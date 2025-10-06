@@ -9,7 +9,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"io"
-	"net/http"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -83,8 +82,7 @@ type ExternalStorage interface {
 	// passed to the callback is undefined.
 	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
 
-	// Delete removes the named file from the store. If the file does not exist,
-	// Delete returns nil.
+	// Delete removes the named file from the store.
 	Delete(ctx context.Context, basename string) error
 
 	// Size returns the length of the named file in bytes.
@@ -130,13 +128,7 @@ type SQLConnI interface {
 // ErrFileDoesNotExist is a sentinel error for indicating that a specified
 // bucket/object/key/file (depending on storage terminology) does not exist.
 // This error is raised by the ReadFile method.
-var ErrFileDoesNotExist = errors.New("external_storage: file does not exist")
-
-// WrapErrFileDoesNotExist wraps an error with ErrFileDoesNotExist.
-func WrapErrFileDoesNotExist(err error, msg string) error {
-	//nolint:errwrap
-	return errors.Wrapf(ErrFileDoesNotExist, "%s: %s", err.Error(), msg)
-}
+var ErrFileDoesNotExist = errors.New("external_storage: file doesn't exist")
 
 // ErrListingUnsupported is a marker for indicating listing is unsupported.
 var ErrListingUnsupported = errors.New("listing is not supported")
@@ -188,7 +180,6 @@ type EarlyBootExternalStorageContext struct {
 	Options         []ExternalStorageOption
 	Limiters        Limiters
 	MetricsRecorder *Metrics
-	HttpMiddleware  HttpMiddleware
 }
 
 // ExternalStorageOptions rolls up the Options into a struct.
@@ -208,8 +199,6 @@ type ExternalStorageOptions struct {
 	AzureStorageTestingKnobs base.ModuleTestingKnobs
 	ClientName               string
 }
-
-type HttpMiddleware func(http.RoundTripper) http.RoundTripper
 
 // ExternalStorageConstructor is a function registered to create instances
 // of a given external storage implementation.

@@ -86,30 +86,6 @@ message RoleBasedAuditEvent {
   string role = 4 [(gogoproto.jsontag) = ",omitempty"];
 }
 
-
-// UnsafeInternalsAccess is recorded when a query accesses unsafe internals
-// using the allow_unsafe_internals override.
-message UnsafeInternalsAccessed {
-  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  // The query that triggered the unsafe internals access.
-  string query = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
-}
-
-// UnsafeInternalsDenied is recorded when a query attempts to access unsafe internals
-// but lacks the appropriate session variables.
-message UnsafeInternalsDenied {
-  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-  // The query that triggered the unsafe internals access.
-  string query = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
-}
-
-
-// TODO (#151948): Update channel from SQL_PERF to SQL_EXEC once the
-// `log.channel_compatibility_mode.enabled` cluster setting is set to false
-// by default and cluster setting is set for removal.
-
 // Category: SQL Slow Query Log
 // Channel: SQL_PERF
 //
@@ -119,10 +95,6 @@ message UnsafeInternalsDenied {
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
 //
-// In version 26.1, these events will be moved to the `SQL_EXEC` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `SQL_EXEC` instead of `SQL_PERF`.
 
 // SlowQuery is recorded when a query triggers the "slow query" condition.
 //
@@ -191,10 +163,6 @@ message TxnRowsReadLimit {
   CommonTxnRowsLimitDetails info = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
-// TODO (#151948): Update channel from SQL_INTERNAL_PERF to SQL_EXEC once the
-// `log.channel_compatibility_mode.enabled` cluster setting is set to false
-// by default and cluster setting is set for removal.
-
 // Category: SQL Slow Query Log (Internal)
 // Channel: SQL_INTERNAL_PERF
 //
@@ -205,11 +173,6 @@ message TxnRowsReadLimit {
 // Note: these events are not written to `system.eventlog`, even
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
-//
-// In version 26.1, these events will be moved to the `SQL_EXEC` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `SQL_EXEC` instead of `SQL_INTERNAL_PERF`.
 
 // SlowQueryInternal is recorded when a query triggers the "slow query" condition,
 // and the cluster setting `sql.log.slow_query.internal_queries.enabled` is

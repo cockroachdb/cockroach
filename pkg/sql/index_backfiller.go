@@ -21,10 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 )
 
 // IndexBackfillPlanner holds dependencies for an index backfiller
@@ -79,35 +77,14 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		completed.g.Add(c...)
 		return completed.g.Slice()
 	}
-	// Add spans that were already completed before the job resumed.
-	addCompleted(progress.CompletedSpans...)
 	updateFunc := func(
 		ctx context.Context, meta *execinfrapb.ProducerMetadata,
 	) error {
 		if meta.BulkProcessorProgress == nil {
 			return nil
 		}
-		progress.CompletedSpans = addCompleted(meta.BulkProcessorProgress.CompletedSpans...)
-		// Make sure the progress update does not contain overlapping spans.
-		// This is a sanity check that only runs in test configurations, since it
-		// is an expensive n^2 check.
-		if buildutil.CrdbTestBuild {
-			for i, span1 := range progress.CompletedSpans {
-				for j, span2 := range progress.CompletedSpans {
-					if i <= j {
-						continue
-					}
-					if span1.Overlaps(span2) {
-						return errors.Newf("progress update contains overlapping spans: %s and %s", span1, span2)
-					}
-				}
-			}
-		}
-
-		knobs := &ib.execCfg.DistSQLSrv.TestingKnobs
-		if knobs.RunBeforeIndexBackfillProgressUpdate != nil {
-			knobs.RunBeforeIndexBackfillProgressUpdate(ctx, meta.BulkProcessorProgress.CompletedSpans)
-		}
+		progress.CompletedSpans = addCompleted(
+			meta.BulkProcessorProgress.CompletedSpans...)
 		return tracker.SetBackfillProgress(ctx, progress)
 	}
 	var spansToDo []roachpb.Span
@@ -121,7 +98,6 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 	if len(spansToDo) == 0 { // already done
 		return nil
 	}
-
 	now := ib.execCfg.DB.Clock().Now()
 	// Pick now as the read timestamp for the backfill. It's safe to use this
 	// timestamp to read even if we've partially backfilled at an earlier
@@ -136,7 +112,6 @@ func (ib *IndexBackfillPlanner) BackfillIndexes(
 		readAsOf,
 		spansToDo,
 		progress.DestIndexIDs,
-		progress.SourceIndexID,
 		updateFunc,
 	)
 	if retErr != nil {
@@ -187,31 +162,32 @@ func (ib *IndexBackfillPlanner) plan(
 	nowTimestamp, writeAsOf, readAsOf hlc.Timestamp,
 	sourceSpans []roachpb.Span,
 	indexesToBackfill []descpb.IndexID,
-	sourceIndexID descpb.IndexID,
 	callback func(_ context.Context, meta *execinfrapb.ProducerMetadata) error,
 ) (runFunc func(context.Context) error, _ error) {
 
 	var p *PhysicalPlan
-	var extEvalCtx extendedEvalContext
+	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 	td := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildExistingMutableTable()
 	if err := DescsTxn(ctx, ib.execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewInternalSessionData(ctx, ib.execCfg.Settings, "plan-index-backfill")
-		extEvalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
+		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, sd, nowTimestamp, descriptors)
 		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(
-			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 		// TODO(ajwerner): Adopt metamorphic.ConstantWithTestRange for the
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
 		const writeAtRequestTimestamp = true
-		spec := initIndexBackfillerSpec(
+		spec, err := initIndexBackfillerSpec(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
-			indexesToBackfill, sourceIndexID,
+			indexesToBackfill,
 		)
-		var err error
+		if err != nil {
+			return err
+		}
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
 	}); err != nil {
@@ -227,12 +203,11 @@ func (ib *IndexBackfillPlanner) plan(
 			ib.execCfg.RangeDescriptorCache,
 			nil, /* txn - the flow does not run wholly in a txn */
 			ib.execCfg.Clock,
-			extEvalCtx.Tracing,
+			evalCtx.Tracing,
 		)
 		defer recv.Release()
-		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := extEvalCtx.Context.Copy()
-		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, nil)
+		evalCtxCopy := evalCtx
+		ib.execCfg.DistSQLPlanner.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil)
 		return cbw.Err()
 	}, nil
 }

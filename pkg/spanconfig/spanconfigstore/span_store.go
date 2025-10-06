@@ -232,7 +232,7 @@ func (s *spanConfigStore) getSpanConfigForKey(
 		break
 	}
 	if !found && log.ExpensiveLogEnabled(ctx, 1) {
-		log.Dev.Warningf(ctx, "span config not found for %s", key.String())
+		log.Warningf(ctx, "span config not found for %s", key.String())
 	}
 	return conf, confSpan, found
 }

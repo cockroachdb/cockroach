@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build amd64 || arm64 || arm64be || ppc64 || ppc64le || mips64 || mips64le || s390x || sparc64
+// +build amd64 arm64 arm64be ppc64 ppc64le mips64 mips64le s390x sparc64
 
 package storage
 

@@ -230,7 +230,7 @@ func planReplicasWithMeta(
 			}
 			problems = append(problems, checkDescriptor(rankedRangeReplicas)...)
 			updates = append(updates, u)
-			log.KvExec.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
+			log.Infof(ctx, "replica has lost quorum, recovering: %s -> %s",
 				rankedRangeReplicas.survivor().Desc, u.NewReplica)
 		}
 	}
@@ -557,7 +557,7 @@ func makeReplicaUpdateIfNeeded(
 		// out on earlier stages. This is covered by invalid input tests and if we
 		// ended up here that means tests are not run, or code changed sufficiently
 		// and both checks and tests were lost.
-		log.KvExec.Fatalf(ctx, "unexpected invalid replica info while making recovery plan, "+
+		log.Fatalf(ctx, "unexpected invalid replica info while making recovery plan, "+
 			"we should never have unvalidated descriptors at planning stage, they must be detected "+
 			"while performing keyspace coverage check: %s", err)
 	}

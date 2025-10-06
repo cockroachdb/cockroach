@@ -41,7 +41,7 @@ WHERE x > 'foo'
 with &1
  ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
  ├── volatile, mutations
- ├── stats: [rows=3.33333, distinct(11)=3.33333, null(11)=0]
+ ├── stats: [rows=3.333333, distinct(11)=3.33333, null(11)=0]
  ├── key: (11)
  ├── fd: ()-->(13), (11)-->(12)
  ├── delete xyz
@@ -62,7 +62,6 @@ with &1
  │         ├── fd: ()-->(8), (6)-->(7,9,10)
  │         ├── scan xyz
  │         │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         │    ├── flags: avoid-full-scan
  │         │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=10]
  │         │    ├── key: (6)
  │         │    └── fd: (6)-->(7-10)
@@ -70,7 +69,7 @@ with &1
  │              └── xyz.z:8 = 5.5 [type=bool, outer=(8), constraints=(/8: [/5.5 - /5.5]; tight), fd=()-->(8)]
  └── select
       ├── columns: x:11(string!null) y:12(int!null) z:13(float!null)
-      ├── stats: [rows=3.33333, distinct(11)=3.33333, null(11)=0]
+      ├── stats: [rows=3.333333, distinct(11)=3.33333, null(11)=0]
       ├── key: (11)
       ├── fd: ()-->(13), (11)-->(12)
       ├── with-scan &1
@@ -109,7 +108,6 @@ delete xyz
       ├── fd: (6)-->(7-10)
       ├── scan xyz
       │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
-      │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=1000]
       │    ├── key: (6)
       │    └── fd: (6)-->(7-10)

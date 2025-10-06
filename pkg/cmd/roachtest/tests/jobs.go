@@ -67,6 +67,7 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		showJobsTimeout = 30 * time.Second
 		pollerMinFrequencySeconds = 5
 		workloadDuration = time.Minute * 5
+
 	}
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, "CREATE DATABASE d")
@@ -77,29 +78,28 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// and adopts 10 jobs at a time.
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.registry.interval.adopt='5s'")
 
-	rng, seed := randutil.NewLockedPseudoRand()
+	rng, seed := randutil.NewPseudoRand()
 	t.L().Printf("Rand seed: %d", seed)
 
 	done := make(chan struct{})
 	earlyExit := make(chan struct{}, 1)
-	group := t.NewErrorGroup()
+	m := c.NewMonitor(ctx)
 
-	group.Go(func(ctx context.Context, l *logger.Logger) error {
+	m.Go(func(ctx context.Context) error {
 		defer close(done)
 		var testTimer timeutil.Timer
 		testTimer.Reset(workloadDuration)
 		select {
 		case <-earlyExit:
-			l.Printf("Exiting early")
 		case <-testTimer.C:
-			l.Printf("workload duration of %s elapsed", workloadDuration)
+			testTimer.Read = true
 		}
 		return nil
 	})
 
-	randomPoller := func(f func(ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand) error) func(ctx context.Context, _ *logger.Logger) error {
+	randomPoller := func(f func(ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand) error) func(ctx context.Context) error {
 
-		return func(ctx context.Context, _ *logger.Logger) error {
+		return func(ctx context.Context) error {
 			var pTimer timeutil.Timer
 			defer pTimer.Stop()
 			for {
@@ -111,8 +111,8 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 				case <-done:
 					return nil
 				case <-pTimer.C:
+					pTimer.Read = true
 					if err := f(ctx, t, c, rng); err != nil {
-						t.L().Printf("Error running periodic function: %s", err)
 						earlyExit <- struct{}{}
 						return err
 					}
@@ -121,19 +121,16 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	group.Go(randomPoller(checkJobQueryLatency))
+	m.Go(randomPoller(checkJobQueryLatency))
 
-	group.Go(randomPoller(pauseResumeChangefeeds))
+	m.Go(randomPoller(pauseResumeChangefeeds))
 
-	group.Go(func(ctx context.Context, _ *logger.Logger) error {
-		createTablesWithChangefeeds(ctx, t, c, rng)
-		return nil
-	})
+	createTablesWithChangefeeds(ctx, t, c, rng)
 
 	// TODO(msbutler): consider adding a schema change workload to the existing
 	// tables to further stress the job system.
 
-	require.NoError(t, group.WaitE())
+	m.Wait()
 	checkJobSystemHealth(ctx, t, c, rng)
 }
 
@@ -146,7 +143,7 @@ func createTablesWithChangefeeds(
 	for i := 0; i < nodeCount; i++ {
 		conn := c.Conn(ctx, t.L(), i+1)
 		sqlDBs[i] = sqlutils.MakeSQLRunner(conn)
-		defer conn.Close() //nolint:deferloop
+		defer conn.Close()
 	}
 
 	sqlDBs[0].Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true;`)
@@ -155,7 +152,7 @@ func createTablesWithChangefeeds(
 		tableName := tableNamePrefix + fmt.Sprintf("%d", i)
 		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, tableName, tableSchema))
 		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO %s VALUES (1, 'x'),(2,'y')`, tableName))
-		sqlDB.Exec(t, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='2m', protect_data_from_gc_on_pause", tableName))
+		sqlDB.Exec(t, fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://' WITH gc_protect_expires_after='5m', protect_data_from_gc_on_pause", tableName))
 		if i%(tableCount/5) == 0 {
 			t.L().Printf("Created %d tables so far", i)
 		}

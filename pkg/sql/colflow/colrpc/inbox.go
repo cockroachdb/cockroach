@@ -437,7 +437,7 @@ func (i *Inbox) GetNumMessages() int64 {
 func (i *Inbox) sendDrainSignal(ctx context.Context) error {
 	log.VEvent(ctx, 2, "Inbox sending drain signal to Outbox")
 	if err := i.stream.Send(&execinfrapb.ConsumerSignal{DrainRequest: &execinfrapb.DrainRequest{}}); err != nil {
-		log.Dev.VWarningf(ctx, 1, "Inbox unable to send drain signal to Outbox: %+v", err)
+		log.VWarningf(ctx, 1, "Inbox unable to send drain signal to Outbox: %+v", err)
 		return err
 	}
 	return nil

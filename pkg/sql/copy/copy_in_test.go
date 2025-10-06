@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -793,7 +792,7 @@ func TestMessageSizeTooBig(t *testing.T) {
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
-	url, cleanup := pgurlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -841,7 +840,7 @@ func TestCopyExceedsSQLMemory(t *testing.T) {
 
 					s := srv.ApplicationLayer()
 
-					url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
 					defer cleanup()
 					var sqlConnCtx clisqlclient.Context
 					conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())

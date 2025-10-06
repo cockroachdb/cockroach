@@ -30,13 +30,11 @@ go_library(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/liveness",
-        "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/storage/enginepb",
-        "//pkg/storage/mvccencoding",
         "//pkg/testutils/datapathutils",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
@@ -55,7 +53,6 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//vfs",
         "@org_golang_google_protobuf//proto",
-        "@org_golang_x_exp//maps",
     ],
 )
 
@@ -83,11 +80,9 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/apply",
-        "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -113,7 +108,6 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_protobuf//proto",
-        "@org_golang_x_exp//maps",
     ],
 )
 

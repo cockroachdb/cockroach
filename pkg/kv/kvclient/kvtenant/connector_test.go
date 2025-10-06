@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -120,10 +121,6 @@ func (*mockServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchRespon
 	panic("unimplemented")
 }
 
-func (m *mockServer) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
-	panic("implement me")
-}
-
 func (m *mockServer) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("implement me")
 }
@@ -200,6 +197,18 @@ func gossipEventForStoreDesc(desc *roachpb.StoreDescriptor) *kvpb.GossipSubscrip
 	}
 }
 
+func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *kvpb.GossipSubscriptionEvent {
+	val, err := protoutil.Marshal(cfg)
+	if err != nil {
+		panic(err)
+	}
+	return &kvpb.GossipSubscriptionEvent{
+		Key:            gossip.KeyDeprecatedSystemConfig,
+		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
+		PatternMatched: gossip.KeyDeprecatedSystemConfig,
+	}
+}
+
 func waitForNodeDesc(t *testing.T, c *connector, nodeID roachpb.NodeID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
@@ -221,7 +230,7 @@ func newConnector(cfg ConnectorConfig, addrs []string) *connector {
 }
 
 // TestConnectorGossipSubscription tests connector's roles as a
-// kvclient.NodeDescStore.
+// kvclient.NodeDescStore and as a config.SystemConfigProvider.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -242,10 +251,11 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC := make(chan *kvpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
 		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -340,6 +350,42 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	desc, err = c.GetNodeDescriptor(3)
 	require.Equal(t, node3, desc)
 	require.NoError(t, err)
+
+	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
+	sysCfg := c.GetSystemConfig()
+	require.Nil(t, sysCfg)
+	sysCfgC, _ := c.RegisterSystemConfigChannel()
+	require.Len(t, sysCfgC, 0)
+
+	// Return first SystemConfig response.
+	sysCfgEntries := &config.SystemConfigEntries{Values: []roachpb.KeyValue{
+		{Key: roachpb.Key("a")},
+		{Key: roachpb.Key("b")},
+	}}
+	gossipSubC <- gossipEventForSystemConfig(sysCfgEntries)
+
+	// Test config.SystemConfigProvider impl. Wait for update first.
+	<-sysCfgC
+	sysCfg = c.GetSystemConfig()
+	require.NotNil(t, sysCfg)
+	require.Equal(t, sysCfgEntries.Values, sysCfg.Values)
+
+	// Return updated SystemConfig response.
+	sysCfgEntriesUp := &config.SystemConfigEntries{Values: []roachpb.KeyValue{
+		{Key: roachpb.Key("a")},
+		{Key: roachpb.Key("c")},
+	}}
+	gossipSubC <- gossipEventForSystemConfig(sysCfgEntriesUp)
+
+	// Test config.SystemConfigProvider impl. Wait for update first.
+	<-sysCfgC
+	sysCfg = c.GetSystemConfig()
+	require.NotNil(t, sysCfg)
+	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
+
+	// A newly registered SystemConfig channel will be immediately notified.
+	sysCfgC2, _ := c.RegisterSystemConfigChannel()
+	require.Len(t, sysCfgC2, 1)
 }
 
 // TestConnectorGossipSubscription tests connector's role as a
@@ -445,10 +491,11 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 3)
+		assert.Len(t, req.Patterns, 4)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
 		assert.Equal(t, "store:.*", req.Patterns[2])
+		assert.Equal(t, "system-db", req.Patterns[3])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err

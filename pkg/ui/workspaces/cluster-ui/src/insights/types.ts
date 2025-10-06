@@ -120,7 +120,6 @@ export type StmtInsightEvent = InsightEventBase & {
   execType?: InsightExecEnum;
   status: StatementStatus;
   errorMsg?: string;
-  queryTags?: Array<{ name: string; value: string }>;
 };
 
 export type Insight = {
@@ -174,11 +173,16 @@ export const highContentionInsight = (
   };
 };
 
-export const slowExecutionInsight = (execType: InsightExecEnum): Insight => {
-  const description =
-    `An execution of this ${execType} was marked as slow. Slow executions ` +
-    `are determined by the 'sql.insights.latency_threshold' and 'sql.insights.anomaly_detection.threshold' ` +
-    `cluster settings.`;
+export const slowExecutionInsight = (
+  execType: InsightExecEnum,
+  latencyThreshold?: number,
+): Insight => {
+  let threshold = latencyThreshold + "ms";
+  if (!latencyThreshold) {
+    threshold =
+      "the value of the 'sql.insights.latency_threshold' cluster setting";
+  }
+  const description = `This ${execType} took longer than ${threshold} to execute.`;
   return {
     name: InsightNameEnum.SLOW_EXECUTION,
     label: InsightEnumToLabel.get(InsightNameEnum.SLOW_EXECUTION),
@@ -274,7 +278,7 @@ export const getInsightFromCause = (
     case InsightNameEnum.HIGH_RETRY_COUNT:
       return highRetryCountInsight(execOption);
     default:
-      return slowExecutionInsight(execOption);
+      return slowExecutionInsight(execOption, latencyThreshold);
   }
 };
 

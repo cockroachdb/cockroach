@@ -104,7 +104,7 @@ func (o *connectionOp) run(ctx context.Context) error {
 	}
 	defer func() {
 		if err := conn.Close(ctx); err != nil {
-			log.Dev.Warningf(ctx, "%v", err)
+			log.Warningf(ctx, "%v", err)
 		}
 	}()
 	elapsed := timeutil.Since(start)

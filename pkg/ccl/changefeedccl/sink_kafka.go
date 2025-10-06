@@ -74,19 +74,18 @@ type kafkaSinkKnobs struct {
 	OverrideClientInit              func(config *sarama.Config) (kafkaClient, error)
 	OverrideAsyncProducerFromClient func(kafkaClient) (sarama.AsyncProducer, error)
 	OverrideSyncProducerFromClient  func(kafkaClient) (sarama.SyncProducer, error)
-	BypassConnectionCheck           bool
 }
 
 var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
 
 func (l *kafkaLogAdapter) Print(v ...interface{}) {
-	log.Changefeed.InfofDepth(l.ctx, 1, "", v...)
+	log.InfofDepth(l.ctx, 1, "", v...)
 }
 func (l *kafkaLogAdapter) Printf(format string, v ...interface{}) {
-	log.Changefeed.InfofDepth(l.ctx, 1, format, v...)
+	log.InfofDepth(l.ctx, 1, format, v...)
 }
 func (l *kafkaLogAdapter) Println(v ...interface{}) {
-	log.Changefeed.InfofDepth(l.ctx, 1, "", v...)
+	log.InfofDepth(l.ctx, 1, "", v...)
 }
 
 func init() {
@@ -115,8 +114,6 @@ type kafkaClient interface {
 	Config() *sarama.Config
 	// Close closes kafka connection.
 	Close() error
-	// LeastLoadedBroker retrieves broker that has the least responses pending.
-	LeastLoadedBroker() *sarama.Broker
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -267,16 +264,10 @@ func (s *kafkaSink) Dial() error {
 		return err
 	}
 
-	// Make sure the broker can be reached.
-	if broker := client.LeastLoadedBroker(); broker != nil {
-		if err := broker.Open(s.kafkaCfg); err != nil && !errors.Is(err, sarama.ErrAlreadyConnected) {
-			return errors.CombineErrors(err, client.Close())
-		}
-		if ok, err := broker.Connected(); !ok || err != nil {
-			return errors.CombineErrors(err, client.Close())
-		}
-	} else if !s.knobs.BypassConnectionCheck {
-		return errors.CombineErrors(errors.New("client has run out of available brokers"), client.Close())
+	if err = client.RefreshMetadata(s.Topics()...); err != nil {
+		// Now that we do not fetch metadata for all topics by default, we try
+		// RefreshMetadata manually to check for any connection error.
+		return errors.CombineErrors(err, client.Close())
 	}
 
 	producer, err := s.newAsyncProducer(client)
@@ -371,7 +362,6 @@ func (s *kafkaSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
-	headers rowHeaders,
 ) error {
 	topic, err := s.topics.Name(topicDescr)
 	if err != nil {
@@ -382,18 +372,10 @@ func (s *kafkaSink) EmitRow(
 	// inside sarama, set the DownstreamClientSend timer to the same value as
 	// BatchHistNanos.
 	recordOneMessageCb := s.metrics.recordOneMessage()
-	downstreamClientSend := s.metrics.timers().DownstreamClientSend.Start()
+	downstreamClientSendCb := s.metrics.timers().DownstreamClientSend.Start()
 	updateMetrics := func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
 		recordOneMessageCb(mvcc, bytes, compressedBytes)
-		downstreamClientSend.End()
-	}
-
-	recordHeaders := make([]sarama.RecordHeader, 0, len(headers))
-	for key, value := range headers {
-		recordHeaders = append(recordHeaders, sarama.RecordHeader{
-			Key:   []byte(key),
-			Value: value,
-		})
+		downstreamClientSendCb()
 	}
 
 	msg := &sarama.ProducerMessage{
@@ -401,7 +383,6 @@ func (s *kafkaSink) EmitRow(
 		Key:      sarama.ByteEncoder(key),
 		Value:    sarama.ByteEncoder(value),
 		Metadata: messageMetadata{alloc: alloc, mvcc: mvcc, updateMetrics: updateMetrics},
-		Headers:  recordHeaders,
 	}
 	s.stats.startMessage(int64(msg.Key.Length() + msg.Value.Length()))
 	return s.emitMessage(ctx, msg)
@@ -433,7 +414,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 		if err != nil {
 			return err
 		}
-		s.scratch, payload = s.scratch.Copy(payload)
+		s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
 
 		// sarama caches this, which is why we have to periodically refresh the
 		// metadata above. Staleness here does not impact correctness. Some new
@@ -483,7 +464,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	}
 
 	if log.V(1) {
-		log.Changefeed.Infof(ctx, "flush waiting for %d inflight messages", inflight)
+		log.Infof(ctx, "flush waiting for %d inflight messages", inflight)
 	}
 	select {
 	case <-ctx.Done():
@@ -507,7 +488,7 @@ func (s *kafkaSink) startInflightMessage(ctx context.Context) error {
 
 	s.mu.inflight++
 	if log.V(2) {
-		log.Changefeed.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
+		log.Infof(ctx, "emitting %d inflight records to kafka", s.mu.inflight)
 	}
 	return nil
 }
@@ -554,7 +535,7 @@ func (s *kafkaSink) workerLoop() {
 
 	startInternalRetry := func(err error) {
 		s.mu.AssertHeld()
-		log.Changefeed.Infof(
+		log.Infof(
 			s.ctx,
 			"kafka sink with flush config (%+v) beginning internal retry with %d inflight messages due to error: %s",
 			s.kafkaCfg.Producer.Flush,
@@ -660,7 +641,7 @@ func (s *kafkaSink) finishProducerMessage(ackMsg *sarama.ProducerMessage, ackErr
 func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryErr error) error {
 	lastSendErr := retryErr
 	activeConfig := s.kafkaCfg
-	log.Changefeed.Infof(s.ctx, "kafka sink handling %d buffered messages for internal retry", len(msgs))
+	log.Infof(s.ctx, "kafka sink handling %d buffered messages for internal retry", len(msgs))
 
 	// Ensure memory for messages are always cleaned up
 	defer func() {
@@ -672,7 +653,7 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 	for {
 		select {
 		case <-s.stopWorkerCh:
-			log.Changefeed.Infof(s.ctx, "kafka sink ending retries due to worker close")
+			log.Infof(s.ctx, "kafka sink ending retries due to worker close")
 			return lastSendErr
 		default:
 		}
@@ -682,14 +663,14 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 		// Surface the error if its not retryable or we weren't able to reduce the
 		// batching config any further
 		if !s.isInternalRetryable(lastSendErr) {
-			log.Changefeed.Infof(s.ctx, "kafka sink abandoning internal retry due to error: %s", lastSendErr.Error())
+			log.Infof(s.ctx, "kafka sink abandoning internal retry due to error: %s", lastSendErr.Error())
 			return lastSendErr
 		} else if !wasReduced {
-			log.Changefeed.Infof(s.ctx, "kafka sink abandoning internal retry due to being unable to reduce batching size")
+			log.Infof(s.ctx, "kafka sink abandoning internal retry due to being unable to reduce batching size")
 			return lastSendErr
 		}
 
-		log.Changefeed.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
+		log.Infof(s.ctx, "kafka sink retrying %d messages with reduced flush config: (%+v)", len(msgs), newConfig.Producer.Flush)
 		activeConfig = newConfig
 
 		newClient, err := s.newClient(newConfig)
@@ -717,14 +698,14 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 		}
 
 		if err := newProducer.Close(); err != nil {
-			log.Changefeed.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
+			log.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
 		}
 		if err := newClient.Close(); err != nil {
-			log.Changefeed.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
+			log.Errorf(s.ctx, "closing of previous sarama client for retry failed with: %s", err.Error())
 		}
 
 		if lastSendErr == nil {
-			log.Changefeed.Infof(s.ctx, "kafka sink internal retry succeeded")
+			log.Infof(s.ctx, "kafka sink internal retry succeeded")
 			return nil
 		}
 	}
@@ -1065,33 +1046,12 @@ func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfi
 	hostName := u.Hostname()
 	// saslUser="$ConnectionString"
 	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
-	sharedAccessKeyNameSnake := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
-	sharedAccessKeyNameCamel := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyNameCamel)
-	if sharedAccessKeyNameSnake != `` && sharedAccessKeyNameCamel != `` {
-		return kafkaDialConfig{}, errors.Newf(`scheme %s cannot specify both %s and %s`, u.Scheme, changefeedbase.SinkParamAzureAccessKeyName, changefeedbase.SinkParamAzureAccessKeyNameCamel)
-	}
-
-	sharedAccessKeyName := sharedAccessKeyNameSnake
-	if sharedAccessKeyName == `` {
-		sharedAccessKeyName = sharedAccessKeyNameCamel
-	}
-
+	sharedAccessKeyName := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
 	if sharedAccessKeyName == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKeyName /*param*/)
 	}
-
-	sharedAccessKeySnake := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
-	sharedAccessKeyCamel := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyCamel)
-	if sharedAccessKeySnake != `` && sharedAccessKeyCamel != `` {
-		return kafkaDialConfig{}, errors.Newf(`scheme %s cannot specify both %s and %s`, u.Scheme, changefeedbase.SinkParamAzureAccessKey, changefeedbase.SinkParamAzureAccessKeyCamel)
-	}
-
-	sharedAccessKey := sharedAccessKeySnake
-	if sharedAccessKey == `` {
-		sharedAccessKey = sharedAccessKeyCamel
-	}
-
+	sharedAccessKey := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
 	if sharedAccessKey == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
@@ -1178,7 +1138,7 @@ func buildKafkaConfig(
 		if err := dialConfig.authMechanism.ApplySarama(ctx, config); err != nil {
 			return nil, err
 		}
-		log.Changefeed.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
+		log.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
 	}
 
 	// Apply statement level overrides.
@@ -1221,7 +1181,7 @@ func makeKafkaSink(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
-	sinkOpts changefeedbase.KafkaSinkOptions,
+	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
@@ -1229,12 +1189,6 @@ func makeKafkaSink(
 	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
-	}
-
-	jsonStr := sinkOpts.JSONConfig
-	if len(sinkOpts.Headers) > 0 {
-		return nil, errors.Newf("headers are not supported for the v1 kafka sink;"+
-			" use the v2 sink instead via the `%s` cluster setting", KafkaV2Enabled.Name())
 	}
 
 	m := mb(requiresResourceAccounting)
@@ -1245,7 +1199,7 @@ func makeKafkaSink(
 
 	topics, err := MakeTopicNamer(
 		targets,
-		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
+		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
 
 	if err != nil {
 		return nil, err

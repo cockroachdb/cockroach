@@ -6,17 +6,25 @@
 package exporter
 
 import (
+	"regexp"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prom "github.com/prometheus/client_model/go"
 )
 
 var (
-	summaryQuantiles = []float64{50, 95, 99, 100}
+	invalidCharRegex      = regexp.MustCompile(`[^a-zA-Z0-9_]`)
+	invalidFirstCharRegex = regexp.MustCompile(`^[^a-zA-Z_]`)
+	summaryQuantiles      = []float64{50, 95, 99, 100}
 )
+
+func sanitizeOpenMetricsLabels(input string) string {
+	sanitized := invalidCharRegex.ReplaceAllString(input, "_")
+	sanitized = invalidFirstCharRegex.ReplaceAllString(sanitized, "_")
+	return sanitized
+}
 
 // ConvertHdrHistogramToPrometheusMetricFamily converts a Hdr histogram into MetricFamily which is used
 // by expfmt.MetricFamilyToOpenMetrics to export openmetrics
@@ -34,13 +42,8 @@ func ConvertHdrHistogramToPrometheusMetricFamily(
 		if value == 0 {
 			continue
 		}
-
-		// Openmetrics standard mandates that quantile should be b/w 0 to 1.
-		// https://github.com/prometheus/OpenMetrics/blob/296468bc2359ebac83f24301b54a0871f2268016/specification/OpenMetrics.md?plain=1#L294
-		// Since hdrHistogram has quantiles in percentage, we need to convert it
-		openMetricsQuantile := quantile / 100
 		valueQuantile := prom.Quantile{
-			Quantile: &openMetricsQuantile,
+			Quantile: &quantile,
 			Value:    &value,
 		}
 
@@ -49,9 +52,8 @@ func ConvertHdrHistogramToPrometheusMetricFamily(
 	summary.Quantile = valueQuantiles
 	summary.SampleCount = &totalCount
 	timestampMs := proto.Int64(start.UTC().UnixMilli())
-	sanitizedName := util.SanitizeMetricName(*name)
 	return &prom.MetricFamily{
-		Name: &sanitizedName,
+		Name: name,
 		Type: prom.MetricType_SUMMARY.Enum(),
 		Metric: []*prom.Metric{{
 			Summary:     summary,

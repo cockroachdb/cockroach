@@ -8,8 +8,8 @@ package log
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -83,7 +83,7 @@ func (l *fileSink) takeOverInternalStderr(logger *loggerT) error {
 
 	// Success: remember who called us, in case the next
 	// caller comes along with the wrong call sequence.
-	takeOverStderrMu.previousStderrTakeover = debugutil.Stack()
+	takeOverStderrMu.previousStderrTakeover = string(debug.Stack())
 	return nil
 }
 
@@ -139,5 +139,5 @@ var takeOverStderrMu struct {
 	// previousStderrTakeover is the stack trace of the previous call to
 	// takeOverStderrInternal(). This can be used to troubleshoot
 	// invalid call sequences.
-	previousStderrTakeover debugutil.SafeStack
+	previousStderrTakeover string
 }

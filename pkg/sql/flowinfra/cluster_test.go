@@ -20,16 +20,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -49,7 +48,7 @@ func runTestClusterFlow(
 	t *testing.T,
 	servers []serverutils.ApplicationLayerInterface,
 	conns []*gosql.DB,
-	clients []execinfrapb.RPCDistSQLClient,
+	clients []execinfrapb.DistSQLClient,
 ) {
 	ctx := context.Background()
 	const numRows = 100
@@ -99,7 +98,7 @@ func runTestClusterFlow(
 		false, // omitInRangefeeds
 	)
 	txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(servers[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
-	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
 
 	var spec fetchpb.IndexFetchSpec
@@ -125,7 +124,7 @@ func runTestClusterFlow(
 	fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
 	req1 := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Latest,
+		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -144,7 +143,7 @@ func runTestClusterFlow(
 	}
 
 	req2 := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Latest,
+		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -170,7 +169,7 @@ func runTestClusterFlow(
 	}
 
 	req3 := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Latest,
+		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: fid,
@@ -218,7 +217,7 @@ func runTestClusterFlow(
 	}
 
 	setupRemoteFlow := func(nodeIdx int, req *execinfrapb.SetupFlowRequest) {
-		log.Dev.Infof(ctx, "Setting up flow on %d", nodeIdx)
+		log.Infof(ctx, "Setting up flow on %d", nodeIdx)
 		if resp, err := clients[nodeIdx].SetupFlow(ctx, req); err != nil {
 			t.Fatal(err)
 		} else if resp.Error != nil {
@@ -229,7 +228,7 @@ func runTestClusterFlow(
 	setupRemoteFlow(0 /* nodeIdx */, req1)
 	setupRemoteFlow(1 /* nodeIdx */, req2)
 
-	log.Dev.Infof(ctx, "Running local sync flow on 2")
+	log.Infof(ctx, "Running local sync flow on 2")
 	rows, err := runLocalFlowTenant(ctx, servers[2], req3)
 	if err != nil {
 		t.Fatal(err)
@@ -263,13 +262,13 @@ func TestClusterFlow(t *testing.T) {
 
 	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
 	conns := make([]*gosql.DB, numNodes)
-	clients := make([]execinfrapb.RPCDistSQLClient, numNodes)
+	clients := make([]execinfrapb.DistSQLClient, numNodes)
 	for i := 0; i < numNodes; i++ {
 		s := tc.Server(i).ApplicationLayer()
 		servers[i] = s
 		conns[i] = s.SQLConn(t)
 		conn := s.RPCClientConn(t, username.RootUserName())
-		clients[i] = conn.NewDistSQLClient()
+		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
 
 	runTestClusterFlow(t, servers, conns, clients)
@@ -289,7 +288,7 @@ func TestTenantClusterFlow(t *testing.T) {
 
 	pods := make([]serverutils.ApplicationLayerInterface, numPods)
 	podConns := make([]*gosql.DB, numPods)
-	clients := make([]execinfrapb.RPCDistSQLClient, numPods)
+	clients := make([]execinfrapb.DistSQLClient, numPods)
 	tenantID := serverutils.TestTenantID()
 	for i := 0; i < numPods; i++ {
 		pods[i], podConns[i] = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
@@ -300,11 +299,11 @@ func TestTenantClusterFlow(t *testing.T) {
 		})
 		defer podConns[i].Close()
 		pod := pods[i]
-		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpcbase.DefaultClass).Connect(ctx)
+		conn, err := pod.RPCContext().GRPCDialPod(pod.RPCAddr(), pod.SQLInstanceID(), pod.Locality(), rpc.DefaultClass).Connect(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		clients[i] = execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
 
 	runTestClusterFlow(t, pods, podConns, clients)
@@ -415,11 +414,11 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	txn := kv.NewTxnFromProto(
 		context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 		now, kv.RootTxn, &txnProto)
-	leafInputState, err := txn.GetLeafTxnInputState(context.Background(), nil /* readsTree */)
+	leafInputState, err := txn.GetLeafTxnInputState(context.Background())
 	require.NoError(t, err)
 
 	req := execinfrapb.SetupFlowRequest{
-		Version:           execversion.Latest,
+		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 		Flow: execinfrapb.FlowSpec{
 			FlowID: execinfrapb.FlowID{UUID: uuid.MakeV4()},
@@ -594,10 +593,13 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	if tc.DefaultTenantDeploymentMode().IsExternal() {
-		tc.GrantTenantCapabilities(
-			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
 	}
 
 	db := tc.ServerConn(0)
@@ -719,11 +721,11 @@ func BenchmarkInfrastructure(b *testing.B) {
 					txn := kv.NewTxnFromProto(
 						context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
 						now, kv.RootTxn, &txnProto)
-					leafInputState, err := txn.GetLeafTxnInputState(context.Background(), nil /* readsTree */)
+					leafInputState, err := txn.GetLeafTxnInputState(context.Background())
 					require.NoError(b, err)
 					for i := range reqs {
 						reqs[i] = execinfrapb.SetupFlowRequest{
-							Version:           execversion.Latest,
+							Version:           execinfra.Version,
 							LeafTxnInputState: leafInputState,
 							Flow: execinfrapb.FlowSpec{
 								Processors: []execinfrapb.ProcessorSpec{{
@@ -771,12 +773,12 @@ func BenchmarkInfrastructure(b *testing.B) {
 					}
 					reqs[0].Flow.Processors = append(reqs[0].Flow.Processors, lastProc)
 
-					var clients []execinfrapb.RPCDistSQLClient
+					var clients []execinfrapb.DistSQLClient
 
 					for i := 0; i < numNodes; i++ {
 						s := tc.Server(i)
 						conn := s.RPCClientConn(b, username.RootUserName())
-						clients = append(clients, conn.NewDistSQLClient())
+						clients = append(clients, execinfrapb.NewDistSQLClient(conn))
 					}
 
 					b.ResetTimer()

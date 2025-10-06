@@ -235,7 +235,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		&tableID, &statementTimeName)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            tableID,
+		TableID:           tableID,
 		FamilyName:        "primary",
 		StatementTimeName: statementTimeName,
 	})
@@ -243,7 +243,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		&tableID, &statementTimeName)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            tableID,
+		TableID:           tableID,
 		FamilyName:        "primary",
 		StatementTimeName: statementTimeName,
 	})
@@ -288,7 +288,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 	sqlDB.QueryRow(t, "SELECT 'test.foo'::regclass::int").Scan(&tableID)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		DescID:            tableID,
+		TableID:           tableID,
 		FamilyName:        "primary",
 		StatementTimeName: "foo",
 	})
@@ -323,14 +323,14 @@ type testLeaseAcquirer struct {
 }
 
 func (t *testLeaseAcquirer) Acquire(
-	ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID,
+	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (lease.LeasedDescriptor, error) {
 	if id != t.id {
 		return nil, errors.Newf("unknown id: %d", id)
 	}
 
-	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp lease.ReadTimestamp) int {
-		return desc.timestamp.Compare(timestamp.GetTimestamp())
+	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
+		return desc.timestamp.Compare(timestamp)
 	})
 	if ok {
 		return t.descs[i], nil

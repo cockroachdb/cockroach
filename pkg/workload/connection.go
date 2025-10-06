@@ -118,7 +118,6 @@ func SanitizeUrls(gen Generator, connFlags *ConnFlags, urls []string) (string, e
 func SetUrlConnVars(gen Generator, connFlags *ConnFlags, urls []string) error {
 	vars := make(map[string]string)
 	vars["application_name"] = gen.Meta().Name
-	vars["allow_unsafe_internals"] = "true"
 	if connFlags != nil {
 		if connFlags.IsoLevel != "" {
 			// As a convenience, replace underscores with spaces. This allows users of

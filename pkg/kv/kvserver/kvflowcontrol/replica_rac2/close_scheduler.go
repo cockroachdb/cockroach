@@ -105,6 +105,7 @@ func (s *streamCloseScheduler) run(_ context.Context, stopper *stop.Stopper) {
 			return
 		case <-s.nonEmptyCh:
 		case <-timer.Ch():
+			timer.MarkRead()
 		}
 
 		now := s.clock.Now()

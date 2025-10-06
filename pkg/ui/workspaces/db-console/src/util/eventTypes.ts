@@ -137,9 +137,6 @@ export const DISK_SLOWNESS_DETECTED = "disk_slowness_detected";
 // Recorded when a disk slowness event is no longer detected on a store
 // after having been detected and reported previously.
 export const DISK_SLOWNESS_CLEARED = "disk_slowness_cleared";
-// Recorded when a disk is running low on available space (recorded
-// periodically).
-export const LOW_DISK_SPACE = "low_disk_space";
 
 // Node Event Types
 export const nodeEvents = [
@@ -150,7 +147,6 @@ export const nodeEvents = [
   NODE_RECOMMISSIONED,
   DISK_SLOWNESS_DETECTED,
   DISK_SLOWNESS_CLEARED,
-  LOW_DISK_SPACE,
 ];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [

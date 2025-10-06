@@ -54,7 +54,6 @@ func TestDataDriven(t *testing.T) {
 			exec.WithDryrun(),
 			exec.WithIntercept(workspaceCmd(), crdbCheckoutPlaceholder),
 			exec.WithIntercept(bazelbinCmd(), sandboxPlaceholder),
-			exec.WithIntercept(bazelbinPgoCmd(), sandboxPlaceholder),
 		}
 		osOpts := []os.Option{
 			os.WithLogger(log.New(logger, "", 0)),
@@ -111,8 +110,4 @@ func workspaceCmd() string {
 
 func bazelbinCmd() string {
 	return fmt.Sprintf("bazel %s", shellescape.QuoteCommand([]string{"info", "bazel-bin", "--color=no"}))
-}
-
-func bazelbinPgoCmd() string {
-	return fmt.Sprintf("bazel %s", shellescape.QuoteCommand([]string{"info", "bazel-bin", "--color=no", "--config=pgo"}))
 }

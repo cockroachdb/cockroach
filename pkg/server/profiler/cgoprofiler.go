@@ -61,9 +61,9 @@ func NewNonGoAllocProfiler(
 	}
 
 	if jemallocHeapDump != nil {
-		log.Dev.Infof(ctx, "writing jemalloc profiles to %s at least every %s", dir, hp.resetInterval())
+		log.Infof(ctx, "writing jemalloc profiles to %s at least every %s", dir, hp.resetInterval())
 	} else {
-		log.Dev.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
+		log.Infof(ctx, `to enable jmalloc profiling: "export MALLOC_CONF=prof:true" or "ln -s prof:true /etc/malloc.conf"`)
 	}
 
 	return hp, nil
@@ -81,7 +81,7 @@ func takeJemallocProfile(ctx context.Context, path string, _ ...interface{}) (su
 		return true
 	}
 	if err := jemallocHeapDump(path); err != nil {
-		log.Dev.Warningf(ctx, "error writing jemalloc heap %s: %v", path, err)
+		log.Warningf(ctx, "error writing jemalloc heap %s: %v", path, err)
 		return false
 	}
 	return true

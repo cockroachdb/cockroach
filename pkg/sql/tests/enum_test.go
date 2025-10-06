@@ -6,7 +6,6 @@
 package tests
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"math/rand"
@@ -47,17 +46,17 @@ func TestLargeEnums(t *testing.T) {
 	// have to wait for lots of versions and it would take a very long time.
 	var createEnumsQuery string
 	{
-		alreadyInserted := btree.NewG[int](8, cmp.Less[int])
+		alreadyInserted := btree.New(8)
 		next := func(n int) (next int, ok bool) {
-			alreadyInserted.AscendGreaterOrEqual(n, func(i int) (wantMore bool) {
-				next, ok = i, true
+			alreadyInserted.AscendGreaterOrEqual(intItem(n), func(i btree.Item) (wantMore bool) {
+				next, ok = int(i.(intItem)), true
 				return false
 			})
 			return next, ok
 		}
 		prev := func(n int) (prev int, ok bool) {
-			alreadyInserted.DescendLessOrEqual(n, func(i int) (wantMore bool) {
-				prev, ok = i, true
+			alreadyInserted.DescendLessOrEqual(intItem(n), func(i btree.Item) (wantMore bool) {
+				prev, ok = int(i.(intItem)), true
 				return false
 			})
 			return prev, ok
@@ -75,7 +74,7 @@ func TestLargeEnums(t *testing.T) {
 				require.Truef(t, ok, "prev %v %v", n, order[:i])
 				fmt.Fprintf(&buf, " AFTER '%d';\n", prev)
 			}
-			alreadyInserted.ReplaceOrInsert(n)
+			alreadyInserted.ReplaceOrInsert(intItem(n))
 		}
 		buf.WriteString("COMMIT;")
 		createEnumsQuery = buf.String()
@@ -100,6 +99,12 @@ func TestLargeEnums(t *testing.T) {
 	require.NoError(t, rows.Err())
 	require.Len(t, read, N)
 	require.Truef(t, sort.IntsAreSorted(read), "%v", read)
+}
+
+type intItem int
+
+func (i intItem) Less(o btree.Item) bool {
+	return i < o.(intItem)
 }
 
 // TestEnumPlaceholderWithAsOfSystemTime is a regression test for an edge case

@@ -24,19 +24,6 @@ SELECT crdb_internal.execute_internally('SELECT k FROM t;', true);
 3
 5
 
-
-statement ok
-ALTER TABLE t SET (schema_locked=false)
-
-statement ok
-SELECT crdb_internal.execute_internally('TRUNCATE t;', true);
-
-statement ok
-ALTER TABLE t SET (schema_locked=true)
-
-query empty
-SELECT crdb_internal.execute_internally('SELECT k FROM t;', true);
-
 # Set the database via the override.
 query T rowsort
 SELECT crdb_internal.execute_internally('EXPLAIN SELECT k FROM t;', 'Database=test');
@@ -159,9 +146,6 @@ SELECT crdb_internal.execute_internally('COMMIT;', 'Database=test', true);
 # Check transactionality.
 statement ok
 BEGIN;
-
-statement ok
-SET LOCAL autocommit_before_ddl=off;
 
 statement ok
 CREATE TABLE t2 (k INT PRIMARY KEY);
@@ -294,7 +278,3 @@ SELECT crdb_internal.execute_internally('SHOW disallow_full_table_scans;', true)
 off
 
 subtest end
-
-# Regression test for crashing with SHOW COMMIT TIMESTAMP.
-statement error this statement is disallowed
-SELECT crdb_internal.execute_internally('SHOW COMMIT TIMESTAMP;', true);

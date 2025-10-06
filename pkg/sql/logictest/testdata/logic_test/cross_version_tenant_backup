@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-24.1
 
 # Ensure that a backup of a tenant can restore into an new version.  
 # 

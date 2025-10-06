@@ -24,12 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -81,14 +79,12 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		isRbr = stmt.Locality.LocalityLevel == tree.LocalityLevelRow
 		isRbt = stmt.Locality.LocalityLevel == tree.LocalityLevelTable
 	}
-	tab := &Table{TabID: tc.nextStableID(), SchemaID: testSchemaID, TabName: stmt.Table, Catalog: tc}
+	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
 	if isRbt && stmt.Locality.TableRegion != "" {
 		tab.multiRegion = true
 		tab.homeRegion = string(stmt.Locality.TableRegion)
 	}
-
-	tab.nextPolicyID = 1
 
 	if isRbr && stmt.PartitionByTable == nil {
 		// Build the table as LOCALITY REGIONAL BY ROW.
@@ -115,27 +111,15 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		// so use type STRING instead.
 		oid := types.String.Oid()
 
-		// Add a region column only if one doesn't already exist.
-		hasRegionCol := false
-		for _, def := range stmt.Defs {
-			if colDef, ok := def.(*tree.ColumnTableDef); ok {
-				if colDef.Name == tree.RegionalByRowRegionDefaultColName {
-					hasRegionCol = true
-					break
-				}
-			}
-		}
-		if !hasRegionCol {
-			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			crdbRegionDef :=
-				multiregion.RegionalByRowDefaultColDef(
-					oid,
-					multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
-					multiregion.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
-				)
-			crdbRegionDef.Type = types.String
-			stmt.Defs = append(stmt.Defs, crdbRegionDef)
-		}
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		crdbRegionDef :=
+			multiregion.RegionalByRowDefaultColDef(
+				oid,
+				multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
+				multiregion.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
+			)
+		crdbRegionDef.Type = types.String
+		stmt.Defs = append(stmt.Defs, crdbRegionDef)
 		tab.implicitRBRIndexElem =
 			&tree.IndexElem{
 				Column: tree.RegionalByRowRegionDefaultColName,
@@ -421,23 +405,13 @@ OuterLoop:
 			cat.FamilyColumn{Column: col, Ordinal: colOrd})
 	}
 
-	// Allow specifying the name of a FK constraint to use for lookup of region
-	// column values for a REGIONAL BY ROW table.
-	var rbrUsingConstraintName string
-	if param := stmt.StorageParams.GetVal(catpb.RBRUsingConstraintTableSettingName); param != nil {
-		rbrUsingConstraintName = param.(*tree.StrVal).RawString()
-	}
-
 	// Search for foreign key constraints. We want to process them after first
 	// processing all the indexes (otherwise the foreign keys could add
 	// unnecessary indexes).
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
-			fk := tc.resolveFK(tab, def)
-			if rbrUsingConstraintName != "" && string(def.Name) == rbrUsingConstraintName {
-				tab.regionalByRowUsingConstraint = fk
-			}
+			tc.resolveFK(tab, def)
 		}
 	}
 
@@ -513,13 +487,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(&name)
 
-	tab := &Table{
-		TabID:    tc.nextStableID(),
-		SchemaID: testSchemaID,
-		TabName:  name,
-		Catalog:  tc,
-		Columns:  columns,
-	}
+	tab := &Table{TabID: tc.nextStableID(), TabName: name, Catalog: tc, Columns: columns}
 
 	var rowid cat.Column
 	ordinal := len(columns)
@@ -540,7 +508,6 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 
 	tab.Columns = append(tab.Columns, rowid)
 	tab.addPrimaryColumnIndex("rowid")
-	tab.Owner = tc.currentUser
 
 	// Add the new table to the catalog.
 	tc.AddTable(tab)
@@ -549,9 +516,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 }
 
 // resolveFK processes a foreign key constraint.
-func (tc *Catalog) resolveFK(
-	tab *Table, d *tree.ForeignKeyConstraintTableDef,
-) cat.ForeignKeyConstraint {
+func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	fromCols := make([]int, len(d.FromCols))
 	for i, c := range d.FromCols {
 		fromCols[i] = tab.FindOrdinal(string(c))
@@ -648,20 +613,10 @@ func (tc *Catalog) resolveFK(
 	var targetUniqueConstraint *UniqueConstraint
 	targetCols := toCols
 	if targetTable.IsRegionalByRow() {
-		// Add the RBR column for validation if it wasn't specified.
-		rbrCol := targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column))
-		rbrColSpecified := false
-		for _, col := range toCols {
-			if col == rbrCol {
-				rbrColSpecified = true
-				break
-			}
-		}
-		if !rbrColSpecified {
-			targetCols = make([]int, 0, len(toCols)+1)
-			targetCols = append(targetCols, rbrCol)
-			targetCols = append(targetCols, toCols...)
-		}
+		targetCols = make([]int, 0, len(toCols)+1)
+		targetCols =
+			append(targetCols, targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column)))
+		targetCols = append(targetCols, toCols...)
 	}
 	for _, idx := range targetTable.Indexes {
 		if indexMatches(idx, targetCols, true /* strict */) {
@@ -721,7 +676,6 @@ func (tc *Catalog) resolveFK(
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
-	return &fk
 }
 
 func (tt *Table) addCheckConstraint(check *tree.CheckConstraintTableDef) {
@@ -929,7 +883,7 @@ func (tt *Table) addIndexWithVersion(
 	idx := &Index{
 		IdxName:      tt.makeIndexName(def.Name, def.Columns, typ),
 		Unique:       typ != nonUniqueIndex,
-		Typ:          def.Type,
+		Inverted:     def.Inverted,
 		IdxZone:      cat.EmptyZone(),
 		table:        tt,
 		version:      version,
@@ -956,13 +910,8 @@ func (tt *Table) addIndexWithVersion(
 	notNullIndex := true
 	for i, colDef := range def.Columns {
 		isLastIndexCol := i == len(def.Columns)-1
-		if isLastIndexCol {
-			switch def.Type {
-			case idxtype.INVERTED:
-				idx.invertedOrd = i
-			case idxtype.VECTOR:
-				idx.vectorOrd = i
-			}
+		if def.Inverted && isLastIndexCol {
+			idx.invertedOrd = i
 		}
 		col := idx.addColumn(tt, colDef, keyCol, isLastIndexCol)
 
@@ -970,7 +919,7 @@ func (tt *Table) addIndexWithVersion(
 			notNullIndex = false
 		}
 
-		if isLastIndexCol && def.Type == idxtype.INVERTED {
+		if isLastIndexCol && def.Inverted {
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
@@ -999,19 +948,6 @@ func (tt *Table) addIndexWithVersion(
 						MaxCells: 3,
 					}},
 				}
-			}
-		}
-
-		if isLastIndexCol && def.Type == idxtype.VECTOR {
-			idx.vecConfig = vecpb.Config{
-				Dims: col.DatumType().Width(),
-				Seed: 42,
-			}
-			switch colDef.OpClass {
-			case "vector_cosine_ops":
-				idx.vecConfig.DistanceMetric = vecpb.CosineDistance
-			case "vector_ip_ops":
-				idx.vecConfig.DistanceMetric = vecpb.InnerProductDistance
 			}
 		}
 	}
@@ -1128,11 +1064,8 @@ func (tt *Table) addIndexWithVersion(
 
 	// Add storing columns.
 	for _, name := range def.Storing {
-		switch def.Type {
-		case idxtype.INVERTED:
+		if def.Inverted {
 			panic("inverted indexes don't support stored columns")
-		case idxtype.VECTOR:
-			panic("vector indexes don't support stored columns")
 		}
 		// Only add storing columns that weren't added as part of adding implicit
 		// key columns.
@@ -1293,7 +1226,7 @@ func (ti *Index) addColumn(
 		colName = elem.Column
 	}
 
-	if ti.Typ == idxtype.INVERTED && isLastIndexCol {
+	if ti.Inverted && isLastIndexCol {
 		// The last column of an inverted index is special: the index key does
 		// not contain values from the column itself, but contains inverted
 		// index entries derived from that column. Create a virtual column to be
@@ -1376,15 +1309,6 @@ func (ti *Index) addColumnByOrdinal(
 					col.ColName(), srcColType,
 				))
 			}
-		} else if typ.Family() == types.PGVectorFamily {
-			if ti.Typ != idxtype.VECTOR {
-				panic(fmt.Errorf(
-					"column %s of type %s is not allowed in a non-vector index", col.ColName(), typ,
-				))
-			}
-			if typ.Width() == 0 {
-				panic(fmt.Errorf("variable-width vector columns are not allowed in a vector index"))
-			}
 		} else if !colinfo.ColumnTypeIsIndexable(typ) {
 			panic(fmt.Errorf("column %s of type %s is not indexable", col.ColName(), typ))
 		}
@@ -1449,7 +1373,7 @@ func (ti *Index) partitionByListExprToDatums(
 	d := make(tree.Datums, len(vals))
 	for i := range vals {
 		c := tree.CastExpr{Expr: vals[i], Type: ti.Columns[i].DatumType()}
-		cTyped, err := c.TypeCheck(ctx, semaCtx, types.AnyElement)
+		cTyped, err := c.TypeCheck(ctx, semaCtx, types.Any)
 		if err != nil {
 			panic(err)
 		}

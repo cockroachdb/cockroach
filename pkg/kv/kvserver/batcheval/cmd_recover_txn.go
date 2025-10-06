@@ -108,18 +108,17 @@ func RecoverTxn(
 		// changed its epoch or timestamp, and the only other valid status
 		// for it to have is COMMITTED.
 		switch reply.RecoveredTxn.Status {
-		case roachpb.PENDING, roachpb.PREPARED, roachpb.ABORTED:
+		case roachpb.PENDING, roachpb.ABORTED:
 			// Once implicitly committed, the transaction should never move back
-			// to the PENDING status, should never be PREPARED, and it should never
-			// be ABORTED.
+			// to the PENDING status and it should never be ABORTED.
 			//
-			// In order for the last part of the statement to be true, we need to
-			// ensure that transaction records that are GCed after being COMMITTED
-			// are never re-written as ABORTED. We used to allow this to happen when
+			// In order for the second statement to be true, we need to ensure
+			// that transaction records that are GCed after being COMMITTED are
+			// never re-written as ABORTED. We used to allow this to happen when
 			// PushTxn requests found missing transaction records because it was
-			// harmless, but we now use the timestamp cache to avoid needing to ever
-			// do so. If this ever becomes possible again, we'll need to relax this
-			// check.
+			// harmless, but we now use the timestamp cache to avoid
+			// needing to ever do so. If this ever becomes possible again, we'll
+			// need to relax this check.
 			return result.Result{}, errors.AssertionFailedf(
 				"programming error: found %s record for implicitly committed transaction: %v",
 				reply.RecoveredTxn.Status, reply.RecoveredTxn,
@@ -171,7 +170,7 @@ func RecoverTxn(
 			// query then we could assert that the transaction record can only be
 			// COMMITTED if legalChange=true.
 			return result.Result{}, nil
-		case roachpb.PENDING, roachpb.PREPARED:
+		case roachpb.PENDING:
 			if args.Txn.Epoch < reply.RecoveredTxn.Epoch {
 				// Recovery not immediately needed because the transaction is
 				// still in progress.
@@ -180,11 +179,10 @@ func RecoverTxn(
 
 			// We should never hit this. The transaction recovery process will only
 			// ever be launched for a STAGING transaction and it is not possible for
-			// a transaction to move back to the PENDING (or PREPARED) status in the
-			// same epoch.
+			// a transaction to move back to the PENDING status in the same epoch.
 			return result.Result{}, errors.AssertionFailedf(
-				"programming error: cannot recover %s transaction in same epoch: %s",
-				reply.RecoveredTxn.Status, reply.RecoveredTxn)
+				"programming error: cannot recover PENDING transaction in same epoch: %s", reply.RecoveredTxn,
+			)
 		case roachpb.STAGING:
 			if legalChange {
 				// Recovery not immediately needed because the transaction is

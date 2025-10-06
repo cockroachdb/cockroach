@@ -230,7 +230,7 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 		end := e.metadataAccessor.GetClusterInitGracePeriodTS()
 		if end != 0 {
 			e.clusterInitGracePeriodEndTS.Store(end)
-			log.Dev.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS())
+			log.Infof(ctx, "fetched cluster init grace period end time from system tenant: %s", e.GetClusterInitGracePeriodEndTS())
 		} else {
 			// No timestamp was received, likely due to a mixed-version workload.
 			// We'll use an estimate of 7 days from this node's startup time instead
@@ -238,7 +238,7 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 			// An update should be sent once the KV starts up on the new version.
 			gracePeriodLength := e.getGracePeriodDuration(7 * 24 * time.Hour)
 			e.clusterInitGracePeriodEndTS.Store(e.getStartTime().Add(gracePeriodLength).Unix())
-			log.Dev.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS())
+			log.Infof(ctx, "estimated cluster init grace period end time as: %s", e.GetClusterInitGracePeriodEndTS())
 			e.continueToPollMetadataAccessor.Store(true)
 		}
 		return nil
@@ -259,7 +259,7 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 		} else {
 			e.trialUsageExpiry.Store(trialUsageCount.ValueInt())
 		}
-		log.Dev.Infof(ctx, "trial license expiry initialized to %s",
+		log.Infof(ctx, "trial license expiry initialized to %s",
 			timeutil.Unix(e.trialUsageExpiry.Load(), 0))
 
 		// Cache and maybe set the cluster init grace period timestamp. This is the
@@ -290,12 +290,12 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 			}
 			gracePeriodLength = e.getGracePeriodDuration(gracePeriodLength) // Allow the value to be shortened by env var
 			end := e.getStartTime().Add(gracePeriodLength)
-			log.Dev.Infof(ctx, "generated new cluster init grace period end time: %s", end.UTC())
+			log.Infof(ctx, "generated new cluster init grace period end time: %s", end.UTC())
 			e.clusterInitGracePeriodEndTS.Store(end.Unix())
 			return txn.KV().Put(ctx, keys.ClusterInitGracePeriodTimestamp, e.clusterInitGracePeriodEndTS.Load())
 		}
 		e.clusterInitGracePeriodEndTS.Store(val.ValueInt())
-		log.Dev.Infof(ctx, "fetched existing cluster init grace period end time: %s", e.GetClusterInitGracePeriodEndTS())
+		log.Infof(ctx, "fetched existing cluster init grace period end time: %s", e.GetClusterInitGracePeriodEndTS())
 		return nil
 	})
 }
@@ -407,7 +407,7 @@ func (e *Enforcer) MaybeFailIfThrottled(
 				"Obtain and install a valid license to continue.")
 		}
 		if e.throttleLogger.ShouldLog() {
-			log.Dev.Infof(ctx, "throttling for license enforcement is active, license expired with a grace period "+
+			log.Infof(ctx, "throttling for license enforcement is active, license expired with a grace period "+
 				"that ended at %s", gracePeriodEnd)
 		}
 		return
@@ -423,7 +423,7 @@ func (e *Enforcer) MaybeFailIfThrottled(
 				"Cockroach Labs reporting server. You can also consider changing your license to one that doesn't "+
 				"require diagnostic reporting to be emitted.")
 		if e.throttleLogger.ShouldLog() {
-			log.Dev.Infof(ctx, "throttling for license enforcement is active, due to no telemetry data received, "+
+			log.Infof(ctx, "throttling for license enforcement is active, due to no telemetry data received, "+
 				"last received at %s", lastPingTS)
 		}
 		return
@@ -449,7 +449,7 @@ func (e *Enforcer) MaybeFailIfThrottled(
 	}
 	if notice != nil {
 		if e.throttleLogger.ShouldLog() {
-			log.Dev.Infof(ctx, "throttling will happen soon: %s", notice.Error())
+			log.Infof(ctx, "throttling will happen soon: %s", notice.Error())
 		}
 	}
 
@@ -495,7 +495,7 @@ func (e *Enforcer) RefreshForLicenseChange(
 		sb.Printf("expiration at %q, ", expiry)
 	}
 	sb.Printf("telemetry required: %t", e.licenseRequiresTelemetry.Load())
-	log.Dev.Infof(ctx, "%s", sb.RedactableString())
+	log.Infof(ctx, "%s", sb.RedactableString())
 }
 
 // UpdateTrialLicenseExpiry returns the expiration timestamp of any trial license
@@ -533,7 +533,7 @@ func (e *Enforcer) UpdateTrialLicenseExpiry(
 		return
 	}
 	curExpiry = e.trialUsageExpiry.Load()
-	log.Dev.Infof(ctx, "trial license expiry timestamp is %s", timeutil.Unix(curExpiry, 0))
+	log.Infof(ctx, "trial license expiry timestamp is %s", timeutil.Unix(curExpiry, 0))
 	return
 }
 
@@ -549,7 +549,7 @@ func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
 			return err
 		}
 		e.trialUsageExpiry.Store(0)
-		log.Dev.Infof(ctx, "trial license expiry was reset")
+		log.Infof(ctx, "trial license expiry was reset")
 		return nil
 	})
 }
@@ -579,7 +579,7 @@ func (e *Enforcer) Disable(ctx context.Context) {
 	if skipDisable || (tk != nil && tk.SkipDisable) {
 		return
 	}
-	log.Dev.Infof(ctx, "disable all license enforcement")
+	log.Infof(ctx, "disable all license enforcement")
 	e.isDisabled.Store(true)
 }
 
@@ -649,7 +649,7 @@ func (e *Enforcer) getMaxTelemetryInterval() time.Duration {
 func (e *Enforcer) maybeLogActiveOverrides(ctx context.Context) {
 	maxOpenTxns := e.getMaxOpenTransactions()
 	if maxOpenTxns != defaultMaxOpenTransactions {
-		log.Dev.Infof(ctx, "max open transactions before throttling overridden to %d", maxOpenTxns)
+		log.Infof(ctx, "max open transactions before throttling overridden to %d", maxOpenTxns)
 	}
 
 	// The grace period may vary depending on the license type. We'll select the
@@ -658,12 +658,12 @@ func (e *Enforcer) maybeLogActiveOverrides(ctx context.Context) {
 	maxGracePeriod := 30 * 7 * time.Hour
 	curGracePeriod := e.getGracePeriodDuration(maxGracePeriod)
 	if curGracePeriod != maxGracePeriod {
-		log.Dev.Infof(ctx, "grace period has changed to %v", curGracePeriod)
+		log.Infof(ctx, "grace period has changed to %v", curGracePeriod)
 	}
 
 	curTelemetryInterval := e.getMaxTelemetryInterval()
 	if curTelemetryInterval != defaultMaxTelemetryInterval {
-		log.Dev.Infof(ctx, "max telemetry interval has changed to %v", curTelemetryInterval)
+		log.Infof(ctx, "max telemetry interval has changed to %v", curTelemetryInterval)
 	}
 }
 
@@ -696,7 +696,7 @@ func (e *Enforcer) getIsNewClusterEstimate(ctx context.Context, txn isql.Txn) (b
 	if st.After(ts.Add(-1*time.Hour)) && st.Before(ts.Add(1*time.Hour)) {
 		return true, nil
 	}
-	log.Dev.Infof(ctx, "cluster init is not within the bounds of the enforcer start time: %v", ts)
+	log.Infof(ctx, "cluster init is not within the bounds of the enforcer start time: %v", ts)
 	return false, nil
 }
 
@@ -728,7 +728,7 @@ func (e *Enforcer) pollMetadataAccessor(ctx context.Context) {
 			e.clusterInitGracePeriodEndTS.Store(ts)
 			e.storeNewGracePeriodEndDate(e.GetClusterInitGracePeriodEndTS(), 0)
 			e.continueToPollMetadataAccessor.Store(false)
-			log.Dev.Infof(ctx, "late retrieval of cluster initialization grace period end time from system tenant: %s",
+			log.Infof(ctx, "late retrieval of cluster initialization grace period end time from system tenant: %s",
 				e.GetClusterInitGracePeriodEndTS())
 		}
 	}

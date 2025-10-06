@@ -84,7 +84,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 		return nil, err
 	}
 
-	log.Dev.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
+	log.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
 	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
 	cp := &CPUProfiler{
 		profiler: makeProfiler(
@@ -114,7 +114,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 		// Try writing a CPU profile.
 		f, err := os.Create(path)
 		if err != nil {
-			log.Dev.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
+			log.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
 			return err
 		}
 		defer f.Close()
@@ -124,7 +124,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 		}
 		defer pprof.StopCPUProfile()
 		dur := cpuProfileDuration.Get(&cp.st.SV)
-		log.Dev.Infof(ctx, "taking CPU profile for %.2fs", dur.Seconds())
+		log.Infof(ctx, "taking CPU profile for %.2fs", dur.Seconds())
 		select {
 		case <-ctx.Done():
 		case <-time.After(cpuProfileDuration.Get(&cp.st.SV)):
@@ -133,7 +133,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 	}); err != nil {
 		// Only log the errors, since errors can occur due to cpu profiles being taken
 		// elsewhere.
-		log.Dev.Infof(ctx, "error during CPU profile: %s", err)
+		log.Infof(ctx, "error during CPU profile: %s", err)
 		return false
 	}
 	return true

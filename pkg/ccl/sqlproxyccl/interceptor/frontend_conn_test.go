@@ -24,8 +24,7 @@ func TestFrontendConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutilsccl.ServerlessOnly(t)
 
-	q, err := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
-	require.NoError(t, err)
+	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 
 	t.Run("PeekMsg returns the right message type", func(t *testing.T) {
 		w, r := net.Pipe()

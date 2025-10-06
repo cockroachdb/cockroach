@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 9
+const configIdx = 8
 
 var cclLogicTestDir string
 
@@ -108,11 +108,4 @@ func TestCCLLogic_zone(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone")
-}
-
-func TestCCLLogic_zone_config_inheritance(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "zone_config_inheritance")
 }

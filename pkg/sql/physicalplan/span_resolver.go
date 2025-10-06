@@ -243,13 +243,13 @@ func (it *spanResolverIterator) Seek(
 		if (reverse && desc.ContainsKeyInverted(seekKey)) ||
 			(!reverse && desc.ContainsKey(seekKey)) {
 			if log.V(1) {
-				log.Dev.Infof(ctx, "not seeking (key=%s); existing descriptor %s", seekKey, desc)
+				log.Infof(ctx, "not seeking (key=%s); existing descriptor %s", seekKey, desc)
 			}
 			return
 		}
 	}
 	if log.V(1) {
-		log.Dev.Infof(ctx, "seeking (key=%s)", seekKey)
+		log.Infof(ctx, "seeking (key=%s)", seekKey)
 	}
 	it.it.Seek(ctx, seekKey, scanDir)
 }

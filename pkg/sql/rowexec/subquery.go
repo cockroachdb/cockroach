@@ -28,9 +28,4 @@ const (
 	// columns, unless there is exactly 1 column in which case the result type is
 	// that column's type. If there are no rows, the result is NULL.
 	SubqueryExecModeOneRow
-	// SubqueryExecModeDiscardAllRows indicates that the subquery is being
-	// executed for its side effects. The subquery should be executed until it
-	// produces all rows, but the rows should not be saved, and the result will
-	// never be checked.
-	SubqueryExecModeDiscardAllRows
 )

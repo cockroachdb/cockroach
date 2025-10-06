@@ -211,7 +211,7 @@ func Start[E rangefeedbuffer.Event](
 					r.Reset()
 				}
 
-				log.Dev.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
+				log.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
 				continue
 			}
 
@@ -230,7 +230,7 @@ func Start[E rangefeedbuffer.Event](
 // re-run the watcher.
 func (s *Watcher[E]) Run(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
-		log.Dev.Fatal(ctx, "currently started: only allowed once at any point in time")
+		log.Fatal(ctx, "currently started: only allowed once at any point in time")
 	}
 	if fn := s.knobs.PreExit; fn != nil {
 		defer fn()
@@ -281,7 +281,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 
 	initialScanTS := s.clock.Now()
 	if initialScanTS.Less(s.lastFrontierTS) {
-		log.Dev.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
+		log.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
 	}
 
 	rangeFeed := s.rangefeedFactory.New(string(s.name), initialScanTS,
@@ -312,7 +312,6 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 		rangefeed.WithDiff(s.withPrevValue),
 		rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
-			log.Dev.VInfof(ctx, 1, "initial scan error: %s", err)
 			// TODO(irfansharif): Consider if there are other errors which we
 			// want to treat as permanent. This was cargo culted from the
 			// settings watcher.
@@ -338,7 +337,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 		fn()
 	}
 
-	log.Dev.Infof(ctx, "%s: established range feed cache", s.name)
+	log.Infof(ctx, "%s: established range feed cache", s.name)
 
 	for {
 		select {

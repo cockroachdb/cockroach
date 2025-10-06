@@ -26,14 +26,11 @@ import (
 
 func registerChangeReplicasMixedVersion(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "change-replicas/mixed-version",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(4),
-		// Disabled on IBM because s390x is only built on master and mixed-version
-		// is impossible to test as of 05/2025.
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
+		Name:             "change-replicas/mixed-version",
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Randomized:       true,
 		Run:              runChangeReplicasMixedVersion,
 		Timeout:          60 * time.Minute,
@@ -81,36 +78,6 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return nil
 	}
 
-	printRemainingTestRangesOnNode := func(
-		ctx context.Context,
-		l *logger.Logger,
-		r *rand.Rand,
-		h *mixedversion.Helper,
-		nodeID int,
-		rangeCount int,
-	) error {
-		ranges := make([]int, 0, rangeCount)
-		rows, err := h.Query(r, `SELECT range_id FROM `+
-			`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, nodeID)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = rows.Close() }()
-
-		var rangeID int
-		for rows.Next() {
-			if err := rows.Scan(&rangeID); err != nil {
-				return err
-			}
-			ranges = append(ranges, rangeID)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		l.Printf("ranges: %v", ranges)
-		return nil
-	}
-
 	// evacuateNodeUsingZoneConfig moves replicas off of a node using a zone
 	// config.
 	evacuateNodeUsingZoneConfig := func(
@@ -141,9 +108,6 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		}
 
 		var rangeCount int
-		// We try for at least 80*9s = 12m to move replicas off of the node. The
-		// scanner interval defaults to 10 minutes, so we can't reliably expect
-		// this to go through much faster, though often it does.
 		for i := 0; i < 80; i++ {
 			err := h.QueryRow(r, `SELECT count(*) FROM `+
 				`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, node).Scan(&rangeCount)
@@ -154,12 +118,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			if rangeCount == 0 {
 				break
 			}
-			if rangeCount < 10 {
-				if err := printRemainingTestRangesOnNode(ctx, l, r, h, node, rangeCount); err != nil {
-					return err
-				}
-			}
-			time.Sleep(9 * time.Second)
+			time.Sleep(3 * time.Second)
 		}
 		if rangeCount > 0 {
 			return errors.Errorf("n%d still has %d replicas", node, rangeCount)
@@ -337,9 +296,6 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 // mixedversion test is running on a multitenant deployment, and only
 // if required by the active version.
 func enableTenantSplitScatter(l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-	// Note that although TenantsAndSystemAlignedSettingsVersion generally refers to
-	// shared process deployments, the defaults for SPLIT and SCATTER were also changed
-	// for separate process in the same version.
 	if h.Context().FromVersion.AtLeast(mixedversion.TenantsAndSystemAlignedSettingsVersion) {
 		return nil
 	}
@@ -383,27 +339,20 @@ func setTenantSetting(
 		return errors.Wrapf(err, "failed to set %s", name)
 	}
 
-	// Wait for the setting to be visible to all nodes in the tenant.
-	for _, n := range h.Tenant.Descriptor.Nodes {
-		db := h.Tenant.Connect(n)
-		if err := testutils.SucceedsSoonError(func() error {
-			var currentValue bool
-			if err := db.QueryRow(fmt.Sprintf("SHOW CLUSTER SETTING %s", name)).Scan(&currentValue); err != nil {
-				return errors.Wrapf(err, "failed to retrieve setting %s", name)
-			}
+	return testutils.SucceedsSoonError(func() error {
+		var currentValue bool
+		if err := h.QueryRow(r, fmt.Sprintf("SHOW CLUSTER SETTING %s", name)).Scan(&currentValue); err != nil {
+			return errors.Wrapf(err, "failed to retrieve setting %s", name)
+		}
 
-			if currentValue != value {
-				err := fmt.Errorf(
-					"waiting for setting %s: current (%t) != expected (%t)", name, currentValue, value,
-				)
-				l.Printf("%v", err)
-				return err
-			}
-
-			return nil
-		}); err != nil {
+		if currentValue != value {
+			err := fmt.Errorf(
+				"waiting for setting %s: current (%t) != expected (%t)", name, currentValue, value,
+			)
+			l.Printf("%v", err)
 			return err
 		}
-	}
-	return nil
+
+		return nil
+	})
 }

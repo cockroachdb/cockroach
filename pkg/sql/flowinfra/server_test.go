@@ -17,8 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -61,13 +61,13 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, srv.NodeID())
-	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	req := &execinfrapb.SetupFlowRequest{
-		Version:           execversion.Latest,
+		Version:           execinfra.Version,
 		LeafTxnInputState: leafInputState,
 	}
 	req.Flow = execinfrapb.FlowSpec{
@@ -94,15 +94,15 @@ func TestServer(t *testing.T) {
 	// Verify version handling.
 	t.Run("version", func(t *testing.T) {
 		testCases := []struct {
-			version     execversion.V
+			version     execinfrapb.DistSQLVersion
 			expectedErr string
 		}{
 			{
-				version:     execversion.Latest + 1,
+				version:     execinfra.Version + 1,
 				expectedErr: "version mismatch",
 			},
 			{
-				version:     execversion.MinAccepted - 1,
+				version:     execinfra.MinAcceptedVersion - 1,
 				expectedErr: "version mismatch",
 			},
 			// TODO(yuzefovich): figure out what setup to perform to simulate
@@ -111,7 +111,7 @@ func TestServer(t *testing.T) {
 			// panic in a separate goroutine because there is no RowReceiver set
 			// up for the table reader.
 			//{
-			//	version:     execversion.MinAccepted,
+			//	version:     execinfra.MinAcceptedVersion,
 			//	expectedErr: "",
 			//},
 		}
@@ -119,7 +119,7 @@ func TestServer(t *testing.T) {
 			t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
 				req := *req
 				req.Version = tc.version
-				distSQLClient := conn.NewDistSQLClient()
+				distSQLClient := execinfrapb.NewDistSQLClient(conn)
 				resp, err := distSQLClient.SetupFlow(ctx, &req)
 				if err == nil && resp.Error != nil {
 					err = resp.Error.ErrorDetail(ctx)

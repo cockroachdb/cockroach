@@ -29,7 +29,7 @@ t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -41,7 +41,7 @@ NormalPri:
 eval deducted: reg=+0 B ela=+2.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -67,7 +67,7 @@ t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -79,7 +79,7 @@ NormalPri:
 eval deducted: reg=+0 B ela=+2.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -94,7 +94,7 @@ scheduled-replicas: 2
 # return the deducted tokens.
 handle_scheduler_event range_id=1 push-mode
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -106,7 +106,7 @@ NormalPri:
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -142,7 +142,7 @@ t1/s3: eval reg=-1.0 MiB/+16 MiB ela=-2.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -154,7 +154,7 @@ NormalPri:
 eval deducted: reg=+0 B ela=+2.0 MiB
 eval original in send-q: reg=+1.0 MiB ela=+1.0 MiB
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,3) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,3) send_queue=[3,3) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:

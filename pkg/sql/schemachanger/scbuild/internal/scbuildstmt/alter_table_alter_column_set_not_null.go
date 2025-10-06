@@ -25,7 +25,7 @@ func alterTableSetNotNull(
 		return
 	}
 	// Block alters on system columns.
-	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column)
+	panicIfSystemColumn(mustRetrieveColumnElem(b, tbl.TableID, columnID), t.Column.String())
 	b.Add(&scpb.ColumnNotNull{
 		TableID:  tbl.TableID,
 		ColumnID: columnID,

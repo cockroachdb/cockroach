@@ -33,9 +33,6 @@ func TestSavepoints(t *testing.T) {
 		s, origConn, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 
-		if _, err := origConn.Exec(`SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';`); err != nil {
-			t.Fatal(err)
-		}
 		if _, err := origConn.Exec(`CREATE TABLE progress(
       conn STRING,
     	n INT, 

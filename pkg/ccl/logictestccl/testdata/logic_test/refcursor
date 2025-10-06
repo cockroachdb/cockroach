@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 statement ok
 CREATE TABLE xy (x INT, y INT);
 
@@ -40,12 +38,8 @@ SELECT * FROM xy;
 statement ok
 DROP TABLE IF EXISTS xy;
 CREATE TABLE xy (x INT, y TEXT);
-
-onlyif config local-legacy-schema-changer
-statement ok
 SET enable_experimental_alter_column_type_general=true;
 
-skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR USING y::REFCURSOR;
 
@@ -472,12 +466,6 @@ SELECT NULLIF('foo'::REFCURSOR, 'bar'::REFCURSOR);
 statement error pgcode 42883 pq: unsupported comparison operator
 SELECT NULLIF('foo'::REFCURSOR, NULL);
 
-statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor
-SELECT * FROM t ORDER BY x;
-
-statement error pgcode 42883 pq: operator does not exist: refcursor = refcursor
-SELECT * FROM t INNER JOIN t t2 USING (x);
-
 # Regression test for #112010 - REFCURSOR should allow IS NULL and
 # IS NOT NULL comparisons.
 subtest is_null
@@ -581,29 +569,29 @@ statement ok
 CREATE TABLE t112099_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR NOT NULL);
 
 # REFCURSOR is not allowed in a primary key.
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 CREATE TABLE t112099 (r REFCURSOR PRIMARY KEY);
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, PRIMARY KEY (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 ALTER TABLE t112099_no_index ADD PRIMARY KEY (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 ALTER TABLE t112099_no_index ADD PRIMARY KEY (x, r, y);
 
 # REFCURSOR is not allowed in a secondary index.
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 CREATE TABLE t112099 (r REFCURSOR, INDEX (r));
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 CREATE TABLE t112099 (x INT, y TEXT, r REFCURSOR, INDEX (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 CREATE INDEX ON t112099_no_index (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor, which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor and thus is not indexable
 CREATE INDEX ON t112099_no_index (x, r, y);
 
 # Regression test for #115701 - REFCURSOR[] is not a valid index column.
@@ -613,35 +601,40 @@ statement ok
 CREATE TABLE t115701_no_index (x INT NOT NULL, y TEXT NOT NULL, r REFCURSOR[] NOT NULL);
 
 # REFCURSOR[] is not allowed in a primary key.
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE TABLE t115701 (r REFCURSOR[] PRIMARY KEY);
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE TABLE t115701 (x INT, y TEXT, r REFCURSOR[], PRIMARY KEY (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 ALTER TABLE t115701_no_index ADD PRIMARY KEY (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 ALTER TABLE t115701_no_index ADD PRIMARY KEY (x, r, y);
 
 # REFCURSOR[] is not allowed in a secondary index.
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE TABLE t115701 (r REFCURSOR[], INDEX (r));
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE TABLE t115701 (x INT, y TEXT, r REFCURSOR[], INDEX (x, r, y));
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE INDEX ON t115701_no_index (r);
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
 CREATE INDEX ON t115701_no_index (x, r, y);
 
-statement error pgcode 0A000 pq: column r has type refcursor\[\], which is not allowed as the last column in an inverted index
+statement error pgcode 0A000 pq: column r of type refcursor\[\] is not allowed as the last column in an inverted index
 CREATE INDEX ON t115701_no_index USING GIN (r)
 
-statement error pgcode 0A000 pq: unimplemented: column r has type refcursor\[\], which is not indexable
+skipif config local-legacy-schema-changer
+statement error pgcode 0A000 pq: unimplemented: column r is of type refcursor\[\] and thus is not indexable
+CREATE INDEX ON t115701_no_index USING GIN (x, r, y gin_trgm_ops)
+
+onlyif config local-legacy-schema-changer
+statement error pgcode 0A000  pq: column r of type refcursor\[\] is only allowed as the last column in an inverted index
 CREATE INDEX ON t115701_no_index USING GIN (x, r, y gin_trgm_ops)
 
 # REFCURSOR is allowed as a STORING column.
@@ -693,33 +686,22 @@ baz   NULL  baz  foo
 statement error pgcode 42883 pq: unknown signature
 SELECT lag(y) OVER w, lead(y) OVER w, first_value(y) OVER w, last_value(y) OVER w FROM t WINDOW w AS ();
 
-# Array functions are allowed (but ordering on REFCURSOR and REFCURSOR[] columns
-# is not).
-statement ok
-SELECT array_agg(x), array_cat_agg(y) FROM t;
+# Array functions are allowed.
+query TT
+SELECT array_agg(x ORDER BY x, y), array_cat_agg(y ORDER BY x, y) FROM t;
+----
+{baz,foo}  {bar}
 
-query TT rowsort
-SELECT array_append(y, x), array_prepend(x, y) FROM t;
+query TT
+SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY x, y;
 ----
 {baz}      {baz}
 {bar,foo}  {foo,bar}
 
-query TT rowsort
-SELECT array_remove(y, 'baz'), array_replace(y, 'baz', 'foo') FROM t;
+query TT
+SELECT array_remove(y, 'baz'), array_replace(y, 'baz', 'foo') FROM t ORDER BY x, y;
 ----
 {}     {}
 {bar}  {bar}
-
-statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor
-SELECT array_agg(x ORDER BY x) FROM t;
-
-statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor\[\]
-SELECT array_agg(y ORDER BY y) FROM t;
-
-statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor
-SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY x;
-
-statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor\[\]
-SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY y;
 
 subtest end

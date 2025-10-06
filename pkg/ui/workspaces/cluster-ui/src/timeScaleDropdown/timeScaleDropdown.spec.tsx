@@ -153,12 +153,7 @@ describe("<TimeScaleDropdown> component", function () {
         name: "next time interval",
       }),
     );
-    userEvent.click(
-      getByRole("button", {
-        name: "next time interval",
-      }),
-    );
-    expect(mockSetTimeScale).toHaveBeenCalledTimes(3);
+    expect(mockSetTimeScale).toHaveBeenCalledTimes(2);
     getByText("Past Hour");
   });
 

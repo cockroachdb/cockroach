@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -24,7 +23,7 @@ type filtererProcessor struct {
 	execinfra.ProcessorBase
 	evalCtx *eval.Context
 	input   execinfra.RowSource
-	filter  execexpr.Helper
+	filter  execinfrapb.ExprHelper
 }
 
 var _ execinfra.Processor = &filtererProcessor{}
@@ -43,7 +42,7 @@ func newFiltererProcessor(
 ) (*filtererProcessor, error) {
 	f := &filtererProcessor{
 		// Make a copy of the eval context since we're going to pass it to the
-		// execexpr.Helper later (which might modify it).
+		// ExprHelper later (which might modify it).
 		evalCtx: flowCtx.NewEvalCtx(),
 		input:   input,
 	}

@@ -12,7 +12,7 @@ import {
   findClosestTimeScale,
 } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { connect } from "react-redux";
 import { useHistory } from "react-router-dom";
 import { createSelector } from "reselect";
@@ -21,65 +21,15 @@ import { PayloadAction } from "src/interfaces/action";
 import { AdminUIState } from "src/redux/state";
 import * as timewindow from "src/redux/timeScale";
 
-// toQueryParamTimescale converts a preset name to a query param
-// format, replacing spaces with dashes.
-function toQueryParamTimescale(str: string): string {
-  return str.toLowerCase().replace(/\s+/g, "-");
-}
-
-const findPreset = (s: string): string | undefined => {
-  return Object.keys(defaultTimeScaleOptions).find(key => {
-    if (toQueryParamTimescale(key) === s) {
-      return defaultTimeScaleOptions[key];
-    }
-  });
-};
-
 // The time scale dropdown from cluster-ui that updates route params as
 // options are selected.
-// The query params formats we support are the following:
-//   `?start=unix_timestamp&end=unix_timestamp`
-//   `?preset=string`
-//
-// When the component is loaded, we will inspect the query params and
-// populate the time scale dropdown. If the user manipulates the
-// component and modifies items, the query params will be sync-ed.
 const TimeScaleDropdownWithSearchParams = (
   props: TimeScaleDropdownProps,
 ): React.ReactElement => {
   const history = useHistory();
 
-  // `queryParamsRead` tracks whether this component has synced state
-  // from the location bar's query params. We do this on initial mount
-  // just once. Once done, we make sure that future redux store updates
-  // get pushed to the query params. This prevents confusion about
-  // bi-directional updates. Any component outside of this one can just
-  // update redux state and the query params will sync.
-  const [queryParamsRead, setQueryParamsRead] = useState(false);
-
   useEffect(() => {
-    if (queryParamsRead) {
-      return;
-    }
-    const setDatesByQueryParams = (
-      dates?: Partial<TimeWindow>,
-      preset?: string,
-    ) => {
-      if (preset) {
-        const presetTimescale = findPreset(preset);
-        if (!presetTimescale) {
-          return;
-        }
-        const presetOption = defaultTimeScaleOptions[presetTimescale];
-
-        props.setTimeScale({
-          ...presetOption,
-          key: presetTimescale,
-          fixedWindowEnd: false,
-        });
-        return;
-      }
-
+    const setDatesByQueryParams = (dates: Partial<TimeWindow>) => {
       const now = moment.utc();
       // `currentWindow` is derived from `scale`, and does not have to do with the `currentWindow` for the metrics page.
       const currentWindow: TimeWindow = {
@@ -126,69 +76,41 @@ const TimeScaleDropdownWithSearchParams = (
     const urlSearchParams = new URLSearchParams(history.location.search);
     const queryStart = urlSearchParams.get("start");
     const queryEnd = urlSearchParams.get("end");
-    const preset = urlSearchParams.get("preset");
 
-    if (queryStart && queryEnd) {
-      const start = moment.unix(Number(queryStart)).utc();
-      const end = moment.unix(Number(queryEnd)).utc();
+    // Only set the timescale if the url params exist.
+    if (queryStart !== null && queryEnd !== null) {
+      const start = queryStart && moment.unix(Number(queryStart)).utc();
+      const end = queryEnd && moment.unix(Number(queryEnd)).utc();
       setDatesByQueryParams({ start, end });
-    } else if (preset) {
-      setDatesByQueryParams({}, preset);
-    } else {
-      // Set query params from the redux store if there aren't any
-      // present in the URL.
-      onTimeScaleChange(props.currentScale);
     }
 
-    setQueryParamsRead(true);
     // Passing an empty array of dependencies will cause this effect
     // to only run on the initial render.
     /* eslint react-hooks/exhaustive-deps: "off" */
   }, []);
 
-  // This will get triggered if the redux store updates the
-  // currentScale, we sync the query params to match.
-  useEffect(() => {
-    if (queryParamsRead) {
-      onTimeScaleChange(props.currentScale);
-    }
-  }, [props.currentScale]);
-
   const onTimeScaleChange = (timeScale: TimeScale) => {
-    if (!timeScale.fixedWindowEnd) {
-      const preset = findClosestTimeScale(
-        defaultTimeScaleOptions,
-        timeScale.windowSize.asSeconds(),
-      ).key;
-      const { pathname, search } = history.location;
-      const urlParams = new URLSearchParams(search);
-      urlParams.set("preset", toQueryParamTimescale(preset));
-      urlParams.delete("start");
-      urlParams.delete("end");
-      history.push({
-        pathname,
-        search: urlParams.toString(),
-      });
-    } else {
-      const duration = timeScale.windowSize;
-      const dateEnd = timeScale.fixedWindowEnd || moment.utc();
-      const { pathname, search } = history.location;
-      const urlParams = new URLSearchParams(search);
-      const seconds = duration.clone().asSeconds();
-      const end = dateEnd.clone();
-      const start = moment.utc(end).subtract(seconds, "seconds").format("X");
-      urlParams.set("start", start);
-      urlParams.set("end", moment.utc(dateEnd).format("X"));
-      urlParams.delete("preset");
-      history.push({
-        pathname,
-        search: urlParams.toString(),
-      });
-    }
-
-    // Pushes changes to the session storage.
     props.setTimeScale(timeScale);
   };
+
+  useEffect(() => {
+    // When history or props change, this effect will
+    // convert the start and end of the current time scale and
+    // write them to the URL as query params.
+    const duration = props.currentScale.windowSize;
+    const dateEnd = props.currentScale.fixedWindowEnd || moment.utc();
+    const { pathname, search } = history.location;
+    const urlParams = new URLSearchParams(search);
+    const seconds = duration.clone().asSeconds();
+    const end = dateEnd.clone();
+    const start = moment.utc(end).subtract(seconds, "seconds").format("X");
+    urlParams.set("start", start);
+    urlParams.set("end", moment.utc(dateEnd).format("X"));
+    history.push({
+      pathname,
+      search: urlParams.toString(),
+    });
+  }, [history, props]);
 
   return <TimeScaleDropdown {...props} setTimeScale={onTimeScaleChange} />;
 };

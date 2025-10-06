@@ -56,7 +56,7 @@ func TestScheduleControl(t *testing.T) {
 	makeSchedule := func(name string, cron string) jobspb.ScheduleID {
 		schedule := th.newScheduledJob(t, name, "sql")
 		if cron != "" {
-			require.NoError(t, schedule.SetScheduleAndNextRun(cron))
+			require.NoError(t, schedule.SetSchedule(cron))
 		}
 
 		require.NoError(t, schedules.Create(ctx, schedule))
@@ -77,7 +77,7 @@ func TestScheduleControl(t *testing.T) {
 
 	t.Run("pause-active-schedule", func(t *testing.T) {
 		schedule := th.newScheduledJob(t, "test schedule", "select 42")
-		require.NoError(t, schedule.SetScheduleAndNextRun("@weekly"))
+		require.NoError(t, schedule.SetSchedule("@weekly"))
 		// Datums only store up until microseconds.
 		ms := time.Microsecond
 		firstRunTime := timeutil.Now().Add(10 * time.Second).Truncate(ms)
@@ -215,8 +215,8 @@ func TestJobsControlForSchedules(t *testing.T) {
 					// Job has to be in paused state in order for it to be resumable;
 					// Alas, because we don't actually run real jobs (see comment above),
 					// We can't just pause the job (since it will stay in pause-requested state forever).
-					// So, just force set job state to paused.
-					th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", StatePaused,
+					// So, just force set job status to paused.
+					th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", StatusPaused,
 						jobID)
 				}
 			}
@@ -283,21 +283,21 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 		Progress:    jobspb.ImportProgress{},
 	}
 
-	allJobStates := []State{StatePending, StateRunning, StatePaused, StateFailed,
-		StateReverting, StateSucceeded, StateCanceled, StateCancelRequested, StatePauseRequested}
+	allJobStates := []Status{StatusPending, StatusRunning, StatusPaused, StatusFailed,
+		StatusReverting, StatusSucceeded, StatusCanceled, StatusCancelRequested, StatusPauseRequested}
 
 	var scheduleID int64 = 123
 	for _, tc := range []struct {
 		command             string
-		validStartingStates []State
+		validStartingStates []Status
 	}{
-		{"pause", []State{StatePending, StateRunning, StateReverting}},
-		{"resume", []State{StatePaused}},
-		{"cancel", []State{StatePending, StateRunning, StatePaused}},
+		{"pause", []Status{StatusPending, StatusRunning, StatusReverting}},
+		{"resume", []Status{StatusPaused}},
+		{"cancel", []Status{StatusPending, StatusRunning, StatusPaused}},
 	} {
 		scheduleID++
 		// Create one job of every Status.
-		for _, state := range allJobStates {
+		for _, status := range allJobStates {
 			record.CreatedBy = &CreatedByInfo{
 				Name: CreatedByScheduledJobs,
 				ID:   scheduleID,
@@ -305,7 +305,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 			jobID := registry.MakeJobID()
 			_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
 			require.NoError(t, err)
-			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", state, jobID)
+			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
 		}
 
 		jobControl := fmt.Sprintf(tc.command+" JOBS FOR SCHEDULE %d", scheduleID)
@@ -395,8 +395,8 @@ func TestJobControlByType(t *testing.T) {
 		jobspb.TypeRestore:    "RESTORE",
 	}
 
-	var allJobStates = []State{StatePending, StateRunning, StatePaused, StateFailed,
-		StateReverting, StateSucceeded, StateCanceled, StateCancelRequested, StatePauseRequested}
+	var allJobStates = []Status{StatusPending, StatusRunning, StatusPaused, StatusFailed,
+		StatusReverting, StatusSucceeded, StatusCanceled, StatusCancelRequested, StatusPauseRequested}
 
 	// Make the jobs of each type controllable.
 	for _, jobType := range allJobTypes {
@@ -413,12 +413,12 @@ func TestJobControlByType(t *testing.T) {
 	for _, jobType := range allJobTypes {
 		for _, tc := range []struct {
 			command        string
-			startingStates []State
-			endState       State
+			startingStates []Status
+			endState       Status
 		}{
-			{"pause", []State{StatePending, StateRunning, StateReverting}, StatePauseRequested},
-			{"resume", []State{StatePaused}, StateRunning},
-			{"cancel", []State{StatePending, StateRunning, StatePaused}, StateCancelRequested},
+			{"pause", []Status{StatusPending, StatusRunning, StatusReverting}, StatusPauseRequested},
+			{"resume", []Status{StatusPaused}, StatusRunning},
+			{"cancel", []Status{StatusPending, StatusRunning, StatusPaused}, StatusCancelRequested},
 		} {
 			commandQuery := fmt.Sprintf("%s ALL %s JOBS", tc.command, jobspbTypeToString[jobType])
 			subJobs := "SHOW JOBS SELECT id FROM system.jobs WHERE job_type='" + jobspbTypeToString[jobType] + "'"

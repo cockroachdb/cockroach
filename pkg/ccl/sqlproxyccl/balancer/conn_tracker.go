@@ -48,10 +48,7 @@ func NewConnTracker(
 	ctx context.Context, stopper *stop.Stopper, timeSource timeutil.TimeSource,
 ) (*ConnTracker, error) {
 	// Ensure that ctx gets cancelled on stopper's quiescing.
-	//
-	// The tracker shares the same lifetime as the proxy which will shutdown
-	// via the stopper, so we can ignore the cancellation function here.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	if timeSource == nil {
 		timeSource = timeutil.DefaultTimeSource{}
@@ -165,7 +162,7 @@ func logTrackerEvent(event string, sa *ServerAssignment) {
 	// for logging. Since we want logs to tie back to the connection, we'll copy
 	// the logtags associated with the owner's context.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(owner.Context()))
-	log.Dev.Infof(logCtx, "%s: %s", event, sa.Addr())
+	log.Infof(logCtx, "%s: %s", event, sa.Addr())
 }
 
 // refreshPartitionsLoop runs on a background goroutine to continuously refresh
@@ -179,6 +176,7 @@ func (t *ConnTracker) refreshPartitionsLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.Ch():
+			timer.MarkRead()
 			t.refreshPartitions()
 		}
 	}

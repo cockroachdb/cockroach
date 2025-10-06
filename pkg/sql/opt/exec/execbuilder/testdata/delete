@@ -1,4 +1,4 @@
-# LogicTest: local !metamorphic-batch-sizes
+# LogicTest: local
 
 statement ok
 CREATE TABLE kv (
@@ -141,7 +141,6 @@ vectorized: true
       table: unindexed@unindexed_pkey
       spans: [/1 - ]
       limit: 1
-      locking strength: for update
 
 query T
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
@@ -158,7 +157,6 @@ vectorized: true
       table: indexed@indexed_value_idx
       spans: [/5 - /5]
       limit: 10
-      locking strength: for update
 
 query T
 EXPLAIN DELETE FROM indexed LIMIT 10
@@ -175,7 +173,6 @@ vectorized: true
       table: indexed@indexed_value_idx
       spans: LIMITED SCAN
       limit: 10
-      locking strength: for update
 
 # TODO(andyk): Prune columns so that index-join is not necessary.
 query T
@@ -193,7 +190,6 @@ vectorized: true
       table: indexed@indexed_value_idx
       spans: [/5 - /5]
       limit: 10
-      locking strength: for update
 
 # Ensure that index hints in DELETE statements force the choice of a specific index
 # as described in #38799.
@@ -217,7 +213,6 @@ vectorized: true
       estimated row count: 1,000 (missing stats)
       table: t38799@foo
       spans: FULL SCAN
-      locking strength: for update
 
 # Tracing tests for fast delete.
 statement ok
@@ -236,9 +231,9 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%DelRange%' OR message LIKE '%DelRng%'
 ----
 delete range      DelRange /Table/110/1 - /Table/110/2
-dist sender send  r78: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r69: sending batch 1 DelRng to (n1,s1):1
 delete range      DelRange /Table/110/1/601/0 - /Table/110/2
-dist sender send  r78: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r69: sending batch 1 DelRng to (n1,s1):1
 
 # Ensure that DelRange requests are autocommitted when DELETE FROM happens on a
 # chunk of fewer than 600 keys.
@@ -256,8 +251,8 @@ query TT nosort
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
-delete range      Del (locking) /Table/110/1/5/0
-dist sender send  r78: sending batch 1 Del, 1 EndTxn to (n1,s1):1
+delete range      Del /Table/110/1/5/0
+dist sender send  r69: sending batch 1 Del, 1 EndTxn to (n1,s1):1
 
 # Ensure that we send DelRanges when doing a point delete operation on a table
 # that has multiple column families.
@@ -276,7 +271,7 @@ SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%Del%' OR message LIKE '%sending batch%'
 ----
 delete range      DelRange /Table/111/1/5 - /Table/111/1/6
-dist sender send  r78: sending batch 1 DelRng to (n1,s1):1
+dist sender send  r69: sending batch 1 DelRng to (n1,s1):1
 
 statement ok
 CREATE TABLE xyz (
@@ -287,9 +282,6 @@ CREATE TABLE xyz (
 )
 
 # Ensure that we can use a hint to avoid a full table scan.
-
-statement ok
-SET avoid_full_table_scans_in_mutations = false
 
 # Without the hint, we plan a full table scan.
 query T
@@ -339,15 +331,12 @@ vectorized: true
         │ estimated row count: 990 (missing stats)
         │ table: xyz@xyz_pkey
         │ key columns: x
-        │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
               estimated row count: 990 (missing stats)
               table: xyz@xyz_y_idx
               spans: /1-/1000 /2001-/3000
-              locking strength: for update
 
 # AVOID_FULL_SCAN also works to ensure a constrained scan.
 query T
@@ -370,50 +359,12 @@ vectorized: true
         │ estimated row count: 990 (missing stats)
         │ table: xyz@xyz_pkey
         │ key columns: x
-        │ locking strength: for update
-        │ parallel
         │
         └── • scan
               columns: (x, y)
               estimated row count: 990 (missing stats)
               table: xyz@xyz_y_idx
               spans: /1-/1000 /2001-/3000
-              locking strength: for update
-
-# We also avoid the full scan using the session setting
-# avoid_full_table_scans_in_mutations.
-statement ok
-SET avoid_full_table_scans_in_mutations = true
-
-query T
-EXPLAIN (VERBOSE) DELETE FROM xyz WHERE (y > 0 AND y < 1000) OR (y > 2000 AND y < 3000) RETURNING z
-----
-distribution: local
-vectorized: true
-·
-• project
-│ columns: (z)
-│
-└── • delete
-    │ columns: (x, z)
-    │ estimated row count: 990 (missing stats)
-    │ from: xyz
-    │ auto commit
-    │
-    └── • index join
-        │ columns: (x, y, z)
-        │ estimated row count: 990 (missing stats)
-        │ table: xyz@xyz_pkey
-        │ key columns: x
-        │ locking strength: for update
-        │ parallel
-        │
-        └── • scan
-              columns: (x, y)
-              estimated row count: 990 (missing stats)
-              table: xyz@xyz_y_idx
-              spans: /1-/1000 /2001-/3000
-              locking strength: for update
 
 # Testcase for issue 105803.
 
@@ -458,602 +409,3 @@ vectorized: true
                   estimated row count: 333 (missing stats)
                   table: b@b_pkey
                   spans: /2-
-
-# Test that FOR UPDATE locks are applied to reads in generic query plans.
-
-statement ok
-CREATE TABLE t137352 (
-  k INT PRIMARY KEY,
-  a INT,
-  b INT,
-  INDEX (a),
-  INDEX (b),
-  FAMILY (k, a, b)
-)
-
-statement ok
-SET plan_cache_mode = force_generic_plan
-
-statement ok
-PREPARE p AS DELETE FROM t137352 WHERE k = $1
-
-query T
-EXPLAIN ANALYZE EXECUTE p(1)
-----
-planning time: 10µs
-execution time: 100µs
-distribution: <hidden>
-vectorized: <hidden>
-plan type: generic, re-optimized
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
-regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
-·
-• delete
-│ sql nodes: <hidden>
-│ regions: <hidden>
-│ actual row count: 0
-│ execution time: 0µs
-│ from: t137352
-│ auto commit
-│
-└── • scan
-      sql nodes: <hidden>
-      kv nodes: <hidden>
-      regions: <hidden>
-      actual row count: 0
-      KV time: 0µs
-      KV rows decoded: 0
-      KV bytes read: 0 B
-      KV gRPC calls: 0
-      estimated max memory allocated: 0 B
-      missing stats
-      table: t137352@t137352_pkey
-      spans: [/1 - /1]
-      locking strength: for update
-
-statement ok
-INSERT INTO t137352 VALUES (1, 10, 100);
-
-query T kvtrace
-EXECUTE p(1)
-----
-Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/114/1/1/0
-Del /Table/114/2/10/1/0
-Del /Table/114/3/100/1/0
-
-statement ok
-DEALLOCATE p
-
-statement ok
-PREPARE p AS DELETE FROM t137352 WHERE a = $1
-
-query T
-EXPLAIN ANALYZE EXECUTE p(10)
-----
-planning time: 10µs
-execution time: 100µs
-distribution: <hidden>
-vectorized: <hidden>
-plan type: generic, re-optimized
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
-regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
-·
-• delete
-│ sql nodes: <hidden>
-│ regions: <hidden>
-│ actual row count: 0
-│ execution time: 0µs
-│ from: t137352
-│ auto commit
-│
-└── • lookup join
-    │ sql nodes: <hidden>
-    │ regions: <hidden>
-    │ actual row count: 0
-    │ KV time: 0µs
-    │ KV rows decoded: 0
-    │ KV bytes read: 0 B
-    │ KV gRPC calls: 0
-    │ execution time: 0µs
-    │ estimated max memory allocated: 0 B
-    │ table: t137352@t137352_pkey
-    │ equality: (k) = (k)
-    │ equality cols are key
-    │ locking strength: for update
-    │
-    └── • lookup join
-        │ sql nodes: <hidden>
-        │ kv nodes: <hidden>
-        │ regions: <hidden>
-        │ actual row count: 0
-        │ KV time: 0µs
-        │ KV rows decoded: 0
-        │ KV bytes read: 0 B
-        │ KV gRPC calls: 0
-        │ execution time: 0µs
-        │ estimated max memory allocated: 0 B
-        │ table: t137352@t137352_a_idx
-        │ equality: ($1) = (a)
-        │ locking strength: for update
-        │
-        └── • values
-              sql nodes: <hidden>
-              regions: <hidden>
-              actual row count: 1
-              execution time: 0µs
-              size: 1 column, 1 row
-
-statement ok
-INSERT INTO t137352 VALUES (1, 10, 100);
-
-query T kvtrace
-EXECUTE p(10)
-----
-Scan /Table/114/2/1{0-1} lock Exclusive (Block, Unreplicated)
-Scan /Table/114/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/114/1/1/0
-Del /Table/114/2/10/1/0
-Del /Table/114/3/100/1/0
-
-subtest locking_behavior
-
-statement ok
-CREATE TABLE t139160 (
-  k INT PRIMARY KEY,
-  i INT,
-  u INT,
-  v INT,
-  INDEX (i) STORING (u),
-  UNIQUE INDEX (u) STORING (i),
-  FAMILY (k, i, u, v)
-);
-
-statement ok
-INSERT INTO t139160 VALUES (1, 2, 3, 4);
-
-# The PK is scanned and locked.
-query T
-EXPLAIN DELETE FROM t139160 WHERE k = 1
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: t139160
-│ auto commit
-│
-└── • scan
-      missing stats
-      table: t139160@t139160_pkey
-      spans: [/1 - /1]
-      locking strength: for update
-
-query T kvtrace
-DELETE FROM t139160 WHERE k = 1
-----
-Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/115/1/1/0
-Del /Table/115/2/2/1/0
-Del (locking) /Table/115/3/3/0
-
-# Only non-unique secondary index is scanned and locked.
-statement ok
-INSERT INTO t139160 VALUES (1, 2, 3, 4);
-
-query T
-EXPLAIN DELETE FROM t139160 WHERE i = 2
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: t139160
-│ auto commit
-│
-└── • scan
-      missing stats
-      table: t139160@t139160_i_idx
-      spans: [/2 - /2]
-      locking strength: for update
-
-query T kvtrace
-DELETE FROM t139160 WHERE i = 2
-----
-Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/115/1/1/0
-Del /Table/115/2/2/1/0
-Del (locking) /Table/115/3/3/0
-
-statement ok
-INSERT INTO t139160 VALUES (1, 2, 3, 4);
-
-# Both primary and non-unique secondary indexes are scanned and locked.
-query T
-EXPLAIN DELETE FROM t139160 WHERE i = 2 RETURNING v
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: t139160
-│ auto commit
-│
-└── • index join
-    │ table: t139160@t139160_pkey
-    │ locking strength: for update
-    │
-    └── • scan
-          missing stats
-          table: t139160@t139160_i_idx
-          spans: [/2 - /2]
-          locking strength: for update
-
-query T kvtrace
-DELETE FROM t139160 WHERE i = 2 RETURNING v
-----
-Scan /Table/115/2/{2-3} lock Exclusive (Block, Unreplicated)
-Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/115/1/1/0
-Del /Table/115/2/2/1/0
-Del (locking) /Table/115/3/3/0
-
-# Only unique secondary index is scanned and locked.
-statement ok
-INSERT INTO t139160 VALUES (1, 2, 3, 4);
-
-query T
-EXPLAIN DELETE FROM t139160 WHERE u = 3
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: t139160
-│ auto commit
-│
-└── • scan
-      missing stats
-      table: t139160@t139160_u_key
-      spans: [/3 - /3]
-      locking strength: for update
-
-query T kvtrace
-DELETE FROM t139160 WHERE u = 3
-----
-Scan /Table/115/3/3/0 lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/115/1/1/0
-Del /Table/115/2/2/1/0
-Del /Table/115/3/3/0
-
-statement ok
-INSERT INTO t139160 VALUES (1, 2, 3, 4);
-
-# Both primary and unique secondary indexes are scanned and locked.
-query T
-EXPLAIN DELETE FROM t139160 WHERE u = 3 RETURNING v
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: t139160
-│ auto commit
-│
-└── • index join
-    │ table: t139160@t139160_pkey
-    │ locking strength: for update
-    │
-    └── • scan
-          missing stats
-          table: t139160@t139160_u_key
-          spans: [/3 - /3]
-          locking strength: for update
-
-query T kvtrace
-DELETE FROM t139160 WHERE u = 3 RETURNING v
-----
-Scan /Table/115/3/3/0 lock Exclusive (Block, Unreplicated)
-Scan /Table/115/1/1/0 lock Exclusive (Block, Unreplicated)
-Del /Table/115/1/1/0
-Del /Table/115/2/2/1/0
-Del /Table/115/3/3/0
-
-statement ok
-INSERT INTO t139160 VALUES (1, 2, 3, 4);
-
-# The filter is not pushed down into the scan, so no index is locked.
-query T
-EXPLAIN DELETE FROM t139160 WHERE v = 4
-----
-distribution: local
-vectorized: true
-·
-• delete
-│ from: t139160
-│ auto commit
-│
-└── • filter
-    │ filter: v = 4
-    │
-    └── • scan
-          missing stats
-          table: t139160@t139160_pkey
-          spans: FULL SCAN
-
-query T kvtrace
-DELETE FROM t139160 WHERE v = 4
-----
-Scan /Table/115/{1-2}
-Del (locking) /Table/115/1/1/0
-Del /Table/115/2/2/1/0
-Del (locking) /Table/115/3/3/0
-
-statement ok
-CREATE TABLE t139105 (k INT PRIMARY KEY, v INT, FAMILY (k, v));
-
-query T
-EXPLAIN DELETE FROM t139105 WHERE k = 1
-----
-distribution: local
-vectorized: true
-·
-• delete range
-  from: t139105
-  auto commit
-  spans: [/1 - /1]
-
-# Delete fast-path - we need locking Del.
-query T kvtrace
-DELETE FROM t139105 WHERE k = 1
-----
-Del (locking) /Table/116/1/1/0
-
-subtest end
-
-subtest locking_behavior_families
-
-# Same tests as above, but now the table has multiple column families. With
-# multiple families we do not use the optimization that elides lock acquisition
-# if the initial scan was locking.
-statement ok
-CREATE TABLE t139160_families (
-  k INT PRIMARY KEY,
-  i INT,
-  u INT,
-  v INT,
-  INDEX (i) STORING (u),
-  UNIQUE INDEX (u) STORING (i),
-  FAMILY (k),
-  FAMILY (i),
-  FAMILY (u),
-  FAMILY (v)
-);
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE k = 1
-----
-Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
-Del /Table/117/2/2/1/0
-Del /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE i = 2
-----
-Scan /Table/117/2/{2-3} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
-Del /Table/117/2/2/1/0
-Del /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE i = 2 RETURNING v
-----
-Scan /Table/117/2/{2-3} lock Exclusive (Block, Unreplicated)
-Scan /Table/117/1/{1-2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
-Del /Table/117/2/2/1/0
-Del /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE u = 3
-----
-Scan /Table/117/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
-Del /Table/117/2/2/1/0
-Del /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE u = 3 RETURNING v
-----
-Scan /Table/117/3/3/{0-1/2} lock Exclusive (Block, Unreplicated)
-Scan /Table/117/1/{1-2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
-Del /Table/117/2/2/1/0
-Del /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-# Sanity check a couple of session variables.
-statement ok
-SET buffered_writes_use_locking_on_non_unique_indexes = true;
-SET optimizer_use_lock_elision_multiple_families = true;
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE k = 1
-----
-Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
-Del /Table/117/1/1/0
-Del /Table/117/1/1/1/1
-Del /Table/117/1/1/2/1
-Del /Table/117/1/1/3/1
-Del (locking) /Table/117/2/2/1/0
-Del (locking) /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-statement ok
-SET optimizer_enable_lock_elision = false;
-
-statement ok
-INSERT INTO t139160_families VALUES (1, 2, 3, 4);
-
-query T kvtrace
-DELETE FROM t139160_families WHERE k = 1
-----
-Scan /Table/117/1/1/{0-2/2} lock Exclusive (Block, Unreplicated)
-Del (locking) /Table/117/1/1/0
-Del (locking) /Table/117/1/1/1/1
-Del (locking) /Table/117/1/1/2/1
-Del (locking) /Table/117/1/1/3/1
-Del (locking) /Table/117/2/2/1/0
-Del (locking) /Table/117/2/2/1/2/1
-Del (locking) /Table/117/3/3/0
-Del (locking) /Table/117/3/3/1/1
-
-statement ok
-RESET optimizer_enable_lock_elision;
-RESET optimizer_use_lock_elision_multiple_families;
-RESET buffered_writes_use_locking_on_non_unique_indexes;
-
-subtest end
-
-# Regression test for incorrectly treating a locked index in one table as being
-# locked in another. Furthermore, we shouldn't be locking an index in a
-# different table altogether.
-subtest locking_other_table
-
-statement ok
-CREATE TABLE legal_entity (
-   id TEXT PRIMARY KEY
-);
-INSERT INTO legal_entity VALUES ('foo');
-
-statement ok
-CREATE TABLE entity_address (
-   id TEXT PRIMARY KEY
-);
-INSERT INTO entity_address VALUES ('bar');
-
-# Retry to ensure that referenced tables are visible.
-retry
-statement ok
-CREATE TABLE legal_entity_address (
-    id INT PRIMARY KEY,
-    legal_entity_id text NOT NULL REFERENCES legal_entity(id) ON DELETE CASCADE,
-    entity_address_id text NOT NULL REFERENCES entity_address(id) ON DELETE CASCADE,
-    UNIQUE (legal_entity_id, entity_address_id),
-    FAMILY (legal_entity_id, entity_address_id)
-);
-
-statement ok
-INSERT INTO legal_entity_address VALUES (1, 'foo', 'bar');
-
-query T
-EXPLAIN
-DELETE FROM entity_address WHERE id IN (
-    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
-);
-----
-distribution: local
-vectorized: true
-·
-• root
-│
-├── • delete
-│   │ from: entity_address
-│   │
-│   └── • buffer
-│       │ label: buffer 1
-│       │
-│       └── • render
-│           │
-│           └── • scan
-│                 missing stats
-│                 table: legal_entity_address@legal_entity_address_legal_entity_id_entity_address_id_key
-│                 spans: [/'foo' - /'foo']
-│
-└── • fk-cascade
-    │ fk: legal_entity_address_entity_address_id_fkey
-    │
-    └── • delete
-        │ from: legal_entity_address
-        │
-        └── • hash join
-            │ equality: (entity_address_id) = (id)
-            │ right cols are key
-            │
-            ├── • scan
-            │     missing stats
-            │     table: legal_entity_address@legal_entity_address_pkey
-            │     spans: FULL SCAN
-            │
-            └── • distinct
-                │ estimated row count: 10
-                │ distinct on: id
-                │
-                └── • scan buffer
-                      estimated row count: 100
-                      label: buffer 1000000
-
-query T kvtrace
-DELETE FROM entity_address WHERE id IN (
-    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
-);
-----
-Scan /Table/120/2/"foo"{-/PrefixEnd}
-Del (locking) /Table/119/1/"bar"/0
-Scan /Table/120/{1-2}
-Del (locking) /Table/120/1/1/0
-Del (locking) /Table/120/2/"foo"/"bar"/0
-
-subtest end

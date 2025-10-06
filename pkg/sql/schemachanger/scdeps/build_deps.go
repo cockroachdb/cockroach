@@ -8,7 +8,6 @@ package scdeps
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,8 +55,6 @@ func NewBuilderDependencies(
 	nodesStatusInfo scbuild.NodesStatusInfo,
 	regionProvider scbuild.RegionProvider,
 	semaCtx *tree.SemaContext,
-	evalCtx *eval.Context,
-	defaultZoneConfig *zonepb.ZoneConfig,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:       clusterID,
@@ -81,8 +78,6 @@ func NewBuilderDependencies(
 		nodesStatusInfo:          nodesStatusInfo,
 		regionProvider:           regionProvider,
 		semaCtx:                  semaCtx,
-		evalCtx:                  evalCtx,
-		defaultZoneConfig:        defaultZoneConfig,
 	}
 }
 
@@ -106,8 +101,6 @@ type buildDeps struct {
 	nodesStatusInfo          scbuild.NodesStatusInfo
 	regionProvider           scbuild.RegionProvider
 	semaCtx                  *tree.SemaContext
-	evalCtx                  *eval.Context
-	defaultZoneConfig        *zonepb.ZoneConfig
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -377,11 +370,6 @@ func (d *buildDeps) Statements() []string {
 	return d.statements
 }
 
-// EvalCtx implements the scbuild.Dependencies interface.
-func (d *buildDeps) EvalCtx() *eval.Context {
-	return d.evalCtx
-}
-
 // SemaCtx implements the scbuild.Dependencies interface.
 func (d *buildDeps) SemaCtx() *tree.SemaContext {
 	return d.semaCtx
@@ -523,8 +511,4 @@ func (d *buildDeps) NodesStatusInfo() scbuild.NodesStatusInfo {
 
 func (d *buildDeps) RegionProvider() scbuild.RegionProvider {
 	return d.regionProvider
-}
-
-func (d *buildDeps) GetDefaultZoneConfig() *zonepb.ZoneConfig {
-	return d.defaultZoneConfig
 }

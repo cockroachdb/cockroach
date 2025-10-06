@@ -238,11 +238,11 @@ func (b *blockedStreamLogger) willLog() bool {
 
 func (b *blockedStreamLogger) flushLogs() {
 	if b.blockedRegularCount > 0 {
-		log.KvDistribution.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
+		log.Warningf(context.Background(), "%d blocked %s regular replication stream(s): %s",
 			b.blockedRegularCount, b.metricType, redact.SafeString(b.regBuf.String()))
 	}
 	if b.blockedElasticCount > 0 {
-		log.KvDistribution.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
+		log.Warningf(context.Background(), "%d blocked %s elastic replication stream(s): %s",
 			b.blockedElasticCount, b.metricType, redact.SafeString(b.elaBuf.String()))
 	}
 	b.elaBuf.Reset()
@@ -287,7 +287,6 @@ func (b *blockedStreamLogger) observeStream(
 	}
 
 	b.blockedCount++
-	// TODO(sumeer): should be picking the top-k and not some arbitrary subset.
 	if b.blockedCount <= streamStatsCountCap {
 		var bb strings.Builder
 		fmt.Fprintf(&bb, "%v stream %s was blocked: durations:", b.metricType, stream.String())
@@ -306,24 +305,9 @@ func (b *blockedStreamLogger) observeStream(
 			pprintTokens(elasticDelta),
 			pprintTokens(elasticStats.tokensReturned),
 			pprintTokens(elasticStats.tokensDeducted))
-		deductionKindFunc := func(class string, stats deltaStats) {
-			if stats.tokensDeductedForceFlush == 0 && stats.tokensDeductedPreventSendQueue == 0 {
-				return
-			}
-			fmt.Fprintf(&bb, " (%s", class)
-			if stats.tokensDeductedForceFlush > 0 {
-				fmt.Fprintf(&bb, " force: %s", pprintTokens(stats.tokensDeductedForceFlush))
-			}
-			if stats.tokensDeductedPreventSendQueue > 0 {
-				fmt.Fprintf(&bb, " prevent: %s", pprintTokens(stats.tokensDeductedPreventSendQueue))
-			}
-			fmt.Fprintf(&bb, ")")
-		}
-		deductionKindFunc("regular", regularStats)
-		deductionKindFunc("elastic", elasticStats)
-		log.KvDistribution.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
+		log.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
 	} else if b.blockedCount == streamStatsCountCap+1 {
-		log.KvDistribution.Infof(context.Background(), "skipped logging some streams that were blocked")
+		log.Infof(context.Background(), "skipped logging some streams that were blocked")
 	}
 }
 
@@ -487,7 +471,7 @@ func (w *sendStreamTokenWatcher) add(
 			"flow-control-send-stream-token-watcher", w.run); err == nil {
 			w.mu.started = true
 		} else {
-			log.KvDistribution.Warningf(ctx, "failed to start send stream token watcher: %v", err)
+			log.Warningf(ctx, "failed to start send stream token watcher: %v", err)
 		}
 	}
 
@@ -525,6 +509,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 			case <-w.stopper.ShouldQuiesce():
 				return
 			case <-w.timer.Ch():
+				w.timer.MarkRead()
 				w.timer.Stop()
 				w.mu.Lock()
 				// The queue has been empty for watcherIdleCloseDuration, check if
@@ -537,7 +522,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 				// item is added a short time after, it will wait to acquire the lock,
 				// notice the watcher is now stopped and start it again.
 				if w.emptyLocked() {
-					defer w.mu.Unlock() //nolint:deferloop
+					defer w.mu.Unlock()
 					w.mu.started = false
 					return
 				}
@@ -556,8 +541,8 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 				select {
 				case <-w.stopper.ShouldQuiesce():
 					return
-				case <-handle.waitChannel():
-					if handle.confirmHaveTokensAndUnblockNextWaiter() {
+				case <-handle.WaitChannel():
+					if handle.ConfirmHaveTokensAndUnblockNextWaiter() {
 						break waiting
 					}
 				}
@@ -567,7 +552,7 @@ func (w *sendStreamTokenWatcher) run(_ context.Context) {
 		// unblocked and confirmed that there are tokens available. Notify the next
 		// handle in line.
 		if grant, found := w.nextGrant(); found {
-			log.KvDistribution.VInfof(ctx, 4,
+			log.VInfof(ctx, 4,
 				"notifying %v of available tokens for stream %v", grant, w.tc.stream)
 			grant.Notify(ctx)
 		}

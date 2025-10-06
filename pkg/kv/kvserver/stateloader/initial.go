@@ -9,8 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -26,19 +24,6 @@ import (
 const (
 	RaftInitialLogIndex = 10
 	RaftInitialLogTerm  = 5
-)
-
-const (
-	// InitialLeaseAppliedIndex is the starting LAI of a Range. All proposals are
-	// assigned higher LAIs.
-	//
-	// The LAIs <= InitialLeaseAppliedIndex are reserved, e.g. for injected
-	// out-of-order proposals in tests. A bunch of tests override LAI to 1, in
-	// order to force re-proposals. We don't want "real" proposals racing with
-	// injected ones, this can cause a closed timestamp regression.
-	//
-	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
-	InitialLeaseAppliedIndex = 10
 )
 
 // WriteInitialReplicaState sets up a new Range, but without writing an
@@ -58,33 +43,35 @@ func WriteInitialReplicaState(
 	gcHint roachpb.GCHint,
 	replicaVersion roachpb.Version,
 ) (enginepb.MVCCStats, error) {
-	s := kvserverpb.ReplicaState{
-		RaftAppliedIndex:     RaftInitialLogIndex,
-		RaftAppliedIndexTerm: RaftInitialLogTerm,
-		LeaseAppliedIndex:    InitialLeaseAppliedIndex,
-		Desc: &roachpb.RangeDescriptor{
-			RangeID: desc.RangeID,
-		},
-		Lease:       &lease,
-		Stats:       &ms,
-		GCThreshold: &gcThreshold,
-		GCHint:      &gcHint,
+	rsl := Make(desc.RangeID)
+	var s kvserverpb.ReplicaState
+	s.TruncatedState = &kvserverpb.RaftTruncatedState{
+		Term:  RaftInitialLogTerm,
+		Index: RaftInitialLogIndex,
 	}
+	s.RaftAppliedIndex = s.TruncatedState.Index
+	s.RaftAppliedIndexTerm = s.TruncatedState.Term
+	s.Desc = &roachpb.RangeDescriptor{
+		RangeID: desc.RangeID,
+	}
+	s.Stats = &ms
+	s.Lease = &lease
+	s.GCThreshold = &gcThreshold
+	s.GCHint = &gcHint
 	if (replicaVersion != roachpb.Version{}) {
 		s.Version = &replicaVersion
 	}
 
-	rsl := Make(desc.RangeID)
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
-		log.KvExec.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
+		log.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
 	}
 
 	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if !existingGCThreshold.IsEmpty() {
-		log.KvExec.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
+		log.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
 	}
 
 	if existingGCHint, err := rsl.LoadGCHint(ctx, readWriter); err != nil {
@@ -96,7 +83,7 @@ func WriteInitialReplicaState(
 	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading Version")
 	} else if (existingVersion != roachpb.Version{}) {
-		log.KvExec.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
+		log.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
 	newMS, err := rsl.Save(ctx, readWriter, s)
@@ -105,18 +92,6 @@ func WriteInitialReplicaState(
 	}
 
 	return newMS, nil
-}
-
-// WriteInitialTruncState writes the initial truncated state.
-//
-// TODO(arul): this can be removed once no longer call this from the split
-// evaluation path.
-func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roachpb.RangeID) error {
-	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(ctx, w,
-		&kvserverpb.RaftTruncatedState{
-			Index: RaftInitialLogIndex,
-			Term:  RaftInitialLogTerm,
-		})
 }
 
 // WriteInitialRangeState writes the initial range state. It's called during
@@ -139,35 +114,17 @@ func WriteInitialRangeState(
 	); err != nil {
 		return err
 	}
+
+	// TODO(sep-raft-log): when the log storage is separated, the below can't be
+	// written in the same batch. Figure out the ordering required here.
+	sl := Make(desc.RangeID)
+	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+		return err
+	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := Make(desc.RangeID).SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
-
-	// TODO(sep-raft-log): when the log storage is separated, raft state must be
-	// written separately.
-	return WriteInitialRaftState(ctx, readWriter, desc.RangeID)
-}
-
-// WriteInitialRaftState writes raft state for an initialized replica created
-// during cluster bootstrap.
-func WriteInitialRaftState(
-	ctx context.Context, writer storage.Writer, rangeID roachpb.RangeID,
-) error {
-	sl := logstore.NewStateLoader(rangeID)
-	// Initialize the HardState with the term and commit index matching the
-	// initial applied state of the replica.
-	if err := sl.SetHardState(ctx, writer, raftpb.HardState{
-		Term:   RaftInitialLogTerm,
-		Commit: RaftInitialLogIndex,
-	}); err != nil {
-		return err
-	}
-	// The raft log is initialized empty, with the truncated state matching the
-	// committed / applied initial state of the replica.
-	return sl.SetRaftTruncatedState(ctx, writer, &kvserverpb.RaftTruncatedState{
-		Index: RaftInitialLogIndex,
-		Term:  RaftInitialLogTerm,
-	})
+	return nil
 }

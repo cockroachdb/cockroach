@@ -17,7 +17,7 @@ support-from node-id=2 store-id=4
 ----
 epoch: 0, expiration: 0,0
 
-send-heartbeats now=100 support-duration=10s
+send-heartbeats now=100 liveness-interval=10s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} Epoch:1 Expiration:110.000000000,0}
@@ -113,7 +113,7 @@ support for:
 {Target:{NodeID:2 StoreID:3} Epoch:4 Expiration:0,0}
 {Target:{NodeID:2 StoreID:4} Epoch:4 Expiration:104.000000000,0}
 
-send-heartbeats now=200 support-duration=10s
+send-heartbeats now=200 liveness-interval=10s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:1 StoreID:2} Epoch:1 Expiration:210.000000000,0}

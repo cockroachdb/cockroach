@@ -21,48 +21,41 @@ type tableUpdater struct {
 	ru row.Updater
 }
 
-// init initializes the tableUpdater with a Txn.
+var _ tableWriter = &tableUpdater{}
+
+// desc is part of the tableWriter interface.
+func (*tableUpdater) desc() string { return "updater" }
+
+// init is part of the tableWriter interface.
 func (tu *tableUpdater) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
 	return tu.tableWriterBase.init(txn, tu.tableDesc(), evalCtx)
 }
 
-// rowForUpdate performs an update.
-//
-// The passed Datums is not used after `rowForUpdate` returns.
-//
-// The PartialIndexUpdateHelper is used to determine which partial indexes
-// to avoid updating when performing row modification. This is necessary
-// because not all rows are indexed by partial indexes.
-//
-// The VectorIndexUpdateHelper is used to determine which partitions to update
-// in each vector index and supply the quantized vectors to add to the
-// partitions. This is necessary because these values are not part of the table,
-// and are materialized only for the purpose of updating vector indexes.
-//
-// The mustValidateOldPKValues parameter indicates whether the expected previous
-// row must be verified (using CPut).
-//
-// The traceKV parameter determines whether the individual K/V operations
-// should be logged to the context. We use a separate argument here instead
-// of a Value field on the context because Value access in context.Context
-// is rather expensive.
+// row is part of the tableWriter interface.
+// We don't implement this because tu.ru.UpdateRow wants two slices
+// and it would be a shame to split the incoming slice on every call.
+// Instead provide a separate rowForUpdate() below.
+func (tu *tableUpdater) row(
+	context.Context, tree.Datums, row.PartialIndexUpdateHelper, bool,
+) error {
+	panic("unimplemented")
+}
+
+// rowForUpdate extends row() from the tableWriter interface.
 func (tu *tableUpdater) rowForUpdate(
 	ctx context.Context,
 	oldValues, updateValues tree.Datums,
 	pm row.PartialIndexUpdateHelper,
-	vh row.VectorIndexUpdateHelper,
-	oth row.OriginTimestampCPutHelper,
-	mustValidateOldPKValues bool,
 	traceKV bool,
 ) (tree.Datums, error) {
 	tu.currentBatchSize++
-	return tu.ru.UpdateRow(
-		ctx, tu.b, oldValues, updateValues, pm, vh, oth, mustValidateOldPKValues, traceKV,
-	)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, pm, nil, traceKV)
 }
 
-// tableDesc returns the TableDescriptor for the table that the tableUpdater
-// will modify.
+// tableDesc is part of the tableWriter interface.
 func (tu *tableUpdater) tableDesc() catalog.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
+
+// walkExprs is part of the tableWriter interface.
+func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}

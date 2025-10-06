@@ -5,21 +5,7 @@
 
 package sqlstats
 
-import (
-	"context"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-)
-
-type FlushFn func(ctx context.Context,
-	stopper *stop.Stopper,
-	aggregatedTs time.Time,
-	stmtStats []*appstatspb.CollectedStatementStatistics,
-	txnStats []*appstatspb.CollectedTransactionStatistics,
-)
+import "time"
 
 // TestingKnobs provides hooks and knobs for unit tests.
 type TestingKnobs struct {
@@ -48,34 +34,20 @@ type TestingKnobs struct {
 	// updated.
 	JobMonitorUpdateCheckInterval time.Duration
 
-	// FlushInterceptor intercepts persistedsqlstats flush operation.
-	FlushInterceptor FlushFn
+	// SkipZoneConfigBootstrap used for backup tests where we want to skip
+	// the Zone Config TTL setup.
+	SkipZoneConfigBootstrap bool
+
+	// ConsumeStmtStatsInterceptor intercepts consumed stmt stats.
+	ConsumeStmtStatsInterceptor StatementVisitor
+
+	// ConsumeTxnStatsInterceptor intercepts consumed transaction stats.
+	ConsumeTxnStatsInterceptor TransactionVisitor
 
 	// OnAfterClear is invoked right after in-memory SQLStats stats cleared.
 	// It can be useful to invoke assertions right after in-memory stats flushed
 	// and cleared, and before new stats added to cache.
 	OnAfterClear func()
-
-	// OnIngesterSessionClear is a callback that is triggered when the ingester
-	// clears a session entry.
-	OnIngesterSessionClear func(sessionID clusterunique.ID)
-
-	// IngesterTxnInterceptor is a callback that's triggered when a txn insight
-	// is observed by the ingester. The callback is called instead of writing the
-	// insight to the buffer.
-	IngesterTxnInterceptor func(sessionID clusterunique.ID, transaction *RecordedTxnStats)
-
-	// IngesterStmtInterceptor is a callback that's triggered when a stmt insight
-	// is observed. The callback is called instead of writing the insight to the buffer.
-	IngesterStmtInterceptor func(sessionID clusterunique.ID, statement *RecordedStmtStats)
-
-	// OnIngesterFlush is a callback that is triggered when the ingester
-	OnIngesterFlush func()
-
-	// SynchronousSQLStats if true, will make the SQL stats flush writing synchronously
-	// with sql execution. This is useful for tests that just want to assert on the
-	// collected stats rather than validating the collection process itself.
-	SynchronousSQLStats bool
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -93,7 +65,7 @@ func (knobs *TestingKnobs) GetAOSTClause() string {
 
 // CreateTestingKnobs creates a testing knob in the unit tests.
 //
-// Note: SQL Stats read path uses follower read (AS OF SYSTEM TIME
+// Note: SQL Stats’s read path uses follower read (AS OF SYSTEM TIME
 // follower_read_timestamp()) to ensure that contention between reads and writes
 // (SQL Stats flush / SQL Stats cleanup) is minimized.
 //

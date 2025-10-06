@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -58,7 +57,6 @@ type TestState struct {
 	sessionData             sessiondata.SessionData
 	statements              []string
 	semaCtx                 *tree.SemaContext
-	evalCtx                 *eval.Context
 	testingKnobs            *scexec.TestingKnobs
 	jobs                    []jobs.Record
 	createdJobsInCurrentTxn []jobspb.JobID
@@ -81,8 +79,8 @@ type TestState struct {
 	approximateTimestamp time.Time
 
 	catalogChanges     catalogChanges
+	idGenerator        eval.DescIDGenerator
 	refProviderFactory scbuild.ReferenceProviderFactory
-	clusterSettings    *cluster.Settings
 }
 
 type catalogChanges struct {
@@ -243,7 +241,7 @@ func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 
 // DescIDGenerator implements scbuild.Dependencies.
 func (s *TestState) DescIDGenerator() eval.DescIDGenerator {
-	return s.evalCtx.DescIDGenerator
+	return s.idGenerator
 }
 
 // ReferenceProviderFactory implements scbuild.Dependencies.

@@ -36,17 +36,12 @@ var tableInserterPool = sync.Pool{
 }
 
 type insertNode struct {
-	singleInputPlanNode
+	source planNode
 
 	// columns is set if this INSERT is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a
 	// RETURNING clause with some scalar expressions.
 	columns colinfo.ResultColumns
-
-	// vectorInsert is set if this INSERT should be executed via a specialized
-	// implementation in the vectorized engine. Currently only set for inserts
-	// executed on behalf of COPY statements.
-	vectorInsert bool
 
 	run insertRun
 }
@@ -93,8 +88,6 @@ type insertRun struct {
 	// regionLocalInfo handles erroring out the INSERT when the
 	// enforce_home_region setting is on.
 	regionLocalInfo regionLocalInfoType
-
-	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
 // regionLocalInfoType contains common items needed for determining the home region
@@ -160,10 +153,7 @@ func (r *regionLocalInfoType) checkHomeRegion(row tree.Datums) error {
 	return nil
 }
 
-func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
-		r.originTimestampCPutHelper.OriginTimestamp = ots
-	}
+func (r *insertRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
@@ -202,22 +192,8 @@ func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
 func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
-	insertVals := rowVals[:len(r.insertCols)]
-	if err := enforceNotNullConstraints(insertVals, r.insertCols); err != nil {
+	if err := enforceNotNullConstraints(rowVals, r.insertCols); err != nil {
 		return err
-	}
-
-	rowVals = rowVals[len(insertVals):]
-
-	// Verify the CHECK constraint results, if any.
-	if n := r.checkOrds.Len(); n > 0 {
-		if err := checkMutationInput(
-			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
-			r.ti.tableDesc(), r.checkOrds, rowVals[:n],
-		); err != nil {
-			return err
-		}
-		rowVals = rowVals[n:]
 	}
 
 	// Create a set of partial index IDs to not write to. Indexes should not be
@@ -225,36 +201,49 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// predicate. This set is passed as a parameter to tableInserter.row below.
 	var pm row.PartialIndexUpdateHelper
 	if n := len(r.ti.tableDesc().PartialIndexes()); n > 0 {
-		err := pm.Init(rowVals[:n], nil /* partialIndexDelVals */, r.ti.tableDesc())
+		offset := len(r.insertCols) + r.checkOrds.Len()
+		partialIndexPutVals := rowVals[offset : offset+n]
+
+		err := pm.Init(partialIndexPutVals, nil /* partialIndexDelVals */, r.ti.tableDesc())
 		if err != nil {
 			return err
 		}
-		rowVals = rowVals[n:]
+
+		// Truncate rowVals so that it no longer includes partial index predicate
+		// values.
+		rowVals = rowVals[:len(r.insertCols)+r.checkOrds.Len()]
 	}
 
-	// Keep track of the vector index partitions to update, as well as the
-	// quantized vectors. This information is passed to tableInserter.row below.
-	// Input is one partition key per vector index followed by one quantized vector
-	// per index.
-	var vh row.VectorIndexUpdateHelper
-	if n := len(r.ti.tableDesc().VectorIndexes()); n > 0 {
-		vh.InitForPut(rowVals[:n], rowVals[n:n*2], r.ti.tableDesc())
+	// Verify the CHECK constraint results, if any.
+	if !r.checkOrds.Empty() {
+		checkVals := rowVals[len(r.insertCols):]
+		if err := checkMutationInput(
+			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			r.ti.tableDesc(), r.checkOrds, checkVals,
+		); err != nil {
+			return err
+		}
+	}
+
+	if len(rowVals) > len(r.insertCols) {
+		// Remove extra columns for check constraints and AFTER triggers.
+		rowVals = rowVals[:len(r.insertCols)]
 	}
 
 	// Error out the insert if the enforce_home_region session setting is on and
 	// the row's locality doesn't match the gateway region.
-	if err := r.regionLocalInfo.checkHomeRegion(insertVals); err != nil {
+	if err := r.regionLocalInfo.checkHomeRegion(rowVals); err != nil {
 		return err
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
+	if err := r.ti.row(params.ctx, rowVals, pm, r.traceKV); err != nil {
 		return err
 	}
 
 	// If result rows need to be accumulated, do it.
 	if r.ti.rows != nil {
-		for i, val := range insertVals {
+		for i, val := range rowVals {
 			// The downstream consumer will want the rows in the order of
 			// the table descriptor, not that of insertCols. Reorder them
 			// and ignore non-public columns.
@@ -277,7 +266,7 @@ func (n *insertNode) startExec(params runParams) error {
 	// Cache traceKV during execution, to avoid re-evaluating it for every row.
 	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	n.run.init(params, n.columns)
+	n.run.initRowContainer(params, n.columns)
 
 	return n.run.ti.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -309,7 +298,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		}
 
 		// Advance one individual row.
-		if next, err := n.input.Next(params); !next {
+		if next, err := n.source.Next(params); !next {
 			lastBatch = true
 			if err != nil {
 				// TODO(richardjcai): Don't like this, not sure how to check if the
@@ -326,13 +315,13 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		if buildutil.CrdbTestBuild {
 			// This testing knob allows us to suspend execution to force a race condition.
 			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn(params.p.stmt.SQL)
+				fn()
 			}
 		}
 
 		// Process the insertion for the current source row, potentially
 		// accumulating the result row for later.
-		if err := n.run.processSourceRow(params, n.input.Values()); err != nil {
+		if err := n.run.processSourceRow(params, n.source.Values()); err != nil {
 			return false, err
 		}
 
@@ -360,9 +349,10 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 		}
 		// Remember we're done for the next call to BatchedNext().
 		n.run.done = true
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), int(n.run.ti.rowsWritten))
 	}
+
+	// Possibly initiate a run of CREATE STATISTICS.
+	params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), n.run.ti.lastBatchSize)
 
 	return n.run.ti.lastBatchSize > 0, nil
 }
@@ -374,7 +364,7 @@ func (n *insertNode) BatchedCount() int { return n.run.ti.lastBatchSize }
 func (n *insertNode) BatchedValues(rowIdx int) tree.Datums { return n.run.ti.rows.At(rowIdx) }
 
 func (n *insertNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.source.Close(ctx)
 	n.run.ti.close(ctx)
 	*n = insertNode{}
 	insertNodePool.Put(n)

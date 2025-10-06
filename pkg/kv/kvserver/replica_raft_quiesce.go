@@ -27,7 +27,7 @@ import (
 // should quiesce. Unquiescing incurs a raft proposal which has a non-neglible
 // cost, and low-latency clusters may otherwise (un)quiesce very frequently,
 // e.g. on every tick.
-var quiesceAfterTicks = envutil.EnvOrDefaultInt64("COCKROACH_QUIESCE_AFTER_TICKS", 6)
+var quiesceAfterTicks = envutil.EnvOrDefaultInt("COCKROACH_QUIESCE_AFTER_TICKS", 6)
 
 // raftDisableQuiescence disables raft quiescence.
 var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
@@ -35,15 +35,15 @@ var raftDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCEN
 func (r *Replica) quiesceLocked(ctx context.Context, lagging laggingReplicaSet) {
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.KvExec.Infof(ctx, "quiescing r%d", r.RangeID)
+			log.Infof(ctx, "quiescing r%d", r.RangeID)
 		}
 		r.mu.quiescent = true
 		r.mu.laggingFollowersOnQuiesce = lagging
-		r.store.unquiescedOrAwakeReplicas.Lock()
-		delete(r.store.unquiescedOrAwakeReplicas.m, r.RangeID)
-		r.store.unquiescedOrAwakeReplicas.Unlock()
+		r.store.unquiescedReplicas.Lock()
+		delete(r.store.unquiescedReplicas.m, r.RangeID)
+		r.store.unquiescedReplicas.Unlock()
 	} else if log.V(4) {
-		log.KvExec.Infof(ctx, "r%d already quiesced", r.RangeID)
+		log.Infof(ctx, "r%d already quiesced", r.RangeID)
 	}
 }
 
@@ -78,13 +78,13 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	}
 	ctx := r.AnnotateCtx(context.TODO())
 	if log.V(3) {
-		log.KvExec.Infof(ctx, "unquiescing r%d", r.RangeID)
+		log.Infof(ctx, "unquiescing r%d", r.RangeID)
 	}
 	r.mu.quiescent = false
 	r.mu.laggingFollowersOnQuiesce = nil
-	r.store.unquiescedOrAwakeReplicas.Lock()
-	r.store.unquiescedOrAwakeReplicas.m[r.RangeID] = struct{}{}
-	r.store.unquiescedOrAwakeReplicas.Unlock()
+	r.store.unquiescedReplicas.Lock()
+	r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
+	r.store.unquiescedReplicas.Unlock()
 
 	st := r.raftSparseStatusRLocked()
 	if st.RaftState == raftpb.StateLeader {
@@ -94,7 +94,7 @@ func (r *Replica) maybeUnquiesceLocked(wakeLeader, mayCampaign bool) bool {
 	} else if st.RaftState == raftpb.StateFollower && st.Lead != raft.None && wakeLeader {
 		// Propose an empty command which will wake the leader.
 		if log.V(3) {
-			log.KvExec.Infof(ctx, "waking r%d leader", r.RangeID)
+			log.Infof(ctx, "waking r%d leader", r.RangeID)
 		}
 		data := raftlog.EncodeCommandBytes(
 			raftlog.EntryEncodingStandardWithoutAC, raftlog.MakeCmdIDKey(), nil, 0 /* pri */)
@@ -213,7 +213,7 @@ type quiescer interface {
 	hasPendingProposalsRLocked() bool
 	hasPendingProposalQuotaRLocked() bool
 	hasSendTokensRaftMuLockedReplicaMuLocked() bool
-	ticksSinceLastProposalRLocked() int64
+	ticksSinceLastProposalRLocked() int
 	mergeInProgressRLocked() bool
 	isDestroyedRLocked() (DestroyReason, error)
 }
@@ -290,25 +290,34 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	// TODO(pav-kv): should check StateLeader rather than leaderID == replicaID.
 	if !q.isRaftLeaderRLocked() { // fast path
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: not leader")
+			log.Infof(ctx, "not quiescing: not leader")
 		}
 		return nil, nil, false
 	}
 	if ticks := q.ticksSinceLastProposalRLocked(); ticks < quiesceAfterTicks {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: proposed %d ticks ago", ticks)
+			log.Infof(ctx, "not quiescing: proposed %d ticks ago", ticks)
 		}
 		return nil, nil, false
 	}
-	// Fast path: if the lease doesn't support quiescence (leader leases and
-	// expiration based leases do not), return early.
-	if !leaseStatus.Lease.SupportsQuiescence() {
-		log.KvExec.VInfof(ctx, 4, "not quiescing: %s", leaseStatus.Lease.Type())
+	// Fast path: don't quiesce leader leases. A fortified raft leader does not
+	// send raft heartbeats, so quiescence is not needed. All liveness decisions
+	// are based on store liveness communication, which is cheap enough to not
+	// need a notion of quiescence.
+	if leaseStatus.Lease.Type() == roachpb.LeaseLeader {
+		log.VInfof(ctx, 4, "not quiescing: leader lease")
+		return nil, nil, false
+	}
+	// Fast path: don't quiesce expiration-based leases, since they'll likely be
+	// renewed soon. The lease may not be ours, but in that case we wouldn't be
+	// able to quiesce anyway (see leaseholder condition below).
+	if l := leaseStatus.Lease; l.Type() == roachpb.LeaseExpiration {
+		log.VInfof(ctx, 4, "not quiescing: expiration-based lease")
 		return nil, nil, false
 	}
 	if q.hasPendingProposalsRLocked() {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: proposals pending")
+			log.Infof(ctx, "not quiescing: proposals pending")
 		}
 		return nil, nil, false
 	}
@@ -318,7 +327,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	// timing of releasing quota is unrelated to this function.
 	if q.hasPendingProposalQuotaRLocked() {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: replication quota outstanding")
+			log.Infof(ctx, "not quiescing: replication quota outstanding")
 		}
 		return nil, nil, false
 	}
@@ -327,27 +336,27 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	// send tokens are eventually released.
 	if q.hasSendTokensRaftMuLockedReplicaMuLocked() {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: holds RACv2 send tokens")
+			log.Infof(ctx, "not quiescing: holds RACv2 send tokens")
 		}
 		return nil, nil, false
 	}
 
 	if q.mergeInProgressRLocked() {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: merge in progress")
+			log.Infof(ctx, "not quiescing: merge in progress")
 		}
 		return nil, nil, false
 	}
 	if _, err := q.isDestroyedRLocked(); err != nil {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: replica destroyed")
+			log.Infof(ctx, "not quiescing: replica destroyed")
 		}
 		return nil, nil, false
 	}
 
 	if q.hasRaftReadyRLocked() {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: raft ready")
+			log.Infof(ctx, "not quiescing: raft ready")
 		}
 		return nil, nil, false
 	}
@@ -356,19 +365,19 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	status := q.raftSparseStatusRLocked()
 	if status == nil {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: dormant Raft group")
+			log.Infof(ctx, "not quiescing: dormant Raft group")
 		}
 		return nil, nil, false
 	}
 	if status.SoftState.RaftState != raftpb.StateLeader {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: not leader")
+			log.Infof(ctx, "not quiescing: not leader")
 		}
 		return nil, nil, false
 	}
 	if status.LeadTransferee != 0 {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: leader transfer to %d in progress", status.LeadTransferee)
+			log.Infof(ctx, "not quiescing: leader transfer to %d in progress", status.LeadTransferee)
 		}
 		return nil, nil, false
 	}
@@ -378,7 +387,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	// pending commands which it's waiting on this leader to propose.
 	if !leaseStatus.IsValid() || !leaseStatus.OwnedBy(q.StoreID()) {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: not leaseholder")
+			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
 		return nil, nil, false
 	}
@@ -386,7 +395,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	// equal in order to quiesce.
 	if status.Applied != status.Commit {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",
+			log.Infof(ctx, "not quiescing: applied (%d) != commit (%d)",
 				status.Applied, status.Commit)
 		}
 		return nil, nil, false
@@ -394,7 +403,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	lastIndex := q.raftLastIndexRLocked()
 	if kvpb.RaftIndex(status.Commit) != lastIndex {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
+			log.Infof(ctx, "not quiescing: commit (%d) != lastIndex (%d)",
 				status.Commit, lastIndex)
 		}
 		return nil, nil, false
@@ -408,7 +417,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 		//
 		// See: https://github.com/cockroachdb/cockroach/issues/84252
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: overloaded followers %v", pausedFollowers)
+			log.Infof(ctx, "not quiescing: overloaded followers %v", pausedFollowers)
 		}
 		return nil, nil, false
 	}
@@ -421,7 +430,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 		}
 		if progress, ok := status.Progress[raftpb.PeerID(rep.ReplicaID)]; !ok {
 			if log.V(4) {
-				log.KvExec.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
+				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
 					rep.ReplicaID, progress)
 			}
 			return nil, nil, false
@@ -430,14 +439,14 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 			// the node to the set of replicas lagging the quiescence index.
 			if l, ok := livenessMap[rep.NodeID]; ok && !l.IsLive {
 				if log.V(4) {
-					log.KvExec.Infof(ctx, "skipping node %d because not live. Progress=%+v",
+					log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
 						rep.NodeID, progress)
 				}
 				lagging = append(lagging, l.Liveness)
 				continue
 			}
 			if log.V(4) {
-				log.KvExec.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d) or state %s not admissible",
+				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d) or state %s not admissible",
 					rep.ReplicaID, progress.Match, status.Applied, progress.State)
 			}
 			return nil, nil, false
@@ -448,7 +457,7 @@ func shouldReplicaQuiesceRaftMuLockedReplicaMuLocked(
 	})
 	if !foundSelf {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: %d not found in progress: %+v",
+			log.Infof(ctx, "not quiescing: %d not found in progress: %+v",
 				status.ID, status.Progress)
 		}
 		return nil, nil, false
@@ -463,7 +472,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 	fromReplica, fromErr := r.getReplicaDescriptorByIDRLocked(r.replicaID, lastToReplica)
 	if fromErr != nil {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.replicaID)
+			log.Infof(ctx, "not quiescing: cannot find from replica (%d)", r.replicaID)
 		}
 		return false
 	}
@@ -477,7 +486,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(roachpb.ReplicaID(id), lastFromReplica)
 		if toErr != nil {
 			if log.V(4) {
-				log.KvExec.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
+				log.Infof(ctx, "failed to quiesce: cannot find to replica (%d)", id)
 			}
 			r.maybeUnquiesceLocked(false /* wakeLeader */, false /* mayCampaign */) // already leader
 			return false
@@ -509,7 +518,7 @@ func (r *Replica) quiesceAndNotifyRaftMuLockedReplicaMuLocked(
 		}
 
 		if !r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, quiesce, curLagging) {
-			log.KvExec.Fatalf(ctx, "failed to coalesce known heartbeat: %v", msg)
+			log.Fatalf(ctx, "failed to coalesce known heartbeat: %v", msg)
 		}
 	}
 	return true
@@ -530,19 +539,19 @@ func shouldFollowerQuiesceOnNotify(
 	status := q.raftBasicStatusRLocked()
 	if status.Term != msg.Term {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: local raft term is %d, incoming term is %d", status.Term, msg.Term)
+			log.Infof(ctx, "not quiescing: local raft term is %d, incoming term is %d", status.Term, msg.Term)
 		}
 		return false
 	}
 	if status.Commit != msg.Commit {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: local raft commit index is %d, incoming commit index is %d", status.Commit, msg.Commit)
+			log.Infof(ctx, "not quiescing: local raft commit index is %d, incoming commit index is %d", status.Commit, msg.Commit)
 		}
 		return false
 	}
 	if status.Lead != msg.From {
 		if log.V(4) {
-			log.KvExec.Infof(ctx, "not quiescing: local raft leader is %d, incoming message from %d", status.Lead, msg.From)
+			log.Infof(ctx, "not quiescing: local raft leader is %d, incoming message from %d", status.Lead, msg.From)
 		}
 		return false
 	}
@@ -550,7 +559,7 @@ func shouldFollowerQuiesceOnNotify(
 	// Don't quiesce if there's outstanding work on this replica.
 	if q.hasPendingProposalsRLocked() {
 		if log.V(3) {
-			log.KvExec.Infof(ctx, "not quiescing: pending commands")
+			log.Infof(ctx, "not quiescing: pending commands")
 		}
 		return false
 	}
@@ -587,7 +596,7 @@ func shouldFollowerQuiesceOnNotify(
 	// necessary.
 	if lagging.AnyMemberStale(livenessMap) {
 		if log.V(3) {
-			log.KvExec.Infof(ctx, "not quiescing: liveness info about lagging replica stale")
+			log.Infof(ctx, "not quiescing: liveness info about lagging replica stale")
 		}
 		return false
 	}

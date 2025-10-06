@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build gofuzz
+// +build gofuzz
 
 // The parser fuzzer needs to live in its own package because it must import
 // the builtins package so functions that are hard coded in sql.y (like

@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -134,19 +134,19 @@ func TestStoreKeyManager(t *testing.T) {
 
 	kmTimeNow = func() time.Time { return timeutil.Unix(5, 0) }
 
-	keyPlain := &enginepb.SecretKey{}
+	keyPlain := &enginepbccl.SecretKey{}
 	require.NoError(t, proto.UnmarshalText(
 		"info {encryption_type: Plaintext, key_id: \"plain\" creation_time: 5 source: \"plain\"}",
 		keyPlain))
-	key16 := &enginepb.SecretKey{}
+	key16 := &enginepbccl.SecretKey{}
 	require.NoError(t, proto.UnmarshalText(fmt.Sprintf(
 		"info {encryption_type: AES128_CTR, key_id: \"%s\" creation_time: 5 source: \"16.key\"} key: \"%s\"",
 		keyID128, key128), key16))
-	key24 := &enginepb.SecretKey{}
+	key24 := &enginepbccl.SecretKey{}
 	require.NoError(t, proto.UnmarshalText(fmt.Sprintf(
 		"info {encryption_type: AES192_CTR, key_id: \"%s\" creation_time: 5 source: \"24.key\"} key: \"%s\"",
 		keyID192, key192), key24))
-	key32 := &enginepb.SecretKey{}
+	key32 := &enginepbccl.SecretKey{}
 	require.NoError(t, proto.UnmarshalText(fmt.Sprintf(
 		"info {encryption_type: AES256_CTR, key_id: \"%s\" creation_time: 5 source: \"32.key\"} key: \"%s\"",
 		keyID256, key256), key32))
@@ -197,18 +197,18 @@ func TestStoreKeyManager(t *testing.T) {
 	}
 }
 
-func setActiveStoreKeyInProto(dkr *enginepb.DataKeysRegistry, id string) {
-	dkr.StoreKeys[id] = &enginepb.KeyInfo{
-		EncryptionType: enginepb.EncryptionType_AES128_CTR,
+func setActiveStoreKeyInProto(dkr *enginepbccl.DataKeysRegistry, id string) {
+	dkr.StoreKeys[id] = &enginepbccl.KeyInfo{
+		EncryptionType: enginepbccl.EncryptionType_AES128_CTR,
 		KeyId:          id,
 	}
 	dkr.ActiveStoreKeyId = id
 }
 
-func setActiveDataKeyInProto(dkr *enginepb.DataKeysRegistry, id string) {
-	dkr.DataKeys[id] = &enginepb.SecretKey{
-		Info: &enginepb.KeyInfo{
-			EncryptionType: enginepb.EncryptionType_AES192_CTR,
+func setActiveDataKeyInProto(dkr *enginepbccl.DataKeysRegistry, id string) {
+	dkr.DataKeys[id] = &enginepbccl.SecretKey{
+		Info: &enginepbccl.KeyInfo{
+			EncryptionType: enginepbccl.EncryptionType_AES192_CTR,
 			KeyId:          id,
 			CreationTime:   kmTimeNow().Unix(),
 		},
@@ -217,8 +217,8 @@ func setActiveDataKeyInProto(dkr *enginepb.DataKeysRegistry, id string) {
 	dkr.ActiveDataKeyId = id
 }
 
-func setActiveStoreKey(dkm *DataKeyManager, id string, kind enginepb.EncryptionType) string {
-	err := dkm.SetActiveStoreKeyInfo(context.Background(), &enginepb.KeyInfo{
+func setActiveStoreKey(dkm *DataKeyManager, id string, kind enginepbccl.EncryptionType) string {
+	err := dkm.SetActiveStoreKeyInfo(context.Background(), &enginepbccl.KeyInfo{
 		EncryptionType: kind,
 		KeyId:          id,
 	})
@@ -228,7 +228,7 @@ func setActiveStoreKey(dkm *DataKeyManager, id string, kind enginepb.EncryptionT
 	return ""
 }
 
-func CompareKeys(last, curr *enginepb.SecretKey) string {
+func CompareKeys(last, curr *enginepbccl.SecretKey) string {
 	if (last == nil && curr == nil) || (last != nil && curr == nil) || (last == nil && curr != nil) ||
 		(last.Info.KeyId == curr.Info.KeyId) {
 		return "same\n"
@@ -242,8 +242,8 @@ func TestDataKeyManager(t *testing.T) {
 	memFS := vfs.NewMem()
 
 	var dkm *DataKeyManager
-	var keyMap map[string]*enginepb.SecretKey
-	var lastActiveDataKey *enginepb.SecretKey
+	var keyMap map[string]*enginepbccl.SecretKey
+	var lastActiveDataKey *enginepbccl.SecretKey
 
 	var unixTime int64
 	kmTimeNow = func() time.Time {
@@ -264,13 +264,13 @@ func TestDataKeyManager(t *testing.T) {
 				if err != nil {
 					return err.Error()
 				}
-				keyMap = make(map[string]*enginepb.SecretKey)
+				keyMap = make(map[string]*enginepbccl.SecretKey)
 				lastActiveDataKey = nil
 				require.NoError(t, memFS.MkdirAll(data[0], 0755))
 				dkm = &DataKeyManager{fs: memFS, dbDir: data[0], rotationPeriod: int64(period)}
-				dkr := &enginepb.DataKeysRegistry{
-					StoreKeys: make(map[string]*enginepb.KeyInfo),
-					DataKeys:  make(map[string]*enginepb.SecretKey),
+				dkr := &enginepbccl.DataKeysRegistry{
+					StoreKeys: make(map[string]*enginepbccl.KeyInfo),
+					DataKeys:  make(map[string]*enginepbccl.SecretKey),
 				}
 				for i := 2; i < len(data); i++ {
 					keyInfo := strings.Split(data[i], " ")
@@ -315,12 +315,12 @@ func TestDataKeyManager(t *testing.T) {
 				d.ScanArgs(t, "id", &id)
 				version := 1
 				d.MaybeScanArgs(t, "version", &version)
-				var et enginepb.EncryptionType
+				var et enginepbccl.EncryptionType
 				switch version {
 				case 1:
-					et = enginepb.EncryptionType_AES128_CTR
+					et = enginepbccl.EncryptionType_AES128_CTR
 				case 2:
-					et = enginepb.EncryptionType_AES_128_CTR_V2
+					et = enginepbccl.EncryptionType_AES_128_CTR_V2
 				default:
 					t.Fatalf("unknown version %d", version)
 				}
@@ -328,7 +328,7 @@ func TestDataKeyManager(t *testing.T) {
 			case "set-active-store-key-plain":
 				var id string
 				d.ScanArgs(t, "id", &id)
-				return setActiveStoreKey(dkm, d.CmdArgs[0].Vals[0], enginepb.EncryptionType_Plaintext)
+				return setActiveStoreKey(dkm, d.CmdArgs[0].Vals[0], enginepbccl.EncryptionType_Plaintext)
 			case "check-exposed":
 				var val bool
 				d.ScanArgs(t, "val", &val)
@@ -348,7 +348,7 @@ func TestDataKeyManager(t *testing.T) {
 				if key == nil {
 					return "none\n"
 				}
-				keyInfo := &enginepb.KeyInfo{}
+				keyInfo := &enginepbccl.KeyInfo{}
 				proto.Merge(keyInfo, key.Info)
 				keyInfo.KeyId = ""
 				return strings.TrimSpace(keyInfo.String()) + "\n"
@@ -463,7 +463,7 @@ func TestDataKeyManagerIO(t *testing.T) {
 			case "set-active-store-key":
 				var id string
 				d.ScanArgs(t, "id", &id)
-				fmt.Fprintf(&buf, "%s", setActiveStoreKey(dkm, id, enginepb.EncryptionType_AES128_CTR))
+				fmt.Fprintf(&buf, "%s", setActiveStoreKey(dkm, id, enginepbccl.EncryptionType_AES128_CTR))
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s\n", d.Cmd)
@@ -574,13 +574,13 @@ func TestDataKeyManagerBlockedWriteAllowsRead(t *testing.T) {
 	fs := &fs.BlockingWriteFSForTesting{FS: mem}
 	dkm := &DataKeyManager{fs: fs, dbDir: "", rotationPeriod: 10000}
 	require.NoError(t, dkm.Load(ctx))
-	require.Equal(t, "", setActiveStoreKey(dkm, "foo", enginepb.EncryptionType_AES128_CTR))
+	require.Equal(t, "", setActiveStoreKey(dkm, "foo", enginepbccl.EncryptionType_AES128_CTR))
 	activeKey, err := dkm.ActiveKeyForWriter(ctx)
 	require.NoError(t, err)
 	activeKeyID := activeKey.Info.KeyId
 	fs.Block()
 	go func() {
-		require.Equal(t, "", setActiveStoreKey(dkm, "bar", enginepb.EncryptionType_AES128_CTR))
+		require.Equal(t, "", setActiveStoreKey(dkm, "bar", enginepbccl.EncryptionType_AES128_CTR))
 	}()
 	time.Sleep(time.Millisecond)
 	k, err := dkm.GetKey(activeKeyID)

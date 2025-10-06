@@ -5,7 +5,7 @@ sh_binary(
     srcs = ["//pkg/sql/lexbase:sql-gen.sh"],
 )
 
-# Define the target to auto-generate plpgsql.go from the grammar file.
+# Define the target to auto-generate sql.go from the grammar file.
 genrule(
     name = "plpgsql-goyacc",
     srcs = [
@@ -16,6 +16,7 @@ genrule(
     export GOPATH=/nonexist-gopath
       $(location :plpgsql-gen) $(location plpgsql.y) plpgsql ""\
           $(location plpgsql.go) $(location @org_golang_x_tools//cmd/goyacc)
+
     """,
     tools = [
         ":plpgsql-gen",
@@ -25,7 +26,7 @@ genrule(
 )
 
 go_library(
-    name = "parser",
+    name = "plpgparser",
     srcs = [
         "lexer.go",
         "parse.go",
@@ -37,14 +38,13 @@ go_library(
         "//pkg/build",  # keep
         "//pkg/sql/parser",
         "//pkg/sql/parser/statements",
-        "//pkg/sql/parserutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/plpgsql/parser/lexbase",  # keep
         "//pkg/sql/scanner",
         "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/types",  # keep
+        "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",  # keep
@@ -63,7 +63,7 @@ go_test(
     srcs = ["parser_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":parser",
+        ":plpgparser",
         "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",

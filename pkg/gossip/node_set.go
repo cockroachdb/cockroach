@@ -119,7 +119,7 @@ func (as *nodeSet) resolvePlaceholder(node roachpb.NodeID) {
 
 func (as *nodeSet) updateGauge() {
 	if as.placeholders < 0 {
-		log.Dev.Fatalf(context.TODO(),
+		log.Fatalf(context.TODO(),
 			"nodeSet.placeholders should never be less than 0; gossip logic is broken %+v", as)
 	}
 	as.gauge.Update(int64(as.len()))

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -64,13 +65,21 @@ func (s destroyStatus) Removed() bool {
 // don't know the current replica ID.
 const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-// postDestroyRaftMuLocked is called after the replica destruction is durably
-// written to Pebble.
-func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) error {
-	// TODO(#136416): at node startup, we should remove all on-disk directories
-	// belonging to replicas which aren't present. A crash before a call to
-	// postDestroyRaftMuLocked will currently leave the files around forever.
-	if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
+	// TODO(tschottdorf): at node startup, we should remove all on-disk
+	// directories belonging to replicas which aren't present. A crash before a
+	// call to postDestroyRaftMuLocked will currently leave the files around
+	// forever.
+	//
+	// TODO(tbg): coming back in 2021, the above should be outdated. The ReplicaID
+	// is set on creation and never changes over the lifetime of a Replica. Also,
+	// the replica is always contained in its descriptor. So this code below should
+	// be removable.
+	//
+	// TODO(pavelkalinnikov): coming back in 2023, the above may still happen if:
+	// (1) state machine syncs, (2) OS crashes before (3) sideloaded was able to
+	// sync the files removal. The files should be cleaned up on restart.
+	if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
 		return err
 	}
 
@@ -111,7 +120,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 		ClearUnreplicatedByRangeID: true,
 	}
 	// TODO(sep-raft-log): need both engines separately here.
-	if err := kvstorage.DestroyReplica(ctx, r.ID(), r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
+	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
 		return err
 	}
 	preTime := timeutil.Now()
@@ -126,17 +135,17 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	}
 	commitTime := timeutil.Now()
 
-	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
+	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
 		return err
 	}
 	if r.IsInitialized() {
-		log.KvDistribution.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+		log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 			commitTime.Sub(startTime).Seconds()*1000,
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
 	} else {
-		log.KvDistribution.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+		log.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			commitTime.Sub(startTime).Seconds()*1000,
 			preTime.Sub(startTime).Seconds()*1000,
 			commitTime.Sub(preTime).Seconds()*1000)
@@ -159,6 +168,7 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	if pq := r.mu.proposalQuota; pq != nil {
 		pq.Close("destroyed")
 	}
+	r.mu.replicaFlowControlIntegration.onDestroyed(ctx)
 	r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
@@ -167,8 +177,8 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		p.finishApplication(ctx, makeProposalResultErr(kvpb.NewAmbiguousResultError(apply.ErrRemoved)))
 	}
 
-	if !r.shMu.destroyStatus.Removed() {
-		log.KvDistribution.Fatalf(ctx, "removing raft group before destroying replica %s", r)
+	if !r.mu.destroyStatus.Removed() {
+		log.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
 	r.mu.raftTracer.Close()

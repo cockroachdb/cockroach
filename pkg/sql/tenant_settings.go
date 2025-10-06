@@ -25,7 +25,6 @@ import (
 // alterTenantSetClusterSettingNode represents an
 // ALTER VIRTUAL CLUSTER ... SET CLUSTER SETTING statement.
 type alterTenantSetClusterSettingNode struct {
-	zeroInputPlanNode
 	name       settings.SettingName
 	tenantSpec tenantSpec
 	st         *cluster.Settings

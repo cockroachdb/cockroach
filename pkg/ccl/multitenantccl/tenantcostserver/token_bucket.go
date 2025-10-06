@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -48,12 +49,17 @@ func (s *instance) TokenBucketRequest(
 	metrics.mutex.Lock()
 	defer metrics.mutex.Unlock()
 
+	// Check whether the consumption rates migration has run. If not, then do not
+	// attempt to read/write the new rates columns.
+	// TODO(andyk): Remove this after 24.3.
+	ratesAvailable := s.settings.Version.IsActive(ctx, clusterversion.V24_2_TenantRates)
+
 	result := &kvpb.TokenBucketResponse{}
 	var consumption kvpb.TenantConsumption
 	if err := s.ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		*result = kvpb.TokenBucketResponse{}
 
-		h := makeSysTableHelper(ctx, tenantID)
+		h := makeSysTableHelper(ctx, tenantID, ratesAvailable)
 		tenant, instance, err := h.readTenantAndInstanceState(txn, instanceID)
 		if err != nil {
 			return err
@@ -127,16 +133,16 @@ func (s *instance) TokenBucketRequest(
 	// Report current consumption.
 	metrics.totalRU.UpdateIfHigher(consumption.RU)
 	metrics.totalKVRU.UpdateIfHigher(consumption.KVRU)
-	metrics.totalReadBatches.UpdateIfHigher(int64(consumption.ReadBatches))
-	metrics.totalReadRequests.UpdateIfHigher(int64(consumption.ReadRequests))
-	metrics.totalReadBytes.UpdateIfHigher(int64(consumption.ReadBytes))
-	metrics.totalWriteBatches.UpdateIfHigher(int64(consumption.WriteBatches))
-	metrics.totalWriteRequests.UpdateIfHigher(int64(consumption.WriteRequests))
-	metrics.totalWriteBytes.UpdateIfHigher(int64(consumption.WriteBytes))
-	metrics.totalSQLPodsCPUSeconds.UpdateIfHigher(consumption.SQLPodsCPUSeconds)
-	metrics.totalPGWireEgressBytes.UpdateIfHigher(int64(consumption.PGWireEgressBytes))
-	metrics.totalExternalIOEgressBytes.UpdateIfHigher(int64(consumption.ExternalIOEgressBytes))
-	metrics.totalExternalIOIngressBytes.UpdateIfHigher(int64(consumption.ExternalIOIngressBytes))
+	metrics.totalReadBatches.Update(int64(consumption.ReadBatches))
+	metrics.totalReadRequests.Update(int64(consumption.ReadRequests))
+	metrics.totalReadBytes.Update(int64(consumption.ReadBytes))
+	metrics.totalWriteBatches.Update(int64(consumption.WriteBatches))
+	metrics.totalWriteRequests.Update(int64(consumption.WriteRequests))
+	metrics.totalWriteBytes.Update(int64(consumption.WriteBytes))
+	metrics.totalSQLPodsCPUSeconds.Update(consumption.SQLPodsCPUSeconds)
+	metrics.totalPGWireEgressBytes.Update(int64(consumption.PGWireEgressBytes))
+	metrics.totalExternalIOEgressBytes.Update(int64(consumption.ExternalIOEgressBytes))
+	metrics.totalExternalIOIngressBytes.Update(int64(consumption.ExternalIOIngressBytes))
 	metrics.totalCrossRegionNetworkRU.UpdateIfHigher(consumption.CrossRegionNetworkRU)
 	return result
 }

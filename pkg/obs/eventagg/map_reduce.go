@@ -105,7 +105,7 @@ func (m *MapReduceAggregator[E, K, Agg]) flushAsync(
 			c.onFlush(ctx, aggInfo, flushed)
 		}
 	}); err != nil {
-		log.Dev.Errorf(ctx, "a problem occurred attempting to flush an aggregation: %v", err)
+		log.Errorf(ctx, "a problem occurred attempting to flush an aggregation: %v", err)
 	}
 }
 

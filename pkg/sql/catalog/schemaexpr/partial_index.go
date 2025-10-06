@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -169,7 +169,7 @@ func makePartialIndexHelper(
 	semaCtx *tree.SemaContext,
 ) partialIndexHelper {
 	tn := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
-	nr := newNameResolver(table.GetID(), tn, cols)
+	nr := newNameResolver(evalCtx, table.GetID(), tn, cols)
 	nr.addIVarContainerToSemaCtx(semaCtx)
 	return partialIndexHelper{
 		nr:        nr,
@@ -184,7 +184,7 @@ func makePartialIndexHelper(
 func (pi partialIndexHelper) makePartialIndexExpr(
 	ctx context.Context, idx catalog.Index,
 ) (tree.TypedExpr, catalog.TableColSet, error) {
-	expr, err := parserutils.ParseExpr(idx.GetPredicate())
+	expr, err := parser.ParseExpr(idx.GetPredicate())
 	if err != nil {
 		return nil, catalog.TableColSet{}, err
 	}

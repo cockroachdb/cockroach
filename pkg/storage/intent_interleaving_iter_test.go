@@ -7,12 +7,11 @@ package storage
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"flag"
 	"fmt"
 	"math/rand"
-	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -556,8 +555,15 @@ func generateRandomData(
 			timestamps = append(timestamps, rng.Intn(1<<20)+1)
 		}
 		// Sort in descending order and make unique.
-		slices.SortFunc(timestamps, func(a, b int) int { return cmp.Compare(b, a) })
-		timestamps = slices.Compact(timestamps)
+		sort.Sort(sort.Reverse(sort.IntSlice(timestamps)))
+		last := 0
+		for j := 1; j < len(timestamps); j++ {
+			if timestamps[j] != timestamps[last] {
+				last++
+				timestamps[last] = timestamps[j]
+			}
+		}
+		timestamps = timestamps[:last+1]
 		for i, ts := range timestamps {
 			// Intent.
 			meta := enginepb.MVCCMetadata{

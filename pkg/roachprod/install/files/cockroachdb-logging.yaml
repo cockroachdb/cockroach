@@ -31,14 +31,10 @@ sinks:
       channels:
         INFO: [DEV, OPS]
         WARNING: all except [DEV, OPS]
-    changefeed:
-      channels: [CHANGEFEED]
     health:
       channels: [HEALTH]
     kv-distribution:
       channels: [KV_DISTRIBUTION]
-    kv-exec:
-      channels: [KV_EXEC]
     pebble:
       channels: [STORAGE]
     security:
@@ -52,8 +48,6 @@ sinks:
       auditable: false
     sql-exec:
       channels: [SQL_EXEC]
-    sql-schema:
-      channels: [SQL_SCHEMA]
     sql-slow:
       channels: [SQL_PERF]
     sql-slow-internal-only:

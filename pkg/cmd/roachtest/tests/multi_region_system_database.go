@@ -27,6 +27,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 		Name:             "schemachange/multiregion/system-database",
 		Owner:            registry.OwnerSQLFoundations,
 		Timeout:          time.Hour * 1,
+		RequiresLicense:  true,
 		Cluster:          clusterSpec,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
@@ -38,7 +39,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 				return r[0] + "-" + r[1]
 			}
 			t.Status("starting cluster")
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SimpleSecureOption(false)))
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(false)))
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
@@ -65,7 +66,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 				c.Stop(ctx, t.L(), option.NewStopOpts(option.Graceful(shutdownGracePeriod)), c.Node(i))
 				t.WorkerStatus("start")
 				startOpts := option.DefaultStartOpts()
-				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.Node(i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.Node(i))
 			}
 
 			// Check system.lease table to ensure that region information for each node is correct
@@ -116,7 +117,7 @@ func registerMultiRegionSystemDatabase(r registry.Registry) {
 
 				t.WorkerStatus("start")
 				startOpts := option.DefaultStartOpts()
-				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.Node(i))
+				c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.Node(i))
 			}
 		},
 	})

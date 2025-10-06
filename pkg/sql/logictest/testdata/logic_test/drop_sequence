@@ -27,10 +27,9 @@ DROP SEQUENCE IF EXISTS drop_if_exists_test
 statement ok
 CREATE SEQUENCE drop_test
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t1 (i INT NOT NULL DEFAULT nextval('drop_test'))
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1
 ----
@@ -38,17 +37,7 @@ t1  CREATE TABLE public.t1 (
       i INT8 NOT NULL DEFAULT nextval('public.drop_test'::REGCLASS),
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-    );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t1
-----
-t1  CREATE TABLE public.t1 (
-      i INT8 NOT NULL DEFAULT nextval('public.drop_test'::REGCLASS),
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-    ) WITH (schema_locked = true);
+    )
 
 query T
 SELECT pg_get_serial_sequence('t1', 'i')
@@ -61,7 +50,6 @@ DROP SEQUENCE drop_test
 statement ok
 DROP SEQUENCE drop_test CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t1
 ----
@@ -69,17 +57,7 @@ t1  CREATE TABLE public.t1 (
       i INT8 NOT NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-    );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t1
-----
-t1  CREATE TABLE public.t1 (
-      i INT8 NOT NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-    ) WITH (schema_locked = true);
+    )
 
 query T
 SELECT pg_get_serial_sequence('t1', 'i')
@@ -111,7 +89,6 @@ CREATE TABLE foo (
   FAMILY (i, j)
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -121,19 +98,7 @@ foo  CREATE TABLE public.foo (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
        FAMILY fam_0_i_j_rowid (i, j, rowid)
-     );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE foo
-----
-foo  CREATE TABLE public.foo (
-       i INT8 NOT NULL DEFAULT nextval('other_db.public.s'::REGCLASS),
-       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-       CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
-       FAMILY fam_0_i_j_rowid (i, j, rowid)
-     ) WITH (schema_locked = true);
+     )
 
 query TT
 SELECT pg_get_serial_sequence('foo', 'i'), pg_get_serial_sequence('foo', 'j')
@@ -146,7 +111,6 @@ DROP DATABASE other_db
 statement ok
 DROP DATABASE other_db CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE foo
 ----
@@ -156,19 +120,7 @@ foo  CREATE TABLE public.foo (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
        FAMILY fam_0_i_j_rowid (i, j, rowid)
-     );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE foo
-----
-foo  CREATE TABLE public.foo (
-       i INT8 NOT NULL,
-       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-       CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
-       FAMILY fam_0_i_j_rowid (i, j, rowid)
-     ) WITH (schema_locked = true);
+     )
 
 query TT
 SELECT pg_get_serial_sequence('foo', 'i'), pg_get_serial_sequence('foo', 'j')
@@ -196,7 +148,6 @@ CREATE TABLE bar (
   FAMILY (i, j)
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -206,19 +157,7 @@ bar  CREATE TABLE public.bar (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
        FAMILY fam_0_i_j_rowid (i, j, rowid)
-     );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE bar
-----
-bar  CREATE TABLE public.bar (
-       i INT8 NOT NULL DEFAULT nextval('other_sc.s'::REGCLASS),
-       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-       CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
-       FAMILY fam_0_i_j_rowid (i, j, rowid)
-     ) WITH (schema_locked = true);
+     )
 
 query TT
 SELECT pg_get_serial_sequence('bar', 'i'), pg_get_serial_sequence('bar', 'j')
@@ -231,7 +170,6 @@ DROP SCHEMA other_sc
 statement ok
 DROP SCHEMA other_sc CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bar
 ----
@@ -241,19 +179,7 @@ bar  CREATE TABLE public.bar (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
        FAMILY fam_0_i_j_rowid (i, j, rowid)
-     );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE bar
-----
-bar  CREATE TABLE public.bar (
-       i INT8 NOT NULL,
-       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-       CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
-       FAMILY fam_0_i_j_rowid (i, j, rowid)
-     ) WITH (schema_locked = true);
+     )
 
 query TT
 SELECT pg_get_serial_sequence('bar', 'i'), pg_get_serial_sequence('bar', 'j')
@@ -274,7 +200,7 @@ CREATE TABLE t2 (i INT NOT NULL)
 statement ok
 CREATE SEQUENCE s2 OWNED BY t2.i
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t3 (i INT NOT NULL DEFAULT nextval('s2'))
 
 query T
@@ -288,7 +214,6 @@ DROP TABLE t2
 statement ok
 DROP TABLE t2 CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t3
 ----
@@ -296,17 +221,7 @@ t3  CREATE TABLE public.t3 (
       i INT8 NOT NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC)
-    );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t3
-----
-t3  CREATE TABLE public.t3 (
-      i INT8 NOT NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC)
-    ) WITH (schema_locked = true);
+    )
 
 query T
 SELECT pg_get_serial_sequence('t3', 'i')
@@ -319,7 +234,7 @@ INSERT INTO t3 VALUES (1)
 statement ok
 CREATE SEQUENCE s3
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t4 (i INT NOT NULL DEFAULT nextval('s3'))
 
 statement ok
@@ -333,7 +248,6 @@ public.s3
 statement ok
 DROP TABLE t3 CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t4
 ----
@@ -341,17 +255,7 @@ t4  CREATE TABLE public.t4 (
       i INT8 NOT NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC)
-    );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t4
-----
-t4  CREATE TABLE public.t4 (
-      i INT8 NOT NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC)
-    ) WITH (schema_locked = true);
+    )
 
 query T
 SELECT pg_get_serial_sequence('t4', 'i')
@@ -372,7 +276,7 @@ CREATE TABLE t5 (i INT NOT NULL)
 statement ok
 CREATE SEQUENCE s5 OWNED BY t5.i
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t6 (i INT NOT NULL DEFAULT nextval('s5'))
 
 query T
@@ -389,7 +293,6 @@ SET sql_safe_updates = false
 statement ok
 ALTER TABLE t5 DROP COLUMN i CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -397,17 +300,7 @@ t6  CREATE TABLE public.t6 (
       i INT8 NOT NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC)
-    );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t6
-----
-t6  CREATE TABLE public.t6 (
-      i INT8 NOT NULL,
-      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC)
-    ) WITH (schema_locked = true);
+    )
 
 query T
 SELECT pg_get_serial_sequence('t6', 'i')

@@ -129,12 +129,12 @@ func randTablesN(r *rand.Rand, n int, prefix string, isMultiRegion bool) []strin
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.forecasts.enabled = false;`)
 
 	// Create the random tables.
-	opts := []randgen.TableOption{randgen.WithCrazyNames()}
+	opt := randgen.TableOptCrazyNames
 	if isMultiRegion {
-		opts = append(opts, randgen.WithMultiRegion())
+		opt |= randgen.TableOptMultiRegion
 	}
 	createTableStatements := randgen.RandCreateTables(
-		context.Background(), r, "table", n, opts, randgen.StatisticsMutator,
+		context.Background(), r, "table", n, opt, randgen.StatisticsMutator,
 		randgen.PartialIndexMutator, randgen.ForeignKeyMutator,
 	)
 

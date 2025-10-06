@@ -19,6 +19,20 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
+      title="Logical Bytes"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Rate at which the logical bytes (sum of keys + values) are ingested by all replication jobs`}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        <Metric
+          name="cr.node.physical_replication.logical_bytes"
+          title="Logical Bytes"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+    <LineGraph
       title="Replication Lag"
       sources={storeSources}
       tenantSource={tenantSource}
@@ -44,20 +58,6 @@ export default function (props: GraphDashboardProps) {
                   : d,
               )
           }
-        />
-      </Axis>
-    </LineGraph>,
-    <LineGraph
-      title="Logical Bytes"
-      sources={storeSources}
-      tenantSource={tenantSource}
-      tooltip={`Rate at which the logical bytes (sum of keys + values) are ingested by all replication jobs`}
-    >
-      <Axis units={AxisUnits.Bytes} label="bytes">
-        <Metric
-          name="cr.node.physical_replication.logical_bytes"
-          title="Logical Bytes"
-          nonNegativeRate
         />
       </Axis>
     </LineGraph>,

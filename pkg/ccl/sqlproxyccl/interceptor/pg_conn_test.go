@@ -23,8 +23,7 @@ func TestPGConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutilsccl.ServerlessOnly(t)
 
-	q, err := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
-	require.NoError(t, err)
+	q := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 
 	t.Run("net.Conn/Write", func(t *testing.T) {
 		external, proxy := net.Pipe()
@@ -64,8 +63,7 @@ func TestPGConn_ToFrontendConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutilsccl.ServerlessOnly(t)
 
-	q, err := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
-	require.NoError(t, err)
+	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 
 	external, proxy := net.Pipe()
 	errCh := writeAsync(t, external, q)
@@ -85,8 +83,7 @@ func TestPGConn_ToBackendConn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutilsccl.ServerlessOnly(t)
 
-	q, err := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
-	require.NoError(t, err)
+	q := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 
 	external, proxy := net.Pipe()
 	errCh := writeAsync(t, external, q)

@@ -303,6 +303,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// to its state for the entire delay, it should push. It may be the case
 			// that the transaction is part of a dependency cycle or that the lock
 			// holder's coordinator node has crashed.
+			timer.Read = true
 			timerC = nil
 			if w.onPushTimer != nil {
 				w.onPushTimer()
@@ -1144,7 +1145,7 @@ func (tag *contentionTag) notify(ctx context.Context, s waitingState) *kvpb.Cont
 		return res
 	default:
 		kind := s.kind // escapes to the heap
-		log.KvExec.Fatalf(ctx, "unhandled waitingState.kind: %v", kind)
+		log.Fatalf(ctx, "unhandled waitingState.kind: %v", kind)
 	}
 	panic("unreachable")
 }

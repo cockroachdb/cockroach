@@ -8,7 +8,6 @@ package queue
 import (
 	"container/heap"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,22 +23,18 @@ import (
 type leaseQueue struct {
 	baseQueue
 	plan.ReplicaPlanner
-	storePool        storepool.AllocatorStorePool
-	planner          plan.ReplicationPlanner
-	clock            *hlc.Clock
-	settings         *config.SimulationSettings
-	as               *mmaintegration.AllocatorSync
-	lastSyncChangeID mmaintegration.SyncChangeID
+	storePool storepool.AllocatorStorePool
+	planner   plan.ReplicationPlanner
+	clock     *hlc.Clock
+	settings  *config.SimulationSettings
 }
 
 // NewLeaseQueue returns a new lease queue.
 func NewLeaseQueue(
 	storeID state.StoreID,
-	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
-	allocatorSync *mmaintegration.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -56,10 +50,8 @@ func NewLeaseQueue(
 		planner:   plan.NewLeasePlanner(allocator, storePool),
 		storePool: storePool,
 		clock:     storePool.Clock(),
-		as:        allocatorSync,
 	}
 	lq.AddLogTag("lease", nil)
-	lq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &lq
 }
 
@@ -67,11 +59,6 @@ func NewLeaseQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a lease transfer.
 func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
-	if !lq.settings.LeaseQueueEnabled {
-		// Nothing to do, disabled.
-		return false
-	}
-
 	repl := NewSimulatorReplica(replica, s)
 	lq.AddLogTag("r", repl.repl.Descriptor())
 	lq.AnnotateCtx(ctx)
@@ -79,7 +66,7 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 	desc := repl.Desc()
 	conf, err := repl.SpanConfig()
 	if err != nil {
-		log.KvDistribution.Fatalf(ctx, "conf not found err=%v", err)
+		log.Fatalf(ctx, "conf not found err=%v", err)
 	}
 	log.VEventf(ctx, 1, "maybe add replica=%s, config=%s", desc, conf)
 	shouldPlanChange, priority := lq.planner.ShouldPlanChange(
@@ -113,16 +100,9 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 // order on ties.
 func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	lq.AddLogTag("tick", tick)
-	ctx = lq.AnnotateCtx(ctx)
-	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
-	// here (see #149904 for more details).
+	ctx = lq.ResetAndAnnotateCtx(ctx)
 	if lq.lastTick.After(lq.next) {
 		lq.next = lq.lastTick
-	}
-
-	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
-		lq.as.PostApply(lq.lastSyncChangeID, true /* success */)
-		lq.lastSyncChangeID = mmaintegration.InvalidSyncChangeID
 	}
 
 	for !tick.Before(lq.next) && lq.priorityQueue.Len() != 0 {
@@ -160,12 +140,12 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			CanTransferLease: true,
 		})
 		if err != nil {
-			log.KvDistribution.Errorf(ctx, "error planning change %s", err.Error())
+			log.Errorf(ctx, "error planning change %s", err.Error())
 			continue
 		}
 
-		lq.next, lq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as, "lease queue")
+		pushReplicateChange(
+			ctx, change, rng, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue)
 	}
 
 	lq.lastTick = tick

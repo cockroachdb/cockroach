@@ -387,8 +387,6 @@ func ParseQoSLevelFromString(val string) (_ QoSLevel, ok bool) {
 		return UserLow, true
 	case NormalName:
 		return Normal, true
-	case BulkLowName:
-		return BulkLow, true
 	default:
 		return 0, false
 	}
@@ -416,7 +414,7 @@ func ToQoSLevelString(value int32) string {
 // Validate checks for a valid user QoSLevel setting before returning it.
 func (e QoSLevel) Validate() QoSLevel {
 	switch e {
-	case Normal, UserHigh, UserLow, BulkLow:
+	case Normal, UserHigh, UserLow:
 		return e
 	default:
 		panic(errors.AssertionFailedf("use of illegal user QoSLevel: %s", e.String()))

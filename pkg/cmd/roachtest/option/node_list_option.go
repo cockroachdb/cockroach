@@ -63,24 +63,6 @@ func (n NodeListOption) Merge(o NodeListOption) NodeListOption {
 	return r
 }
 
-func (n NodeListOption) Intersect(o NodeListOption) NodeListOption {
-	set := make(map[int]struct{}, len(o))
-	for _, node := range o {
-		set[node] = struct{}{}
-	}
-
-	var result NodeListOption
-	seen := make(map[int]struct{}, len(n))
-	for _, node := range n {
-		if _, ok := set[node]; ok {
-			result = append(result, node)
-			seen[node] = struct{}{}
-		}
-	}
-
-	return result
-}
-
 // RandNode returns a random node from the NodeListOption.
 func (n NodeListOption) RandNode() NodeListOption {
 	return NodeListOption{n[rand.Intn(len(n))]}
@@ -99,29 +81,6 @@ func (n NodeListOption) SeededRandList(rand *rand.Rand, size int) (NodeListOptio
 	nodes := append([]int{}, n...)
 	rand.Shuffle(len(nodes), func(i, j int) { nodes[i], nodes[j] = nodes[j], nodes[i] })
 	return nodes[:size], nil
-}
-
-// SeededRandGroups splits up the NodeListOption into numGroups groups of nodes using
-// a seeded rand object. Nodes are not guaranteed to be evenly distributed among groups,
-// but groups are guaranteed to have at least one node.
-func (n NodeListOption) SeededRandGroups(rand *rand.Rand, numGroups int) ([]NodeListOption, error) {
-	if numGroups > len(n) {
-		return nil, fmt.Errorf("cannot partition nodes - numGroups: %d > len: %d", numGroups, len(n))
-	}
-
-	nodes := append([]int{}, n...)
-	rand.Shuffle(len(nodes), func(i, j int) { nodes[i], nodes[j] = nodes[j], nodes[i] })
-
-	groups := make([]NodeListOption, numGroups)
-	// Assign each group at least one node.
-	for i := 0; i < numGroups; i++ {
-		groups[i] = NodeListOption{nodes[i]}
-	}
-	for i := numGroups; i < len(nodes); i++ {
-		groupIdx := rand.Intn(numGroups)
-		groups[groupIdx] = append(groups[groupIdx], nodes[i])
-	}
-	return groups, nil
 }
 
 // NodeIDsString returns the nodes in the NodeListOption, separated by spaces.

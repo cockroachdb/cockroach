@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemaobjectlimit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -207,13 +206,6 @@ func (p *planner) createDescriptor(
 			"expected new descriptor, not a modification of version %d",
 			descriptor.OriginalVersion())
 	}
-
-	if err := schemaobjectlimit.CheckMaxSchemaObjects(
-		ctx, p.InternalSQLTxn(), p.Descriptors(), p.execCfg.TableStatsCache, p.execCfg.Settings, 1,
-	); err != nil {
-		return err
-	}
-
 	b := p.Txn().NewBatch()
 	kvTrace := p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 	if err := p.Descriptors().WriteDescToBatch(ctx, kvTrace, descriptor, b); err != nil {
@@ -248,6 +240,19 @@ func TranslateSurvivalGoal(g tree.SurvivalGoal) (descpb.SurvivalGoal, error) {
 		return descpb.SurvivalGoal_ZONE_FAILURE, nil
 	case tree.SurvivalGoalRegionFailure:
 		return descpb.SurvivalGoal_REGION_FAILURE, nil
+	default:
+		return 0, errors.Newf("unknown survival goal: %d", g)
+	}
+}
+
+// TranslateProtoSurvivalGoal translate a descpb.SurvivalGoal into a
+// tree.SurvivalGoal.
+func TranslateProtoSurvivalGoal(g descpb.SurvivalGoal) (tree.SurvivalGoal, error) {
+	switch g {
+	case descpb.SurvivalGoal_ZONE_FAILURE:
+		return tree.SurvivalGoalZoneFailure, nil
+	case descpb.SurvivalGoal_REGION_FAILURE:
+		return tree.SurvivalGoalRegionFailure, nil
 	default:
 		return 0, errors.Newf("unknown survival goal: %d", g)
 	}

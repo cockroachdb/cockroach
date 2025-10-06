@@ -6,7 +6,6 @@
 package opgen
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -24,20 +23,12 @@ func init() {
 				}),
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
 					// Avoid adding splits for tables without any data (i.e. newly created ones).
-					// Non-backfilled indexes will still try and add split points.
 					if checkIfDescriptorIsWithoutData(this.TableID, md) {
 						return nil
 					}
-					var copyIndexID descpb.IndexID
-					// Truncate will not have a temporary index ID since no backfill is
-					// required. It will use the source index to copy splits from.
-					if this.TemporaryIndexID == 0 {
-						copyIndexID = this.SourceIndexID
-					}
 					return &scop.MaybeAddSplitForIndex{
-						TableID:     this.TableID,
-						IndexID:     this.IndexID,
-						CopyIndexID: copyIndexID,
+						TableID: this.TableID,
+						IndexID: this.IndexID,
 					}
 				}),
 			),
@@ -45,7 +36,7 @@ func init() {
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.BackfillIndex {
 					// No need to backfill indexes for added descriptors, these will
 					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
 						return nil
 					}
 					return &scop.BackfillIndex{
@@ -75,7 +66,7 @@ func init() {
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MergeIndex {
 					// No need to merge indexes for added descriptors, these will
 					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
 						return nil
 					}
 					return &scop.MergeIndex{
@@ -103,7 +94,7 @@ func init() {
 				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.ValidateIndex {
 					// No need to backfill validate for added descriptors, these will
 					// be empty.
-					if checkIfDescriptorIsWithoutData(this.TableID, md) || this.TemporaryIndexID == 0 {
+					if checkIfDescriptorIsWithoutData(this.TableID, md) {
 						return nil
 					}
 					return &scop.ValidateIndex{
@@ -117,37 +108,6 @@ func init() {
 					return &scop.MakeValidatedPrimaryIndexPublic{
 						TableID: this.TableID,
 						IndexID: this.IndexID,
-					}
-				}),
-				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MarkRecreatedIndexesAsVisible {
-					// For secondary indexes with a recreate source, we make the index visible
-					// when the original source is hidden. Otherwise, they become public with
-					// the primary key. Older releases without the HideForPrimaryKeyRecreated
-					// flag always wait for the primary key to be public.
-					var indexVisibilities map[descpb.IndexID]float64
-					for _, target := range md.Targets {
-						idx := target.GetSecondaryIndex()
-						// Skip unrelated indexes and indexes that are supposed
-						// to be invisible.
-						if idx == nil ||
-							idx.TableID != this.TableID ||
-							idx.RecreateTargetIndexID != this.IndexID ||
-							idx.IsNotVisible ||
-							idx.Invisibility == 1.0 ||
-							(idx.HideForPrimaryKeyRecreated && idx.RecreateSourceIndexID != 0) {
-							continue
-						}
-						if indexVisibilities == nil {
-							indexVisibilities = make(map[descpb.IndexID]float64)
-						}
-						indexVisibilities[idx.IndexID] = idx.Invisibility
-					}
-					if len(indexVisibilities) == 0 {
-						return nil
-					}
-					return &scop.MarkRecreatedIndexesAsVisible{
-						TableID:           this.TableID,
-						IndexVisibilities: indexVisibilities,
 					}
 				}),
 			),

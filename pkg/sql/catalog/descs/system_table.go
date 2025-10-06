@@ -51,7 +51,7 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 		if err != nil {
 			return err
 		}
-		if e := read.LookupNamespaceEntry(ni); e != nil {
+		if e := read.LookupNamespaceEntry(&ni); e != nil {
 			id = e.GetID()
 		}
 		return nil

@@ -7,20 +7,15 @@ package mixedversion
 
 import (
 	"fmt"
-	"maps"
 	"math/rand"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -98,14 +93,9 @@ type (
 		hooks          *testHooks
 		prng           *rand.Rand
 		bgChans        []shouldStop
-		logger         *logger.Logger
-		cluster        cluster.Cluster
 
 		// State variables updated as the test plan is generated.
 		usingFixtures bool
-
-		// Unit test only fields.
-		_getFailer func(name string) (*failures.Failer, error)
 	}
 
 	// UpgradeStage encodes in what part of an upgrade a test step is in
@@ -137,11 +127,9 @@ type (
 		// this probability for specific mutator implementations as
 		// needed.
 		Probability() float64
-		// Generate takes a test plan, the testPlanner, and an RNG and returns the list of
-		// mutations that should be applied to the plan. The test plan is the intended output
-		// after applying the mutations. The testPlanner is used to access specific attributes
-		// of the test plan, such as the current context or the services.
-		Generate(*rand.Rand, *TestPlan, *testPlanner) ([]mutation, error)
+		// Generate takes a test plan and a RNG and returns the list of
+		// mutations that should be applied to the plan.
+		Generate(*rand.Rand, *TestPlan) []mutation
 	}
 
 	// mutationOp encodes the type of mutation and controls how the
@@ -157,12 +145,6 @@ type (
 		reference *singleStep
 		impl      singleStepProtocol
 		op        mutationOp
-		// unavailableNodes are marked for each step during the `Generate`
-		// method, but the mutator steps themselves are not created until
-		// `applyMutations` is called. These booleans denote whether
-		// the mutator sets any nodes to unavailable.
-		hasUnavailableSystemNodes bool
-		hasUnavailableTenantNodes bool
 	}
 
 	// stepSelector provides a high level API for mutator
@@ -229,16 +211,11 @@ const (
 	spanConfigTenantLimit = 50000
 )
 
-// failureInjectionMutators includes a list of all
-// failure injection mutators.
-var failureInjectionMutators = []mutator{
-	panicNodeMutator{},
-	networkPartitionMutator{},
-}
-
-// clusterSettingMutators includes a list of all
-// cluster setting mutator implementations.
-var clusterSettingMutators = []mutator{
+// planMutators includes a list of all known `mutator`
+// implementations. A subset of these mutations might be enabled in
+// any mixedversion test plan.
+var planMutators = []mutator{
+	preserveDowngradeOptionRandomizerMutator{},
 	newClusterSettingMutator(
 		"kv.expiration_leases_only.enabled",
 		[]bool{true, false},
@@ -250,38 +227,16 @@ var clusterSettingMutators = []mutator{
 		clusterSettingMinimumVersion("v23.2.0"),
 	),
 	newClusterSettingMutator(
+		"kv.snapshot_receiver.excise.enabled",
+		[]bool{true, false},
+		clusterSettingMinimumVersion("v23.2.0"),
+	),
+	newClusterSettingMutator(
 		"storage.sstable.compression_algorithm",
 		[]string{"snappy", "zstd"},
 		clusterSettingMinimumVersion("v24.1.0-alpha.0"),
 	),
-	// These two settings are newly introduced, so their probabilities
-	// are temporarily raised to increase testing on them specifically.
-	// The 50% matches the metamorphic probability of these settings
-	// being enabled in non mixed version tests.
-	newClusterSettingMutator(
-		"kv.transaction.write_buffering.enabled",
-		[]bool{true, false},
-		clusterSettingMinimumVersion("v25.2.0"),
-		clusterSettingProbability(0.5),
-	),
-	newClusterSettingMutator(
-		"kv.rangefeed.buffered_sender.enabled",
-		[]bool{true, false},
-		clusterSettingMinimumVersion("v25.2.0"),
-		clusterSettingProbability(0.5),
-	),
 }
-
-// planMutators includes a list of all known `mutator`
-// implementations. A subset of these mutations might be enabled in
-// planMutators includes a list of all known `mutator`
-// implementations. A subset of these mutations might be enabled in
-var planMutators = func() []mutator {
-	mutators := []mutator{preserveDowngradeOptionRandomizerMutator{}}
-	mutators = append(mutators, clusterSettingMutators...)
-	mutators = append(mutators, failureInjectionMutators...)
-	return mutators
-}()
 
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan
@@ -308,7 +263,7 @@ var planMutators = func() []mutator {
 //     allowing the cluster version to advance. Mixed-version hooks may be
 //     executed while this is happening.
 //     - AfterUpgradeFinalizedStage: run after-upgrade hooks.
-func (p *testPlanner) Plan() (*TestPlan, error) {
+func (p *testPlanner) Plan() *TestPlan {
 	setup, testUpgrades := p.setupTest()
 
 	upgradeStepsForService := func(
@@ -359,7 +314,7 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		addSteps(p.finalizeUpgradeSteps(service, to, scheduleHooks, virtualClusterRunning))
 
 		// run after upgrade steps, if any,
-		addSteps(p.afterUpgradeSteps(service, scheduleHooks))
+		addSteps(p.afterUpgradeSteps(service, from, to, scheduleHooks))
 
 		return steps
 	}
@@ -445,40 +400,18 @@ func (p *testPlanner) Plan() (*TestPlan, error) {
 		isLocal:        p.isLocal,
 	}
 
-	failureInjections := make(map[string]struct{})
-	for _, m := range failureInjectionMutators {
-		failureInjections[m.Name()] = struct{}{}
-	}
-
-	// Probabilistically enable some of the mutators on the base test
+	// Probabilistically enable some of of the mutators on the base test
 	// plan generated above.
 	for _, mut := range planMutators {
 		if p.mutatorEnabled(mut) {
-			if _, found := failureInjections[mut.Name()]; found {
-				// We disable any failure injections that would occur on clusters with
-				// less than three nodes as this can lead to uninteresting failures
-				// (e.g. a single node panic failure).
-				if len(p.currentContext.Nodes()) < 3 {
-					continue
-				}
-				// We disable failure injections for local runs as some failure
-				// injections are not supported in that mode and can
-				// cause unintended behaviors (partitions using iptables).
-				if p.isLocal {
-					continue
-				}
-			}
-			mutations, err := mut.Generate(p.prng, testPlan, p)
-			if err != nil {
-				return nil, err
-			}
+			mutations := mut.Generate(p.prng, testPlan)
 			testPlan.applyMutations(p.prng, mutations)
 			testPlan.enabledMutators = append(testPlan.enabledMutators, mut)
 		}
 	}
 
 	testPlan.assignIDs()
-	return testPlan, nil
+	return testPlan
 }
 
 // nonUpgradeContext builds a mixed-version context to be used during
@@ -624,13 +557,7 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 	}
 
 	setupContext := p.nonUpgradeContext(initialVersion, SystemSetupStage)
-
-	clusterStartHooks := p.hooks.BeforeClusterStartSteps(setupContext, p.prng)
-	if len(clusterStartHooks) > 0 {
-		steps = append(steps, p.concurrently(beforeClusterStartLabel, clusterStartHooks)...)
-	}
-
-	steps = append(steps,
+	return append(steps,
 		p.newSingleStepWithContext(setupContext, startStep{
 			version:            initialVersion,
 			rt:                 p.rt,
@@ -645,19 +572,6 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 			virtualClusterName: install.SystemInterfaceName,
 		}),
 	)
-
-	if len(p.options.workloadNodes) > 0 {
-		// Add step for staging all workload binaries needed for test on workload
-		// node(s)
-		steps = append(steps,
-			p.newSingleStepWithContext(setupContext, stageAllWorkloadBinariesStep{
-				versions:      p.versions,
-				rt:            p.rt,
-				workloadNodes: p.options.workloadNodes,
-			}))
-	}
-
-	return steps
 }
 
 // tenantSetupSteps returns the series of steps needed to create the
@@ -665,19 +579,18 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 // passed is the version in which the tenant is created.
 func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 	setupContext := p.nonUpgradeContext(v, TenantSetupStage)
-	var steps []testStep
 	shouldGrantCapabilities := p.deploymentMode == SeparateProcessDeployment ||
 		(p.deploymentMode == SharedProcessDeployment && !v.AtLeast(TenantsAndSystemAlignedSettingsVersion))
 
-	var tenantSetupStep singleStepProtocol
+	var startStep singleStepProtocol
 	if p.deploymentMode == SharedProcessDeployment {
-		tenantSetupStep = startSharedProcessVirtualClusterStep{
+		startStep = startSharedProcessVirtualClusterStep{
 			name:       p.tenantName(),
 			initTarget: p.currentContext.Tenant.Descriptor.Nodes[0],
 			settings:   p.clusterSettingsForTenant(v),
 		}
 	} else {
-		tenantSetupStep = startSeparateProcessVirtualClusterStep{
+		startStep = startSeparateProcessVirtualClusterStep{
 			name:     p.tenantName(),
 			rt:       p.rt,
 			version:  v,
@@ -685,23 +598,19 @@ func (p *testPlanner) tenantSetupSteps(v *clusterupgrade.Version) []testStep {
 		}
 	}
 
-	clusterStartHooks := p.hooks.BeforeClusterStartSteps(setupContext, p.prng)
-	if len(clusterStartHooks) > 0 {
-		steps = append(steps, p.concurrently(beforeClusterStartLabel, clusterStartHooks)...)
-	}
 	// We are creating a virtual cluster: we first create it, then wait
 	// for the cluster version to match the expected version, then set
 	// it as the default cluster, and finally give it all capabilities
 	// if necessary.
-	steps = append(steps,
-		p.newSingleStepWithContext(setupContext, tenantSetupStep),
+	steps := []testStep{
+		p.newSingleStepWithContext(setupContext, startStep),
 		p.newSingleStepWithContext(setupContext, waitForStableClusterVersionStep{
 			nodes:              p.currentContext.Tenant.Descriptor.Nodes,
 			timeout:            p.options.upgradeTimeout,
 			desiredVersion:     versionToClusterVersion(v),
 			virtualClusterName: p.tenantName(),
 		}),
-	)
+	}
 
 	// We only use the 'default tenant' cluster setting in
 	// shared-process deployments. For separate-process deployments, we
@@ -814,17 +723,17 @@ func (p *testPlanner) initUpgradeSteps(
 // the same and then run any after-finalization hooks the user may
 // have provided.
 func (p *testPlanner) afterUpgradeSteps(
-	service *ServiceContext, scheduleHooks bool,
-) (steps []testStep) {
+	service *ServiceContext, fromVersion, toVersion *clusterupgrade.Version, scheduleHooks bool,
+) []testStep {
 	p.setFinalizing(service, false)
 	p.setStage(service, AfterUpgradeFinalizedStage)
-
 	if scheduleHooks {
-		steps = append(steps,
-			p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))...)
+		return p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
 	}
-	// if we are not scheduling hooks, return a nil slice.
-	return steps
+
+	// Currently, we only schedule user-provided hooks after the upgrade
+	// is finalized; if we are not scheduling hooks, return a nil slice.
+	return nil
 }
 
 func (p *testPlanner) upgradeSteps(
@@ -1217,7 +1126,11 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
-func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []testStep) []testStep {
+// mapSingleSteps iterates over every step in the test plan and calls
+// the given function `f` for every `singleStep` (i.e., every step
+// that actually performs an action). The function should return a
+// list of testSteps that replace the given step in the plan.
+func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
 	var mapStep func(testStep, bool) []testStep
 	mapStep = func(step testStep, isConcurrent bool) []testStep {
 		switch s := step.(type) {
@@ -1261,61 +1174,47 @@ func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []te
 			return f(ss, isConcurrent)
 		}
 	}
-	var newSteps []testStep
-	for _, s := range steps {
-		newSteps = append(newSteps, mapStep(s, false)...)
+
+	mapSteps := func(steps []testStep) []testStep {
+		var newSteps []testStep
+		for _, s := range steps {
+			newSteps = append(newSteps, mapStep(s, false)...)
+		}
+
+		return newSteps
 	}
 
-	return newSteps
-}
+	mapUpgrades := func(upgrades []*upgradePlan) []*upgradePlan {
+		var newUpgrades []*upgradePlan
+		for _, upgrade := range upgrades {
+			newUpgrades = append(newUpgrades, &upgradePlan{
+				from: upgrade.from,
+				to:   upgrade.to,
+				sequentialStep: sequentialRunStep{
+					label: upgrade.sequentialStep.label,
+					steps: mapSteps(upgrade.sequentialStep.steps),
+				},
+			})
+		}
 
-// mapSingleSteps iterates over every step in the test plan and calls
-// the given function `f` for every `singleStep` (i.e., every step
-// that actually performs an action). The function should return a
-// list of testSteps that replace the given step in the plan.
-func (plan *TestPlan) mapSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.setup.systemSetup = plan.mapServiceSetup(plan.setup.systemSetup, f)
-	plan.setup.tenantSetup = plan.mapServiceSetup(plan.setup.tenantSetup, f)
-	plan.initSteps = plan.walkSteps(plan.initSteps, f)
-	plan.upgrades = plan.mapUpgrades(plan.upgrades, f)
-}
-
-func (plan *TestPlan) mapServiceSetup(
-	s *serviceSetup, f func(*singleStep, bool) []testStep,
-) *serviceSetup {
-	if s == nil {
-		return nil
+		return newUpgrades
 	}
 
-	return &serviceSetup{
-		steps:    plan.walkSteps(s.steps, f),
-		upgrades: plan.mapUpgrades(s.upgrades, f),
-	}
-}
+	mapServiceSetup := func(s *serviceSetup) *serviceSetup {
+		if s == nil {
+			return nil
+		}
 
-func (plan *TestPlan) mapUpgrades(
-	upgrades []*upgradePlan, f func(*singleStep, bool) []testStep,
-) []*upgradePlan {
-	var newUpgrades []*upgradePlan
-	for _, upgrade := range upgrades {
-		newUpgrades = append(newUpgrades, &upgradePlan{
-			from: upgrade.from,
-			to:   upgrade.to,
-			sequentialStep: sequentialRunStep{
-				label: upgrade.sequentialStep.label,
-				steps: plan.walkSteps(upgrade.sequentialStep.steps, f),
-			},
-		})
+		return &serviceSetup{
+			steps:    mapSteps(s.steps),
+			upgrades: mapUpgrades(s.upgrades),
+		}
 	}
 
-	return newUpgrades
-}
-
-func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.mapServiceSetup(plan.setup.systemSetup, f)
-	plan.mapServiceSetup(plan.setup.tenantSetup, f)
-	plan.walkSteps(plan.initSteps, f)
-	plan.mapUpgrades(plan.upgrades, f)
+	plan.setup.systemSetup = mapServiceSetup(plan.setup.systemSetup)
+	plan.setup.tenantSetup = mapServiceSetup(plan.setup.tenantSetup)
+	plan.initSteps = mapSteps(plan.initSteps)
+	plan.upgrades = mapUpgrades(plan.upgrades)
 }
 
 func newStepIndex(plan *TestPlan) stepIndex {
@@ -1415,51 +1314,6 @@ func (ss stepSelector) Filter(predicate func(*singleStep) bool) stepSelector {
 	return result
 }
 
-// Cut finds the first step that matches the predicate given, returning
-// new selectors for the steps before and after the matching step. It also
-// returns a new selector for the matching cut step. If no step matches the
-// predicate, Cut returns `ss`, nil, nil.
-func (ss stepSelector) Cut(predicate func(*singleStep) bool) (before, after, cut stepSelector) {
-	predicateFound := false
-	for _, s := range ss {
-		if predicateFound {
-			after = append(after, s)
-		} else if predicate(s) {
-			predicateFound = true
-			cut = append(cut, s)
-		} else {
-			before = append(before, s)
-		}
-	}
-	return before, after, cut
-}
-
-// CutAfter is like Cut but the cut step is merged with the `after` selector
-func (ss stepSelector) CutAfter(predicate func(*singleStep) bool) (stepSelector, stepSelector) {
-	before, after, cut := ss.Cut(predicate)
-	return before, append(cut, after...)
-}
-
-// CutBefore is like Cut but the cut step is merged with the `before` selector
-func (ss stepSelector) CutBefore(predicate func(*singleStep) bool) (stepSelector, stepSelector) {
-	before, after, cut := ss.Cut(predicate)
-	return append(before, cut...), after
-}
-
-// MarkNodesUnavailable marks all steps in the given step selector
-// as having unavailable nodes for the given tenant(s). This is used to
-// act as a filter for steps that requires all nodes to be available.
-func (ss stepSelector) MarkNodesUnavailable(systemUnavailable bool, tenantUnavailable bool) {
-	for _, s := range ss {
-		if systemUnavailable {
-			s.context.System.hasUnavailableNodes = true
-		}
-		if tenantUnavailable && s.context.Tenant != nil {
-			s.context.Tenant.hasUnavailableNodes = true
-		}
-	}
-}
-
 // RandomStep returns a new selector that selects a single step,
 // randomly chosen from the list of selected steps in the original
 // selector.
@@ -1514,16 +1368,12 @@ func (ss stepSelector) InsertSequential(rng *rand.Rand, impl singleStepProtocol)
 	})
 }
 
-// InsertBefore inserts the step before the selected step. This is not guaranteed to be a non-concurrent insert, if the
-// selected step is part of a `concurrentRunStep`, the new step will be concurrent with the selected step.
 func (ss stepSelector) InsertBefore(impl singleStepProtocol) []mutation {
 	return ss.insert(impl, func() mutationOp {
 		return mutationInsertBefore
 	})
 }
 
-// InsertAfter inserts the step after the selected step. This is not guaranteed to be a non-concurrent insert, if the
-// selected step is part of a `concurrentRunStep`, the new step will be concurrent with the selected step.
 func (ss stepSelector) InsertAfter(impl singleStepProtocol) []mutation {
 	return ss.insert(impl, func() mutationOp {
 		return mutationInsertAfter
@@ -1556,6 +1406,7 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 	for _, mut := range mutationApplicationOrder(mutations) {
 		plan.mapSingleSteps(func(ss *singleStep, isConcurrent bool) []testStep {
 			index := newStepIndex(plan)
+
 			// If the mutation is not relative to this step, move on.
 			if ss != mut.reference {
 				return []testStep{ss}
@@ -1572,10 +1423,6 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 					context: index.ContextForInsertion(ss, mut.op),
 					impl:    mut.impl,
 					rng:     rngFromRNG(rng),
-				}
-				newSingleStep.context.System.hasUnavailableNodes = mut.hasUnavailableSystemNodes
-				if newSingleStep.context.Tenant != nil {
-					newSingleStep.context.Tenant.hasUnavailableNodes = mut.hasUnavailableTenantNodes
 				}
 			}
 
@@ -1749,7 +1596,6 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	var out strings.Builder
 	allSteps := plan.Steps()
 	for i, step := range allSteps {
-
 		plan.prettyPrintStep(&out, step, treeBranchString(i, len(allSteps)), debug)
 	}
 
@@ -1770,20 +1616,6 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 		}
 
 		addLine("Mutators", strings.Join(mutatorNames, ", "))
-	}
-	// Extract user hooks from the plan.
-	userHooks := make(map[string]string)
-	plan.iterateSingleSteps(func(ss *singleStep, _ bool) []testStep {
-		if hook, ok := ss.impl.(runHookStep); ok {
-			userHooks[hook.hook.id] = hook.hook.name
-		}
-		return nil
-	})
-	if len(userHooks) > 0 {
-		names := slices.Collect(maps.Values(userHooks))
-		// N.B. sort the names to ensure deterministic output.
-		sort.Strings(names)
-		addLine("Hooks", strings.Join(names, ", "))
 	}
 
 	return fmt.Sprintf(
@@ -1832,7 +1664,7 @@ func (plan *TestPlan) prettyPrintStep(
 		}
 
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(debug), extras, ss.ID, debugInfo,
+			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.ID, debugInfo,
 		))
 	}
 

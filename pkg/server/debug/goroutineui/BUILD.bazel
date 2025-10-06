@@ -7,7 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/allstacks",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_maruel_panicparse_v2//stack",
     ],
 )

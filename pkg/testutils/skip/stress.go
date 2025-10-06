@@ -17,7 +17,8 @@ func NightlyStress() bool {
 	return nightlyStress
 }
 
-// Stress returns true iff the process is running under a local _dev_ instance of the stress, i.e., ./dev test ... --stress
+// Stress returns true iff the process is running under any instance of the stress
+// harness, including the nightly one.
 func Stress() bool {
-	return stress
+	return stress || nightlyStress
 }

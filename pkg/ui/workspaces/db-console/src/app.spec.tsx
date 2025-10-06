@@ -17,6 +17,18 @@ stubComponentInModule(
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
 stubComponentInModule(
+  "src/views/databases/databasesPage",
+  "DatabasesPageLegacy",
+);
+stubComponentInModule(
+  "src/views/databases/databaseDetailsPage",
+  "DatabaseDetailsPageLegacy",
+);
+stubComponentInModule(
+  "src/views/databases/databaseTablePage",
+  "DatabaseTablePage",
+);
+stubComponentInModule(
   "src/views/cluster/containers/dataDistribution",
   "default",
 );
@@ -285,10 +297,47 @@ describe("Routing to", () => {
     });
   });
 
+  describe("legacy '/databases/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
+    test("redirected to '/database/:${databaseNameAttr}/table/:${tableNameAttr}'", () => {
+      navigateToPath("/databases/database/some-db-name/table/some-table-name");
+      expect(history.location.pathname).toBe(
+        "/database/some-db-name/table/some-table-name",
+      );
+    });
+  });
+
   describe("'/database' path", () => {
     test("redirected to '/databases'", () => {
       navigateToPath("/database");
       expect(history.location.pathname).toBe("/databases");
+    });
+  });
+
+  describe("legacy '/legacy/databases' path", () => {
+    test("routes to <DatabasesPageLegacy> component", () => {
+      navigateToPath("/legacy/databases");
+      screen.getByTestId("DatabasesPageLegacy");
+    });
+  });
+
+  describe("legacy '/database/:${databaseNameAttr}' path", () => {
+    test("routes to <DatabaseDetailsPageLegacy> component", () => {
+      navigateToPath("/database/some-db-name");
+      screen.getByTestId("DatabaseDetailsPageLegacy");
+    });
+  });
+
+  describe("'/database/:${databaseNameAttr}/table' path", () => {
+    test("redirected to '/databases/:${databaseNameAttr}'", () => {
+      navigateToPath("/database/some-db-name/table");
+      expect(history.location.pathname).toBe("/database/some-db-name");
+    });
+  });
+
+  describe("'/database/:${databaseNameAttr}/table/:${tableNameAttr}' path", () => {
+    test("routes to <DatabaseTablePage> component", () => {
+      navigateToPath("/database/some-db-name/table/some-table-name");
+      screen.getByTestId("DatabaseTablePage");
     });
   });
 

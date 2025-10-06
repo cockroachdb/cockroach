@@ -26,18 +26,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -126,61 +118,4 @@ func rewriteSchema(schemaName string, tableNames []string) {
 			}
 		}
 	})
-}
-
-// TestVirtualTablesIgnoreDisallowFullTableScans checks that we ignore
-// disallow_full_table_scans for virtual tables, even when the virtual table is
-// populated using an internal executor query that itself does a full scan.
-func TestVirtualTablesIgnoreDisallowFullTableScans(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Inject a virtual table into crdb_internal which is populated using an
-	// internal executor query that does a full scan.
-	crdbInternalFooTable := virtualSchemaTable{
-		schema: `
-CREATE TABLE crdb_internal.foo (
-  status STRING NOT NULL,
-  created TIMESTAMP NOT NULL
-)
-`,
-		comment: "foo",
-		indexes: []virtualIndex{},
-		populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (retErr error) {
-			it, err := p.InternalSQLTxn().QueryIteratorEx(
-				ctx, "foo", p.Txn(), sessiondata.NodeUserSessionDataOverride,
-				// Use a full-table scan query with an index hint to hit the
-				// disallow_full_table_scans check in execbuilder.
-				"SELECT status, created FROM system.jobs@jobs_status_created_idx",
-			)
-			if err != nil {
-				return err
-			}
-			defer func() {
-				if err := it.Close(); err != nil {
-					retErr = errors.CombineErrors(retErr, err)
-				}
-			}()
-			for {
-				hasNext, err := it.Next(ctx)
-				if !hasNext || err != nil {
-					return err
-				}
-				currentRow := it.Cur()
-				if err := addRow(currentRow...); err != nil {
-					return err
-				}
-			}
-		},
-	}
-	crdbInternal.tableDefs[catconstants.CrdbInternalTestID] = crdbInternalFooTable
-
-	ctx := context.Background()
-
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
-
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	sqlDB.Exec(t, "SET disallow_full_table_scans = on")
-	sqlDB.CheckQueryResults(t, "SELECT * FROM crdb_internal.foo WHERE status = 'banana'", [][]string{})
 }

@@ -9,10 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
 
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
-
-// TODO (#151948): Update channel from TELEMETRY to CHANGEFEED once the
-// `log.channel_compatibility_mode_enabled` cluster setting is set to false
-// by default.
+import "util/log/logpb/event.proto";
 
 // Category: Changefeed telemetry events
 // Channel: TELEMETRY
@@ -22,11 +19,6 @@ import "util/log/eventpb/events.proto";
 // CreateChangefeed is an event for any CREATE CHANGEFEED query that
 // successfully starts running. Failed CREATE statements will show up as
 // ChangefeedFailed events.
-//
-// Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `CHANGEFEED` instead of `TELEMETRY`.
 message CreateChangefeed {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 
@@ -34,29 +26,8 @@ message CreateChangefeed {
   bool transformation = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
-// AlterChangefeed is an event for any ALTER CHANGEFEED statements that are run.
-//
-// Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `CHANGEFEED` instead of `TELEMETRY`.
-message AlterChangefeed {
-  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-
-  // The description of the changefeed job before the ALTER CHANGEFEED.
-  string previous_description = 2 [(gogoproto.jsontag) = ",omitempty"];
-
-  // TODO(yang): Consider expanding this log to include removed/added/changed options
-  // and added/dropped targets.
-}
-
 // ChangefeedFailed is an event for any changefeed failure since the plan hook
 // was triggered.
-//
-// Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `CHANGEFEED` instead of `TELEMETRY`.
 message ChangefeedFailed {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 
@@ -65,22 +36,7 @@ message ChangefeedFailed {
   string failure_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
-// ChangefeedCanceled is an event for any changefeed cancellations.
-//
-// Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `CHANGEFEED` instead of `TELEMETRY`.
-message ChangefeedCanceled {
-  CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
-}
-
 // ChangefeedEmittedBytes is an event representing the bytes emitted by a changefeed over an interval.
-//
-// Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `CHANGEFEED` instead of `TELEMETRY`.
 message ChangefeedEmittedBytes {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 

@@ -48,22 +48,11 @@ CREATE TABLE index_tab
     data1 INT NOT NULL,
     data2 INT NOT NULL,
     geom GEOMETRY,
-    vec1 VECTOR(3),
-    vec2 VECTOR(2),
-    vec3 VECTOR(3),
     INDEX a (id, data1, data2),
     INDEX b (val, data1, data2),
     INDEX c (region, data1, data2),
     INDEX d (latitude, longitude, data1, data2),
-    INVERTED INDEX geomIdx(geom),
-    VECTOR INDEX (vec1),
-    VECTOR INDEX (vec2),
-    VECTOR INDEX (data1, data2, vec1),
-    VECTOR INDEX (vec1) WHERE latitude > 0,
-    VECTOR INDEX (data2, vec2) WHERE data2 > 0,
-    VECTOR INDEX (longitude, vec3) WHERE longitude IN (1, 2),
-    VECTOR INDEX cosine_idx (vec1 vector_cosine_ops),
-    VECTOR INDEX ip_idx (vec2 vector_ip_ops)
+    INVERTED INDEX geomIdx(geom)
 )
 ----
 
@@ -373,7 +362,7 @@ lock partial_index_const
  ├── lock columns: (7-10)
  ├── locking: for-update
  ├── cardinality: [0 - 5]
- ├── volatile
+ ├── volatile, mutations
  ├── key: (4)
  ├── fd: ()-->(2), (4)-->(1,3)
  └── project
@@ -1069,37 +1058,19 @@ index-join kuv
       ├── key: (4)
       ├── fd: (4)-->(1,2)
       ├── ordering: +2
-      ├── limit
+      ├── top-k
       │    ├── columns: k:1!null u:2 rowid:4!null
       │    ├── internal-ordering: +2
+      │    ├── k: 15
       │    ├── cardinality: [0 - 15]
       │    ├── key: (4)
       │    ├── fd: (4)-->(1,2)
       │    ├── ordering: +2
-      │    ├── union-all
-      │    │    ├── columns: k:1!null u:2 rowid:4!null
-      │    │    ├── left columns: k:7 u:8 rowid:10
-      │    │    ├── right columns: k:13 u:14 rowid:16
-      │    │    ├── cardinality: [0 - 30]
-      │    │    ├── ordering: +2
-      │    │    ├── limit hint: 15.00
-      │    │    ├── scan kuv@kuv_k_u_idx
-      │    │    │    ├── columns: k:7!null u:8 rowid:10!null
-      │    │    │    ├── constraint: /7/8/10: [/1 - /1]
-      │    │    │    ├── limit: 15
-      │    │    │    ├── key: (10)
-      │    │    │    ├── fd: ()-->(7), (10)-->(8)
-      │    │    │    ├── ordering: +8 opt(7) [actual: +8]
-      │    │    │    └── limit hint: 15.00
-      │    │    └── scan kuv@kuv_k_u_idx
-      │    │         ├── columns: k:13!null u:14 rowid:16!null
-      │    │         ├── constraint: /13/14/16: [/2 - /2]
-      │    │         ├── limit: 15
-      │    │         ├── key: (16)
-      │    │         ├── fd: ()-->(13), (16)-->(14)
-      │    │         ├── ordering: +14 opt(13) [actual: +14]
-      │    │         └── limit hint: 15.00
-      │    └── 15
+      │    └── scan kuv@kuv_k_u_idx
+      │         ├── columns: k:1!null u:2 rowid:4!null
+      │         ├── constraint: /1/2/4: [/1 - /2]
+      │         ├── key: (4)
+      │         └── fd: (4)-->(1,2)
       └── 5
 
 # The offset is not pushed into the index join if
@@ -1256,38 +1227,38 @@ limit
  ├── ordering: +6
  ├── union-all
  │    ├── columns: val:2!null data1:6!null
- │    ├── left columns: val:58 data1:62
- │    ├── right columns: val:44 data1:48
+ │    ├── left columns: val:46 data1:50
+ │    ├── right columns: val:35 data1:39
  │    ├── cardinality: [0 - 30]
  │    ├── ordering: +6
  │    ├── limit hint: 10.00
  │    ├── union-all
- │    │    ├── columns: val:58!null data1:62!null
- │    │    ├── left columns: val:16 data1:20
- │    │    ├── right columns: val:30 data1:34
+ │    │    ├── columns: val:46!null data1:50!null
+ │    │    ├── left columns: val:13 data1:17
+ │    │    ├── right columns: val:24 data1:28
  │    │    ├── cardinality: [0 - 20]
- │    │    ├── ordering: +62
+ │    │    ├── ordering: +50
  │    │    ├── limit hint: 10.00
  │    │    ├── scan index_tab@b
- │    │    │    ├── columns: val:16!null data1:20!null
- │    │    │    ├── constraint: /16/20/21/15: [/1 - /1]
+ │    │    │    ├── columns: val:13!null data1:17!null
+ │    │    │    ├── constraint: /13/17/18/12: [/1 - /1]
  │    │    │    ├── limit: 10
- │    │    │    ├── fd: ()-->(16)
- │    │    │    ├── ordering: +20 opt(16) [actual: +20]
+ │    │    │    ├── fd: ()-->(13)
+ │    │    │    ├── ordering: +17 opt(13) [actual: +17]
  │    │    │    └── limit hint: 10.00
  │    │    └── scan index_tab@b
- │    │         ├── columns: val:30!null data1:34!null
- │    │         ├── constraint: /30/34/35/29: [/2 - /2]
+ │    │         ├── columns: val:24!null data1:28!null
+ │    │         ├── constraint: /24/28/29/23: [/2 - /2]
  │    │         ├── limit: 10
- │    │         ├── fd: ()-->(30)
- │    │         ├── ordering: +34 opt(30) [actual: +34]
+ │    │         ├── fd: ()-->(24)
+ │    │         ├── ordering: +28 opt(24) [actual: +28]
  │    │         └── limit hint: 10.00
  │    └── scan index_tab@b
- │         ├── columns: val:44!null data1:48!null
- │         ├── constraint: /44/48/49/43: [/3 - /3]
+ │         ├── columns: val:35!null data1:39!null
+ │         ├── constraint: /35/39/40/34: [/3 - /3]
  │         ├── limit: 10
- │         ├── fd: ()-->(44)
- │         ├── ordering: +48 opt(44) [actual: +48]
+ │         ├── fd: ()-->(35)
+ │         ├── ordering: +39 opt(35) [actual: +39]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1296,10 +1267,10 @@ opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region = 'US_EAST' OR region = 'US_WEST'
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── limit
  │    ├── columns: region:3!null data1:6!null
  │    ├── internal-ordering: -6
@@ -1308,28 +1279,28 @@ scalar-group-by
  │    ├── fd: ()-->(3,6)
  │    ├── union-all
  │    │    ├── columns: region:3!null data1:6!null
- │    │    ├── left columns: region:18 data1:21
- │    │    ├── right columns: region:32 data1:35
+ │    │    ├── left columns: region:15 data1:18
+ │    │    ├── right columns: region:26 data1:29
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── scan index_tab@c,rev
- │    │    │    ├── columns: region:18!null data1:21!null
- │    │    │    ├── constraint: /18/21/22/16: [/'US_EAST' - /'US_EAST']
+ │    │    │    ├── columns: region:15!null data1:18!null
+ │    │    │    ├── constraint: /15/18/19/13: [/'US_EAST' - /'US_EAST']
  │    │    │    ├── limit: 1(rev)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(18,21)
+ │    │    │    ├── fd: ()-->(15,18)
  │    │    │    └── limit hint: 1.00
  │    │    └── scan index_tab@c,rev
- │    │         ├── columns: region:32!null data1:35!null
- │    │         ├── constraint: /32/35/36/30: [/'US_WEST' - /'US_WEST']
+ │    │         ├── columns: region:26!null data1:29!null
+ │    │         ├── constraint: /26/29/30/24: [/'US_WEST' - /'US_WEST']
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(32,35)
+ │    │         ├── fd: ()-->(26,29)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:15, outer=(6)]
+      └── const-agg [as=max:12, outer=(6)]
            └── data1:6
 
 # Case with multi-column keys in single-key spans.
@@ -1339,10 +1310,10 @@ FROM index_tab
 WHERE (latitude, longitude) = (1, 2) OR (latitude, longitude) = (4, 5)
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── limit
  │    ├── columns: latitude:4!null longitude:5!null data1:6!null
  │    ├── internal-ordering: -6
@@ -1351,28 +1322,28 @@ scalar-group-by
  │    ├── fd: ()-->(4-6)
  │    ├── union-all
  │    │    ├── columns: latitude:4!null longitude:5!null data1:6!null
- │    │    ├── left columns: latitude:19 longitude:20 data1:21
- │    │    ├── right columns: latitude:33 longitude:34 data1:35
+ │    │    ├── left columns: latitude:16 longitude:17 data1:18
+ │    │    ├── right columns: latitude:27 longitude:28 data1:29
  │    │    ├── cardinality: [0 - 2]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── scan index_tab@d,rev
- │    │    │    ├── columns: latitude:19!null longitude:20!null data1:21!null
- │    │    │    ├── constraint: /19/20/21/22/16: [/1/2 - /1/2]
+ │    │    │    ├── columns: latitude:16!null longitude:17!null data1:18!null
+ │    │    │    ├── constraint: /16/17/18/19/13: [/1/2 - /1/2]
  │    │    │    ├── limit: 1(rev)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(19-21)
+ │    │    │    ├── fd: ()-->(16-18)
  │    │    │    └── limit hint: 1.00
  │    │    └── scan index_tab@d,rev
- │    │         ├── columns: latitude:33!null longitude:34!null data1:35!null
- │    │         ├── constraint: /33/34/35/36/30: [/4/5 - /4/5]
+ │    │         ├── columns: latitude:27!null longitude:28!null data1:29!null
+ │    │         ├── constraint: /27/28/29/30/24: [/4/5 - /4/5]
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(33-35)
+ │    │         ├── fd: ()-->(27-29)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:15, outer=(6)]
+      └── const-agg [as=max:12, outer=(6)]
            └── data1:6
 
 # Case with countable multi-key spans.
@@ -1380,10 +1351,10 @@ opt expect=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 4
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── limit
  │    ├── columns: val:2!null data1:6!null
  │    ├── internal-ordering: -6
@@ -1392,42 +1363,42 @@ scalar-group-by
  │    ├── fd: ()-->(2,6)
  │    ├── union-all
  │    │    ├── columns: val:2!null data1:6!null
- │    │    ├── left columns: val:59 data1:63
- │    │    ├── right columns: val:45 data1:49
+ │    │    ├── left columns: val:47 data1:51
+ │    │    ├── right columns: val:36 data1:40
  │    │    ├── cardinality: [0 - 3]
  │    │    ├── ordering: -6
  │    │    ├── limit hint: 1.00
  │    │    ├── union-all
- │    │    │    ├── columns: val:59!null data1:63!null
- │    │    │    ├── left columns: val:17 data1:21
- │    │    │    ├── right columns: val:31 data1:35
+ │    │    │    ├── columns: val:47!null data1:51!null
+ │    │    │    ├── left columns: val:14 data1:18
+ │    │    │    ├── right columns: val:25 data1:29
  │    │    │    ├── cardinality: [0 - 2]
- │    │    │    ├── ordering: -63
+ │    │    │    ├── ordering: -51
  │    │    │    ├── limit hint: 1.00
  │    │    │    ├── scan index_tab@b,rev
- │    │    │    │    ├── columns: val:17!null data1:21!null
- │    │    │    │    ├── constraint: /17/21/22/16: [/1 - /1]
+ │    │    │    │    ├── columns: val:14!null data1:18!null
+ │    │    │    │    ├── constraint: /14/18/19/13: [/1 - /1]
  │    │    │    │    ├── limit: 1(rev)
  │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(17,21)
+ │    │    │    │    ├── fd: ()-->(14,18)
  │    │    │    │    └── limit hint: 1.00
  │    │    │    └── scan index_tab@b,rev
- │    │    │         ├── columns: val:31!null data1:35!null
- │    │    │         ├── constraint: /31/35/36/30: [/2 - /2]
+ │    │    │         ├── columns: val:25!null data1:29!null
+ │    │    │         ├── constraint: /25/29/30/24: [/2 - /2]
  │    │    │         ├── limit: 1(rev)
  │    │    │         ├── key: ()
- │    │    │         ├── fd: ()-->(31,35)
+ │    │    │         ├── fd: ()-->(25,29)
  │    │    │         └── limit hint: 1.00
  │    │    └── scan index_tab@b,rev
- │    │         ├── columns: val:45!null data1:49!null
- │    │         ├── constraint: /45/49/50/44: [/3 - /3]
+ │    │         ├── columns: val:36!null data1:40!null
+ │    │         ├── constraint: /36/40/41/35: [/3 - /3]
  │    │         ├── limit: 1(rev)
  │    │         ├── key: ()
- │    │         ├── fd: ()-->(45,49)
+ │    │         ├── fd: ()-->(36,40)
  │    │         └── limit hint: 1.00
  │    └── 1
  └── aggregations
-      └── const-agg [as=max:15, outer=(6)]
+      └── const-agg [as=max:12, outer=(6)]
            └── data1:6
 
 # Case with limit ordering on more than one column.
@@ -1445,24 +1416,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:17 data1:20 data2:21
- │    ├── right columns: region:31 data1:34 data2:35
+ │    ├── left columns: region:14 data1:17 data2:18
+ │    ├── right columns: region:25 data1:28 data2:29
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:17!null data1:20!null data2:21!null
- │    │    ├── constraint: /17/20/21/15: [/'US_EAST' - /'US_EAST']
+ │    │    ├── columns: region:14!null data1:17!null data2:18!null
+ │    │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST']
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(17)
- │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
+ │    │    ├── fd: ()-->(14)
+ │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:31!null data1:34!null data2:35!null
- │         ├── constraint: /31/34/35/29: [/'US_WEST' - /'US_WEST']
+ │         ├── columns: region:25!null data1:28!null data2:29!null
+ │         ├── constraint: /25/28/29/23: [/'US_WEST' - /'US_WEST']
  │         ├── limit: 10
- │         ├── fd: ()-->(31)
- │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
+ │         ├── fd: ()-->(25)
+ │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1482,24 +1453,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:17 data1:20 data2:21
- │    ├── right columns: region:31 data1:34 data2:35
+ │    ├── left columns: region:14 data1:17 data2:18
+ │    ├── right columns: region:25 data1:28 data2:29
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:17!null data1:20!null data2:21!null
- │    │    ├── constraint: /17/20/21/15: [/'US_EAST'/4 - /'US_EAST']
+ │    │    ├── columns: region:14!null data1:17!null data2:18!null
+ │    │    ├── constraint: /14/17/18/12: [/'US_EAST'/4 - /'US_EAST']
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(17)
- │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
+ │    │    ├── fd: ()-->(14)
+ │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:31!null data1:34!null data2:35!null
- │         ├── constraint: /31/34/35/29: [/'US_WEST'/4 - /'US_WEST']
+ │         ├── columns: region:25!null data1:28!null data2:29!null
+ │         ├── constraint: /25/28/29/23: [/'US_WEST'/4 - /'US_WEST']
  │         ├── limit: 10
- │         ├── fd: ()-->(31)
- │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
+ │         ├── fd: ()-->(25)
+ │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1519,24 +1490,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:17 data1:20 data2:21
- │    ├── right columns: region:31 data1:34 data2:35
+ │    ├── left columns: region:14 data1:17 data2:18
+ │    ├── right columns: region:25 data1:28 data2:29
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:17!null data1:20!null data2:21!null
- │    │    ├── constraint: /17/20/21/15: [/'US_EAST' - /'US_EAST'/2]
+ │    │    ├── columns: region:14!null data1:17!null data2:18!null
+ │    │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST'/2]
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(17)
- │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
+ │    │    ├── fd: ()-->(14)
+ │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:31!null data1:34!null data2:35!null
- │         ├── constraint: /31/34/35/29: [/'US_WEST' - /'US_WEST'/2]
+ │         ├── columns: region:25!null data1:28!null data2:29!null
+ │         ├── constraint: /25/28/29/23: [/'US_WEST' - /'US_WEST'/2]
  │         ├── limit: 10
- │         ├── fd: ()-->(31)
- │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
+ │         ├── fd: ()-->(25)
+ │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1557,24 +1528,24 @@ limit
  ├── ordering: +6,+7
  ├── union-all
  │    ├── columns: region:3!null data1:6!null data2:7!null
- │    ├── left columns: region:17 data1:20 data2:21
- │    ├── right columns: region:31 data1:34 data2:35
+ │    ├── left columns: region:14 data1:17 data2:18
+ │    ├── right columns: region:25 data1:28 data2:29
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +6,+7
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@c
- │    │    ├── columns: region:17!null data1:20!null data2:21!null
- │    │    ├── constraint: /17/20/21/15: [/'US_EAST'/4 - /'US_EAST'/999]
+ │    │    ├── columns: region:14!null data1:17!null data2:18!null
+ │    │    ├── constraint: /14/17/18/12: [/'US_EAST'/4 - /'US_EAST'/999]
  │    │    ├── limit: 10
- │    │    ├── fd: ()-->(17)
- │    │    ├── ordering: +20,+21 opt(17) [actual: +20,+21]
+ │    │    ├── fd: ()-->(14)
+ │    │    ├── ordering: +17,+18 opt(14) [actual: +17,+18]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@c
- │         ├── columns: region:31!null data1:34!null data2:35!null
- │         ├── constraint: /31/34/35/29: [/'US_WEST'/4 - /'US_WEST'/999]
+ │         ├── columns: region:25!null data1:28!null data2:29!null
+ │         ├── constraint: /25/28/29/23: [/'US_WEST'/4 - /'US_WEST'/999]
  │         ├── limit: 10
- │         ├── fd: ()-->(31)
- │         ├── ordering: +34,+35 opt(31) [actual: +34,+35]
+ │         ├── fd: ()-->(25)
+ │         ├── ordering: +28,+29 opt(25) [actual: +28,+29]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1597,36 +1568,36 @@ top-k
  ├── ordering: +6,+7
  └── union-all
       ├── columns: latitude:4!null longitude:5 data1:6!null data2:7!null
-      ├── left columns: latitude:102 longitude:103 data1:104 data2:105
-      ├── right columns: latitude:116 longitude:117 data1:118 data2:119
+      ├── left columns: latitude:81 longitude:82 data1:83 data2:84
+      ├── right columns: latitude:92 longitude:93 data1:94 data2:95
       ├── union-all
-      │    ├── columns: latitude:102!null longitude:103!null data1:104!null data2:105!null
-      │    ├── left columns: latitude:88 longitude:89 data1:90 data2:91
-      │    ├── right columns: latitude:74 longitude:75 data1:76 data2:77
+      │    ├── columns: latitude:81!null longitude:82!null data1:83!null data2:84!null
+      │    ├── left columns: latitude:70 longitude:71 data1:72 data2:73
+      │    ├── right columns: latitude:59 longitude:60 data1:61 data2:62
       │    ├── cardinality: [0 - 30]
       │    ├── union-all
-      │    │    ├── columns: latitude:88!null longitude:89!null data1:90!null data2:91!null
-      │    │    ├── left columns: latitude:46 longitude:47 data1:48 data2:49
-      │    │    ├── right columns: latitude:60 longitude:61 data1:62 data2:63
+      │    │    ├── columns: latitude:70!null longitude:71!null data1:72!null data2:73!null
+      │    │    ├── left columns: latitude:37 longitude:38 data1:39 data2:40
+      │    │    ├── right columns: latitude:48 longitude:49 data1:50 data2:51
       │    │    ├── cardinality: [0 - 20]
       │    │    ├── scan index_tab@d
-      │    │    │    ├── columns: latitude:46!null longitude:47!null data1:48!null data2:49!null
-      │    │    │    ├── constraint: /46/47/48/49/43: [/10/11 - /10/11]
+      │    │    │    ├── columns: latitude:37!null longitude:38!null data1:39!null data2:40!null
+      │    │    │    ├── constraint: /37/38/39/40/34: [/10/11 - /10/11]
       │    │    │    ├── limit: 10
-      │    │    │    └── fd: ()-->(46,47)
+      │    │    │    └── fd: ()-->(37,38)
       │    │    └── scan index_tab@d
-      │    │         ├── columns: latitude:60!null longitude:61!null data1:62!null data2:63!null
-      │    │         ├── constraint: /60/61/62/63/57: [/10/12 - /10/12]
+      │    │         ├── columns: latitude:48!null longitude:49!null data1:50!null data2:51!null
+      │    │         ├── constraint: /48/49/50/51/45: [/10/12 - /10/12]
       │    │         ├── limit: 10
-      │    │         └── fd: ()-->(60,61)
+      │    │         └── fd: ()-->(48,49)
       │    └── scan index_tab@d
-      │         ├── columns: latitude:74!null longitude:75!null data1:76!null data2:77!null
-      │         ├── constraint: /74/75/76/77/71: [/10/13 - /10/13]
+      │         ├── columns: latitude:59!null longitude:60!null data1:61!null data2:62!null
+      │         ├── constraint: /59/60/61/62/56: [/10/13 - /10/13]
       │         ├── limit: 10
-      │         └── fd: ()-->(74,75)
+      │         └── fd: ()-->(59,60)
       └── scan index_tab@d
-           ├── columns: latitude:116!null longitude:117 data1:118!null data2:119!null
-           └── constraint: /116/117/118/119/113
+           ├── columns: latitude:92!null longitude:93 data1:94!null data2:95!null
+           └── constraint: /92/93/94/95/89
                 ├── [/-5 - /-5]
                 └── [/0 - /0]
 
@@ -1637,10 +1608,10 @@ FROM index_tab WHERE region = 'US_WEST' OR region = 'US_EAST'
 ORDER BY data1 LIMIT 10
 ----
 index-join index_tab
- ├── columns: id:1!null val:2 region:3!null latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
+ ├── columns: id:1!null val:2 region:3!null latitude:4 longitude:5 data1:6!null data2:7!null geom:8
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: (1)-->(2-11)
+ ├── fd: (1)-->(2-8)
  ├── ordering: +6
  └── limit
       ├── columns: id:1!null region:3!null data1:6!null data2:7!null
@@ -1651,26 +1622,26 @@ index-join index_tab
       ├── ordering: +6
       ├── union-all
       │    ├── columns: id:1!null region:3!null data1:6!null data2:7!null
-      │    ├── left columns: id:15 region:17 data1:20 data2:21
-      │    ├── right columns: id:29 region:31 data1:34 data2:35
+      │    ├── left columns: id:12 region:14 data1:17 data2:18
+      │    ├── right columns: id:23 region:25 data1:28 data2:29
       │    ├── cardinality: [0 - 20]
       │    ├── ordering: +6
       │    ├── limit hint: 10.00
       │    ├── scan index_tab@c
-      │    │    ├── columns: id:15!null region:17!null data1:20!null data2:21!null
-      │    │    ├── constraint: /17/20/21/15: [/'US_EAST' - /'US_EAST']
+      │    │    ├── columns: id:12!null region:14!null data1:17!null data2:18!null
+      │    │    ├── constraint: /14/17/18/12: [/'US_EAST' - /'US_EAST']
       │    │    ├── limit: 10
-      │    │    ├── key: (15)
-      │    │    ├── fd: ()-->(17), (15)-->(20,21)
-      │    │    ├── ordering: +20 opt(17) [actual: +20]
+      │    │    ├── key: (12)
+      │    │    ├── fd: ()-->(14), (12)-->(17,18)
+      │    │    ├── ordering: +17 opt(14) [actual: +17]
       │    │    └── limit hint: 10.00
       │    └── scan index_tab@c
-      │         ├── columns: id:29!null region:31!null data1:34!null data2:35!null
-      │         ├── constraint: /31/34/35/29: [/'US_WEST' - /'US_WEST']
+      │         ├── columns: id:23!null region:25!null data1:28!null data2:29!null
+      │         ├── constraint: /25/28/29/23: [/'US_WEST' - /'US_WEST']
       │         ├── limit: 10
-      │         ├── key: (29)
-      │         ├── fd: ()-->(31), (29)-->(34,35)
-      │         ├── ordering: +34 opt(31) [actual: +34]
+      │         ├── key: (23)
+      │         ├── fd: ()-->(25), (23)-->(28,29)
+      │         ├── ordering: +28 opt(25) [actual: +28]
       │         └── limit hint: 10.00
       └── 10
 
@@ -1815,26 +1786,26 @@ limit
  ├── ordering: +5
  ├── union-all
  │    ├── columns: id:1!null latitude:4!null longitude:5!null
- │    ├── left columns: id:15 latitude:18 longitude:19
- │    ├── right columns: id:29 latitude:32 longitude:33
+ │    ├── left columns: id:12 latitude:15 longitude:16
+ │    ├── right columns: id:23 latitude:26 longitude:27
  │    ├── cardinality: [0 - 20]
  │    ├── ordering: +5
  │    ├── limit hint: 10.00
  │    ├── scan index_tab@d
- │    │    ├── columns: id:15!null latitude:18!null longitude:19!null
- │    │    ├── constraint: /18/19/20/21/15: (/0/NULL - /0]
+ │    │    ├── columns: id:12!null latitude:15!null longitude:16!null
+ │    │    ├── constraint: /15/16/17/18/12: (/0/NULL - /0]
  │    │    ├── limit: 10
- │    │    ├── key: (15)
- │    │    ├── fd: ()-->(18), (15)-->(19)
- │    │    ├── ordering: +19 opt(18) [actual: +19]
+ │    │    ├── key: (12)
+ │    │    ├── fd: ()-->(15), (12)-->(16)
+ │    │    ├── ordering: +16 opt(15) [actual: +16]
  │    │    └── limit hint: 10.00
  │    └── scan index_tab@d
- │         ├── columns: id:29!null latitude:32!null longitude:33!null
- │         ├── constraint: /32/33/34/35/29: (/10/NULL - /10]
+ │         ├── columns: id:23!null latitude:26!null longitude:27!null
+ │         ├── constraint: /26/27/28/29/23: (/10/NULL - /10]
  │         ├── limit: 10
- │         ├── key: (29)
- │         ├── fd: ()-->(32), (29)-->(33)
- │         ├── ordering: +33 opt(32) [actual: +33]
+ │         ├── key: (23)
+ │         ├── fd: ()-->(26), (23)-->(27)
+ │         ├── ordering: +27 opt(26) [actual: +27]
  │         └── limit hint: 10.00
  └── 10
 
@@ -1870,7 +1841,7 @@ select
  │    ├── columns: geom:8
  │    └── inverted-filter
  │         ├── columns: id:1!null
- │         ├── inverted expression: /14
+ │         ├── inverted expression: /11
  │         │    ├── tight: false, unique: false
  │         │    └── union spans
  │         │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
@@ -1880,8 +1851,8 @@ select
  │         │    └── st_intersects('010100000000000000000008400000000000000840', geom:8)
  │         ├── key: (1)
  │         └── scan index_tab@geomidx,inverted
- │              ├── columns: id:1!null geom_inverted_key:14!null
- │              └── inverted constraint: /14/1
+ │              ├── columns: id:1!null geom_inverted_key:11!null
+ │              └── inverted constraint: /11/1
  │                   └── spans
  │                        ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
  │                        ├── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
@@ -1894,15 +1865,15 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE region > 'US_EAST' AND region < 'US_WEST'
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── scan index_tab@c
  │    ├── columns: region:3!null data1:6!null
  │    └── constraint: /3/6/7/1: [/e'US_EAST\x00' - /'US_WEST')
  └── aggregations
-      └── max [as=max:15, outer=(6)]
+      └── max [as=max:12, outer=(6)]
            └── data1:6
 
 # No-op case because the number of keys exceeds maxScanCount.
@@ -1910,15 +1881,15 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE val > 0 AND val < 300
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── scan index_tab@b
  │    ├── columns: val:2!null data1:6!null
  │    └── constraint: /2/6/7/1: [/1 - /299]
  └── aggregations
-      └── max [as=max:15, outer=(6)]
+      └── max [as=max:12, outer=(6)]
            └── data1:6
 
 # No-op case because the same number of rows would be scanned by the split-up
@@ -1927,10 +1898,10 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab WHERE id > 0 AND id < 4
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── scan index_tab@a
  │    ├── columns: id:1!null data1:6!null
  │    ├── constraint: /1/6/7: [/1 - /3]
@@ -1938,7 +1909,7 @@ scalar-group-by
  │    ├── key: (1)
  │    └── fd: (1)-->(6)
  └── aggregations
-      └── max [as=max:15, outer=(6)]
+      └── max [as=max:12, outer=(6)]
            └── data1:6
 
 # No-op case because the scan is already limited.
@@ -1948,10 +1919,10 @@ FROM (SELECT region, data1 FROM index_tab LIMIT 10)
 WHERE region='ASIA' OR region='AUSTRALIA'
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── select
  │    ├── columns: region:3!null data1:6!null
  │    ├── cardinality: [0 - 10]
@@ -1961,7 +1932,7 @@ scalar-group-by
  │    └── filters
  │         └── (region:3 = 'ASIA') OR (region:3 = 'AUSTRALIA') [outer=(3), constraints=(/3: [/'ASIA' - /'ASIA'] [/'AUSTRALIA' - /'AUSTRALIA']; tight)]
  └── aggregations
-      └── max [as=max:15, outer=(6)]
+      └── max [as=max:12, outer=(6)]
            └── data1:6
 
 # No-op case because the limit is negative.
@@ -1993,15 +1964,15 @@ opt expect-not=SplitLimitedScanIntoUnionScans
 SELECT max(data1) FROM index_tab@b
 ----
 scalar-group-by
- ├── columns: max:15
+ ├── columns: max:12
  ├── cardinality: [1 - 1]
  ├── key: ()
- ├── fd: ()-->(15)
+ ├── fd: ()-->(12)
  ├── scan index_tab@b
  │    ├── columns: data1:6!null
  │    └── flags: force-index=b
  └── aggregations
-      └── max [as=max:15, outer=(6)]
+      └── max [as=max:12, outer=(6)]
            └── data1:6
 
 # ---------------------------------------------------
@@ -2354,7 +2325,7 @@ memo (optimized, ~5KB, required=[presentation: d:1,f:3,e:2] [ordering: +1,+3,+2]
 memo expect=GeneratePartialOrderTopK
 SELECT * FROM defg ORDER BY d, f, e LIMIT 10
 ----
-memo (optimized, ~16KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
+memo (optimized, ~15KB, required=[presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2])
  ├── G1: (limit G2 G3 ordering=+1,+3,+2) (top-k G2 &{10 +1,+3,+2 }) (top-k G4 &{10 +1,+3,+2 }) (top-k G5 &{10 +1,+3,+2 }) (top-k G6 &{10 +1,+3,+2 }) (top-k G2 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1}) (top-k G5 &{10 +1,+3,+2 +1,+3}) (top-k G6 &{10 +1,+3,+2 +1,+3}) (top-k G4 &{10 +1,+3,+2 +1,+3})
  │    ├── [presentation: d:1,e:2,f:3,g:4] [ordering: +1,+3,+2]
  │    │    ├── best: (top-k G6="[ordering: +1,+3] [limit hint: 100.00]" &{10 +1,+3,+2 +1,+3})
@@ -2778,34 +2749,23 @@ update t82730a
  │    └── col1_5:10 => col1_5:4
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── index-join t82730a
+ └── top-k
       ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── internal-ordering: +9
+      ├── k: 84
       ├── cardinality: [0 - 84]
       ├── key: (7)
       ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
-      └── top-k
-           ├── columns: col1_0:7!null col1_1:8 col1_3:9
-           ├── internal-ordering: +9
-           ├── k: 84
-           ├── cardinality: [0 - 84]
+      └── select
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
            ├── key: (7)
-           ├── fd: (7)-->(8,9), (8,9)~~>(7)
-           └── select
-                ├── columns: col1_0:7!null col1_1:8 col1_3:9
-                ├── key: (7)
-                ├── fd: (7)-->(8,9), (8,9)~~>(7)
-                ├── scan t82730a@t82730a_col1_1_col1_3_key
-                │    ├── columns: col1_0:7!null col1_1:8 col1_3:9
-                │    ├── constraint: /8/9
-                │    │    ├── [/NULL - /0]
-                │    │    ├── [/2 - /999999999]
-                │    │    ├── [/1000000001 - /1999999999]
-                │    │    └── [/2000000001 - ]
-                │    ├── flags: avoid-full-scan
-                │    ├── key: (7)
-                │    └── fd: (7)-->(8,9), (8,9)~~>(7)
-                └── filters
-                     └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           ├── scan t82730a
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           │    ├── key: (7)
+           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           └── filters
+                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
 
 exec-ddl
 CREATE TABLE t82730b (
@@ -2852,34 +2812,23 @@ update t82730b [as=tab_41831]
  │    └── col1_5:10 => col1_5:4
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
- └── index-join t82730b
+ └── top-k
       ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+      ├── internal-ordering: +9
+      ├── k: 84
       ├── cardinality: [0 - 84]
       ├── key: (7)
       ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
-      └── top-k
-           ├── columns: col1_0:7!null col1_1:8 col1_3:9
-           ├── internal-ordering: +9
-           ├── k: 84
-           ├── cardinality: [0 - 84]
+      └── select
+           ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
            ├── key: (7)
-           ├── fd: (7)-->(8,9), (8,9)~~>(7)
-           └── select
-                ├── columns: col1_0:7!null col1_1:8 col1_3:9
-                ├── key: (7)
-                ├── fd: (7)-->(8,9), (8,9)~~>(7)
-                ├── scan t82730b@t82730b_col1_1_col1_3_key [as=tab_41831]
-                │    ├── columns: col1_0:7!null col1_1:8 col1_3:9
-                │    ├── constraint: /8/9
-                │    │    ├── [/NULL - /0]
-                │    │    ├── [/2 - /4]
-                │    │    ├── [/6 - /4999999]
-                │    │    └── [/5000001 - ]
-                │    ├── flags: avoid-full-scan
-                │    ├── key: (7)
-                │    └── fd: (7)-->(8,9), (8,9)~~>(7)
-                └── filters
-                     └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
+           ├── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           ├── scan t82730b [as=tab_41831]
+           │    ├── columns: col1_0:7!null col1_1:8 col1_3:9 col1_5:10
+           │    ├── key: (7)
+           │    └── fd: (7)-->(8-10), (8,9)~~>(7,10)
+           └── filters
+                └── col1_0:7 ILIKE col1_0:7 [outer=(7), constraints=(/7: (/NULL - ])]
 
 # Regression test for #88993. Do not construct an unordered limit below the
 # UnionAll.
@@ -3508,1320 +3457,3 @@ project
       └── array_remove(array_agg:27, NULL) [as=col6s:28, outer=(27), immutable]
 
 # End Regression Test for #93410
-
-# --------------------------------------------------
-# GenerateVectorSearch
-# --------------------------------------------------
-
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 1;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 1
- ├── cardinality: [0 - 1]
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1-11,15)
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 1
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with a limit greater than 1.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with a different vector index.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (10)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec2_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
-
-# Case with a subset of table columns requested.
-opt expect=GenerateVectorSearch
-SELECT id, vec1 FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null vec1:9  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(9), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null vec1:9
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(9), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null vec1:9
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(9)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with additional projected expressions.
-opt expect=GenerateVectorSearch
-SELECT id, vec1, latitude*longitude, data1*data2 FROM index_tab
-ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null vec1:9 "?column?":15 "?column?":16!null  [hidden: column17:17]
- ├── internal-ordering: +17
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(9,15-17), (9)-->(17)
- ├── ordering: +17
- └── project
-      ├── columns: "?column?":15 "?column?":16!null column17:17 id:1!null vec1:9
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(9,15-17), (9)-->(17)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null latitude:4 longitude:5 data1:6!null data2:7!null vec1:9
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(4-7,9)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           ├── latitude:4 * longitude:5 [as="?column?":15, outer=(4,5), immutable]
-           ├── data1:6 * data2:7 [as="?column?":16, outer=(6,7), immutable]
-           └── vec1:9 <-> '[3,1,2]' [as=column17:17, outer=(9), immutable]
-
-# Case with prefix columns.
-opt expect=GenerateVectorSearch
-SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 AND data2 = 2 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 vec1:9  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2,9), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 vec1:9
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,9,15), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 data1:6!null data2:7!null vec1:9
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2,6,7,9)
-      │    ├── vector-search index_tab@index_tab_data1_data2_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /6/7
-      │    │    │    └── [/1/2 - /1/2]
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with the index prefix constrained to multiple sets of values.
-opt expect=GenerateVectorSearch
-SELECT id, val, region, vec1 FROM index_tab
-WHERE (data1, data2) IN ((1, 2), (3, 4), (5, 6))
-ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 vec1:9  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2,3,9,15), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 vec1:9
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,3,9,15), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 data1:6!null data2:7!null vec1:9
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2,3,6,7,9)
-      │    ├── vector-search index_tab@index_tab_data1_data2_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /6/7
-      │    │    │    ├── [/1/2 - /1/2]
-      │    │    │    ├── [/3/4 - /3/4]
-      │    │    │    └── [/5/6 - /5/6]
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with Cosine distance operator.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <=> '[3,1,2]' LIMIT 1;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 1
- ├── cardinality: [0 - 1]
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1-11,15)
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@cosine_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 1
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <=> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with InnerProduct distance operator.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec2 <#> '[3,1,2]' LIMIT 1;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 1
- ├── cardinality: [0 - 1]
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1-11,15)
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@ip_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 1
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec2:10 <#> '[3,1,2]' [as=column15:15, outer=(10), immutable]
-
-# Case with prefix columns constrained by a check constraint. Inapplicable check
-# constraints should not prevent the search.
-exec-ddl
-CREATE TABLE index_with_check_tab (
-  col1 INT NOT NULL,
-  col2 INT NOT NULL,
-  vec VECTOR(3),
-  CHECK (col1 IN (1, 2, 3, 5)),
-  CHECK (col2 IN (100, 200, 300)),
-  VECTOR INDEX (col1, vec)
-)
-----
-
-opt expect=GenerateVectorSearch
-SELECT * FROM index_with_check_tab ORDER BY vec <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: col1:1!null col2:2!null vec:3  [hidden: column7:7]
- ├── internal-ordering: +7
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── fd: (3)-->(7)
- ├── ordering: +7
- └── project
-      ├── columns: column7:7 col1:1!null col2:2!null vec:3
-      ├── immutable
-      ├── fd: (3)-->(7)
-      ├── inner-join (lookup index_with_check_tab)
-      │    ├── columns: col1:1!null col2:2!null vec:3
-      │    ├── key columns: [4] = [4]
-      │    ├── lookup columns are key
-      │    ├── vector-search index_with_check_tab@index_with_check_tab_col1_vec_idx,vector
-      │    │    ├── columns: rowid:4!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /1
-      │    │    │    ├── [/1 - /1]
-      │    │    │    ├── [/2 - /2]
-      │    │    │    ├── [/3 - /3]
-      │    │    │    └── [/5 - /5]
-      │    │    ├── key: (4)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec:3 <-> '[3,1,2]' [as=column7:7, outer=(3), immutable]
-
-# Test computed prefix columns.
-exec-ddl
-CREATE TABLE index_with_computed_tab (
-  col1 INT NOT NULL,
-  col2 INT NOT NULL,
-  col3 INT NOT NULL AS (col1 + col2) STORED,
-  col4 INT NOT NULL AS (col1 * col2) VIRTUAL,
-  vec VECTOR(3),
-  VECTOR INDEX (col3, vec),
-  VECTOR INDEX (col4, vec)
-)
-----
-
-opt expect=GenerateVectorSearch
-SELECT vec FROM index_with_computed_tab WHERE col3 = 5 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: vec:5  [hidden: column9:9]
- ├── internal-ordering: +9
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── fd: (5)-->(9)
- ├── ordering: +9
- └── project
-      ├── columns: column9:9 vec:5
-      ├── immutable
-      ├── fd: (5)-->(9)
-      ├── inner-join (lookup index_with_computed_tab)
-      │    ├── columns: col3:3!null vec:5
-      │    ├── key columns: [6] = [6]
-      │    ├── lookup columns are key
-      │    ├── vector-search index_with_computed_tab@index_with_computed_tab_col3_vec_idx,vector
-      │    │    ├── columns: rowid:6!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /3
-      │    │    │    └── [/5 - /5]
-      │    │    ├── key: (6)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
-
-opt expect=GenerateVectorSearch
-SELECT * FROM index_with_computed_tab WHERE col3 = 5 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: col1:1!null col2:2!null col3:3!null col4:4!null vec:5  [hidden: column9:9]
- ├── internal-ordering: +9 opt(3)
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── fd: ()-->(3), (5)-->(9), (1,2)-->(4)
- ├── ordering: +9 opt(3) [actual: +9]
- └── project
-      ├── columns: column9:9 col4:4!null col1:1!null col2:2!null col3:3!null vec:5
-      ├── immutable
-      ├── fd: (1,2)-->(3,4), (5)-->(9)
-      ├── inner-join (lookup index_with_computed_tab)
-      │    ├── columns: col1:1!null col2:2!null col3:3!null vec:5
-      │    ├── key columns: [6] = [6]
-      │    ├── lookup columns are key
-      │    ├── fd: (1,2)-->(3)
-      │    ├── vector-search index_with_computed_tab@index_with_computed_tab_col3_vec_idx,vector
-      │    │    ├── columns: rowid:6!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /3
-      │    │    │    └── [/5 - /5]
-      │    │    ├── key: (6)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           ├── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
-           └── col1:1 * col2:2 [as=col4:4, outer=(1,2), immutable]
-
-opt expect=GenerateVectorSearch
-SELECT vec FROM index_with_computed_tab WHERE col4 = 12 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: vec:5  [hidden: column9:9]
- ├── internal-ordering: +9
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── fd: (5)-->(9)
- ├── ordering: +9
- └── project
-      ├── columns: column9:9 vec:5
-      ├── immutable
-      ├── fd: (5)-->(9)
-      ├── inner-join (lookup index_with_computed_tab)
-      │    ├── columns: col1:1!null col2:2!null vec:5
-      │    ├── key columns: [6] = [6]
-      │    ├── lookup columns are key
-      │    ├── vector-search index_with_computed_tab@index_with_computed_tab_col4_vec_idx,vector
-      │    │    ├── columns: rowid:6!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /4
-      │    │    │    └── [/12 - /12]
-      │    │    ├── key: (6)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
-
-# The col1 and col2 filters imply filters on col3 and col4, but may filter
-# additional rows, so this case is not yet supported.
-opt expect-not=GenerateVectorSearch
-SELECT vec FROM index_with_computed_tab WHERE col1 = 2 AND col2 = 10 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: vec:5  [hidden: column9:9]
- ├── internal-ordering: +9
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── fd: (5)-->(9)
- ├── ordering: +9
- └── project
-      ├── columns: column9:9 vec:5
-      ├── immutable
-      ├── fd: (5)-->(9)
-      ├── select
-      │    ├── columns: col1:1!null col2:2!null vec:5
-      │    ├── fd: ()-->(1,2)
-      │    ├── scan index_with_computed_tab
-      │    │    ├── columns: col1:1!null col2:2!null vec:5
-      │    │    └── computed column expressions
-      │    │         ├── col3:3
-      │    │         │    └── col1:1 + col2:2
-      │    │         └── col4:4
-      │    │              └── col1:1 * col2:2
-      │    └── filters
-      │         ├── col1:1 = 2 [outer=(1), constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
-      │         └── col2:2 = 10 [outer=(2), constraints=(/2: [/10 - /10]; tight), fd=()-->(2)]
-      └── projections
-           └── vec:5 <-> '[3,1,2]' [as=column9:9, outer=(5), immutable]
-
-# Case with a placeholder vector.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> $1 LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable, has-placeholder
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable, has-placeholder
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── has-placeholder
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── has-placeholder
-      │    │    ├── key: (1)
-      │    │    └── $1
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> $1 [as=column15:15, outer=(9), immutable]
-
-# Locking should transfer from the scan to the lookup-join.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5 FOR UPDATE;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── volatile
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── volatile
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── locking: for-update
-      │    ├── volatile
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5 FOR SHARE SKIP LOCKED;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── volatile
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── volatile
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── locking: for-share,skip-locked
-      │    ├── volatile
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# The lock operator handles locking, so the lookup-join is non-locking.
-opt expect=GenerateVectorSearch set=optimizer_use_lock_op_for_serializable=true
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]' LIMIT 5 FOR SHARE;
-----
-lock index_tab
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── key columns: id:1
- ├── lock columns: (16-26)
- ├── locking: for-share
- ├── cardinality: [0 - 5]
- ├── volatile
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── top-k
-      ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11 column15:15
-      ├── internal-ordering: +15
-      ├── k: 5
-      ├── cardinality: [0 - 5]
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── ordering: +15
-      └── project
-           ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-           ├── immutable
-           ├── key: (1)
-           ├── fd: (1)-->(2-11), (9)-->(15)
-           ├── inner-join (lookup index_tab)
-           │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-           │    ├── key columns: [1] = [1]
-           │    ├── lookup columns are key
-           │    ├── key: (1)
-           │    ├── fd: (1)-->(2-11)
-           │    ├── vector-search index_tab@index_tab_vec1_idx,vector
-           │    │    ├── columns: id:1!null
-           │    │    ├── target nearest neighbors: 5
-           │    │    ├── key: (1)
-           │    │    └── '[3,1,2]'
-           │    └── filters (true)
-           └── projections
-                └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# The index can be forced.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab@index_tab_vec2_idx ORDER BY vec2 <-> '[3,1,2]' LIMIT 500;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 500
- ├── cardinality: [0 - 500]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (10)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec2_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 500
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
-
-# Forcing a different index prevents using the vector index.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab@primary ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── flags: force-index=index_tab_pkey
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# No-op case with an un-indexed vector column.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec3 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (11)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (11)-->(15)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── vec3:11 <-> '[3,1,2]' [as=column15:15, outer=(11), immutable]
-
-# No-op case without a limit.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]';
-----
-sort
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# No-op case without an ordering.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab LIMIT 5;
-----
-scan index_tab
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
- ├── limit: 5
- ├── key: (1)
- └── fd: (1)-->(2-11)
-
-# No-op case with an ordering on a non-vector column.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY id LIMIT 5;
-----
-scan index_tab
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
- ├── limit: 5
- ├── key: (1)
- ├── fd: (1)-->(2-11)
- └── ordering: +1
-
-# No-op case with an ordering on an additional column.
-# TODO(drewk, mw5h): support this case.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> '[3,1,2]', id LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15,+1
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15,+1
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# The query vector must be a constant or placeholder.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> (SELECT '[3,1,2]'::VECTOR(3) FROM a LIMIT 1) LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column23:23]
- ├── internal-ordering: +23
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11,23)
- ├── ordering: +23
- └── project
-      ├── columns: column23:23 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11,23)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── vector-distance [as=column23:23, outer=(9), immutable, subquery]
-                ├── vec1:9
-                └── subquery
-                     └── project
-                          ├── columns: vector:22!null
-                          ├── cardinality: [0 - 1]
-                          ├── key: ()
-                          ├── fd: ()-->(22)
-                          ├── scan a@s_idx
-                          │    ├── limit: 1
-                          │    └── key: ()
-                          └── projections
-                               └── '[3,1,2]' [as=vector:22]
-
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY vec1 <-> vec2 LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9,10)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9,10)-->(15)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── vec1:9 <-> vec2:10 [as=column15:15, outer=(9,10), immutable]
-
-# Currently, the vector column must be the left argument.
-# TODO(drewk, mw5h): add a normalization rule to flip the args.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab ORDER BY '[3,1,2]' <-> vec1 LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── scan index_tab
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── partial index predicates
-      │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    ├── key: (1)
-      │    └── fd: (1)-->(2-11)
-      └── projections
-           └── '[3,1,2]' <-> vec1:9 [as=column15:15, outer=(9), immutable]
-
-# Currently, there can be no extra filters beyond those used to constrain index
-# prefix columns, if any.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab WHERE region = 'us-west' AND latitude > 0 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15 opt(3)
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,4-11), (9)-->(15)
- ├── ordering: +15 opt(3) [actual: +15]
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(3), (1)-->(2,4-11), (9)-->(15)
-      ├── select
-      │    ├── columns: id:1!null val:2 region:3!null latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key: (1)
-      │    ├── fd: ()-->(3), (1)-->(2,4-11)
-      │    ├── index-join index_tab
-      │    │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(3), (1)-->(2,4-11)
-      │    │    └── scan index_tab@c
-      │    │         ├── columns: id:1!null region:3!null data1:6!null data2:7!null
-      │    │         ├── constraint: /3/6/7/1: [/'us-west' - /'us-west']
-      │    │         ├── key: (1)
-      │    │         └── fd: ()-->(3), (1)-->(6,7)
-      │    └── filters
-      │         └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# The full index prefix must be constrained in order to use the index.
-opt expect-not=GenerateVectorSearch
-SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 vec1:9  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2,9), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 vec1:9
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,9), (9)-->(15)
-      ├── select
-      │    ├── columns: id:1!null val:2 data1:6!null vec1:9
-      │    ├── key: (1)
-      │    ├── fd: ()-->(6), (1)-->(2,9)
-      │    ├── scan index_tab
-      │    │    ├── columns: id:1!null val:2 data1:6!null vec1:9
-      │    │    ├── partial index predicates
-      │    │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2,6,9)
-      │    └── filters
-      │         └── data1:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# The filters cannot be used to constrain the index prefix because they are a
-# contradiction.
-opt expect-not=GenerateVectorSearch
-SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 AND data1 = 2 AND data2 = 2
-ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-values
- ├── columns: id:1!null val:2!null vec1:9!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1,2,9)
-
-# Inequalities cannot be used to constrain the index prefix.
-opt expect-not=GenerateVectorSearch
-SELECT id, val, vec1 FROM index_tab WHERE data1 = 1 AND data2 >= 2 AND data2 <= 5
-ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 vec1:9  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2,9,15), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 vec1:9
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2,9,15), (9)-->(15)
-      ├── select
-      │    ├── columns: id:1!null val:2 data1:6!null data2:7!null vec1:9
-      │    ├── key: (1)
-      │    ├── fd: ()-->(6), (1)-->(2,7,9)
-      │    ├── scan index_tab
-      │    │    ├── columns: id:1!null val:2 data1:6!null data2:7!null vec1:9
-      │    │    ├── partial index predicates
-      │    │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2,6,7,9)
-      │    └── filters
-      │         ├── (data2:7 >= 2) AND (data2:7 <= 5) [outer=(7), constraints=(/7: [/2 - /5]; tight)]
-      │         └── data1:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Partial index case with exact predicate match.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab WHERE latitude > 0 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_vec1_idx1,vector,partial
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Partial index case where the filter matches the index predicate, but is also
-# needed to constrain the prefix column.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab WHERE longitude IN (1, 2) ORDER BY vec3 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5!null data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (11)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (11)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_longitude_vec3_idx,vector,partial
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /5
-      │    │    │    ├── [/1 - /1]
-      │    │    │    └── [/2 - /2]
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec3:11 <-> '[3,1,2]' [as=column15:15, outer=(11), immutable]
-
-# No-op because the filter is more restrictive than the index predicate, and
-# additional filters are not yet supported.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab WHERE latitude > 3 ORDER BY vec1 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: (1)-->(2-11), (9)-->(15)
- ├── ordering: +15
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (9)-->(15)
-      ├── select
-      │    ├── columns: id:1!null val:2 region:3 latitude:4!null longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── scan index_tab
-      │    │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    │    ├── partial index predicates
-      │    │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-11)
-      │    └── filters
-      │         └── latitude:4 > 3 [outer=(4), constraints=(/4: [/4 - ]; tight)]
-      └── projections
-           └── vec1:9 <-> '[3,1,2]' [as=column15:15, outer=(9), immutable]
-
-# Case with a prefix column and a partial-index predicate on the prefix column.
-# This works even though the filter is more restrictive than the index
-# predicate because of the prefix column.
-opt expect=GenerateVectorSearch
-SELECT * FROM index_tab WHERE data2 = 1 ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15 opt(7)
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: ()-->(7), (1)-->(2-6,8-11), (10)-->(15)
- ├── ordering: +15 opt(7) [actual: +15]
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: (1)-->(2-11), (10)-->(15)
-      ├── inner-join (lookup index_tab)
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-11)
-      │    ├── vector-search index_tab@index_tab_data2_vec2_idx,vector,partial
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── prefix constraint: /7
-      │    │    │    └── [/1 - /1]
-      │    │    ├── key: (1)
-      │    │    └── '[3,1,2]'
-      │    └── filters (true)
-      └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
-
-# No-op case where the filter is not implied by the partial-index predicate.
-opt expect-not=GenerateVectorSearch
-SELECT * FROM index_tab WHERE data2 = 0 ORDER BY vec2 <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11  [hidden: column15:15]
- ├── internal-ordering: +15 opt(7)
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── key: (1)
- ├── fd: ()-->(7), (1)-->(2-6,8-11), (10)-->(15)
- ├── ordering: +15 opt(7) [actual: +15]
- └── project
-      ├── columns: column15:15 id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      ├── immutable
-      ├── key: (1)
-      ├── fd: ()-->(7), (1)-->(2-6,8-11), (10)-->(15)
-      ├── select
-      │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    ├── key: (1)
-      │    ├── fd: ()-->(7), (1)-->(2-6,8-11)
-      │    ├── scan index_tab
-      │    │    ├── columns: id:1!null val:2 region:3 latitude:4 longitude:5 data1:6!null data2:7!null geom:8 vec1:9 vec2:10 vec3:11
-      │    │    ├── partial index predicates
-      │    │    │    ├── index_tab_vec1_idx1: filters
-      │    │    │    │    └── latitude:4 > 0 [outer=(4), constraints=(/4: [/1 - ]; tight)]
-      │    │    │    ├── index_tab_data2_vec2_idx: filters
-      │    │    │    │    └── data2:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
-      │    │    │    └── index_tab_longitude_vec3_idx: filters
-      │    │    │         └── longitude:5 IN (1, 2) [outer=(5), constraints=(/5: [/1 - /1] [/2 - /2]; tight)]
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-11)
-      │    └── filters
-      │         └── data2:7 = 0 [outer=(7), constraints=(/7: [/0 - /0]; tight), fd=()-->(7)]
-      └── projections
-           └── vec2:10 <-> '[3,1,2]' [as=column15:15, outer=(10), immutable]
-
-# Regression test for failure to project the vector column from the index join.
-exec-ddl
-CREATE TABLE IF NOT EXISTS image_embeddings (
-    id UUID default gen_random_uuid() PRIMARY KEY,
-    photo_id TEXT NOT NULL,
-    photo_url TEXT NOT NULL,
-    description TEXT,
-    embedding vector(5) NOT NULL,
-	VECTOR INDEX (embedding)
-);
-----
-
-opt expect=GenerateVectorSearch
-SELECT photo_id, photo_url, description FROM image_embeddings
-ORDER BY embedding <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.036530]'
-LIMIT 5;
-----
-top-k
- ├── columns: photo_id:2!null photo_url:3!null description:4  [hidden: column8:8]
- ├── internal-ordering: +8
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── ordering: +8
- └── project
-      ├── columns: column8:8 photo_id:2!null photo_url:3!null description:4
-      ├── immutable
-      ├── inner-join (lookup image_embeddings)
-      │    ├── columns: photo_id:2!null photo_url:3!null description:4 embedding:5!null
-      │    ├── key columns: [1] = [1]
-      │    ├── lookup columns are key
-      │    ├── vector-search image_embeddings@image_embeddings_embedding_idx,vector
-      │    │    ├── columns: id:1!null
-      │    │    ├── target nearest neighbors: 5
-      │    │    ├── key: (1)
-      │    │    └── '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]'
-      │    └── filters (true)
-      └── projections
-           └── embedding:5 <-> '[0.016068,-0.033417,-0.020309,-0.031494,-0.014076,0.03653]' [as=column8:8, outer=(5), immutable]
-
-# Regression test for #146257 - do not overwrite the supplied filters while
-# iterating through vector indexes.
-exec-ddl
-CREATE TABLE t146257 (
-  col1 INT NOT NULL,
-  col2 INT NOT NULL,
-  vec VECTOR(3),
-  VECTOR INDEX (col1, vec),
-  VECTOR INDEX (vec)
-)
-----
-
-# Do not plan a vector search that drops the "col2 = 12" filter.
-opt expect-not=GenerateVectorSearch
-SELECT vec FROM t146257 WHERE col2 = 12 ORDER BY vec <-> '[3,1,2]' LIMIT 5;
-----
-top-k
- ├── columns: vec:3  [hidden: column7:7]
- ├── internal-ordering: +7
- ├── k: 5
- ├── cardinality: [0 - 5]
- ├── immutable
- ├── fd: (3)-->(7)
- ├── ordering: +7
- └── project
-      ├── columns: column7:7 vec:3
-      ├── immutable
-      ├── fd: (3)-->(7)
-      ├── select
-      │    ├── columns: col2:2!null vec:3
-      │    ├── fd: ()-->(2)
-      │    ├── scan t146257
-      │    │    └── columns: col2:2!null vec:3
-      │    └── filters
-      │         └── col2:2 = 12 [outer=(2), constraints=(/2: [/12 - /12]; tight), fd=()-->(2)]
-      └── projections
-           └── vec:3 <-> '[3,1,2]' [as=column7:7, outer=(3), immutable]

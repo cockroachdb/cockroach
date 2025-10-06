@@ -22,7 +22,7 @@ func TestCommentOnIndex(t *testing.T) {
 		if _, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (c INT, INDEX t_c_idx (c)) WITH (schema_locked=false);
+		CREATE TABLE t (c INT, INDEX t_c_idx (c));
 	`); err != nil {
 			t.Fatal(err)
 		}
@@ -106,7 +106,6 @@ func TestCommentOnIndexWhenDropIndex(t *testing.T) {
 
 	runCommentOnTests(t, func(db *gosql.DB) {
 		if _, err := db.Exec(`
-		SET create_table_with_schema_locked=false;
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		CREATE TABLE t (c INT, INDEX t_c_idx (c));

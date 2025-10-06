@@ -49,12 +49,6 @@ type RSGCrash struct {
 	Schema string // the schema that the crash was induced with
 }
 
-// FatalNodeRoachtest contains a fatal error from a node from a roachtest
-type FatalNodeRoachtest struct {
-	Message,
-	FatalLogs string
-}
-
 // A CondensedMessage is a test log output garnished with useful helper methods
 // that extract concise information for seamless debugging.
 type CondensedMessage string
@@ -66,8 +60,6 @@ var fatalRE = regexp.MustCompile(`(?ms)(^F\d{6}.*?\n)(goroutine \d+.*?\n)\n`)
 // tests_test.testRandomSyntax.
 var crasherRE = regexp.MustCompile(`(?s)( *rsg_test.go:\d{3}: Crash detected:.*?\n)(.*?;\n)`)
 var reproRE = regexp.MustCompile(`(?s)( *rsg_test.go:\d{3}: To reproduce, use schema:)`)
-
-var roachtestNodeFatalRE = regexp.MustCompile(`(?ms)\A(.*?\n)((?:^F\d{6}\b[^\n]*(?:\n|$))+)`)
 
 // FatalOrPanic constructs a FatalOrPanic. If no fatal or panic occurred in the
 // test, ok=false is returned.
@@ -104,23 +96,6 @@ func (s CondensedMessage) RSGCrash(lineLimit int) (c RSGCrash, ok bool) {
 		return c, true
 	}
 	return RSGCrash{}, false
-}
-
-// FatalNodeRoachtest constructs a FatalNodeRoachtest which is used to
-// construct an issue with node fatal logs in a Roachtest. If not found, or if
-// regex matching doesn't return the exact expected number of matches,
-// ok=false is returned
-func (s CondensedMessage) FatalNodeRoachtest() (fnr FatalNodeRoachtest, ok bool) {
-	ss := string(s)
-	if matches := roachtestNodeFatalRE.FindStringSubmatchIndex(ss); matches != nil {
-		if len(matches) != 6 {
-			return FatalNodeRoachtest{}, false
-		}
-		fnr.Message = ss[matches[2] : matches[3]-1]
-		fnr.FatalLogs = ss[matches[4]:matches[5]]
-		return fnr, true
-	}
-	return FatalNodeRoachtest{}, false
 }
 
 // String calls .Digest(30).

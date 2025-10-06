@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -433,9 +432,6 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
-		if t.Result.ResumeSpan != nil {
-			break
-		}
 		read := &observedRead{
 			Key:        t.Key,
 			SkipLocked: t.SkipLocked,
@@ -467,9 +463,6 @@ func (v *validator) processOp(op Operation) {
 		if v.checkNonAmbError(op, t.Result) {
 			break
 		}
-		if t.Result.ResumeSpan != nil {
-			break
-		}
 		// Accumulate all the writes for this transaction.
 		write := &observedWrite{
 			Key:   t.Key,
@@ -484,54 +477,8 @@ func (v *validator) processOp(op Operation) {
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`put`, t.Result)
 		}
-	case *CPutOperation:
-		if v.checkNonAmbError(op, t.Result) {
-			break
-		}
-		readObservation := &observedRead{Key: t.Key}
-		writeObservation := &observedWrite{
-			Key:   t.Key,
-			Seq:   t.Seq,
-			Value: roachpb.MakeValueFromString(t.Value()),
-		}
-		// Consider two cases based on whether the CPut hit a ConditionFailedError.
-		err := errorFromResult(t.Result)
-		if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
-			// If the CPut failed, the actual value (in the ConditionFailedError) is
-			// observed, and the CPut's write is not observed.
-			observedVal := roachpb.Value{}
-			if e.ActualValue != nil {
-				observedVal.RawBytes = e.ActualValue.RawBytes
-			}
-			readObservation.Value = observedVal
-			v.curObservations = append(v.curObservations, readObservation)
-		} else {
-			// If the CPut succeeded, the expected value is observed, and the CPut's
-			// write is also observed.
-			if !t.AllowIfDoesNotExist {
-				// If AllowIfDoesNotExist == true, we don't know if the read found the
-				// expected value or no value, so we can't add a read observation.
-				// Otherwise, it must have observed the expected value.
-				observedVal := roachpb.Value{}
-				if t.ExpVal != nil {
-					observedVal = roachpb.MakeValueFromBytes(t.ExpVal)
-				}
-				readObservation.Value = observedVal
-				v.curObservations = append(v.curObservations, readObservation)
-			}
-			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
-				writeObservation.Timestamp = sv.Timestamp
-			}
-			v.curObservations = append(v.curObservations, writeObservation)
-		}
-		if v.buffering == bufferingSingle {
-			v.checkAtomic(`cput`, t.Result)
-		}
 	case *DeleteOperation:
 		if v.checkNonAmbError(op, t.Result) {
-			break
-		}
-		if t.Result.ResumeSpan != nil {
 			break
 		}
 		sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
@@ -584,14 +531,10 @@ func (v *validator) processOp(op Operation) {
 		// not prevent new keys from being inserted in the deletion span between the
 		// transaction's read and write timestamps.
 		if v.observationFilter != observeLocking {
-			endKey := t.EndKey
-			if t.Result.ResumeSpan != nil {
-				endKey = t.Result.ResumeSpan.Key
-			}
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
-					EndKey: endKey,
+					EndKey: t.EndKey,
 				},
 				IsDeleteRange: true, // just for printing
 				KVs:           nil,
@@ -791,36 +734,17 @@ func (v *validator) processOp(op Operation) {
 		}
 		// We don't yet actually check the barrier guarantees here, i.e. that all
 		// concurrent writes are applied by the time it completes. Maybe later.
-	case *FlushLockTableOperation:
-		execTimestampStrictlyOptional = true
-		if resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
-			// FlushLockTableOperation may race with a split.
-		} else {
-			// Fail or retry on other errors, depending on type.
-			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
-		}
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
-		readSpan := roachpb.Span{Key: t.Key, EndKey: t.EndKey}
-		// If the ResumeSpan equals the original request span, the scan wasn't
-		// processed at all.
-		if t.Result.ResumeSpan != nil && t.Result.ResumeSpan.Equal(readSpan) {
-			break
-		}
-
 		switch v.observationFilter {
 		case observeAll:
-			if t.Result.ResumeSpan != nil {
-				if op.Scan.Reverse {
-					readSpan.Key = t.Result.ResumeSpan.EndKey
-				} else {
-					readSpan.EndKey = t.Result.ResumeSpan.Key
-				}
-			}
 			scan := &observedScan{
-				Span:       readSpan,
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
 				Reverse:    t.Reverse,
 				SkipLocked: t.SkipLocked,
 				KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
@@ -993,9 +917,6 @@ func (v *validator) processOp(op Operation) {
 		// Don't fail on all errors because savepoints can be labeled with
 		// errOmitted if a previous op in the txn failed.
 		v.checkError(op, t.Result)
-	case *MutateBatchHeaderOperation:
-		execTimestampStrictlyOptional = true
-		v.checkError(op, t.Result)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
@@ -1116,8 +1037,8 @@ func (v *validator) checkAtomicCommitted(
 	// it, un-hiding each of them as we encounter each write, and using the
 	// current state of the view as we encounter each read. Luckily this is easy
 	// to do by with a pebble.Batch "view".
-	firstBatch := v.kvs.kvs.NewIndexedBatch()
-	defer func() { _ = firstBatch.Close() }()
+	batch := v.kvs.kvs.NewIndexedBatch()
+	defer func() { _ = batch.Close() }()
 
 	var failure string
 	// writeTS is populated with the timestamp of the materialized observed writes
@@ -1146,7 +1067,6 @@ func (v *validator) checkAtomicCommitted(
 	// rollbackSp = observedSavepoint{...} when the observedSavepoint object
 	// contains a rollback for which we haven't encountered a matching create yet.
 	var rollbackSp *observedSavepoint = nil
-	batch := firstBatch
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
 		observation := txnObservations[idx]
 		switch o := observation.(type) {
@@ -1208,7 +1128,7 @@ func (v *validator) checkAtomicCommitted(
 			} else { // ranged write
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := mvccencoding.EncodeMVCCTimestampSuffix(o.Timestamp)
+				suffix := storage.EncodeMVCCTimestampSuffix(o.Timestamp)
 				if err := batch.RangeKeyUnset(key, endKey, suffix, nil); err != nil {
 					panic(err)
 				}
@@ -1285,7 +1205,7 @@ func (v *validator) checkAtomicCommitted(
 			} else {
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := mvccencoding.EncodeMVCCTimestampSuffix(writeTS)
+				suffix := storage.EncodeMVCCTimestampSuffix(writeTS)
 				if err := batch.RangeKeySet(key, endKey, suffix, o.Value.RawBytes, nil); err != nil {
 					panic(err)
 				}
@@ -1630,7 +1550,7 @@ func validReadTimes(
 			// Range key contains the key. Emit a point deletion on the key
 			// at the tombstone's timestamp for each active range key.
 			for _, rk := range iter.RangeKeys() {
-				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
+				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					panic(err)
 				}

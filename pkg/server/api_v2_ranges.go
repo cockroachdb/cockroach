@@ -205,7 +205,7 @@ func (a *apiV2Server) listRange(w http.ResponseWriter, r *http.Request) {
 		RangeIDs: []roachpb.RangeID{roachpb.RangeID(rangeID)},
 	}
 
-	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Ranges(ctx, rangesRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
@@ -436,9 +436,9 @@ type hotRangeInfo struct {
 	ReadBytesPerSecond  float64          `json:"read_bytes_per_second"`
 	CPUTimePerSecond    float64          `json:"cpu_time_per_second"`
 	LeaseholderNodeID   roachpb.NodeID   `json:"leaseholder_node_id"`
-	Databases           []string         `json:"databases"`
-	Tables              []string         `json:"tables"`
-	Indexes             []string         `json:"indexes"`
+	TableName           string           `json:"table_name"`
+	DatabaseName        string           `json:"database_name"`
+	IndexName           string           `json:"index_name"`
 	SchemaName          string           `json:"schema_name"`
 	ReplicaNodeIDs      []roachpb.NodeID `json:"replica_node_ids"`
 	StoreID             roachpb.StoreID  `json:"store_id"`
@@ -497,8 +497,8 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 		requestedNodes = []roachpb.NodeID{requestedNodeID}
 	}
 
-	remoteRequest := serverpb.HotRangesRequest{Nodes: []string{"local"}}
-	nodeFn := func(ctx context.Context, status serverpb.RPCStatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
+	remoteRequest := serverpb.HotRangesRequest{NodeID: "local"}
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, nodeID roachpb.NodeID) ([]hotRangeInfo, error) {
 		resp, err := status.HotRangesV2(ctx, &remoteRequest)
 		if err != nil || resp == nil {
 			return nil, err
@@ -516,9 +516,9 @@ func (a *apiV2Server) listHotRanges(w http.ResponseWriter, r *http.Request) {
 				ReadBytesPerSecond:  r.ReadBytesPerSecond,
 				CPUTimePerSecond:    r.CPUTimePerSecond,
 				LeaseholderNodeID:   r.LeaseholderNodeID,
-				Databases:           r.Databases,
-				Tables:              r.Tables,
-				Indexes:             r.Indexes,
+				TableName:           r.TableName,
+				DatabaseName:        r.DatabaseName,
+				IndexName:           r.IndexName,
 				ReplicaNodeIDs:      r.ReplicaNodeIds,
 				SchemaName:          r.SchemaName,
 				StoreID:             r.StoreID,

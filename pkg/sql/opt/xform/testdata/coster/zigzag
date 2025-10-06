@@ -16,8 +16,7 @@ scalar-group-by
  ├── columns: count:8!null
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 22.21
- ├── cost-flags: unbounded-cardinality
+ ├── cost: 21.00913
  ├── key: ()
  ├── fd: ()-->(8)
  ├── inner-join (zigzag abcd@a_idx abcd@c_idx)
@@ -25,9 +24,8 @@ scalar-group-by
  │    ├── eq columns: [5] = [5]
  │    ├── left fixed columns: [1] = [0]
  │    ├── right fixed columns: [3] = [2]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]
- │    ├── cost: 22.17
- │    ├── cost-flags: unbounded-cardinality
+ │    ├── stats: [rows=0.901, distinct(1)=0.901, null(1)=0, distinct(2)=0.901, null(2)=0, distinct(3)=0.901, null(3)=0, distinct(1-3)=0.901, null(1-3)=0]
+ │    ├── cost: 20.97012
  │    ├── fd: ()-->(1-3)
  │    └── filters
  │         ├── a:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
@@ -45,8 +43,7 @@ scalar-group-by
  ├── columns: count:8!null
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 30.21
- ├── cost-flags: unbounded-cardinality
+ ├── cost: 29.00913
  ├── key: ()
  ├── fd: ()-->(8)
  ├── inner-join (zigzag abcd@a_idx abcd@c_idx)
@@ -54,9 +51,8 @@ scalar-group-by
  │    ├── eq columns: [5] = [5]
  │    ├── left fixed columns: [1] = [0]
  │    ├── right fixed columns: [3] = [2]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(1-3)=1, null(1-3)=0]
- │    ├── cost: 30.17
- │    ├── cost-flags: unbounded-cardinality
+ │    ├── stats: [rows=0.901, distinct(1)=0.901, null(1)=0, distinct(2)=0.901, null(2)=0, distinct(3)=0.901, null(3)=0, distinct(1-3)=0.901, null(1-3)=0]
+ │    ├── cost: 28.97012
  │    ├── fd: ()-->(1-3)
  │    └── filters
  │         ├── a:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]

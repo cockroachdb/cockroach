@@ -79,7 +79,7 @@ func (r *resumer) OnFailOrCancel(ctx context.Context, _ interface{}, jobErr erro
 	if jobs.HasErrJobCanceled(jobErr) {
 		err := errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"key visualizer job is not cancelable")
-		log.Dev.Infof(ctx, "%v", err)
+		log.Infof(ctx, "%v", err)
 	}
 	return nil
 }

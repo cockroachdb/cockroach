@@ -213,20 +213,21 @@ func (rs *replicaScanner) waitAndProcess(ctx context.Context, start time.Time, r
 	waitInterval := rs.paceInterval(start, timeutil.Now())
 	rs.waitTimer.Reset(waitInterval)
 	if log.V(6) {
-		log.KvDistribution.Infof(ctx, "wait timer interval set to %s", waitInterval)
+		log.Infof(ctx, "wait timer interval set to %s", waitInterval)
 	}
 	for {
 		select {
 		case <-rs.waitTimer.C:
 			if log.V(6) {
-				log.KvDistribution.Infof(ctx, "wait timer fired")
+				log.Infof(ctx, "wait timer fired")
 			}
+			rs.waitTimer.Read = true
 			if repl == nil {
 				return false
 			}
 
 			if log.V(2) {
-				log.KvDistribution.Infof(ctx, "replica scanner processing %s", repl)
+				log.Infof(ctx, "replica scanner processing %s", repl)
 			}
 			for _, q := range rs.queues {
 				q.MaybeAddAsync(ctx, repl, rs.clock.NowAsClockTimestamp())
@@ -251,7 +252,7 @@ func (rs *replicaScanner) removeReplica(repl *Replica) {
 	}
 	if log.V(6) {
 		ctx := rs.AnnotateCtx(context.TODO())
-		log.KvDistribution.Infof(ctx, "removed replica %s", repl)
+		log.Infof(ctx, "removed replica %s", repl)
 	}
 }
 
@@ -299,7 +300,7 @@ func (rs *replicaScanner) scanLoop() {
 				rs.mu.total += timeutil.Since(start)
 			}()
 			if log.V(6) {
-				log.KvDistribution.Infof(ctx, "reset replica scan iteration")
+				log.Infof(ctx, "reset replica scan iteration")
 			}
 
 			// Reset iteration and start time.

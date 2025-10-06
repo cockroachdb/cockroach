@@ -93,11 +93,12 @@ func (f *RangeFeed) runInitialScan(
 	for r.Next() {
 		// Figure out what spans are left to scan.
 		toScan = toScan[:0]
-		for sp, ts := range frontier.Entries() {
+		frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
 			if ts.IsEmpty() || ts.Less(f.initialTimestamp) {
 				toScan = append(toScan, sp)
 			}
-		}
+			return span.ContinueMatch
+		})
 
 		// Scan the spans.
 		if len(toScan) > 0 {
@@ -109,7 +110,7 @@ func (f *RangeFeed) runInitialScan(
 					}
 				}
 				if n.ShouldLog() {
-					log.Dev.Warningf(ctx, "failed to perform initial scan: %v", err)
+					log.Warningf(ctx, "failed to perform initial scan: %v", err)
 				}
 				continue
 			}

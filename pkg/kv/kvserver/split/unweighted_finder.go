@@ -47,7 +47,6 @@ const (
 	splitKeyMinCounter         = 100              // min aggregate counters before consideration
 	splitKeyThreshold          = 0.25             // 25% difference between left/right counters
 	splitKeyContainedThreshold = 0.50             // too many spanning queries over split point
-	clearDirectionThreshold    = 0.80             // 80% accesses left or right
 )
 
 type sample struct {
@@ -99,7 +98,7 @@ func (f *UnweightedFinder) Record(span roachpb.Span, weight float64) {
 	f.count++
 	if count < splitKeySampleSize {
 		idx = count
-	} else if idx = f.randSource.IntN(count); idx >= splitKeySampleSize {
+	} else if idx = f.randSource.Intn(count); idx >= splitKeySampleSize {
 		// Increment all existing keys' counters.
 		for i := range f.samples {
 			if span.ProperlyContainsKey(f.samples[i].key) {
@@ -202,15 +201,14 @@ func (f *UnweightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 		imbalanceAndTooManyContained)
 }
 
-// PopularKey implements the LoadBasedSplitter interface.
-func (f *UnweightedFinder) PopularKey() PopularKey {
+// PopularKeyFrequency implements the LoadBasedSplitter interface.
+func (f *UnweightedFinder) PopularKeyFrequency() float64 {
 	slices.SortFunc(f.samples[:], func(a, b sample) int {
 		return bytes.Compare(a.key, b.key)
 	})
 
 	currentKeyCount := 1
-	popularKeyCount := 0
-	var key roachpb.Key
+	popularKeyCount := 1
 	for i := 1; i < len(f.samples); i++ {
 		if bytes.Equal(f.samples[i].key, f.samples[i-1].key) {
 			currentKeyCount++
@@ -218,32 +216,11 @@ func (f *UnweightedFinder) PopularKey() PopularKey {
 			currentKeyCount = 1
 		}
 		if popularKeyCount < currentKeyCount {
-			key = f.samples[i].key
 			popularKeyCount = currentKeyCount
 		}
 	}
 
-	return PopularKey{
-		Key:       key,
-		Frequency: float64(popularKeyCount) / float64(splitKeySampleSize),
-	}
-}
-
-// AccessDirection returns a value in [-1, 1] indicating the direction of access
-// requests over time. A negative value implies more traffic is moving to the left
-// (lower keys), a positive value implies more traffic is moving to the right
-// (higher keys), and zero indicates even distribution.
-func (f *UnweightedFinder) AccessDirection() float64 {
-	var left, right int
-	for _, s := range f.samples {
-		left += s.left
-		right += s.right
-	}
-	if left+right == 0 {
-		return 0
-	}
-	// Return ratio in [-1, 1].
-	return float64(right-left) / float64(right+left)
+	return float64(popularKeyCount) / float64(splitKeySampleSize)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.

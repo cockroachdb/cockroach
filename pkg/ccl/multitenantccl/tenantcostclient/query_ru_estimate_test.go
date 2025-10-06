@@ -72,6 +72,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: tenantID,
+		Settings: st,
 		TestingKnobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
 				// We disable the randomization of some batch sizes because with
@@ -195,7 +196,7 @@ func TestEstimateQueryRUConsumption(t *testing.T) {
 	const deltaFraction = 0.25
 	allowedDelta := tenantMeasuredRUs * deltaFraction
 	require.InDeltaf(t, tenantMeasuredRUs, tenantEstimatedRUs, allowedDelta,
-		"estimated RUs (%.2f) were not within %.2f RUs of the expected value (%.2f)",
+		"estimated RUs (%d) were not within %f RUs of the expected value (%f)",
 		tenantEstimatedRUs,
 		allowedDelta,
 		tenantMeasuredRUs,

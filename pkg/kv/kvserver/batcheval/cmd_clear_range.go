@@ -150,9 +150,9 @@ func ClearRange(
 	// If we're writing Pebble range tombstones, use ClearRangeWithHeuristic to
 	// avoid writing tombstones across empty spans -- in particular, across the
 	// range key span, since we expect range keys to be rare.
-	const pointKeyThreshold = 2
+	const pointKeyThreshold, rangeKeyThreshold = 2, 2
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, readWriter, readWriter, from, to, pointKeyThreshold,
+		ctx, readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -201,7 +201,7 @@ func computeStatsDelta(
 			// We only want to assert the correctness of stats that do not contain
 			// estimates.
 			if delta.ContainsEstimates == 0 && !delta.Equal(computed) {
-				log.KvExec.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
+				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
 					pretty.Diff(delta, computed))
 			}
 		}

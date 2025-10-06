@@ -219,7 +219,7 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 			enc, err := EncodeMVCCValue(tc.val)
 			require.NoError(t, err)
 			fmt.Fprintf(&buf, "encoded: %x", enc)
-			assert.Equal(t, tc.val.encodedSize(), len(enc))
+			assert.Equal(t, encodedMVCCValueSize(tc.val), len(enc))
 
 			dec, err := DecodeMVCCValue(enc)
 			require.NoError(t, err)
@@ -239,7 +239,7 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 		t.Run("DeocdeValueFromMVCCValue/"+name, func(t *testing.T) {
 			enc, err := EncodeMVCCValue(tc.val)
 			require.NoError(t, err)
-			assert.Equal(t, tc.val.encodedSize(), len(enc))
+			assert.Equal(t, encodedMVCCValueSize(tc.val), len(enc))
 
 			dec, err := DecodeValueFromMVCCValue(enc)
 			require.NoError(t, err)

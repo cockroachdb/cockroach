@@ -4,7 +4,7 @@ genrule(
     cmd = """
     $(location //pkg/cmd/cockroach-short) gen settings-list \
     --show-class --format=rawhtml --class-header-label 'Supported Deployments' \
-    --class-labels 'Advanced/Self-Hosted,Advanced/Self-hosted (read-write); Basic/Standard (read-only),Basic/Standard/Advanced/Self-Hosted' > $@
+    --class-labels 'Dedicated/Self-Hosted,Dedicated/Self-hosted (read-write); Serverless (read-only),Serverless/Dedicated/Self-Hosted' > $@
     """,
     tools = ["//pkg/cmd/cockroach-short"],
     visibility = [

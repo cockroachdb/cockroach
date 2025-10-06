@@ -124,12 +124,6 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 		log.VEventf(ctx, 2, "txn tombstone present; transaction has been aborted")
 		return kvpb.NewTransactionAbortedError(reason)
 	}
-	// Verify that if the transaction record is being created, the client thinks
-	// it's in the PENDING state.
-	if txn.Status != roachpb.PENDING {
-		return errors.AssertionFailedf(
-			"cannot create transaction record with non-PENDING transaction: %v", txn)
-	}
 	return nil
 }
 
@@ -138,7 +132,7 @@ func CanCreateTxnRecord(ctx context.Context, rec EvalContext, txn *roachpb.Trans
 // be PENDING.
 func BumpToMinTxnCommitTS(ctx context.Context, rec EvalContext, txn *roachpb.Transaction) {
 	if txn.Status != roachpb.PENDING {
-		log.KvExec.Fatalf(ctx, "non-pending txn passed to BumpToMinTxnCommitTS: %v", txn)
+		log.Fatalf(ctx, "non-pending txn passed to BumpToMinTxnCommitTS: %v", txn)
 	}
 	minCommitTS := rec.MinTxnCommitTS(ctx, txn.ID, txn.Key)
 	if bumped := txn.WriteTimestamp.Forward(minCommitTS); bumped {

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 type tableDescReferences []descpb.TableDescriptor_Reference
@@ -132,7 +131,7 @@ func (f *referenceProviderFactory) NewReferenceProvider(
 	case *memo.CreateTriggerExpr:
 		planDeps, typeDeps, funcDeps, err = toPlanDependencies(t.Deps, t.TypeDeps, t.FuncDeps)
 	default:
-		return nil, errors.AssertionFailedf("unexpected root expression: %s", t.Op())
+		return nil, errors.AssertionFailedf("unexpected root expression: %s", t.(memo.RelExpr).Op())
 	}
 	if err != nil {
 		return nil, err
@@ -180,7 +179,7 @@ func NewReferenceProviderFactory(p *planner) scbuild.ReferenceProviderFactory {
 // after test is done.
 func NewReferenceProviderFactoryForTest(
 	ctx context.Context,
-	opName redact.SafeString,
+	opName string,
 	txn *kv.Txn,
 	user username.SQLUsername,
 	execCfg *ExecutorConfig,

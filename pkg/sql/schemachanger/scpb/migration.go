@@ -10,13 +10,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	idxtype "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
 
 // HasDeprecatedElements returns if the target contains any element or fields
 // marked for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
-	return false
+	return target.GetSecondaryIndexPartial() != nil
 }
 
 // migrateDeprecatedFields will check if any of the deprecated fields are being
@@ -26,41 +25,8 @@ func migrateDeprecatedFields(
 	version clusterversion.ClusterVersion, target Target,
 ) (migrated bool, newTargets []Target) {
 	newTargets = make([]Target, 0)
-
-	// Migrate IsInverted boolean to index Type enumeration.
-	var idx *Index
-	if primary := target.GetPrimaryIndex(); primary != nil {
-		idx = &primary.Index
-	}
-	if secondary := target.GetSecondaryIndex(); secondary != nil {
-		idx = &secondary.Index
-	}
-	if temp := target.GetTemporaryIndex(); temp != nil {
-		idx = &temp.Index
-	}
-	if idx != nil && idx.IsInverted && idx.Type != idxtype.INVERTED {
-		idx.Type = idxtype.INVERTED
-		migrated = true
-	}
-
-	// In TriggerDeps, map the deprecated UsesRelationIDs to a
-	// TriggerDeps_RelationReference.
-	if deps := target.GetTriggerDeps(); deps != nil {
-		if len(deps.UsesRelationIDs) > 0 {
-			deps.UsesRelations = make([]TriggerDeps_RelationReference, len(deps.UsesRelationIDs))
-			for i := range deps.UsesRelationIDs {
-				deps.UsesRelations[i] = TriggerDeps_RelationReference{
-					ID: deps.UsesRelationIDs[i],
-				}
-			}
-			deps.UsesRelationIDs = nil
-			migrated = true
-		}
-	}
-
-	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
 	if columnType := target.GetColumnType(); columnType != nil {
-		if columnType.ComputeExpr != nil {
+		if columnType.ComputeExpr != nil && version.IsActive(clusterversion.V24_3) {
 			newTarget := MakeTarget(
 				AsTargetStatus(target.TargetStatus),
 				&ColumnComputeExpression{
@@ -82,9 +48,16 @@ func migrateDeprecatedFields(
 func migrateTargetElement(targets []Target, idx int) {
 	targetToMigrate := targets[idx]
 	switch t := targetToMigrate.Element().(type) {
-	default:
-		// No-op case to defeat unused linter when there are no elements to migrate.
-		_ = t.element
+	case *SecondaryIndexPartial:
+		for _, target := range targets {
+			if secondaryIndex := target.GetSecondaryIndex(); secondaryIndex != nil &&
+				secondaryIndex.TableID == t.TableID &&
+				secondaryIndex.IndexID == t.IndexID &&
+				target.TargetStatus == targetToMigrate.TargetStatus {
+				secondaryIndex.EmbeddedExpr = &t.Expression
+				break
+			}
+		}
 	}
 }
 

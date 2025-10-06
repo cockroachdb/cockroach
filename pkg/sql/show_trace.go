@@ -19,7 +19,6 @@ import (
 
 // showTraceNode is a planNode that processes session trace data.
 type showTraceNode struct {
-	zeroInputPlanNode
 	columns colinfo.ResultColumns
 	compact bool
 
@@ -40,16 +39,14 @@ func (p *planner) ShowTrace(ctx context.Context, n *tree.ShowTraceForSession) (p
 	// does not get confused.
 	ageColIdx := colinfo.GetTraceAgeColumnIdx(n.Compact)
 	node = &sortNode{
-		singleInputPlanNode: singleInputPlanNode{node},
+		plan: node,
 		ordering: colinfo.ColumnOrdering{
 			colinfo.ColumnOrderInfo{ColIdx: ageColIdx, Direction: encoding.Ascending},
 		},
 	}
 
 	if n.TraceType == tree.ShowTraceReplica {
-		node = &showTraceReplicaNode{
-			singleInputPlanNode: singleInputPlanNode{node},
-		}
+		node = &showTraceReplicaNode{plan: node}
 	}
 	return node, nil
 }
@@ -158,6 +155,7 @@ var kvMsgRegexp = regexp.MustCompile(
 		"^fetched: ",
 		"^CPut ",
 		"^Put ",
+		"^InitPut ",
 		"^DelRange ",
 		"^ClearRange ",
 		"^Del ",

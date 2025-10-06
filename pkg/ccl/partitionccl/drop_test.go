@@ -84,11 +84,10 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 
 	// Set zone configs on the primary index, secondary index, and one partition
 	// of the secondary index.
-	ttl := "gc.ttlseconds = 1"
-	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@kv_pkey",
-		fmt.Sprintf("num_replicas = %d", *s.DefaultZoneConfig().NumReplicas))
-	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@i", ttl)
-	sqlutils.SetZoneConfig(t, sqlDB, "PARTITION p2 OF INDEX t.kv@i", ttl)
+	ttlYaml := "gc: {ttlseconds: 1}"
+	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@kv_pkey", "")
+	sqlutils.SetZoneConfig(t, sqlDB, "INDEX t.kv@i", ttlYaml)
+	sqlutils.SetZoneConfig(t, sqlDB, "PARTITION p2 OF INDEX t.kv@i", ttlYaml)
 
 	// Drop the index and verify that the zone config for the secondary index and
 	// its partition are removed but the zone config for the primary index
@@ -170,8 +169,8 @@ SELECT job_id
 				`SELECT status FROM [SHOW JOB $1]`,
 				id,
 			).Scan(&status)
-			if status != string(jobs.StateSucceeded) {
-				return errors.Errorf("expected %q, got %q", jobs.StateSucceeded, status)
+			if status != string(jobs.StatusSucceeded) {
+				return errors.Errorf("expected %q, got %q", jobs.StatusSucceeded, status)
 			}
 			return nil
 		})

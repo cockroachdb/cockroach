@@ -149,7 +149,7 @@ func UpdateAddrs(ctx context.Context, addr, advAddr *string, ln net.Addr) error 
 	requestedAll := (desiredHost == "" || desiredHost == "0.0.0.0" || desiredHost == "::")
 	listenedAll := (lnHost == "" || lnHost == "0.0.0.0" || lnHost == "::")
 	if (requestedAll && !listenedAll) || (!requestedAll && desiredHost != lnHost) {
-		log.Dev.Warningf(ctx, "requested to listen on %q, actually listening on %q", desiredHost, lnHost)
+		log.Warningf(ctx, "requested to listen on %q, actually listening on %q", desiredHost, lnHost)
 	}
 	*addr = net.JoinHostPort(lnHost, lnPort)
 

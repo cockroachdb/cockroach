@@ -168,6 +168,7 @@ func (r *SchemaRegistry) register(hw http.ResponseWriter, hr *http.Request) (err
 	if err := json.NewDecoder(hr.Body).Decode(&req); err != nil {
 		return err
 	}
+
 	subject := strings.Split(hr.URL.Path, "/")[2]
 	id := r.registerSchema(subject, req.Schema)
 	res, err := json.Marshal(confluentSchemaVersionResponse{ID: id})

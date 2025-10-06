@@ -42,7 +42,7 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON shipments FOR EACH ROW EXECUTE FUN
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 142 MutationType ops
+StatementPhase stage 1 of 1 with 141 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -100,7 +100,7 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], PUBLIC] -> ABSENT
@@ -432,29 +432,18 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEnabled
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerTiming
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEvents
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
-      TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
-      RelationReferences:
-      - id: 109
-        columnids: []
-        indexid: 0
-      TableID: 109
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -560,6 +549,14 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -617,14 +614,6 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 109
@@ -706,7 +695,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], ABSENT] -> PUBLIC
@@ -757,7 +746,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 153 MutationType ops
+PreCommitPhase stage 2 of 2 with 152 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -815,7 +804,7 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraintUnvalidated:{DescID: 109, ConstraintID: 5, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 109, Name: check, ConstraintID: 5}, ABSENT], PUBLIC] -> ABSENT
@@ -1147,29 +1136,18 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerName
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEnabled
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerTiming
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerEvents
-      TriggerID: 1
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.TriggerFunctionCall
-      TriggerID: 1
-    *scop.UpdateTableBackReferencesInRelations
-      RelationReferences:
-      - id: 109
-        columnids: []
-        indexid: 0
-      TableID: 109
     *scop.UpdateTableBackReferencesInTypes
       BackReferencedTableID: 109
       TypeIDs:
@@ -1275,6 +1253,14 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 109
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 109
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 109
+      TypeIDs:
+      - 107
+      - 108
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -1332,14 +1318,6 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 109
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 109
@@ -1410,7 +1388,7 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.shipments CASCADE
         redactedstatement: DROP TABLE defaultdb.public.shipments CASCADE
@@ -1762,7 +1740,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 1, Expr: gen_random_uuid()}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1, TypeName: UUID}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 1, Expr: gen_random_uuid()}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1774,7 +1752,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 5, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 5, ReferencedSequenceIDs: [106], Expr: nextval(106:::REGCLASS)}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -1786,7 +1764,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, Expr: [FUNCTION 100112](), ReferencedFunctionIDs: [112]}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 6, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnDefaultExpression:{DescID: 109, ColumnID: 6, Expr: [FUNCTION 100112](), ReferencedFunctionIDs: [112]}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -2200,7 +2178,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
@@ -2236,7 +2214,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
@@ -2260,7 +2238,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
@@ -2304,7 +2282,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
 - from: [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
@@ -2395,31 +2373,31 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [IndexData:{DescID: 109, IndexID: 2}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 109, ColumnID: 4, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [IndexName:{DescID: 109, Name: partialidx, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
@@ -2462,7 +2440,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - from: [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: STRING}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [SequenceOwner:{DescID: 109, ColumnID: 2, ReferencedDescID: 110}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
@@ -2684,7 +2662,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 109, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, VALIDATED]
   kind: Precedence
   rule: relation dropped before dependent index
 - from: [Table:{DescID: 109}, DROPPED]
@@ -2980,7 +2958,7 @@ PreCommitPhase stage 2 of 2 with 7 MutationType ops
       - 109
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (51 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 51 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.customers CASCADE
         redactedstatement: DROP TABLE defaultdb.public.customers CASCADE
@@ -3019,7 +2997,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 55 MutationType ops
     [[IndexName:{DescID: 104, Name: customers_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 105, IndexID: 0, ConstraintID: 3, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
     [[ForeignKeyConstraint:{DescID: 109, IndexID: 0, ConstraintID: 2, ReferencedColumnIDs: [1], ReferencedDescID: 104}, ABSENT], VALIDATED] -> ABSENT
@@ -3524,7 +3502,7 @@ DROP TABLE defaultdb.customers CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
@@ -3548,7 +3526,7 @@ DROP TABLE defaultdb.customers CASCADE;
   kind: Precedence
   rule: dependents removed before column
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
@@ -3560,7 +3538,7 @@ DROP TABLE defaultdb.customers CASCADE;
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
 - from: [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT]
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
@@ -3607,27 +3585,27 @@ DROP TABLE defaultdb.customers CASCADE;
   to:   [Table:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT]
   to:   [IndexData:{DescID: 104, IndexID: 2}, DROPPED]
   kind: Precedence
   rule: index removed before garbage collection
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, ABSENT]
   to:   [Table:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index drop mutation visible before cleaning up index columns
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, DELETE_ONLY]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before index name
-- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, VALIDATED]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, VALIDATED]
   to:   [IndexName:{DescID: 104, Name: customers_email_key, IndexID: 2}, ABSENT]
   kind: Precedence
   rule: index no longer public before dependents, excluding columns
@@ -3756,7 +3734,7 @@ DROP TABLE defaultdb.customers CASCADE;
   kind: SameStagePrecedence
   rules: [descriptor dropped before dependent element removal; descriptor dropped right before removing back-reference in its parent descriptor]
 - from: [Table:{DescID: 104}, DROPPED]
-  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, VALIDATED]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 1, RecreateSourceIndexID: 0}, VALIDATED]
   kind: Precedence
   rule: relation dropped before dependent index
 - from: [Table:{DescID: 104}, DROPPED]
@@ -3842,7 +3820,7 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
     [[IndexName:{DescID: 116, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 116, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 116, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 116, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 116, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 116, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraint:{DescID: 116, ReferencedTypeIDs: [114 115], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 116, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -4005,6 +3983,14 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 116
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 116
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 116
+      TypeIDs:
+      - 114
+      - 115
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -4042,14 +4028,6 @@ StatementPhase stage 1 of 1 with 63 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 116
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 116
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 116
-      TypeIDs:
-      - 114
-      - 115
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 116
@@ -4105,7 +4083,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[IndexName:{DescID: 116, Name: greeter_pkey, IndexID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 116, ColumnID: 2, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 116, ColumnID: 3, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 116, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], ABSENT] -> PUBLIC
+    [[SecondaryIndex:{DescID: 116, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[IndexName:{DescID: 116, Name: i, IndexID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[CheckConstraint:{DescID: 116, ReferencedTypeIDs: [114 115], IndexID: 0, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
     [[ConstraintWithoutIndexName:{DescID: 116, Name: check, ConstraintID: 2}, ABSENT], ABSENT] -> PUBLIC
@@ -4153,7 +4131,7 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     [[IndexName:{DescID: 116, Name: greeter_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 116, ColumnID: 2, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 116, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[SecondaryIndex:{DescID: 116, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
+    [[SecondaryIndex:{DescID: 116, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[IndexName:{DescID: 116, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[CheckConstraint:{DescID: 116, ReferencedTypeIDs: [114 115], IndexID: 0, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ConstraintWithoutIndexName:{DescID: 116, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -4316,6 +4294,14 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 2
       TableID: 116
+    *scop.RemoveDroppedIndexPartialPredicate
+      IndexID: 2
+      TableID: 116
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 116
+      TypeIDs:
+      - 114
+      - 115
     *scop.SetIndexName
       IndexID: 2
       Name: crdb_internal_index_2_name_placeholder
@@ -4353,14 +4339,6 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       IndexID: 2
       Kind: 1
       TableID: 116
-    *scop.RemoveDroppedIndexPartialPredicate
-      IndexID: 2
-      TableID: 116
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 116
-      TypeIDs:
-      - 114
-      - 115
     *scop.MakeIndexAbsent
       IndexID: 2
       TableID: 116
@@ -4394,7 +4372,7 @@ PreCommitPhase stage 2 of 2 with 67 MutationType ops
       - 116
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (3 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops pending
       Statements:
       - statement: DROP TABLE defaultdb.greeter
         redactedstatement: DROP TABLE defaultdb.public.greeter

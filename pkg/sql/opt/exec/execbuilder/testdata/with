@@ -33,7 +33,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT a FROM y
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ columns: (a)
@@ -80,7 +80,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO x VALUES (1) RETURNING a
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ columns: (a)
@@ -213,20 +213,10 @@ vectorized: true
     │
     └── • apply join (left outer)
         │
-        ├── • scan
-        │     missing stats
-        │     table: y@y_pkey
-        │     spans: FULL SCAN
-        │
-        └── • inner loop (unoptimized)
-            │
-            └── • with &1 (foo)
-                   ├── materialized
-                   ├── select
-                   │    ├── scan x
-                   │    └── filters
-                   │         └── x.a = y.a
-                   └── with-scan &1 (foo)
+        └── • scan
+              missing stats
+              table: y@y_pkey
+              spans: FULL SCAN
 
 query T
 EXPLAIN
@@ -239,18 +229,8 @@ vectorized: true
 ·
 • apply join
 │
-├── • values
-│     size: 1 column, 3 rows
-│
-└── • inner loop (unoptimized)
-    │
-    └── • with &1 (foo)
-           ├── materialized
-           ├── select
-           │    ├── scan y
-           │    └── filters
-           │         └── y.a <= column1
-           └── with-scan &1 (foo)
+└── • values
+      size: 1 column, 3 rows
 
 # Regression tests for #93370. Do not convert a non-recursive CTE
 # that uses UNION ALL and WITH RECURSIVE to UNION.
@@ -280,7 +260,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT 1 UNION ALL SELECT id + 1 FROM x WHERE id < 3
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 3 (x)

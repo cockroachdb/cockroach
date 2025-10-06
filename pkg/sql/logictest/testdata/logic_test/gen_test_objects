@@ -179,17 +179,18 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-%vui
-comments
-descriptor_id_se͌q
-job_progress_history
-ro le_options
-sett"ings
-statement_bundle_chunks
-statement_diagnost ics
+database_role_settings
+eventLog
+j ob\\x97s
+locations
+mvcc&_statistics
+protected_ts_records
+repor
+ts_met😐a
+span_stats_buckets
+sqlliveness
+statement_diagnosti cs
 sta😣tement_statistics
-task%q_payloads
-users
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +199,26 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-"%vui"                "\\U00105591ke😰y"  text
-"%vui"                "lastUpda͗ted"     timestamp without time zone
-"%vui"                rowid              bigint
-"%vui"                "v̮/alue'"         bytea
-comments              "%pobjec̏t_😫id"    bigint
-comments              "commen  t "       text
-comments              rowid              bigint
-comments              sub_id             bigint
-comments              "type'😡"           bigint
-descriptor_id_se͌q    rowid              bigint
-descriptor_id_se͌q    value              bigint
-job_progress_history  "fra""ction"       double precision
-job_progress_history  job_id             bigint
-job_progress_history  "resOlved%q"       numeric
-job_progress_history  rowid              bigint
-job_progress_history  "wRit́ten"         timestamp with time zone
-"ro le_options"       option             text
-"ro le_options"       rowid              bigint
-"ro le_options"       user_id            oid
-"ro le_options"       username           text
+database_role_settings  database_id           oid
+database_role_settings  "ro'le_id"            oid
+database_role_settings  role_name             text
+database_role_settings  rowid                 bigint
+database_role_settings  settings              ARRAY
+"eventLog"              "\\xa7t̻%pimest̏am    p"                           timestamp without time zone
+"eventLog"              "eventType"           text
+"eventLog"              info                  text
+"eventLog"              "reportingID"         bigint
+"eventLog"              rowid                 bigint
+"eventLog"              "targ%ve}tID"         bigint
+"eventLog"              "uniqueID"            bytea
+"j ob\\x97s"            "claim_instAnce_id"   bigint
+"j ob\\x97s"            "claim_session?_ id"  bytea
+"j ob\\x97s"            "create\nd"           timestamp without time zone
+"j ob\\x97s"            created_by_id         bigint
+"j ob\\x97s"            created_by_type       text
+"j ob\\x97s"            "id.\\U000FA67C"      bigint
+"j ob\\x97s"            "j%qob_type "         text
+"j ob\\x97s"            l😲ast_ru😻n            timestamp without time zone
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +236,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  job_status
-"d%qbt_1"  public  sp😗an_stats_unique_keys
-"d%qbt_1"  public  statement_execution̫_insights
-"d%qbt_2"  public  role_options
-"d%qbt_2"  public  "table_metadat(a"
-"d%qbt_2"  public  ui
-dbt_3      public  protected_ts_meta
-dbt_3      public  statement_hints
-dbt_3      public  web_sessions
+"d%qbt_1"  public  statement_activity
+"d%qbt_1"  public  ten😘ant_id_seq
+"d%qbt_1"  public  tra😗nsaction_execution_insights
+"d%qbt_2"  public  "mvc%pc_statistics"
+"d%qbt_2"  public  "span_co""nfigurations"
+"d%qbt_2"  public  state😟ment_diagnostics_requests
+dbt_3      public  statement_diagnostics
+dbt_3      public  task_payloads
+dbt_3      public  "tenant_id                       _seq"
 
 
 statement ok

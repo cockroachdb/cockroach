@@ -191,8 +191,7 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 		t.Run(fmt.Sprintf("diskLimit=%s", humanizeutil.IBytes(diskLimit)), func(t *testing.T) {
 			serverCfg := &execinfra.ServerConfig{}
 			serverCfg.TestingKnobs.MemoryLimitBytes = diskLimit
-			diskMon := execinfra.NewLimitedMonitorNoFlowCtx(ctx, testDiskMonitor, serverCfg,
-				nil /* sd */, mon.MakeName("test-disk"))
+			diskMon := execinfra.NewLimitedMonitorNoFlowCtx(ctx, testDiskMonitor, serverCfg, nil /* sd */, "test-disk")
 			defer diskMon.Stop(ctx)
 			diskAcc := diskMon.MakeBoundAccount()
 			defer diskAcc.Close(ctx)

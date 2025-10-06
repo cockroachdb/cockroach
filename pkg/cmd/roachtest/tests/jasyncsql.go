@@ -30,7 +30,7 @@ func registerJasyncSQL(r registry.Registry) {
 		// TODO(darrylwong): If the above issue is addressed we can enable secure mode
 		c.Start(
 			ctx, t.L(), option.NewStartOpts(sqlClientsInMemoryDB),
-			install.MakeClusterSettings(install.SimpleSecureOption(false)),
+			install.MakeClusterSettings(install.SecureOption(false)),
 		)
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])

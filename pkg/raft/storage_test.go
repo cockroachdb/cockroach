@@ -27,7 +27,7 @@ import (
 
 func TestStorageTerm(t *testing.T) {
 	prev3 := entryID{index: 3, term: 3}
-	ls := prev3.append(4, 5).LogSlice
+	ls := prev3.append(4, 5)
 	tests := []struct {
 		i uint64
 
@@ -59,7 +59,7 @@ func TestStorageTerm(t *testing.T) {
 
 func TestStorageEntries(t *testing.T) {
 	prev3 := entryID{index: 3, term: 3}
-	ls := prev3.append(4, 5, 6).LogSlice
+	ls := prev3.append(4, 5, 6)
 	ents := ls.entries
 	tests := []struct {
 		lo, hi, maxsize uint64
@@ -94,21 +94,21 @@ func TestStorageEntries(t *testing.T) {
 }
 
 func TestStorageLastIndex(t *testing.T) {
-	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5).LogSlice}
+	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5)}
 	require.Equal(t, uint64(5), s.LastIndex())
 	require.NoError(t, s.Append(index(6).terms(5)))
 	require.Equal(t, uint64(6), s.LastIndex())
 }
 
-func TestStorageCompacted(t *testing.T) {
-	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5).LogSlice}
-	require.Equal(t, uint64(3), s.Compacted())
+func TestStorageFirstIndex(t *testing.T) {
+	s := &MemoryStorage{ls: entryID{index: 3, term: 3}.append(4, 5)}
+	require.Equal(t, uint64(4), s.FirstIndex())
 	require.NoError(t, s.Compact(4))
-	require.Equal(t, uint64(4), s.Compacted())
+	require.Equal(t, uint64(5), s.FirstIndex())
 }
 
 func TestStorageCompact(t *testing.T) {
-	ls := entryID{index: 3, term: 3}.append(4, 5).LogSlice
+	ls := entryID{index: 3, term: 3}.append(4, 5)
 	tests := []struct {
 		i uint64
 
@@ -135,7 +135,7 @@ func TestStorageCompact(t *testing.T) {
 }
 
 func TestStorageCreateSnapshot(t *testing.T) {
-	ls := entryID{index: 3, term: 3}.append(4, 5).LogSlice
+	ls := entryID{index: 3, term: 3}.append(4, 5)
 	cs := &pb.ConfState{Voters: []pb.PeerID{1, 2, 3}}
 	data := []byte("data")
 
@@ -160,7 +160,7 @@ func TestStorageCreateSnapshot(t *testing.T) {
 }
 
 func TestStorageAppend(t *testing.T) {
-	ls := entryID{index: 3, term: 3}.append(4, 5).LogSlice
+	ls := entryID{index: 3, term: 3}.append(4, 5)
 	tests := []struct {
 		entries []pb.Entry
 
@@ -236,9 +236,9 @@ func TestStorageLogSnapshot(t *testing.T) {
 	snap := s.LogSnapshot()
 	// The snapshot must be immutable regardless of mutations on the storage.
 	check := func() {
-		require.Equal(t, uint64(0), snap.Compacted())
+		require.Equal(t, uint64(1), snap.FirstIndex())
 		require.Equal(t, uint64(3), snap.LastIndex())
-		entries, err := snap.Entries(1, 4, math.MaxUint64)
+		entries, err := snap.Entries(snap.FirstIndex(), snap.LastIndex()+1, math.MaxUint64)
 		require.NoError(t, err)
 		require.Equal(t, index(1).terms(1, 2, 3), entries)
 	}

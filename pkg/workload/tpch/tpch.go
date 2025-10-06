@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"math/rand/v2"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -186,27 +186,9 @@ func (w *tpch) Hooks() workload.Hooks {
 }
 
 type generateLocals struct {
-	seedableRand seedableRand
+	rng *rand.Rand
 
 	orderData *orderSharedRandomData
-}
-
-// seedableRand is a helper for creating a seeded *rand.Rand without allocating.
-type seedableRand struct {
-	rng    *rand.Rand
-	source *rand.PCG
-}
-
-func makeSeedableRand() seedableRand {
-	source := rand.NewPCG(0, 0)
-	return seedableRand{rng: rand.New(source), source: source}
-}
-
-// Seed is equivalent to rand.New(rand.NewPCG(seed, 0)) but reuses the same
-// rand.Rand object.
-func (r *seedableRand) Seed(seed uint64) *rand.Rand {
-	r.source.Seed(seed, 0)
-	return r.rng
 }
 
 // Tables implements the Generator interface.
@@ -215,7 +197,7 @@ func (w *tpch) Tables() []workload.Table {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
 				return &generateLocals{
-					seedableRand: makeSeedableRand(),
+					rng: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
 					orderData: &orderSharedRandomData{
 						partKeys:   make([]int, 0, 7),
 						shipDates:  make([]int64, 0, 7),
@@ -478,12 +460,12 @@ func (w *worker) run(ctx context.Context) error {
 		w.hists.Get(fmt.Sprintf("%d", queryNum)).Record(elapsed)
 		// Note: if you are changing the output format here, please change the
 		// regex in roachtest/tpchvec.go accordingly.
-		log.Dev.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds:\n%s",
+		log.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds:\n%s",
 			queryNum, numRows, elapsed.Seconds(), query)
 	} else {
 		// Note: if you are changing the output format here, please change the
 		// regex in roachtest/tpchvec.go accordingly.
-		log.Dev.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds",
+		log.Infof(ctx, "[q%d] returned %d rows after %4.2f seconds",
 			queryNum, numRows, elapsed.Seconds())
 	}
 	return nil

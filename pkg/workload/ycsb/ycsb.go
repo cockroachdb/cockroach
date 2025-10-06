@@ -8,9 +8,11 @@ package ycsb
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"math"
-	"math/rand/v2"
 	"strings"
 	"sync/atomic"
 
@@ -22,13 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
-	"github.com/cockroachdb/crlib/crrand"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -87,17 +88,17 @@ type ycsb struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	timeString   bool
-	insertRandom bool
-	zeroPadding  int
-	insertStart  int
-	insertCount  int
-	recordCount  int
-	json         bool
-	families     bool
-	rmwInTxn     bool
-	sfu          bool
-	splits       int
+	timeString  bool
+	insertHash  bool
+	zeroPadding int
+	insertStart int
+	insertCount int
+	recordCount int
+	json        bool
+	families    bool
+	rmwInTxn    bool
+	sfu         bool
+	splits      int
 
 	workload                                                string
 	requestDistribution                                     string
@@ -129,15 +130,9 @@ var ycsbMeta = workload.Meta{
 			`scan-freq`:                {RuntimeOnly: true},
 			`read-modify-write-freq`:   {RuntimeOnly: true},
 		}
-		g.flags.SetNormalizeFunc(func(flags *pflag.FlagSet, name string) pflag.NormalizedName {
-			if name == `insert-hash` {
-				name = `insert-random`
-			}
-			return pflag.NormalizedName(name)
-		})
 		g.flags.BoolVar(&g.timeString, `time-string`, false, `Prepend field[0-9] data with current time in microsecond precision.`)
-		g.flags.BoolVar(&g.insertRandom, `insert-random`, true, `Key to be pseduorandom or ordered.`)
-		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key has zeros padded to left to make this length of digits.`)
+		g.flags.BoolVar(&g.insertHash, `insert-hash`, true, `Key to be hashed or ordered.`)
+		g.flags.IntVar(&g.zeroPadding, `zero-padding`, 1, `Key using "insert-hash=false" has zeros padded to left to make this length of digits.`)
 		g.flags.IntVar(&g.insertStart, `insert-start`, 0, `Key to start initial sequential insertions from. (default 0)`)
 		g.flags.IntVar(&g.insertCount, `insert-count`, 10000, `Number of rows to sequentially insert before beginning workload.`)
 		g.flags.IntVar(&g.recordCount, `record-count`, 0, `Key to start workload insertions from. Must be >= insert-start + insert-count. (Default: insert-start + insert-count)`)
@@ -332,13 +327,9 @@ func (g *ycsb) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			g.splits,
 			func(splitIdx int) []interface{} {
-				w := ycsbWorker{
-					config:   g,
-					prngPerm: crrand.MakePerm64(RandomSeed.Seed()),
-				}
 				step := math.MaxUint64 / uint64(g.splits+1)
 				return []interface{}{
-					w.buildKeyName(step * uint64(splitIdx+1)),
+					keyNameFromHash(step * uint64(splitIdx+1)),
 				}
 			},
 		),
@@ -350,7 +341,7 @@ func (g *ycsb) Tables() []workload.Table {
 			func(rowIdx int) []interface{} {
 				w := ycsbWorker{
 					config:   g,
-					prngPerm: crrand.MakePerm64(RandomSeed.Seed()),
+					hashFunc: fnv.New64(),
 				}
 				key := w.buildKeyName(uint64(g.insertStart + rowIdx))
 				// TODO(peter): Need to fill in FIELD here, rather than an empty JSONB
@@ -387,9 +378,9 @@ func (g *ycsb) Tables() []workload.Table {
 
 				w := ycsbWorker{
 					config:   g,
-					prngPerm: crrand.MakePerm64(RandomSeed.Seed()),
+					hashFunc: fnv.New64(),
 				}
-				rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
+				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 				var tmpbuf [fieldLength]byte
 				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
@@ -467,18 +458,16 @@ func (g *ycsb) Ops(
 
 	var requestGen randGenerator
 	var err error
-	requestGenRng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
+	requestGenRng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	switch strings.ToLower(g.requestDistribution) {
 	case "zipfian":
-		requestGen, err = workloadimpl.NewZipfGenerator(
-			requestGenRng, zipfIMin,
-			workloadimpl.DefaultIMax-1, workloadimpl.DefaultTheta, false /* verbose */)
+		requestGen, err = NewZipfGenerator(
+			requestGenRng, zipfIMin, defaultIMax-1, defaultTheta, false /* verbose */)
 	case "uniform":
 		requestGen, err = NewUniformGenerator(requestGenRng, 0, uint64(g.recordCount)-1)
 	case "latest":
 		requestGen, err = NewSkewedLatestGenerator(
-			requestGenRng, zipfIMin, uint64(g.recordCount)-1,
-			workloadimpl.DefaultTheta, false /* verbose */)
+			requestGenRng, zipfIMin, uint64(g.recordCount)-1, defaultTheta, false /* verbose */)
 	default:
 		return workload.QueryLoad{}, errors.Errorf("Unknown request distribution: %s", g.requestDistribution)
 	}
@@ -487,12 +476,10 @@ func (g *ycsb) Ops(
 	}
 
 	var scanLengthGen randGenerator
-	scanLengthGenRng := rand.New(rand.NewPCG(RandomSeed.Seed(), 1))
+	scanLengthGenRng := rand.New(rand.NewSource(RandomSeed.Seed() + 1))
 	switch strings.ToLower(g.scanLengthDistribution) {
 	case "zipfian":
-		scanLengthGen, err = workloadimpl.NewZipfGenerator(
-			scanLengthGenRng, g.minScanLength, g.maxScanLength,
-			workloadimpl.DefaultTheta, false /* verbose */)
+		scanLengthGen, err = NewZipfGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength, defaultTheta, false /* verbose */)
 	case "uniform":
 		scanLengthGen, err = NewUniformGenerator(scanLengthGenRng, g.minScanLength, g.maxScanLength)
 	default:
@@ -561,7 +548,7 @@ func (g *ycsb) Ops(
 			return workload.QueryLoad{}, err
 		}
 
-		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i)))
+		rng := rand.New(rand.NewSource(RandomSeed.Seed() + uint64(i)))
 		w := &ycsbWorker{
 			config:                  g,
 			hists:                   reg.GetHandle(),
@@ -579,7 +566,7 @@ func (g *ycsb) Ops(
 			requestGen:              requestGen,
 			scanLengthGen:           scanLengthGen,
 			rng:                     rng,
-			prngPerm:                crrand.MakePerm64(RandomSeed.Seed()),
+			hashFunc:                fnv.New64(),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
@@ -624,7 +611,8 @@ type ycsbWorker struct {
 	requestGen    randGenerator // used to generate random keys for requests
 	scanLengthGen randGenerator // used to generate length of scan operations
 	rng           *rand.Rand    // used to generate random strings for the values
-	prngPerm      crrand.Perm64 // used to map the key index to a pseudorandom key
+	hashFunc      hash.Hash64
+	hashBuf       [binary.MaxVarintLen64]byte
 }
 
 func (yw *ycsbWorker) run(ctx context.Context) error {
@@ -692,12 +680,29 @@ const (
 	readModifyWriteOp operation = `readModifyWrite`
 )
 
-func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
-	if yw.config.insertRandom {
-		// Use prngPerm to map the key index to a pseudorandom key.
-		keynum = yw.prngPerm.At(keynum)
+func (yw *ycsbWorker) hashKey(key uint64) uint64 {
+	yw.hashBuf = [binary.MaxVarintLen64]byte{} // clear hashBuf
+	binary.PutUvarint(yw.hashBuf[:], key)
+	yw.hashFunc.Reset()
+	if _, err := yw.hashFunc.Write(yw.hashBuf[:]); err != nil {
+		panic(err)
 	}
-	return fmt.Sprintf("user%0*d", yw.config.zeroPadding, keynum)
+	return yw.hashFunc.Sum64()
+}
+
+func (yw *ycsbWorker) buildKeyName(keynum uint64) string {
+	if yw.config.insertHash {
+		return keyNameFromHash(yw.hashKey(keynum))
+	}
+	return keyNameFromOrder(keynum, yw.config.zeroPadding)
+}
+
+func keyNameFromHash(hashedKey uint64) string {
+	return fmt.Sprintf("user%d", hashedKey)
+}
+
+func keyNameFromOrder(keynum uint64, zeroPadding int) string {
+	return fmt.Sprintf("user%0*d", zeroPadding, keynum)
 }
 
 // Keys are chosen by first drawing from a Zipf distribution, hashing the drawn
@@ -757,7 +762,7 @@ func (yw *ycsbWorker) randString(length int) string {
 	}
 	// the rest of data is random str
 	for i := strStart; i < length; i++ {
-		str[i] = letters[yw.rng.IntN(len(letters))]
+		str[i] = letters[yw.rng.Intn(len(letters))]
 	}
 	return string(str)
 }
@@ -820,7 +825,7 @@ func (yw *ycsbWorker) updateRow(ctx context.Context) error {
 	var stmt stmtKey
 	var args [2]interface{}
 	args[0] = yw.nextReadKey()
-	fieldIdx := yw.rng.IntN(numTableFields)
+	fieldIdx := yw.rng.Intn(numTableFields)
 	value := yw.randString(fieldLength)
 	if yw.config.json {
 		stmt = yw.updateStmts[0]
@@ -902,7 +907,7 @@ func (yw *ycsbWorker) readModifyWriteRow(ctx context.Context) error {
 	}
 	run := func(db conn) error {
 		key := yw.nextReadKey()
-		fieldIdx := yw.rng.IntN(numTableFields)
+		fieldIdx := yw.rng.Intn(numTableFields)
 		// Read.
 		var oldValue []byte
 		readStmt := yw.readFieldForUpdateStmts[fieldIdx]

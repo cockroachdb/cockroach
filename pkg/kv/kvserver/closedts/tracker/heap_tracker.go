@@ -103,7 +103,7 @@ func (h *heapTracker) Track(ctx context.Context, ts hlc.Timestamp) RemovalToken 
 func (h *heapTracker) Untrack(ctx context.Context, tok RemovalToken) {
 	idx := tok.(heapToken).index
 	if idx == -1 {
-		log.KvDistribution.Fatalf(ctx, "attempting to untrack already-untracked item")
+		log.Fatalf(ctx, "attempting to untrack already-untracked item")
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()

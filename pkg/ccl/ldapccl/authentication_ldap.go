@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -16,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/go-ldap/ldap/v3"
@@ -55,6 +58,9 @@ func (authManager *ldapAuthManager) FetchLDAPUserDN(
 ) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
 	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authentication"); err != nil {
 		return nil, "", err
+	}
+	if !st.Version.IsActive(ctx, clusterversion.V24_2) {
+		return nil, "", pgerror.Newf(pgcode.FeatureNotSupported, "LDAP authentication is only supported after v24.2 upgrade is finalized")
 	}
 
 	authManager.mu.Lock()
@@ -133,6 +139,9 @@ func (authManager *ldapAuthManager) ValidateLDAPLogin(
 ) (detailedErrorMsg redact.RedactableString, authError error) {
 	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authentication"); err != nil {
 		return "", err
+	}
+	if !st.Version.IsActive(ctx, clusterversion.V24_2) {
+		return "", pgerror.Newf(pgcode.FeatureNotSupported, "LDAP authentication is only supported after v24.2 upgrade is finalized")
 	}
 
 	authManager.mu.Lock()

@@ -194,9 +194,7 @@ func newProxyHandler(
 	proxyMetrics *metrics,
 	options ProxyOptions,
 ) (*proxyHandler, error) {
-	// The proxy handler shares the same lifetime as the proxy which will shutdown
-	// via the stopper, so we can ignore the cancellation function here.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	handler := proxyHandler{
 		stopper:       stopper,
@@ -281,7 +279,7 @@ func newProxyHandler(
 		dirOpts = append(dirOpts, handler.testingKnobs.dirOpts...)
 	}
 
-	client := tenant.NewGRPCDirectoryClientAdapter(conn)
+	client := tenant.NewDirectoryClient(conn)
 	handler.directoryCache, err = tenant.NewDirectoryCache(ctx, stopper, client, dirOpts...)
 	if err != nil {
 		return nil, err
@@ -360,7 +358,7 @@ func (handler *proxyHandler) handle(
 		if err := handler.handleCancelRequest(cr, true /* allowForward */); err != nil {
 			// Lots of noise from this log indicates that somebody is spamming
 			// fake cancel requests.
-			log.Dev.Warningf(
+			log.Warningf(
 				ctx, "could not handle cancel request from client %s: %v",
 				incomingConn.RemoteAddr().String(), err,
 			)
@@ -546,7 +544,7 @@ func (handler *proxyHandler) handle(
 	// the session logs.
 	connBegin := timeutil.Now()
 	defer func() {
-		log.Dev.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
+		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
 	// Wrap the client connection with an error annotater. WARNING: The TLS
@@ -612,7 +610,7 @@ func (handler *proxyHandler) validateConnection(
 		if tenant.ClusterName == "" || tenant.ClusterName == clusterName {
 			return nil
 		}
-		log.Dev.Errorf(
+		log.Errorf(
 			ctx,
 			"could not validate connection: cluster name '%s' doesn't match expected '%s'",
 			clusterName,
@@ -885,7 +883,7 @@ func parseClusterIdentifier(
 	tenID, err := strconv.ParseUint(tenantIDStr, 10, 64)
 	if err != nil {
 		// Log these non user-facing errors.
-		log.Dev.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifier, err)
+		log.Errorf(ctx, "cannot parse tenant ID in %s: %v", clusterIdentifier, err)
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
 		err = errors.WithHintf(err, "Is '%s' a valid tenant ID?", tenantIDStr)
 		err = errors.WithHint(err, clusterNameFormHint)
@@ -895,7 +893,7 @@ func parseClusterIdentifier(
 	// This case only happens if tenID is 0 or 1 (system tenant).
 	if tenID < roachpb.MinTenantID.ToUint64() {
 		// Log these non user-facing errors.
-		log.Dev.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifier)
+		log.Errorf(ctx, "%s contains an invalid tenant ID", clusterIdentifier)
 		err := errors.Errorf("invalid cluster identifier '%s'", clusterIdentifier)
 		err = errors.WithHintf(err, "Tenant ID %d is invalid.", tenID)
 		return "", roachpb.MaxTenantID, err

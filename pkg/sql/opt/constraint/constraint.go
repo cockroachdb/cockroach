@@ -725,14 +725,14 @@ func (c *Constraint) ExtractConstCols(ctx context.Context, evalCtx *eval.Context
 	return res
 }
 
-// ExtractNotNullCols finds the set of columns that cannot be NULL without
-// violating the constraint, and adds them to the given column set.
-func (c *Constraint) ExtractNotNullCols(
-	ctx context.Context, evalCtx *eval.Context, cols *opt.ColSet,
-) {
+// ExtractNotNullCols returns a set of columns that cannot be NULL when the
+// constraint holds.
+func (c *Constraint) ExtractNotNullCols(ctx context.Context, evalCtx *eval.Context) opt.ColSet {
 	if c.IsUnconstrained() || c.IsContradiction() {
-		return
+		return opt.ColSet{}
 	}
+
+	var res opt.ColSet
 
 	// If we have a span where the start and end key value diverge for a column,
 	// none of the columns that follow can be not-null. For example:
@@ -754,11 +754,11 @@ func (c *Constraint) ExtractNotNullCols(
 			hasNull = hasNull || start.Value(i) == tree.DNull
 		}
 		if !hasNull {
-			cols.Add(c.Columns.Get(i).ID())
+			res.Add(c.Columns.Get(i).ID())
 		}
 	}
 	if prefix == c.Columns.Count() {
-		return
+		return res
 	}
 
 	// Now look at the first column that follows the prefix.
@@ -775,11 +775,12 @@ func (c *Constraint) ExtractNotNullCols(
 		// If the span is unbounded on the NULL side, or if it is of the form
 		// [/NULL - /x], the column is nullable.
 		if key.Length() <= prefix || (key.Value(prefix) == tree.DNull && boundary == IncludeBoundary) {
-			return
+			return res
 		}
 	}
 	// All spans constrain col to be not-null.
-	cols.Add(col.ID())
+	res.Add(col.ID())
+	return res
 }
 
 // CalculateMaxResults returns an integer indicating the maximum number of
@@ -802,9 +803,7 @@ func (c *Constraint) CalculateMaxResults(
 	// Ensure that if we have nullable columns, we are only reading non-null
 	// values, given that a unique index allows an arbitrary number of duplicate
 	// entries if they have NULLs.
-	notNullCols = notNullCols.Copy()
-	c.ExtractNotNullCols(ctx, evalCtx, &notNullCols)
-	if !indexCols.SubsetOf(notNullCols) {
+	if !indexCols.SubsetOf(notNullCols.Union(c.ExtractNotNullCols(ctx, evalCtx))) {
 		return 0, false
 	}
 

@@ -1,2 +1,0 @@
-show_inspect_errors_stmt ::=
-	'SHOW' 'INSPECT' 'ERRORS' opt_for_table_clause opt_for_job_clause opt_with_details

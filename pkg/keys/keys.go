@@ -140,32 +140,6 @@ func DecodeStoreLivenessSupportForKey(key roachpb.Key) (roachpb.NodeID, roachpb.
 	return nodeID, storeID, nil
 }
 
-// StoreWAGPrefix returns the key prefix for WAG nodes.
-func StoreWAGPrefix() roachpb.Key {
-	return MakeStoreKey(localStoreWAGNodeSuffix, nil)
-}
-
-// StoreWAGNodeKey returns the key for a WAG node at the given index.
-func StoreWAGNodeKey(index uint64) roachpb.Key {
-	return MakeStoreKey(localStoreWAGNodeSuffix, encoding.EncodeUint64Ascending(nil, index))
-}
-
-// DecodeWAGNodeKey returns the index of the WAG node from its key.
-func DecodeWAGNodeKey(key roachpb.Key) (uint64, error) {
-	suffix, detail, err := DecodeStoreKey(key)
-	if err != nil {
-		return 0, err
-	}
-	if !suffix.Equal(localStoreWAGNodeSuffix) {
-		return 0, errors.Errorf("key with suffix %q != %q", suffix, localStoreWAGNodeSuffix)
-	}
-	detail, index, err := encoding.DecodeUint64Ascending(detail)
-	if len(detail) != 0 {
-		return 0, errors.Errorf("invalid key has trailing garbage: %q", detail)
-	}
-	return index, err
-}
-
 // StoreCachedSettingsKey returns a store-local key for store's cached settings.
 func StoreCachedSettingsKey(settingKey roachpb.Key) roachpb.Key {
 	return MakeStoreKey(localStoreCachedSettingsSuffix, encoding.EncodeBytesAscending(nil, settingKey))
@@ -351,11 +325,6 @@ func DecodeAbortSpanKey(key roachpb.Key, dest []byte) (uuid.UUID, error) {
 // RangeAppliedStateKey returns a system-local key for the range applied state key.
 func RangeAppliedStateKey(rangeID roachpb.RangeID) roachpb.Key {
 	return MakeRangeIDPrefixBuf(rangeID).RangeAppliedStateKey()
-}
-
-// RangeForceFlushKey returns a system-local key for the range force flush key.
-func RangeForceFlushKey(rangeID roachpb.RangeID) roachpb.Key {
-	return MakeRangeIDPrefixBuf(rangeID).RangeForceFlushKey()
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.
@@ -557,7 +526,6 @@ func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
 	} else {
 		buf = buf[:0]
 	}
-
 	// Don't unwrap any local prefix on key using Addr(key). This allow for
 	// doubly-local lock table keys. For example, local range descriptor keys can
 	// be locked during split and merge transactions.
@@ -1159,12 +1127,6 @@ func (b RangeIDPrefixBuf) ReplicatedSharedLocksTransactionLatchingKey(txnID uuid
 // See comment on RangeAppliedStateKey function.
 func (b RangeIDPrefixBuf) RangeAppliedStateKey() roachpb.Key {
 	return append(b.replicatedPrefix(), LocalRangeAppliedStateSuffix...)
-}
-
-// RangeForceFlushKey returns a system-local key for the range force flush
-// key.
-func (b RangeIDPrefixBuf) RangeForceFlushKey() roachpb.Key {
-	return append(b.replicatedPrefix(), LocalRangeForceFlushSuffix...)
 }
 
 // RangeLeaseKey returns a system-local key for a range lease.

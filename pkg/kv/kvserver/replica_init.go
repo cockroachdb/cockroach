@@ -12,9 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -27,10 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -50,11 +49,11 @@ const (
 // corresponding env variable is true.
 //
 // NB: for a subset of system ranges, SystemClass is used instead of this.
-var defRaftConnClass = func() rpcbase.ConnectionClass {
+var defRaftConnClass = func() rpc.ConnectionClass {
 	if envutil.EnvOrDefaultBool("COCKROACH_RAFT_USE_DEFAULT_CONNECTION_CLASS", false) {
-		return rpcbase.DefaultClass
+		return rpc.DefaultClass
 	}
-	return rpcbase.RaftClass
+	return rpc.RaftClass
 }()
 
 // loadInitializedReplicaForTesting loads and constructs an initialized Replica,
@@ -69,26 +68,19 @@ func loadInitializedReplicaForTesting(
 	if err != nil {
 		return nil, err
 	}
-
-	// No need to wait for previous lease to expire since this is only used in
-	// tests and some tests don't expect the extra delay.
-	return newInitializedReplica(store, state, false /* waitForPrevLeaseToExpire */)
+	return newInitializedReplica(store, state)
 }
 
 // newInitializedReplica creates an initialized Replica from its loaded state.
-func newInitializedReplica(
-	store *Store, loaded kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
-) (*Replica, error) {
-	r := newUninitializedReplicaWithoutRaftGroup(store, loaded.FullReplicaID())
+func newInitializedReplica(store *Store, loaded kvstorage.LoadedReplicaState) (*Replica, error) {
+	r := newUninitializedReplicaWithoutRaftGroup(store, loaded.ReplState.Desc.RangeID, loaded.ReplicaID)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-
-	if err := r.initRaftMuLockedReplicaMuLocked(loaded, waitForPrevLeaseToExpire); err != nil {
+	if err := r.initRaftMuLockedReplicaMuLocked(loaded); err != nil {
 		return nil, err
 	}
-
 	return r, nil
 }
 
@@ -99,8 +91,10 @@ func newInitializedReplica(
 //
 // TODO(#94912): we actually have another initialization path which should be
 // refactored: Replica.initFromSnapshotLockedRaftMuLocked().
-func newUninitializedReplica(store *Store, id roachpb.FullReplicaID) (*Replica, error) {
-	r := newUninitializedReplicaWithoutRaftGroup(store, id)
+func newUninitializedReplica(
+	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) (*Replica, error) {
+	r := newUninitializedReplicaWithoutRaftGroup(store, rangeID, replicaID)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -116,15 +110,17 @@ func newUninitializedReplica(store *Store, id roachpb.FullReplicaID) (*Replica, 
 // newUninitializedReplica() instead. This only exists for
 // newInitializedReplica() to avoid creating the Raft group twice (once when
 // creating the uninitialized replica, and once when initializing it).
-func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplicaID) *Replica {
-	uninitState := stateloader.UninitializedReplicaState(id.RangeID)
+func newUninitializedReplicaWithoutRaftGroup(
+	store *Store, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) *Replica {
+	uninitState := stateloader.UninitializedReplicaState(rangeID)
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
-		RangeID:        id.RangeID,
-		replicaID:      id.ReplicaID,
+		RangeID:        rangeID,
+		replicaID:      replicaID,
 		creationTime:   timeutil.Now(),
 		store:          store,
-		abortSpan:      abortspan.New(id.RangeID),
+		abortSpan:      abortspan.New(rangeID),
 		concMgr: concurrency.NewManager(concurrency.Config{
 			NodeDesc:           store.nodeDesc,
 			RangeDesc:          uninitState.Desc,
@@ -141,10 +137,10 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 		}),
 		allocatorToken: &plan.AllocatorToken{},
 	}
-	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, id.RangeID)
-	r.cachedClosedTimestampPolicy.Store(new(ctpb.RangeClosedTimestampPolicy))
+	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, rangeID)
 
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
+	r.mu.stateLoader = stateloader.Make(rangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
 
@@ -161,9 +157,9 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 			// Expose proposal data for external test packages.
 			return store.cfg.TestingKnobs.TestingProposalSubmitFilter(kvserverbase.ProposalFilterArgs{
 				Ctx:        p.Context(),
-				RangeID:    id.RangeID,
+				RangeID:    rangeID,
 				StoreID:    store.StoreID(),
-				ReplicaID:  id.ReplicaID,
+				ReplicaID:  replicaID,
 				Cmd:        p.command,
 				QuotaAlloc: p.quotaAlloc,
 				CmdID:      p.idKey,
@@ -189,10 +185,9 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 	}
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
 
-	// NB: state will be loaded when the replica gets initialized.
+	// NB: the state will be loaded when the replica gets initialized.
 	r.shMu.state = uninitState
-
-	r.rangeStr.store(id.ReplicaID, uninitState.Desc)
+	r.rangeStr.store(replicaID, uninitState.Desc)
 	// Add replica log tag - the value is rangeStr.String().
 	r.AmbientContext.AddLogTag("r", &r.rangeStr)
 	r.raftCtx = logtags.AddTag(r.AnnotateCtx(context.Background()), "raft", nil /* value */)
@@ -200,42 +195,14 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
-	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
-	r.raftMu.stateLoader = stateloader.Make(id.RangeID)
-
-	// Initialize all the components of the log storage. The state of the log
-	// storage, such as RaftTruncatedState and the last entry ID, will be loaded
-	// when the replica is initialized.
-	sideloaded := logstore.NewDiskSideloadStorage(
+	r.raftMu.stateLoader = stateloader.Make(rangeID)
+	r.raftMu.sideloaded = logstore.NewDiskSideloadStorage(
 		store.cfg.Settings,
-		id.RangeID,
-		// NB: sideloaded log entries are persisted in the state engine so that they
-		// can be ingested to the state machine locally, when being applied.
-		store.StateEngine().GetAuxiliaryDir(),
+		rangeID,
+		store.TODOEngine().GetAuxiliaryDir(),
 		store.limiters.BulkIOWriteRate,
-		store.StateEngine(),
+		store.TODOEngine(),
 	)
-	r.logStorage = &replicaLogStorage{
-		ctx:                r.raftCtx,
-		raftEntriesMonitor: store.cfg.RaftEntriesMonitor,
-		cache:              store.raftEntryCache,
-		onSync:             (*replicaSyncCallback)(r),
-		metrics:            store.metrics,
-	}
-	r.logStorage.mu.RWMutex = (*syncutil.RWMutex)(&r.mu.ReplicaMutex)
-	r.logStorage.raftMu.Mutex = &r.raftMu.Mutex
-	r.logStorage.ls = &logstore.LogStore{
-		RangeID:     id.RangeID,
-		Engine:      store.LogEngine(),
-		Sideload:    sideloaded,
-		StateLoader: r.raftMu.stateLoader.StateLoader,
-		// NOTE: use the same SyncWaiter loop for all raft log writes performed by a
-		// given range ID, to ensure that callbacks are processed in order.
-		SyncWaiter: store.syncWaiters[int(id.RangeID)%len(store.syncWaiters)],
-		Settings:   store.cfg.Settings,
-		DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
-			store.TestingKnobs().DisableSyncLogWriteToss,
-	}
 
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
@@ -251,9 +218,18 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 	r.breaker = newReplicaCircuitBreaker(
 		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
 	)
-	r.LeaderlessWatcher = newLeaderlessWatcher()
-	r.shMu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
-
+	r.mu.currentRACv2Mode = r.replicationAdmissionControlModeToUse(context.TODO())
+	r.raftMu.flowControlLevel = kvflowcontrol.GetV2EnabledWhenLeaderLevel(
+		r.raftCtx, store.ClusterSettings(), store.TestingKnobs().FlowControlTestingKnobs)
+	if r.raftMu.flowControlLevel > kvflowcontrol.V2NotEnabledWhenLeader {
+		r.mu.replicaFlowControlIntegration = noopReplicaFlowControlIntegration{}
+	} else {
+		r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration(
+			(*replicaFlowControl)(r),
+			makeStoreFlowControlHandleFactory(r.store),
+			r.store.TestingKnobs().FlowControlTestingKnobs,
+		)
+	}
 	r.raftMu.msgAppScratchForFlowControl = map[roachpb.ReplicaID][]raftpb.Message{}
 	r.raftMu.replicaStateScratchForFlowControl = map[roachpb.ReplicaID]rac2.ReplicaStateInfo{}
 	r.flowControlV2 = replica_rac2.NewProcessor(replica_rac2.ProcessorOptions{
@@ -270,9 +246,9 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 		MsgAppSender:           r,
 		EvalWaitMetrics:        r.store.cfg.KVFlowEvalWaitMetrics,
 		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
+		EnabledWhenLeaderLevel: r.raftMu.flowControlLevel,
 		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
-	r.RefreshPolicy(nil)
 	return r
 }
 
@@ -282,7 +258,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 	r.mu.AssertHeld()
 	if r.startKey != nil {
-		log.KvExec.Fatalf(
+		log.Fatalf(
 			r.AnnotateCtx(context.Background()),
 			"start key written twice: was %s, now %s", r.startKey, startKey,
 		)
@@ -292,9 +268,7 @@ func (r *Replica) setStartKeyLocked(startKey roachpb.RKey) {
 
 // initRaftMuLockedReplicaMuLocked initializes the Replica using the state
 // loaded from storage. Must not be called more than once on a Replica.
-func (r *Replica) initRaftMuLockedReplicaMuLocked(
-	s kvstorage.LoadedReplicaState, waitForPrevLeaseToExpire bool,
-) error {
+func (r *Replica) initRaftMuLockedReplicaMuLocked(s kvstorage.LoadedReplicaState) error {
 	desc := s.ReplState.Desc
 	// Ensure that the loaded state corresponds to the same replica.
 	if desc.RangeID != r.RangeID || s.ReplicaID != r.replicaID {
@@ -311,13 +285,8 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.setStartKeyLocked(desc.StartKey)
 
 	r.shMu.state = s.ReplState
-	if r.shMu.state.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
-		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
-	}
-	// TODO(pav-kv): make a method to initialize the log storage.
-	ls := r.asLogStorage()
-	ls.shMu.trunc = s.TruncState
-	ls.shMu.last = s.LastEntryID
+	r.shMu.lastIndexNotDurable = s.LastIndex
+	r.shMu.lastTermNotDurable = invalidLastTerm
 
 	// Initialize the Raft group. This may replace a Raft group that was installed
 	// for the uninitialized replica to process Raft requests or snapshots.
@@ -339,21 +308,6 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	// Instead, we make the first lease special (which is OK) and the problem
 	// disappears.
 	if r.shMu.state.Lease.Sequence > 0 {
-		if waitForPrevLeaseToExpire {
-			// Wait for the previous lease to expire. This is important because if the
-			// node was restarted, we don't want to reacquire the lease with a start
-			// time that overlaps the previous lease.
-			// This ensures that we don't serve a write request with the new
-			// lease that contradicts a future read served by the old lease before the
-			// restart (we would have lost that timestamp cache).
-			// Note that we need to sleep (instead of just forwarding the
-			// minLeaseProposedTS) because we will run into assertions where the
-			// lease proposed time is in the future compared to r.Clock().Now(), and
-			// we don't allow acquiring a lease that starts in the future.
-			if err := r.waitForPreviousLeaseToExpire(r.store); err != nil {
-				return err
-			}
-		}
 		r.mu.minLeaseProposedTS = r.Clock().NowAsClockTimestamp()
 	}
 
@@ -370,11 +324,10 @@ func (r *Replica) initRaftGroupRaftMuLockedReplicaMuLocked() error {
 		raftpb.PeerID(r.replicaID),
 		r.shMu.state.RaftAppliedIndex,
 		r.store.cfg,
-		r.shMu.currentRACv2Mode == rac2.MsgAppPull,
+		r.mu.currentRACv2Mode == rac2.MsgAppPull,
 		&raftLogger{ctx: ctx},
 		(*replicaRLockedStoreLiveness)(r),
 		r.store.raftMetrics,
-		r.store.TestingKnobs().RaftTestingKnobs,
 	))
 	if err != nil {
 		return err
@@ -430,17 +383,17 @@ func (r *Replica) setDescRaftMuLocked(ctx context.Context, desc *roachpb.RangeDe
 
 func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	if desc.RangeID != r.RangeID {
-		log.KvExec.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
+		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.shMu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		log.KvExec.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
+		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.shMu.state.Desc, desc)
 	}
 	if r.shMu.state.Desc.IsInitialized() &&
 		!r.shMu.state.Desc.StartKey.Equal(desc.StartKey) {
-		log.KvExec.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
+		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
 			r.shMu.state.Desc.StartKey, desc.StartKey)
 	}
 
@@ -457,7 +410,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	//   3) Various unit tests do not provide a valid descriptor.
 	replDesc, found := desc.GetReplicaDescriptor(r.StoreID())
 	if found && replDesc.ReplicaID != r.replicaID {
-		log.KvExec.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
+		log.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
 			r.replicaID, replDesc.ReplicaID)
 	}
 
@@ -467,7 +420,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	if desc.IsInitialized() && r.mu.tenantID == (roachpb.TenantID{}) {
 		_, tenantID, err := keys.DecodeTenantPrefix(desc.StartKey.AsRawKey())
 		if err != nil {
-			log.KvExec.Fatalf(ctx, "failed to decode tenant prefix from key for "+
+			log.Fatalf(ctx, "failed to decode tenant prefix from key for "+
 				"replica %v: %v", r, err)
 		}
 		r.mu.tenantID = tenantID
@@ -492,9 +445,10 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 
 	r.rangeStr.store(r.replicaID, desc)
 	r.isInitialized.Store(desc.IsInitialized())
-	r.connectionClass.set(rpcbase.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
+	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey, defRaftConnClass))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
+	r.mu.replicaFlowControlIntegration.onDescChanged(ctx)
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to
@@ -502,29 +456,10 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	for _, span := range []roachpb.Span{keys.NodeLivenessSpan, keys.MetaSpan} {
 		rspan, err := keys.SpanAddr(span)
 		if err != nil {
-			log.KvExec.Fatalf(ctx, "can't resolve system span %s: %s", span, err)
+			log.Fatalf(ctx, "can't resolve system span %s: %s", span, err)
 		}
 		if _, err := desc.RSpan().Intersect(rspan); err == nil {
 			r.store.scheduler.AddPriorityID(desc.RangeID)
 		}
 	}
-}
-
-// waitForPreviousLeaseToExpire waits for the previous lease to expire. It does
-// so by sleeping until Clock().Now() is in the future of the previous lease
-// expiration. This works for expiration-based leases, and leader-leases but
-// only best-effort for epoch-based leases since the liveness record might not
-// be found in cache after the restart.
-func (r *Replica) waitForPreviousLeaseToExpire(store *Store) error {
-	st := r.leaseStatusAtRLocked(r.AnnotateCtx(context.TODO()), r.Clock().NowAsClockTimestamp())
-	if st.OwnedBy(store.StoreID()) {
-		// Only sleep if we were the previous lease owner.
-		if err := r.Clock().SleepUntil(
-			r.AnnotateCtx(context.TODO()),
-			st.Expiration().Next(),
-		); err != nil {
-			return err
-		}
-	}
-	return nil
 }

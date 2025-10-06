@@ -153,7 +153,7 @@ func (s *Store) startGossip() {
 						annotatedCtx := repl.AnnotateCtx(ctx)
 						if err := gossipFn.fn(annotatedCtx, repl); err != nil {
 							if cannotGossipEvery.ShouldLog() {
-								log.KvDistribution.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
+								log.Infof(annotatedCtx, "could not gossip %s: %v", gossipFn.description, err)
 							}
 							if !errors.Is(err, errPeriodicGossipsDisabled) {
 								continue
@@ -192,7 +192,7 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		// get the first system config, then periodically in the background
 		// (managed by the Node).
 		if err := s.ComputeMetrics(ctx); err != nil {
-			log.KvDistribution.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
+			log.Infof(ctx, "%s: failed initial metrics computation: %s", s, err)
 		}
 		log.Event(ctx, "computed initial metrics")
 	})
@@ -206,10 +206,10 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 	now := s.cfg.Clock.NowAsClockTimestamp()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		if shouldQueue {
-			_ = s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
-			_ = s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
 				h.MaybeAdd(ctx, repl, now)
 			})
 		}
@@ -347,7 +347,7 @@ func (s *StoreGossip) asyncGossipStore(ctx context.Context, reason string, useCa
 	gossipFn := func(ctx context.Context) {
 		log.VEventf(ctx, 2, "gossiping on %s", reason)
 		if err := s.GossipStore(ctx, useCached); err != nil {
-			log.KvDistribution.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
+			log.Warningf(ctx, "error gossiping on %s: %+v", reason, err)
 		}
 	}
 
@@ -361,7 +361,7 @@ func (s *StoreGossip) asyncGossipStore(ctx context.Context, reason string, useCa
 	if err := s.stopper.RunAsyncTask(
 		ctx, fmt.Sprintf("storage.Store: gossip on %s", reason), gossipFn,
 	); err != nil {
-		log.KvDistribution.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
+		log.Warningf(ctx, "unable to gossip on %s: %+v", reason, err)
 	}
 }
 
@@ -447,14 +447,12 @@ func (s *StoreGossip) MaybeGossipOnCapacityChange(ctx context.Context, cce Capac
 // recordNewPerSecondStats takes recently calculated values for the number of
 // queries and key writes the store is handling and decides whether either has
 // changed enough to justify re-gossiping the store's capacity.
-func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS, newWBPS, newCPUS float64) {
+func (s *StoreGossip) RecordNewPerSecondStats(newQPS, newWPS float64) {
 	// Overwrite stats to keep them up to date even if the capacity is
 	// gossiped, but isn't due yet to be recomputed from scratch.
 	s.cachedCapacity.Lock()
 	s.cachedCapacity.cached.QueriesPerSecond = newQPS
 	s.cachedCapacity.cached.WritesPerSecond = newWPS
-	s.cachedCapacity.cached.WriteBytesPerSecond = newWBPS
-	s.cachedCapacity.cached.CPUPerSecond = newCPUS
 	s.cachedCapacity.Unlock()
 
 	if shouldGossip, reason := s.shouldGossipOnCapacityDelta(); shouldGossip {
@@ -506,12 +504,6 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	updateForWPS, deltaWPS := deltaExceedsThreshold(
 		s.cachedCapacity.lastGossiped.WritesPerSecond, s.cachedCapacity.cached.WritesPerSecond,
 		gossipMinAbsoluteDelta, gossipWhenLoadDeltaExceedsFraction)
-	updateForWBPS, deltaWBPS := deltaExceedsThreshold(
-		s.cachedCapacity.lastGossiped.WriteBytesPerSecond, s.cachedCapacity.cached.WriteBytesPerSecond,
-		gossipMinAbsoluteDelta, gossipWhenLoadDeltaExceedsFraction)
-	updateForCPUS, deltaCPUS := deltaExceedsThreshold(
-		s.cachedCapacity.lastGossiped.CPUPerSecond, s.cachedCapacity.cached.CPUPerSecond,
-		gossipMinAbsoluteDelta, gossipWhenLoadDeltaExceedsFraction)
 	updateForRangeCount, deltaRangeCount := deltaExceedsThreshold(
 		float64(s.cachedCapacity.lastGossiped.RangeCount), float64(s.cachedCapacity.cached.RangeCount),
 		GossipWhenRangeCountDeltaExceeds, gossipWhenCapacityDeltaExceedsFraction)
@@ -522,9 +514,6 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	lastGossipMaxIOScore, _ := s.cachedCapacity.lastGossiped.IOThresholdMax.Score()
 	updateForMaxIOOverloadScore := cachedMaxIOScore >= gossipMinMaxIOOverloadScore &&
 		cachedMaxIOScore > lastGossipMaxIOScore
-	diskUnhealthy := s.cachedCapacity.cached.IOThreshold.DiskUnhealthy
-	updateForChangeInDiskUnhealth :=
-		s.cachedCapacity.lastGossiped.IOThreshold.DiskUnhealthy != diskUnhealthy
 	s.cachedCapacity.Unlock()
 
 	if s.knobs.DisableLeaseCapacityGossip {
@@ -537,12 +526,6 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	if updateForWPS {
 		reason += fmt.Sprintf("writes-per-second(%.1f) ", deltaWPS)
 	}
-	if updateForWBPS {
-		reason += fmt.Sprintf("write-bytes-per-second(%.1f) ", deltaWBPS)
-	}
-	if updateForCPUS {
-		reason += fmt.Sprintf("cpu-nanos-per-second(%.1f) ", deltaCPUS)
-	}
 	if updateForRangeCount {
 		reason += fmt.Sprintf("range-count(%.1f) ", deltaRangeCount)
 	}
@@ -551,9 +534,6 @@ func (s *StoreGossip) shouldGossipOnCapacityDelta() (should bool, reason string)
 	}
 	if updateForMaxIOOverloadScore {
 		reason += fmt.Sprintf("io-overload(%.1f) ", cachedMaxIOScore)
-	}
-	if updateForChangeInDiskUnhealth {
-		reason += fmt.Sprintf("disk-unhealthy(%t) ", diskUnhealthy)
 	}
 	if reason != "" {
 		should = true

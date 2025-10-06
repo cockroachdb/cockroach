@@ -53,7 +53,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 			j := h.newScheduledJob(t, "test_job", "test sql")
 			j.rec.ExecutorType = InlineExecutorName
 
-			require.NoError(t, j.SetScheduleAndNextRun("@daily"))
+			require.NoError(t, j.SetSchedule("@daily"))
 			j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{OnError: test.onError}))
 
 			ctx := context.Background()
@@ -61,7 +61,7 @@ func TestInlineExecutorFailedJobsHandling(t *testing.T) {
 
 			// Pretend we failed running; we expect job to be rescheduled.
 			require.NoError(t, h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				return NotifyJobTermination(ctx, txn, h.env, 123, StateFailed, nil, j.ScheduleID())
+				return NotifyJobTermination(ctx, txn, h.env, 123, StatusFailed, nil, j.ScheduleID())
 			}))
 			// Verify nextRun updated
 			loaded := h.loadSchedule(t, j.ScheduleID())

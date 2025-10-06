@@ -17,10 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
 )
+
+// we need to hardcode the random seed when loading fixtures since
+// that references a static bucket in GCS
+const fixturesRandomSeed = 1
 
 func registerCopy(r registry.Registry) {
 	// This test imports a fully-populated Bank table. It then creates an empty
@@ -28,7 +33,7 @@ func registerCopy(r registry.Registry) {
 	// statements to copy all data from the first table into the second table.
 	runCopy := func(ctx context.Context, t test.Test, c cluster.Cluster, rows int, inTxn bool) {
 		// payload is the size of the payload column for each row in the Bank
-		// table.
+		// table. If this is adjusted, a new fixture may need to be generated.
 		const payload = 100
 		// rowOverheadEstimate is an estimate of the overhead of a single
 		// row in the Bank table, not including the size of the payload
@@ -41,7 +46,7 @@ func registerCopy(r registry.Registry) {
 
 		copyTimeout := 10 * time.Minute
 
-		m := c.NewDeprecatedMonitor(ctx, c.All())
+		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
@@ -53,10 +58,10 @@ func registerCopy(r registry.Registry) {
 				return errors.Wrap(err, "disabling load-based splitting")
 			}
 
-			t.Status("importing bank table")
+			t.Status("importing Bank fixture")
 			c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
-				"./cockroach workload init bank --data-loader=IMPORT --rows=%d --payload-bytes=%d --seed 123 {pgurl:1}",
-				rows, payload))
+				"./cockroach workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
+				rows, payload, fixturesRandomSeed))
 			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
 				t.Fatalf("failed to rename table: %v", err)
 			}
@@ -170,11 +175,13 @@ func registerCopy(r registry.Registry) {
 	for _, tc := range testcases {
 		tc := tc
 		r.Add(registry.TestSpec{
-			Name:             fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
-			Owner:            registry.OwnerKV,
-			Cluster:          r.MakeClusterSpec(tc.nodes),
+			Name:    fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", tc.rows, tc.nodes, tc.txn),
+			Owner:   registry.OwnerKV,
+			Cluster: r.MakeClusterSpec(tc.nodes),
+			// Uses gs://cockroach-fixtures-us-east1. See:
+			// https://github.com/cockroachdb/cockroach/issues/105968
+			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
-			CompatibleClouds: registry.AllClouds,
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)

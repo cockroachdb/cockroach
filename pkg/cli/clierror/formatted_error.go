@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
 )
 
 // OutputError prints out an error object on the given writer.

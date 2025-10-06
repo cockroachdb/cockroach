@@ -20,9 +20,9 @@ type EventGen interface {
 	// Generate returns an eventExecutor storing a sorted list of events and
 	// being ready execute events for the simulation execution.
 	Generate(seed int64, settings *config.SimulationSettings) scheduled.EventExecutor
-	// StringWithTag returns the concise string representation of the event
-	// executor, detailing the number of scheduled events.
-	StringWithTag(tag string) string
+	// String returns the concise string representation of the event executor,
+	// detailing the number of scheduled events.
+	String() string
 }
 
 // StaticEvents implements the EventGen interface. For proper initialization,
@@ -85,14 +85,14 @@ func (se StaticEvents) ScheduleMutationWithAssertionEvent(
 
 }
 
-// StringWithTag returns the concise string representation of the event
-// executor, detailing the number of scheduled events.
-func (se StaticEvents) StringWithTag(tag string) string {
+// String returns the concise string representation of the event executor,
+// detailing the number of scheduled events.
+func (se StaticEvents) String() string {
 	if se.eventExecutor == nil {
 		panic("StaticEvents.eventExecutor is a nil interface; " +
 			"use NewStaticEventsWithNoEvents for proper initialization.")
 	}
-	return se.eventExecutor.PrintEventSummary(tag)
+	return se.eventExecutor.PrintEventSummary()
 }
 
 // Generate returns an eventExecutor populated with a sorted list of events. It

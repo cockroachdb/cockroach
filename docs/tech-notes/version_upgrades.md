@@ -141,7 +141,7 @@ version") is also handled via the upgrade process, as follows:
 ## Enforcing the invariants during upgrades in single-tenancy
 
 In the single-tenant case, the upgrade process (in
-`pkg/upgrade/upgrademanager/manager.go`, `Migrate()`) enforces the
+`pkg/upgrace/upgrademanager/manager.go`, `Migrate()`) enforces the
 invariants as follows:
 
 1. the current cluster version X is observed.

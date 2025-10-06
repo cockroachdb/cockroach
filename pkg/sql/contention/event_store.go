@@ -13,18 +13,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -219,9 +214,10 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 
 			select {
 			case <-timer.C:
+				timer.Read = true
 				if err := s.flushAndResolve(ctx); err != nil {
 					if log.V(1) {
-						log.Dev.Warningf(ctx, "unexpected error encountered when performing "+
+						log.Warningf(ctx, "unexpected error encountered when performing "+
 							"txn id resolution %s", err)
 					}
 				}
@@ -301,14 +297,14 @@ func (s *eventStore) getEventByEventHash(
 }
 
 // flushAndResolve is the main method called by the resolver goroutine each
-// time the timer fires. This method does three things:
+// time the timer fires. This method does two things:
 //  1. it triggers the batching buffer to flush its content into the intake
 //     goroutine. This is to ensure that in the case where we have very low
 //     rate of contentions, the contention events won't be permanently trapped
 //     in the batching buffer.
 //  2. it invokes the dequeue() method on the resolverQueue. This cause the
 //     resolver to perform txnID resolution. See inline comments on the method
-//  3. Lastly, it logs the resolved events.
+//     for details.
 func (s *eventStore) flushAndResolve(ctx context.Context) error {
 	// This forces the write-buffer flushes its batch into the intake goroutine.
 	// The intake goroutine will asynchronously add all events in the batch
@@ -324,9 +320,6 @@ func (s *eventStore) flushAndResolve(ctx context.Context) error {
 	// Ensure that all the resolved contention events are added to the store
 	// before we bubble up the error.
 	s.upsertBatch(result)
-
-	// Aggregate the resolved event information for logging.
-	logResolvedEvents(ctx, result)
 
 	return err
 }
@@ -347,22 +340,6 @@ func (s *eventStore) upsertBatch(events []contentionpb.ExtendedContentionEvent) 
 	}
 }
 
-// addEventsForTest is a convenience function used by tests to directly add events to
-// the eventStore bypassing the resolver and buffer guard.
-func (s *eventStore) addEventsForTest(events []contentionpb.ExtendedContentionEvent) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for i := range events {
-		blockingTxnID := events[i].BlockingEvent.TxnMeta.ID
-		_, ok := s.mu.store.Get(blockingTxnID)
-		if !ok {
-			atomic.AddInt64(&s.atomic.storageSize, int64(entryBytes(&events[i])))
-		}
-		s.mu.store.Add(events[i].Hash(), events[i])
-	}
-}
-
 func (s *eventStore) resolutionIntervalWithJitter() time.Duration {
 	baseInterval := TxnIDResolutionInterval.Get(&s.st.SV)
 
@@ -370,42 +347,6 @@ func (s *eventStore) resolutionIntervalWithJitter() time.Duration {
 	frac := 1 + (2*rand.Float64()-1)*0.15
 	jitteredInterval := time.Duration(frac * float64(baseInterval.Nanoseconds()))
 	return jitteredInterval
-}
-
-// contentionKey is used as a key in the eventsAggregated map to group
-// contention events by their characteristics.
-type contentionKey struct {
-	waitingStmtFingerprintID appstatspb.StmtFingerprintID
-	waitingTxnFingerprintID  appstatspb.TransactionFingerprintID
-	blockingTxnFingerprintID appstatspb.TransactionFingerprintID
-	contendedKey             redact.RedactableString
-}
-
-func logResolvedEvents(ctx context.Context, events []contentionpb.ExtendedContentionEvent) {
-	eventsAggregated := make(map[contentionKey]time.Duration)
-	for _, event := range events {
-		// Create a struct key instead of a composite string
-		key := contentionKey{
-			waitingStmtFingerprintID: event.WaitingStmtFingerprintID,
-			waitingTxnFingerprintID:  event.WaitingTxnFingerprintID,
-			blockingTxnFingerprintID: event.BlockingTxnFingerprintID,
-			contendedKey:             redact.Sprint(event.BlockingEvent.Key),
-		}
-		// Add the contention time to the existing total for this key combination
-		eventsAggregated[key] += event.BlockingEvent.Duration
-	}
-
-	for key, duration := range eventsAggregated {
-		// Create an AggregatedContentionInfo event for structured logging
-		event := &eventpb.AggregatedContentionInfo{
-			WaitingStmtFingerprintId: "\\x" + sqlstatsutil.EncodeStmtFingerprintIDToString(key.waitingStmtFingerprintID),
-			WaitingTxnFingerprintId:  "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(key.waitingTxnFingerprintID),
-			BlockingTxnFingerprintId: "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(key.blockingTxnFingerprintID),
-			ContendedKey:             key.contendedKey,
-			Duration:                 duration.Nanoseconds(),
-		}
-		log.StructuredEvent(ctx, logpb.Severity_INFO, event)
-	}
 }
 
 func entryBytes(event *contentionpb.ExtendedContentionEvent) int {

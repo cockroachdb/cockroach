@@ -217,7 +217,7 @@ func (s SearchPath) Equals(other *SearchPath) bool {
 		return false
 	}
 	// Fast path: skip the check if it is the same slice.
-	if len(s.paths) > 0 && &s.paths[0] != &other.paths[0] {
+	if &s.paths[0] != &other.paths[0] {
 		for i := range s.paths {
 			if s.paths[i] != other.paths[i] {
 				return false

@@ -42,12 +42,6 @@ type uncommittedDescriptors struct {
 	uncommitted       nstree.NameMap
 	original, mutable nstree.IDMap
 
-	// versionBumpOnly stores descriptors that have been modified only by
-	// changing their version counter, without any other mutations. These bumps
-	// are used to trigger cache invalidation and are tracked to avoid the
-	// typical block on version convergence behavior.
-	versionBumpOnly map[descpb.ID]bool
-
 	// memAcc is the actual account of an injected, upstream monitor
 	// to track memory usage of uncommittedDescriptors.
 	memAcc mon.BoundAccount
@@ -55,8 +49,7 @@ type uncommittedDescriptors struct {
 
 func makeUncommittedDescriptors(monitor *mon.BytesMonitor) uncommittedDescriptors {
 	return uncommittedDescriptors{
-		versionBumpOnly: map[descpb.ID]bool{},
-		memAcc:          monitor.MakeBoundAccount(),
+		memAcc: monitor.MakeBoundAccount(),
 	}
 }
 
@@ -68,11 +61,10 @@ func (ud *uncommittedDescriptors) reset(ctx context.Context) {
 	ud.memAcc.Clear(ctx)
 	old := *ud
 	*ud = uncommittedDescriptors{
-		original:        old.original,
-		uncommitted:     old.uncommitted,
-		mutable:         old.mutable,
-		versionBumpOnly: map[descpb.ID]bool{},
-		memAcc:          old.memAcc,
+		original:    old.original,
+		uncommitted: old.uncommitted,
+		mutable:     old.mutable,
+		memAcc:      old.memAcc,
 	}
 }
 

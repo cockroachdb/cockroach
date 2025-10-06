@@ -96,8 +96,7 @@ func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf 
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.clusterGen))
 	} else {
 		buf.WriteString(configStr("cluster", "static"))
-		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d, store_byte_capacity=%d\n",
-			staticSettings.nodes, staticSettings.storesPerNode, staticSettings.storeByteCapacity))
+		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d\n", staticSettings.nodes, staticSettings.storesPerNode))
 	}
 
 	if t.randOptions.ranges {
@@ -105,8 +104,8 @@ func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf 
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.rangeGen))
 	} else {
 		buf.WriteString(configStr("ranges", "static"))
-		buf.WriteString(fmt.Sprintf("\tplacement_type=%v, ranges=%d, min_key=%d, max_key=%d, replication_factor=%d, bytes=%d\n",
-			staticSettings.placementType, staticSettings.ranges, staticSettings.minKey, staticSettings.maxKey, staticSettings.replicationFactor, staticSettings.bytes))
+		buf.WriteString(fmt.Sprintf("\tplacement_type=%v, ranges=%d, key_space=%d, replication_factor=%d, bytes=%d\n",
+			staticSettings.placementType, staticSettings.ranges, staticSettings.keySpace, staticSettings.replicationFactor, staticSettings.bytes))
 	}
 
 	if t.randOptions.load {
@@ -149,23 +148,10 @@ func (tr testResultsReport) String() string {
 		buf.WriteString(fmt.Sprintf("sample%d: start running\n", nthSample))
 		if failed || tr.flags.Has(OutputConfigGen) {
 			buf.WriteString(fmt.Sprintf("configurations generated using seed %d\n", output.seed))
-			clusterGenStr, rangeGenStr, loadGenStr, eventGenStr :=
-				output.clusterGen.String(), output.rangeGen.String(), output.loadGen.StringWithTag(""), output.eventGen.StringWithTag("")
-			emptyIfBlank := func(tag string, s string) string {
-				if s == "" {
-					return fmt.Sprintf("%s: empty", tag)
-				}
-				return s
-			}
-			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank("cluster", clusterGenStr)))
-			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank("range", rangeGenStr)))
-			buf.WriteString(fmt.Sprintf("\t%v\n", emptyIfBlank("load", loadGenStr)))
-			buf.WriteString("\tscheduled_event:\n")
-			if eventGenStr == "" {
-				eventGenStr = "\t\tempty"
-			}
-			buf.WriteString(fmt.Sprintf("%v\n", eventGenStr))
-
+			buf.WriteString(fmt.Sprintf("\t%v\n", output.clusterGen))
+			buf.WriteString(fmt.Sprintf("\t%v\n", output.rangeGen))
+			buf.WriteString(fmt.Sprintf("\t%v\n", output.loadGen))
+			buf.WriteString(fmt.Sprintf("\t%v\n", output.eventGen))
 		}
 		if failed || tr.flags.Has(OutputInitialState) {
 			buf.WriteString(fmt.Sprintf("initial state at %s:\n", output.initialTime.Format("2006-01-02 15:04:05")))
@@ -176,7 +162,7 @@ func (tr testResultsReport) String() string {
 			buf.WriteString(fmt.Sprintf("topology:\n%s", topology.String()))
 		}
 		if failed || tr.flags.Has(OutputEvents) {
-			buf.WriteString(fmt.Sprintf("%v\n", output.eventExecutor.PrintEventsExecuted()))
+			buf.WriteString(output.eventExecutor.PrintEventsExecuted())
 		}
 		if failed {
 			buf.WriteString(fmt.Sprintf("sample%d: failed assertion\n%s\n", nthSample, output.reason))

@@ -15,4 +15,4 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹bittab› ADD
  │    └── from bittab@[3] into bittab_vb_key+
  ├── execute 1 system table mutations transaction
  ├── validate UNIQUE constraint backed by index bittab_vb_key+ in relation bittab
- └── execute 2 system table mutations transactions
+ └── execute 1 system table mutations transaction

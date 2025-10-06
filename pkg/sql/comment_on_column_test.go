@@ -26,7 +26,7 @@ func TestCommentOnColumn(t *testing.T) {
 		if _, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (c1 INT, c2 INT, c3 INT) WITH (schema_locked=false);
+		CREATE TABLE t (c1 INT, c2 INT, c3 INT);
 	`); err != nil {
 			t.Fatal(err)
 		}
@@ -176,12 +176,13 @@ func TestCommentOnAlteredColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runCommentOnTestsDeclarativeOnly(t, func(db *gosql.DB) {
+	runCommentOnTests(t, func(db *gosql.DB) {
 		expectedComment := "expected comment"
 
 		if _, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
+		SET enable_experimental_alter_column_type_general = true;
 		CREATE TABLE t (c INT);
 	`); err != nil {
 			t.Fatal(err)
@@ -213,22 +214,15 @@ func TestCommentOnAlteredColumn(t *testing.T) {
 func runCommentOnTests(t *testing.T, testFunc func(db *gosql.DB)) {
 	for _, setupQuery := range []string{
 		`SET use_declarative_schema_changer = 'on'`,
-		`SET create_table_with_schema_locked=false;
-		 SET use_declarative_schema_changer = 'off';`,
+		`SET use_declarative_schema_changer = 'off'`,
 	} {
-		runOneCommentOnTest(t, setupQuery, testFunc)
+		func() {
+			params, _ := createTestServerParams()
+			s, db, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(context.Background())
+			_, err := db.Exec(setupQuery)
+			require.NoError(t, err)
+			testFunc(db)
+		}()
 	}
-}
-
-func runCommentOnTestsDeclarativeOnly(t *testing.T, testFunc func(db *gosql.DB)) {
-	runOneCommentOnTest(t, "SET use_declarative_schema_changer = 'on'", testFunc)
-}
-
-func runOneCommentOnTest(t *testing.T, setupQuery string, testFunc func(db *gosql.DB)) {
-	params, _ := createTestServerParamsAllowTenants()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-	_, err := db.Exec(setupQuery)
-	require.NoError(t, err)
-	testFunc(db)
 }

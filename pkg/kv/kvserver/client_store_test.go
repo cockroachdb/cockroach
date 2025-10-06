@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -117,16 +115,15 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+	testutils.RunTrueAndFalse(t, "kv.expiration_leases_only.enabled", func(t *testing.T, expOnly bool) {
 		storeReg := fs.NewStickyRegistry()
 		listenerReg := listenerutil.NewListenerRegistry()
 		defer listenerReg.Close()
 
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
-		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
 
-		manualClock := hlc.NewHybridManualClock()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: listenerReg,
@@ -138,7 +135,6 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: storeReg,
-						WallClock:         manualClock,
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						DisableScanner: true,
@@ -164,33 +160,10 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		repl := tc.GetFirstStoreFromServer(t, 0).GetReplicaIfExists(desc.RangeID)
 		require.NotNil(t, repl)
 		lease, _ := repl.GetLease()
-
-		if leaseType == roachpb.LeaseLeader {
-			// The first lease that'll be acquired above is going to be an expiration
-			// based lease. That's because at that point, there won't be a leader,
-			// and the lease acquisition will trigger an election. Expire that lease
-			// and send a request that'll force a re-acquisition. This time, we should
-			// get a leader lease.
-			manualClock.Increment(tc.Server(0).RaftConfig().RangeLeaseDuration.Nanoseconds())
-			incArgs := incrementArgs(key, int64(5))
-
-			testutils.SucceedsSoon(t, func() error {
-				_, err := kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, 0).TestSender(), incArgs)
-				return err.GoError()
-			})
-			lease, _ = repl.GetLease()
-			require.Equal(t, roachpb.LeaseLeader, lease.Type())
-		}
-
-		switch leaseType {
-		case roachpb.LeaseExpiration:
+		if expOnly {
 			require.Equal(t, roachpb.LeaseExpiration, lease.Type())
-		case roachpb.LeaseEpoch:
+		} else {
 			require.Equal(t, roachpb.LeaseEpoch, lease.Type())
-		case roachpb.LeaseLeader:
-			require.Equal(t, roachpb.LeaseLeader, lease.Type())
-		default:
-			panic("unknown")
 		}
 
 		// Restart the server and check whether the range starts out quiesced.
@@ -201,70 +174,6 @@ func TestStoreLoadReplicaQuiescent(t *testing.T) {
 		repl, _, err = tc.Server(0).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, desc.RangeID)
 		require.NoError(t, err)
 		require.NotNil(t, repl.RaftStatus())
-		switch leaseType {
-		case roachpb.LeaseExpiration, roachpb.LeaseLeader:
-			require.False(t, repl.IsQuiescent())
-		case roachpb.LeaseEpoch:
-			require.True(t, repl.IsQuiescent())
-		default:
-			panic("unknown")
-		}
+		require.Equal(t, !expOnly, repl.IsQuiescent())
 	})
-}
-
-// BenchmarkStorePoolReadsWithConcurrentUpdates checks the performance of
-// querying the store pool while there are concurrent updates to the store
-// details.
-func BenchmarkStorePoolReadsWithConcurrentUpdates(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-
-	// Create cluster with 3 nodes.
-	numNodes := 3
-	cluster := testcluster.StartTestCluster(b, numNodes, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-	})
-	defer cluster.Stopper().Stop(ctx)
-
-	// Start a goroutine that continuously takes the write lock on storepool for
-	// updating the store details. This is to simulate the gossip callback that
-	// periodically updates the store details.
-	stopCh := make(chan struct{})
-	go func() {
-		store := cluster.GetFirstStoreFromServer(b, 0)
-		for {
-			select {
-			case <-stopCh:
-				return
-			default:
-				for i := range numNodes {
-					// Skip the updates to the store idx 1. This is to test the
-					// performance for updates to other stores while checking if the
-					// store is ready for routine replica transfer below.
-					if i == 1 {
-						continue
-					}
-					// Note that we have to lock the whole store pool just to update one
-					// store detail.
-					detail := store.StorePool().GetStoreDetail(roachpb.StoreID(i))
-					detail.Lock()
-					detail.LastUpdatedTime = detail.LastUpdatedTime.AddDuration(100 * time.Millisecond)
-					time.Sleep(100 * time.Millisecond)
-					detail.Unlock()
-				}
-			}
-		}
-	}()
-
-	// Ensure the goroutine is stopped when the benchmark completes.
-	defer close(stopCh)
-
-	b.ResetTimer()
-	store := cluster.GetFirstStoreFromServer(b, 0)
-	for n := 0; n < b.N; n++ {
-		// Check if the store is ready for routine replica transfer. This function
-		// is periodically called from the replicate queue.
-		store.StorePool().IsStoreReadyForRoutineReplicaTransfer(ctx, roachpb.StoreID(1))
-	}
 }

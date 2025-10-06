@@ -131,8 +131,7 @@ call
                 │                                                      │                             │         ├── select
                 │                                                      │                             │         │    ├── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
                 │                                                      │                             │         │    ├── scan t
-                │                                                      │                             │         │    │    ├── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
-                │                                                      │                             │         │    │    └── flags: avoid-full-scan
+                │                                                      │                             │         │    │    └── columns: k:33!null i:34 s:35 crdb_internal_mvcc_timestamp:36 tableoid:37
                 │                                                      │                             │         │    └── filters
                 │                                                      │                             │         │         └── eq
                 │                                                      │                             │         │              ├── variable: k:33

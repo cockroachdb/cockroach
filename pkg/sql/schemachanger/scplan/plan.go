@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_2"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_3"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_1"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_2"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -118,7 +118,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 		// Generate the graph used to build the stages.
 		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Dev.Infof(ctx, "graph generation took %v", timeutil.Since(start))
+			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
 	}
 	{
@@ -132,7 +132,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 			!p.Params.SkipPlannerSanityChecks,
 		)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Dev.Infof(ctx, "stage generation took %v", timeutil.Since(start))
+			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}
 	}
 	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
@@ -156,8 +156,8 @@ type rulesForRelease struct {
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
-	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
-	{activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
+	{activeVersion: clusterversion.V24_2, rulesRegistry: release_24_2.GetRegistry()},
+	{activeVersion: clusterversion.V24_1, rulesRegistry: release_24_1.GetRegistry()},
 }
 
 // minVersionForRules the oldest version supported by the rules.
@@ -204,7 +204,7 @@ func getMinValidVersionForRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion,
 ) clusterversion.ClusterVersion {
 	if !activeVersion.IsActive(minVersionForRules) {
-		log.Dev.Warningf(ctx, "falling back to rules for minimum version (%v),"+
+		log.Warningf(ctx, "falling back to rules for minimum version (%v),"+
 			"active version was : %v",
 			minVersionForRules,
 			activeVersion)

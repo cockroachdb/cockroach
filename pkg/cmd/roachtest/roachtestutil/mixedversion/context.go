@@ -34,9 +34,6 @@ type (
 		// upgraded to a certain version, and the migrations are being
 		// executed).
 		Finalizing bool
-		// hasUnavailableNodes indicates whether this step has any nodes
-		// that are currently marked as unavailable.
-		hasUnavailableNodes bool
 
 		// nodesByVersion maps released versions to which nodes are
 		// currently running that version.

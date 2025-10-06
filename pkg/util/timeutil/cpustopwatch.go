@@ -25,7 +25,7 @@ type CPUStopWatch struct {
 // NewCPUStopWatch returns a new CPUStopWatch if the grunning library is
 // supported. Otherwise, it returns nil.
 func NewCPUStopWatch() *CPUStopWatch {
-	if grunning.Supported {
+	if grunning.Supported() {
 		return &CPUStopWatch{}
 	}
 	return nil

@@ -86,12 +86,12 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	// flag) is passed without argument, see below.
 	commandSpecificDefaultLegacyStderrOverride := severity.INFO
 
-	if isDemoCmd(cmd) || cmd == genMetricListCmd || cmd == debugTimeSeriesDumpCmd {
+	if isDemoCmd(cmd) || cmd == genMetricListCmd {
 		// `cockroach demo` and `cockroach gen metric-list` are special:
 		// they start a server, but without
 		// disk and interactively. We don't want to litter the console
 		// with warning or error messages unless overridden; however,
-		// should the command encounter a log.Dev.Fatal event, we want
+		// should the command encounter a log.Fatal event, we want
 		// to inform the user (who is guaranteed to be looking at the screen).
 		//
 		// NB: this can be overridden from the command line as usual.
@@ -240,7 +240,6 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	serverCfg.GoroutineDumpDirName = filepath.Join(outputDirectory, base.GoroutineDumpDir)
 	serverCfg.HeapProfileDirName = filepath.Join(outputDirectory, base.HeapProfileDir)
 	serverCfg.CPUProfileDirName = filepath.Join(outputDirectory, base.CPUProfileDir)
-	serverCfg.ExecutionTraceDirName = filepath.Join(outputDirectory, base.ExecutionTraceDir)
 	serverCfg.InflightTraceDirName = filepath.Join(outputDirectory, base.InflightTraceDir)
 
 	return nil
@@ -463,16 +462,14 @@ func addPredefinedLogFiles(c *logconfig.Config) {
 const predefinedLogFiles = `
 sinks:
  file-groups:
+  kv-distribution:        { channels: KV_DISTRIBUTION }
   default:
     channels:
       INFO: [DEV, OPS]
       WARNING: all except [DEV, OPS]
-  changefeed:             { channels: CHANGEFEED }
-  health:                 { channels: HEALTH }
-  kv-distribution:        { channels: KV_DISTRIBUTION }
-  kv-exec:                { channels: KV_EXEC }
+  health:                 { channels: HEALTH  }
   pebble:                 { channels: STORAGE }
-  security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true }
+  security:               { channels: [PRIVILEGES, USER_ADMIN], auditable: true  }
   sql-auth:               { channels: SESSIONS, auditable: true }
   sql-audit:              { channels: SENSITIVE_ACCESS, auditable: true }
   sql-exec:               { channels: SQL_EXEC }

@@ -95,14 +95,14 @@ func init() {
 	var err error
 	OSUser, err = user.Current()
 	if err != nil {
-		log.Dev.Fatalf(context.Background(), "Unable to determine OS user: %v", err)
+		log.Fatalf(context.Background(), "Unable to determine OS user: %v", err)
 	}
 
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	var loggerError error
 	Logger, loggerError = loggerCfg.NewLogger("")
 	if loggerError != nil {
-		log.Dev.Fatalf(context.Background(), "unable to configure logger: %v", loggerError)
+		log.Fatalf(context.Background(), "unable to configure logger: %v", loggerError)
 	}
 }
 

@@ -105,8 +105,8 @@ func genReport(w io.Writer, t Transitions) {
 	di := makeDebugInfo(t)
 	var present, missing bytes.Buffer
 	for _, sName := range di.sortedStateNames {
-		present.Reset()
-		missing.Reset()
+		defer present.Reset()
+		defer missing.Reset()
 
 		for _, eName := range di.sortedEventNames {
 			handledBuf := &missing

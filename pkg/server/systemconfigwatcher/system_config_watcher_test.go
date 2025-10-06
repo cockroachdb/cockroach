@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -37,7 +38,7 @@ func TestSystemConfigWatcher(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t,
+	s, sqlDB, kvDB := serverutils.StartServer(t,
 		base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
@@ -51,17 +52,30 @@ func TestSystemConfigWatcher(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
 
 	t.Run("system", func(t *testing.T) {
-		runTest(t, s, sqlDB)
+		runTest(t, s, sqlDB, nil)
 	})
 	t.Run("secondary", func(t *testing.T) {
 		tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 			TenantID: serverutils.TestTenantID(),
 		})
-		runTest(t, tenant, tenantDB)
+		// We expect the secondary tenant to see the host tenant's view of a few
+		// keys. We need to plumb that expectation into the test.
+		runTest(t, tenant, tenantDB, func(t *testing.T) []roachpb.KeyValue {
+			return kvtenant.GossipSubscriptionSystemConfigMask.Apply(
+				config.SystemConfigEntries{
+					Values: getSystemDescriptorAndZonesSpans(ctx, t, keys.SystemSQLCodec, kvDB),
+				},
+			).Values
+		})
 	})
 }
 
-func runTest(t *testing.T, s serverutils.ApplicationLayerInterface, sqlDB *gosql.DB) {
+func runTest(
+	t *testing.T,
+	s serverutils.ApplicationLayerInterface,
+	sqlDB *gosql.DB,
+	extraRows func(t *testing.T) []roachpb.KeyValue,
+) {
 	ctx := context.Background()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -81,6 +95,10 @@ func runTest(t *testing.T, s serverutils.ApplicationLayerInterface, sqlDB *gosql
 		}
 		entries := protoutil.Clone(&rs.SystemConfigEntries).(*config.SystemConfigEntries)
 		sc := getSystemDescriptorAndZonesSpans(ctx, t, execCfg.Codec, kvDB)
+		if extraRows != nil {
+			sc = append(sc, extraRows(t)...)
+			sort.Sort(roachpb.KeyValueByKey(sc))
+		}
 		sort.Sort(roachpb.KeyValueByKey(entries.Values))
 		if !assert.Equal(noopT{}, sc, entries.Values) {
 			return errors.Errorf("mismatch: %v", pretty.Diff(sc, entries.Values))

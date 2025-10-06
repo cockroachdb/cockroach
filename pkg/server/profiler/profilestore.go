@@ -117,7 +117,7 @@ func (s *profileStore) cleanupLastRampup(
 		if numFiles > maxP {
 			// Yes: clean this up.
 			if err := fn(files[i].Name()); err != nil {
-				log.Dev.Warningf(ctx, "%v", err)
+				log.Warningf(ctx, "%v", err)
 			}
 		} else {
 			// No: we preserve this file.
@@ -142,12 +142,12 @@ func (s *profileStore) parseFileName(
 	var err error
 	timestamp, err = time.Parse(timestampFormat, maybeTimestamp)
 	if err != nil {
-		log.Dev.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
+		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
 		return
 	}
 	heapUsage, err = strconv.ParseUint(parts[3], 10, 64)
 	if err != nil {
-		log.Dev.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
+		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
 		return
 	}
 	ok = true

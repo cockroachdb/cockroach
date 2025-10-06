@@ -116,10 +116,7 @@ package ctxgroup
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -127,12 +124,6 @@ import (
 type Group struct {
 	wrapped *errgroup.Group
 	ctx     context.Context
-	panicMu *recovered
-}
-
-type recovered struct {
-	syncutil.Mutex
-	payload error
 }
 
 // Wait blocks until all function calls from the Go method have returned, then
@@ -146,11 +137,6 @@ func (g Group) Wait() error {
 	}
 	ctxErr := g.ctx.Err()
 	err := g.wrapped.Wait()
-
-	if g.panicMu.payload != nil {
-		panic(verboseError{g.panicMu.payload})
-	}
-
 	if err != nil {
 		return err
 	}
@@ -163,18 +149,7 @@ func WithContext(ctx context.Context) Group {
 	return Group{
 		wrapped: grp,
 		ctx:     ctx,
-		panicMu: &recovered{},
 	}
-}
-
-// SetLimit limits the number of active goroutines in this group to at most n. A
-// negative value indicates no limit. A limit of zero will prevent any new
-// goroutines from being added. Any subsequent call to the Go method will block
-// until it can add an active goroutine without exceeding the configured limit.
-// The limit must not be modified while any goroutines in the group are active.
-// This delegates to errgroup.Group.SetLimit.
-func (g Group) SetLimit(n int) {
-	g.wrapped.SetLimit(n)
 }
 
 // Go calls the given function in a new goroutine.
@@ -182,21 +157,9 @@ func (g Group) Go(f func() error) {
 	g.wrapped.Go(f)
 }
 
-// GoCtx calls the given function in a new goroutine. If the function passed
-// panics, the shared context is cancelled and then the subsequent call to Wait
-// will panic with the original panic payload wrapped in a Panic error.
-// If multiple tasks in the group panic, their panic errors are combined and
-// thrown as a single panic in Wait().
+// GoCtx calls the given function in a new goroutine.
 func (g Group) GoCtx(f func(ctx context.Context) error) {
-	g.wrapped.Go(func() (err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				err = wrapPanic(1, r)
-				g.panicMu.Lock()
-				defer g.panicMu.Unlock()
-				g.panicMu.payload = errors.CombineErrors(g.panicMu.payload, err)
-			}
-		}()
+	g.wrapped.Go(func() error {
 		return f(g.ctx)
 	})
 }
@@ -222,42 +185,4 @@ func GoAndWait(ctx context.Context, fs ...func(ctx context.Context) error) error
 		}
 	}
 	return group.Wait()
-}
-
-// wrapPanic turns r into an error if it is not one already.
-func wrapPanic(depth int, r interface{}) error {
-	// If r is already a verboseError, we remove the `verboseError` wrapper
-	// because it will be reapplied when the panic is rethrown by wait. The stack
-	// trace is attached to the inner error. Its desirable to remove the verbose
-	// format wrapper from the child because the parent verbose wrapper will
-	// print the child errors .Error() method and the child's stack. If we left
-	// the wrapper in place, this would print the child error's stack twice.
-	if err, ok := r.(verboseError); ok {
-		return errors.WithStackDepth(err.error, depth+1)
-	}
-	if err, ok := r.(error); ok {
-		return errors.WithStackDepth(err, depth+1)
-	}
-	return errors.NewWithDepthf(depth+1, "panic: %v", r)
-}
-
-type verboseError struct {
-	error // always a errors.WithStack.withStack
-}
-
-// Error overrides WithStack.withStack()'s Error to include the stack.
-//
-// Typically withstack's Error() just delegates to the underlying error and
-// requires formatting with %+v to print the stacktrace. However this wrapper is
-// used to wrap a recovered panic that is *rethrown*. If this rethrown panic is
-// not recovered, the runtime will eventually crash and print it... by calling
-// .Error(), which will *not* indicate the stack to the original panic we so
-// dutifully captured by using WithStack. So override .Error() to include the
-// stack, but leave .Format() to fallthrough to withStack as usual.
-func (p verboseError) Error() string {
-	return fmt.Sprintf("%+v", p.error)
-}
-
-func (p verboseError) Unwrap() error {
-	return p.error
 }

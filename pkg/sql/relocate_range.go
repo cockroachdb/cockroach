@@ -17,9 +17,9 @@ import (
 )
 
 type relocateRange struct {
-	singleInputPlanNode
 	optColumnsSlot
 
+	rows            planNode
 	subjectReplicas tree.RelocateSubject
 	toStoreID       tree.TypedExpr
 	fromStoreID     tree.TypedExpr
@@ -89,10 +89,10 @@ func (n *relocateRange) startExec(params runParams) (err error) {
 }
 
 func (n *relocateRange) Next(params runParams) (bool, error) {
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
-	datum := n.input.Values()[0]
+	datum := n.rows.Values()[0]
 	if datum == tree.DNull {
 		return true, nil
 	}
@@ -126,7 +126,7 @@ func (n *relocateRange) Values() tree.Datums {
 }
 
 func (n *relocateRange) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.rows.Close(ctx)
 }
 
 func (n *relocateRange) relocate(params runParams, rangeDesc roachpb.RangeDescriptor) error {

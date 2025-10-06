@@ -9,9 +9,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -48,11 +45,6 @@ func (desc *IndexDescriptor) FillColumns(elems tree.IndexElemList) error {
 	for _, c := range elems {
 		if c.Expr != nil {
 			return errors.AssertionFailedf("index elem expression should have been replaced with a column")
-		}
-		// Vector index prefix columns don't have a direction, nor do the vector columns themselves.
-		if !desc.Type.HasScannablePrefix() && c.Direction != tree.DefaultDirection {
-			return pgerror.Newf(pgcode.FeatureNotSupported,
-				"%s does not support the %s option", idxtype.ErrorText(desc.Type), c.Direction)
 		}
 		desc.KeyColumnNames = append(desc.KeyColumnNames, string(c.Column))
 		switch c.Direction {
@@ -104,10 +96,10 @@ func (desc *IndexDescriptor) GetName() string {
 }
 
 // InvertedColumnID returns the ColumnID of the inverted column of the inverted
-// index. This is always the last column in KeyColumnIDs. Panics if the index is
+// index. This is always the last column in ColumnIDs. Panics if the index is
 // not inverted.
 func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
-	if desc.Type != idxtype.INVERTED {
+	if desc.Type != IndexDescriptor_INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnIDs[len(desc.KeyColumnIDs)-1]
@@ -117,7 +109,7 @@ func (desc *IndexDescriptor) InvertedColumnID() ColumnID {
 // index. This is always the last column in KeyColumnNames. Panics if the index is
 // not inverted.
 func (desc *IndexDescriptor) InvertedColumnName() string {
-	if desc.Type != idxtype.INVERTED {
+	if desc.Type != IndexDescriptor_INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
@@ -128,28 +120,8 @@ func (desc *IndexDescriptor) InvertedColumnName() string {
 //
 // Panics if the index is not inverted.
 func (desc *IndexDescriptor) InvertedColumnKeyType() *types.T {
-	if desc.Type != idxtype.INVERTED {
+	if desc.Type != IndexDescriptor_INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	return types.EncodedKey
-}
-
-// VectorColumnID returns the ColumnID of the vector column of the vector index.
-// This is always the last column in KeyColumnIDs. Panics if the index is not a
-// vector index.
-func (desc *IndexDescriptor) VectorColumnID() ColumnID {
-	if desc.Type != idxtype.VECTOR {
-		panic(errors.AssertionFailedf("index is not a vector index"))
-	}
-	return desc.KeyColumnIDs[len(desc.KeyColumnIDs)-1]
-}
-
-// VectorColumnName returns the name of the vector column of the vector index.
-// This is always the last column in KeyColumnNames. Panics if the index is
-// not a vector index.
-func (desc *IndexDescriptor) VectorColumnName() string {
-	if desc.Type != idxtype.VECTOR {
-		panic(errors.AssertionFailedf("index is not a vector index"))
-	}
-	return desc.KeyColumnNames[len(desc.KeyColumnNames)-1]
 }

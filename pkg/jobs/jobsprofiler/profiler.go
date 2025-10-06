@@ -46,12 +46,12 @@ func StorePlanDiagram(
 		_, diagURL, err := execinfrapb.GeneratePlanDiagramURL(fmt.Sprintf("job:%d", jobID), flowSpecs,
 			execinfrapb.DiagramFlags{})
 		if err != nil {
-			log.Dev.Warningf(ctx, "plan diagram failed to generate: %v", err)
+			log.Warningf(ctx, "plan diagram failed to generate: %v", err)
 			return
 		}
 		diagString := diagURL.String()
 		if len(diagString) > MaxDiagSize {
-			log.Dev.Warningf(ctx, "plan diagram is too large (%dk) to store", len(diagString)/1024)
+			log.Warningf(ctx, "plan diagram is too large (%dk) to store", len(diagString)/1024)
 			return
 		}
 		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -75,10 +75,10 @@ func StorePlanDiagram(
 			// Write the new diagram.
 			return infoStorage.Write(ctx, dspKey, []byte(diagString))
 		}); err != nil && ctx.Err() == nil {
-			log.Dev.Warningf(ctx, "failed to write DistSQL diagram for job %d: %v", jobID, err.Error())
+			log.Warningf(ctx, "failed to write DistSQL diagram for job %d: %v", jobID, err.Error())
 		}
 	}); err != nil {
-		log.Dev.Warningf(ctx, "failed to spawn task to generate DistSQL plan diagram for job %d: %v",
+		log.Warningf(ctx, "failed to spawn task to generate DistSQL plan diagram for job %d: %v",
 			jobID, err.Error())
 	}
 }
@@ -103,7 +103,7 @@ func StorePerNodeProcessorProgressFraction(
 		}
 		return nil
 	}); err != nil {
-		log.Dev.Warningf(ctx, "failed to write progress fraction for job %d: %v",
+		log.Warningf(ctx, "failed to write progress fraction for job %d: %v",
 			jobID, err.Error())
 	}
 }

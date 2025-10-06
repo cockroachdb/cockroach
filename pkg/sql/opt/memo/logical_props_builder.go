@@ -16,9 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -61,7 +59,7 @@ func (b *logicalPropsBuilder) init(ctx context.Context, evalCtx *eval.Context, m
 		evalCtx: evalCtx,
 		mem:     mem,
 	}
-	b.sb.init(ctx, evalCtx, mem)
+	b.sb.init(ctx, evalCtx, mem.Metadata())
 }
 
 func (b *logicalPropsBuilder) clear() {
@@ -71,7 +69,7 @@ func (b *logicalPropsBuilder) clear() {
 }
 
 func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relational) {
-	md := b.mem.Metadata()
+	md := scan.Memo().Metadata()
 	hardLimit := scan.HardLimit.RowCount()
 	pred := scan.PartialIndexPredicate(md)
 
@@ -93,12 +91,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	rel.NotNullCols = makeTableNotNullCols(md, scan.Table).Copy()
 	// Union not-NULL columns with not-NULL columns in the constraint.
 	if scan.Constraint != nil {
-		scan.Constraint.ExtractNotNullCols(b.sb.ctx, b.evalCtx, &rel.NotNullCols)
+		rel.NotNullCols.UnionWith(scan.Constraint.ExtractNotNullCols(b.sb.ctx, b.evalCtx))
 	}
 	// Union not-NULL columns with not-NULL columns in the partial index
 	// predicate.
 	if pred != nil {
-		b.extractNotNullCols(pred, &rel.NotNullCols)
+		rel.NotNullCols.UnionWith(b.rejectNullCols(pred))
 	}
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
@@ -203,15 +201,6 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	}
 }
 
-// buildPlaceholderScanProps is unimplemented. Placeholder expressions are only created
-// in two places:
-//
-//  1. The placeholder fast-path which entirely skips optimization.
-//  2. The ConvertParameterizedLookupJoinToPlaceholderScan exploration rule
-//     which always adds the placeholder scan to an existing memo group, for
-//     which logical properties have already been built.
-//
-// In both cases this function is never called.
 func (b *logicalPropsBuilder) buildPlaceholderScanProps(
 	scan *PlaceholderScanExpr, rel *props.Relational,
 ) {
@@ -267,8 +256,7 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 	//   SELECT y FROM xy WHERE y=5
 	//
 	// "y" cannot be null because the SQL equality operator rejects nulls.
-	rel.NotNullCols = opt.ColSet{}
-	b.extractNotNullCols(sel.Filters, &rel.NotNullCols)
+	rel.NotNullCols = b.rejectNullCols(sel.Filters)
 	rel.NotNullCols.UnionWith(inputProps.NotNullCols)
 	rel.NotNullCols.IntersectionWith(rel.OutputCols)
 
@@ -511,13 +499,6 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 	inputProps := indexJoin.Input.Relational()
 	md := b.mem.Metadata()
 
-	// Side Effects
-	// ------------
-	// A Locking option is a side effect.
-	if !indexJoin.Locking.IsNoOp() {
-		rel.VolatilitySet.AddVolatile()
-	}
-
 	// Output Columns
 	// --------------
 	rel.OutputCols = indexJoin.Cols
@@ -558,13 +539,6 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 }
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *props.Relational) {
-	// Side Effects
-	// ------------
-	// A Locking option is a side effect.
-	if !join.Locking.IsNoOp() {
-		rel.VolatilitySet.AddVolatile()
-	}
-
 	b.buildJoinProps(join, rel)
 	if join.Locking.WaitPolicy == tree.LockWaitSkipLocked {
 		// SKIP LOCKED can act like a filter. The minimum cardinality of a scan
@@ -577,24 +551,10 @@ func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *pr
 func (b *logicalPropsBuilder) buildInvertedJoinProps(
 	join *InvertedJoinExpr, rel *props.Relational,
 ) {
-	// Side Effects
-	// ------------
-	// A Locking option is a side effect.
-	if !join.Locking.IsNoOp() {
-		rel.VolatilitySet.AddVolatile()
-	}
-
 	b.buildJoinProps(join, rel)
 }
 
 func (b *logicalPropsBuilder) buildZigzagJoinProps(join *ZigzagJoinExpr, rel *props.Relational) {
-	// Side Effects
-	// ------------
-	// A Locking option is a side effect.
-	if !join.LeftLocking.IsNoOp() || !join.RightLocking.IsNoOp() {
-		rel.VolatilitySet.AddVolatile()
-	}
-
 	b.buildJoinProps(join, rel)
 }
 
@@ -1435,22 +1395,8 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 	// examples include:
 	// * row_number+the partition is a key.
 	// * rank is determined by the partition and the value being ordered by.
+	// * aggregations/first_value/last_value are determined by the partition.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	if inputProps.FuncDeps.ColsAreStrictKey(window.Partition) {
-		// Special case: when the partition columns form a strict key over the
-		// input, each partition will only have a single row. Therefore, the window
-		// function output columns are trivially determined by the partition cols.
-		rel.FuncDeps.AddStrictKey(window.Partition, rel.OutputCols)
-	} else {
-		// It may still be possible to infer functional dependencies based on the
-		// window frames and window function types.
-		determinedCols := getWindowPartitionDeps(window, &inputProps.FuncDeps)
-		if !determinedCols.Empty() {
-			// The partition columns determine some of the window function outputs.
-			rel.FuncDeps.AddStrictDependency(window.Partition, determinedCols)
-		}
-	}
-	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
 	// Cardinality
 	// -----------
@@ -1621,11 +1567,6 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relational) {
 	BuildSharedProps(lock, &rel.Shared, b.evalCtx)
 
-	// Side Effects
-	// ------------
-	// Locking is a side effect.
-	rel.VolatilitySet.AddVolatile()
-
 	private := lock.Private().(*LockPrivate)
 	inputProps := lock.Child(0).(RelExpr).Relational()
 
@@ -1639,105 +1580,6 @@ func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relation
 	}
 	if !b.disableStats {
 		b.sb.buildLock(lock, rel)
-	}
-}
-
-func (b *logicalPropsBuilder) buildVectorSearchProps(
-	search *VectorSearchExpr, rel *props.Relational,
-) {
-	md := b.mem.Metadata()
-	BuildSharedProps(search, &rel.Shared, b.evalCtx)
-
-	// Output Columns
-	// --------------
-	// VectorSearch output columns are stored in the definition.
-	rel.OutputCols = search.Cols
-
-	// Not Null Columns
-	// ----------------
-	// Initialize not-NULL columns from the table schema.
-	rel.NotNullCols = makeTableNotNullCols(md, search.Table).Intersection(rel.OutputCols)
-
-	// Outer Columns
-	// -------------
-	// VectorSearch operator never has outer columns.
-
-	// Functional Dependencies
-	// -----------------------
-	// Initialize key FD's from the table schema, including constant columns
-	// from the constraint, minus any columns that are not projected by the
-	// VectorSearch operator.
-	rel.FuncDeps.CopyFrom(MakeTableFuncDep(md, search.Table))
-	if idx := md.Table(search.Table).Index(search.Index); idx.PrefixColumnCount() > 0 {
-		// Prefix columns are restricted to constant values.
-		var constants opt.ColSet
-		for i := 0; i < idx.PrefixColumnCount(); i++ {
-			constants.Add(search.Table.ColumnID(idx.Column(i).Ordinal()))
-		}
-		rel.FuncDeps.AddConstants(constants)
-	}
-	rel.FuncDeps.ProjectCols(rel.OutputCols)
-
-	// Cardinality
-	// -----------
-	// Restrict cardinality based on FDs and constraint. Note that we cannot use
-	// TargetNeighborCount to restrict cardinality because it is not a strict
-	// limit.
-	// TODO(drewk, mw5h): we can likely determine a guarantee on the max number of
-	// candidates.
-	rel.Cardinality = props.AnyCardinality
-	if rel.FuncDeps.HasMax1Row() {
-		rel.Cardinality = rel.Cardinality.Limit(1)
-	}
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildVectorSearch(search, rel)
-	}
-}
-
-func (b *logicalPropsBuilder) buildVectorMutationSearchProps(
-	search *VectorMutationSearchExpr, rel *props.Relational,
-) {
-	BuildSharedProps(search, &rel.Shared, b.evalCtx)
-	inputProps := search.Input.Relational()
-
-	// Output Columns
-	// --------------
-	// VectorMutationSearch passes through all input columns. It also produces
-	// the partition column, and optionally, the quantized vector column.
-	rel.OutputCols = inputProps.OutputCols.Copy()
-	rel.OutputCols.Add(search.PartitionCol)
-	if search.QuantizedVectorCol != 0 {
-		rel.OutputCols.Add(search.QuantizedVectorCol)
-	}
-
-	// Not Null Columns
-	// ----------------
-	// Pass through not-NULL columns from the input.
-	rel.NotNullCols = inputProps.NotNullCols
-
-	// Outer Columns
-	// -------------
-	// Pass through outer columns from the input.
-	rel.OuterCols = inputProps.OuterCols
-
-	// Functional Dependencies
-	// -----------------------
-	// Copy the input FDs. Make sure to add the new output columns to the FDs.
-	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	rel.FuncDeps.ProjectCols(rel.OutputCols)
-
-	// Cardinality
-	// -----------
-	// Pass through input cardinality.
-	rel.Cardinality = inputProps.Cardinality
-
-	// Statistics
-	// ----------
-	if !b.disableStats {
-		b.sb.buildVectorMutationSearch(search, rel)
 	}
 }
 
@@ -2060,15 +1902,8 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 		var keyCols opt.ColSet
 		index := tab.Index(i)
 
-		if !index.IsUnique() {
-			// A non-unique index won't add any additional information, since it
-			// relies on the PK columns to form a key.
-			continue
-		}
-
-		switch index.Type() {
-		case idxtype.INVERTED, idxtype.VECTOR:
-			// Skip inverted and vector indexes for now.
+		if index.IsInverted() {
+			// Skip inverted indexes for now.
 			continue
 		}
 
@@ -2216,24 +2051,26 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 	return card
 }
 
-// ExtractNullColsRejectedByFilter finds the set of columns that are "null
-// rejected" by the filters and adds them to the given column set. An input row
-// with a NULL value on any of these columns will not pass the filter.
-func ExtractNullColsRejectedByFilter(
-	ctx context.Context, evalCtx *eval.Context, filters FiltersExpr, cols *opt.ColSet,
-) {
+// NullColsRejectedByFilter returns a set of columns that are "null rejected"
+// by the filters. An input row with a NULL value on any of these columns will
+// not pass the filter.
+func NullColsRejectedByFilter(
+	ctx context.Context, evalCtx *eval.Context, filters FiltersExpr,
+) opt.ColSet {
+	var notNullCols opt.ColSet
 	for i := range filters {
 		filterProps := filters[i].ScalarProps()
 		if filterProps.Constraints != nil {
-			filterProps.Constraints.ExtractNotNullCols(ctx, evalCtx, cols)
+			notNullCols.UnionWith(filterProps.Constraints.ExtractNotNullCols(ctx, evalCtx))
 		}
 	}
+	return notNullCols
 }
 
-// extractNotNullCols finds the set of columns that are "null rejected" by the
-// filters and adds them to the given column set.
-func (b *logicalPropsBuilder) extractNotNullCols(filters FiltersExpr, cols *opt.ColSet) {
-	ExtractNullColsRejectedByFilter(b.sb.ctx, b.evalCtx, filters, cols)
+// rejectNullCols returns the set of all columns that are inferred to be not-
+// null, based on the filter conditions.
+func (b *logicalPropsBuilder) rejectNullCols(filters FiltersExpr) opt.ColSet {
+	return NullColsRejectedByFilter(b.sb.ctx, b.evalCtx, filters)
 }
 
 // addFiltersToFuncDep returns the union of all functional dependencies from
@@ -2382,7 +2219,7 @@ func distinctCountFromType(md *opt.Metadata, typ *types.T) (_ uint64, ok bool) {
 func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
-		md := sb.mem.Metadata()
+		md := join.Memo().Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
 
 		// Include the key columns in the output columns.
@@ -2416,7 +2253,7 @@ func ensureLookupJoinInputProps(join *LookupJoinExpr, sb *statisticsBuilder) *pr
 func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder) *props.Relational {
 	relational := &join.lookupProps
 	if relational.OutputCols.Empty() {
-		md := sb.mem.Metadata()
+		md := join.Memo().Metadata()
 		relational.OutputCols = join.Cols.Difference(join.Input.Relational().OutputCols)
 		relational.NotNullCols = makeTableNotNullCols(md, join.Table).Copy()
 		relational.NotNullCols.IntersectionWith(relational.OutputCols)
@@ -2437,7 +2274,7 @@ func ensureInvertedJoinInputProps(join *InvertedJoinExpr, sb *statisticsBuilder)
 // apply to the two sides of the join, as if it were a Scan operator.
 func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
 	ensureInputPropsForIndex(
-		sb.mem.Metadata(),
+		join.Memo().Metadata(),
 		join.LeftTable,
 		join.LeftIndex,
 		join.Cols,
@@ -2446,7 +2283,7 @@ func ensureZigzagJoinInputProps(join *ZigzagJoinExpr, sb *statisticsBuilder) {
 	)
 	// For stats purposes, ensure left and right column sets are disjoint.
 	ensureInputPropsForIndex(
-		sb.mem.Metadata(),
+		join.Memo().Metadata(),
 		join.RightTable,
 		join.RightIndex,
 		join.Cols.Difference(join.leftProps.OutputCols),
@@ -2517,7 +2354,6 @@ func addOuterColsToFuncDep(outerCols opt.ColSet, fdset *props.FuncDepSet) {
 // statistics.
 type joinPropsHelper struct {
 	evalCtx  *eval.Context
-	mem      *Memo
 	join     RelExpr
 	joinType opt.Operator
 
@@ -2536,8 +2372,7 @@ type joinPropsHelper struct {
 func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
-	*h = joinPropsHelper{evalCtx: b.evalCtx, mem: b.mem, join: joinExpr}
-	md := b.mem.Metadata()
+	*h = joinPropsHelper{evalCtx: b.evalCtx, join: joinExpr}
 
 	switch join := joinExpr.(type) {
 	case *LookupJoinExpr:
@@ -2547,9 +2382,10 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = &join.lookupProps
 		h.filters = append(join.On, join.AllLookupFilters...)
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the lookup join equalities.
+		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.KeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
@@ -2573,9 +2409,10 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = &join.lookupProps
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the prefix column equalities.
+		md := join.Memo().Metadata()
 		index := md.Table(join.Table).Index(join.Index)
 		for i, colID := range join.PrefixKeyCols {
 			indexColID := join.Table.ColumnID(index.Column(i).Ordinal())
@@ -2598,7 +2435,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = join.Right.Relational()
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the merge join equalities.
 		for i := range join.LeftEq {
@@ -2620,7 +2457,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 		h.rightProps = &join.rightProps
 		h.filters = join.On
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
 
 		// Apply the zigzag join equalities.
 		for i := range join.LeftEqCols {
@@ -2639,7 +2476,7 @@ func (h *joinPropsHelper) init(b *logicalPropsBuilder, joinExpr RelExpr) {
 
 		h.filters = *join.Child(2).(*FiltersExpr)
 		b.addFiltersToFuncDep(h.filters, &h.filtersFD)
-		b.extractNotNullCols(h.filters, &h.filterNotNullCols)
+		h.filterNotNullCols = b.rejectNullCols(h.filters)
 		h.filterIsTrue = h.filters.IsTrue()
 		h.filterIsFalse = h.filters.IsFalse()
 	}
@@ -2781,7 +2618,7 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 // addSelfJoinImpliedFDs adds any extra equality FDs that are implied by a self
 // join equality between key columns on a table.
 func (h *joinPropsHelper) addSelfJoinImpliedFDs(rel *props.Relational) {
-	md := h.mem.Metadata()
+	md := h.join.Memo().Metadata()
 	leftCols, rightCols := h.leftProps.OutputCols, h.rightProps.OutputCols
 	if !rel.FuncDeps.ComputeEquivClosure(leftCols).Intersects(rightCols) {
 		// There are no equalities between left and right columns.
@@ -3133,40 +2970,4 @@ func CanBeCompositeSensitive(e opt.Expr) bool {
 
 	isCompositeInsensitive, _ := check(e)
 	return !isCompositeInsensitive
-}
-
-// getWindowPartitionDeps returns the set of window function output columns that
-// are functionally determined by the Window operator's partition columns
-// (which may be empty) based on the window frame and function type.
-//
-// NOTE: getWindowPartitionDeps assumes that execution performs aggregation in
-// the same order for every row in the window, even when there is no explicit
-// ORDER BY.
-func getWindowPartitionDeps(window *WindowExpr, inputFDs *props.FuncDepSet) opt.ColSet {
-	var determinedCols opt.ColSet
-	for i := range window.Windows {
-		// Ensure that the window frame extends to the entire partition. This
-		// ensures that every row in the partition has the exact same frame.
-		item := &window.Windows[i]
-		if item.Frame.FrameExclusion != treewindow.NoExclusion ||
-			item.Frame.StartBoundType != treewindow.UnboundedPreceding ||
-			item.Frame.EndBoundType != treewindow.UnboundedFollowing {
-			continue
-		}
-		// Aggregations, first_value, and last_value functions always produce the
-		// same result for any row given the same frame.
-		if !opt.IsAggregateOp(item.Function) {
-			switch item.Function.Op() {
-			case opt.FirstValueOp, opt.LastValueOp:
-			default:
-				continue
-			}
-		}
-		// Since we determined that this function always produces the same result
-		// for a given window frame, as well as that the frame is the same for all
-		// rows in a given partition, there is a dependency from the partition
-		// columns to the output of this window function.
-		determinedCols.Add(item.Col)
-	}
-	return determinedCols
 }

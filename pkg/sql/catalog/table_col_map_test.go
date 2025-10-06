@@ -6,6 +6,7 @@
 package catalog_test
 
 import (
+	"math/rand"
 	"sort"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestTableColMap(t *testing.T) {
 	for _, systemColumnDesc := range colinfo.AllSystemColumnDescs {
 		columnIDs = append(columnIDs, systemColumnDesc.ID)
 	}
-	rng.Shuffle(len(columnIDs), func(i, j int) {
+	rand.Shuffle(len(columnIDs), func(i, j int) {
 		columnIDs[i], columnIDs[j] = columnIDs[j], columnIDs[i]
 	})
 

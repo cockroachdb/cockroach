@@ -18,8 +18,6 @@ component sources {
 () SQL_INTERNAL_PERF
 () TELEMETRY
 () KV_DISTRIBUTION
-() CHANGEFEED
-() KV_EXEC
 cloud stray as "stray\nerrors"
 }
 queue stderr
@@ -45,13 +43,11 @@ SQL_PERF --> p__1
 SQL_INTERNAL_PERF --> p__1
 TELEMETRY --> p__1
 KV_DISTRIBUTION --> p__1
-CHANGEFEED --> p__1
-KV_EXEC --> p__1
 p__1 --> buffer2
 buffer2 --> f1
 stray --> stderrfile
 @enduml
-# http://www.plantuml.com/plantuml/uml/N9DFZvim4CNl_XGMf_P0gzrZ3zLIc4si9f1Y5hLI9SJwpougmUbWAbLLldjbG-Am9zvxyp9O-Pc7qRPefsDFUgKjjOPYz_9ggUnG2TkPWGXpF9b13PQEPaAXHlgFl7jFCwZTepXmzzX2igksJl6gA9CDU0cSioBt1Vvjr_1q2_l4kISEPPDaUvOxToXPpNQmWRa9EMSLgw59qXJuzTVm7TABFa3vUD4ihw3Can1Mi8CzLEKFPxxMJSPuLR8lJnKh_ElIRP9lu14WMmf-i-ZD9EbeiVrBsv56NlqS5AB1CI9dydjIawAZbGgHY1ObVPwqLdZlwxEEvi6fQUvygWqUM_j9e7oE_zn7f4NRwLPOghlU_v5KcrugfD57gNGxzJQM7KPku2jKptk44R_GjEBrGszUeijmFekNgr8y3vRkcPn91ZMDuy_-OAGuy61cSC4l-6w21U9DSaKPiW0qP07hxROrtFLM1sATEARhP8KxZAxGG_G6VHY42x0ghz_k6JgtK2ONsYxJTsI-ASu43EH13T9zI_y3003__m00
+# http://www.plantuml.com/plantuml/uml/N9DFZzCm4CNl_XHMJd08QFV80MreXwr5cvGu6u6457dzPpSYZSl4GKAetntPRkk6azzxypgo_6iU9YVGpOU13DeuwYp5_kNLKTMZbgwt8v7sSBIZ7XsTx8nIJ_GlUVEMhg7rHxNd_jX0iMqsNl6cgej7218uPrKP2lphjkEh3UmAxvuur5snth7IkttDMhQ5HuXDA3bhM0jTiLe1l_uQli7gelTGVxveLZPGbqKA6zZ23fhwkpTVscxDU5EpJqyDgqeY1pihEZaKVwYOQ1RKZr4ZMfmoSYA_PZrhEZcb4OaKgEZpR8p6-r2FEek3OzVTXTHOF0ZtGQ9wpd_VPqIWwusGZff-2Ez5ZHsKHfgzLzg8UN2vwZ7pWr2X9kwHLlv4A-Jhky6-P9TXl4kGYr8U1-VkYPp86bgQvn_3nKYrvyb4FicVATq4PrOtoPLOoXAtb2LwjzkM39TRFSbbuj4jamNLDBgoJT5_XDCWuF7k391SGFhCt97u9_0clJ1vqAFoNyE_0000__y0
 
 # Capture everything to one file with sync and warnings only to stderr.
 yaml only-channels=DEV,SESSIONS

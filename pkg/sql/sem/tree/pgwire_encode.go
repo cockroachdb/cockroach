@@ -7,6 +7,7 @@ package tree
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"strconv"
 	"time"
@@ -14,16 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/lib/pq/oid"
 )
-
-// spaces is a static slice of spaces used for efficient padding.
-var spaces = bytes.Repeat([]byte{' '}, system.CacheLineSize)
 
 // ResolveBlankPaddedChar pads the given string with spaces if blank padding is
 // required or returns the string unmodified otherwise.
@@ -31,15 +27,7 @@ func ResolveBlankPaddedChar(s string, t *types.T) string {
 	if t.Oid() == oid.T_bpchar && len(s) < int(t.Width()) {
 		// Pad spaces on the right of the string to make it of length specified
 		// in the type t.
-		res := make([]byte, t.Width())
-		copy(res, s)
-		pad := res[len(s):]
-		for len(pad) > len(spaces) {
-			copy(pad, spaces)
-			pad = pad[len(spaces):]
-		}
-		copy(pad, spaces)
-		return encoding.UnsafeConvertBytesToString(res)
+		return fmt.Sprintf("%-*v", t.Width(), s)
 	}
 	return s
 }

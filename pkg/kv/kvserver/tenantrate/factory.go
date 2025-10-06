@@ -97,7 +97,7 @@ func (rl *LimiterFactory) GetTenant(
 		rcLim = new(refCountedLimiter)
 		rcLim.lim.init(rl, tenantID, rl.mu.config, rl.metrics.tenantMetrics(tenantID), rl.authorizer, options...)
 		rl.mu.tenants[tenantID] = rcLim
-		log.KvDistribution.Infof(
+		log.Infof(
 			ctx, "tenant %s rate limiter initialized (rate: %g RU/s; burst: %g RU)",
 			tenantID, rl.mu.config.Rate, rl.mu.config.Burst,
 		)

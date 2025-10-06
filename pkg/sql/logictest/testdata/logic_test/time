@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 # Note that the odd '0000-01-01 hh:mi:ss +0000 UTC' result format is an
 # artifact of how pq displays TIMEs.
 
@@ -294,7 +292,7 @@ SELECT date_trunc('microsecond', time '12:01:02.345678')
 ----
 12:01:02.345678
 
-query error pgcode 22023 unsupported timespan: day
+query error pgcode 22023 date_trunc\(\): unsupported timespan: day
 SELECT date_trunc('day', time '12:01:02.345')
 
 query R
@@ -327,7 +325,7 @@ SELECT extract(epoch from time '12:00:00')
 ----
 43200
 
-query error pgcode 22023 unsupported timespan: day
+query error pgcode 22023 extract\(\): unsupported timespan: day
 SELECT extract(day from time '12:00:00')
 
 query R
@@ -340,10 +338,10 @@ SELECT extract('EPOCH' from time '12:00:00')
 ----
 43200
 
-query error pgcode 22023 unsupported timespan: day
+query error pgcode 22023 extract\(\): unsupported timespan: day
 SELECT extract('day' from time '12:00:00')
 
-query error pgcode 22023 unsupported timespan: day
+query error pgcode 22023 extract\(\): unsupported timespan: day
 SELECT extract('DAY' from time '12:00:00')
 
 subtest precision_tests

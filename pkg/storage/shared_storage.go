@@ -12,20 +12,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 )
-
-// ConfigureForSharedStorage mutates the provided Pebble options to use shared
-// storage using the provided remote storage.
-func ConfigureForSharedStorage(opts *pebble.Options, remoteStorage remote.Storage) error {
-	opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
-		"": remoteStorage,
-	})
-	opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
-	opts.Experimental.CreateOnSharedLocator = ""
-	return nil
-}
 
 // externalStorageReader implements remote.ObjectReader on top of
 // cloud.ExternalStorage..

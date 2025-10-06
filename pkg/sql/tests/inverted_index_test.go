@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const numRandomJSONs = 1000
@@ -37,14 +37,14 @@ func TestInvertedIndex(t *testing.T) {
 	db.Exec(t, "CREATE DATABASE IF NOT EXISTS test")
 	db.Exec(t, "CREATE TABLE test.jsons (i INT PRIMARY KEY, j JSONB)")
 
-	rng, _ := randutil.NewTestRand()
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	// Grab a bunch of random JSONs. We insert half before we add the inverted
 	// index and half after.
 	jsons := make([]json.JSON, numRandomJSONs)
 	for i := 0; i < numRandomJSONs; i++ {
 		var err error
-		jsons[i], err = json.Random(jsonComplexity, rng)
+		jsons[i], err = json.Random(jsonComplexity, r)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +82,7 @@ func TestInvertedIndex(t *testing.T) {
 	perm := rand.Perm(len(jsons))
 	for i := 0; i < docsToUpdate; i++ {
 		var err error
-		jsons[perm[i]], err = json.Random(jsonComplexity, rng)
+		jsons[perm[i]], err = json.Random(jsonComplexity, r)
 		if err != nil {
 			t.Fatal(err)
 		}

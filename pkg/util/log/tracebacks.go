@@ -14,7 +14,7 @@ const (
 )
 
 // Obey the GOTRACEBACK environment variable for determining which stacks to
-// output during a log.Dev.Fatal.
+// output during a log.Fatal.
 var traceback = func() int {
 	switch os.Getenv("GOTRACEBACK") {
 	case "none":
@@ -26,7 +26,7 @@ var traceback = func() int {
 	}
 }()
 
-// DisableTracebacks turns off tracebacks for log.Dev.Fatals. Returns a function
+// DisableTracebacks turns off tracebacks for log.Fatals. Returns a function
 // that sets the traceback settings back to where they were.
 // Only intended for use by tests.
 func DisableTracebacks() func() {

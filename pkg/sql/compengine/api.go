@@ -138,6 +138,6 @@ func New(queryIter QueryIterFn, methods []Method, offset int, input string) Engi
 		compMethods: methods,
 	}
 
-	// log.Dev.Warningf(context.Background(), "COMPLETIONS qPos %d tokIdx %d\ntokens: %#v\nsketch: %q", c.queryPos, c.queryTokIdx, c.tokens, c.sketch)
+	// log.Warningf(context.Background(), "COMPLETIONS qPos %d tokIdx %d\ntokens: %#v\nsketch: %q", c.queryPos, c.queryTokIdx, c.tokens, c.sketch)
 	return c
 }

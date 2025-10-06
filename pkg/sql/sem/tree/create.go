@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -234,7 +233,7 @@ type CreateIndex struct {
 	Name        Name
 	Table       TableName
 	Unique      bool
-	Type        idxtype.T
+	Inverted    bool
 	IfNotExists bool
 	Columns     IndexElemList
 	Sharded     *ShardedIndexDef
@@ -257,11 +256,8 @@ func (node *CreateIndex) Format(ctx *FmtCtx) {
 	if node.Unique {
 		ctx.WriteString("UNIQUE ")
 	}
-	switch node.Type {
-	case idxtype.INVERTED:
+	if node.Inverted {
 		ctx.WriteString("INVERTED ")
-	case idxtype.VECTOR:
-		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")
 	if node.Concurrently {
@@ -370,7 +366,7 @@ type CreateType struct {
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
 	EnumLabels EnumValueList
-	// CompositeTypeList is set when this represents a CREATE TYPE ... AS ( )
+	// CompositeTypeList is set when this repesnets a CREATE TYPE ... AS ( )
 	// statement.
 	CompositeTypeList []CompositeTypeElem
 	// IfNotExists is true if IF NOT EXISTS was requested.
@@ -1034,7 +1030,7 @@ type IndexTableDef struct {
 	Columns          IndexElemList
 	Sharded          *ShardedIndexDef
 	Storing          NameList
-	Type             idxtype.T
+	Inverted         bool
 	PartitionByIndex *PartitionByIndex
 	StorageParams    StorageParams
 	Predicate        Expr
@@ -1043,11 +1039,8 @@ type IndexTableDef struct {
 
 // Format implements the NodeFormatter interface.
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
-	switch node.Type {
-	case idxtype.INVERTED:
+	if node.Inverted {
 		ctx.WriteString("INVERTED ")
-	case idxtype.VECTOR:
-		ctx.WriteString("VECTOR ")
 	}
 	ctx.WriteString("INDEX ")
 	if node.Name != "" {
@@ -1581,17 +1574,10 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 			ctx.FormatNode(&node.StorageParams)
 			ctx.WriteByte(')')
 		}
-	}
-	switch node.OnCommit {
-	case CreateTableOnCommitUnset:
-	case CreateTableOnCommitPreserveRows:
-		ctx.WriteString(" ON COMMIT PRESERVE ROWS")
-	default:
-		panic(errors.AssertionFailedf("unexpected CreateTableOnCommitSetting: %d", node.OnCommit))
-	}
-	if node.Locality != nil {
-		ctx.WriteString(" ")
-		ctx.FormatNode(node.Locality)
+		if node.Locality != nil {
+			ctx.WriteString(" ")
+			ctx.FormatNode(node.Locality)
+		}
 	}
 }
 
@@ -1719,7 +1705,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(option.AsIntegerType.SQLString())
 		case SeqOptCycle, SeqOptNoCycle:
 			ctx.WriteString(option.Name)
-		case SeqOptCacheNode, SeqOptCacheSession:
+		case SeqOptCache, SeqOptCacheNode:
 			ctx.WriteString(option.Name)
 			ctx.WriteByte(' ')
 			// TODO(knz): replace all this with ctx.FormatNode if/when
@@ -1816,18 +1802,18 @@ type SequenceOption struct {
 
 // Names of options on CREATE SEQUENCE.
 const (
-	SeqOptAs           = "AS"
-	SeqOptCycle        = "CYCLE"
-	SeqOptNoCycle      = "NO CYCLE"
-	SeqOptOwnedBy      = "OWNED BY"
-	SeqOptCacheNode    = "PER NODE CACHE"
-	SeqOptCacheSession = "PER SESSION CACHE"
-	SeqOptIncrement    = "INCREMENT"
-	SeqOptMinValue     = "MINVALUE"
-	SeqOptMaxValue     = "MAXVALUE"
-	SeqOptStart        = "START"
-	SeqOptRestart      = "RESTART"
-	SeqOptVirtual      = "VIRTUAL"
+	SeqOptAs        = "AS"
+	SeqOptCycle     = "CYCLE"
+	SeqOptNoCycle   = "NO CYCLE"
+	SeqOptOwnedBy   = "OWNED BY"
+	SeqOptCache     = "CACHE"
+	SeqOptCacheNode = "PER NODE CACHE"
+	SeqOptIncrement = "INCREMENT"
+	SeqOptMinValue  = "MINVALUE"
+	SeqOptMaxValue  = "MAXVALUE"
+	SeqOptStart     = "START"
+	SeqOptRestart   = "RESTART"
+	SeqOptVirtual   = "VIRTUAL"
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs
@@ -1960,28 +1946,6 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	}
 }
 
-// ViewOptions represents options for CREATE VIEW statements.
-type ViewOptions struct {
-	SecurityInvoker bool
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ViewOptions) Format(ctx *FmtCtx) {
-	if node.SecurityInvoker {
-		ctx.WriteString("security_invoker = true")
-	} else {
-		ctx.WriteString("security_invoker = false")
-	}
-}
-
-func (node *ViewOptions) doc(p *PrettyCfg) pretty.Doc {
-	if node.SecurityInvoker {
-		return pretty.Text("security_invoker = true")
-	} else {
-		return pretty.Text("security_invoker = false")
-	}
-}
-
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name         TableName
@@ -1989,7 +1953,6 @@ type CreateView struct {
 	AsSource     *Select
 	IfNotExists  bool
 	Persistence  Persistence
-	Options      *ViewOptions
 	Replace      bool
 	Materialized bool
 	WithData     bool
@@ -2025,12 +1988,6 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteByte(')')
 	}
 
-	if node.Options != nil {
-		ctx.WriteString(` WITH ( `)
-		ctx.FormatNode(node.Options)
-		ctx.WriteString(` )`)
-	}
-
 	ctx.WriteString(" AS ")
 	ctx.FormatNode(node.AsSource)
 	if node.Materialized && node.WithData {
@@ -2045,7 +2002,6 @@ type RefreshMaterializedView struct {
 	Name              *UnresolvedObjectName
 	Concurrently      bool
 	RefreshDataOption RefreshDataOption
-	AsOf              AsOfClause
 }
 
 // RefreshDataOption corresponds to arguments for the REFRESH MATERIALIZED VIEW
@@ -2071,10 +2027,6 @@ func (node *RefreshMaterializedView) Format(ctx *FmtCtx) {
 		ctx.WriteString("CONCURRENTLY ")
 	}
 	ctx.FormatNode(node.Name)
-	if node.AsOf.Expr != nil {
-		ctx.WriteString(" ")
-		ctx.FormatNode(&node.AsOf)
-	}
 	switch node.RefreshDataOption {
 	case RefreshDataWithData:
 		ctx.WriteString(" WITH DATA")
@@ -2262,9 +2214,9 @@ type CreateTenantFromReplication struct {
 	// to use the TenantSpec type. This supports the auto-promotion
 	// of simple identifiers to strings.
 	ReplicationSourceTenantName *TenantSpec
-	// ReplicationSourceConnUri is the address of the source cluster that we are
+	// ReplicationSourceAddress is the address of the source cluster that we are
 	// replicating data from.
-	ReplicationSourceConnUri Expr
+	ReplicationSourceAddress Expr
 
 	Options TenantReplicationOptions
 }
@@ -2288,15 +2240,15 @@ func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
 	// do not contain sensitive information.
 	ctx.FormatNode(node.TenantSpec)
 
-	if node.ReplicationSourceConnUri != nil {
+	if node.ReplicationSourceAddress != nil {
 		ctx.WriteString(" FROM REPLICATION OF ")
 		ctx.FormatNode(node.ReplicationSourceTenantName)
 		ctx.WriteString(" ON ")
-		_, canOmitParentheses := node.ReplicationSourceConnUri.(alreadyDelimitedAsSyntacticDExpr)
+		_, canOmitParentheses := node.ReplicationSourceAddress.(alreadyDelimitedAsSyntacticDExpr)
 		if !canOmitParentheses {
 			ctx.WriteByte('(')
 		}
-		ctx.FormatNode(node.ReplicationSourceConnUri)
+		ctx.FormatNode(node.ReplicationSourceAddress)
 		if !canOmitParentheses {
 			ctx.WriteByte(')')
 		}

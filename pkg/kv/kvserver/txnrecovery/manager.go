@@ -330,7 +330,7 @@ func (m *manager) updateMetrics() func(*roachpb.Transaction, error) {
 				m.metrics.SuccessesAsCommitted.Inc(1)
 			case roachpb.ABORTED:
 				m.metrics.SuccessesAsAborted.Inc(1)
-			case roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING:
+			case roachpb.PENDING, roachpb.STAGING:
 				m.metrics.SuccessesAsPending.Inc(1)
 			default:
 				panic("unexpected")

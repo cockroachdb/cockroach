@@ -245,7 +245,7 @@ func lookupDescriptorID(
 	if err != nil {
 		return descpb.InvalidID, err
 	}
-	if e := c.LookupNamespaceEntry(key); e != nil {
+	if e := c.LookupNamespaceEntry(&key); e != nil {
 		return e.GetID(), nil
 	}
 	return descpb.InvalidID, nil

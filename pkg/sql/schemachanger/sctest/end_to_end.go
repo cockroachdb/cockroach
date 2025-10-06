@@ -58,7 +58,6 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
-	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 	testCaseDir := datapathutils.RewritableDataPath(t, relTestCaseDir)
@@ -133,15 +132,14 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 					sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 					sctestdeps.WithSessionData(sctestdeps.ReadSessionDataFromDB(t, tdb, func(
-						sd *sessiondata.SessionData, localData sessiondatapb.LocalOnlySessionData,
+						sd *sessiondata.SessionData,
 					) {
 						// For setting up a builder inside tests we will ensure that the new schema
 						// changer will allow non-fully implemented operations.
-						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafeAlways
+						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
 						sd.TempTablesEnabled = true
 						sd.ApplicationName = ""
 						sd.EnableUniqueWithoutIndexConstraints = true // this allows `ADD UNIQUE WITHOUT INDEX` in the testing suite.
-						sd.SerialNormalizationMode = localData.SerialNormalizationMode
 					})),
 					sctestdeps.WithTestingKnobs(&scexec.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
@@ -153,7 +151,6 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
 					sctestdeps.WithIDGenerator(s.ApplicationLayer()),
 					sctestdeps.WithReferenceProviderFactory(refFactory),
-					sctestdeps.WithClusterSettings(s.ClusterSettings()),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
 				var fileNameSuffix string

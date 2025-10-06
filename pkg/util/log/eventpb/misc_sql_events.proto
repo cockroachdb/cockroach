@@ -33,8 +33,6 @@ message SetClusterSetting {
   string setting_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The new value of the cluster setting.
   string value = 4 [(gogoproto.jsontag) = ",omitempty"];
-  // The current default value of the cluster setting.
-  string default_value = 5 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 

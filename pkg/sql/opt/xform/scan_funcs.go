@@ -39,11 +39,10 @@ import (
 func (c *CustomFuncs) GenerateIndexScans(
 	grp memo.RelExpr, required *physical.Required, scanPrivate *memo.ScanPrivate,
 ) {
-	// Iterate over all non-inverted and non-vector secondary indexes.
+	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
-	reject := rejectPrimaryIndex | rejectInvertedIndexes | rejectVectorIndexes
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, nil /* filters */, reject)
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, nil /* filters */, rejectPrimaryIndex|rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		// The iterator only produces pseudo-partial indexes (the predicate is
 		// true) because no filters are passed to iter.Init to imply a partial
@@ -505,7 +504,7 @@ func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool 
 	if !ok {
 		return false
 	}
-	table := c.e.mem.Metadata().Table(scanExpr.Table)
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
 	return table.IsRegionalByRow()
 }
 
@@ -514,7 +513,7 @@ func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool 
 // region without bounded staleness. Bounded staleness would allow local
 // replicas to be used for the scan.
 func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
-	scanExpr, inputFilters, ok := c.GetFilteredCanonicalScan(input)
+	scanExpr, inputFilters, ok := c.getfilteredCanonicalScan(input)
 	if !ok {
 		return false
 	}
@@ -524,7 +523,7 @@ func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
 	if c.e.evalCtx.BoundedStaleness() {
 		return false
 	}
-	table := c.e.mem.Metadata().Table(scanExpr.Table)
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
 	if table.IsRegionalByRow() {
 		tabMeta := c.e.mem.Metadata().TableMeta(scanExpr.Table)
 		index := table.Index(scanExpr.Index)

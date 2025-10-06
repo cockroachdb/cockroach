@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 subtest digest
 
 # NB: CockroachDB currently differs from Postgres, since the shaX functions

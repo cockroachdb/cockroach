@@ -1,3 +1,0 @@
-echo
-----
-no cpus

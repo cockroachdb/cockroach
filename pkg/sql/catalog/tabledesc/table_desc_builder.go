@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -842,10 +842,7 @@ func maybeUpgradePrimaryIndexFormatVersion(builder *tableDescriptorBuilder) (has
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
-		// If the index type does not support STORING columns, then it's not
-		// encoded differently based on whether column families are in use, so
-		// nothing to do.
-		if !idx.Type.SupportsStoring() {
+		if idx.Type == descpb.IndexDescriptor_INVERTED {
 			return false
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:
@@ -1188,7 +1185,7 @@ func maybeUpgradeSequenceReferenceForView(
 		if err != nil {
 			return false, expr, err
 		}
-		newExpr, err = parserutils.ParseExpr(newExprStr)
+		newExpr, err = parser.ParseExpr(newExprStr)
 		if err != nil {
 			return false, expr, err
 		}
@@ -1197,7 +1194,7 @@ func maybeUpgradeSequenceReferenceForView(
 		return false, newExpr, err
 	}
 
-	stmt, err := parserutils.ParseOne(viewDesc.GetViewQuery())
+	stmt, err := parser.ParseOne(viewDesc.GetViewQuery())
 	if err != nil {
 		return hasUpgraded, err
 	}

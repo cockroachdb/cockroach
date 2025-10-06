@@ -824,21 +824,11 @@ func (s *Return) WalkStmt(visitor StatementVisitor) Statement {
 
 type ReturnNext struct {
 	StatementImpl
-	Expr Expr
-}
-
-func (s *ReturnNext) CopyNode() *ReturnNext {
-	copyNode := *s
-	return &copyNode
+	Expr   Expr
+	RetVar Variable
 }
 
 func (s *ReturnNext) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("RETURN NEXT")
-	if s.Expr != nil {
-		ctx.WriteByte(' ')
-		ctx.FormatNode(s.Expr)
-	}
-	ctx.WriteString(";\n")
 }
 
 func (s *ReturnNext) PlpgSQLStatementTag() string {
@@ -846,27 +836,17 @@ func (s *ReturnNext) PlpgSQLStatementTag() string {
 }
 
 func (s *ReturnNext) WalkStmt(visitor StatementVisitor) Statement {
-	newStmt, _ := visitor.Visit(s)
-	return newStmt
+	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
 }
 
 type ReturnQuery struct {
 	StatementImpl
-	SqlStmt tree.Statement
-}
-
-func (s *ReturnQuery) CopyNode() *ReturnQuery {
-	copyNode := *s
-	return &copyNode
+	Query        Expr
+	DynamicQuery Expr
+	Params       []Expr
 }
 
 func (s *ReturnQuery) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("RETURN QUERY")
-	if s.SqlStmt != nil {
-		ctx.WriteByte(' ')
-		ctx.FormatNode(s.SqlStmt)
-	}
-	ctx.WriteString(";\n")
 }
 
 func (s *ReturnQuery) PlpgSQLStatementTag() string {
@@ -874,8 +854,7 @@ func (s *ReturnQuery) PlpgSQLStatementTag() string {
 }
 
 func (s *ReturnQuery) WalkStmt(visitor StatementVisitor) Statement {
-	newStmt, _ := visitor.Visit(s)
-	return newStmt
+	panic(unimplemented.New("plpgsql visitor", "Unimplemented PLpgSQL visitor pattern"))
 }
 
 // stmt_raise
@@ -1095,74 +1074,6 @@ func (s *Call) PlpgSQLStatementTag() string {
 
 func (s *Call) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
-	return newStmt
-}
-
-// stmt_do
-type DoBlock struct {
-	StatementImpl
-
-	// Block is the code block that defines the logic of the DO statement.
-	Block *Block
-
-	// Annotations is allocated during initial parsing of user input, and then
-	// each annotation is set by the optbuilder when the optimizer processes
-	// the DO block statements.
-	Annotations tree.Annotations
-}
-
-var _ Statement = (*DoBlock)(nil)
-var _ tree.DoBlockBody = (*DoBlock)(nil)
-
-func (s *DoBlock) Format(ctx *tree.FmtCtx) {
-	ctx.WithAnnotations(&s.Annotations, func() {
-		ctx.WriteString("DO ")
-
-		// Format the body of the DO block separately so that FormatStringDollarQuotes
-		// can examine the resulting string and determine how to quote the block.
-		bodyCtx := ctx.Clone()
-		bodyCtx.FormatNode(s.Block)
-		bodyStr := "\n" + bodyCtx.CloseAndGetString()
-
-		// Avoid replacing the entire formatted string with '_' if any redaction flags
-		// are set. They will have already been applied when the body was formatted.
-		ctx.WithoutConstantRedaction(func() {
-			ctx.FormatStringDollarQuotes(bodyStr)
-		})
-		ctx.WriteString(";\n")
-	})
-}
-
-func (s *DoBlock) IsDoBlockBody() {}
-
-func (s *DoBlock) VisitBody(v tree.Visitor) tree.DoBlockBody {
-	plVisitor := SQLStmtVisitor{Visitor: v}
-	newBlock := Walk(&plVisitor, s.Block)
-	if newBlock != s.Block {
-		return &DoBlock{Block: newBlock.(*Block)}
-	}
-	return s
-}
-
-func (s *DoBlock) CopyNode() *DoBlock {
-	copyNode := *s
-	copyNode.Block = s.Block.CopyNode()
-	return &copyNode
-}
-
-func (s *DoBlock) PlpgSQLStatementTag() string {
-	return "stmt_do"
-}
-
-func (s *DoBlock) WalkStmt(visitor StatementVisitor) Statement {
-	newStmt, _ := visitor.Visit(s)
-	newBlock := s.Block.WalkStmt(visitor)
-	if newBlock != s.Block {
-		if newStmt == s {
-			newStmt = s.CopyNode()
-		}
-		newStmt.(*DoBlock).Block = newBlock.(*Block)
-	}
 	return newStmt
 }
 

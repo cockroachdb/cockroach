@@ -8,11 +8,6 @@ package main
 import "github.com/spf13/cobra"
 
 var rootCmd = &cobra.Command{Use: "release"}
-var artifactsDir string
-
-func init() {
-	rootCmd.PersistentFlags().StringVar(&artifactsDir, "artifacts-dir", "", "artifacts directory")
-}
 
 const (
 	envSMTPUser     = "SMTP_USER"
@@ -36,6 +31,11 @@ func main() {
 }
 
 func init() {
+	rootCmd.AddCommand(pickSHACmd)
+	rootCmd.AddCommand(postReleaseSeriesBlockersCmd)
+	rootCmd.AddCommand(cancelReleaseSeriesDateCmd)
+	rootCmd.AddCommand(setOrchestrationVersionCmd)
 	rootCmd.AddCommand(updateReleasesTestFilesCmd)
+	rootCmd.AddCommand(setCockroachVersionCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
 }

@@ -114,6 +114,6 @@ func (l *streamController) Process(ctx context.Context, eventType log.EventType,
 		eventType: eventType,
 		event:     e,
 	}); err != nil {
-		log.Dev.Errorf(ctx, "error consuming exhaust: %v", err)
+		log.Errorf(ctx, "error consuming exhaust: %v", err)
 	}
 }

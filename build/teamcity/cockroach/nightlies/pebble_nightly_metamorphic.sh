@@ -19,10 +19,10 @@ source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 mkdir -p artifacts
 
 # Pull in the latest version of Pebble from upstream. The benchmarks run
-# against the tip of the 'master' branch. We do this by `go get`ting the
+# against the tip of the 'crl-release-24.3' branch. We do this by `go get`ting the
 # latest version of the module, and then running `mirror` to update `DEPS.bzl`
 # accordingly.
-bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@master
+bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@crl-release-24.3
 # Just dump the diff to see what, if anything, has changed.
 git diff
 NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
@@ -36,5 +36,3 @@ echo "Pebble module Git SHA: $PEBBLE_SHA"
 
 BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e BUILD_VCS_NUMBER=$PEBBLE_SHA -e GITHUB_API_TOKEN -e GITHUB_REPO -e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH -e TC_BUILD_ID -e TC_SERVER_URL" \
                                run_bazel build/teamcity/cockroach/nightlies/pebble_nightly_metamorphic_impl.sh
-
-du -a -h artifacts | sort -hr

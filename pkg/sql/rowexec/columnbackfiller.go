@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -61,7 +60,7 @@ func newColumnBackfiller(
 	spec execinfrapb.BackfillerSpec,
 ) (*columnBackfiller, error) {
 	columnBackfillerMon := execinfra.NewMonitor(
-		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("column-backfill-mon"),
+		ctx, flowCtx.Cfg.BackfillerMonitor, "column-backfill-mon",
 	)
 	cb := &columnBackfiller{
 		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
@@ -107,9 +106,7 @@ func (*columnBackfiller) Resume(output execinfra.RowReceiver) {
 }
 
 // Close is part of the execinfra.Processor interface.
-func (cb *columnBackfiller) Close(ctx context.Context) {
-	cb.ColumnBackfiller.Close(ctx)
-}
+func (*columnBackfiller) Close(context.Context) {}
 
 func (cb *columnBackfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	finishedSpans, err := cb.mainLoop(ctx)
@@ -235,7 +232,7 @@ func GetResumeSpans(
 	}
 
 	if jobID == 0 {
-		log.Dev.Errorf(ctx, "mutation with no job: %d, table desc: %+v", mutationID, tableDesc)
+		log.Errorf(ctx, "mutation with no job: %d, table desc: %+v", mutationID, tableDesc)
 		return nil, nil, 0, errors.AssertionFailedf(
 			"no job found for mutation %d", errors.Safe(mutationID))
 	}

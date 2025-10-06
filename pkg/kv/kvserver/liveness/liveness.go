@@ -158,9 +158,6 @@ var (
 		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
 		Measurement: "Nodes",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_REPLICATION,
-		HowToUse:    "This is a critical metric that tracks the live nodes in the cluster.",
 	}
 	metaHeartbeatsInFlight = metric.Metadata{
 		Name:        "liveness.heartbeatsinflight",
@@ -191,9 +188,6 @@ var (
 		Help:        "Node liveness heartbeat latency",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_REPLICATION,
-		HowToUse:    "If this metric exceeds 1 second, it is a sign of cluster instability.",
 	}
 )
 
@@ -395,7 +389,7 @@ func (nl *NodeLiveness) SetDraining(
 		}
 		if err := nl.setDrainingInternal(ctx, oldLivenessRec, drain, reporter); err != nil {
 			if log.V(1) {
-				log.KvExec.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
 			}
 			if grpcutil.IsConnectionRejected(err) {
 				return err
@@ -515,7 +509,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	})
 	if err != nil {
 		if log.V(1) {
-			log.KvExec.Infof(ctx, "updating liveness record: %v", err)
+			log.Infof(ctx, "updating liveness record: %v", err)
 		}
 		if errors.Is(err, errNodeDrainingSet) {
 			return nil
@@ -543,7 +537,7 @@ func (nl *NodeLiveness) cacheUpdated(old livenesspb.Liveness, new livenesspb.Liv
 		nl.onNodeDecommissioning(new.NodeID)
 	}
 	if log.V(2) {
-		log.KvExec.Infof(nl.ambientCtx.AnnotateCtx(context.Background()), "received liveness update: %s", new)
+		log.Infof(nl.ambientCtx.AnnotateCtx(context.Background()), "received liveness update: %s", new)
 	}
 }
 
@@ -612,7 +606,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting node liveness instance")
 	if nl.started.Load() {
 		// This is meant to prevent tests from calling start twice.
-		log.KvExec.Fatal(ctx, "liveness already started")
+		log.Fatal(ctx, "liveness already started")
 	}
 
 	retryOpts := base.DefaultRetryOptions()
@@ -650,7 +644,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 							nodeID := nl.cache.selfID()
 							liveness, err := nl.getLivenessRecordFromKV(ctx, nodeID)
 							if err != nil {
-								log.KvExec.Infof(ctx, "unable to get liveness record from KV: %s", err)
+								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
 								if grpcutil.IsConnectionRejected(err) {
 									return err
 								}
@@ -660,7 +654,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 						}
 						if err := nl.heartbeatInternal(ctx, oldLiveness, incrementEpoch); err != nil {
 							if errors.Is(err, ErrEpochIncremented) {
-								log.KvExec.Infof(ctx, "%s; retrying", err)
+								log.Infof(ctx, "%s; retrying", err)
 								continue
 							}
 							return err
@@ -670,7 +664,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 					}
 					return nil
 				}); err != nil {
-				log.KvExec.Warningf(ctx, heartbeatFailureLogFormat, err)
+				log.Warningf(ctx, heartbeatFailureLogFormat, err)
 			} else if nl.onSelfHeartbeat != nil {
 				nl.onSelfHeartbeat(ctx)
 			}
@@ -756,7 +750,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		dur := timeutil.Since(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		if dur > time.Second {
-			log.KvExec.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
+			log.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
 		}
 	}(timeutil.Now())
 
@@ -1018,7 +1012,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		return err
 	}
 
-	log.KvExec.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
+	log.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
 	nl.cache.maybeUpdate(ctx, written)
 	nl.metrics.EpochIncrements.Inc()
 	return nil
@@ -1070,7 +1064,7 @@ func (nl *NodeLiveness) updateLiveness(
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
-				log.KvExec.Infof(ctx, "retrying liveness update after %s", err)
+				log.Infof(ctx, "retrying liveness update after %s", err)
 				continue
 			}
 			return Record{}, err

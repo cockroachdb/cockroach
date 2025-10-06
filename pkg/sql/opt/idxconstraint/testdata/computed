@@ -92,40 +92,6 @@ index-constraints vars=(a int, b int, c int as (a+5) stored) index=(a, c)
 [/3/8 - /3/8]
 [/5/10 - /5/10]
 
-# A computed column not in the 1st index position can derive a predicate.
-index-constraints vars=(a int, b int, c int as (a+5) stored) index=(a, c, b)
-a = 3 OR (a = 5 AND b > 0)
-----
-[/3/8 - /3/8]
-[/5/10/1 - /5/10]
-
-index-constraints vars=(a int, b int, c int as (a+5) stored) index=(c, a, b)
-(a = 3 OR a = 5) AND b > 0
-----
-[/8/3/1 - /8/3]
-[/10/5/1 - /10/5]
-
-index-constraints vars=(a int, b int, c int as (a+5) stored) index=(a, c, b)
-(a = 3 OR a = 5) AND b > 0
-----
-[/3/8/1 - /3/8]
-[/5/10/1 - /5/10]
-
-# A computed column not in the 1st index position can derive a predicate.
-index-constraints vars=(a int, b int as (a+1) virtual, c int as (b+5) stored) index=(c)
-a = 3 OR a = 5
-----
-[/9 - /9]
-[/11 - /11]
-Remaining filter: (a = 3) OR (a = 5)
-
-index-constraints vars=(a int, b int, c int as (b+5) stored) index=(a, c)
-a = 1 AND (b = 10 OR b = 20)
-----
-[/1/15 - /1/15]
-[/1/25 - /1/25]
-Remaining filter: (b = 10) OR (b = 20)
-
 # We don't derive a predicate for non-single-key cases.
 index-constraints vars=(a int, b int, c int as (a+b) stored) index=(a, c)
 (a=3 AND b=4) OR (a >= 3 AND b=6)

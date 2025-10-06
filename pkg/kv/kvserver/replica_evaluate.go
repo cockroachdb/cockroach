@@ -9,9 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"runtime/trace"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -31,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/kr/pretty"
 )
 
@@ -84,6 +81,10 @@ func optimizePuts(
 			if maybeAddPut(t.Key) {
 				continue
 			}
+		case *kvpb.InitPutRequest:
+			if maybeAddPut(t.Key) {
+				continue
+			}
 		}
 		firstUnoptimizedIndex = i
 		break
@@ -116,59 +117,11 @@ func optimizePuts(
 	if ok, err := iter.Valid(); err != nil {
 		// TODO(bdarnell): return an error here instead of silently
 		// running without the optimization?
-		log.KvExec.Errorf(ctx, "Seek returned error; disabling blind-put optimization: %+v", err)
+		log.Errorf(context.TODO(), "Seek returned error; disabling blind-put optimization: %+v", err)
 		return origReqs, nil
 	} else if ok && bytes.Compare(iter.UnsafeKey().Key, maxKey) <= 0 {
 		iterKey = iter.UnsafeKey().Key.Clone()
 	}
-
-	if lock.LockNonExistentKeys {
-		ltStart, _ := keys.LockTableSingleKey(minKey, nil)
-
-		// If we already have an iterKey, we only need to know if there is an even
-		// earlier key that is locked,
-		var ltEnd roachpb.Key
-		if iterKey != nil {
-			ltEnd, _ = keys.LockTableSingleKey(iterKey.Next(), nil)
-		} else {
-			ltEnd, _ = keys.LockTableSingleKey(maxKey.Next(), nil)
-		}
-
-		ltIter, err := storage.NewLockTableIterator(ctx, reader,
-			storage.LockTableIteratorOptions{
-				LowerBound:  ltStart,
-				UpperBound:  ltEnd,
-				MatchMinStr: lock.Exclusive,
-			})
-		if err != nil {
-			return nil, err
-		}
-		defer ltIter.Close()
-
-		if valid, err := ltIter.SeekEngineKeyGE(storage.EngineKey{Key: ltStart}); err != nil {
-			log.KvExec.Errorf(ctx, "SeekEngineKeyGE error; disabling blind-put optimization: %+v", err)
-			return origReqs, nil
-		} else if valid {
-			engineKey, err := ltIter.EngineKey()
-			if err != nil {
-				log.KvExec.Errorf(ctx, "EngineKey error; disabling blind-put optimization: %+v", err)
-				return origReqs, nil
-			}
-			ltKey, err := engineKey.ToLockTableKey()
-			if err != nil {
-				log.KvExec.Errorf(ctx, "ToLockTableKey error; disabling blind-put optimization: %+v", err)
-				return origReqs, nil
-			}
-			if bytes.Compare(ltKey.Key, maxKey) <= 0 &&
-				(iterKey == nil || bytes.Compare(ltKey.Key, iterKey) < 0) {
-				iterKey = ltKey.Key.Clone()
-			}
-		}
-		// If !valid, we know there are existing locks in the lock table for iterKey
-		// (or any key before it), so it is still the correct key to stop blind
-		// writing at.
-	}
-
 	// Set the prefix of the run which is being written to virgin
 	// keyspace to "blindly" put values.
 	reqs := append([]kvpb.RequestUnion(nil), origReqs...)
@@ -184,8 +137,12 @@ func optimizePuts(
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
+			case *kvpb.InitPutRequest:
+				shallow := *t
+				shallow.Blind = true
+				reqs[i].MustSetInner(&shallow)
 			default:
-				log.KvExec.Fatalf(ctx, "unexpected non-put request: %s", t)
+				log.Fatalf(context.TODO(), "unexpected non-put request: %s", t)
 			}
 		}
 	}
@@ -208,6 +165,15 @@ func evaluateBatch(
 	evalPath batchEvalPath,
 	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
+	defer func() {
+		// Ensure that errors don't carry the WriteTooOld flag set. The client
+		// handles non-error responses with the WriteTooOld flag set, and errors
+		// with this flag set confuse it.
+		if retErr != nil && retErr.GetTxn() != nil {
+			retErr.GetTxn().WriteTooOld = false
+		}
+	}()
+
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
 
@@ -240,10 +206,6 @@ func evaluateBatch(
 		// transactions on reads). Note that 1PC transactions have had their
 		// transaction field cleared by this point so we do not execute this
 		// check in that case.
-		//
-		// TODO(arul): this check assumes lock == Intent, which isn't true any
-		// longer. We could optimize this by making a distinction between locks
-		// acquired and previous writes performed.
 		if baHeader.Txn.IsLocking() {
 			// We don't check the abort span for a couple of special requests:
 			// - if the request is asking to abort the transaction, then don't check the
@@ -251,17 +213,9 @@ func evaluateBatch(
 			// has already been aborted.
 			// - heartbeats don't check the abort span. If the txn is aborted, they'll
 			// return an aborted proto in their otherwise successful response.
-			// - if the request belongs to a transaction that has buffered all
-			// preceding writes on the client, we don't rely on the AbortSpan to
-			// correctly uphold read-your-own-write semantics.
-			//
 			// TODO(nvanbenschoten): Let's remove heartbeats from this allowlist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
-			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() &&
-				!ba.HasBufferedAllPrecedingWrites {
-				if fn := rec.EvalKnobs().BeforeAbortSpanCheck; fn != nil {
-					fn(ba.Txn.ID)
-				}
+			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
@@ -321,20 +275,19 @@ func evaluateBatch(
 		// If a unittest filter was installed, check for an injected error; otherwise, continue.
 		if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:          ctx,
-				CmdID:        idKey,
-				Index:        index,
-				Sid:          rec.StoreID(),
-				Req:          args,
-				Version:      rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
-				Hdr:          baHeader,
-				AdmissionHdr: ba.AdmissionHeader,
+				Ctx:     ctx,
+				CmdID:   idKey,
+				Index:   index,
+				Sid:     rec.StoreID(),
+				Req:     args,
+				Version: rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
+				Hdr:     baHeader,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
 					pErr.SetTxn(baHeader.Txn)
 				}
-				log.KvExec.Infof(ctx, "test injecting error: %s", pErr)
+				log.Infof(ctx, "test injecting error: %s", pErr)
 				return nil, result.Result{}, pErr
 			}
 		}
@@ -348,34 +301,25 @@ func evaluateBatch(
 		// Note that `reply` is populated even when an error is returned: it
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
-		var reg *trace.Region
-		if trace.IsEnabled() {
-			regName := args.Method().String() // NB: this is cheap, no allocs
-			reg = trace.StartRegion(ctx, regName)
-		}
 		curResult, err := evaluateCommand(
 			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
 		)
-		if reg != nil {
-			reg.End()
-		}
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:          ctx,
-				CmdID:        idKey,
-				Index:        index,
-				Sid:          rec.StoreID(),
-				Req:          args,
-				Hdr:          baHeader,
-				AdmissionHdr: ba.AdmissionHeader,
-				Err:          err,
+				Ctx:   ctx,
+				CmdID: idKey,
+				Index: index,
+				Sid:   rec.StoreID(),
+				Req:   args,
+				Hdr:   baHeader,
+				Err:   err,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
 					pErr.SetTxn(baHeader.Txn)
 				}
-				log.KvExec.Infof(ctx, "test injecting error: %s", pErr)
+				log.Infof(ctx, "test injecting error: %s", pErr)
 				return nil, result.Result{}, pErr
 			}
 		}
@@ -395,7 +339,7 @@ func evaluateBatch(
 		//
 		// TODO(tbg): find out if that's true and why and improve the comment.
 		if err := mergedResult.MergeAndDestroy(curResult); err != nil {
-			log.KvExec.Fatalf(
+			log.Fatalf(
 				ctx,
 				"unable to absorb Result: %s\ndiff(new, old): %s",
 				err, pretty.Diff(curResult, mergedResult),
@@ -488,7 +432,7 @@ func evaluateBatch(
 		// we had an EndTxn that decided that it can refresh to something higher
 		// than baHeader.Timestamp because there were no refresh spans.
 		if br.Txn.ReadTimestamp.Less(baHeader.Timestamp) {
-			log.KvExec.Fatalf(ctx, "br.Txn.ReadTimestamp < ba.Timestamp (%s < %s). ba: %s",
+			log.Fatalf(ctx, "br.Txn.ReadTimestamp < ba.Timestamp (%s < %s). ba: %s",
 				br.Txn.ReadTimestamp, baHeader.Timestamp, ba)
 		}
 		br.Timestamp = br.Txn.ReadTimestamp
@@ -567,15 +511,6 @@ func evaluateCommand(
 		log.VEventf(ctx, 2, "evaluated %s command %s, txn=%v : resp=%s, err=%v",
 			args.Method(), trunc(args.String()), h.Txn, resp, err)
 	}
-
-	// If there is a pebble data corruption error, we want to serialize it by
-	// returning the KV error PebbleCorruptionError. This way, the error can be
-	// extracted by KV clients.
-	if err != nil {
-		if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
-			err = kvpb.NewPebbleCorruptionError(rec.StoreID(), info)
-		}
-	}
 	return pd, err
 }
 
@@ -609,14 +544,14 @@ func canDoServersideRetry(
 	deadline hlc.Timestamp,
 ) (*kvpb.BatchRequest, bool) {
 	if pErr == nil {
-		log.KvExec.Fatalf(ctx, "canDoServersideRetry called without error")
+		log.Fatalf(ctx, "canDoServersideRetry called without error")
 	}
 	if ba.Txn != nil {
 		if !ba.CanForwardReadTimestamp {
 			return ba, false
 		}
 		if !deadline.IsEmpty() {
-			log.KvExec.Fatal(ctx, "deadline passed for transactional request")
+			log.Fatal(ctx, "deadline passed for transactional request")
 		}
 		if etArg, ok := ba.GetArg(kvpb.EndTxn); ok {
 			et := etArg.(*kvpb.EndTxnRequest)

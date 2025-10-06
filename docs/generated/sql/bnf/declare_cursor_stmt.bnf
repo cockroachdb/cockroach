@@ -1,4 +1,2 @@
 declare_cursor_stmt ::=
-	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' 'WITH' 'HOLD' for_with_lookahead_variants select_stmt
-	| 'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' 'WITHOUT' 'HOLD' for_with_lookahead_variants select_stmt
-	| 'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR'  for_with_lookahead_variants select_stmt
+	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' opt_hold 'FOR' select_stmt

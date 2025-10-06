@@ -150,7 +150,7 @@ CREATE TABLE t_not_valid_dst (i INT PRIMARY KEY, j INT, c CHAR);
 statement ok
 CREATE SEQUENCE t_not_valid_sq;
 
-statement ok
+statement ok;
 ALTER TABLE t_not_valid_dst ADD CONSTRAINT v_fk FOREIGN KEY(j) REFERENCES t_not_valid_src(i) NOT VALID;
 
 statement ok
@@ -159,7 +159,7 @@ ALTER TABLE t_not_valid_dst ADD CHECK (j > currval('t_not_valid_sq')) NOT VALID;
 statement ok
 DROP TABLE t_not_valid_src CASCADE;
 
-statement ok
+statement ok;
 DROP SEQUENCE t_not_valid_sq CASCADE;
 
 # Sequence related check constraint should be cleaned, so inserts should work.

@@ -9,12 +9,6 @@
 # This script runs microbenchmarks across a roachprod cluster. It will build microbenchmark binaries
 # for the given revisions if they do not already exist in the BENCH_BUCKET. It will then create a
 # roachprod cluster, stage the binaries on the cluster, and run the microbenchmarks.
-# Acceptable values for a revision:
-#   - A branch name (e.g. master, release-23.2)
-#   - A tag name (e.g. v21.1.0)
-#   - A full commit SHA (e.g. 0123456789abcdef0123456789abcdef01234567)
-#   - LATEST_PATCH_RELEASE, which will use the latest patch release tag (e.g. vX.Y.Z)
-#
 # Parameters (and suggested defaults):
 #   BENCH_REVISION: revision to build and run benchmarks against (default: master)
 #   BENCH_COMPARE_REVISION: revision to compare against (default: latest release branch)
@@ -44,41 +38,6 @@ remote_dir="/mnt/data1"
 benchmarks_commit=$(git rev-parse HEAD)
 exit_status=0
 
-# Check if a string is a valid SHA (otherwise it's a branch or tag name).
-is_sha() {
-  local sha="$1"
-  [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
-}
-
-get_latest_patch_tag() {
-  local latest_tag
-  latest_tag=$(git tag -l 'v*' \
-    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-    | sort -t. -k1,1 -k2,2n -k3,3n \
-    | tail -n 1)
-  echo "$latest_tag"
-}
-
-# Create arrays for the revisions and their corresponding SHAs.
-revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
-declare -a sha_arr
-declare -a name_arr
-for rev in "${revisions[@]}"; do
-  if [ "$rev" == "LATEST_PATCH_RELEASE" ]; then
-    git fetch origin --tags
-    rev=$(get_latest_patch_tag)
-  fi
-  if is_sha "$rev"; then
-    sha="$rev"
-    name="${sha:0:8}"
-  else
-    sha=$(git ls-remote origin "$rev" | awk '{print $1}')
-    name="$rev (${sha:0:8})"
-  fi
-  name_arr+=("$name")
-  sha_arr+=("$sha")
-done
-
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
@@ -100,6 +59,29 @@ cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 cp $BAZEL_BIN/pkg/cmd/roachprod-microbench/roachprod-microbench_/roachprod-microbench bin
 chmod a+w bin/roachprod bin/roachprod-microbench
 EOF
+
+# Check if a string is a valid SHA (otherwise it's a branch name).
+is_sha() {
+  local sha="$1"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+}
+
+# Create arrays for the revisions and their corresponding SHAs.
+revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
+declare -a sha_arr
+declare -a name_arr
+for rev in "${revisions[@]}"; do
+  git fetch origin "$rev"
+  if is_sha "$rev"; then
+    sha="$rev"
+    name="${sha:0:8}"
+  else
+    sha=$(git rev-parse origin/"$rev")
+    name="$rev (${sha:0:8})"
+  fi
+  name_arr+=("$name")
+  sha_arr+=("$sha")
+done
 
 # Check if the baseline cache exists and copy it to the output directory.
 baseline_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[1]}"
@@ -139,13 +121,6 @@ for sha in "${build_sha_arr[@]}"; do
   ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$remote_dir/$sha"
 done
 
-# Post issues to github for triggered builds (triggered builds are always on master)
-if [ -n "${TRIGGERED_BUILD:-}" ]; then
-  export GITHUB_BRANCH="master"
-  export GITHUB_SHA="${build_sha_arr[0]}"
-  export GITHUB_BINARY="experiment"
-fi
-
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
   --binaries experiment="$remote_dir/${build_sha_arr[0]}" \
@@ -156,7 +131,6 @@ fi
   ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
   ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
   ${BENCH_IGNORE_PACKAGES:+--ignore-package="$BENCH_IGNORE_PACKAGES"} \
-  ${TRIGGERED_BUILD:+--post-issues} \
   --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?

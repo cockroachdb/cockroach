@@ -8,7 +8,7 @@ import {
   InsightType,
   recommendDropUnusedIndex,
 } from "../insights";
-import { HexStringToInt64String, useSwrWithClusterId } from "../util";
+import { HexStringToInt64String, indexUnusedDuration } from "../util";
 
 import { QuoteIdentifier } from "./safesql";
 import {
@@ -56,7 +56,7 @@ type SchemaInsightResponse =
   | CreateIndexRecommendationsResponse;
 type SchemaInsightQuery<RowType> = {
   name: InsightType;
-  query: string | (() => string);
+  query: string | ((csIndexUnusedDuration: string) => string);
   toSchemaInsight: (response: SqlTxnResult<RowType>) => InsightRecommendation[];
 };
 
@@ -142,7 +142,8 @@ function createIndexRecommendationsToSchemaInsight(
 // and want to return the most used ones as a priority.
 const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
   name: "DropIndex",
-  query: () => {
+  query: (csIndexUnusedDuration: string) => {
+    csIndexUnusedDuration = csIndexUnusedDuration ?? indexUnusedDuration;
     return `SELECT * FROM (SELECT us.table_id,
                           us.index_id,
                           us.last_read,
@@ -153,16 +154,14 @@ const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
                           t.parent_id as database_id,
                           t.database_name,
                           t.schema_name,
-                          cs.value as unused_threshold,
-                          cs.value::interval as interval_threshold, 
+                          '${csIndexUnusedDuration}' as unused_threshold,
+                          '${csIndexUnusedDuration}'::interval as interval_threshold, 
                           now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                    FROM "".crdb_internal.index_usage_statistics AS us
                             JOIN "".crdb_internal.table_indexes as ti
                                  ON us.index_id = ti.index_id AND us.table_id = ti.descriptor_id
                             JOIN "".crdb_internal.tables as t
                                  ON t.table_id = ti.descriptor_id and t.name = ti.descriptor_name
-                            JOIN "".crdb_internal.cluster_settings cs
-                                 ON cs.variable = 'sql.index_recommendation.drop_unused_duration'
                    WHERE t.database_name != 'system' AND ti.is_unique IS false)
           WHERE unused_interval > interval_threshold
           ORDER BY total_reads DESC;`;
@@ -209,21 +208,24 @@ const schemaInsightQueries: Array<
   | SchemaInsightQuery<CreateIndexRecommendationsResponse>
 > = [dropUnusedIndexQuery, createIndexRecommendationsQuery];
 
-function getQuery(query: string | (() => string)): string {
+function getQuery(
+  csIndexUnusedDuration: string,
+  query: string | ((csIndexUnusedDuration: string) => string),
+): string {
   if (typeof query == "string") {
     return query;
   }
-  return query();
+  return query(csIndexUnusedDuration);
 }
 
 // getSchemaInsights makes requests over the SQL API and transforms the corresponding
 // SQL responses into schema insights.
-export async function getSchemaInsights(): Promise<
-  SqlApiResponse<InsightRecommendation[]>
-> {
+export async function getSchemaInsights(
+  params: SchemaInsightReqParams,
+): Promise<SqlApiResponse<InsightRecommendation[]>> {
   const request: SqlExecutionRequest = {
     statements: schemaInsightQueries.map(insightQuery => ({
-      sql: getQuery(insightQuery.query),
+      sql: getQuery(params.csIndexUnusedDuration, insightQuery.query),
     })),
     execute: true,
     max_result_size: LARGE_RESULT_SIZE,
@@ -253,18 +255,5 @@ export async function getSchemaInsights(): Promise<
     results,
     result.error,
     "retrieving insights information",
-  );
-}
-
-export function useSchemaInsights() {
-  return useSwrWithClusterId<SqlApiResponse<InsightRecommendation[]>>(
-    "getInsightRecommendations",
-    () => {
-      return getSchemaInsights();
-    },
-    {
-      // Refresh every 1 minute.
-      refreshInterval: 60 * 1_000,
-    },
   );
 }

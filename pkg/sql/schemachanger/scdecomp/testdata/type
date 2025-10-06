@@ -184,7 +184,6 @@ ElementState:
     expr: x'80':::@100104
     referencedColumnIds: []
     tableId: 108
-    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
@@ -196,7 +195,6 @@ ElementState:
     expr: x'80':::@100106
     referencedColumnIds: []
     tableId: 108
-    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds:
@@ -267,7 +265,6 @@ ElementState:
     closedTypeIds:
     - 104
     - 105
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 2
     computeExpr: null
     elementCreationMetadata:
@@ -300,7 +297,6 @@ ElementState:
     closedTypeIds:
     - 104
     - 105
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4
     computeExpr: null
     elementCreationMetadata:
@@ -329,7 +325,7 @@ ElementState:
         visibleType: 0
         width: 0
       arrayDimensions: []
-      arrayElemType: null
+      arrayElemType: EnumFamily
       family: ArrayFamily
       geoMetadata: null
       intervalDurationField: null
@@ -348,7 +344,6 @@ ElementState:
     closedTypeIds:
     - 106
     - 107
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 3
     computeExpr: null
     elementCreationMetadata:
@@ -379,7 +374,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 1
     computeExpr: null
     elementCreationMetadata:
@@ -409,7 +403,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
     computeExpr: null
     elementCreationMetadata:
@@ -439,7 +432,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
     computeExpr: null
     elementCreationMetadata:
@@ -469,7 +461,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
     computeExpr: null
     elementCreationMetadata:
@@ -499,7 +490,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
     computeExpr: null
     elementCreationMetadata:
@@ -529,7 +519,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 5
     computeExpr: null
     elementCreationMetadata:
@@ -669,8 +658,6 @@ ElementState:
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
-    type: FORWARD
-    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 108
@@ -680,7 +667,6 @@ ElementState:
     constraintId: 0
     expr: g::STRING = 'hi':::STRING
     geoConfig: null
-    hideForPrimaryKeyRecreated: false
     indexId: 2
     invisibility: 0
     isConcurrently: false
@@ -689,18 +675,15 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
-    recreateTargetId: 0
     referencedColumnIds:
     - 2
     sharding: null
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
-    type: FORWARD
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
-    vecConfig: null
   Status: PUBLIC
 - Table:
     isTemporary: false
@@ -708,9 +691,6 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 100
-    tableId: 108
-  Status: PUBLIC
-- TableSchemaLocked:
     tableId: 108
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
@@ -982,7 +962,6 @@ ElementState:
     expr: (3:::INT8, 'foo':::STRING)
     referencedColumnIds: []
     tableId: 111
-    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -992,7 +971,6 @@ ElementState:
     expr: (4:::INT8, 'foo':::STRING)
     referencedColumnIds: []
     tableId: 111
-    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -1003,7 +981,6 @@ ElementState:
     referencedColumnIds:
     - 2
     tableId: 111
-    usage: REGULAR
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
@@ -1082,7 +1059,6 @@ ElementState:
     closedTypeIds:
     - 109
     - 110
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 3
     computeExpr: null
     elementCreationMetadata:
@@ -1143,7 +1119,7 @@ ElementState:
         visibleType: 0
         width: 0
       arrayDimensions: []
-      arrayElemType: null
+      arrayElemType: TupleFamily
       family: ArrayFamily
       geoMetadata: null
       intervalDurationField: null
@@ -1161,7 +1137,6 @@ ElementState:
 - ColumnType:
     closedTypeIds:
     - 109
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 2
     computeExpr: null
     elementCreationMetadata:
@@ -1225,7 +1200,6 @@ ElementState:
 - ColumnType:
     closedTypeIds:
     - 109
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4
     computeExpr: null
     elementCreationMetadata:
@@ -1289,7 +1263,6 @@ ElementState:
 - ColumnType:
     closedTypeIds:
     - 109
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 5
     computeExpr: null
     elementCreationMetadata:
@@ -1352,7 +1325,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 1
     computeExpr: null
     elementCreationMetadata:
@@ -1382,7 +1354,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
     computeExpr: null
     elementCreationMetadata:
@@ -1412,7 +1383,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
     computeExpr: null
     elementCreationMetadata:
@@ -1442,7 +1412,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
     computeExpr: null
     elementCreationMetadata:
@@ -1472,7 +1441,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
     computeExpr: null
     elementCreationMetadata:
@@ -1502,7 +1470,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 6
     computeExpr: null
     elementCreationMetadata:
@@ -1532,7 +1499,6 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds: []
-    columnFamilyOrderFollowsColumnId: 0
     columnId: 7
     computeExpr: null
     elementCreationMetadata:
@@ -1677,8 +1643,6 @@ ElementState:
     sourceIndexId: 0
     tableId: 111
     temporaryIndexId: 0
-    type: FORWARD
-    vecConfig: null
   Status: PUBLIC
 - SchemaChild:
     childObjectId: 111
@@ -1688,7 +1652,6 @@ ElementState:
     constraintId: 0
     expr: (c).a = 3:::INT8
     geoConfig: null
-    hideForPrimaryKeyRecreated: false
     indexId: 2
     invisibility: 0
     isConcurrently: false
@@ -1697,18 +1660,15 @@ ElementState:
     isNotVisible: false
     isUnique: false
     recreateSourceId: 0
-    recreateTargetId: 0
     referencedColumnIds:
     - 2
     sharding: null
     sourceIndexId: 0
     tableId: 111
     temporaryIndexId: 0
-    type: FORWARD
     usesFunctionIds: []
     usesSequenceIds: []
     usesTypeIds: []
-    vecConfig: null
   Status: PUBLIC
 - Table:
     isTemporary: false
@@ -1716,9 +1676,6 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 100
-    tableId: 111
-  Status: PUBLIC
-- TableSchemaLocked:
     tableId: 111
   Status: PUBLIC
 - UserPrivileges:

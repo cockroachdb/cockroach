@@ -35,7 +35,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/76>  …/1/1         {1}       1
+<before:/Table/67>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -1547,7 +1547,7 @@ ORDER BY
 statistics_name  column_names  row_count  null_count  has_histogram
 s                {a}           3          0           true
 s                {b}           3          0           true
-s                {j}           3          0           false
+s                {j}           3          0           true
 s                {rowid}       3          0           true
 
 statement ok
@@ -1672,28 +1672,12 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
 WHERE statistics_name = 's' AND column_names = '{geog}'
 
-# s390x produces slightly different inverted index key for the linestring (among
-# other shapes) because it has architecture support for trigonometric functions
-# (used by s2 library), so we have different expectations for s390x vs other
-# systems. s390x is the only big endian system we support right now, so we abuse
-# the corresponding option a bit.
-skipif bigendian
-
 query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
 '\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd5000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
-
-skipif littleendian
-
-query TIRI colnames,nosort
-SHOW HISTOGRAM $hist_id_1
-----
-upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
-'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
-'\x42fd5000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
 
 statement ok
 DROP INDEX geo_table@geog_idx_1;
@@ -1706,8 +1690,6 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
 WHERE statistics_name = 's' AND column_names = '{geog}'
 
-skipif bigendian
-
 query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
@@ -1716,17 +1698,6 @@ upper_bound                                                                     
 '\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
-
-skipif littleendian
-
-query TIRI colnames,nosort
-SHOW HISTOGRAM $hist_id_1
-----
-upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
-'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
-'\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
-'\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
-'\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
 
 # Stats for multi-column inverted indexes.
 statement ok
@@ -2411,7 +2382,7 @@ SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
 ----
 {100}
 
-# Test single column partial statistics USING EXTREMES creation.
+# Test single column partial statistics creation.
 
 statement ok
 CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (c, d));
@@ -2457,6 +2428,9 @@ INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
 # latest full statistic.
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pgcode 0A000 creating partial statistics with a WHERE clause is not yet supported
+CREATE STATISTICS abcd_a_partial ON a FROM abcd WHERE a > 1;
 
 statement ok
 CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
@@ -2728,10 +2702,10 @@ statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
 
 statement error pq: column x does not have a prior statistic
-EXPLAIN ANALYZE CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
+CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
 
 statement error pq: the latest full statistic for column a has no histogram
-EXPLAIN ANALYZE CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
+CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
 CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
@@ -2750,8 +2724,8 @@ CREATE STATISTICS only_null_stat ON a FROM only_null;
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
 
-statement error pq: only outer or NULL bounded buckets exist in only_null@only_null_a_idx \(table ID \d+, column IDs \[1\]\), so partial stats cannot be collected
-EXPLAIN ANALYZE CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
+statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
+CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
 
 statement ok
 CREATE INDEX ON xy (y) WHERE y > 5;
@@ -2890,7 +2864,7 @@ statistics_name  column_names  row_count  distinct_count  null_count  has_histog
 j1               {a}           5          5               0           true
 j1               {b,e}         5          5               1           false
 j1               {b}           5          5               1           true
-j1               {c}           5          5               1           false
+j1               {c}           5          5               1           true
 j1               {d}           5          5               1           true
 j1               {e}           5          5               1           true
 j1               {f}           5          5               1           true
@@ -3015,7 +2989,7 @@ j4               {a}                       5          5               0         
 j4               {b,e}                     5          5               1           false
 j4               {b}                       5          5               1           true
 j4               {crdb_internal_idx_expr}  5          5               1           true
-j4               {c}                       5          5               1           false
+j4               {c}                       5          5               1           true
 j4               {d}                       5          5               1           true
 j4               {e}                       5          5               1           true
 j4               {f}                       5          5               1           true
@@ -3034,14 +3008,6 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 '{"bar": {"baz": 1}}'  0           0                    1
 '{"bar": {"baz": 2}}'  0           0                    1
 '{"bar": {"baz": 3}}'  0           0                    1
-
-# Regression test for collecting stats on a table only with virtual computed
-# columns (#130817).
-statement ok
-CREATE TABLE t130817 (k INT PRIMARY KEY AS (NULL) VIRTUAL);
-
-statement ok
-ANALYZE t130817;
 
 # Test partial stats using extremes on indexed virtual computed columns.
 statement ok
@@ -3091,30 +3057,20 @@ upper_bound            range_rows  distinct_range_rows  equal_rows
 # Verify that the correct partial predicate is used for partial stats using
 # extremes when outer buckets exist (int column type).
 statement ok
-CREATE TABLE int_outer_buckets (a INT PRIMARY KEY)
+CREATE TABLE int_outer_buckets (a PRIMARY KEY) AS SELECT generate_series(0, 9999);
 
-# Inject a full stats collection with 2 outer buckets with upper bounds of
-# MaxInt64 and MinInt64.
 statement ok
-ALTER TABLE int_outer_buckets INJECT STATISTICS '[
-  {
-    "name": "int_outer_buckets_full",
-    "columns": ["a"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10000,
-    "distinct_count": 10000,
-    "null_count": 0,
-    "avg_size": 2,
-    "histo_col_type": "int",
-    "histo_version": 3,
-    "histo_buckets": [
-      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "-9223372036854775808"},
-      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
-      {"num_eq": 1, "num_range": 9998, "distinct_range": 9998, "upper_bound": "9999"},
-      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "9223372036854775807"}
-    ]
-  }
-]'
+CREATE STATISTICS int_outer_buckets_full ON a FROM int_outer_buckets;
+
+let $hist_id_int_outer_buckets_full
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE int_outer_buckets] WHERE statistics_name = 'int_outer_buckets_full'
+
+# The full stats collection should have added 2 outer buckets for a total of 202
+# with upper bounds of MaxInt64 and MinInt64.
+query I
+SELECT count(*) FROM [SHOW HISTOGRAM $hist_id_int_outer_buckets_full]
+----
+202
 
 statement ok
 INSERT INTO int_outer_buckets SELECT generate_series(-10, -1) UNION ALL SELECT generate_series(10000, 10009);
@@ -3412,14 +3368,14 @@ NULL  {o}  1000  33    true
 query T retry
 SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 9] WHERE info LIKE '%estimated row count:%'
 ----
-    │ estimated row count: 1
+    │ estimated row count: 0
           estimated row count: 18 (1.8% of the table; stats collected <hidden> ago)
 
 # All we care about is the row counts, so don't error if other parts of the explain output change
 query T
 SELECT info FROM [EXPLAIN SELECT * FROM mno WHERE n = 1 AND o = 11] WHERE info LIKE '%estimated row count:%'
 ----
-    │ estimated row count: 1
+    │ estimated row count: 0
           estimated row count: 20 (2.0% of the table; stats collected <hidden> ago)
 
 statement ok

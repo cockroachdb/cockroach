@@ -32,7 +32,7 @@ func (c *CustomFuncs) GenerateStreamingSetOp(
 	right memo.RelExpr,
 	private *memo.SetPrivate,
 ) {
-	orders := ordering.DeriveInterestingOrderings(c.e.mem, grp)
+	orders := ordering.DeriveInterestingOrderings(grp)
 	for _, order := range orders {
 		// A streaming set operation must have an ordering that includes all output
 		// columns. If the interesting ordering includes some columns but not all,

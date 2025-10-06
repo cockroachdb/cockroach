@@ -22,13 +22,6 @@ type FingerprintOption struct {
 	StartTime       hlc.Timestamp
 }
 
-func (f FingerprintOption) AOSTCmd() string {
-	if f.AOST.IsEmpty() {
-		return ""
-	}
-	return fmt.Sprintf("AS OF SYSTEM TIME '%s'", f.AOST.AsOfSystemTime())
-}
-
 func AOST(aost hlc.Timestamp) func(*FingerprintOption) {
 	return func(opt *FingerprintOption) {
 		opt.AOST = aost
@@ -76,7 +69,10 @@ func FingerprintTable(
 		return 0, err
 	}
 
-	aostCmd := opts.AOSTCmd()
+	aostCmd := ""
+	if !opts.AOST.IsEmpty() {
+		aostCmd = fmt.Sprintf("AS OF SYSTEM TIME '%s'", opts.AOST.AsOfSystemTime())
+	}
 
 	cmd := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(crdb_internal.table_span(%d),true) %s`, tableID, aostCmd)
 
@@ -119,18 +115,12 @@ func FingerprintTables(
 func FingerprintDatabase(
 	ctx context.Context, db *gosql.DB, dbName string, optFuncs ...func(*FingerprintOption),
 ) (map[string]int64, error) {
-	opts, err := getOpts(optFuncs...)
-	if err != nil {
-		return nil, err
-	}
-	aostCmd := opts.AOSTCmd()
-
 	var databaseID int
-	row := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT id FROM system.namespace %s WHERE name = $1`, aostCmd), dbName)
+	row := db.QueryRowContext(ctx, `SELECT id FROM system.namespace WHERE name = $1`, dbName)
 	if err := row.Scan(&databaseID); err != nil {
 		return nil, errors.New("could not get database descriptor id")
 	}
-	rows, err := db.QueryContext(ctx, fmt.Sprintf(`SELECT id, name FROM system.namespace %s where "parentID" = $1`, aostCmd), databaseID)
+	rows, err := db.QueryContext(ctx, `SELECT id, name FROM system.namespace where "parentID" = $1`, databaseID)
 	if err != nil {
 		return nil, errors.New("could not get database table name and tableIDs")
 	}
@@ -168,12 +158,9 @@ func FingerprintDatabase(
 func FingerprintAllDatabases(
 	ctx context.Context, db *gosql.DB, includeSystemDB bool, optFuncs ...func(*FingerprintOption),
 ) (map[string]map[string]int64, error) {
-	opts, err := getOpts(optFuncs...)
-	if err != nil {
-		return nil, err
-	}
+
 	dbNames := make([]string, 0)
-	rows, err := db.QueryContext(ctx, fmt.Sprintf(`select name from system.namespace %s where "parentID"=0`, opts.AOSTCmd()))
+	rows, err := db.QueryContext(ctx, `SELECT database_name FROM [SHOW DATABASES]`)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get database names")
 	}

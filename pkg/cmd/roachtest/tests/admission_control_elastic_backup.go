@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -78,9 +77,9 @@ func registerElasticControlForBackups(r registry.Registry) {
 					defer db.Close()
 
 					t.Status(fmt.Sprintf("during: enabling admission control (<%s)", 30*time.Second))
-					roachtestutil.SetAdmissionControl(ctx, t, c, true)
+					setAdmissionControl(ctx, t, c, true)
 
-					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+					m := c.NewMonitor(ctx, c.CRDBNodes())
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
 						bucketPrefix := "gs"

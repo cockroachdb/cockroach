@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -274,17 +273,6 @@ func Decode(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDOid(tree.MakeDOid(oid.Oid(i), valType)), rkey, err
-	case types.LTreeFamily:
-		var l ltree.T
-		if dir == encoding.Ascending {
-			rkey, l, err = encoding.DecodeLTreeAscending(key)
-		} else {
-			rkey, l, err = encoding.DecodeLTreeDescending(key)
-		}
-		if err != nil {
-			return nil, nil, err
-		}
-		return tree.NewDLTree(l), rkey, err
 	case types.EnumFamily:
 		var r []byte
 		if dir == encoding.Ascending {

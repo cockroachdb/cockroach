@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION
@@ -175,10 +174,7 @@ BEGIN; COMMIT
 statement ok
 BEGIN; END
 
-# COMMIT/ROLLBACK without a transaction are errors when autocommit_before_ddl=false.
-
-statement ok
-SET autocommit_before_ddl = false
+# COMMIT/ROLLBACK without a transaction are errors.
 
 statement error pgcode 25P01 there is no transaction in progress
 COMMIT TRANSACTION
@@ -186,35 +182,10 @@ COMMIT TRANSACTION
 statement error pgcode 25P01 there is no transaction in progress
 ROLLBACK TRANSACTION
 
-# COMMIT/ROLLBACK without a transaction are allowed when autocommit_before_ddl=true.
-
-statement ok
-SET autocommit_before_ddl = true
-
-statement ok
-COMMIT TRANSACTION
-
-statement ok
-ROLLBACK TRANSACTION
-
-# Set isolation level without a transaction is an error when autocommit_before_ddl=false.
-
-statement ok
-SET autocommit_before_ddl = false
+# Set isolation level without a transaction is an error.
 
 statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
-
-# Set isolation level without a transaction is a warning when autocommit_before_ddl=true.
-
-statement ok
-SET autocommit_before_ddl = true
-
-query T noticetrace
-SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
-----
-WARNING: there is no transaction in progress
-SQLSTATE: 25P01
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
@@ -538,20 +509,8 @@ COMMIT
 
 # User priority.
 
-statement ok
-SET autocommit_before_ddl = false
-
 statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
-
-statement ok
-SET autocommit_before_ddl = true
-
-query T noticetrace
-SET TRANSACTION PRIORITY LOW
-----
-WARNING: there is no transaction in progress
-SQLSTATE: 25P01
 
 statement ok
 BEGIN TRANSACTION PRIORITY LOW; COMMIT
@@ -1185,11 +1144,11 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T
@@ -1327,11 +1286,11 @@ BEGIN TRANSACTION;
   SELECT 1;
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1489,10 +1448,7 @@ COMMIT
 
 # BEGIN READ WRITE overrides READ ONLY default
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE;
-
-statement ok
-SET LOCAL autocommit_before_ddl = false;
+BEGIN READ WRITE
 
 statement ok
 CREATE SEQUENCE a
@@ -1503,33 +1459,8 @@ COMMIT
 statement error cannot execute CREATE TABLE in a read-only transaction
 CREATE TABLE tab (a int)
 
-# EXPLAIN of a DDL is disallowed out of caution.
-statement error cannot execute CREATE TABLE in a read-only transaction
-EXPLAIN CREATE TABLE tab (a int)
-
 statement error cannot execute INSERT in a read-only transaction
 INSERT INTO kv VALUES('foo')
-
-# EXPLAIN of a mutation is allowed even in read-only mode.
-statement ok
-EXPLAIN INSERT INTO kv VALUES('foo')
-
-statement ok
-EXPLAIN (OPT) INSERT INTO kv VALUES('foo')
-
-statement ok
-EXPLAIN (DISTSQL) INSERT INTO kv VALUES('foo')
-
-skipif config local-vec-off fakedist-vec-off
-statement ok
-EXPLAIN (VEC) INSERT INTO kv VALUES('foo')
-
-statement ok
-EXPLAIN (GIST) INSERT INTO kv VALUES('foo')
-
-# EXPLAIN ANALYZE is still disallowed.
-statement error cannot execute INSERT in a read-only transaction
-EXPLAIN ANALYZE INSERT INTO kv VALUES('foo')
 
 statement error cannot execute UPDATE in a read-only transaction
 UPDATE kv SET v = 'foo'
@@ -1549,13 +1480,6 @@ SELECT * FROM kv FOR SHARE
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')
 
-# This is just a Values with an expression that hasn't been evaluated.
-statement ok
-EXPLAIN SELECT nextval('a')
-
-statement error pgcode 55000 pq: currval of sequence "test.public.a" is not yet defined in this session
-SELECT currval('a')
-
 statement error cannot execute setval\(\) in a read-only transaction
 SELECT setval('a', 2)
 
@@ -1564,10 +1488,6 @@ CREATE ROLE my_user
 
 statement error cannot execute ALTER ROLE in a read-only transaction
 ALTER ROLE testuser SET default_int_size = 4
-
-# EXPLAIN of an ALTER is disallowed out of caution.
-statement error cannot execute ALTER ROLE in a read-only transaction
-EXPLAIN ALTER ROLE testuser SET default_int_size = 4
 
 statement error cannot execute DROP ROLE in a read-only transaction
 DROP ROLE testuser
@@ -1635,11 +1555,11 @@ statement ok
 BEGIN; SELECT 1
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1753,15 +1673,8 @@ SHOW intervalstyle
 ----
 iso_8601
 
-
-statement ok
-ALTER TABLE rewind_session_test SET (schema_locked=false)
-
 statement ok
 TRUNCATE rewind_session_test
-
-statement ok
-ALTER TABLE rewind_session_test RESET (schema_locked)
 
 statement ok
 SET intervalstyle = 'postgres'
@@ -1853,7 +1766,7 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 onlyif config enterprise-configs
-statement error pq: unsupported in READ COMMITTED isolation
+statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
 SELECT cluster_logical_timestamp();
 
 statement ok

@@ -72,9 +72,7 @@ func (sp *bulkRowWriter) Start(ctx context.Context) {
 	ctx = sp.StartInternal(ctx, "bulkRowWriter")
 	sp.input.Start(ctx)
 	err := sp.work(ctx)
-	if err != nil {
-		sp.MoveToDraining(err)
-	}
+	sp.MoveToDraining(err)
 }
 
 // Next is part of the RowSource interface.

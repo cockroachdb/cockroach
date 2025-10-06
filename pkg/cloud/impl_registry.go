@@ -449,7 +449,7 @@ func (l *limitedReader) Read(ctx context.Context, p []byte) (int, error) {
 	const batchedWriteLimit = 128 << 10
 	if l.pool > batchedWriteLimit {
 		if err := l.lim.WaitN(ctx, l.pool); err != nil {
-			log.Dev.Warningf(ctx, "failed to throttle write: %+v", err)
+			log.Warningf(ctx, "failed to throttle write: %+v", err)
 		}
 		l.pool = 0
 	}
@@ -458,7 +458,7 @@ func (l *limitedReader) Read(ctx context.Context, p []byte) (int, error) {
 
 func (l *limitedReader) Close(ctx context.Context) error {
 	if err := l.lim.WaitN(ctx, l.pool); err != nil {
-		log.Dev.Warningf(ctx, "failed to throttle closing write: %+v", err)
+		log.Warningf(ctx, "failed to throttle closing write: %+v", err)
 	}
 	return l.r.Close(ctx)
 }
@@ -479,7 +479,7 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 	const batchedWriteLimit = 128 << 10
 	if l.pool > batchedWriteLimit {
 		if err := l.lim.WaitN(l.ctx, l.pool); err != nil {
-			log.Dev.Warningf(l.ctx, "failed to throttle write: %+v", err)
+			log.Warningf(l.ctx, "failed to throttle write: %+v", err)
 		}
 		l.pool = 0
 	}
@@ -489,7 +489,7 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 
 func (l *limitedWriter) Close() error {
 	if err := l.lim.WaitN(l.ctx, l.pool); err != nil {
-		log.Dev.Warningf(l.ctx, "failed to throttle closing write: %+v", err)
+		log.Warningf(l.ctx, "failed to throttle closing write: %+v", err)
 	}
 	return l.w.Close()
 }

@@ -1,2 +1,0 @@
-inspect_table_stmt ::=
-	'INSPECT' 'TABLE' table_name opt_as_of_clause opt_inspect_options_clause

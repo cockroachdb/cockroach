@@ -1,0 +1,190 @@
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full' WITH encryption_passphrase='123';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full2' WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc';
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';
+----
+
+# No passphrase results in an error.
+exec-sql expect-error-regex=(file appears encrypted)
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full']
+----
+regex matches error
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full'
+WITH encryption_passphrase='123'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name)
+----
+bank table full
+baz table full
+foo table full
+public schema full
+public schema full
+public schema full
+public schema full
+
+exec-sql expect-error-regex=(file appears encrypted)
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
+WITH incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name);
+----
+regex matches error
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
+WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system'
+ORDER BY (backup_type, object_name);
+----
+bank table full
+baz table full
+foo table full
+public schema full
+public schema full
+public schema full
+public schema full
+
+
+# Providing a passphrase when the backup is encrypted by KMS results in an error.
+exec-sql expect-error-regex=(failed to decrypt)
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full3'
+WITH encryption_passphrase='123'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name)
+----
+regex matches error
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full3'
+WITH kms='testkms:///cmk?AUTH=implicit'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name)
+----
+bank table full
+baz table full
+foo table full
+public schema full
+public schema full
+public schema full
+public schema full
+
+
+exec-sql
+INSERT INTO baz VALUES(4, 'a'), (5, 'b'), (6, 'c');
+----
+
+# Add an incremental layer to each backup.
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/full' WITH encryption_passphrase='123';
+----
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/full2' WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc';
+----
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/full3' WITH kms='testkms:///cmk?AUTH=implicit';
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full'
+WITH encryption_passphrase='123'] WHERE database_name <> 'system' ORDER BY (backup_type, object_name)
+----
+bank table full
+baz table full
+foo table full
+public schema full
+public schema full
+public schema full
+public schema full
+bank table incremental
+baz table incremental
+foo table incremental
+public schema incremental
+public schema incremental
+public schema incremental
+public schema incremental
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full2'
+WITH encryption_passphrase='456', incremental_location='nodelocal://1/inc'] WHERE database_name <> 'system'
+ORDER BY (backup_type, object_name)
+----
+bank table full
+baz table full
+foo table full
+public schema full
+public schema full
+public schema full
+public schema full
+bank table incremental
+baz table incremental
+foo table incremental
+public schema incremental
+public schema incremental
+public schema incremental
+public schema incremental
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/full3'
+WITH kms='testkms:///cmk?AUTH=implicit'] WHERE database_name <> 'system'
+ORDER BY (backup_type, object_name)
+----
+bank table full
+baz table full
+foo table full
+public schema full
+public schema full
+public schema full
+public schema full
+bank table incremental
+baz table incremental
+foo table incremental
+public schema incremental
+public schema incremental
+public schema incremental
+public schema incremental
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full' WITH new_db_name='d2', encryption_passphrase='123';
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full2' WITH new_db_name='d3', encryption_passphrase='456', incremental_location='nodelocal://1/inc';
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full3' WITH new_db_name='d4', kms='testkms:///cmk?AUTH=implicit';
+----
+
+query-sql
+USE d2;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;
+----
+baz
+foo
+
+query-sql
+USE d3;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;
+----
+baz
+foo
+
+query-sql
+USE d4;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;
+----
+baz
+foo

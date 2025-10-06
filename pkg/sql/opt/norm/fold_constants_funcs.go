@@ -6,6 +6,8 @@
 package norm
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -180,11 +182,17 @@ func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 // array as a Const datum with type TArray.
 func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.ScalarExpr {
 	elemType := typ.ArrayContents()
-	elements := make(tree.Datums, len(elems))
-	for i := range elements {
-		elements[i] = memo.ExtractConstDatum(elems[i])
+	a := tree.NewDArray(elemType)
+	a.Array = make(tree.Datums, len(elems))
+	for i := range a.Array {
+		a.Array[i] = memo.ExtractConstDatum(elems[i])
+		if a.Array[i] == tree.DNull {
+			a.HasNulls = true
+		} else {
+			a.HasNonNulls = true
+		}
 	}
-	return c.f.ConstructConst(tree.NewDArrayFromDatums(elemType, elements), typ)
+	return c.f.ConstructConst(a, typ)
 }
 
 // IsConstValueOrGroupOfConstValues returns true if the input is a constant,
@@ -336,7 +344,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			if err != nil {
 				return nil, false, err
 			}
-			oid, ok := cDatum.(*tree.DOid)
+			oid, ok := tree.AsDOid(cDatum)
 			if !ok {
 				return nil, false, nil
 			}
@@ -661,12 +669,10 @@ func (c *CustomFuncs) FoldFunction(
 	if c.f.evalCtx != nil && c.f.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(private.Name)
 		def, err := c.f.catalog.ResolveFunction(
-			c.f.ctx,
-			tree.MakeUnresolvedFunctionName(&unresolved),
-			&c.f.evalCtx.SessionData().SearchPath,
-		)
+			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
+			&c.f.evalCtx.SessionData().SearchPath)
 		if err != nil {
-			log.Dev.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
+			log.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
 			return nil, false
 		}
 		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}

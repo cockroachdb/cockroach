@@ -48,7 +48,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.T
 		} else if num != 1 {
 			// It's possible for us to be GCing a tenant record that hasn't
 			// been fully written yet, e.g. during RESTORE.
-			log.Dev.Warningf(ctx, "tenant GC: no record to delete for %d", info.ID)
+			log.Warningf(ctx, "tenant GC: no record to delete for %d", info.ID)
 		}
 
 		if _, err := txn.ExecEx(
@@ -102,7 +102,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.Te
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
-	log.Dev.Infof(ctx, "clearing data for tenant %d", info.ID)
+	log.Infof(ctx, "clearing data for tenant %d", info.ID)
 
 	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(info.ID))
 	prefixEnd := prefix.PrefixEnd()

@@ -31,13 +31,14 @@ var checkReconciliationJobInterval = settings.RegisterDurationSetting(
 	"spanconfig.reconciliation_job.check_interval",
 	"the frequency at which to check if the span config reconciliation job exists (and to start it if not)",
 	10*time.Minute,
+	settings.NonNegativeDuration,
 )
 
 // jobEnabledSetting gates the activation of the span config reconciliation job.
 //
 // TODO(irfansharif): This should be a tenant read-only setting once the work
 // for #73349 is completed.
-var JobEnabledSetting = settings.RegisterBoolSetting(
+var jobEnabledSetting = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"spanconfig.reconciliation_job.enabled",
 	"enable the use of the kv accessor", true)
@@ -108,7 +109,7 @@ func (m *Manager) run(ctx context.Context) {
 	//   skip starting the reconciliation job, learning about the cluster
 	//   version shortly, and only checking the job after an interval has
 	//   passed.
-	JobEnabledSetting.SetOnChange(&m.settings.SV, func(ctx context.Context) {
+	jobEnabledSetting.SetOnChange(&m.settings.SV, func(ctx context.Context) {
 		triggerJobCheck()
 	})
 	checkReconciliationJobInterval.SetOnChange(&m.settings.SV, func(ctx context.Context) {
@@ -123,16 +124,16 @@ func (m *Manager) run(ctx context.Context) {
 			fn()
 		}
 
-		if !JobEnabledSetting.Get(&m.settings.SV) {
+		if !jobEnabledSetting.Get(&m.settings.SV) {
 			return
 		}
 
 		started, err := m.createAndStartJobIfNoneExists(ctx, m.settings)
 		if err != nil {
-			log.Dev.Errorf(ctx, "error starting auto span config reconciliation job: %v", err)
+			log.Errorf(ctx, "error starting auto span config reconciliation job: %v", err)
 		}
 		if started {
-			log.Dev.Infof(ctx, "started auto span config reconciliation job")
+			log.Infof(ctx, "started auto span config reconciliation job")
 		}
 	}
 
@@ -148,6 +149,7 @@ func (m *Manager) run(ctx context.Context) {
 		case <-jobCheckCh:
 			checkJob()
 		case <-timer.C:
+			timer.Read = true
 			checkJob()
 		case <-m.stopper.ShouldQuiesce():
 			return

@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build lint && nightly
+// +build lint,nightly
 
 package lint
 
@@ -13,7 +14,6 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/urlcheck/lib/urlcheck"
 	sqlparser "github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -25,9 +25,6 @@ func TestNightlyLint(t *testing.T) {
 	// TestHelpURLs checks that all help texts have a valid documentation URL.
 	t.Run("TestHelpURLs", func(t *testing.T) {
 		skip.UnderShort(t)
-		if build.ParsedVersion().IsPrerelease() || build.ParsedVersion().IsCustomOrAdhocBuild() {
-			skip.IgnoreLint(t, "pre-release or customized build")
-		}
 		if pkgSpecified {
 			skip.IgnoreLint(t, "PKG specified")
 		}

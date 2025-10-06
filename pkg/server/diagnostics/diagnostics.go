@@ -112,7 +112,7 @@ func addInfoToURL(
 		if license.OrganizationId != nil {
 			organizationUUID, err := uuid.FromBytes(license.OrganizationId)
 			if err != nil {
-				log.Dev.Infof(context.Background(), "unexpected error parsing organization id from license %s", err)
+				log.Infof(context.Background(), "unexpected error parsing organization id from license %s", err)
 			}
 			organizationID = organizationUUID.String()
 		}
@@ -120,7 +120,7 @@ func addInfoToURL(
 			licenseExpiry = strconv.Itoa(int(license.ValidUntilUnixSec))
 			licenseUUID, err := uuid.FromBytes(license.LicenseId)
 			if err != nil {
-				log.Dev.Infof(context.Background(), "unexpected error parsing organization id from license %s", err)
+				log.Infof(context.Background(), "unexpected error parsing organization id from license %s", err)
 			}
 			licenseID = licenseUUID.String()
 		}

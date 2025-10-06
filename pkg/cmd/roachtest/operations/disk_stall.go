@@ -24,9 +24,7 @@ type cleanupDiskStall struct {
 }
 
 func (cl *cleanupDiskStall) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	if err := cl.staller.Unstall(ctx, cl.nodes); err != nil {
-		o.Fatalf("failed to unstall disk: %v", err)
-	}
+	cl.staller.Unstall(ctx, cl.nodes)
 	o.Status("unstalled nodes; waiting 10 seconds before restarting")
 	time.Sleep(10 * time.Second)
 	// We might need to restart the node if it isn't live.
@@ -49,9 +47,7 @@ func runDiskStall(
 
 	nodes := c.All()
 	nid := nodes[rng.Intn(len(nodes))]
-	// Disable state validation since we run dmsetup Setup() during cluster creation and not part
-	// of the operation.
-	ds := roachtestutil.MakeDmsetupDiskStaller(o, c, true /* disableStateValidation */)
+	ds := roachtestutil.MakeDmsetupDiskStaller(o, c)
 
 	o.Status(fmt.Sprintf("stalling disk on node %d", nid))
 	ds.Stall(ctx, c.Node(nid))

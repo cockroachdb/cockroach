@@ -94,7 +94,7 @@ func (ag *aggregatorBase) init(
 	post *execinfrapb.PostProcessSpec,
 	trailingMetaCallback func() []execinfrapb.ProducerMetadata,
 ) error {
-	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("aggregator-mem"))
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, "aggregator-mem")
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
 		input = newInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
@@ -691,7 +691,7 @@ func (ag *hashAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		case aggEmittingRows:
 			ag.runningState, row, meta = ag.emitRow()
 		default:
-			log.Dev.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
+			log.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
 		}
 
 		if row == nil && meta == nil {
@@ -713,7 +713,7 @@ func (ag *orderedAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		case aggEmittingRows:
 			ag.runningState, row, meta = ag.emitRow()
 		default:
-			log.Dev.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
+			log.Fatalf(ag.Ctx(), "unsupported state: %d", ag.runningState)
 		}
 
 		if row == nil && meta == nil {

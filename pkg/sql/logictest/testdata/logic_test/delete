@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
@@ -229,11 +228,10 @@ SELECT count(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 subtest regression_29494
 
 statement ok
-CREATE TABLE t29494(x INT PRIMARY KEY) WITH (schema_locked=false); INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT PRIMARY KEY); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
@@ -243,7 +241,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
   x INT8 NOT NULL,
   CONSTRAINT t29494_pkey PRIMARY KEY (x ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
@@ -254,7 +252,6 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 query I
@@ -268,11 +265,10 @@ COMMIT
 subtest regression_33361
 
 statement ok
-CREATE TABLE t33361(x INT PRIMARY KEY, y INT UNIQUE, z INT) WITH (schema_locked=false); INSERT INTO t33361 VALUES (1, 2, 3)
+CREATE TABLE t33361(x INT PRIMARY KEY, y INT UNIQUE, z INT); INSERT INTO t33361 VALUES (1, 2, 3)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t33361 DROP COLUMN y
 
 statement error column "y" does not exist
@@ -286,12 +282,9 @@ BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE t33361 DROP COLUMN y
 
 query II
-DELETE FROM t33361 RETURNING *
+DELETE FROM t33361 RETURNING *; COMMIT
 ----
 1 3
-
-statement ok
-COMMIT
 
 # Test that delete works with column families (no indexes, so fast path).
 statement ok
@@ -457,15 +450,8 @@ a  b  c   a  b  c
 4  d  40  4  d  40
 
 # Clean u_a to input a new set of data, and to improve test readability.
-
-statement ok
-ALTER TABLE u_a SET (schema_locked=false)
-
 statement ok
 TRUNCATE u_a
-
-statement ok
-ALTER TABLE u_a RESET (schema_locked)
 
 statement ok
 INSERT INTO u_a VALUES (1, 'a', 5), (2, 'b', 10), (3, 'c', 15), (4, 'd', 20), (5, 'd', 25), (6, 'd', 30), (7, 'd', 35), (8, 'd', 40), (9, 'd', 45)
@@ -479,7 +465,7 @@ DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY bar.a DESC 
 
 # Test aliased table names, ORDER BY and LIMIT where ORDER BY references the target
 # table.
-query ITI rowsort
+query ITI
 DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY foo.a DESC LIMIT 3 RETURNING foo.*;
 ----
 7  d  35
@@ -612,26 +598,5 @@ CREATE TABLE t108166 (a INT)
 
 statement error pgcode 42803 sum\(\): aggregate functions are not allowed in ORDER BY in DELETE
 DELETE FROM t108166 ORDER BY COALESCE(sum(a), 1) LIMIT 1;
-
-subtest end
-
-# Regression test for double-counting some rows for "rows affected" statistic in
-# deleteRange when a single SQL row is deleted via different KV batches.
-subtest regression_151505
-
-statement ok
-CREATE TABLE t (
-  k INT PRIMARY KEY,
-  c INT,
-  FAMILY (k),
-  FAMILY (c)
-);
-
-statement ok
-INSERT INTO t SELECT i, NULL FROM generate_series(1, 599) AS g(i);
-INSERT INTO t VALUES (600, 2);
-
-statement count 600
-DELETE FROM t WHERE k > 0 AND k < 1000;
 
 subtest end

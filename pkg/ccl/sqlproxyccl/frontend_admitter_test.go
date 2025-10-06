@@ -136,9 +136,7 @@ func TestFrontendAdmitRequireEncryption(t *testing.T) {
 			ProtocolVersion: pgproto3.ProtocolVersionNumber,
 			Parameters:      map[string]string{"key": "val"},
 		}
-		buf, err := startup.Encode([]byte{})
-		require.NoError(t, err)
-		_, err = cli.Write(buf)
+		_, err := cli.Write(startup.Encode([]byte{}))
 		require.NoError(t, err)
 	}()
 
@@ -168,9 +166,7 @@ func TestFrontendAdmitWithCancel(t *testing.T) {
 
 	go func() {
 		cancelRequest := pgproto3.CancelRequest{ProcessID: 1, SecretKey: 2}
-		buf, err := cancelRequest.Encode([]byte{})
-		require.NoError(t, err)
-		_, err = cli.Write(buf)
+		_, err := cli.Write(cancelRequest.Encode([]byte{}))
 		require.NoError(t, err)
 	}()
 
@@ -197,9 +193,7 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 
 	go func() {
 		sslRequest := pgproto3.SSLRequest{}
-		buf, err := sslRequest.Encode([]byte{})
-		require.NoError(t, err)
-		_, err = cli.Write(buf)
+		_, err := cli.Write(sslRequest.Encode([]byte{}))
 		require.NoError(t, err)
 		b := []byte{0}
 		n, err := cli.Read(b)
@@ -207,9 +201,7 @@ func TestFrontendAdmitWithSSLAndCancel(t *testing.T) {
 		require.NoError(t, err)
 		cli = tls.Client(cli, &tls.Config{InsecureSkipVerify: true})
 		cancelRequest := pgproto3.CancelRequest{ProcessID: 1, SecretKey: 2}
-		buf, err = cancelRequest.Encode([]byte{})
-		require.NoError(t, err)
-		_, err = cli.Write(buf)
+		_, err = cli.Write(cancelRequest.Encode([]byte{}))
 		require.NoError(t, err)
 	}()
 

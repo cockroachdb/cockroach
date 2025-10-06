@@ -23,7 +23,7 @@ const panicInjectionProbability = 0.0005
 func MaybeInjectOptimizerTestingPanic(ctx context.Context, evalCtx *eval.Context) {
 	if evalCtx.SessionData().TestingOptimizerInjectPanics {
 		if rand.Float64() < panicInjectionProbability {
-			log.Dev.Info(ctx, "injecting panic in optimizer")
+			log.Info(ctx, "injecting panic in optimizer")
 			panic(errors.AssertionFailedf("injected panic in optimizer"))
 		}
 	}

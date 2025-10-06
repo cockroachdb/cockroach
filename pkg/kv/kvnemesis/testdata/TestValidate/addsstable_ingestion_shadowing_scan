@@ -4,7 +4,7 @@ db0.Put(ctx, tk(1), sv(1)) // @0.000000001,0 <nil>
 db0.Put(ctx, tk(2), sv(1)) // @0.000000001,0 <nil>
 db0.Put(ctx, tk(3), sv(1)) // @0.000000001,0 <nil>
 db0.Put(ctx, tk(4), sv(1)) // @0.000000001,0 <nil>
-db0.AddSSTable(ctx, tk(1), tk(4), ... /* @s2 */)
+db0.AddSSTable(ctx, tk(1), tk(4), ... /* @s2 */) // 1005 bytes
 // ^-- tk(1) -> sv(s2): /Table/100/"0000000000000001"/0.000000001,0 -> /BYTES/v2
 // ^-- tk(2) -> sv(s2): /Table/100/"0000000000000002"/0.000000001,0 -> /<empty>
 // ^-- [tk(3), tk(4)) -> sv(s2): /Table/100/"000000000000000{3"-4"} -> /<empty>

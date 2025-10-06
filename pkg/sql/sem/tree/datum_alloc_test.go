@@ -37,7 +37,7 @@ func TestNilDatumAlloc(t *testing.T) {
 		typ := randgen.RandType(rng)
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
 		var err error
-		buf, err = valueside.Encode(buf[:0], valueside.NoColumnID, d)
+		buf, err = valueside.Encode(buf[:0], valueside.NoColumnID, d, nil /* scratch */)
 		require.NoError(t, err)
 		decoded, _, err := valueside.Decode(da, typ, buf)
 		require.NoError(t, err)

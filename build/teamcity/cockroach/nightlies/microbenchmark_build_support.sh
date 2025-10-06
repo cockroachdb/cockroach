@@ -24,13 +24,7 @@ function build_and_upload_binaries() {
     return
   fi
 
-  # Check if crdb_bench flag is supported, since we could be building an older
-  # version that does not support it.
-  if grep -q "crdb_bench" .bazelrc; then
-    config_args="--config=crosslinux --crdb_test_off --crdb_bench"
-  else
-    config_args="--config=crosslinux --crdb_test_off"
-  fi
+  config_args="--config=crosslinux --crdb_test_off"
   bazel clean
   go_test_targets=$(bazel query kind\(go_test, //$BENCH_PACKAGE:all\))
   bazel build $config_args $go_test_targets
@@ -69,7 +63,6 @@ EOF
 current_sha=$(git rev-parse HEAD)
 shas=("$@")
 for sha in "${shas[@]}"; do
-  git fetch origin "$sha"
   git checkout "$sha"
   build_and_upload_binaries "$sha"
 done

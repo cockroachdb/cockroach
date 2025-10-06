@@ -38,7 +38,7 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 # while r2 and r3 have partial entry tracking.
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -46,14 +46,14 @@ NormalPri:
   term=1 index=2  tokens=1048576
   term=1 index=3  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,3) (2.0 MiB) send_queue=[3,4) precise_q_size=+1.0 MiB
+(n2,s2):2: state=replicate closed=false inflight=[1,3) send_queue=[3,4) precise_q_size=+1.0 MiB
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
   term=1 index=2  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,4) precise_q_size=+2.0 MiB
+(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+2.0 MiB
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+2.0 MiB ela=+0 B
 NormalPri:
@@ -86,7 +86,7 @@ t1/s3: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,6) (5.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[4,6) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+5.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -96,13 +96,13 @@ NormalPri:
   term=1 index=4  tokens=1048576
   term=1 index=5  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,5) (4.0 MiB) send_queue=[5,6) precise_q_size=+1.0 MiB
+(n2,s2):2: state=replicate closed=false inflight=[2,5) send_queue=[5,6) precise_q_size=+1.0 MiB
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+1.0 MiB ela=+0 B
 NormalPri:
   term=1 index=4  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,6) precise_q_size=+2.0 MiB
+(n3,s3):3: state=replicate closed=false inflight=[1,4) send_queue=[4,6) precise_q_size=+2.0 MiB
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+2.0 MiB ela=+0 B
 ++++
@@ -123,21 +123,9 @@ t1/s2: eval reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
 t1/s3: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
 
-# Send an empty event so that replicaSendStreams are aware of the update to
-# match.
-raft_event
-range_id=1
-----
-t1/s1: eval reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
-t1/s2: eval reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-t1/s3: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,6) (1.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[5,6) send_queue=[6,6) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -172,21 +160,21 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[5,7) (2.0 MiB) send_queue=[7,7) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[6,7) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=5  tokens=1048576
   term=1 index=6  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[5,7) (2.0 MiB) send_queue=[7,7) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[5,7) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+2.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=5  tokens=1048576
   term=1 index=6  tokens=1048576
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[4,7) (3.0 MiB) send_queue=[7,7) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[4,7) send_queue=[7,7) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -201,18 +189,6 @@ range_id=1
   store_id=1 term=1 to_index=6 pri=NormalPri
   store_id=2 term=1 to_index=6 pri=NormalPri
   store_id=3 term=1 to_index=6 pri=NormalPri
-----
-t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-
-# Send an empty event so that replicaSendStreams are aware of the update to
-# match.
-raft_event
-range_id=1
 ----
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
        send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB

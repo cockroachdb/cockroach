@@ -35,7 +35,7 @@ export class Highlight extends React.Component<SqlBoxProps> {
 
   renderZone = (): React.ReactElement => {
     const { zone } = this.props;
-    const zoneConfig = zone.zone_config;
+    const zoneConfig = zone.zoneConfigResp.zone_config;
     return (
       <span className={cx("sql-highlight", "hljs")}>
         <span className="hljs-keyword">CONFIGURE ZONE USING</span>

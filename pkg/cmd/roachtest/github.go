@@ -8,54 +8,36 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-// GithubPoster interface allows MaybePost to be mocked in unit tests that test
-// failure modes.
-type GithubPoster interface {
-	MaybePost(
-		t *testImpl, issueInfo *githubIssueInfo, l *logger.Logger, message string,
-		params map[string]string) (
-		*issues.TestFailureIssue, error)
-}
-
-// githubIssues struct implements GithubPoster
 type githubIssues struct {
-	disable     bool
-	dryRun      bool
-	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
-		*issues.Options) (*issues.TestFailureIssue, error)
-	teamLoader func() (team.Map, error)
-}
-
-// githubIssueInfo struct contains information related to this issue on this
-// worker / test
-// separate from githubIssues because githubIssues is shared amongst all workers
-type githubIssueInfo struct {
+	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error)
+	teamLoader   func() (team.Map, error)
 }
 
-// newGithubIssueInfo constructor for newGithubIssueInfo
-func newGithubIssueInfo(cluster *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
-	return &githubIssueInfo{
-		cluster:      cluster,
+func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
+	return &githubIssues{
+		disable:      disable,
 		vmCreateOpts: vmCreateOpts,
+		cluster:      c,
+		issuePoster:  issues.Post,
+		teamLoader:   team.DefaultLoadTeams,
 	}
 }
 
@@ -195,9 +177,9 @@ func (g *githubIssues) createPostRequest(
 	runtimeAssertionsBuild bool,
 	coverageBuild bool,
 	params map[string]string,
-	issueInfo *githubIssueInfo,
 ) (issues.PostRequest, error) {
 	var mention []string
+	var projColID int
 
 	var (
 		issueOwner    = spec.Owner
@@ -236,7 +218,6 @@ func (g *githubIssues) createPostRequest(
 	const infraFlakeLabel = "X-infra-flake"
 	const runtimeAssertionsLabel = "B-runtime-assertions-enabled"
 	const coverageLabel = "B-coverage-enabled"
-	const s390xTestFailureLabel = "s390x-test-failure"
 	labels := []string{"O-roachtest"}
 	if infraFlake {
 		labels = append(labels, infraFlakeLabel)
@@ -255,11 +236,6 @@ func (g *githubIssues) createPostRequest(
 			labels = append(labels, coverageLabel)
 		}
 	}
-	// N.B. To simplify tracking failures on s390x, we add the designated s390x-test-failure label. This could be removed
-	// in the future, i.e., after several major releases, when we expect s390x to be sufficiently stable.
-	if arch := params["arch"]; vm.CPUArch(arch) == vm.ArchS390x {
-		labels = append(labels, s390xTestFailureLabel)
-	}
 	labels = append(labels, spec.ExtraLabels...)
 
 	teams, err := g.teamLoader()
@@ -273,8 +249,11 @@ func (g *githubIssues) createPostRequest(
 			if mentionTeam {
 				mention = append(mention, "@"+string(alias))
 			}
-			labels = append(labels, teams[alias].Labels()...)
+			if label := teams[alias].Label; label != "" {
+				labels = append(labels, label)
+			}
 		}
+		projColID = teams[sl[0]].TriageColumnID
 	}
 
 	branch := os.Getenv("TC_BUILD_BRANCH")
@@ -284,8 +263,8 @@ func (g *githubIssues) createPostRequest(
 
 	artifacts := fmt.Sprintf("/%s", testName)
 
-	if issueInfo.cluster != nil {
-		issueClusterName = issueInfo.cluster.name
+	if g.cluster != nil {
+		issueClusterName = g.cluster.name
 	}
 
 	issueMessage := messagePrefix + message
@@ -309,6 +288,7 @@ func (g *githubIssues) createPostRequest(
 
 	return issues.PostRequest{
 		MentionOnCreate: mention,
+		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        issueName,
 		Labels:          labels,
@@ -322,18 +302,9 @@ func (g *githubIssues) createPostRequest(
 	}, nil
 }
 
-// MaybePost entry point for POSTing an issue to GitHub
 func (g *githubIssues) MaybePost(
-	t *testImpl,
-	issueInfo *githubIssueInfo,
-	l *logger.Logger,
-	message string,
-	params map[string]string,
+	t *testImpl, l *logger.Logger, message string, params map[string]string,
 ) (*issues.TestFailureIssue, error) {
-	if g.dryRun {
-		return nil, g.dryRunPost(t, issueInfo, l, message, params)
-	}
-
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
@@ -343,7 +314,7 @@ func (g *githubIssues) MaybePost(
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
 		message,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
+		tests.UsingRuntimeAssertions(t), t.goCoverEnabled, params,
 	)
 
 	if err != nil {
@@ -358,76 +329,4 @@ func (g *githubIssues) MaybePost(
 		postRequest,
 		opts,
 	)
-}
-
-// dryRunPost simulates posting an issue to GitHub by rendering
-// the issue and logging a clickable link.
-func (g *githubIssues) dryRunPost(
-	t *testImpl,
-	issueInfo *githubIssueInfo,
-	l *logger.Logger,
-	message string,
-	params map[string]string,
-) error {
-	postRequest, err := g.createPostRequest(
-		t.Name(), t.start, t.end, t.spec, t.failures(),
-		message,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
-	)
-	if err != nil {
-		return err
-	}
-	_, url, err := formatPostRequest(postRequest)
-	if err != nil {
-		return err
-	}
-	l.Printf("GitHub issue posting in dry-run mode:\n%s", url)
-	return nil
-}
-
-// formatPostRequest returns a string representation of the rendered PostRequest
-// as well as a link that can be followed to open the issue in Github. The rendered
-// PostRequest also includes the labels that would be applied to the issue as part
-// of the body.
-func formatPostRequest(req issues.PostRequest) (string, string, error) {
-	data := issues.TemplateData{
-		PostRequest:      req,
-		Parameters:       req.ExtraParams,
-		CondensedMessage: issues.CondensedMessage(req.Message),
-		Branch:           "test_branch",
-		Commit:           "test_SHA",
-		PackageNameShort: strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
-	}
-
-	formatter := issues.UnitTestFormatter
-	r := &issues.Renderer{}
-	if err := formatter.Body(r, data); err != nil {
-		return "", "", err
-	}
-
-	var post strings.Builder
-	post.WriteString(r.String())
-
-	// Github labels are normally not part of the rendered issue body, but we want to
-	// still test that they are correctly set so append them here.
-	post.WriteString("\n------\nLabels:\n")
-	for _, label := range req.Labels {
-		post.WriteString(fmt.Sprintf("- <code>%s</code>\n", label))
-	}
-
-	u, err := url.Parse("https://github.com/cockroachdb/cockroach/issues/new")
-	if err != nil {
-		return "", "", err
-	}
-	q := u.Query()
-	q.Add("title", formatter.Title(data))
-	q.Add("body", post.String())
-	// Adding a template parameter is required to be able to view the rendered
-	// template on GitHub, otherwise it just takes you to the template selection
-	// page.
-	q.Add("template", "none")
-	u.RawQuery = q.Encode()
-	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
-
-	return post.String(), u.String(), nil
 }

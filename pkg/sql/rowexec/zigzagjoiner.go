@@ -331,9 +331,6 @@ func newZigzagJoiner(
 
 	collectingStats := false
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
-			z.contentionEventsListener.Init(flowTxn.ID())
-		}
 		collectingStats = true
 		z.ExecStatsForTrace = z.execStatsForTrace
 	}
@@ -803,7 +800,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			zigzagJoinerBatchSize,
 		)
 		if err != nil {
-			log.Dev.Errorf(z.Ctx(), "scan error: %s", err)
+			log.Errorf(z.Ctx(), "scan error: %s", err)
 			return err
 		}
 		fetchedRow, err := z.fetchRow(z.Ctx())
@@ -853,8 +850,6 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
 		KVPairsRead:         optional.MakeUint(uint64(z.getKVPairsRead())),
 		ContentionTime:      optional.MakeTimeValue(z.contentionEventsListener.GetContentionTime()),
-		LockWaitTime:        optional.MakeTimeValue(z.contentionEventsListener.GetLockWaitTime()),
-		LatchWaitTime:       optional.MakeTimeValue(z.contentionEventsListener.GetLatchWaitTime()),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
 	scanStats := z.scanStatsListener.GetScanStats()

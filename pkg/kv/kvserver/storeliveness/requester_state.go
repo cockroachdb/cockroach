@@ -201,7 +201,7 @@ func (rsh *requesterStateHandler) markIdleStores(ctx context.Context) {
 	for _, rs := range rsh.requesterState.supportFrom {
 		if !rs.recentlyQueried.CompareAndSwap(active, inactive) {
 			if rs.recentlyQueried.CompareAndSwap(inactive, idle) {
-				log.KvExec.Infof(ctx, "stopping heartbeats to idle store %+v", rs.state.Target)
+				log.Infof(ctx, "stopping heartbeats to idle store %+v", rs.state.Target)
 			}
 		}
 	}
@@ -333,11 +333,10 @@ func (rsfu *requesterStateForUpdate) getHeartbeatsToSend(
 }
 
 // updateMaxRequested forwards the current MaxRequested timestamp to now +
-// support duration, where now is the node's clock timestamp.
-func (rsfu *requesterStateForUpdate) updateMaxRequested(
-	now hlc.Timestamp, supportDuration time.Duration,
-) {
-	newMaxRequested := now.Add(supportDuration.Nanoseconds(), 0)
+// interval, where now is the node's clock timestamp and interval is the
+// liveness interval.
+func (rsfu *requesterStateForUpdate) updateMaxRequested(now hlc.Timestamp, interval time.Duration) {
+	newMaxRequested := now.Add(interval.Nanoseconds(), 0)
 	meta := rsfu.getMeta()
 	if meta.MaxRequested.Forward(newMaxRequested) {
 		// Update the entire meta struct to ensure MaxEpoch is not overwritten.
@@ -422,13 +421,13 @@ func handleHeartbeatResponse(
 func logSupportFromChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.SupportState) {
 	if ss.Epoch == ssNew.Epoch {
 		if ss.Expiration.IsEmpty() {
-			log.KvExec.Infof(ctx, "received support from %s", supportChangeStr(ss, ssNew))
+			log.Infof(ctx, "received support from %s", supportChangeStr(ss, ssNew))
 		} else if log.ExpensiveLogEnabled(ctx, 3) {
-			log.KvExec.VInfof(ctx, 3, "extended support from %s", supportChangeStr(ss, ssNew))
+			log.VInfof(ctx, 3, "extended support from %s", supportChangeStr(ss, ssNew))
 		}
 	} else {
 		assert(ss.Epoch < ssNew.Epoch, "epoch regressed")
-		log.KvExec.Infof(ctx, "lost support from %s", supportChangeStr(ss, ssNew))
+		log.Infof(ctx, "lost support from %s", supportChangeStr(ss, ssNew))
 	}
 }
 
@@ -448,6 +447,10 @@ func assert(condition bool, msg string) {
 	}
 }
 
-func supportChangeStr(ssOld slpb.SupportState, ssNew slpb.SupportState) redact.RedactableString {
-	return redact.Sprintf("store %+v; old = %+v, new = %+v", ssNew.Target, ssOld, ssNew)
+func supportChangeStr(
+	current slpb.SupportState, previous slpb.SupportState,
+) redact.RedactableString {
+	return redact.Sprintf(
+		"store %+v; current = %+v, previous = %+v", current.Target, current, previous,
+	)
 }

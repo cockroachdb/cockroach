@@ -171,18 +171,12 @@ func (j *ScheduledJob) ExecutionArgs() *jobspb.ExecutionArguments {
 	return &j.rec.ExecutionArgs
 }
 
-// SetScheduleAndNextRun updates periodicity of this schedule, and updates this schedules
+// SetSchedule updates periodicity of this schedule, and updates this schedules
 // next run time.
-func (j *ScheduledJob) SetScheduleAndNextRun(scheduleExpr string) error {
+func (j *ScheduledJob) SetSchedule(scheduleExpr string) error {
 	j.rec.ScheduleExpr = scheduleExpr
 	j.markDirty("schedule_expr")
 	return j.ScheduleNextRun()
-}
-
-// SetScheduleExpr updates schedule expression for this schedule without updating next run time.
-func (j *ScheduledJob) SetScheduleExpr(scheduleExpr string) {
-	j.rec.ScheduleExpr = scheduleExpr
-	j.markDirty("schedule_expr")
 }
 
 // HasRecurringSchedule returns true if this schedule job runs periodically.

@@ -1,3 +1,0 @@
-create_policy_stmt ::=
-	'CREATE' 'POLICY' name 'ON' table_name opt_policy_type opt_policy_command opt_policy_roles opt_policy_exprs
-	| 'CREATE' 'POLICY' 'IF' 'NOT' 'EXISTS' name 'ON' table_name opt_policy_type opt_policy_command opt_policy_roles opt_policy_exprs

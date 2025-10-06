@@ -47,7 +47,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc"
 )
 
 const (
@@ -102,7 +101,6 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
 ) (OIDC, error) {
 	return &noOIDCConfigured{}, nil
 }
@@ -113,6 +111,7 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
+	settings.NonNegativeDuration,
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
 
@@ -134,15 +133,6 @@ type authenticationServer struct {
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterLogInServer(g, s)
 	serverpb.RegisterLogOutServer(g, s)
-
-}
-
-// RegisterService registers the LogIn and LogOut services with DRPC.
-func (s *authenticationServer) RegisterDRPCService(d drpc.Mux) error {
-	if err := serverpb.DRPCRegisterLogIn(d, s); err != nil {
-		return err
-	}
-	return serverpb.DRPCRegisterLogOut(d, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -197,11 +187,11 @@ func (s *authenticationServer) UserLogin(
 	authMethod, hbaEntry, err := s.lookupAuthenticationMethodUsingRules(hba.ConnHostSSL, hbaConf, username, originIP)
 	if err != nil {
 		if log.V(1) {
-			log.Dev.Infof(ctx, "invalid retrieval of HBA entry: error: %v", err)
+			log.Infof(ctx, "invalid retrieval of HBA entry: error: %v", err)
 		}
 	} else if authMethod.String() == "ldap" {
 		if log.V(1) {
-			log.Dev.Infof(ctx, "retrieved LDAP HBA entry successfully: authMethod: %s, hbaEntry: %v", authMethod.String(), hbaEntry)
+			log.Infof(ctx, "retrieved LDAP HBA entry successfully: authMethod: %s, hbaEntry: %v", authMethod.String(), hbaEntry)
 		}
 		execCfg := s.sqlServer.ExecutorConfig()
 		ldapManager.Do(func() {
@@ -212,13 +202,13 @@ func (s *authenticationServer) UserLogin(
 		ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, username, hbaEntry, identMap)
 		if authError != nil {
 			if log.V(1) {
-				log.Dev.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+				log.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
 			}
 		} else {
 			detailedErrors, authError = ldapManager.m.ValidateLDAPLogin(ctx, execCfg.Settings, ldapUserDN, username, req.Password, hbaEntry, identMap)
 			if authError != nil {
 				if log.V(1) {
-					log.Dev.Infof(ctx, "ldap bind response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+					log.Infof(ctx, "ldap bind response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
 				}
 			} else {
 				ldapAuthSuccess = true
@@ -260,10 +250,9 @@ func (s *authenticationServer) UserLogin(
 // DemoLogin is the same as UserLogin but using the GET method.
 // It is only available for 'cockroach demo' and test clusters.
 func (s *authenticationServer) DemoLogin(w http.ResponseWriter, req *http.Request) {
-	tags := logtags.BuildBuffer()
-	tags.Add("client", log.SafeOperational(req.RemoteAddr))
-	tags.Add("demologin", nil)
-	ctx := logtags.WithTags(context.Background(), tags.Finish())
+	ctx := context.Background()
+	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(req.RemoteAddr))
+	ctx = logtags.AddTag(ctx, "demologin", nil)
 
 	fail := func(err error) {
 		w.WriteHeader(500)
@@ -347,7 +336,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
 
-	exists, _, canLoginDBConsole, _, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		username,
@@ -420,7 +409,7 @@ func (s *authenticationServer) UserLogout(
 		err := status.Errorf(
 			codes.InvalidArgument,
 			"session with id %d nonexistent", sessionID)
-		log.Dev.Infof(ctx, "%v", err)
+		log.Infof(ctx, "%v", err)
 		return nil, err
 	}
 
@@ -505,7 +494,7 @@ func (s *authenticationServer) VerifyUserSessionDBConsole(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
-	exists, _, canLoginDBConsole, _, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		userName,
@@ -577,7 +566,6 @@ func (s *authenticationServer) VerifyJWT(
 	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
 	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
 		ctx,
-		execCfg.Settings,
 		inputUser,
 		[]byte(jwtStr),
 		identMap,
@@ -776,7 +764,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 
 	if !am.allowAnonymous && (werr != nil && jerr != nil) {
 		if log.V(1) {
-			log.Dev.Infof(req.Context(), "session error: %v; jwt error: %v", werr, jerr)
+			log.Infof(req.Context(), "session error: %v; jwt error: %v", werr, jerr)
 		}
 		http.Error(w, "a valid authentication cookie or JWT is required", http.StatusUnauthorized)
 		return

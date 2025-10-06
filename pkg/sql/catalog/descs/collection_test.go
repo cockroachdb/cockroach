@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/assert"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -254,10 +255,6 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			immByIDAfter, err := descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 			require.NoError(t, err)
 			require.Same(t, immByNameAfter, immByIDAfter)
-
-			// The name must be non-empty.
-			_, err = descriptors.ByNameWithLeased(txn.KV()).Get().Database(ctx, "")
-			require.Equal(t, sqlerrors.ErrEmptyDatabaseName, err)
 
 			return nil
 		}))
@@ -598,7 +595,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Create a monitor to be used to track memory usage in a Collection.
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test_monitor"),
+		Name:     "test_monitor",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 
@@ -1239,7 +1236,7 @@ func TestDescriptorErrorWrap(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test_monitor"),
+		Name:     "test_monitor",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
@@ -1253,7 +1250,7 @@ func TestDescriptorErrorWrap(t *testing.T) {
 	}{
 		{"bare error", errors.New("bare error is treated as an assertion"), true},
 		{"out of memory", ba.Grow(ctx, monitor.Limit()), false},
-		{"pgcode error", sqlerrors.NewAlterColTypeInCombinationNotSupportedError(), false},
+		{"pgcode error", sqlerrors.NewAlterColumnTypeColOwnsSequenceNotSupportedErr(), false},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
@@ -1265,14 +1262,14 @@ func TestDescriptorErrorWrap(t *testing.T) {
 					return err
 				}
 
-				require.False(t, errors.HasAssertionFailure(tc.err))
+				require.False(t, assert.IsAssertionFailure(tc.err))
 				err = descs.DecorateDescriptorError(mut, tc.err)
 				// Ensure err is still an error
 				require.Error(t, err)
 				// Ensure descriptor info is wrapped in the error
 				require.Contains(t, err.Error(), mut.GetName())
 				// Ensure error is promoted to assertion as expected
-				require.Equal(t, tc.isAssertion, errors.HasAssertionFailure(err))
+				require.Equal(t, tc.isAssertion, assert.IsAssertionFailure(err))
 				return nil
 			}))
 		})

@@ -11,11 +11,6 @@ package grunning
 
 import "time"
 
-// Supported is true iff per-goroutine running time is available in this build.
-// We use a patched Go runtime for all platforms officially supported for CRDB
-// when built using Bazel.
-const Supported = supported
-
 // Time returns the time spent by the current goroutine in the running state.
 func Time() time.Duration {
 	return time.Duration(grunningnanos())
@@ -46,4 +41,11 @@ func Elapsed(start, end time.Duration) time.Duration {
 		diff = 0
 	}
 	return time.Duration(diff)
+}
+
+// Supported returns true iff per-goroutine running time is available in this
+// build. We use a patched Go runtime for all platforms officially supported for
+// CRDB when built using Bazel.
+func Supported() bool {
+	return supported()
 }

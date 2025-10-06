@@ -43,7 +43,6 @@ go_library(
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
-        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sem/volatility",
@@ -83,7 +82,6 @@ go_test(
     embed = [":memo"],
     deps = [
         "//pkg/kv/kvserver/concurrency/isolation",
-        "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",

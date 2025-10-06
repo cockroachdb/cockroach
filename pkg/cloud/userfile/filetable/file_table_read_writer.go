@@ -331,7 +331,7 @@ filename`, f.GetFQFileTableName())
 		defer func() {
 			if err := it.Close(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
-				log.Dev.Warningf(ctx, "failed to close %+v", err)
+				log.Warningf(ctx, "failed to close %+v", err)
 			}
 		}()
 		var ok bool
@@ -345,7 +345,7 @@ filename`, f.GetFQFileTableName())
 		defer func() {
 			if err := rows.sqlConnExecResults.Close(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
-				log.Dev.Warningf(ctx, "failed to close %+v", err)
+				log.Warningf(ctx, "failed to close %+v", err)
 			}
 		}()
 		vals := make([]driver.Value, 1)
@@ -671,7 +671,7 @@ func newFileTableReader(
 		defer func() {
 			if err := it.Close(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
-				log.Dev.Warningf(ctx, "failed to close %+v", err)
+				log.Warningf(ctx, "failed to close %+v", err)
 			}
 		}()
 		ok, err := it.Next(ctx)
@@ -689,7 +689,7 @@ func newFileTableReader(
 		defer func() {
 			if err := metaRows.sqlConnExecResults.Close(); err != nil {
 				retErr = errors.CombineErrors(retErr, err)
-				log.Dev.Warningf(ctx, "failed to close %+v", err)
+				log.Warningf(ctx, "failed to close %+v", err)
 			}
 		}()
 		vals := make([]driver.Value, 2)
@@ -736,7 +736,7 @@ func newFileTableReader(
 			defer func() {
 				if err := it.Close(); err != nil {
 					retErr = errors.CombineErrors(retErr, err)
-					log.Dev.Warningf(ctx, "failed to close %+v", err)
+					log.Warningf(ctx, "failed to close %+v", err)
 				}
 			}()
 			ok, err := it.Next(ctx)
@@ -751,7 +751,7 @@ func newFileTableReader(
 			defer func() {
 				if err := rows.sqlConnExecResults.Close(); err != nil {
 					retErr = errors.CombineErrors(retErr, err)
-					log.Dev.Warningf(ctx, "failed to close %+v", err)
+					log.Warningf(ctx, "failed to close %+v", err)
 				}
 			}()
 			vals := make([]driver.Value, 1)

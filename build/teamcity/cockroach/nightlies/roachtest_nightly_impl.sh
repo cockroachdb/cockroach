@@ -20,15 +20,11 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
 fi
 
 arch=amd64
-if [[ ${CLOUD} == "ibm" ]]; then
-  arch=s390x
+if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+  arch=amd64-fips
 fi
 $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
-if [[ $arch != "s390x" ]]; then
-  $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
-  # N.B. FIPS is metamoprhically always on as of PR#139510
-  $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh amd64-fips
-fi
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh arm64
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
@@ -36,16 +32,14 @@ source $root/build/teamcity/util/roachtest_util.sh
 # Standard release branches are in the format `release-24.1` for the
 # 24.1 release, for example.
 release_branch_regex="^release-[0-9][0-9]\.[0-9]"
-# Test selection is enabled only on release branches.
-selective_tests="false"
 
 if [[ "${TC_BUILD_BRANCH}" == "master" ]]; then
-  # We default to using test selection on master, unless explicitly
+  # We default to running all tests on master, unless explicitly
   # overriden in the TeamCity UI.
-  selective_tests="${SELECTIVE_TESTS:-true}"
+  select_probability="${SELECT_PROBABILITY:-1.0}"
 elif [[ "${TC_BUILD_BRANCH}" =~ ${release_branch_regex}$ ]]; then
   # Same for release branches.
-  selective_tests="${SELECTIVE_TESTS:-true}"
+  select_probability="${SELECT_PROBABILITY:-1.0}"
 elif [[ "${TC_BUILD_BRANCH}" =~ ${release_branch_regex}\.[0-9]{1,2}-rc$ ]]; then
   # If we are running an `-rc` branch for a specific patch release
   # (for instance, `release-24.1.1-rc`), then only run 40% of the test
@@ -55,7 +49,7 @@ elif [[ "${TC_BUILD_BRANCH}" =~ ${release_branch_regex}\.[0-9]{1,2}-rc$ ]]; then
   # NOTE: in the future, instead of choosing the tests randomly as we
   # do here, we plan to utilize a smarter test selection strategy (see
   # #119630).
-  select_probability="--select-probability=0.4"
+  select_probability="${SELECT_PROBABILITY:-0.4}"
 elif [[ "${TC_BUILD_BRANCH}" =~ ^release- && "${ROACHTEST_FORCE_RUN_INVALID_RELEASE_BRANCH}" != "true" ]]; then
   # The only valid release branches are the ones handled above. That
   # said, from time to time we might have cases where a branch with
@@ -68,32 +62,14 @@ elif [[ "${TC_BUILD_BRANCH}" =~ ^release- && "${ROACHTEST_FORCE_RUN_INVALID_RELE
 else
   # Use a 0.1 default in all other branches, to reduce the chances of
   # an accidental full-suite run on feature branches.
-  select_probability="--select-probability=0.1"
+  select_probability="${SELECT_PROBABILITY:-0.1}"
 fi
 
-# Special handling for the select-probability is needed because it is
-# incompatible with the selective-tests flag. If it isn't overriden in the
-# TeamCity UI or set by the logic above, we need to omit the flag entirely.
-if [[ "${SELECT_PROBABILITY:-}"  != "" ]]; then
-  select_probability=--select-probability="${SELECT_PROBABILITY}"
-fi
-
-# Fail early if both selective-tests=true and select-probability are set.
-if [[ "${selective_tests}" == "true" && "${select_probability:-}" != "" ]]; then
-  echo "SELECTIVE_TESTS=true and SELECT_PROBABILITY are incompatible. Disable one of them."
-  exit 1
-fi
-#
-# N.B. Recall, the conditional probability of FIPS is P(fips) * (1 - P(arm64)).
-# Hence, with the given defaults, FIPS is effectively enabled with probability 0.01 (= 0.02 * 0.5)
-#
 build/teamcity-roachtest-invoke.sh \
   --metamorphic-encryption-probability=0.5 \
   --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
-  --metamorphic-fips-probability="${FIPS_PROBABILITY:-0.02}" \
   --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
-  ${select_probability:-} \
-  --always-collect-artifacts="${ALWAYS_COLLECT_ARTIFACTS:-false}" \
+  --select-probability="${select_probability}" \
   --use-spot="${USE_SPOT:-auto}" \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
@@ -106,8 +82,5 @@ build/teamcity-roachtest-invoke.sh \
   --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --slack-token="${SLACK_TOKEN}" \
   --suite nightly \
-  --selective-tests="${selective_tests:-false}" \
-  --export-openmetrics="${EXPORT_OPENMETRICS:-false}" \
-  --openmetrics-labels="branch=$(tc_build_branch), goarch=${arch}, goos=linux, commit=${COMMIT_SHA}, suite=nightly" \
-  ${EXTRA_ROACHTEST_ARGS:+$EXTRA_ROACHTEST_ARGS} \
+  --selective-tests="${SELECTIVE_TESTS:-true}" \
   "${TESTS}"

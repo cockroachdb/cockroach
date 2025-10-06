@@ -68,7 +68,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 2 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
@@ -77,7 +77,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ca-central-1')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
@@ -87,7 +87,7 @@ TABLE regional_by_row_table
  │              │    └── ('us-east-1')
  │              └── ZONE
  │                   ├── replica constraints
- │                   │    ├── 2 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
  │                   │    └── 1 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
@@ -110,7 +110,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 2 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
@@ -119,7 +119,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ca-central-1')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
@@ -129,7 +129,7 @@ TABLE regional_by_row_table
  │              │    └── ('us-east-1')
  │              └── ZONE
  │                   ├── replica constraints
- │                   │    ├── 2 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
  │                   │    └── 1 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
@@ -152,7 +152,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 2 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
@@ -161,7 +161,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ca-central-1')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
@@ -171,7 +171,7 @@ TABLE regional_by_row_table
  │              │    └── ('us-east-1')
  │              └── ZONE
  │                   ├── replica constraints
- │                   │    ├── 2 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
  │                   │    └── 1 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
@@ -194,7 +194,7 @@ TABLE regional_by_row_table
  │         │    └── ZONE
  │         │         ├── replica constraints
  │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
- │         │         │    ├── 2 replicas: [+region=ca-central-1]
+ │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ap-southeast-2]
  │         │         └── lease preference: [+region=ap-southeast-2]
@@ -203,7 +203,7 @@ TABLE regional_by_row_table
  │         │    │    └── ('ca-central-1')
  │         │    └── ZONE
  │         │         ├── replica constraints
- │         │         │    ├── 2 replicas: [+region=ap-southeast-2]
+ │         │         │    ├── 1 replicas: [+region=ap-southeast-2]
  │         │         │    ├── 1 replicas: [+region=ca-central-1]
  │         │         │    └── 1 replicas: [+region=us-east-1]
  │         │         ├── voter constraints: [+region=ca-central-1]
@@ -213,7 +213,7 @@ TABLE regional_by_row_table
  │              │    └── ('us-east-1')
  │              └── ZONE
  │                   ├── replica constraints
- │                   │    ├── 2 replicas: [+region=ap-southeast-2]
+ │                   │    ├── 1 replicas: [+region=ap-southeast-2]
  │                   │    ├── 1 replicas: [+region=ca-central-1]
  │                   │    └── 1 replicas: [+region=us-east-1]
  │                   ├── voter constraints: [+region=us-east-1]
@@ -266,7 +266,7 @@ ap-southeast-2  23
 query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
-<before:/Table/76>  …
+<before:/Table/67>  …
 
 query TIIII
 SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
@@ -404,7 +404,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX r
 ORDER BY 1
 ----
 start_key           end_key               replicas  lease_holder
-<before:/Table/76>  …/"\x80"/0            {1}       1
+<before:/Table/67>  …/"\x80"/0            {1}       1
 …/"\x80"/0          …/"\xc0"/0            {4}       4
 …/"\xc0"/0          <after:/Table/110/5>  {7}       7
 
@@ -481,7 +481,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 
       table: regional_by_row_table@regional_by_row_table_pkey
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'us-east-1'/1 - /'us-east-1'/1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kmGL2jAYx9_vU4Tn1TYiNq2DERjcOCsTPL1ZYYOzSGyfc5m1yZIUT8TvPlq33bXU2-mLywshTx5_-f_ydA_2VwYconAUXs_IezKYTm7IXfj9dvR5OCZv-8NoFn0dvSP1BoMrqXKRLZa7hVHbhRPLDMm3L-E0JHpNPhEWk8lgEIUz4gOFXKU4Fhu0wO-AQUxBG5WgtcqUpX3VMEwfgHsUZK4LV5ZjCokyCHwPTroMgcOsvGeKIkXT9YBCik7IrMK2RrpqrS70GndA4VplxSa3nOg1JXrtUyIoWVLyEyhEWpQn3TlczaHLuh7EBwqqcI_hrBMrBM6e2Az7wL0DvUyIvZLQfP7w0fuPlN-QYpdK-a8nlZwr5Z-UenQpcmVSNJjWPOJDi_ZYdZTuBo3G9ihBI0rwgigWjRQZOTtRrz6CkdxIR9jJV-o1ovXOGf0UrVa5xRc9gte4qcNKCUxXeBS3qjAJ3hqVVL3H7aQCVYUUrTue9o6bYV4dsfIGg2Lzb8hPSexZUnCa5DVJ_qUk1iQFl9oFTVLvWdKHGsmr28UU7jO1XcgUOHh_Vqfl5--C8g9iZcsPIPqhthV2ttPl-O5FZpHCjVhjHx2ajcyldTIB7kyBh8Ob3wEAAP__tq0eJw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8k1Fr2zAUhd_3K8R92oZCLCeDIRh0NA4LpEkXBzZoTFDs20yLY2mSTBqC__uws621cbomD9WDQVfX3z3nyD6A_ZUChzAYB9dz8p4MZ9Mbchd8vx1_Hk3I28EonIdfx-9IvcHgWqpMpMvVfmnUbunEKkXy7UswC4jekE-ERWQ6HIbBnPhAIVMJTsQWLfA7YBBR0EbFaK0yZelQNYySB-AeBZnp3JXliEKsDAI_gJMuReAwL-fMUCRouh5QSNAJmVbYVklXrdWl3uAeKFyrNN9mlhO9oURvfEoEJStKfgKFUIvypLuAxeLho7eALut6EBUUVO4eBVon1gicPXE0GgD3CnqZKfZ6puJzTbGTph695JkyCRpMaj6iosX2RHWU7vqNxnYpfkOKf2m-vVfK9-o_2fYahnovyNaikSIlZ0fcr3sey610hJ2U5jWk9c_JeoZWq8zii261OanDShOYrPFo3KrcxHhrVFz1HrfTClQVErTueOofN6OsOmLlBINi--9XfEpil5JYk-Q_S-qfJvWapN6lJL9J6j9L-lAjefWcIgr3qdotZQIcvD-r0_L4u6B8Qaxt-QGEP9Suws73ury-e5FapHAjNjhAh2YrM2mdjIE7k2NRvPkdAAD__67tHiA=
 
 query T
 EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
@@ -502,7 +502,7 @@ SET vectorize=off
 query T retry
 SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
 ----
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ktFr2zAQxt_3VxwHpe1QiOW-DMGgpfGYWZp2cWCDxgQluqZabEuTZNIQ8r8PO93ahGSwPkwPBt2dv_t-H1qj_1mgwCzpJ9cjeA-fhrc3cJ98v-tfpQM466XZKPvaP4fdAUdzbSpZTKariTPLSZDTguDb52SYgF3AR-A5XGUQqLRwJs-fOxL66ZcETk96Ws6dLE9OkWFlFA1kSR7FPXLMGVpnZuS9cU1p3Q6k6glFxFBXtg5NOWc4M45QrDHoUBAKHDUehiQVuW6EDBUFqYtW9qDdy4PViV3QChlem6IuKy_ALhjYRcxAMpgy-IEMMyubTneMl2Ps8m6E-YahqcOLOR_knFDwVzRpD0W0YW8D4v8JaDx--hBtoUBWCjiY8EjuKGC8B8iPAr5weXJaFlBXxilypHbQ8s2BJAamY2w33s2gr0sdgB-1drFnLf6X7Ifkrak87Xk7vCna29ThDQSpOW3BvandjO6cmbWz2-ttK9QWFPmw7cbbS1q1Ld5scCTLP0_ntRJ_qxLfV4r_qnSxoxTtesoZPhRmOdEKBUbPp3Pg8_tg84Oc-ybs7NEsW9nRyjZRPcjCE8MbuaAeBXKlrrQPeoYiuJo2m3e_AgAA__-t84PV
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kFFr2zAQx9_3KY6D0nYoxPJehmDQ0njMLE27OLBBY4ISXVMttqVJMmkI-e7DTrc2IRlbH6YHg-7OP_1_t0b_o0CBWdJPrkbwFj4Ob67hLvl2279MB3DWS7NR9qV_DrsDjubaVLKYTFcTZ5aTIKcFwddPyTABu4APwHO4zCBQaeFMnj91JPTTzwmcnvS0nDtZnpwiw8ooGsiSPIo75JgztM7MyHvjmtK6HUjVI4qIoa5sHZpyznBmHKFYY9ChIBQ4ajIMSSpy3QgZKgpSFy32YNyLg9WJXdAKGV6Zoi4rL8AuGNhFzEAymDL4jgwzK5tOd4zj8eP7aIxd3o1AVgo4mPBADvMNQ1OH57A-yDmh4C_s0h6KaMNeJ8j_k-DFVu6oULwnxI8KPXt4cloWUFfGKXKkdlTyzQHzgekY2413nfu61AH40WjRXrT4X3Y9JG9N5Wkv29-91OGNBKk5bcW9qd2Mbp2ZtbPb600LaguKfNh24-0lrdoWb15wJMvfm31J4q8lRfuk-I-kdzukaJeUM7wvzHKiFQqMnk7nwOfXweYHOffNsrMHs2yxo5VtVnUvC08Mr-WCehTIlbrSPugZiuBq2mze_AwAAP__m_KD0g==
 
 statement ok
 RESET vectorize
@@ -813,7 +813,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * 
               table: child@child_pkey
               spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslGFr8kgQx9_fpxjmjXqkuBstlIWCpUbOYmNPA1eoImkytXuN2Ty7CbUUv_vDJvapCbXQ0ryI7uzkN___7LCvaH4lKHDuTbzLAP6G0Wx6DXfe7c3kYuxDezieB_N_Jx2oJ0SPMonhv3-8mQdtfxqAd2sToV1Py0JNab7Py1YyhnOIVvZPpwMX_hDaURXkrLOE6Wg09wJw0cFUxeSHGzIo7pDj0sFMq4iMUdqGXsuEcbxFwRyUaVbkNrx0MFKaULxiLvOEUGAQ3ic0ozAm3WXoYEx5KJMSW3oYlO9V9kQv6OClSopNagRYWc5eKjo4z0Ib7S5wsMAuZ12Gy52DqsjfK5s8XBMKfiB1PETBds731PIfULtYbM_YXjGEaQwcVP5I-qh6t6GeH1X_LtqQlmECRap0TJrimu7l7gObvjpRWdetG5zIjcyBH5XWa0hzv9LYKyXTfV979bLBS0YCJt4ogAs_GMPVdOyjg9XkDqqft4ZPlHoqMvhfyRRUKqA96MM5bFt91hJCDDhjnJ3tB3vgwjkMep3Dc8qqc9Lx_UrTWqr0qNl-w2zvm2b7P2vW3gjb1tmhXQe2rajm_0cacNpoQP8rDZiRyVRqqDGJH1dijUon3I4sxWuqxtyoQkd0o1VU5lbLaQkqAzGZvNp1q8U4Lbe4raAp3Py5BQ5J_Lsk3iS5n5J6NRI7JLlNUu9TUv84qdck9T8lnR4nMdv7h0Q925tMINs_Jx-83h60H4RrYwdg_qieS6wddIPiIUwMOXgdPtGQctIbmUqTywhFrgva7f76HQAA__8pKDXV
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslNFr6kgUxt_3rzicF3VJcRJdKAOFlBrZFBu7GthCFUmTUzu3MZM7k1BL8X-_TGJvTajltjQP0Zwcf_N9Zz7nBfXPFDnOvYl3EcLfMJ5Nr-DWu7menPsBdEf-PJz_N-lBsyF-EGkC___rzTzoBtMQvBvTCN1mWx4pyop9X74SCZxBvDJfej04D0bQjeuizXpLmI7Hcy8EBy3MZEJBtCGN_BZtXFqYKxmT1lKZ0kvV4Cdb5MxCkeVlYcpLC2OpCPkLFqJICTmG0V1KM4oSUn2GFiZURCKtsJUHt7qv8kd6RgsvZFpuMs3ByLL2UtHCeR6Zan-Bi8X2lC2wb7M-gyhLwAZZPJDC5c5CWRZvSnQRrQm5fSDdHyFnO-tr6u1vUO_ulR9V67TU2kfVvonUpESUQplJlZCipKFzuXvHViBPZN53moYmYiMKsI9KYy1pzmcGeSlFtp_joLls-JwTh4k3DuE8CH24nPoBWlgn160_Xgc8kfKxzOGHFBnIjEPXHcIZbDtD1uGcuzZjNjvdB9t14AzcQe9wX_J6X1Ryt1K0FjI7anbQMjv4otnh95o1J8K2c3po14JtJ274_5YBDFsDGH5mADPSucw0tZL4Z7k6sU1kKVlTHXMtSxXTtZJx1Vs_TitQVUhIF_Vbp37ws-qVbVZQFG1-_48OSfZXSaxNcj4kDRokdkhy2qTBh6ThcdKgTRp-SPrnOImZ2d-n8smcXBzZ_jp55_Z6oflBtNYmAPMH-VRhTdA18vso1WThVfRIIypIbUQmdCFi5IUqabf761cAAAD__yS4NdA=
 
 statement ok
 SET vectorize=on
@@ -890,7 +890,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1FrIjEQx9_vUwzzoh4pJqsPJVCw1JWzWO2pcIUqst2d2lzXzV4SqaX43Y_s2lY9LbRcHrKbyeQ_v8xMXtD-SVHiKOyFF2P4Dp3h4Apuw5vr3nm3D9V2dzQe_ezVYNchflBpAr9-hMMQwhvvA9VdjzwylLmNSz5TCZxBPPM_NTjvt6EalzbBa1MYdDqjcAwBMsx0Qv1oQRblLQqcMsyNjslabbzppXDoJiuUnKHK8qXz5inDWBtC-YJOuZRQ4ji6S2lIUUKmzpFhQi5SaSFb0LeKeZY_0jMyvNDpcpFZCR6LbUiR4SiPvLU-wdYE64LXOU7XDPXSvUe2LpoTSrGF2m2j5Gv2NVrxH2gnk9Up3xBDlCUgQLsHMkfpgz16cZT-HdqSUVEKy0ybhAwlO9zT9YFr9vWJzuvB7gV7aqEciKNojT204DOJvdQq2-S1sRt2_JyThF7YGcMovOrC5aDbR4Zl47bKz2vCe1o_LnP4rVUGOpNQbTXhDFaVJq9IKVuCc8FPN43dCuAMWo0aMhzSQjuC9MBp_7hWldPt8wxWlXhH8F_Ft8rnZeVNcjczNFc6O5q-5l76Gp9J35BsrjNLe6U9HInvRToRvgcomVPZN1YvTUzXRseFb7kcFEKFISHryt2gXHSzYkv4CIaixduz2lYSX1US-0rBh0qNHSW-rRTsKzU-VGoeV-I-Y_epfvIPWiLfjJMD0-tAfyCaW1-20YN-KmR9c1uU91FqieFV9EhtcmQWKlPWqRilM0tar7_9DQAA__-kMOJR
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk0Fv4jwQhu_frxjNBfjkCif0UFmqRFWClopClyBtpYJQmkyptyHO2o5KVfHfV05oS9hSbavNweDx-PXjd8bPaH6lKDAMhsH5FP6H_mR8CTfB9dXwbDCCZm8QTsPvwxbUE-J7mSbw41swCSC4djnQrGfkkabMblPyhUzgFOKF-9OCs1EPmnEV83hrDuN-Pwym4CPDTCU0ilZkUNygh3OGuVYxGaO0Cz2XCYNkjYIzlFleWBeeM4yVJhTPaKVNCQVOo9uUJhQlpNscGSZkI5mWsiV9txwX-QM9IcNzlRarzAhwWGxLigzDPHLR9gxns_UJn2Hb420OUZaAB8rek8b5hqEq7BuJsdGSUHg76IMeCr5hX6P3_gF9d0t-kNbfo_UO0r5BGtIySqHIlE5IU1LjnG_eudZIHam87dcvNJQracE7iMb30PzPGHmhZLb1sVM_dvqUk4Bh0J9CGFwO4GI8GCHDqnG71c-LwUOlHoocfiqZgcoENLvHcArrxjFvCCG6HuceP9k2dteHU-h2WshwQitlCdJ3drvHtW6c7O5nsG7ENcE_FV8rnVeV1sntQtNSquygfZ09-zqfsW9CJleZob3S_l2hjjzXA5Qsqeobowod05VWcZlbTcelUBlIyNhq1a8mg6xc8twJmqLVa2PuKnlfVeL7Sv6HSp2aEt9V8veVOh8qHR9W4s6xu1Q9ugcskG-_o3eGlw_dhmhpXNnCe_VYyrrmNijuotQQw8vogXpkSa9kJo2VMQqrC9ps_vsdAAD__6Zd4k0=
 
 statement ok
 SET vectorize=on
@@ -968,7 +968,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id =
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk0FP4zwQhu_frxjNpfDJqHbaA7KEFESLNqikbFtpV6JVFZKheEnjrO2IItT_vkpSoM22SKD1wYnH9juP37Ff0P5OUeK4P-hfTOB_uBwNr-G2__NmcB6EcNQLxpPx98Ex7C6IH1SaQBCG_RFcDYMQ8shQ5mAYQj5XCZxBPK9-fnzrj_oQ1zHBZzC8vBz3J-Ahw0wnFEZLsihvUeCMYW50TNZqU4ZeqgVBskLJGaosL1wZnjGMtSGUL-iUSwklTqK7lEYUJWTaHBkm5CKVVrIVqF_18_yRnpHhhU6LZWZlRcU2oMhwnEdltD1Ff4ptwdscZ2uGunDvma2LFoRSbKEGPZR8zb5GK_4B7XS6OuUbYoiyBARo90DmIL3XoBcH6d-hLRkVpVBk2iRkKNnhnq33HDPUJzpve7sHHKilciAOonUaaN5njL3SKtv42tlNW99Ov_68OjvQ-rHI4ZdWGehMwpHfhTNYtbq8JaX0BeeCnx7DediDI9-DM_A7x8hwREvtCNI9u8sHs2qdbu9nsGrFO4J_K76VOK9LbJK7uaGF0hkyHBZOgi-Y7zG_c9C3bsO3zmd8G5HNdWapUdP9mXgj04koi0_JguoLY3VhYroxOq7W1sNhJVQFErKunvXqQZBVU6LMYChavr2nbSXxVSXRVPI-VOrsKPFtJa-p1PlQqXtYiZeO3af6qXzJEvmmnezpXhuWG6KFLcs2ftBPlezkOS9Nv49SSwyvo0fqkSOzVJmyTsUonSlovf7vTwAAAP__9TTaxw==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9FO4zoQhu_PU4zmpnBkVDvhAllCCqJBJ6iknLbSrkSrKiRD8ZLGWdsRRajvvkpSoO1StKD1hROP7d-f_xk_o_2Zo8RR2A_Px_AvXAwHV3ATfr_un0UxHPSi0Xj0f_8Qthek9yrPIIrjcAiXgyiGMjFUOBjEUM5UBqeQzpqfb_-FwxDSNib4FAYXF6NwDB4yLHRGcbIgi_IGBU4ZlkanZK02dei5WRBlS5ScoSrKytXhKcNUG0L5jE65nFDiOLnNaUhJRqbLkWFGLlF5I9uABk0_Kx_oCRme67xaFFY2VGwNigxHZVJHuxOcTJYnfIJdwbsckiIDAdrdk8HpiqGu3BuJdcmcUIoN9KiHkq_Y1-jFX6AP1uR7ab0dWrGX9g3SklFJDlWhTUaGsi3O6eqda8X6SJddb_tCfbVQDsReNL6D5n3GyEutirWP_vaxbXUG7efFyb7WD1UJP7QqQBcSDoJjOIVl55h3pJSB4Fzwk0M4i3twEHhwCoF_iAyHtNCOIH9nd_1glp2Tzf0Mlp10S_B3xdeUlm1KTXY7MzRXukCGg8pJCAQLPBb4e33zd3zzP-PbkGypC0s7Of2zDB2JOvmUzaktGKsrk9K10Wmzth0OGqEmkJF17azXDqKimRL1CYaSxWtFbiqJryrxXSXvQyV_S4lvKnm7Sv6HSsf7lXjt2F2uH-uXK5Gv29E73UvDekMyt3XaRvf6sZEdP5W16XdJbonhVfJAPXJkFqpQ1qkUpTMVrVb__AoAAP__93baww==
 
 statement ok
 SET vectorize=on
@@ -1046,7 +1046,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = 
           table: child@child_pkey
           spans: [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fv2jAQx9_3KU73Qju5wg48VJYqpSpBo6LQAdMmFYTS5Eq9hjizHZWq4rtPSWgLGVRqtTwYfLb_9_P_zs9o_yQocRz0g4sJfIXuaHgFN8Gv6_55bwBHnd54Mv7eP4bdDdG9SmLoB90JXA57A8hCQ6mD4QCyuYrhDKJ5-efnt2AUQFTFBJ_BsNsdBxPwkGGqYxqES7Iob1DgjGFmdETWalOEnssNvXiFkjNUaZa7IjxjGGlDKJ_RKZcQSpyEtwmNKIzJNDkyjMmFKillS06_HOfZAz0hwwud5MvUypKKbUCR4TgLi2hziv4Um4I3Oc7WDHXu3jJbFy4IpdhC7XVQ8jX7HK34D7TT6eqUb4ghTGMQoN09mYP0Xo1eHKR_g7ZkVJhAnmoTk6F4h3u23nPNgT7RWdPbvWBfLZUDcRCtVUPzPmLspVbpxtfWbtrJU0ay6tbhj0kwKnsWGVZd61c_L473tX7IM_itVQo6lXDkt-EMVo02b0gpfcG54KfHcD7owJHvwRn4rWNkOKKldgTJntPFO1o1TrfPM1g1oh3BfxVfS59VpTfx7dzQQukUGQ5zJ8EXzPeY3zroZ7vmZ-sjfo7IZjq1VKv1_ky8lulEFE1B8YKqRrI6NxFdGx2Ve6vpsBQqAzFZV6161aSXlkuiyGAoXL6-s20l8VklUVfy3lVq7SjxbSWvrtR6V6l9WIkXjt0l-rF44RL55jvZM7x8WBwIF7Yo2_heP5ayRbdblHdhYonhVfhAHXJklipV1qkIpTM5rddf_gYAAP__PpHhDA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1FP2zwUhu-_X3F0bgqfjGqnXCBLSEE01YpKw9pMm0SrKiSH4pHGme2IItT_PiUp0HYUDTRfOPGx_frxOa-f0P7KUOI4GATnEfwPvVF4CdfBj6vBWX8IB93-OBp_HRzC9oLkTmUpDIJeBBdhfwhFbCh3EA6hmKkUTiGZ1T_fvwSjAJImJvgUwl5vHETgIcNcpzSMF2RRXqPAKcPC6ISs1aYKPdUL-ukSJWeo8qJ0VXjKMNGGUD6hUy4jlBjFNxmNKE7JtDkyTMnFKqtla06_7mfFPT0iw3OdlYvcypqKrUGR4biIq2h7gpPJ8oRPsC14m0OcpyBAuzsyOF0x1KV7JbEunhNKsYHe76LkK_Y5evEP6P01-V5ab4dW7KV9hbRkVJxBmWuTkqF0i3O6euNaQ32ki7a3faGBWigHYi8a30HzPpLIC63ydR4728dGjwXJxq3htygY1Z5Fho1r_ebznOGB1vdlAT-1ykHnEg78YziFZeuYt6SUvuBc8JNDOBt24cD34BT8ziEyHNFCO4Lsjd3VO1q2Tjb3M1i2ki3BPxVfSl00pTbpzczQXOkcGYalk-AL5nvM7-zNZ2cnn52P5HNEttC5pZ1a_13ljkRlCkrn1BjJ6tIkdGV0Uq9thmEtVAdSsq6Z9ZpBP6-nRHWCoXjx4tRNJfFZJb6r5L2r1NlS4ptK3q5S512l4_1KvMrYbaYfqhctka_b0Rvdc8NqQzy3VdnGd_qhlq3cblHexpklhpfxPXXJkVmoXFmnEpTOlLRa_fc7AAD__0CL4Qg=
 
 statement ok
 SET vectorize=on
@@ -1746,8 +1746,10 @@ VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 │               │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column2 = pk)
 │               │ locking strength: for update
 │               │
-│               └── • values
-│                     size: 5 columns, 2 rows
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 5 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -1833,7 +1835,7 @@ CREATE TABLE public.regional_by_row_table (
   INDEX new_idx (a ASC, b ASC),
   UNIQUE INDEX unique_b_a (b ASC, a ASC),
   FAMILY fam_0_pk_pk2_a_b_j_crdb_region (pk, pk2, a, b, j, crdb_region)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+) LOCALITY REGIONAL BY ROW
 
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
@@ -1974,19 +1976,16 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │           ├── • values
 │           │     size: 1 column, 1 row
 │           │
-│           └── • index join
-│               │ table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
+│           └── • limit
+│               │ count: 1
 │               │
-│               └── • limit
-│                   │ count: 1
+│               └── • filter
+│                   │ filter: ((a + b) = 2) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
 │                   │
-│                   └── • filter
-│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-│                       │
-│                       └── • scan
-│                             missing stats
-│                             table: regional_by_row_table_virt@regional_by_row_table_virt_v_key
-│                             spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│                   └── • scan
+│                         missing stats
+│                         table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • constraint-check
     │
@@ -2156,19 +2155,16 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │           ├── • values
 │           │     size: 1 column, 1 row
 │           │
-│           └── • index join
-│               │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+│           └── • limit
+│               │ count: 1
 │               │
-│               └── • limit
-│                   │ count: 1
+│               └── • filter
+│                   │ filter: ((a + b) = 2) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
 │                   │
-│                   └── • filter
-│                       │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-│                       │
-│                       └── • scan
-│                             missing stats
-│                             table: regional_by_row_table_virt_partial@v_v_gt_0 (partial index)
-│                             spans: [/'ap-southeast-2'/2 - /'ap-southeast-2'/2] [/'ca-central-1'/2 - /'ca-central-1'/2] [/'us-east-1'/2 - /'us-east-1'/2]
+│                   └── • scan
+│                         missing stats
+│                         table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+│                         spans: FULL SCAN (SOFT LIMIT)
 │
 └── • constraint-check
     │
@@ -2183,18 +2179,12 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
                 │ count: 1
                 │
                 └── • filter
-                    │ filter: (a = 1) AND (b > -1)
+                    │ filter: ((a = 1) AND (b > -1)) AND ((pk != 1) OR (crdb_region != 'ap-southeast-2'))
                     │
-                    └── • index join
-                        │ table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-                        │
-                        └── • filter
-                            │ filter: (pk != 1) OR (crdb_region != 'ap-southeast-2')
-                            │
-                            └── • scan
-                                  missing stats
-                                  table: regional_by_row_table_virt_partial@v_a_gt_0 (partial index)
-                                  spans: FULL SCAN (SOFT LIMIT)
+                    └── • scan
+                          missing stats
+                          table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
+                          spans: FULL SCAN (SOFT LIMIT)
 
 query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
@@ -2305,7 +2295,7 @@ statement ok
 USE single_region_test_db;
 
 statement ok
-CREATE TABLE t63109 (a INT, b STRING) WITH (schema_locked = false);
+CREATE TABLE t63109 (a INT, b STRING);
 
 statement ok
 ALTER TABLE t63109 SET LOCALITY REGIONAL BY ROW;
@@ -3177,17 +3167,10 @@ vectorized: true
 │   └── • delete
 │       │ from: user_settings_cascades
 │       │
-│       └── • lookup join
-│           │ table: user_settings_cascades@user_settings_cascades_user_id_idx
-│           │ equality: (crdb_region, id) = (crdb_region, user_id)
-│           │
-│           └── • distinct
-│               │ estimated row count: 100
-│               │ distinct on: id, crdb_region
-│               │
-│               └── • scan buffer
-│                     estimated row count: 100
-│                     label: buffer 1000000
+│       └── • scan
+│             missing stats
+│             table: user_settings_cascades@user_settings_cascades_user_id_idx
+│             spans: [/'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ap-southeast-2'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'ca-central-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882'] [/'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882' - /'us-east-1'/'5ebfedee-0dcf-41e6-a315-5fa0b51b9882']
 │
 └── • constraint-check
     │
@@ -3516,7 +3499,7 @@ SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM t108206_c WHERE EXISTS (SELECT * 
           table: t108206_c@t108206_c_pkey
           spans: [/'ca-central-1'/20 - /'ca-central-1'/20] [/'us-east-1'/20 - /'us-east-1'/20]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr4kAQx9_vUwzzoh5b3EQ5ZKFgqZGzWO2pcIUqkiZTu9eYze1uqKX43Y-NntWcFlouDyGZnf3Nf_47-4rmd4ICx0E_uJzAV-iOhtdwF9ze9C96A6h2euPJ-Ee_BocJ1uMtn3-bR_DzezAKILh1eVA9npVts7K5jOEcorn7qMHFoAPVaBPzeW0Gw253HEzAR4apimkQLsmguEMPZwwzrSIyRmkXei0SevEKBWco0yy3LjxjGClNKF7RSpsQCpyE9wmNKIxJ1zkyjMmGMimwuybau6959kQvyPBSJfkyNQKcPLZVjAzHWeii9Sm2p1j3eZ3jbM1Q5fZNgbHhglB4e5J7HRR8zT6n2vuPqqfTVYtvlUOYxuCBso-kT3bhl7rwTnbxJt6QlmECeap0TJriA_2z9ZF2B-pMZXX_sNG-XEoL3klpjZI0_yMGXymZbv1tHJadvGQkoB90JzAOrntwNewNkO1sz3a2Z4W9cxmvkGFfqac8g19KpqBSAdV2E85hVWnyihCi7XHu8dZ25Ns-nEO7UUOGI1oqS5Ac2e1u36rS2t_PYFWJDoD_EnczkG1mQMf3c00LqdKTRjZLRjY-YuSITKZSQ6VDPl6JlyqdeW4aKF7QZoKMynVEN1pFRe7md1iAikBMxm5W_c1PLy2WPFdBU7jcXbR9kvdZklcm-e-SGgckvk_yy6TGu6TmaRJ3jj0k6tldbYF8-5wdef190G0IF8Yd2_hRPRdYN-YGxUOYGGJ4HT5RhyzppUylsTJCYXVO6_WXPwEAAP__fkfliA==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk1Fr6koQx9_vpxjmRb1scRPLRRYKlhq5KVZ7jXALVSRNpnZPYzZnd0Mtxe9-2Oix6tFyWk4eQjI7-9v__Gf2Dc33DAVGQT-4GsPf0BsNb-A-uLvtX4YDqHfDaBz912_AfoL1eNvn_8wS-P_fYBRAcOfyoH48q9hkFTOZwgUkM_fRgMtBF-rJOubzxhSGvV4UjMFHhrlKaRAvyKC4Rw-nDAutEjJGaRd6qxLCdImCM5R5UVoXnjJMlCYUb2ilzQgFjuOHjEYUp6SbHBmmZGOZVdhtEZ3t16x4pldkeKWycpEbAU4e2yhGhlERu2hzgpPJss0n2PR5k0Ocp-CBsk-kcbpiqEr7rsjYeE4ovJ0Swi4KvmJfq8L7g1V0NhWcVO0fqPZOqn4Xa0jLOIMyVzolTeme3unqSHkDdaaKpr9fWF8upAXvpDR-IM3_jKHXSuYbP1v7x45fCxLQD3pjiIKbEK6H4QDZ1uZia3NR2TmT6RIZ9pV6Lgv4pmQOKhdQ75zDBSxr57wmhOh4nHu8vRn5jg8X0Gk1kOGIFsoSZEd2u9u3rLV39zNY1pI94K_Ebc-Ldc91-jDTNJcqP2lk68DI1meMHJEpVG7ooMm_17Izz00DpXNaT5BRpU7oVqukyl3_DitQFUjJ2PWqv_4J82rJcydoihfbEd0leV8l8UOS_yGptUfiuyT_kNT6kHR-msSdY4-ZenFXWSDfPGdHXj8fdBviuXFti57US4V1Y25QPMaZIYY38TN1yZJeyFwaKxMUVpe0Wv31IwAA__-d1uWE
 
 statement ok
 SET vectorize=on
@@ -3580,7 +3563,7 @@ ALTER TABLE xyz INJECT STATISTICS '[
 
 # Regression test for #105942.
 query T retry
-EXPLAIN (VERBOSE) SELECT
+EXPLAIN SELECT
   xyz.str,
   abc.id,
   abc.id1,
@@ -3601,24 +3584,22 @@ WHERE
 distribution: local
 vectorized: true
 ·
-• project
-│ columns: (str, id, id1, id2, created_at, updated_at)
+• lookup join
+│ estimated row count: 1
+│ table: xyz@xyz_id2_str_abc_id_idx
+│ equality: (crdb_region, id2) = (crdb_region, id2)
+│ pred: ((abc_id = id) AND (id2 = '68088706-02c6-47d1-b993-a421cd761f2b')) AND (crdb_region = 'ap-southeast-2')
 │
-└── • lookup join (inner)
-    │ columns: (str, abc_id, id2, crdb_region, id, id1, created_at, updated_at, id2, crdb_region)
-    │ estimated row count: 1
+└── • index join
+    │ estimated row count: 0
     │ table: abc@abc_pkey
-    │ equality: (crdb_region, abc_id) = (crdb_region, id)
-    │ equality cols are key
-    │ pred: (((id2 = id2) AND (id2 = '68088706-02c6-47d1-b993-a421cd761f2b')) AND (crdb_region = 'ap-southeast-2')) AND (id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6')
-    │ parallel
     │
     └── • scan
-          columns: (str, abc_id, id2, crdb_region)
-          estimated row count: 4 (3.7% of the table; stats collected <hidden> ago)
-          table: xyz@xyz_id2_str_abc_id_idx
-          spans: /"@"/"h\b\x87\x06\x02\xc6Gѹ\x93\xa4!\xcdv\x1f+"-/"@"/"h\b\x87\x06\x02\xc6Gѹ\x93\xa4!\xcdv\x1f+"/PrefixEnd
+          estimated row count: 0 (0.37% of the table; stats collected <hidden> ago)
+          table: abc@abc_id1_id2_idx
+          spans: [/'ap-southeast-2'/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'/'68088706-02c6-47d1-b993-a421cd761f2b']
 
+# The following should use a string of 4 lookup/index joins with a cost under 200.
 query T retry
 EXPLAIN(opt,verbose) SELECT
   x.str,
@@ -3652,59 +3633,78 @@ WHERE
 project
  ├── columns: str:12 id1:2 id2:5 created_at:3 updated_at:4 id1:21 id2:24 created_at:22 updated_at:23
  ├── immutable
- ├── stats: [rows=1.17627]
- ├── cost: 164.374636
- ├── cost-flags: unbounded-cardinality
- ├── fd: ()-->(2,5,21,24), (3)==(22), (22)==(3), (5)==(24), (24)==(5), (4)==(23), (23)==(4), (2)==(21), (21)==(2)
+ ├── stats: [rows=0.3666667]
+ ├── cost: 45.3262257
+ ├── fd: ()-->(2,5,21,24), (5)==(24), (24)==(5), (2)==(21), (21)==(2), (3)==(22), (22)==(3), (4)==(23), (23)==(4)
  ├── distribution: ap-southeast-2
  ├── prune: (2-5,12,21-24)
- └── inner-join (lookup abc [as=b])
+ └── inner-join (lookup xyz@xyz_id2_str_abc_id_idx [as=x])
       ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 str:12 abc_id:13 x.id2:14 x.crdb_region:15 b.id:20 b.id1:21 b.created_at:22 b.updated_at:23 b.id2:24 b.crdb_region:25
-      ├── key columns: [15 13] = [25 20]
-      ├── lookup columns are key
+      ├── key columns: [6 5] = [15 14]
       ├── immutable
-      ├── stats: [rows=1.17627, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(20)=1, null(20)=0, distinct(24)=1, null(24)=0, distinct(25)=1, null(25)=0]
-      ├── cost: 164.342873
-      ├── cost-flags: unbounded-cardinality
-      ├── fd: ()-->(2,5,6,14,15,21,24,25), (1)-->(3,4), (20)-->(22,23), (1)==(13,20), (13)==(1,20), (20)==(1,13), (5)==(14,24), (14)==(5,24), (24)==(5,14), (6)==(15,25), (15)==(6,25), (25)==(6,15), (2)==(21), (21)==(2), (3)==(22), (22)==(3), (4)==(23), (23)==(4)
+      ├── stats: [rows=0.3666667, distinct(13)=0.366667, null(13)=0, distinct(14)=0.366667, null(14)=0, distinct(15)=0.366667, null(15)=0, distinct(20)=0.366667, null(20)=0, distinct(24)=0.366667, null(24)=0, distinct(25)=0.366667, null(25)=0]
+      ├── cost: 45.302559
+      ├── fd: ()-->(2,5,6,14,15,21,24,25), (1)-->(3,4), (1)==(13,20), (13)==(1,20), (5)==(14,24), (14)==(5,24), (6)==(15,25), (15)==(6,25), (20)-->(22,23), (20)==(1,13), (24)==(5,14), (25)==(6,15), (2)==(21), (21)==(2), (3)==(22), (22)==(3), (4)==(23), (23)==(4)
       ├── distribution: ap-southeast-2
       ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
-      ├── inner-join (lookup abc [as=a])
-      │    ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 str:12 abc_id:13 x.id2:14 x.crdb_region:15
-      │    ├── key columns: [15 13] = [6 1]
+      ├── inner-join (lookup abc [as=b])
+      │    ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 b.id:20 b.id1:21 b.created_at:22 b.updated_at:23 b.id2:24 b.crdb_region:25
+      │    ├── key columns: [25 20] = [25 20]
       │    ├── lookup columns are key
       │    ├── immutable
-      │    ├── stats: [rows=1.17627, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(13)=1, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0]
-      │    ├── cost: 127.367778
-      │    ├── cost-flags: unbounded-cardinality
-      │    ├── fd: ()-->(2,5,6,14,15), (1)-->(3,4), (1)==(13), (13)==(1), (5)==(14), (14)==(5), (6)==(15), (15)==(6)
+      │    ├── stats: [rows=0.1344445, distinct(1)=0.134444, null(1)=0, distinct(2)=0.134444, null(2)=0, distinct(3)=0.134444, null(3)=0, distinct(4)=0.134444, null(4)=0, distinct(5)=0.134444, null(5)=0, distinct(6)=0.134444, null(6)=0, distinct(20)=0.134444, null(20)=0, distinct(21)=0.134444, null(21)=0, distinct(22)=0.134444, null(22)=0, distinct(23)=0.134444, null(23)=0, distinct(24)=0.134444, null(24)=0, distinct(25)=0.134444, null(25)=0]
+      │    ├── cost: 34.9459129
+      │    ├── key: (20)
+      │    ├── fd: ()-->(2,5,6,21,24,25), (1)-->(3,4), (20)-->(22,23), (1)==(20), (20)==(1), (2)==(21), (21)==(2), (3)==(22), (22)==(3), (4)==(23), (23)==(4), (5)==(24), (24)==(5), (6)==(25), (25)==(6)
       │    ├── distribution: ap-southeast-2
       │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
-      │    ├── prune: (3,4,12)
-      │    ├── interesting orderings: (+1 opt(2,5,6)) (+13 opt(14,15)) (+12,+13 opt(14,15))
-      │    ├── scan xyz@xyz_id2_str_abc_id_idx [as=x]
-      │    │    ├── columns: str:12 abc_id:13 x.id2:14 x.crdb_region:15
-      │    │    ├── constraint: /15/14/12/13/11: [/'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b']
+      │    ├── interesting orderings: (+1 opt(2,5,6)) (+20 opt(21,24,25))
+      │    ├── inner-join (lookup abc@abc_id1_id2_idx [as=b])
+      │    │    ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6 b.id:20 b.id1:21 b.id2:24 b.crdb_region:25
+      │    │    ├── key columns: [6 2 5 1] = [25 21 24 20]
+      │    │    ├── lookup columns are key
       │    │    ├── immutable
-      │    │    ├── stats: [rows=3.66667, distinct(13)=3.11719, null(13)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(14,15)=1, null(14,15)=0]
-      │    │    │   histogram(15)=  0       3.6667
-      │    │    │                 <--- 'ap-southeast-2'
-      │    │    ├── cost: 73.2733335
-      │    │    ├── cost-flags: unbounded-cardinality
-      │    │    ├── fd: ()-->(14,15)
+      │    │    ├── stats: [rows=0.003666667, distinct(1)=0.00366667, null(1)=0, distinct(2)=0.00366667, null(2)=0, distinct(5)=0.00366667, null(5)=0, distinct(6)=0.00366667, null(6)=0, distinct(20)=0.00366667, null(20)=0, distinct(21)=0.00366667, null(21)=0, distinct(24)=0.00366667, null(24)=0, distinct(25)=0.00366667, null(25)=0, distinct(21,24,25)=0.00366667, null(21,24,25)=0]
+      │    │    ├── cost: 34.8283629
+      │    │    ├── key: (20)
+      │    │    ├── fd: ()-->(2,5,6,21,24,25), (1)-->(3,4), (6)==(25), (25)==(6), (2)==(21), (21)==(2), (5)==(24), (24)==(5), (1)==(20), (20)==(1)
       │    │    ├── distribution: ap-southeast-2
-      │    │    ├── prune: (12,13)
-      │    │    └── interesting orderings: (+13 opt(14,15)) (+12,+13 opt(14,15))
+      │    │    ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
+      │    │    ├── interesting orderings: (+(1|20) opt(2,5,6,21,24,25))
+      │    │    ├── index-join abc
+      │    │    │    ├── columns: a.id:1 a.id1:2 a.created_at:3 a.updated_at:4 a.id2:5 a.crdb_region:6
+      │    │    │    ├── immutable
+      │    │    │    ├── stats: [rows=0.3666667, distinct(1)=0.366667, null(1)=0, distinct(2)=0.366667, null(2)=0, distinct(3)=0.360675, null(3)=0, distinct(4)=0.360675, null(4)=0, distinct(5)=0.366667, null(5)=0, distinct(6)=0.366667, null(6)=0, distinct(2,5,6)=0.366667, null(2,5,6)=0]
+      │    │    │    │   histogram(6)=  0      0.36667
+      │    │    │    │                <--- 'ap-southeast-2'
+      │    │    │    ├── cost: 33.2056672
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: ()-->(2,5,6), (1)-->(3,4)
+      │    │    │    ├── distribution: ap-southeast-2
+      │    │    │    ├── prune: (1,3,4)
+      │    │    │    ├── interesting orderings: (+1 opt(2,5,6))
+      │    │    │    └── scan abc@abc_id1_id2_idx [as=a]
+      │    │    │         ├── columns: a.id:1 a.id1:2 a.id2:5 a.crdb_region:6
+      │    │    │         ├── constraint: /6/2/5/1: [/'ap-southeast-2'/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'/'68088706-02c6-47d1-b993-a421cd761f2b']
+      │    │    │         ├── stats: [rows=0.3666667, distinct(1)=0.366667, null(1)=0, distinct(2)=0.366667, null(2)=0, distinct(5)=0.366667, null(5)=0, distinct(6)=0.366667, null(6)=0, distinct(2,5,6)=0.366667, null(2,5,6)=0]
+      │    │    │         │   histogram(6)=  0      0.36667
+      │    │    │         │                <--- 'ap-southeast-2'
+      │    │    │         ├── cost: 25.430667
+      │    │    │         ├── key: (1)
+      │    │    │         ├── fd: ()-->(2,5,6)
+      │    │    │         ├── distribution: ap-southeast-2
+      │    │    │         └── interesting orderings: (+1 opt(2,5,6))
+      │    │    └── filters
+      │    │         ├── b.id2:24 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(24), constraints=(/24: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(24)]
+      │    │         ├── b.crdb_region:25 = 'ap-southeast-2' [outer=(25), immutable, constraints=(/25: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(25)]
+      │    │         └── b.id1:21 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' [outer=(21), constraints=(/21: [/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' - /'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6']; tight), fd=()-->(21)]
       │    └── filters
-      │         ├── x.id2:14 = a.id2:5 [outer=(5,14), constraints=(/5: (/NULL - ]; /14: (/NULL - ]), fd=(5)==(14), (14)==(5)]
-      │         ├── a.id2:5 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(5), constraints=(/5: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(5)]
-      │         ├── a.crdb_region:6 = 'ap-southeast-2' [outer=(6), immutable, constraints=(/6: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(6)]
-      │         └── a.id1:2 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' [outer=(2), constraints=(/2: [/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' - /'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6']; tight), fd=()-->(2)]
+      │         ├── a.created_at:3 = b.created_at:22 [outer=(3,22), constraints=(/3: (/NULL - ]; /22: (/NULL - ]), fd=(3)==(22), (22)==(3)]
+      │         └── a.updated_at:4 = b.updated_at:23 [outer=(4,23), constraints=(/4: (/NULL - ]; /23: (/NULL - ]), fd=(4)==(23), (23)==(4)]
       └── filters
-           ├── x.id2:14 = b.id2:24 [outer=(14,24), constraints=(/14: (/NULL - ]; /24: (/NULL - ]), fd=(14)==(24), (24)==(14)]
-           ├── b.id2:24 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(24), constraints=(/24: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(24)]
-           ├── b.crdb_region:25 = 'ap-southeast-2' [outer=(25), immutable, constraints=(/25: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(25)]
-           └── b.id1:21 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' [outer=(21), constraints=(/21: [/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' - /'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6']; tight), fd=()-->(21)]
+           ├── abc_id:13 = a.id:1 [outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ]), fd=(1)==(13), (13)==(1)]
+           ├── x.id2:14 = '68088706-02c6-47d1-b993-a421cd761f2b' [outer=(14), constraints=(/14: [/'68088706-02c6-47d1-b993-a421cd761f2b' - /'68088706-02c6-47d1-b993-a421cd761f2b']; tight), fd=()-->(14)]
+           └── x.crdb_region:15 = 'ap-southeast-2' [outer=(15), immutable, constraints=(/15: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(15)]
 
 subtest insertFastPathUnique
 
@@ -3855,7 +3855,7 @@ vectorized: true
             │ pred: ((id_default != id) OR (column1 != crdb_region)) AND (email != name)
             │
             └── • filter
-                │ estimated row count: 1
+                │ estimated row count: 0
                 │ filter: column3 != column2
                 │
                 └── • scan buffer

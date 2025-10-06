@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build linux
+// +build linux
 
 package disk
 
@@ -79,11 +80,10 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 	major := unix.Major(statInfo.Dev)
 	minor := unix.Minor(statInfo.Dev)
 
-	// See
-	// - /usr/include/linux/major.h
-	// - Documentation/admin-guide/devices.rst:
+	// Per /usr/include/linux/major.h and Documentation/admin-guide/devices.rst:
 	switch major {
 	case 0: // UNNAMED_MAJOR
+
 		// Perform additional lookups for unknown device types
 		var statfs sysutil.StatfsT
 		err := sysutil.Statfs(path, &statfs)
@@ -114,21 +114,11 @@ func deviceIDFromFileInfo(finfo fs.FileInfo, path string) DeviceID {
 			maybeWarnf(ctx, "unsupported file system type %x for path (%d:%d) %q", statfs.Type, major, minor, path)
 		}
 
-	case 43:
-		// Network block devices (nb*)
-		maybeInfof(ctx, "mapping %q to diskstats network block device %d:%d", path, major, minor)
-
-	case 8, 65, 66, 67, 68, 69, 70, 71, 128, 129, 130, 131, 132, 133, 134, 135:
-		// SCSI disks (sdX)
-		maybeInfof(ctx, "mapping %q to diskstats SCSI device %d:%d", path, major, minor)
-
-	case 202:
-		// Xen virtual block devices (xvd*)
-		maybeInfof(ctx, "mapping %q to diskstats xvd* device %d:%d", path, major, minor)
-
 	case 259: // BLOCK_EXT_MAJOR=259
+
 		// NOTE: Major device 259 is the happy path for ext4 and xfs filesystems: no
 		// additional handling is required.
+
 		maybeInfof(ctx, "mapping %q to diskstats device %d:%d", path, major, minor)
 
 	default:
@@ -167,8 +157,6 @@ func deviceIDForZFS(path string) (uint32, uint32, error) {
 }
 
 func zfsGetPoolName(path string) (_ZPoolName, error) {
-	// When df(1) is run against a zpool, it will resolve the device name and
-	// return the dataset name within the zpool.
 	out, err := exec.Command("df", "--no-sync", "--output=source,fstype", path).Output()
 	if err != nil {
 		return "", errors.Newf("unable to exec df(1): %v", err) // nolint:errwrap
@@ -183,20 +171,16 @@ func zfsParseDF(df []byte) (_ZPoolName, error) {
 		return "", fmt.Errorf("unexpected df(1) output: %q", df)
 	}
 
-	// Neither zpool names, nor filesystem names are allowed to have spaces in
-	// them.
 	fields := strings.Fields(lines[1])
 	if len(fields) != 2 {
 		return "", fmt.Errorf("unexpected df(1) fields (expected 2, got %d): %q", len(fields), lines[1])
 	}
 
-	const zfsFSName = "zfs"
-	if fields[1] != zfsFSName {
-		return "", fmt.Errorf("unexpected df(1) field (expected %q, got %q)", zfsFSName, lines[1])
+	if fields[1] != "zfs" {
+		return "", fmt.Errorf("unexpected df(1) fields (expected 2, got %d): %q", len(fields), lines[1])
 	}
 
-	// Return just the zpool name and accept inputs formed like "data1" or
-	// "data1/crdb-logs"
+	// Need to accept inputs formed like "data1" and "data1/crdb-logs"
 	poolName := strings.Split(fields[0], "/")[0]
 
 	return _ZPoolName(poolName), nil
@@ -205,10 +189,6 @@ func zfsParseDF(df []byte) (_ZPoolName, error) {
 func zpoolGetDevice(poolName _ZPoolName) (string, error) {
 	ctx := context.TODO()
 
-	// zpool status returns the devices underlying a zpool.  -P returns the
-	// absolute path of the device and -L resolves all symlinks that could have
-	// been used to open the pool (e.g., /dev/disk/... -> /dev/).  See
-	// zpool-status(8) for additional details.
 	out, err := exec.Command("zpool", "status", "-pPL", string(poolName)).Output()
 	if err != nil {
 		return "", errors.Newf("unable to find the devices attached to pool %q: %v", poolName, err) // nolint:errwrap
@@ -224,17 +204,6 @@ func zpoolParseStatus(ctx context.Context, poolName _ZPoolName, output []byte) (
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		fields := strings.Fields(line)
-
-		// Only search for online devices that begin with /dev in order to skip over
-		// any vdevs (e.g. mirror-0, mirror-1, raid-z, etc).  The output of zpool
-		// status leaves much to be desired with regard to parsing of output.
-		// Recent versions of ZFS can emit this output as json while using the `-j`
-		// flag[1], however as of Ubuntu 24.04[2], the -j flag is still not
-		// supported (though was added in Ubuntu 25 and will be present in 26.04
-		// LTS).
-		//
-		// [1] https://openzfs.github.io/openzfs-docs/man/master/8/zpool-status.8.html
-		// [2] https://manpages.ubuntu.com/manpages/noble/man8/zpool-status.8.html
 		if len(fields) >= 2 && fields[1] == "ONLINE" && strings.HasPrefix(fields[0], "/dev/") {
 			devCount++
 			if devName == "" {
@@ -260,13 +229,7 @@ var (
 	scsiPartitionRegex = regexp.MustCompile(`^(ram|loop|fd|(h|s|v|xv)d[a-z])(\d+)?$`)
 )
 
-// stripDevicePartition removes partition suffix from a device path.  To ensure
-// a decent quality of service, we need to strip the partition information off
-// to measure the IO of the entire device and not just the device partition
-// being used for a store.  This is especially true in low-bandwidth
-// environments, such as AWS, where an EBS gp3 volume default to 125MB/s and may
-// have its devices partitioned (e.g. logs vs data, but still on the same
-// physical device)..
+// stripDevicePartition removes partition suffix from a device path.
 func stripDevicePartition(devicePath string) string {
 	base := filepath.Base(devicePath)
 
@@ -284,8 +247,7 @@ func stripDevicePartition(devicePath string) string {
 	return devicePath
 }
 
-// getDeviceID takes a block device name (e.g., nvme5n1) and returns its major
-// and minor device numbers.
+// getDeviceID takes a block device name (e.g., nvme5n1) and returns its major and minor numbers.
 func getDeviceID(devPath string) (uint32, uint32, error) {
 	devName := filepath.Base(devPath)
 	devFilePath := fmt.Sprintf("/sys/block/%s/dev", devName)

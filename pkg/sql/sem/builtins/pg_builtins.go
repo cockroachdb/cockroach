@@ -8,7 +8,6 @@ package builtins
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -66,7 +65,6 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Any.Oid():         {},
-	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
@@ -83,7 +81,6 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
-	types.Trigger.Oid():     {},
 	types.AnyTuple.Oid():    {},
 }
 
@@ -109,6 +106,10 @@ func init() {
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
 		switch typ.Oid() {
+		case oid.T_trigger:
+			// TRIGGER is not valid in any context apart from the return-type of a
+			// trigger function.
+			continue
 		case oid.T_int2vector, oid.T_oidvector:
 			// Handled separately below.
 		default:
@@ -175,16 +176,8 @@ func init() {
 			},
 		)
 	})
-	// Add casts between the same type in deterministic order.
-	typOIDs := make([]oid.Oid, 0, len(castBuiltins))
-	for typOID := range castBuiltins {
-		typOIDs = append(typOIDs, typOID)
-	}
-	sort.Slice(typOIDs, func(i, j int) bool {
-		return typOIDs[i] < typOIDs[j]
-	})
-	for _, typOID := range typOIDs {
-		def := castBuiltins[typOID]
+	// Add casts between the same type.
+	for typOID, def := range castBuiltins {
 		typ := types.OidToType[typOID]
 		if !shouldMakeFromCastBuiltin(typ) {
 			continue
@@ -284,35 +277,23 @@ func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDef
 	)
 }
 
-// makeTypeIOBuiltins generates the i/o builtins that Postgres implements for
-// each type. Typically this includes typein, typeout, typerecv, and typsend.
-// However, for certain pseudo-types like "any" and "trigger", PostgreSQL only
-// has the in/out functions. All builtins are no-op, and only supported because
-// ORMs sometimes use their names to form a map for client-side type encoding
-// and decoding. See issue #12526 for more details.
+// makeTypeIOBuiltins generates the 4 i/o builtins that Postgres implements for
+// every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
+// and only supported because ORMs sometimes use their names to form a map for
+// client-side type encoding and decoding. See issue #12526 for more details.
 func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDefinition {
 	typname := typ.String()
-	result := map[string]builtinDefinition{
-		// Note: PG returns 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
-		// Note: PG takes 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ),
-	}
-
-	// PostgreSQL doesn't have send/recv functions for certain pseudo-types.
-	switch typ.Oid() {
-	case oid.T_any, oid.T_trigger:
-		// PostgreSQL has any_in/any_out and trigger_in/trigger_out but not
-		// any_send/any_recv or trigger_send/trigger_recv.
-	default:
-		result[builtinPrefix+"send"] = makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes)
+	return map[string]builtinDefinition{
+		builtinPrefix + "send": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
 		// Note: PG takes type 2281 "internal" for these builtins, which we don't
 		// provide. We won't implement these functions anyway, so it shouldn't
 		// matter.
-		result[builtinPrefix+"recv"] = makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ)
+		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
+		// Note: PG returns 'cstring' for these builtins, but we don't support that.
+		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
+		// Note: PG takes 'cstring' for these builtins, but we don't support that.
+		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
 	}
-
-	return result
 }
 
 // http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
@@ -438,7 +419,7 @@ func makePGPrivilegeInquiryDef(
 					user = username.MakeSQLUsernameFromPreNormalizedString(userS)
 					if user.Undefined() {
 						if _, ok := arg.(*tree.DOid); ok {
-							// Postgres returns false if no matching user is
+							// Postgres returns falseifn no matching user is
 							// found when given an OID.
 							return tree.DBoolFalse, nil
 						}
@@ -575,11 +556,7 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 }
 
 func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
-	return makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
-		},
+	return makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "text", Typ: types.String},
@@ -587,9 +564,8 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.RegType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typName := tree.MustBeDString(args[0])
-				_, err := strconv.Atoi(strings.TrimSpace(string(typName)))
-				if err == nil {
-					// If a number was passed in, return NULL.
+				int, _ := strconv.Atoi(strings.TrimSpace(string(typName)))
+				if int > 0 {
 					return tree.DNull, nil
 				}
 				typOid, err := eval.ParseDOid(ctx, evalCtx, string(typName), typ)
@@ -773,45 +749,12 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}, {Name: "arg_num", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body: `
-WITH defaults_parsed AS (
-  SELECT
-    proargdefaults,
-    pronargs,
-    proargmodes,
-    array_upper(proargmodes, 1) AS total_args,
-    CASE
-      WHEN proargdefaults IS NULL THEN 0
-      ELSE array_length(string_to_array(trim('()' FROM proargdefaults), '}, {'), 1)
-    END AS num_defaults,
-    trim('()' FROM proargdefaults) AS defaults_trimmed,
-    -- Count input arguments up to position $2
-    CASE
-      WHEN proargmodes IS NULL THEN $2
-      ELSE (
-        SELECT count(*)
-        FROM generate_series(1, $2) AS i
-        WHERE proargmodes[i] IN ('i', 'b', 'v')
-      )
-    END AS nth_input_arg
-  FROM pg_catalog.pg_proc
-  WHERE oid = $1
-  LIMIT 1
-)
-SELECT
-  CASE
-    WHEN proargdefaults IS NULL THEN NULL
-    WHEN $2 < 1 OR $2 > COALESCE(total_args, pronargs) THEN NULL
-    WHEN (proargmodes IS NOT NULL AND proargmodes[$2] NOT IN ('i', 'b', 'v')) THEN NULL
-    WHEN nth_input_arg <= (pronargs - num_defaults) THEN NULL
-    ELSE trim('{}' FROM split_part(defaults_trimmed, '}, {', nth_input_arg - (pronargs - num_defaults)))
-  END
-FROM defaults_parsed
-			`,
+			Body:       "SELECT NULL",
 			Info: "Get textual representation of a function argument's default value. " +
 				"The second argument of this function is the argument number among all " +
 				"arguments (i.e. proallargtypes, *not* proargtypes), starting with 1, " +
-				"because that's how information_schema.sql uses it.",
+				"because that's how information_schema.sql uses it. Currently, this " +
+				"always returns NULL, since CockroachDB does not support default values.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
 			Language:          tree.RoutineLangSQL,
@@ -912,7 +855,7 @@ FROM defaults_parsed
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				columnName := tree.MustBeDString(args[1])
-				qualifiedName, err := parserutils.ParseQualifiedTableName(string(tableName))
+				qualifiedName, err := parser.ParseQualifiedTableName(string(tableName))
 				if err != nil {
 					return nil, err
 				}
@@ -959,10 +902,7 @@ FROM defaults_parsed
 	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_my_temp_schema": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
@@ -995,10 +935,7 @@ FROM defaults_parsed
 	// session's temporary schema.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_is_other_temp_schema": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -1032,7 +969,7 @@ FROM defaults_parsed
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
@@ -1047,21 +984,16 @@ FROM defaults_parsed
 	"pg_collation_for": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "str", Typ: types.AnyElement}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				d := args[0]
 				var collation string
-				switch t := d.(type) {
+				switch t := args[0].(type) {
 				case *tree.DString:
 					collation = "default"
 				case *tree.DCollatedString:
 					collation = t.Locale
 				default:
-					if w, ok := d.(*tree.DOidWrapper); ok && w.Oid == oidext.T_citext {
-						collation = "default"
-						break
-					}
 					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
 						"collations are not supported by type: %s", t.ResolvedType())
 				}
@@ -1915,35 +1847,6 @@ FROM defaults_parsed
 		},
 	),
 
-	"has_system_privilege": makePGPrivilegeInquiryDef(
-		"system",
-		paramTypeOpts{},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
-			// Build the privilege map dynamically from GlobalPrivileges so that
-			// this function automatically picks up new privileges as they are added.
-			m := make(privMap)
-			for _, priv := range privilege.GlobalPrivileges {
-				// ALL is not a valid input for this function.
-				if priv == privilege.ALL {
-					continue
-				}
-				privName := strings.ToUpper(string(priv.DisplayName()))
-				m[privName] = privilege.Privilege{Kind: priv}
-				m[privName+" WITH GRANT OPTION"] = privilege.Privilege{Kind: priv, GrantOption: true}
-			}
-
-			privs, err := parsePrivilegeStr(args[0], m)
-			if err != nil {
-				return eval.HasNoPrivilege, err
-			}
-
-			specifier := eval.HasPrivilegeSpecifier{
-				IsGlobalPrivilege: true,
-			}
-			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
-		},
-	),
-
 	"pg_has_role": makePGPrivilegeInquiryDef(
 		"role",
 		paramTypeOpts{{"role", strOrOidTypes}},
@@ -2131,7 +2034,7 @@ FROM defaults_parsed
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				var totalSize int
 				for _, arg := range args {
-					encodeTableValue, err := valueside.Encode(nil, valueside.NoColumnID, arg)
+					encodeTableValue, err := valueside.Encode(nil, valueside.NoColumnID, arg, nil)
 					if err != nil {
 						return tree.DNull, err
 					}
@@ -2140,7 +2043,7 @@ FROM defaults_parsed
 				return tree.NewDInt(tree.DInt(totalSize)), nil
 			},
 			Info:       "Return size in bytes of the column provided as an argument",
-			Volatility: volatility.Stable,
+			Volatility: volatility.Immutable,
 		}),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like

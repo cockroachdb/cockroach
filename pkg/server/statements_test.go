@@ -11,9 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -36,10 +34,6 @@ func TestStatements(t *testing.T) {
 	testQuery := "CREATE TABLE foo (id INT8)"
 	_, err := db.Exec(testQuery)
 	require.NoError(t, err)
-
-	conn := sqlutils.MakeSQLRunner(db)
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, 1,
-		sqlstatstestutil.StatementFilter{Query: testQuery})
 
 	resp, err := client.Statements(ctx, &serverpb.StatementsRequest{NodeID: "local"})
 	require.NoError(t, err)
@@ -67,10 +61,6 @@ func TestStatementsExcludeStats(t *testing.T) {
 	testQuery := "CREATE TABLE foo (id INT8)"
 	_, err := db.Exec(testQuery)
 	require.NoError(t, err)
-
-	conn := sqlutils.MakeSQLRunner(db)
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, 1,
-		sqlstatstestutil.StatementFilter{Query: testQuery})
 
 	t.Run("exclude-statements", func(t *testing.T) {
 		resp, err := client.Statements(ctx, &serverpb.StatementsRequest{

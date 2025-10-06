@@ -118,7 +118,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Row Application Processing Time: 50th percentile"
+      title="Batch Application Processing Time: 50th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
       tooltip={
@@ -140,7 +140,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Row Application Processing Time: 99th percentile"
+      title="Batch Application Processing Time: 99th percentile"
       isKvGraph={false}
       tenantSource={tenantSource}
       tooltip={

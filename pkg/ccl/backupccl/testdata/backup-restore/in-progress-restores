@@ -1,0 +1,445 @@
+# This test ensures that table, database and cluster backups properly backup and
+# restore (i.e. capture) an in progress database or table RESTORE. The
+# in-progress restore may take other kinds of descriptors offline (e.g. type,
+# schema), so this test ensures that the capturing restore handles these other offline
+# descriptors properly.
+#
+# TODO(msbutler): currently, a user cannot explicitly target a restoring table
+# or database in their backup because of a schema change bug (#86626, #86691).
+# I.e., the user cannot run:
+#  - BACKUP DATABASE my_offline_restoring_database
+#  - BACKUP TABLE my_offline_restoring_table.
+#
+# The user can only backup offline tables if they are implicitly covered in the
+# target, i.e. RESTORE DATABASE my_database_that_contains_an_offline_table. Once
+# the schema change bugs are fixed, a user should be able to explicitly target
+# offline tables.
+
+
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE b;
+USE b;
+CREATE SCHEMA me;
+CREATE TYPE me.greeting AS ENUM ('hello', 'howdy', 'heyyy');
+CREATE TABLE me.baz (x INT, y me.greeting);
+CREATE INDEX greeting_idx ON me.baz (y);
+INSERT INTO me.baz VALUES (1,'howdy'), (2,'hello'), (3,'heyyy');
+CREATE DATABASE d;
+USE d;
+----
+
+
+# Run a backup to then restore from and test that future backups capture the
+# in-progress restore data.
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/' WITH revision_history;
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = restore.before_publishing_descriptors;
+----
+
+#######
+# Case 1: Capture an in-progress database restore with cluster restore
+#######
+
+# Pause a RESTORE DATABASE job, so a cluster backup can back up the restoring data.
+restore expect-pausepoint tag=a
+RESTORE DATABASE b FROM LATEST IN 'nodelocal://1/cluster/' with new_db_name=b2;
+----
+job paused at pausepoint
+
+
+# This incremental cluster backup should capture the offline restoring database
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/' WITH revision_history;
+----
+
+save-cluster-ts tag=t0
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+# Resume the job so the next incremental backup observes that everything is back online
+#
+# Note: when a restore job resumes after all data was initially ingested, the last
+# check pointed restore span entry (i.e. in the mu.requestsCompleted object) gets reingested.
+# -- in this case, the greeting_idx index gets re-ingested.
+job resume=a
+----
+
+
+job tag=a wait-for-state=succeeded
+----
+
+# This backup should capture the online restored database
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/' WITH revision_history;
+----
+
+
+# Display the backed up objects from the restoring b2 database
+# - The first incremental backup captures all its schema objects
+#   and all data ingested AOST the backup (i.e. 3 rows in b2.baz).
+# - The second incremental backs up all data from b2 starting from t0,
+#   since the table returned online after the first incremental backup.
+#   (i.e. 3 rows in b2.baz).
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/cluster/']
+WHERE
+  database_name = 'b2'
+ORDER BY
+  start_time, database_name;
+----
+b2 public schema <nil> incremental
+b2 me schema <nil> incremental
+b2 greeting type <nil> incremental
+b2 _greeting type <nil> incremental
+b2 baz table 3 incremental
+b2 public schema <nil> incremental
+b2 me schema <nil> incremental
+b2 greeting type <nil> incremental
+b2 _greeting type <nil> incremental
+b2 baz table 0 incremental
+
+
+# Ensure the restored cluster contains nothing from the in-progress restoring database as of system
+# time t0
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+
+restore aost=t0
+RESTORE FROM LATEST IN 'nodelocal://1/cluster/' AS OF SYSTEM TIME t0;
+----
+
+
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'b2';
+----
+
+
+# Ensure restored cluster contains the restored database as of latest time
+new-cluster name=s3 share-io-dir=s1 allow-implicit-access
+----
+
+
+exec-sql
+RESTORE FROM LATEST IN 'nodelocal://1/cluster/';
+----
+
+
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'b2';
+----
+b2
+
+
+query-sql
+SELECT * FROM b2.me.baz;
+----
+1 howdy
+2 hello
+3 heyyy
+
+
+query-sql
+SELECT table_name,index_name,non_unique,seq_in_index,column_name
+FROM [SHOW INDEX FROM b2.me.baz]
+WHERE index_name = 'greeting_idx'
+ORDER BY seq_in_index;
+----
+baz greeting_idx true 1 y
+baz greeting_idx true 2 rowid
+
+
+#################
+# Case 2: capture an in-progress table restore with a database restore. The table restore also
+# introduces a user defined schema.
+##################
+
+exec-sql
+USE d;
+DROP SCHEMA IF EXISTS me CASCADE;
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = restore.before_publishing_descriptors;
+----
+
+
+restore expect-pausepoint tag=b
+RESTORE TABLE b.me.baz FROM LATEST IN 'nodelocal://1/cluster/' WITH into_db='d';
+----
+job paused at pausepoint
+
+
+# ensure user cannot override offline schema created by table restore into data database d
+exec-sql
+CREATE SCHEMA me;
+----
+pq: schema "me" already exists
+
+
+# This backup should capture 3 rows from restoring table table baz
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/database/' WITH revision_history;
+----
+
+save-cluster-ts tag=m0
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+job resume=b
+----
+
+
+job tag=b wait-for-state=succeeded
+----
+
+
+# This backup should capture 3 rows from restoring table table baz, since it just came online
+# (this will change once we more selectively reintroduce offline spans)
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/' WITH revision_history;
+----
+
+# Display the backed up objects from the restoring d database
+# - The full backup captures all its schema objects
+#   and all data ingested AOST the backup
+# - The second incremental backs up all data from d starting from t0,
+#   since the table returned online after the first incremental backup.
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/database/']
+WHERE
+  database_name = 'd'
+ORDER BY
+  start_time, database_name;
+----
+d public schema <nil> full
+d me schema <nil> full
+d greeting type <nil> full
+d _greeting type <nil> full
+d baz table 3 full
+d public schema <nil> incremental
+d me schema <nil> incremental
+d greeting type <nil> incremental
+d _greeting type <nil> incremental
+d baz table 0 incremental
+
+
+# Ensure that restoring the database, AOST the in-progress restore, elides the restoring descriptors
+restore aost=m0
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' AS OF SYSTEM TIME m0 with new_db_name = d_aost;
+----
+
+
+query-sql
+SHOW TABLES FROM d_aost;
+----
+
+
+query-sql
+SELECT schema_name FROM [SHOW SCHEMAS FROM d_aost] WHERE schema_name='me';
+----
+
+# Restore AOST completed in-progress restore, implying baz is online.
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' with new_db_name = d_latest
+----
+
+
+query-sql
+SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_latest];
+----
+me baz table
+
+###################
+# Case 3: same as case 2, except the table restore restores into an existing
+# user defined schema, instead of creating its own.
+###################
+
+exec-sql
+DROP DATABASE d_aost;
+DROP DATABASE d_latest;
+CREATE DATABASE d_with_schema;
+CREATE SCHEMA d_with_schema.me;
+CREATE TABLE d_with_schema.me.bar (x INT);
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = restore.before_publishing_descriptors;
+----
+
+
+restore expect-pausepoint tag=bb
+RESTORE TABLE b.me.baz FROM LATEST IN 'nodelocal://1/cluster/' WITH into_db='d_with_schema';
+----
+job paused at pausepoint
+
+
+# Ensure one can write into the schema that is currently getting restored
+exec-sql
+INSERT INTO d_with_schema.me.bar VALUES (1);
+----
+
+
+# This backup should capture 3 rows from restoring table table baz
+exec-sql
+BACKUP DATABASE d_with_schema INTO 'nodelocal://1/database/' WITH revision_history;
+----
+
+
+save-cluster-ts tag=n0
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+job resume=bb
+----
+
+
+job tag=bb wait-for-state=succeeded
+----
+
+exec-sql
+BACKUP DATABASE d_with_schema INTO LATEST IN 'nodelocal://1/database/' WITH revision_history;
+----
+
+
+# Ensure that restoring the tables, AOST the in-progress restore, elides the restoring descriptors.
+restore aost=n0
+RESTORE DATABASE d_with_schema FROM LATEST IN 'nodelocal://1/database/' AS OF SYSTEM TIME n0 with new_db_name = d_aost;
+----
+
+
+# only the pre-existing table, bar, should be around (not the restoring one, baz)
+query-sql
+SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_aost];
+----
+me bar table
+
+
+# ensure the existing schema is in the cluster
+query-sql
+SELECT schema_name FROM [SHOW SCHEMAS FROM d_aost] WHERE schema_name='me';
+----
+me
+
+
+exec-sql
+RESTORE DATABASE d_with_schema FROM LATEST IN 'nodelocal://1/database/' with new_db_name = d_latest
+----
+
+
+query-sql
+SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_latest];
+----
+me bar table
+me baz table
+
+
+###################
+# Case 4: capture a table restore creating its own user defined schema with another table restore
+###################
+
+
+exec-sql
+DROP DATABASE d_aost;
+DROP DATABASE d_latest;
+DROP SCHEMA d.me CASCADE;
+CREATE DATABASE d_aost;
+CREATE DATABASE d_latest;
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = restore.before_publishing_descriptors;
+----
+
+
+restore expect-pausepoint tag=bbb
+RESTORE TABLE b.me.baz FROM LATEST IN 'nodelocal://1/cluster/' WITH into_db='d';
+----
+job paused at pausepoint
+
+
+exec-sql
+BACKUP TABLE d.* INTO 'nodelocal://1/table/' WITH revision_history;
+----
+
+
+save-cluster-ts tag=o0
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+job resume=bbb
+----
+
+
+job tag=bbb wait-for-state=succeeded
+----
+
+
+exec-sql
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/' WITH revision_history;
+----
+
+
+# Ensure that restoring the table, AOST the in-progress restore, elides the restoring descriptors.
+restore aost=o0
+RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' AS OF SYSTEM TIME o0 with into_db = d_aost;
+----
+
+
+# No tables or schema should exist in d_aost, as all descriptors in the back up are offline.
+query-sql
+SHOW TABLES FROM d_aost;
+----
+
+
+query-sql
+SELECT schema_name FROM [SHOW SCHEMAS FROM d_aost] WHERE schema_name='me';
+----
+
+
+exec-sql
+RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' with into_db = d_latest
+----
+
+
+query-sql
+SELECT schema_name FROM [SHOW SCHEMAS FROM d_latest] WHERE schema_name='me';
+----
+me
+
+
+query-sql
+SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_latest];
+----
+me baz table

@@ -78,7 +78,7 @@ func TestDataDriven(t *testing.T) {
 					&tableID, &statementTimeName)
 				targets.Add(changefeedbase.Target{
 					Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-					DescID:            tableID,
+					TableID:           tableID,
 					FamilyName:        "primary",
 					StatementTimeName: statementTimeName,
 				})

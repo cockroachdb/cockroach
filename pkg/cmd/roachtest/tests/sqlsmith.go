@@ -35,7 +35,7 @@ func registerSQLSmith(r registry.Registry) {
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
 		"tpch-sf1": func(r *rand.Rand) []string {
 			return []string{`
-RESTORE TABLE tpch.* FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
+RESTORE TABLE tpch.* FROM 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
@@ -56,7 +56,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				stmts = append(
 					stmts,
 					fmt.Sprintf(`
-RESTORE TABLE tpcc.%s FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
+RESTORE TABLE tpcc.%s FROM 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `,
 						t, version,
@@ -121,6 +121,19 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		for _, stmt := range setup {
 			logStmt(stmt)
 			if _, err := conn.Exec(stmt); err != nil {
+				if strings.Contains(err.Error(), "does not exist") {
+					// This is likely to be an elusive 'pq: column
+					// "crdb_internal_idx_expr" does not exist' error that we
+					// cannot reproduce. The current hypothesis is that the
+					// CREATE TABLE statement contains some non-visible
+					// characters that get lost when printing as a string, so we
+					// will log this statement as a sequence of integers so that
+					// later we can reconstruct the stmt precisely.
+					for _, char := range stmt {
+						fmt.Fprintf(smithLog, "%d ", char)
+					}
+					fmt.Fprint(smithLog, "\n\n")
+				}
 				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			}
 		}
@@ -191,7 +204,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				m := c.NewDeprecatedMonitor(ctx, c.Node(1))
+				m := c.NewMonitor(ctx, c.Node(1))
 				m.Go(func(context.Context) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
@@ -328,7 +341,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
-			Skip:             "153489. uses ancient fixture",
+			RequiresLicense:  true,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -421,15 +434,12 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 	}
 
 	for _, table := range tables {
-		// Locality changes can only be made if schema_locked is toggled.
-		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=false);`, table.String()))
 		// Maybe change the locality of the table.
 		if val := rnd.Intn(3); val == 0 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW;`, table.String()))
 		} else if val == 1 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY GLOBAL;`, table.String()))
 		}
-		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=true);`, table.String()))
 		// Else keep the locality as REGIONAL BY TABLE.
 	}
 }

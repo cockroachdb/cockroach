@@ -1,0 +1,185 @@
+# LogicTest: local
+
+statement ok
+CREATE PROCEDURE foo(x INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'foo: %', x;
+  END
+$$
+
+query T
+EXPLAIN CALL foo(0);
+----
+distribution: local
+vectorized: true
+·
+• call
+  estimated row count: 0
+  procedure: foo(0)
+
+query T
+EXPLAIN (VERBOSE) CALL foo(1);
+----
+distribution: local
+vectorized: true
+·
+• call
+  columns: ()
+  estimated row count: 0
+  procedure: foo(1)
+
+query T
+EXPLAIN (OPT) CALL foo(3);
+----
+call
+ └── procedure: foo
+      ├── args
+      │    └── 3
+      ├── params: x
+      └── body
+           └── values
+                └── (_stmt_raise_1(x),)
+
+query T
+EXPLAIN (OPT, VERBOSE) CALL foo(3);
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ ├── stats: [rows=0]
+ ├── cost: 0.01
+ ├── distribution: test
+ └── procedure: foo
+      ├── args
+      │    └── 3
+      ├── params: x:1
+      └── body
+           └── values
+                ├── columns: "_stmt_raise_1":5
+                ├── outer: (1)
+                ├── cardinality: [1 - 1]
+                ├── volatile
+                ├── stats: [rows=1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── (_stmt_raise_1(x:1),)
+
+query T
+EXPLAIN (OPT, TYPES) CALL foo(3);
+----
+call
+ ├── cardinality: [0 - 0]
+ ├── volatile
+ ├── stats: [rows=0]
+ ├── cost: 0.01
+ ├── distribution: test
+ └── procedure: foo [type=void]
+      ├── args
+      │    └── const: 3 [type=int]
+      ├── params: x:1(int)
+      └── body
+           └── values
+                ├── columns: "_stmt_raise_1":5(void)
+                ├── outer: (1)
+                ├── cardinality: [1 - 1]
+                ├── volatile
+                ├── stats: [rows=1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                └── tuple [type=tuple{void}]
+                     └── udf: _stmt_raise_1 [type=void]
+                          ├── tail-call
+                          ├── args
+                          │    └── variable: x:1 [type=int]
+                          ├── params: x:2(int)
+                          └── body
+                               ├── values
+                               │    ├── columns: stmt_raise_2:3(int)
+                               │    ├── outer: (2)
+                               │    ├── cardinality: [1 - 1]
+                               │    ├── volatile
+                               │    ├── stats: [rows=1]
+                               │    ├── key: ()
+                               │    ├── fd: ()-->(3)
+                               │    └── tuple [type=tuple{int}]
+                               │         └── function: crdb_internal.plpgsql_raise [type=int]
+                               │              ├── const: 'NOTICE' [type=string]
+                               │              ├── concat [type=string]
+                               │              │    ├── concat [type=string]
+                               │              │    │    ├── const: 'foo: ' [type=string]
+                               │              │    │    └── coalesce [type=string]
+                               │              │    │         ├── cast: STRING [type=string]
+                               │              │    │         │    └── variable: x:2 [type=int]
+                               │              │    │         └── const: '<NULL>' [type=string]
+                               │              │    └── const: '' [type=string]
+                               │              ├── const: '' [type=string]
+                               │              ├── const: '' [type=string]
+                               │              └── const: '00000' [type=string]
+                               └── values
+                                    ├── columns: "_implicit_return":4(void)
+                                    ├── cardinality: [1 - 1]
+                                    ├── stats: [rows=1]
+                                    ├── key: ()
+                                    ├── fd: ()-->(4)
+                                    └── tuple [type=tuple{void}]
+                                         └── null [type=void]
+
+query T
+EXPLAIN (DISTSQL) CALL foo(3);
+----
+distribution: local
+vectorized: true
+·
+• call
+  estimated row count: 0
+  procedure: foo(3)
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FL-0AQxe__TxHeqYXt3wRveyvWQyDWansQJMi6mdbFbSbubKhS8t0liUURD53DwLx5M7-ZI-TNQ-P6YVXM82UyWeTrzfqumCZX86JImvbZO_t_yzy5nEKh5oqWZk8C_YgMpUIT2JIIh146Doa8eodOFVzdtLGXSwXLgaCPiC56goZna3xijfdJepFCoaJonB_cnQK38XtWotkRdPYDli-g006dz7snabgWOouU_iLNsq5UoGpH45PCbbC0CmwH71jeDosGoSKJYzcbi7w-tSQGMvvx_FJh6_nw5CpopF8x-yOdAv2A2Un_2PqFD8PazUfTn7U1XkjhxrzSgiKFvaudRGehY2ip6_59BgAA__9oSZu_
+
+query T
+EXPLAIN ANALYZE CALL foo(3);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• call
+  sql nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  execution time: 0µs
+  estimated row count: 0
+  procedure: foo(3)
+
+query T
+EXPLAIN ANALYZE (DISTSQL) CALL foo(3);
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• call
+  sql nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  execution time: 0µs
+  estimated row count: 0
+  procedure: foo(3)
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMUMtq40AQvO9XiDrtwnhXYm9zW9YXg_MgyS2IMB617SEjtTLdwg5Gn5UfyJcFSTY4IYH0YaCqu6tq-gB5irD4_2-5zNpuFYP_vWb--fcXDBqu6NLVJLD3KFAatIk9iXAaqMM4sKj2sLlBaNpOB7o08JwI9gANGgkWkb2LmXcxZvmfHAYVqQtx1KU9-U4DN5mGmmyWv74IDFZO_ZYk407bTm02bCXenRNlbzCho62o2xBscZZzMYfNe_P9qDckLTdC70J-5ZR_cJoVfWlA1Yam-wh3ydN1Yj_OTvBqFBqJikSnbjGBRXNqiSZy9RS_NFhH3j2EChb5sWafPKfCsOA2Mnzsdsu7UfbuuR1irV0UMrhwjzQnpVSHJogGD6upo77_8RYAAP__9m6rjw==

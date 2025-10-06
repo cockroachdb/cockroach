@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build linux
+// +build linux
 
 package disk
 
@@ -149,11 +150,7 @@ func parseDiskStats(
 		} else if ok {
 			stats.FlushesDuration = time.Duration(millis) * time.Millisecond
 		}
-		disks[diskIdx].tracer.RecordEvent(traceEvent{
-			time:  measuredAt,
-			stats: stats,
-			err:   nil,
-		})
+		disks[diskIdx].recordStats(measuredAt, stats)
 		countCollected++
 	}
 	return countCollected, nil

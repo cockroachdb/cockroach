@@ -72,14 +72,14 @@ func NewExternalConnection(connDetails connectionpb.ConnectionDetails) ExternalC
 	return ec
 }
 
-// ExternalConnectionNotFoundError is returned from load when the external
+// externalConnectionNotFoundError is returned from load when the external
 // connection does not exist.
-type ExternalConnectionNotFoundError struct {
+type externalConnectionNotFoundError struct {
 	connectionName string
 }
 
 // Error makes scheduledJobNotFoundError an error.
-func (e *ExternalConnectionNotFoundError) Error() string {
+func (e *externalConnectionNotFoundError) Error() string {
 	return fmt.Sprintf("external connection with name %s does not exist", e.connectionName)
 }
 
@@ -94,13 +94,13 @@ func LoadExternalConnection(
 	// `SELECT` on the system table.
 	row, cols, err := txn.QueryRowExWithCols(ctx, "lookup-schedule", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		"SELECT * FROM system.external_connections WHERE connection_name = $1", name)
+		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
 
 	if err != nil {
-		return nil, errors.CombineErrors(err, &ExternalConnectionNotFoundError{connectionName: name})
+		return nil, errors.CombineErrors(err, &externalConnectionNotFoundError{connectionName: name})
 	}
 	if row == nil {
-		return nil, &ExternalConnectionNotFoundError{connectionName: name}
+		return nil, &externalConnectionNotFoundError{connectionName: name}
 	}
 
 	ec := NewMutableExternalConnection()
@@ -352,32 +352,6 @@ func (e *MutableExternalConnection) Create(ctx context.Context, txn isql.Txn) er
 	}
 
 	return e.InitFromDatums(row, retCols)
-}
-
-func (e *MutableExternalConnection) Update(ctx context.Context, txn isql.Txn) error {
-	cols, qargsForChanges, err := e.marshalChanges()
-	if err != nil {
-		return err
-	}
-
-	qargs := make([]interface{}, 0, 1+len(qargsForChanges))
-	qargs = append(qargs, e.ConnectionName())
-	qargs = append(qargs, qargsForChanges...)
-
-	var setClauses []string
-	placeHolder := 2
-	for _, col := range cols {
-		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, placeHolder))
-		placeHolder++
-	}
-
-	updateQuery := fmt.Sprintf(`UPDATE system.external_connections 
-															SET %s, updated = now() 
-		                          WHERE connection_name = $1`,
-		strings.Join(setClauses, ", "))
-
-	_, err = txn.ExecEx(ctx, "ExternalConnection.Update", txn.KV(), sessiondata.NodeUserSessionDataOverride, updateQuery, qargs...)
-	return err
 }
 
 // marshalChanges marshals all changes in the in-memory representation and returns

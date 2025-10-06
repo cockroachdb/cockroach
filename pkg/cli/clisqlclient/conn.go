@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/pprompt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/otan/gopgkrb5"
 )
 
@@ -436,23 +436,6 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	defer func(prev bool) { c.alwaysInferResultTypes = prev }(c.alwaysInferResultTypes)
 	c.alwaysInferResultTypes = false
 
-	// Metadata checks require allow_unsafe_internals to be on.
-	allowUnsafeInternals, err := c.getSessionVariable(ctx, "allow_unsafe_internals")
-	if err != nil {
-		fmt.Fprintf(c.errw, "warning: unable to retrieve allow_unsafe_internals setting: %v\n", err)
-	} else if allowUnsafeInternals == "off" {
-		// Temporarily turn on allow_unsafe_internals.
-		if err := c.Exec(ctx, "SET allow_unsafe_internals = on"); err != nil {
-			fmt.Fprintf(c.errw, "warning: unable to set allow_unsafe_internals to true: %v\n", err)
-		} else {
-			defer func() {
-				if resetErr := c.Exec(ctx, "SET allow_unsafe_internals = off"); resetErr != nil {
-					fmt.Fprintf(c.errw, "warning: unable to reset allow_unsafe_internals to false: %v\n", resetErr)
-				}
-			}()
-		}
-	}
-
 	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
 	if c.conn.IsClosed() {
 		return MarkWithConnectionClosed(err)
@@ -561,15 +544,6 @@ func (c *sqlConn) GetServerValue(
 	}
 
 	return dbVals[0], true
-}
-
-// getSessionVariable retrieves the value of a session variable.
-func (c *sqlConn) getSessionVariable(ctx context.Context, varName string) (string, error) {
-	val, ok := c.GetServerValue(ctx, varName, fmt.Sprintf("SHOW %s", varName))
-	if !ok {
-		return "", errors.Newf("unable to retrieve session variable %s", varName)
-	}
-	return toString(val), nil
 }
 
 func (c *sqlConn) GetLastQueryStatistics(ctx context.Context) (results QueryStats, resErr error) {
@@ -685,7 +659,7 @@ func (c *sqlConn) Query(ctx context.Context, query string, args ...interface{}) 
 		if err != nil {
 			return nil, err
 		}
-		return &sqlRows{rows: rows, typeMap: c.conn.TypeMap(), conn: c}, nil
+		return &sqlRows{rows: rows, connInfo: c.conn.ConnInfo(), conn: c}, nil
 	}
 
 	// Otherwise, we use pgconn. This allows us to add support for multiple
@@ -697,9 +671,9 @@ func (c *sqlConn) Query(ctx context.Context, query string, args ...interface{}) 
 		return nil, MarkWithConnectionClosed(multiResultReader.Close())
 	}
 	rs := &sqlRowsMultiResultSet{
-		rows:    multiResultReader,
-		typeMap: c.conn.TypeMap(),
-		conn:    c,
+		rows:     multiResultReader,
+		connInfo: c.conn.ConnInfo(),
+		conn:     c,
 	}
 	if _, err := rs.NextResultSet(); err != nil {
 		return nil, err

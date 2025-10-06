@@ -66,7 +66,7 @@ func (np *nodeProxy) nodeProxyHandler(
 	nodeID, local, err := np.parseNodeID(nodeIDString)
 	if err != nil {
 		httpErr := errors.Wrapf(err, "server: error parsing nodeID from request: %s", nodeIDString)
-		log.Dev.Errorf(ctx, "%v", httpErr)
+		log.Errorf(ctx, "%v", httpErr)
 		if clearCookieOnError {
 			resetCookie(w, r)
 		}
@@ -112,7 +112,7 @@ func (np *nodeProxy) routeToNode(
 	addr, _, err := np.getNodeIDHTTPAddress(nodeID)
 	if err != nil {
 		httpErr := errors.Wrapf(err, "unable to get address for n%d", nodeID)
-		log.Dev.Errorf(r.Context(), "%v", httpErr)
+		log.Errorf(r.Context(), "%v", httpErr)
 
 		// Reset the cookie to `local` so the user session isn't stuck on a bad node
 		if clearCookieOnError {

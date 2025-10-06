@@ -108,7 +108,7 @@ func TransferLease(
 	// Forwarding the lease's start time is safe because we know that the
 	// lease's sequence number has been incremented. Assert this.
 	if newLease.Sequence <= prevLease.Sequence {
-		log.KvExec.Fatalf(ctx, "lease sequence not incremented: prev=%s, new=%s", prevLease, newLease)
+		log.Fatalf(ctx, "lease sequence not incremented: prev=%s, new=%s", prevLease, newLease)
 	}
 
 	log.VEventf(ctx, 2, "lease transfer: prev lease: %+v, new lease: %+v", prevLease, newLease)

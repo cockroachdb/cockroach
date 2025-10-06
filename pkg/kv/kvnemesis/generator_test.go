@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/maps"
 )
 
 func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
@@ -37,7 +36,7 @@ func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 			ok := fn(int(v.Int()))
 			if !ok {
 				if log.V(1) {
-					log.Dev.Infof(context.Background(), "returned false for %d: %v", v.Int(), v)
+					log.Infof(context.Background(), "returned false for %d: %v", v.Int(), v)
 				}
 			}
 			return ok
@@ -45,7 +44,7 @@ func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 			for fieldIdx := 0; fieldIdx < v.NumField(); fieldIdx++ {
 				if !forEachIntField(v.Field(fieldIdx)) {
 					if log.V(1) {
-						log.Dev.Infof(context.Background(), "returned false for %s in %s",
+						log.Infof(context.Background(), "returned false for %s in %s",
 							v.Type().Field(fieldIdx).Name, v.Type().Name())
 					}
 					return false
@@ -85,8 +84,6 @@ func TestRandStep(t *testing.T) {
 	updateKeys = func(op Operation) {
 		switch o := op.GetValue().(type) {
 		case *PutOperation:
-			keys[string(o.Key)] = struct{}{}
-		case *CPutOperation:
 			keys[string(o.Key)] = struct{}{}
 		case *BatchOperation:
 			for _, op := range o.Ops {
@@ -170,29 +167,9 @@ func TestRandStep(t *testing.T) {
 				}
 			case *PutOperation:
 				if _, ok := keys[string(o.Key)]; ok {
-					if o.MustAcquireExclusiveLock {
-						client.PutMustAcquireExclusiveLockExisting++
-					} else {
-						client.PutExisting++
-					}
+					client.PutExisting++
 				} else {
-					if o.MustAcquireExclusiveLock {
-						client.PutMustAcquireExclusiveLockMissing++
-					} else {
-						client.PutMissing++
-					}
-				}
-			case *CPutOperation:
-				if _, ok := keys[string(o.Key)]; ok {
-					client.CPutMatchExisting++
-				} else {
-					if o.AllowIfDoesNotExist {
-						client.CPutAllowIfDoesNotExist++
-					} else if o.ExpVal == nil {
-						client.CPutMatchMissing++
-					} else {
-						client.CPutNoMatch++
-					}
+					client.PutMissing++
 				}
 			case *ScanOperation:
 				if o.Reverse {
@@ -259,17 +236,9 @@ func TestRandStep(t *testing.T) {
 				}
 			case *DeleteOperation:
 				if _, ok := keys[string(o.Key)]; ok {
-					if o.MustAcquireExclusiveLock {
-						client.DeleteMustAcquireExclusiveLockExisting++
-					} else {
-						client.DeleteExisting++
-					}
+					client.DeleteExisting++
 				} else {
-					if o.MustAcquireExclusiveLock {
-						client.DeleteMustAcquireExclusiveLockMissing++
-					} else {
-						client.DeleteMissing++
-					}
+					client.DeleteMissing++
 				}
 			case *DeleteRangeOperation:
 				client.DeleteRange++
@@ -279,10 +248,6 @@ func TestRandStep(t *testing.T) {
 				client.AddSSTable++
 			case *BarrierOperation:
 				client.Barrier++
-			case *FlushLockTableOperation:
-				client.FlushLockTable++
-			case *MutateBatchHeaderOperation:
-				client.MutateBatchHeader++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
@@ -313,16 +278,13 @@ func TestRandStep(t *testing.T) {
 		switch o := step.Op.GetValue().(type) {
 		case *GetOperation,
 			*PutOperation,
-			*CPutOperation,
 			*ScanOperation,
 			*BatchOperation,
 			*DeleteOperation,
 			*DeleteRangeOperation,
 			*DeleteRangeUsingTombstoneOperation,
 			*AddSSTableOperation,
-			*BarrierOperation,
-			*FlushLockTableOperation,
-			*MutateBatchHeaderOperation:
+			*BarrierOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
@@ -500,9 +462,7 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 
 	var numSingleRange, numCrossRange, numPoint int
 	for i := 0; i < num; i++ {
-		dr := randDelRangeUsingTombstoneImpl(
-			maps.Keys(splitPointMap), maps.Keys(keysMap), nextSeq, rng,
-		).DeleteRangeUsingTombstone
+		dr := randDelRangeUsingTombstoneImpl(splitPointMap, keysMap, nextSeq, rng).DeleteRangeUsingTombstone
 		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
 		nk, nek := fk(string(dr.Key)), fk(string(dr.EndKey))
 		s := fmt.Sprintf("[%d,%d)", nk, nek)

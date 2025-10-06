@@ -241,12 +241,6 @@ type ByNameGetter getterBase
 func (g ByNameGetter) Database(
 	ctx context.Context, name string,
 ) (catalog.DatabaseDescriptor, error) {
-	if name == "" {
-		if g.flags.isOptional {
-			return nil, nil
-		}
-		return nil, sqlerrors.ErrEmptyDatabaseName
-	}
 	desc, err := getDescriptorByName(
 		ctx, g.KV(), g.Descriptors(), nil /* db */, nil /* sc */, name, g.flags, catalog.Database,
 	)

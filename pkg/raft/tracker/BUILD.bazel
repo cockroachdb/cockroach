@@ -19,6 +19,7 @@ go_library(
         "//pkg/raft/raftstoreliveness",
         "//pkg/util/container/ring",
         "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_exp//maps",
     ],

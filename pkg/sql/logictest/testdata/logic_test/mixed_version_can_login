@@ -1,59 +1,59 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-24.1
 
-let $origver
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+query T
+SELECT crdb_internal.node_executable_version()
+----
+24.1
 
 upgrade 0
 
 upgrade 1
 
-# Node 0 should have a different release series now.
-query B nodeidx=0
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T nodeidx=0
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-false
+24.3
 
-# Node 2 should still have the original release series.
-query B nodeidx=2
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
 ----
-true
+24.1
 
 # Verify that a non-root user can login on the upgraded node.
 user testuser nodeidx=0
 
-query B
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-false
+24.3
 
 # Verify that a root user can login on the upgraded node.
 user root nodeidx=1
 
-query B
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-false
+24.3
 
 # Verify that a non-root user can login on the non-upgraded node.
 user testuser nodeidx=2
 
-query B
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T
+SELECT crdb_internal.node_executable_version()
 ----
-true
+24.1
 
 # Verify that a root user can login on the non-upgraded node.
 user root nodeidx=2
 
-query B
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T
+SELECT crdb_internal.node_executable_version()
 ----
-true
+24.1
 
 upgrade 2
 
-query B
-SELECT crdb_internal.release_series(crdb_internal.node_executable_version()) = '$origver'
+query T
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
 ----
-false
+24.3

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -67,10 +66,10 @@ func muxRangeFeed(
 	eventCh chan<- RangeFeedMessage,
 ) (retErr error) {
 	if log.V(1) {
-		log.KvExec.Infof(ctx, "Establishing MuxRangeFeed (%s...; %d spans)", spans[0], len(spans))
-		start := crtime.NowMono()
+		log.Infof(ctx, "Establishing MuxRangeFeed (%s...; %d spans)", spans[0], len(spans))
+		start := timeutil.Now()
 		defer func() {
-			log.KvExec.Infof(ctx, "MuxRangeFeed terminating after %s with err=%v", start.Elapsed(), retErr)
+			log.Infof(ctx, "MuxRangeFeed terminating after %s with err=%v", timeutil.Since(start), retErr)
 		}()
 	}
 
@@ -284,7 +283,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 
 		for !s.transport.IsExhausted() {
 			args := makeRangeFeedRequest(
-				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs, m.cfg.consumerID, m.cfg.bulkDelivery)
+				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs)
 			args.Replica = s.transport.NextReplica()
 			args.StreamID = streamID
 			s.ReplicaDescriptor = args.Replica
@@ -369,24 +368,20 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 	nodeID roachpb.NodeID,
 	stream *future.Future[muxStreamOrError],
 ) (retErr error) {
-
-	tags := logtags.BuildBuffer()
-	tags.Add("mux_n", nodeID)
+	ctx = logtags.AddTag(ctx, "mux_n", nodeID)
 	// Add "generation" number to the context so that log messages and stacks can
 	// differentiate between multiple instances of mux rangefeed goroutine
 	// (this can happen when one was shutdown, then re-established).
-	tags.Add("gen", atomic.AddInt64(&m.seqID, 1))
-
-	ctx = logtags.AddTags(ctx, tags.Finish())
+	ctx = logtags.AddTag(ctx, "gen", atomic.AddInt64(&m.seqID, 1))
 	ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 	defer restore()
 
 	if log.V(1) {
-		log.KvExec.Infof(ctx, "Establishing MuxRangeFeed to node %d", nodeID)
-		start := crtime.NowMono()
+		log.Infof(ctx, "Establishing MuxRangeFeed to node %d", nodeID)
+		start := timeutil.Now()
 		defer func() {
-			log.KvExec.Infof(ctx, "MuxRangeFeed to node %d terminating after %s with err=%v",
-				nodeID, start.Elapsed(), retErr)
+			log.Infof(ctx, "MuxRangeFeed to node %d terminating after %s with err=%v",
+				nodeID, timeutil.Since(start), retErr)
 		}()
 	}
 
@@ -401,18 +396,9 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		return future.MustSet(stream, muxStreamOrError{err: err})
 	}
 
-	maybeCloseClient := func() {
-		if closer, ok := mux.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				log.KvExec.Warningf(ctx, "error closing mux rangefeed client: %v", err)
-			}
-		}
-	}
-
 	ms := muxStream{nodeID: nodeID}
 	ms.mu.sender = mux
 	if err := future.MustSet(stream, muxStreamOrError{stream: &ms}); err != nil {
-		maybeCloseClient()
 		return err
 	}
 
@@ -422,7 +408,6 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		// another goroutine loaded it.  That's fine, since we would not
 		// be able to send new request on this stream anymore, and we'll retry
 		// against another node.
-		maybeCloseClient()
 		m.muxClients.Delete(nodeID)
 
 		if recvErr == io.EOF {
@@ -443,7 +428,7 @@ func (m *rangefeedMuxer) startNodeMuxRangeFeed(
 		}
 
 		if log.V(1) {
-			log.KvExec.Infof(ctx, "mux to node %d restarted %d streams", ms.nodeID, len(toRestart))
+			log.Infof(ctx, "mux to node %d restarted %d streams", ms.nodeID, len(toRestart))
 		}
 		return m.restartActiveRangeFeeds(ctx, recvErr, toRestart)
 	}
@@ -458,7 +443,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 	for {
 		event, err := receiver.Recv()
 		if err != nil {
-			return errors.Wrapf(err, "receiving from node %d", ms.nodeID)
+			return err
 		}
 
 		active := ms.lookupStream(event.StreamID)
@@ -472,7 +457,7 @@ func (m *rangefeedMuxer) receiveEventsFromNode(
 		// additional event(s) arriving for a stream that is no longer active.
 		if active == nil {
 			if log.V(1) {
-				log.KvExec.Infof(ctx, "received stray event stream %d: %v", event.StreamID, event)
+				log.Infof(ctx, "received stray event stream %d: %v", event.StreamID, event)
 			}
 			continue
 		}
@@ -567,7 +552,7 @@ func (m *rangefeedMuxer) restartActiveRangeFeed(
 	}
 
 	if log.V(1) {
-		log.KvExec.Infof(ctx, "RangeFeed %s@%s (r%d, replica %s) disconnected with last checkpoint %s ago: %v (errInfo %v)",
+		log.Infof(ctx, "RangeFeed %s@%s (r%d, replica %s) disconnected with last checkpoint %s ago: %v (errInfo %v)",
 			active.Span, active.StartAfter, active.RangeID, active.ReplicaDescriptor,
 			timeutil.Since(active.Resolved.GoTime()), reason, errInfo)
 	}

@@ -25,7 +25,7 @@ import (
 )
 
 type controlSchedulesNode struct {
-	singleInputPlanNode
+	rows    planNode
 	command tree.ScheduleCommand
 	numRows int
 }
@@ -110,7 +110,7 @@ func DeleteSchedule(
 // startExec implements planNode interface.
 func (n *controlSchedulesNode) startExec(params runParams) error {
 	for {
-		ok, err := n.input.Next(params)
+		ok, err := n.rows.Next(params)
 		if err != nil {
 			return err
 		}
@@ -118,7 +118,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			break
 		}
 
-		schedule, err := loadSchedule(params, n.input.Values()[0])
+		schedule, err := loadSchedule(params, n.rows.Values()[0])
 		if err != nil {
 			return err
 		}
@@ -203,5 +203,5 @@ func (*controlSchedulesNode) Values() tree.Datums { return nil }
 
 // Close implements planNode interface.
 func (n *controlSchedulesNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.rows.Close(ctx)
 }

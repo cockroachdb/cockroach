@@ -62,8 +62,6 @@ message DefaultPrivilegesForRole {
     // for the role causes it to "own" default privileges as it is no longer
     // the "default" case and the role cannot be dropped until the default case
     // is met.
-    // Note: if adding any public_has_* fields in the future, be sure to update
-    // checking of these default privileges in addDependentPrivileges.
     optional bool public_has_usage_on_types = 4 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_tables = 5 [(gogoproto.nullable) = false];
     optional bool role_has_all_privileges_on_sequences = 6 [(gogoproto.nullable) = false];

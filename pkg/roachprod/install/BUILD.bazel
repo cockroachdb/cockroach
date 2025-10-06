@@ -10,32 +10,25 @@ go_library(
         "expander.go",
         "install.go",
         "iterm2.go",
-        "monitor.go",
         "nodes.go",
         "run_options.go",
         "services.go",
         "session.go",
         "staging.go",
-        ":typegen-cluster-settings",  # keep
     ],
     embedsrcs = [
         "files/cockroachdb-logging.yaml",
         "scripts/download.sh",
         "scripts/start.sh",
         "scripts/open_ports.sh",
-        "scripts/monitor_remote.sh",
-        "scripts/monitor_local.sh",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/install",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl/licenseccl",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/logger",
-        "//pkg/roachprod/roachprodutil",
-        "//pkg/roachprod/roachprodutil/codec",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
         "//pkg/roachprod/vm",
@@ -50,8 +43,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_version//:version",
-        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sys//unix",
@@ -61,13 +52,9 @@ go_library(
 go_test(
     name = "install_test",
     srcs = [
-        "cluster_settings_test.go",
         "cluster_synced_test.go",
         "cockroach_test.go",
-        "expander_test.go",
-        "monitor_test.go",
         "services_test.go",
-        "session_test.go",
         "staging_test.go",
         "start_template_test.go",
     ],
@@ -75,35 +62,15 @@ go_test(
     embed = [":install"],
     deps = [
         "//pkg/roachprod/cloud",
-        "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/gce/testutils",
         "//pkg/roachprod/vm/local",
         "//pkg/testutils/datapathutils",
-        "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "//pkg/util/retry",
-        "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
-        "@in_gopkg_yaml_v3//:yaml_v3",
-    ],
-)
-
-genrule(
-    name = "typegen-cluster-settings",
-    srcs = ["cluster_settings.go"],
-    outs = ["types_generated.go"],
-    cmd = """$(location //pkg/roachprod/roachprodutil/codec/cmd/typegen:typegen) \
-       -output $@ $(location cluster_settings.go)
-""",
-    tools = [
-        "//pkg/roachprod/roachprodutil/codec/cmd/typegen",
-    ],
-    visibility = [
-        ":__pkg__",
-        "//pkg/gen:__pkg__",
     ],
 )

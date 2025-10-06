@@ -140,13 +140,14 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteByte(' ')
 			}
-			ctx.WithAnnotations(node.BodyAnnotations[i], func() {
-				ctx.FormatNode(stmt)
-				if !isPLpgSQL {
-					// PL/pgSQL statements handle printing semicolons themselves.
-					ctx.WriteByte(';')
-				}
-			})
+			oldAnn := ctx.ann
+			ctx.ann = node.BodyAnnotations[i]
+			ctx.FormatNode(stmt)
+			if !isPLpgSQL {
+				// PL/pgSQL statements handle printing semicolons themselves.
+				ctx.WriteByte(';')
+			}
+			ctx.ann = oldAnn
 		}
 		ctx.WriteString("$$")
 	} else if node.RoutineBody != nil {
@@ -338,7 +339,21 @@ type RoutineBodyStr string
 // Format implements the NodeFormatter interface.
 func (node RoutineBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
-	ctx.FormatStringDollarQuotes(string(node))
+	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
+		ctx.WriteString("$funcbody$")
+	} else {
+		ctx.WriteString("$$")
+	}
+	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
+		ctx.WriteString("_")
+	} else {
+		ctx.WriteString(string(node))
+	}
+	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
+		ctx.WriteString("$funcbody$")
+	} else {
+		ctx.WriteString("$$")
+	}
 }
 
 // RoutineParams represents a list of RoutineParam.
@@ -636,8 +651,6 @@ const (
 	TTLExpirationExpr               SchemaExprContext = "TTL EXPIRATION EXPRESSION"
 	TTLDefaultExpr                  SchemaExprContext = "TTL DEFAULT"
 	TTLUpdateExpr                   SchemaExprContext = "TTL UPDATE"
-	PolicyUsingExpr                 SchemaExprContext = "POLICY USING"
-	PolicyWithCheckExpr             SchemaExprContext = "POLICY WITH CHECK"
 )
 
 func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {

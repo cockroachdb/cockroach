@@ -7,10 +7,10 @@ package zonepb
 
 import (
 	"fmt"
+	"runtime/debug"
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"gopkg.in/yaml.v2"
@@ -50,13 +50,13 @@ var _ yaml.Unmarshaler = &ConstraintsConjunction{}
 // MarshalYAML implements yaml.Marshaler.
 func (c ConstraintsConjunction) MarshalYAML() (interface{}, error) {
 	return nil, fmt.Errorf(
-		"MarshalYAML should never be called directly on Constraints (%v): %v", c, debugutil.Stack())
+		"MarshalYAML should never be called directly on Constraints (%v): %v", c, debug.Stack())
 }
 
 // UnmarshalYAML implements yaml.Marshaler.
 func (c *ConstraintsConjunction) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return fmt.Errorf(
-		"UnmarshalYAML should never be called directly on Constraints: %v", debugutil.Stack())
+		"UnmarshalYAML should never be called directly on Constraints: %v", debug.Stack())
 }
 
 // ConstraintsList is an alias for a slice of Constraints that can be

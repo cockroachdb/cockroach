@@ -7,7 +7,6 @@ package main
 
 import (
 	"archive/zip"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,9 +31,9 @@ func TestMoveToZipArchive(t *testing.T) {
 	expectLs := func(expected ...string) {
 		t.Helper()
 		var actual []string
-		require.NoError(t, filepath.WalkDir(baseDir, func(path string, d fs.DirEntry, err error) error {
+		require.NoError(t, filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
 			require.NoError(t, err)
-			if !d.IsDir() {
+			if !info.IsDir() {
 				rel, err := filepath.Rel(baseDir, path)
 				require.NoError(t, err)
 				actual = append(actual, rel)

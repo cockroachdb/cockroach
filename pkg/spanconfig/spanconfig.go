@@ -332,7 +332,7 @@ func Delta(
 	ctx context.Context, s Splitter, committed, uncommitted catalog.TableDescriptor,
 ) (int, error) {
 	if committed == nil && uncommitted == nil {
-		log.Dev.Fatalf(ctx, "unexpected: got two nil table descriptors")
+		log.Fatalf(ctx, "unexpected: got two nil table descriptors")
 	}
 
 	var nonNilDesc catalog.TableDescriptor

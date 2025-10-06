@@ -181,13 +181,13 @@ on-txn-updated txn=txn3 status=committed
 [-] update txn: committing txn3
 [5] sequence req4: resolving intent ‹"k"› for txn 00000003 with COMMITTED status
 [5] sequence req4: lock wait-queue event: done waiting
-[5] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[5] sequence req4: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: sequencing complete, returned guard
 [7] sequence req2: resolving intent ‹"k"› for txn 00000003 with COMMITTED status
 [7] sequence req2: lock wait-queue event: done waiting
-[7] sequence req2: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[7] sequence req2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: sequencing complete, returned guard

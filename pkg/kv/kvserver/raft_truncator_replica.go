@@ -26,25 +26,48 @@ func (r *raftTruncatorReplica) getRangeID() roachpb.RangeID {
 func (r *raftTruncatorReplica) getTruncatedState() kvserverpb.RaftTruncatedState {
 	r.mu.Lock() // TODO(pav-kv): not needed if raftMu is held.
 	defer r.mu.Unlock()
-	return (*Replica)(r).asLogStorage().shMu.trunc
+	// TruncatedState is guaranteed to be non-nil.
+	return *r.shMu.state.TruncatedState
 }
 
-func (r *raftTruncatorReplica) stagePendingTruncation(_ context.Context, pt pendingTruncation) {
-	(*Replica)(r).stagePendingTruncationRaftMuLocked(pt)
+func (r *raftTruncatorReplica) setTruncatedStateAndSideEffects(
+	ctx context.Context,
+	trunc *kvserverpb.RaftTruncatedState,
+	expectedFirstIndexPreTruncation kvpb.RaftIndex,
+) (expectedFirstIndexWasAccurate bool) {
+	_, expectedFirstIndexAccurate := (*Replica)(r).handleTruncatedStateResult(
+		ctx, trunc, expectedFirstIndexPreTruncation)
+	return expectedFirstIndexAccurate
 }
 
-func (r *raftTruncatorReplica) finalizeTruncation(ctx context.Context) {
-	(*Replica)(r).finalizeTruncationRaftMuLocked(ctx)
+func (r *raftTruncatorReplica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
+	r.raftMu.AssertHeld()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shMu.raftLogSize += deltaBytes
+	r.shMu.raftLogLastCheckSize += deltaBytes
+	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
+	// between server restarts.
+	if r.shMu.raftLogSize < 0 {
+		r.shMu.raftLogSize = 0
+	}
+	if r.shMu.raftLogLastCheckSize < 0 {
+		r.shMu.raftLogLastCheckSize = 0
+	}
+	if !isDeltaTrusted {
+		r.shMu.raftLogSizeTrusted = false
+	}
 }
 
 func (r *raftTruncatorReplica) getPendingTruncs() *pendingLogTruncations {
 	return &r.pendingLogTruncations
 }
 
-func (r *raftTruncatorReplica) sideloadedStats(
-	ctx context.Context, span kvpb.RaftSpan,
-) (entries uint64, freed int64, err error) {
-	return r.logStorage.ls.Sideload.Stats(ctx, span)
+func (r *raftTruncatorReplica) sideloadedBytesIfTruncatedFromTo(
+	ctx context.Context, from, to kvpb.RaftIndex,
+) (freed int64, err error) {
+	freed, _, err = r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, from, to)
+	return freed, err
 }
 
 func (r *raftTruncatorReplica) getStateLoader() stateloader.StateLoader {

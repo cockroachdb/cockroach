@@ -210,9 +210,6 @@ func TestOpenMetricsFileWithJson(t *testing.T) {
 						}
 					}
 
-					// openmetrics has quantiles in absolute values (i.e 0 to 1) an hdrHistogram has quantiles from 0 to 100.
-					// Multiplying by 100 to make a fair comparison
-					quantile *= 100
 					if int64(countValue) != hist.ValueAtQuantile(quantile) {
 						return errors.Errorf("invalid summary quantile: %f", quantile)
 					}

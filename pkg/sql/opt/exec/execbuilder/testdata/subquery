@@ -93,7 +93,6 @@ vectorized: true
 │       │ table: abc@abc_pkey
 │       │ equality: (any_not_null) = (a)
 │       │ equality cols are key
-│       │ parallel
 │       │
 │       └── • group (scalar)
 │           │ columns: (any_not_null)
@@ -437,19 +436,11 @@ vectorized: true
 │ estimated row count: 2 (missing stats)
 │ pred: column1 = a
 │
-├── • scan
-│     columns: (a, b, c)
-│     estimated row count: 1,000 (missing stats)
-│     table: abc@abc_pkey
-│     spans: FULL SCAN
-│
-└── • inner loop (unoptimized)
-    │ columns: ()
-    │
-    └── • values
-          columns: ()
-           ├── (a,)
-           └── (b,)
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_pkey
+      spans: FULL SCAN
 
 statement ok
 CREATE TABLE corr (

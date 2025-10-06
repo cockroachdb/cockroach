@@ -284,25 +284,10 @@ example [::1]:26257 or [fe80::f6f2:::]:26257.`,
 	}
 
 	Database = FlagInfo{
-		Name:      "database",
-		Shorthand: "d",
-		EnvVar:    "COCKROACH_DATABASE",
-		Description: `
-The name of the database and (optionally) virtual cluster to connect to:
-<PRE>
-   -d [database]
-   -d cluster:[virtual-cluster]/[database]
-
-</PRE>
-For example:
-<PRE>
-   -d mydb
-   -d cluster:mycluster/mydb
-
-</PRE>
-If empty or unspecified, the virtual cluster defaults to the
-"server.controller.default_target_cluster" cluster setting.
-`,
+		Name:        "database",
+		Shorthand:   "d",
+		EnvVar:      "COCKROACH_DATABASE",
+		Description: `The name of the database to connect to.`,
 	}
 
 	DumpMode = FlagInfo{
@@ -1118,8 +1103,11 @@ See the storage.wal_failover.unhealthy_op_threshold cluster setting.
 	}
 
 	StorageEngine = FlagInfo{
-		Name:        "storage-engine",
-		Description: "Deprecated: only present for backward compatibility.",
+		Name: "storage-engine",
+		Description: `
+Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
+only present for backward compatibility.
+`,
 	}
 
 	SecondaryCache = FlagInfo{
@@ -1197,14 +1185,10 @@ Verbose output.`,
 	TempDir = FlagInfo{
 		Name: "temp-dir",
 		Description: `
-The parent directory path where a temporary subdirectory will be created to be
-used for temporary files. This path must exist or the node will not start.
-
-The encryption from one of the stores is used with the temporary directory
-(specifically, the first store that is on-disk and encrypted).
-
-The temporary subdirectory is used primarily as working memory for distributed
-computations and CSV importing.
+The parent directory path where a temporary subdirectory will be created to be used for temporary files.
+This path must exist or the node will not start.
+The temporary subdirectory is used primarily as working memory for distributed computations
+and CSV importing.
 For example, the following will generate an arbitrary, temporary subdirectory
 "/mnt/ssd01/temp/cockroach-temp<NUMBER>":
 <PRE>
@@ -1213,8 +1197,7 @@ For example, the following will generate an arbitrary, temporary subdirectory
 
 </PRE>
 If this flag is unspecified, the temporary subdirectory will be located under
-the root of one of the stores (with preference for on-disk, encrypted stores).
-`,
+the root of the first store.`,
 	}
 
 	ExternalIODir = FlagInfo{
@@ -1249,13 +1232,9 @@ The value "disabled" will disable all local file I/O.
 Connection URL, of the form:
 <PRE>
    postgresql://[user[:passwd]@]host[:port]/[db][?parameters...]
-   postgresql://[user[:passwd]@]host[:port]/cluster:[virtual-cluster]/[db][?parameters...]
-
 </PRE>
-For example:
+For example, postgresql://myuser@localhost:26257/mydb.
 <PRE>
-   postgresql://myuser@localhost:26257/mydb
-   postgresql://myuser@localhost:26257/cluster:mycluster/mydb
 
 </PRE>
 If left empty, the discrete connection flags are used: host, port,
@@ -1310,6 +1289,13 @@ is the prefix for range local keys. The hex format takes an encoded MVCCKey.`}
 		Description: `
 File containing the JSON output from a node's /_status/gossip/ endpoint.
 If specified, takes priority over host/port flags.`,
+	}
+
+	PrintSystemConfig = FlagInfo{
+		Name: "print-system-config",
+		Description: `
+If specified, print the system config contents. Beware that the output will be
+long and not particularly human-readable.`,
 	}
 
 	DecodeAsTable = FlagInfo{
@@ -1819,14 +1805,6 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
-	ZipValidateFile = FlagInfo{
-		Name: "validate-zip-file",
-		Description: `
-Validate debug zip file after generation. This is a quick check to validate
-whether the generated zip file is valid and not corrupted.
-`,
-	}
-
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
@@ -1835,6 +1813,47 @@ whether the generated zip file is valid and not corrupted.
 	StmtDiagCancelAll = FlagInfo{
 		Name:        "all",
 		Description: `Cancel all outstanding requests.`,
+	}
+
+	ImportSkipForeignKeys = FlagInfo{
+		Name: "skip-foreign-keys",
+		Description: `
+Speed up data import by ignoring foreign key constraints in the dump file's DDL.
+Also enables importing individual tables that would otherwise fail due to
+dependencies on other tables.
+`,
+	}
+
+	ImportMaxRowSize = FlagInfo{
+		Name: "max-row-size",
+		Description: `
+Override limits on line size when importing Postgres dump files. This setting
+may need to be tweaked if the Postgres dump file has extremely long lines.
+`,
+	}
+
+	ImportIgnoreUnsupportedStatements = FlagInfo{
+		Name: "ignore-unsupported-statements",
+		Description: `
+Ignore statements that are unsupported during an import from a PGDUMP file.
+`,
+	}
+
+	ImportLogIgnoredStatements = FlagInfo{
+		Name: "log-ignored-statements",
+		Description: `
+Log unsupported statements that are ignored during an import from a PGDUMP file to the specified
+destination. This flag should be used in conjunction with the ignore-unsupported-statements flag
+that ignores the unsupported statements during an import.
+`,
+	}
+
+	ImportRowLimit = FlagInfo{
+		Name: "row-limit",
+		Description: `
+Specify the number of rows that will be imported for each table during a PGDUMP or MYSQLDUMP import.
+This can be used to check schema and data correctness without running the entire import.
+`,
 	}
 
 	Log = FlagInfo{
@@ -2051,31 +2070,5 @@ from node to node and previous application or staging attempt failed.
 		Description: `
 Maximum number of characters in printed keys and spans. If key representation
 exceeds this value, it is truncated. Set to 0 to disable truncation.`,
-	}
-	// Attrs and others store the static information for CLI flags.
-
-	EnterpriseEncryption = FlagInfo{
-		Name: "enterprise-encryption",
-		Description: `
-<PRE>Specify encryption options for one of the stores on a node. If multiple
-stores exist, the flag must be specified for each store.
-
-A valid enterprise license is required to use this functionality.
-
-Key files should be generated by "cockroach gen encryption-key".
-
-Valid fields:
-
-* path    (required): must match the path of one of the stores, or the special
-                      value "*" to match all stores
-* key     (required): path to the current key file, or "plain"
-* old-key (required): path to the previous key file, or "plain"
-* rotation-period   : amount of time after which data keys should be rotated
-
-</PRE>
-example:
-<PRE>
-  --enterprise-encryption=path=cockroach-data,key=/keys/aes-128.key,old-key=plain</PRE>
-`,
 	}
 )

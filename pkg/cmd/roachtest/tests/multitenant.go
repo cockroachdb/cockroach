@@ -16,12 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -276,7 +275,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 	t.L().Printf("restarting virtual cluster")
 	c.StartServiceForVirtualCluster(ctx, t.L(), tenantStartOpts, install.MakeClusterSettings())
 
-	grp := t.NewErrorGroup(task.WithContext(ctx))
+	grp := ctxgroup.WithContext(ctx)
 	startSchemaChange := make(chan struct{})
 	waitForSchemaChange := make(chan struct{})
 	killNodes := make(chan struct{})
@@ -287,7 +286,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 	// Start a connection that will hold a lease on a table that we are going
 	// to schema change on. The region we are connecting to will be intentionally,
 	// killed off.
-	grp.Go(func(ctx context.Context, l *logger.Logger) (err error) {
+	grp.GoCtx(func(ctx context.Context) (err error) {
 		txn, err := otherRegionConn.BeginTx(ctx, nil)
 		if err != nil {
 			return errors.Wrap(err, "starting transaction")
@@ -301,7 +300,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 			}
 			err = errors.CombineErrors(err, commitErr)
 			if err != nil {
-				l.Printf("Committed lease holding txn with error: %#v", err)
+				t.L().Printf("Committed lease holding txn with error: %#v", err)
 			}
 		}()
 		_, err = txn.Exec(fmt.Sprintf("SELECT * FROM %s.usertable", workloadDB))
@@ -313,7 +312,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 	<-startSchemaChange
 
 	// Start a schema change, while the lease is being held.
-	grp.Go(func(ctx context.Context, l *logger.Logger) (err error) {
+	grp.GoCtx(func(ctx context.Context) error {
 		defer func() {
 			waitForSchemaChange <- struct{}{}
 		}()
@@ -328,7 +327,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 				// Unrelated error, so lets kill off the test.
 				return errors.NewAssertionErrorWithWrappedErrf(err, "no time out detected because of dead region")
 			} else if err != nil {
-				l.Printf("waiting for schema change completion, found expected error: %v", err)
+				t.L().Printf("waiting for schema change completion, found expected error: %v", err)
 				continue
 			} else {
 				// Schema change compleded successfully.
@@ -345,7 +344,7 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 	t.Status("stopping the server ahead of checking for the tenant server")
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), killedRegion)
 	nodesKilled <- struct{}{}
-	require.NoErrorf(t, grp.WaitE(), "waited for go routines, expected no error.")
+	require.NoErrorf(t, grp.Wait(), "waited for go routines, expected no error.")
 
 	// Restart the KV storage servers first.
 	c.Start(ctx, t.L(), systemStartOpts, install.MakeClusterSettings(), killedRegion)
@@ -357,30 +356,28 @@ func runMultiTenantMultiRegion(ctx context.Context, t test.Test, c cluster.Clust
 
 	// Validate that no region is labeled as unavailable after.
 	for _, node := range killedRegion {
-		func() {
-			tenantDB := c.Conn(ctx, t.L(), node, option.VirtualClusterName(virtualCluster))
-			defer tenantDB.Close()
+		tenantDB := c.Conn(ctx, t.L(), node, option.VirtualClusterName(virtualCluster))
+		defer tenantDB.Close()
 
-			rows, err := tenantDB.Query("SELECT crdb_region, unavailable_at FROM system.region_liveness")
-			require.NoError(t, err, "error querying region liveness on n%d", node)
+		rows, err := tenantDB.Query("SELECT crdb_region, unavailable_at FROM system.region_liveness")
+		require.NoError(t, err, "error querying region liveness on n%d", node)
 
-			var unavailableRegions []string
-			for rows.Next() {
-				var region []byte
-				var unavailableAt time.Time
+		var unavailableRegions []string
+		for rows.Next() {
+			var region []byte
+			var unavailableAt time.Time
 
-				require.NoError(t, rows.Scan(&region, unavailableAt), "reading region liveness on n%d", node)
-				unavailableRegions = append(
-					unavailableRegions,
-					fmt.Sprintf("region: %x, unavailable_at: %s", region, unavailableAt),
-				)
-			}
+			require.NoError(t, rows.Scan(&region, unavailableAt), "reading region liveness on n%d", node)
+			unavailableRegions = append(
+				unavailableRegions,
+				fmt.Sprintf("region: %x, unavailable_at: %s", region, unavailableAt),
+			)
+		}
 
-			require.NoError(t, rows.Err(), "rows.Err() on n%d", node)
-			if len(unavailableRegions) > 0 {
-				t.Fatalf("unavailable regions on n%d:\n%s", node, strings.Join(unavailableRegions, "\n"))
-			}
-		}()
+		require.NoError(t, rows.Err(), "rows.Err() on n%d", node)
+		if len(unavailableRegions) > 0 {
+			t.Fatalf("unavailable regions on n%d:\n%s", node, strings.Join(unavailableRegions, "\n"))
+		}
 	}
 
 	t.L().Printf("validated region liveness")
@@ -402,6 +399,7 @@ func registerMultiTenantMultiregion(r registry.Registry) {
 		),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		RequiresLicense:   true,
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly, registry.Quick),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

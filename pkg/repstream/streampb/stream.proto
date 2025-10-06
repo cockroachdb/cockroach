@@ -19,7 +19,6 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "roachpb/span_config.proto";
 import "sql/catalog/descpb/structured.proto";
-import "sql/catalog/externalcatalog/externalpb/external.proto";
 
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
@@ -45,10 +44,15 @@ message ReplicationProducerSpec {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SourceTenantID"
   ];
-  
-  reserved 7;
-  reserved 8;
-  sql.catalog.externalcatalog.externalpb.ExternalCatalog external_catalog = 9 [(gogoproto.nullable) = false];
+
+  // TableDescriptors are the descriptors for the tables in the
+  // ReplicationProducerRequest.
+  //
+  // TODO(ssd): We likely want to remove this one-time table
+  // descriptor fetch with a schemafeed that the consumer starts.
+  map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
+
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 8 [(gogoproto.nullable) = false];
 }
 
 // ReplicationProducerRequest is sent by the consuming cluster when
@@ -83,11 +87,6 @@ message ReplicationProducerRequest {
   // TableNames, if set, are the names of the individual tables that a
   // logical replication ingestion processor are interested in.
   repeated string table_names = 4;
-
-  bool allow_offline = 5;
-  
-  // Sent during bidirectional LDR setup to validate the reverse stream URI.
-  string unvalidated_reverse_stream_uri = 6 [(gogoproto.customname) = "UnvalidatedReverseStreamURI"];
 }
 
 enum ReplicationType {
@@ -169,8 +168,6 @@ message LogicalReplicationPlanRequest {
     repeated int32 table_ids = 1 [(gogoproto.customname) = "TableIDs"];
     // PlanAsOf is the time as of which the plan should be produced.
     util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
-    bool use_table_span = 3;
-    int64 stream_id = 4 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
 }
 
 // SourcePartition contains per partition information for a replication plan.

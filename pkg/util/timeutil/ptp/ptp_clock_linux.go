@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build linux
+// +build linux
 
 package ptp
 
@@ -48,7 +49,7 @@ func MakeClock(ctx context.Context, clockDevicePath string) (Clock, error) {
 	// https://lore.kernel.org/patchwork/patch/868609/
 	// https://github.com/torvalds/linux/blob/7e63420847ae5f1036e4f7c42f0b3282e73efbc2/tools/testing/selftests/ptp/testptp.c#L87
 	clockID := (^clockDeviceFD << 3) | 3
-	log.Dev.Infof(
+	log.Infof(
 		ctx,
 		"opened clock device %s with fd %d, mod_fd %x",
 		clockDevicePath,

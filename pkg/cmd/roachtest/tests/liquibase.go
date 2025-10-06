@@ -34,7 +34,7 @@ func registerLiquibase(r registry.Registry) {
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
 		// TODO(darrylwong): if https://github.com/liquibase/liquibase-test-harness/pull/724 is merged, enable secure mode
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.All())
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -91,10 +91,7 @@ func registerLiquibase(r registry.Registry) {
 		// The script executes the cockroach binary from /cockroach/cockroach.sh
 		// so we symlink that here.
 		t.Status("creating database/user used by tests")
-		if err = c.RunE(ctx, option.WithNodes(node), `
-sudo mkdir /cockroach && \
-sudo chmod o+rx /cockroach && \
-sudo ln -sf /home/ubuntu/cockroach /cockroach/cockroach.sh`); err != nil {
+		if err = c.RunE(ctx, option.WithNodes(node), `sudo mkdir /cockroach && sudo ln -sf /home/ubuntu/cockroach /cockroach/cockroach.sh`); err != nil {
 			t.Fatal(err)
 		}
 		// TODO(darrylwong): once secure mode is enabled, add --certs-dir=install.CockroachNodeCertsDir

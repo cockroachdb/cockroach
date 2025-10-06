@@ -1,8 +1,3 @@
-# LogicTest: !local-prepared
-# Keep schema locked disabled by default for this test.
-statement ok
-SET create_table_with_schema_locked=false
-
 subtest regression_42858
 
 statement ok
@@ -35,9 +30,6 @@ sql.schema.new_column_type.timetz_3_
 sql.schema.new_column_type.timetz_4_
 
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
 CREATE TABLE sec_col_fam(x INT, y INT, z INT, FAMILY (x), FAMILY (y), FAMILY (z), INDEX (x) STORING (y, z));
 CREATE INDEX ON sec_col_fam (x) STORING (y, z)
 
@@ -45,9 +37,6 @@ query T
 SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.schema.secondary_index_column_families' AND usage_count >= 2
 ----
 sql.schema.secondary_index_column_families
-
-statement ok
-RESET autocommit_before_ddl
 
 statement ok
 set require_explicit_primary_keys=true
@@ -92,7 +81,7 @@ t  CREATE TABLE public.t (
      rowid_2 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid_2 ASC),
      FAMILY fam_0_rowid_rowid_1_rowid_2 (rowid, rowid_1, rowid_2)
-   );
+   )
 
 subtest regression_qualification_feature_counts
 
@@ -119,23 +108,19 @@ CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
   z JSONB,
-  v VECTOR(3),
   INVERTED INDEX (z),
-  INDEX (y) USING HASH WITH (bucket_count=4),
-  VECTOR INDEX (v)
+  INDEX (y) USING HASH WITH (bucket_count=4)
 )
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
 WHERE feature_name IN (
   'sql.schema.inverted_index',
-  'sql.schema.hash_sharded_index',
-  'sql.schema.vector_index'
+  'sql.schema.hash_sharded_index'
 )
 ----
 sql.schema.inverted_index
 sql.schema.hash_sharded_index
-sql.schema.vector_index
 
 subtest like_table
 
@@ -153,14 +138,12 @@ CREATE TABLE like_table (
   j JSON,
   k INT UNIQUE WITHOUT INDEX,
   t TIMESTAMPTZ DEFAULT current_timestamp() - '5s'::interval ON UPDATE current_timestamp(),
-  v VECTOR(3),
   PRIMARY KEY (a, b),
   UNIQUE INDEX foo (b DESC, c),
   INDEX (c) STORING (j),
   INVERTED INDEX (j),
   UNIQUE WITHOUT INDEX (h),
-  UNIQUE WITHOUT INDEX (h) WHERE h > 0,
-  VECTOR INDEX (v)
+  UNIQUE WITHOUT INDEX (h) WHERE h > 0
 )
 
 statement ok
@@ -177,10 +160,9 @@ like_none  CREATE TABLE public.like_none (
              j JSONB NULL,
              k INT8 NULL,
              t TIMESTAMPTZ NULL,
-             v VECTOR(3) NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_none_pkey PRIMARY KEY (rowid ASC)
-           );
+           )
 
 statement ok
 CREATE TABLE like_constraints (LIKE like_table INCLUDING CONSTRAINTS)
@@ -196,14 +178,13 @@ like_constraints  CREATE TABLE public.like_constraints (
                     j JSONB NULL,
                     k INT8 NULL,
                     t TIMESTAMPTZ NULL,
-                    v VECTOR(3) NULL,
                     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                     CONSTRAINT like_constraints_pkey PRIMARY KEY (rowid ASC),
                     CONSTRAINT check_a CHECK (a > 3:::INT8),
                     CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
                     CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
                     CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
-                  );
+                  )
 
 statement ok
 CREATE TABLE like_indexes (LIKE like_table INCLUDING INDEXES)
@@ -219,13 +200,11 @@ like_indexes  CREATE TABLE public.like_indexes (
                 j JSONB NULL,
                 k INT8 NULL,
                 t TIMESTAMPTZ NULL,
-                v VECTOR(3) NULL,
                 CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
                 UNIQUE INDEX foo (b DESC, c ASC),
                 INDEX like_table_c_idx (c ASC) STORING (j),
-                INVERTED INDEX like_table_j_idx (j),
-                VECTOR INDEX like_table_v_idx (v vector_l2_ops)
-              );
+                INVERTED INDEX like_table_j_idx (j)
+              )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
 statement ok
@@ -242,10 +221,9 @@ like_generated  CREATE TABLE public.like_generated (
                   j JSONB NULL,
                   k INT8 NULL,
                   t TIMESTAMPTZ NULL,
-                  v VECTOR(3) NULL,
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT like_generated_pkey PRIMARY KEY (rowid ASC)
-                );
+                )
 
 statement ok
 CREATE TABLE like_defaults (LIKE like_table INCLUDING DEFAULTS)
@@ -261,10 +239,9 @@ like_defaults  CREATE TABLE public.like_defaults (
                  j JSONB NULL,
                  k INT8 NULL,
                  t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
-                 v VECTOR(3) NULL,
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT like_defaults_pkey PRIMARY KEY (rowid ASC)
-               );
+               )
 
 statement ok
 CREATE TABLE like_all (LIKE like_table INCLUDING ALL)
@@ -280,17 +257,15 @@ like_all  CREATE TABLE public.like_all (
             j JSONB NULL,
             k INT8 NULL,
             t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
-            v VECTOR(3) NULL,
             CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
             INVERTED INDEX like_table_j_idx (j),
-            VECTOR INDEX like_table_v_idx (v vector_l2_ops),
             CONSTRAINT check_a CHECK (a > 3:::INT8),
             CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
             CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
             CONSTRAINT unique_h_1 UNIQUE WITHOUT INDEX (h) WHERE h > 0:::INT8
-          );
+          )
 
 statement ok
 CREATE TABLE like_mixed (LIKE like_table INCLUDING ALL EXCLUDING GENERATED EXCLUDING CONSTRAINTS INCLUDING GENERATED)
@@ -308,13 +283,11 @@ like_mixed  CREATE TABLE public.like_mixed (
               j JSONB NULL,
               k INT8 NULL,
               t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
-              v VECTOR(3) NULL,
               CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
-              INVERTED INDEX like_table_j_idx (j),
-              VECTOR INDEX like_table_v_idx (v vector_l2_ops)
-            );
+              INVERTED INDEX like_table_j_idx (j)
+            )
 
 statement ok
 CREATE TABLE like_no_pk_table (
@@ -332,7 +305,7 @@ like_no_pk_rowid_hidden  CREATE TABLE public.like_no_pk_rowid_hidden (
                            b INT8 NULL,
                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                            CONSTRAINT like_no_pk_rowid_hidden_pkey PRIMARY KEY (rowid ASC)
-                         );
+                         )
 
 statement error duplicate column name
 CREATE TABLE duplicate_column (LIKE like_table, c DECIMAL)
@@ -342,7 +315,7 @@ CREATE TABLE other_table (blah INT)
 
 # Test that mixing normal specifiers and LIKE specifiers works as expected. We
 # expect that the column ordering depends on the order of the LIKE specifiers.
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE like_more_specifiers (LIKE like_table, z DECIMAL, INDEX(a,blah,z), LIKE other_table)
 
 query TT
@@ -356,13 +329,12 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                         j JSONB NULL,
                         k INT8 NULL,
                         t TIMESTAMPTZ NULL,
-                        v VECTOR(3) NULL,
                         z DECIMAL NULL,
                         blah INT8 NULL,
                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                         CONSTRAINT like_more_specifiers_pkey PRIMARY KEY (rowid ASC),
                         INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC)
-                      );
+                      )
 
 statement ok
 CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH (bucket_count=4))
@@ -379,7 +351,7 @@ like_hash  CREATE TABLE public.like_hash (
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
              INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
-           );
+           )
 
 statement ok
 DROP TABLE like_hash;
@@ -396,7 +368,7 @@ like_hash  CREATE TABLE public.like_hash (
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT like_hash_pkey PRIMARY KEY (rowid ASC),
              INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
-           );
+           )
 
 statement ok
 CREATE TABLE regression_67196 (pk INT PRIMARY KEY, hidden INT NOT VISIBLE);
@@ -412,7 +384,7 @@ regression_67196_like  CREATE TABLE public.regression_67196_like (
                          hidden INT8 NOT VISIBLE NULL,
                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                          CONSTRAINT regression_67196_like_pkey PRIMARY KEY (rowid ASC)
-                       );
+                       )
 
 statement error unimplemented
 CREATE TABLE error (LIKE like_hash_base INCLUDING COMMENTS)
@@ -526,7 +498,7 @@ generated_always_t  CREATE TABLE public.generated_always_t (
                       CONSTRAINT generated_always_t_pkey PRIMARY KEY (rowid ASC),
                       UNIQUE INDEX generated_always_t_a_key (a ASC),
                       FAMILY f1 (a, b, rowid)
-                    );
+                    )
 
 statement ok
 CREATE TABLE generated_by_default_t (
@@ -545,7 +517,7 @@ generated_by_default_t  CREATE TABLE public.generated_by_default_t (
                           CONSTRAINT generated_by_default_t_pkey PRIMARY KEY (rowid ASC),
                           UNIQUE INDEX generated_by_default_t_a_key (a ASC),
                           FAMILY f1 (a, b, rowid)
-                        );
+                        )
 
 statement ok
 CREATE TABLE generated_always_t_notnull (a INT UNIQUE, b INT NOT NULL GENERATED ALWAYS AS IDENTITY)
@@ -586,7 +558,7 @@ gen_always_as_id_seqopt  CREATE TABLE public.gen_always_as_id_seqopt (
                            CONSTRAINT gen_always_as_id_seqopt_pkey PRIMARY KEY (rowid ASC),
                            UNIQUE INDEX gen_always_as_id_seqopt_a_key (a ASC),
                            FAMILY f1 (a, b, rowid)
-                         );
+                         )
 
 statement ok
 CREATE TABLE gen_always_as_id_seqopt_cache (
@@ -600,12 +572,12 @@ SHOW CREATE TABLE gen_always_as_id_seqopt_cache
 ----
 gen_always_as_id_seqopt_cache  CREATE TABLE public.gen_always_as_id_seqopt_cache (
                                  a INT8 NULL,
-                                 b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3 PER NODE CACHE 10),
+                                 b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT gen_always_as_id_seqopt_cache_pkey PRIMARY KEY (rowid ASC),
                                  UNIQUE INDEX gen_always_as_id_seqopt_cache_a_key (a ASC),
                                  FAMILY f1 (a, b, rowid)
-                               );
+                               )
 
 statement ok
 CREATE TABLE gen_by_default_as_id_seqopt (
@@ -624,7 +596,7 @@ gen_by_default_as_id_seqopt  CREATE TABLE public.gen_by_default_as_id_seqopt (
                                CONSTRAINT gen_by_default_as_id_seqopt_pkey PRIMARY KEY (rowid ASC),
                                UNIQUE INDEX gen_by_default_as_id_seqopt_a_key (a ASC),
                                FAMILY f1 (a, b, rowid)
-                             );
+                             )
 
 statement ok
 CREATE TABLE gen_by_default_as_id_seqopt_cache (
@@ -638,12 +610,12 @@ SHOW CREATE TABLE gen_by_default_as_id_seqopt_cache
 ----
 gen_by_default_as_id_seqopt_cache  CREATE TABLE public.gen_by_default_as_id_seqopt_cache (
                                      a INT8 NULL,
-                                     b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 PER NODE CACHE 10),
+                                     b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 2 INCREMENT 3 CACHE 10),
                                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                      CONSTRAINT gen_by_default_as_id_seqopt_cache_pkey PRIMARY KEY (rowid ASC),
                                      UNIQUE INDEX gen_by_default_as_id_seqopt_cache_a_key (a ASC),
                                      FAMILY f1 (a, b, rowid)
-                                   );
+                                   )
 
 statement ok
 CREATE SEQUENCE serial_test_sequence start 1 increment 1
@@ -894,7 +866,7 @@ CREATE TABLE public.t_good_hash_indexes_1 (
   crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5),
   INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH (bucket_count=5)
-);
+)
 
 statement ok
 CREATE TABLE t_good_hash_indexes_2 (
@@ -909,7 +881,7 @@ CREATE TABLE public.t_good_hash_indexes_2 (
   a INT8 NOT NULL,
   crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
-);
+)
 
 subtest table_settings
 
@@ -933,7 +905,7 @@ WHERE
 statement ok
 DROP TABLE t1
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t1 (a int) WITH (sql_stats_automatic_collection_fraction_stale_rows = 0.5,
                               sql_stats_automatic_collection_min_stale_rows = 4000)
 
@@ -958,9 +930,9 @@ CREATE TABLE public.t1 (
   a INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-) WITH (sql_stats_automatic_collection_min_stale_rows = 4000, sql_stats_automatic_collection_fraction_stale_rows = 0.5);
+) WITH (sql_stats_automatic_collection_min_stale_rows = 4000, sql_stats_automatic_collection_fraction_stale_rows = 0.5)
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t11 (a int) WITH (sql_stats_automatic_collection_enabled = true,
                                sql_stats_automatic_collection_fraction_stale_rows = 1.797693134862315708145274237317043567981e+308,
                                sql_stats_automatic_collection_min_stale_rows = 9223372036854775807)
@@ -973,7 +945,7 @@ CREATE TABLE public.t11 (
   a INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t11_pkey PRIMARY KEY (rowid ASC)
-) WITH (sql_stats_automatic_collection_enabled = true, sql_stats_automatic_collection_min_stale_rows = 9223372036854775807, sql_stats_automatic_collection_fraction_stale_rows = 1.7976931348623157e+308);
+) WITH (sql_stats_automatic_collection_enabled = true, sql_stats_automatic_collection_min_stale_rows = 9223372036854775807, sql_stats_automatic_collection_fraction_stale_rows = 1.7976931348623157e+308)
 
 statement error pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000
 CREATE TABLE t22 (a int) WITH (sql_stats_automatic_collection_fraction_stale_rows = -1.0)
@@ -1000,7 +972,7 @@ tbl  CREATE TABLE public.tbl (
        j INT8 NOT NULL ON UPDATE nextval('public.s'::REGCLASS),
        CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
        FAMILY f1 (i, j)
-     );
+     )
 
 statement ok
 CREATE SEQUENCE IF NOT EXISTS s1
@@ -1022,7 +994,7 @@ tbl  CREATE TABLE public.tbl (
        j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
        CONSTRAINT tbl_pkey PRIMARY KEY (i ASC),
        FAMILY f1 (i, j)
-     );
+     )
 
 # We should propagate the type of the column into the sequence (#110352), instead
 # of always using INT8 for them.
@@ -1090,7 +1062,7 @@ subtest 115352
 statement ok
 SET experimental_enable_unique_without_index_constraints = true
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t_115352 (i INT, UNIQUE WITHOUT INDEX (i) NOT VALID);
 
 # NOT VALID constraint specified within `CREATE TABLE` is a no-op and does not
@@ -1099,11 +1071,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE t_115352];
 ----
 CREATE TABLE public.t_115352 (
-  i INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_115352_pkey PRIMARY KEY (rowid ASC),
-  CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i)
-);
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT t_115352_pkey PRIMARY KEY (rowid ASC),
+    CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i)
+)
 
 subtest end
 
@@ -1136,124 +1108,5 @@ CREATE TABLE v_133399 (c01 INT);
 
 statement error pgcode 42804 could not find matching function overload for given arguments
 CREATE TABLE t_133399 AS (SELECT * FROM v_133399 WINDOW window_name AS (ROWS c01 BETWEEN nextval ('abc', 'abc', 'abc') AND c01 PRECEDING));
-
-subtest end
-
-subtest create_table_as_notice
-
-statement ok
-CREATE TABLE IF NOT EXISTS t1 (
-  id1 UUID NOT NULL DEFAULT gen_random_uuid(),
-  id2 UUID NOT NULL DEFAULT gen_random_uuid(),
-  ts TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
-  val JSONB,
-  PRIMARY KEY(id1, id2)
-);
-
-# Ignore weaker isolation levels, since that will cause additional NOTICEs that we don't want to check in this test.
-skipif config weak-iso-level-configs
-query T noticetrace
-CREATE TABLE t2 AS SELECT * FROM t1;
-----
-NOTICE: CREATE TABLE ... AS does not copy over indexes, default expressions, or constraints; the new table has a hidden rowid primary key column
-
-subtest end
-
-subtest create_table_with_duplicate_storage_params
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE create_table_with_duplicate_storage_params_a (
-  a INT PRIMARY KEY,
-  b TEXT NOT NULL
-) WITH (fillfactor=10, fillfactor=15);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE IF NOT EXISTS create_table_with_duplicate_storage_params_b (
-  a INT
-) WITH (fillfactor=10, fillfactor=20);
-
-subtest end
-
-subtest create_table_with_as_duplicate_storage_params
-
-statement ok
-CREATE TABLE create_table_with_as_duplicate_storage_params_a (a INT);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE create_table_with_as_duplicate_storage_params_b (a) WITH (fillfactor=10, fillfactor=20) AS (SELECT * FROM create_table_with_as_duplicate_storage_params_a);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE IF NOT EXISTS create_table_with_as_duplicate_storage_params_c (a) WITH (fillfactor=10, fillfactor=20) AS (SELECT * FROM create_table_with_as_duplicate_storage_params_a);
-
-subtest end
-
-subtest create_table_primary_key_with_duplicate_storage_params
-
-# only bucket_count is a valid storage param, so USING HASH must be added
-statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
-CREATE TABLE create_table_primary_key_with_duplicate_storage_params_a (a INT PRIMARY KEY USING HASH WITH (bucket_count=10, bucket_count=20));
-
-subtest end
-
-subtest create_table_index_elem_duplicate_storage_params
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE create_table_index_elem_duplicate_storage_params_a (
-  a INT PRIMARY KEY,
-  b INT,
-  INDEX (b) WITH (fillfactor=10, fillfactor=20)
-);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE create_table_index_elem_duplicate_storage_params_b (
-  a INT PRIMARY KEY,
-  b INT,
-  INDEX b_idx (b) WITH (fillfactor=10, fillfactor=20)
-);
-
-statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
-CREATE TABLE create_table_index_elem_duplicate_storage_params_c (
-  a INT PRIMARY KEY,
-  b INT,
-  UNIQUE INDEX (b) USING HASH WITH (bucket_count=10, bucket_count=20)
-);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE TABLE create_table_index_elem_duplicate_storage_params_d (
-  a INT PRIMARY KEY,
-  b JSONB,
-  INVERTED INDEX (b) WITH (fillfactor=10, fillfactor=20)
-);
-
-statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
-CREATE TABLE create_table_index_elem_duplicate_storage_params_e (
-  a INT,
-  PRIMARY KEY (a) USING HASH WITH (bucket_count=10, bucket_count=20)
-);
-
-subtest end
-
-statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/v25.4
-CREATE TABLE not_indexable (COL1 INT PRIMARY KEY, COL2 REFCURSOR, COL3 REFCURSOR, INDEX (COL2, COL3))
-
-subtest region_lookup_param
-
-statement ok
-SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
-
-statement ok
-CREATE TABLE parent (k INT PRIMARY KEY);
-
-# The infer_rbr_region_col_using_constraint table storage param cannot be set
-# on a non-RBR table.
-statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on REGIONAL BY ROW tables
-CREATE TABLE t_infer_rbr_region_col (
-  a INT PRIMARY KEY,
-  b INT,
-  CONSTRAINT foo FOREIGN KEY (b) REFERENCES parent(k)
-) WITH (infer_rbr_region_col_using_constraint = foo);
-
-statement ok
-RESET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled;
 
 subtest end

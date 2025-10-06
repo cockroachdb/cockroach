@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -101,7 +100,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()))
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
 				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
 				require.NoError(t, err)
 				return protections
@@ -155,8 +154,7 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 		}
 	}
 
-	// Skip kafka sink because it's not compatible with s390x/IBM architecture
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestOmitSinks("kafka"))
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 }
 
 // TestChangefeedProtectedTimestamps asserts the state of changefeed PTS records
@@ -219,7 +217,7 @@ func TestChangefeedProtectedTimestamps(t *testing.T) {
 			span roachpb.Span) func() []hlc.Timestamp {
 			return func() (r []hlc.Timestamp) {
 				require.NoError(t,
-					spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, srv.Clock().Now()))
+					spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, srv.Clock().Now()))
 				protections, _, err := ptsReader.GetProtectionTimestamps(ctx, span)
 				require.NoError(t, err)
 				return protections
@@ -404,21 +402,7 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		perTablePTSEnabled :=
-			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
-				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
-
-		if perTablePTSEnabled {
-			eFeed, ok := f2.(cdctest.EnterpriseTestFeed)
-			require.True(t, ok)
-			hwm, err := eFeed.HighWaterMark()
-			require.NoError(t, err)
-			require.NoError(t, eFeed.WaitForHighWaterMark(hwm))
-
-			require.Equal(t, 2, getNumPTSRecords())
-		} else {
-			require.Equal(t, 1, getNumPTSRecords())
-		}
+		require.Equal(t, 1, getNumPTSRecords())
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
@@ -440,114 +424,27 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 		// single row with multiple versions.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
 
-		t.Run("canceled due to gc_protect_expires_after option", func(t *testing.T) {
-			testutils.RunValues(t, "initially-protected-with", []string{"none", "option", "setting"},
-				func(t *testing.T, initialProtect string) {
-					defer func() {
-						sqlDB.Exec(t, `RESET CLUSTER SETTING changefeed.protect_timestamp.max_age`)
-					}()
+		feed, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH protect_data_from_gc_on_pause, gc_protect_expires_after='24h'")
+		require.NoError(t, err)
+		defer func() {
+			closeFeed(t, feed)
+		}()
 
-					if initialProtect == "option" {
-						// We set the cluster setting to something small to make sure that
-						// the option alone is able to protect the PTS record.
-						sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
-					} else {
-						sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '24h'`)
-					}
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, jobFeed.Pause())
 
-					feedStmt := `CREATE CHANGEFEED FOR TABLE foo`
-					switch initialProtect {
-					case "none":
-						feedStmt += ` WITH gc_protect_expires_after='1us'`
-					case "option":
-						feedStmt += ` WITH gc_protect_expires_after='24h'`
-					}
+		// While the job is paused, take opportunity to test that alter changefeed
+		// works when setting gc_protect_expires_after option.
 
-					feed, err := f.Feed(feedStmt)
-					require.NoError(t, err)
-					defer func() {
-						closeFeed(t, feed)
-					}()
+		// Verify we can set it to 0 -- i.e. disable.
+		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'", jobFeed.JobID()))
+		// Now, set it to something very small.
+		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '250ms'", jobFeed.JobID()))
 
-					jobFeed := feed.(cdctest.EnterpriseTestFeed)
-
-					if initialProtect != "none" {
-						require.NoError(t, jobFeed.Pause())
-
-						// Wait a little bit and make sure the job ISN'T canceled.
-						require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
-							return s == jobs.StateCanceled
-						}), `still waiting for job status; current status is "paused"`)
-
-						if initialProtect == "option" {
-							// Set the cluster setting back to something high to make sure the
-							// option alone can cause the changefeed to be canceled.
-							sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '24h'`)
-						}
-
-						// Set option to something small so that job will be canceled.
-						sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET gc_protect_expires_after = '1us'`, jobFeed.JobID()))
-					}
-
-					// Stale PTS record should trigger job cancellation.
-					require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
-						return s == jobs.StateCanceled
-					}))
-				})
-		})
-
-		t.Run("canceled due to changefeed.protect_timestamp.max_age setting", func(t *testing.T) {
-			testutils.RunValues(t, "initially-protected-with", []string{"none", "option", "setting"},
-				func(t *testing.T, initialProtect string) {
-					defer func() {
-						sqlDB.Exec(t, `RESET CLUSTER SETTING changefeed.protect_timestamp.max_age`)
-					}()
-
-					if initialProtect == "setting" {
-						sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '24h'`)
-					} else {
-						sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
-					}
-
-					// Set the max age cluster setting to something small.
-					feedStmt := `CREATE CHANGEFEED FOR TABLE foo`
-					if initialProtect == "option" {
-						feedStmt += ` WITH gc_protect_expires_after='24h'`
-					}
-					feed, err := f.Feed(feedStmt)
-					require.NoError(t, err)
-					defer func() {
-						closeFeed(t, feed)
-					}()
-
-					jobFeed := feed.(cdctest.EnterpriseTestFeed)
-
-					if initialProtect != "none" {
-						require.NoError(t, jobFeed.Pause())
-
-						// Wait a little bit and make sure the job ISN'T canceled.
-						require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
-							return s == jobs.StateCanceled
-						}), `still waiting for job status; current status is "paused"`)
-
-						switch initialProtect {
-						case "option":
-							// Reset the option so that it defaults to the cluster setting.
-							sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'`, jobFeed.JobID()))
-						case "setting":
-							// Modify the cluster setting and do an ALTER CHANGEFEED so that
-							// the new value is picked up.
-							sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
-							sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff`, jobFeed.JobID()))
-						}
-					}
-
-					// Stale PTS record should trigger job cancellation.
-					require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
-						return s == jobs.StateCanceled
-					}))
-				})
-		})
+		// Stale PTS record should trigger job cancellation.
+		require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusCanceled
+		}))
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
@@ -570,8 +467,8 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// Keep track of where the spanconfig reconciler is up to.
 	lastReconcilerCheckpoint := atomic.Value{}
 	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
-	s, db, stopServer := startTestFullServer(t, makeOptions(t, withKnobsFn(
-		func(knobs *base.TestingKnobs) {
+	s, db, stopServer := startTestFullServer(t, feedTestOptions{
+		knobsFn: func(knobs *base.TestingKnobs) {
 			if knobs.SpanConfig == nil {
 				knobs.SpanConfig = &spanconfig.TestingKnobs{}
 			}
@@ -583,9 +480,9 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 				return nil
 			}
 			scKnobs.SQLWatcherCheckpointNoopsEveryDurationOverride = 1 * time.Second
-		}),
-		feedTestwithSettings(settings),
-	))
+		},
+		settings: settings,
+	})
 
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -598,7 +495,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	fooDescr := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "d", "foo")
 	var targets changefeedbase.Targets
 	targets.Add(changefeedbase.Target{
-		DescID: fooDescr.GetID(),
+		TableID: fooDescr.GetID(),
 	})
 
 	// We need to give our PTS record a legit job ID so the protected ts
@@ -612,7 +509,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		})
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR TABLE foo INTO 'null://'`).Scan(&jobID)
-	waitForJobState(sqlDB, t, jobID, `running`)
+	waitForJobStatus(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
 	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
@@ -651,9 +548,9 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 		t.Logf("updating PTS reader cache to %s", asOf)
 		require.NoError(
 			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
 		)
-		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
 	}
 	gcTestTableRange := func(tableName, databaseName string) {
 		row := sqlDB.QueryRow(t, fmt.Sprintf("SELECT range_id FROM [SHOW RANGES FROM TABLE %s.%s]", tableName, databaseName))
@@ -751,8 +648,6 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
@@ -774,9 +669,10 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 
 		// removes table 3 from the target of the PTS record.
 		removeOnePTSTarget := func(recordID uuid.UUID) error {
+			recordIDBs := recordID.GetBytes()
 			return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				s := `select target from system.protected_ts_records where id = $1`
-				datums, err := txn.QueryRowEx(ctx, "pts-test", txn.KV(), sessiondata.NodeUserSessionDataOverride, s, recordID)
+				datums, err := txn.QueryRowEx(ctx, "pts-test", txn.KV(), sessiondata.NodeUserSessionDataOverride, s, recordIDBs)
 				require.NoError(t, err)
 				j := tree.MustBeDBytes(datums[0])
 
@@ -792,7 +688,7 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 				require.NoError(t, err)
 
 				_, err = txn.ExecEx(ctx, "pts-test", txn.KV(), sessiondata.NodeUserSessionDataOverride,
-					"UPDATE system.protected_ts_records SET target = $1 WHERE id = $2", bs, recordID,
+					"UPDATE system.protected_ts_records SET target = $1 WHERE id = $2", bs, recordIDBs,
 				)
 				require.NoError(t, err)
 				return nil
@@ -870,12 +766,6 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
-		// Since old style PTS records should not be created when per-table PTS records are enabled,
-		// we disable them for this test. Per-table PTS breaks assumptions about where we can find
-		// the PTS record uuids.
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
-
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sysDB := sqlutils.MakeSQLRunner(s.SystemServer.SQLConn(t))
 
@@ -952,268 +842,6 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
-}
-
-// TestChangefeedProtectedTimestampUpdateForMultipleTables verifies that
-// a changefeed with multiple tables will successfully create and update
-// protected timestamp records when PerTableProtectedTimestamps is disabled,
-// that it will NOT create per-table protected timestamp records, and that
-// it will increment the relevant metrics when managing its protected timestamps.
-func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	verifyFunc := func() {}
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		defer verifyFunc()
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		// Checkpoint and trigger potential protected timestamp updates frequently.
-		// Make the protected timestamp lag long enough that it shouldn't be
-		// immediately updated after a restart.
-		changefeedbase.SpanCheckpointInterval.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
-		changefeedbase.ProtectTimestampInterval.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
-		changefeedbase.ProtectTimestampLag.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
-
-		// Ensure we use legacy single protected timestamp behavior for this test
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, false)
-
-		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
-		sqlDB.Exec(t, `CREATE TABLE bar (id INT)`)
-		registry := s.Server.JobRegistry().(*jobs.Registry)
-		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
-		createPTSCount, _ := metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
-		managePTSCount, _ := metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
-		managePTSErrorCount, _ := metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
-		require.Equal(t, int64(0), createPTSCount)
-		require.Equal(t, int64(0), managePTSCount)
-		require.Equal(t, int64(0), managePTSErrorCount)
-
-		createStmt := `CREATE CHANGEFEED FOR foo, bar
-WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
-		testFeed := feed(t, f, createStmt)
-		defer closeFeed(t, testFeed)
-
-		createPTSCount, _ = metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
-		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
-		require.Equal(t, int64(1), createPTSCount)
-		require.Equal(t, int64(0), managePTSCount)
-
-		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
-		require.True(t, ok)
-
-		// Wait for the changefeed to checkpoint and update PTS at least once.
-		require.NoError(t, eFeed.WaitForHighWaterMark(hlc.Timestamp{}))
-
-		// TODO(#151690): Ideally we could use the same pts record id
-		// for all times we get the PTS, but that's not possible right now
-		// because of the linked issue (pts records rewrite unnecessarily for
-		// multi-table feeds).
-		getPTS := func() hlc.Timestamp {
-			p, err := eFeed.Progress()
-			require.NoError(t, err)
-			ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, p.ProtectedTimestampRecord)
-			var tsStr string
-			sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
-			require.NoError(t, err)
-			ts, err := hlc.ParseHLC(tsStr)
-			require.NoError(t, err)
-			return ts
-		}
-		ts := getPTS()
-
-		// Force the changefeed to restart.
-		require.NoError(t, eFeed.Pause())
-		require.NoError(t, eFeed.Resume())
-
-		// Wait for a new checkpoint.
-		hwm, err := eFeed.HighWaterMark()
-		require.NoError(t, err)
-		require.NoError(t, eFeed.WaitForHighWaterMark(hwm))
-
-		// TODO(#151690): Check that the PTS was not updated after the resume.
-		// Right now we cannot do this without the test flaking because of the
-		// linked issue (pts records rewrite unnecessarily for multi-table feeds).
-
-		ptsLag := 10 * time.Millisecond
-		// Lower the PTS lag and check that it has been updated.
-		changefeedbase.ProtectTimestampLag.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, ptsLag)
-
-		hwm, err = eFeed.HighWaterMark()
-		require.NoError(t, err)
-		require.NoError(t, eFeed.WaitForHighWaterMark(hwm))
-
-		ts2 := getPTS()
-		require.True(t, ts.Less(ts2))
-
-		managePTSCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
-		managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
-		require.GreaterOrEqual(t, managePTSCount, int64(1))
-		require.Equal(t, int64(0), managePTSErrorCount)
-
-		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
-		err = execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-			var ptsEntries cdcprogresspb.ProtectedTimestampRecords
-			if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID()); err != nil {
-				return err
-			}
-
-			require.Equal(t, 0, ptsEntries.Size())
-			return nil
-		})
-
-		require.NoError(t, err)
-	}
-
-	withTxnRetries := withArgsFn(func(args *base.TestServerArgs) {
-		requestFilter, vf := testutils.TestingRequestFilterRetryTxnWithPrefix(t, changefeedJobProgressTxnName, 1)
-		args.Knobs.Store = &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: requestFilter,
-		}
-		verifyFunc = vf
-	})
-
-	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
-}
-
-// TestChangefeedPerTableProtectedTimestampProgression tests that
-// the changefeed's per-table protected timestamps progress as expected
-// when table lag is introduced and removed.
-func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-
-		// Enable per-table protected timestamps and progress tracking
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, true)
-		changefeedbase.TrackPerTableProgress.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, true)
-
-		ptsLag := 100 * time.Millisecond
-
-		// Configure frequent checkpointing and PTS updates for faster testing
-		changefeedbase.SpanCheckpointInterval.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
-		changefeedbase.ProtectTimestampInterval.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, ptsLag)
-		changefeedbase.ProtectTimestampLag.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 50*time.Millisecond)
-
-		sqlDB.Exec(t, `CREATE TABLE table1 (id INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `CREATE TABLE table2 (id INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `CREATE TABLE table3 (id INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO table1 VALUES (1)`)
-		sqlDB.Exec(t, `INSERT INTO table2 VALUES (1)`)
-		sqlDB.Exec(t, `INSERT INTO table3 VALUES (1)`)
-
-		var table1ID, table2ID, table3ID descpb.ID
-		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table1' AND database_name = current_database()`).Scan(&table1ID)
-		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table2' AND database_name = current_database()`).Scan(&table2ID)
-		sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables WHERE name = 'table3' AND database_name = current_database()`).Scan(&table3ID)
-
-		createStmt := `CREATE CHANGEFEED FOR table1, table2, table3
-		WITH resolved='100ms', min_checkpoint_frequency='100ms'`
-		testFeed := feed(t, f, createStmt)
-		defer closeFeed(t, testFeed)
-
-		assertPayloads(t, testFeed, []string{
-			`table1: [1]->{"after": {"id": 1}}`,
-			`table2: [1]->{"after": {"id": 1}}`,
-			`table3: [1]->{"after": {"id": 1}}`,
-		})
-
-		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
-		require.True(t, ok)
-
-		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
-
-		// Assert that the feed-level PTS record does not exist because per-table
-		// protected timestamps are enabled.
-		progress, err := eFeed.Progress()
-		require.NoError(t, err)
-		require.Equal(t, progress.ProtectedTimestampRecord, uuid.UUID{})
-
-		tablePTS := make(map[descpb.ID]hlc.Timestamp)
-		expectedTables := map[descpb.ID]struct{}{
-			table1ID: {},
-			table2ID: {},
-			table3ID: {},
-		}
-		testutils.SucceedsSoon(t, func() error {
-			return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-				var ptsEntries cdcprogresspb.ProtectedTimestampRecords
-				if err := readChangefeedJobInfo(
-					ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID(),
-				); err != nil {
-					return err
-				}
-
-				if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
-					return errors.Newf(
-						"expected %d per-table PTS records, got %d",
-						len(expectedTables), len(ptsEntries.ProtectedTimestampRecords),
-					)
-				}
-
-				// We save the protection timestamps for each table in tablePTS
-				// so that we can assert that they progress as expected later.
-				for tableID := range expectedTables {
-					if ptsEntries.ProtectedTimestampRecords[tableID] == uuid.Nil {
-						return errors.Newf("expected PTS record for table %d", tableID)
-					}
-					ptsQry := fmt.Sprintf(
-						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
-						ptsEntries.ProtectedTimestampRecords[tableID],
-					)
-					var tsStr string
-					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
-					ts, err := hlc.ParseHLC(tsStr)
-					require.NoError(t, err)
-					tablePTS[tableID] = ts
-				}
-				return nil
-			})
-		})
-
-		// Assert that each per table PTS record progresses as expected.
-		testutils.SucceedsSoon(t, func() error {
-			return execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
-				var ptsEntries cdcprogresspb.ProtectedTimestampRecords
-				if err := readChangefeedJobInfo(
-					ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, eFeed.JobID(),
-				); err != nil {
-					return err
-				}
-
-				for tableID := range expectedTables {
-					ptsQry := fmt.Sprintf(
-						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
-						ptsEntries.ProtectedTimestampRecords[tableID],
-					)
-					var tsStr string
-					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
-					ts, err := hlc.ParseHLC(tsStr)
-					require.NoError(t, err)
-					if !ts.After(tablePTS[tableID]) {
-						return errors.Newf(
-							"expected PTS record for table %d to progress since %s, got %s",
-							tableID, tablePTS[tableID], ts,
-						)
-					}
-				}
-				return nil
-			})
-		})
-	}
-
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func fetchRoleMembers(

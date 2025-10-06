@@ -44,7 +44,6 @@ import (
 )
 
 type alterDatabaseOwnerNode struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseOwner
 	desc *dbdesc.Mutable
 }
@@ -130,7 +129,6 @@ func (n *alterDatabaseOwnerNode) Values() tree.Datums          { return tree.Dat
 func (n *alterDatabaseOwnerNode) Close(context.Context)        {}
 
 type alterDatabaseAddRegionNode struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseAddRegion
 	desc *dbdesc.Mutable
 }
@@ -313,7 +311,6 @@ func (n *alterDatabaseAddRegionNode) Values() tree.Datums          { return tree
 func (n *alterDatabaseAddRegionNode) Close(context.Context)        {}
 
 type alterDatabaseDropRegionNode struct {
-	zeroInputPlanNode
 	n                     *tree.AlterDatabaseDropRegion
 	desc                  *dbdesc.Mutable
 	removingPrimaryRegion bool
@@ -497,10 +494,10 @@ func (p *planner) AlterDatabaseDropRegion(
 	}
 
 	return &alterDatabaseDropRegionNode{
-		n:                     n,
-		desc:                  dbDesc,
-		removingPrimaryRegion: removingPrimaryRegion,
-		toDrop:                toDrop,
+		n,
+		dbDesc,
+		removingPrimaryRegion,
+		toDrop,
 	}, nil
 }
 
@@ -894,7 +891,6 @@ func (n *alterDatabaseDropRegionNode) Values() tree.Datums          { return tre
 func (n *alterDatabaseDropRegionNode) Close(context.Context)        {}
 
 type alterDatabasePrimaryRegionNode struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabasePrimaryRegion
 	desc *dbdesc.Mutable
 }
@@ -1281,7 +1277,6 @@ func (n *alterDatabasePrimaryRegionNode) Close(context.Context)        {}
 func (n *alterDatabasePrimaryRegionNode) ReadingOwnWrites()            {}
 
 type alterDatabaseSurvivalGoalNode struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseSurvivalGoal
 	desc *dbdesc.Mutable
 }
@@ -1421,7 +1416,6 @@ func (n *alterDatabaseSurvivalGoalNode) Values() tree.Datums          { return t
 func (n *alterDatabaseSurvivalGoalNode) Close(context.Context)        {}
 
 type alterDatabasePlacementNode struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabasePlacement
 	desc *dbdesc.Mutable
 }
@@ -1565,7 +1559,6 @@ func (n *alterDatabasePlacementNode) Values() tree.Datums          { return tree
 func (n *alterDatabasePlacementNode) Close(context.Context)        {}
 
 type alterDatabaseAddSuperRegion struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseAddSuperRegion
 	desc *dbdesc.Mutable
 }
@@ -1670,7 +1663,6 @@ func (n *alterDatabaseAddSuperRegion) Values() tree.Datums          { return tre
 func (n *alterDatabaseAddSuperRegion) Close(context.Context)        {}
 
 type alterDatabaseDropSuperRegion struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseDropSuperRegion
 	desc *dbdesc.Mutable
 }
@@ -1793,7 +1785,6 @@ func (p *planner) getSuperRegionsForDatabase(
 }
 
 type alterDatabaseAlterSuperRegion struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseAlterSuperRegion
 	desc *dbdesc.Mutable
 }
@@ -1961,7 +1952,6 @@ func (p *planner) addSuperRegion(
 }
 
 type alterDatabaseSecondaryRegion struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseSecondaryRegion
 	desc *dbdesc.Mutable
 }
@@ -2041,7 +2031,7 @@ func (n *alterDatabaseSecondaryRegion) startExec(params runParams) error {
 	}
 
 	regions, ok := prevRegionConfig.GetSuperRegionRegionsForRegion(prevRegionConfig.PrimaryRegion())
-	if !ok && prevRegionConfig.IsMemberOfSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
+	if !ok && prevRegionConfig.IsMemberOfExplicitSuperRegion(catpb.RegionName(n.n.SecondaryRegion)) {
 		return pgerror.New(pgcode.InvalidDatabaseDefinition,
 			"the secondary region can not be in a super region, unless the primary is also "+
 				"within a super region",
@@ -2110,7 +2100,6 @@ func (n *alterDatabaseSecondaryRegion) Values() tree.Datums          { return tr
 func (n *alterDatabaseSecondaryRegion) Close(context.Context)        {}
 
 type alterDatabaseDropSecondaryRegion struct {
-	zeroInputPlanNode
 	n    *tree.AlterDatabaseDropSecondaryRegion
 	desc *dbdesc.Mutable
 }
@@ -2260,7 +2249,6 @@ func (n *alterDatabaseDropSecondaryRegion) Values() tree.Datums          { retur
 func (n *alterDatabaseDropSecondaryRegion) Close(context.Context)        {}
 
 type alterDatabaseSetZoneConfigExtensionNode struct {
-	zeroInputPlanNode
 	n          *tree.AlterDatabaseSetZoneConfigExtension
 	desc       *dbdesc.Mutable
 	yamlConfig tree.TypedExpr

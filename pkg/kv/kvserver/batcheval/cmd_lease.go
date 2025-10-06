@@ -9,14 +9,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func newFailedLeaseTrigger(isTransfer bool) result.Result {
@@ -57,7 +55,6 @@ func evalNewLease(
 
 	// Construct the prior read summary if the lease sequence is changing.
 	var priorReadSum *rspb.ReadSummary
-	var locksWritten int
 	if prevLease.Sequence != lease.Sequence {
 		// If the new lease is not equivalent to the old lease, construct a read
 		// summary to instruct the new leaseholder on how to update its timestamp
@@ -69,27 +66,6 @@ func evalNewLease(
 			// allowed to invalidate prior reads.
 			localReadSum := rec.GetCurrentReadSummary(ctx)
 			priorReadSum = &localReadSum
-
-			durabilityUpgradeLimit := concurrency.GetMaxLockFlushSize(&rec.ClusterSettings().SV)
-			// If this is a lease transfer, we write out all unreplicated leases to
-			// storage, so that any waiters will discover them on the new leaseholder.
-			acquisitions, approxSize := rec.GetConcurrencyManager().OnRangeLeaseTransferEval()
-			log.VEventf(ctx, 2, "upgrading durability of %d locks", len(acquisitions))
-			if approxSize > durabilityUpgradeLimit {
-				log.KvExec.Warningf(ctx,
-					"refusing to upgrade lock durability of %d locks since approximate lock size of %d byte exceeds %d bytes",
-					len(acquisitions),
-					approxSize,
-					durabilityUpgradeLimit)
-			} else {
-				for _, acq := range acquisitions {
-					if err := storage.MVCCAcquireLock(ctx, readWriter,
-						&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, ms, 0, 0, true /* allowSequenceNumberRegression */); err != nil {
-						return newFailedLeaseTrigger(isTransfer), err
-					}
-				}
-				locksWritten = len(acquisitions)
-			}
 		} else {
 			// If the new lease is not equivalent to the old lease (i.e. either the
 			// lease is changing hands or the leaseholder restarted), construct a
@@ -128,7 +104,6 @@ func evalNewLease(
 	}
 
 	pd.Local.Metrics = new(result.Metrics)
-	pd.Local.Metrics.LeaseTransferLocksWritten = locksWritten
 	if isTransfer {
 		pd.Local.Metrics.LeaseTransferSuccess = 1
 	} else {

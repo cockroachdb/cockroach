@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,18 +63,8 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 
 	// Encode the secondary index rows.
 	for _, idx := range w.tableDesc.PublicNonPrimaryIndexes() {
-		if idx.GetType() == idxtype.VECTOR {
-			return nil, errors.AssertionFailedf("system tables cannot have vector indexes")
-		}
 		indexEntries, err := rowenc.EncodeSecondaryIndex(
-			context.Background(),
-			w.codec,
-			w.tableDesc,
-			idx,
-			w.colIDtoRowIndex,
-			values,
-			rowenc.EmptyVectorIndexEncodingHelper,
-			true, /* includeEmpty */
+			context.Background(), w.codec, w.tableDesc, idx, w.colIDtoRowIndex, values, true, /* includeEmpty */
 		)
 		if err != nil {
 			return nil, errors.NewAssertionErrorWithWrappedErrf(
@@ -106,9 +95,9 @@ func (w KVWriter) Insert(
 	}
 	for _, kv := range kvs {
 		if kvTrace {
-			log.VEventf(ctx, 2, "CPut %s -> %s", kv.Key, kv.Value.String())
+			log.VEventf(ctx, 2, "CPut %s -> %s", kv.Key, kv.Value)
 		}
-		b.CPut(kv.Key, &kv.Value, nil /* expValue */)
+		b.CPutAllowingIfNotExists(kv.Key, &kv.Value, nil /* expValue */)
 	}
 	return nil
 }
@@ -131,7 +120,7 @@ func (w KVWriter) Update(
 	for i, keyVal := range kvs {
 		expVal := expKvs[i].Value.TagAndDataBytes()
 		if kvTrace {
-			log.VEventf(ctx, 2, "CPut %s -> %s, expValue: %s", keyVal.Key, keyVal.Value.String(), expKvs[i].Value.String())
+			log.VEventf(ctx, 2, "CPut %s -> %s, expValue: %s", keyVal.Key, keyVal.Value, expKvs[i].Value)
 		}
 		b.CPut(keyVal.Key, &keyVal.Value, expVal)
 	}

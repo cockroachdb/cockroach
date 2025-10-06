@@ -26,7 +26,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/util",
         "//pkg/util/errorutil",
         "//pkg/util/grpcutil",
@@ -38,12 +37,9 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_storj_drpc//:drpc",
-        "@org_golang_google_grpc//:grpc",
     ],
 )
 
@@ -109,10 +105,7 @@ proto_library(
 
 go_proto_library(
     name = "gossip_go_proto",
-    compilers = [
-        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
-    ],
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
     importpath = "github.com/cockroachdb/cockroach/pkg/gossip",
     proto = ":gossip_proto",
     visibility = ["//visibility:public"],

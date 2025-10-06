@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
+	"google.golang.org/grpc"
 )
 
 // Add adds values from ots to ts.
@@ -75,19 +76,22 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 // we generate the names for the quantiles that are exported (internal TSDB does
 // not support full histograms).
 func GetInternalTimeseriesNamesFromServer(
-	ctx context.Context, ac RPCAdminClient,
+	ctx context.Context, conn *grpc.ClientConn,
 ) ([]string, error) {
-	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
+	c := NewAdminClient(conn)
+	resp, err := c.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
 		return nil, err
 	}
 	var sl []string
 	for name, meta := range resp.Metadata {
 		if meta.MetricType == io_prometheus_client.MetricType_HISTOGRAM {
-			// See usage of HistogramMetricComputers in pkg/server/status/recorder.go.
-			for _, q := range metric.HistogramMetricComputers {
+			// See usage of RecordHistogramQuantiles in pkg/server/status/recorder.go.
+			for _, q := range metric.RecordHistogramQuantiles {
 				sl = append(sl, name+q.Suffix)
 			}
+			sl = append(sl, name+"-avg")
+			sl = append(sl, name+"-count")
 		} else {
 			sl = append(sl, name)
 		}

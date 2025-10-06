@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked !local-prepared
-
 subtest cursor
 
 # Verify that SQL and PL/pgSQL cursors run under READ COMMITTED correctly.
@@ -319,12 +317,6 @@ subtest schema_changes_multi-stmt
 # They are allowed in single-statement explicit transactions.
 
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
-SET create_table_with_schema_locked=false
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 CREATE TABLE single_stmt_explicit (a INT PRIMARY KEY);
 COMMIT
@@ -482,12 +474,6 @@ ALTER SCHEMA s RENAME TO foo;
 statement ok
 ROLLBACK
 
-statement ok
-RESET autocommit_before_ddl
-
-statement ok
-RESET create_table_with_schema_locked
-
 subtest end
 
 statement ok
@@ -515,11 +501,6 @@ GRANT ALL ON t TO testuser2;
 
 user testuser
 
-# The following transaction looks at the lock table, which makes it sensitive to whether or not
-# replicated locks are buffered.
-statement ok
-SET kv_transaction_buffered_writes_enabled=false
-
 query I
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM t WHERE a = 1 FOR SHARE;
@@ -537,9 +518,6 @@ database_name  schema_name  table_name  lock_key_pretty  lock_strength  durabili
 # 1: Shared
 # 2: None
 
-statement ok
-SET kv_transaction_buffered_writes_enabled=false
-
 query I
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM t FOR UPDATE SKIP LOCKED
@@ -552,9 +530,6 @@ user testuser2
 # 1: Shared
 # 2: Exclusive
 
-statement ok
-SET kv_transaction_buffered_writes_enabled=false
-
 query I
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM t FOR SHARE SKIP LOCKED;
@@ -562,26 +537,15 @@ COMMIT;
 ----
 1
 
-statement ok
-RESET kv_transaction_buffered_writes_enabled
-
 user root
 
 statement ok
 COMMIT
 
-statement ok
-RESET kv_transaction_buffered_writes_enabled
-
 user testuser
 
 statement ok
 COMMIT
-
-statement ok
-RESET kv_transaction_buffered_writes_enabled
-
-subtest end
 
 subtest regression_130661
 
@@ -608,58 +572,6 @@ COMMIT
 
 subtest end
 
-subtest regression_141961
-
-statement ok
-BEGIN ISOLATION LEVEL READ COMMITTED;
-
-query I
-SELECT * FROM (WITH foo AS (SELECT * FROM t FOR UPDATE LIMIT 1) SELECT 1);
-----
-1
-
-statement ok
-ROLLBACK;
-
-subtest end
-
-subtest regression_143138
-
-statement ok
-CREATE TABLE usertable (
-  ycsb_key VARCHAR(255) NOT NULL,
-  field0 STRING NOT NULL,
-  field1 STRING NOT NULL,
-  CONSTRAINT usertable_pkey PRIMARY KEY (ycsb_key ASC),
-  FAMILY fam_0_ycsb_key (ycsb_key),
-  FAMILY fam_1_field0 (field0),
-  FAMILY fam_2_field1 (field1)
-)
-
-statement ok
-SET plan_cache_mode = force_generic_plan
-
-statement ok
-PREPARE p AS UPDATE usertable SET field1 = $2:::STRING WHERE ycsb_key = $1:::STRING;
-
-query T kvtrace
-EXECUTE p ('foo', 'bar')
-----
-Scan /Table/119/1/"foo"/2/1 lock Exclusive (Block, Unreplicated)
-
-statement ok
-BEGIN ISOLATION LEVEL READ COMMITTED;
-
-query T kvtrace
-EXECUTE p ('foo', 'bar')
-----
-Scan /Table/119/1/"foo"/2/1 lock Exclusive (Block, Unreplicated)
-
-statement ok
-ROLLBACK
-
-subtest end
-
 # Verify that RESET ALL does not change transaction_isolation.
 
 statement ok
@@ -680,82 +592,3 @@ read committed
 
 statement ok
 COMMIT
-
-subtest show
-
-# Test isolation level column in SHOW TRANSACTIONS, SHOW QUERIES, SHOW SESSIONS.
-
-user testuser2
-
-statement ok
-SET default_transaction_isolation = 'READ COMMITTED'
-
-user testuser
-
-statement ok
-SET default_transaction_isolation = 'READ COMMITTED'
-
-query T rowsort
-SELECT isolation_level FROM [SHOW TRANSACTIONS]
-----
-READ COMMITTED
-
-query TT colnames
-SELECT isolation_level, query FROM [SHOW QUERIES] ORDER BY isolation_level, query
-----
-isolation_level  query
-READ COMMITTED   SELECT isolation_level, query FROM [SHOW CLUSTER STATEMENTS] ORDER BY isolation_level, query
-
-query TTT colnames
-SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW SESSIONS]
-ORDER BY isolation_level, user_name, active_queries
-----
-isolation_level  user_name  active_queries
-READ COMMITTED   testuser   SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY isolation_level, user_name, active_queries
-READ COMMITTED   testuser2  ·
-SERIALIZABLE     root       ·
-
-statement ok
-SET default_transaction_isolation = 'SERIALIZABLE'
-
-query TT colnames
-SELECT isolation_level, query FROM [SHOW QUERIES] ORDER BY isolation_level, query
-----
-isolation_level  query
-SERIALIZABLE     SELECT isolation_level, query FROM [SHOW CLUSTER STATEMENTS] ORDER BY isolation_level, query
-
-# If there is no active query for a session, use the default transaction
-# isolation level. Otherwise, use the isolation level of the active query.
-query TTT colnames
-SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW SESSIONS]
-ORDER BY isolation_level, user_name, active_queries
-----
-isolation_level  user_name  active_queries
-READ COMMITTED   testuser2  ·
-SERIALIZABLE     root       ·
-SERIALIZABLE     testuser   SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY isolation_level, user_name, active_queries
-
-statement ok
-BEGIN ISOLATION LEVEL READ COMMITTED
-
-query TTT colnames
-SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW SESSIONS]
-ORDER BY isolation_level, user_name, active_queries
-----
-isolation_level  user_name  active_queries
-READ COMMITTED   testuser   SELECT DISTINCT isolation_level, user_name, active_queries FROM [SHOW CLUSTER SESSIONS] ORDER BY isolation_level, user_name, active_queries
-READ COMMITTED   testuser2  ·
-SERIALIZABLE     root       ·
-
-statement ok
-COMMIT
-
-statement ok
-RESET default_transaction_isolation
-
-user testuser2
-
-statement ok
-RESET default_transaction_isolation
-
-subtest end

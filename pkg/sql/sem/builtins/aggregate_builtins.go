@@ -347,7 +347,7 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"count": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.AnyElement}, types.Int, newCountAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements.", volatility.Immutable, true /* calledOnNullInput */),
 	),
 
@@ -526,21 +526,21 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"json_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.AnyElement}, types.Jsonb, newJSONAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"jsonb_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.AnyElement}, types.Jsonb, newJSONAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
 	"json_object_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.String, types.AnyElement}, types.Jsonb, newJSONObjectAggregate,
+		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
 			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* calledOnNullInput */),
 	),
 	"jsonb_object_agg": makeBuiltin(tree.FunctionProperties{},
-		makeAggOverload([]*types.T{types.String, types.AnyElement}, types.Jsonb, newJSONObjectAggregate,
+		makeAggOverload([]*types.T{types.String, types.Any}, types.Jsonb, newJSONObjectAggregate,
 			"Aggregates values as a JSON or JSONB object.", volatility.Stable, true /* calledOnNullInput */),
 	),
 
@@ -591,7 +591,7 @@ var aggregates = map[string]builtinDefinition{
 
 	AnyNotNull: makePrivate(makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverloadWithReturnType(
-			[]*types.T{types.AnyElement},
+			[]*types.T{types.Any},
 			tree.IdentityReturnType(0),
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
@@ -1867,7 +1867,7 @@ func mergeStatsMetadataHelper(
 		return nil
 	}
 
-	metadataJSON, ok := metadataDatum.(*tree.DJSON)
+	metadataJSON, ok := tree.AsDJSON(metadataDatum)
 	if !ok {
 		return nil
 	}
@@ -1899,7 +1899,7 @@ func mergeStatementStatsHelper(
 		return nil
 	}
 
-	statsJSON, ok := statsDatum.(*tree.DJSON)
+	statsJSON, ok := tree.AsDJSON(statsDatum)
 	if !ok {
 		return nil
 	}
@@ -1920,7 +1920,7 @@ func mergeTransactionStatsHelper(
 		return nil
 	}
 
-	statsJSON, ok := statsDatum.(*tree.DJSON)
+	statsJSON, ok := tree.AsDJSON(statsDatum)
 	if !ok {
 		return nil
 	}
@@ -1948,7 +1948,7 @@ func mergeAggregatedMetadataHelper(
 		return nil
 	}
 
-	metadataJSON, ok := datum.(*tree.DJSON)
+	metadataJSON, ok := tree.AsDJSON(datum)
 	if !ok {
 		return nil
 	}
@@ -1996,7 +1996,7 @@ type arrayCatAggregate struct {
 	acc mon.BoundAccount
 	// seenNonNull tracks whether at least one non-NULL datum was added. This is
 	// needed to handle a case of only empty arrays added correctly (we want to
-	// return an empty array too rather than NULL).
+	// return an empty array too rather that NULL).
 	seenNonNull bool
 }
 

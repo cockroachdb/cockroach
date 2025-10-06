@@ -9,8 +9,8 @@
 set -xeuo pipefail
 
 GO_FIPS_REPO=https://github.com/golang-fips/go
-GO_FIPS_COMMIT=12327118900b0833266189a293cba8ad674901c1
-GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
+GO_FIPS_COMMIT=fc8a2bd706bcd6b18b260a9aea59cf63884acdeb
+GO_VERSION=1.22.12
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y
@@ -30,14 +30,12 @@ git checkout $GO_FIPS_COMMIT
 # current build infrastructure results in the following error:
 #     version `GLIBC_2.32' not found (required by external/go_sdk_fips/bin/go)
 rm ./patches/017-fix-linkage.patch
-# This patch doesn't apply on Go 1.23.6, but all the files are test-only, so
-# they shouldn't make a difference for the purpose of building the SDK.
-# When golang-fips supports Go 1.23.6, this line can be deleted.
-rm ./patches/023-crypto-tls-fix-config-time.patch
 # Lower the requirements in case we need to bootstrap with an older Go version
 sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
-GOLANG_REPO=https://github.com/cockroachdb/go.git ./scripts/full-initialize-repo.sh "$GOCOMMIT"
+./scripts/full-initialize-repo.sh "go$GO_VERSION"
 cd go/src
+# Apply the CRL patch
+patch -p2 </bootstrap/diff.patch
 # add a special version modifier so we can explicitly use it in bazel
 sed -i '1 s/$/fips/' ../VERSION
 ./make.bash -v

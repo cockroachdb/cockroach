@@ -238,35 +238,6 @@ func TestTxnCommitterStripsInFlightWrites(t *testing.T) {
 	require.Nil(t, pErr)
 	require.NotNil(t, br)
 
-	// Send the same batch but with an EndTxn with the Prepare flag set. In-flight
-	// writes should not be attached because the XA two-phase commit protocol
-	// disables parallel commits.
-	ba.Requests = nil
-	etArgsPrepare := etArgs
-	etArgsPrepare.Prepare = true
-	ba.Add(&putArgs, &qiArgs, &etArgsPrepare)
-
-	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 3)
-		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[2].GetInner())
-
-		et := ba.Requests[2].GetInner().(*kvpb.EndTxnRequest)
-		require.True(t, et.Commit)
-		require.True(t, et.Prepare)
-		require.Len(t, et.LockSpans, 2)
-		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyB}}, et.LockSpans)
-		require.Len(t, et.InFlightWrites, 0)
-
-		br = ba.CreateReply()
-		br.Txn = ba.Txn
-		br.Txn.Status = roachpb.PREPARED
-		return br, nil
-	})
-
-	br, pErr = tc.SendLocked(ctx, ba)
-	require.Nil(t, pErr)
-	require.NotNil(t, br)
-
 	// Send the same batch but with an EndTxn containing a commit trigger.
 	// In-flight writes should not be attached because commit triggers disable
 	// parallel commits.

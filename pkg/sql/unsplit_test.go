@@ -13,20 +13,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/require"
 )
 
 func TestUnsplitAt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	// TODO(jeffreyxiao): Disable the merge queue due to a race condition. The
 	// merge queue might issue an AdminMerge and before the actual merge happens,
 	// the LHS of the merge is manually split and is later merged even though a
@@ -42,15 +40,6 @@ func TestUnsplitAt(t *testing.T) {
 	}
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-
-	if s.DeploymentMode().IsExternal() {
-		require.NoError(t, s.GrantTenantCapabilities(
-			context.Background(), serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{
-				tenantcapabilitiespb.CanAdminSplit:   "true",
-				tenantcapabilitiespb.CanAdminUnsplit: "true",
-			}))
-	}
 
 	r := sqlutils.MakeSQLRunner(db)
 

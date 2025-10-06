@@ -137,7 +137,7 @@ func (t *TSDB) Scrape(ctx context.Context) {
 				t.mu.points[name] = append(t.mu.points[name], *m.Counter.Value)
 			}
 		default:
-			log.Dev.Fatalf(ctx, "cannot extract value for type %T", mtr)
+			log.Fatalf(ctx, "cannot extract value for type %T", mtr)
 		}
 	})
 }
@@ -225,7 +225,7 @@ func (t *TSDB) registerIterable(metric metric.Iterable) {
 	if t.mu.scraped {
 		t.t.Fatalf("register all metrics upfront before Scrape()")
 	}
-	t.mu.points[metric.GetName(false /* useStaticLabels */)] = []float64{}
+	t.mu.points[metric.GetName()] = []float64{}
 }
 
 // Option represents a configuration setting.

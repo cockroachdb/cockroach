@@ -110,12 +110,6 @@ func TestEtagHandler(t *testing.T) {
 					resp.Header.Get("ETag"),
 					"Requests for hashed files must always include an ETag response header",
 				)
-				require.Equal(
-					t,
-					"no-cache",
-					resp.Header.Get("Cache-Control"),
-					`Requests for hashed files must always include a "Cache-control: no-cache" response header`,
-				)
 			}
 
 			bodyBytes, err := io.ReadAll(resp.Body)

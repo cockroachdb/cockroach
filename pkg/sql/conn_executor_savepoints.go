@@ -31,7 +31,6 @@ const commitOnReleaseSavepointName = "cockroach_restart"
 func (ex *connExecutor) execSavepointInOpenState(
 	ctx context.Context, s *tree.Savepoint, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload, error) {
-	ex.state.mu.hasSavepoints = true
 	savepoints := &ex.extraTxnState.savepoints
 	// Sanity check for "SAVEPOINT cockroach_restart".
 	commitOnRelease := ex.isCommitOnReleaseSavepoint(s.Name)
@@ -146,12 +145,12 @@ func (ex *connExecutor) execRelease(
 			return eventTxnReleased{}, nil
 		}
 		// Committing the transaction failed. We'll go to state RestartWait if
-		// it's a retryable error, or to state RollbackWait otherwise.
-		if errIsRetryable(err) {
+		// it's a retriable error, or to state RollbackWait otherwise.
+		if errIsRetriable(err) {
 			// For certain retryable errors, we should turn them into client visible
 			// errors, since the client needs to retry now.
 			var conversionError error
-			if err, conversionError = ex.convertRetryableErrorIntoUserVisibleError(ctx, err); conversionError != nil {
+			if err, conversionError = ex.convertRetriableErrorIntoUserVisibleError(ctx, err); conversionError != nil {
 				return ex.makeErrEvent(conversionError, s)
 			}
 			// Add the savepoint back. We want to allow a ROLLBACK TO SAVEPOINT
@@ -160,32 +159,26 @@ func (ex *connExecutor) execRelease(
 			ex.sessionDataStack.PushTopClone()
 
 			rc, canAutoRetry := ex.getRewindTxnCapability()
-			ev := eventRetryableErr{
+			ev := eventRetriableErr{
 				IsCommit:     fsm.FromBool(isCommit(s)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
-			payload := eventRetryableErrPayload{err: err, rewCap: rc}
+			payload := eventRetriableErrPayload{err: err, rewCap: rc}
 			return ev, payload
 		}
 
-		// Non-retryable error. The transaction might have committed (i.e. the
+		// Non-retriable error. The transaction might have committed (i.e. the
 		// error might be ambiguous). We can't allow a ROLLBACK TO SAVEPOINT to
 		// recover the transaction, so we're not adding the savepoint back.
 		ex.rollbackSQLTransaction(ctx, s)
-		ev := eventNonRetryableErr{IsCommit: fsm.FromBool(false)}
-		payload := eventNonRetryableErrPayload{err: err}
+		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(false)}
+		payload := eventNonRetriableErrPayload{err: err}
 		return ev, payload
 	}
 
 	if err := ex.state.mu.txn.ReleaseSavepoint(ctx, entry.kvToken); err != nil {
 		ev, payload := ex.makeErrEvent(err, s)
 		return ev, payload
-	}
-
-	if len(ex.extraTxnState.savepoints) == 0 {
-		// NB: Only RELEASE SAVEPOINT can clear the entire savepoint stack. ROLLBACK
-		// TO SAVEPOINT will always leave at least one savepoint.
-		ex.state.mu.hasSavepoints = false
 	}
 
 	return nil, nil
@@ -219,7 +212,6 @@ func (ex *connExecutor) execRollbackToSavepointInOpenState(
 	if entry.kvToken.Initial() {
 		return eventTxnRestart{}, nil
 	}
-
 	// No event is necessary; there's nothing for the state machine to do.
 	return nil, nil
 }
@@ -272,8 +264,8 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 	ctx context.Context, s *tree.RollbackToSavepoint,
 ) (fsm.Event, fsm.EventPayload) {
 	makeErr := func(err error) (fsm.Event, fsm.EventPayload) {
-		ev := eventNonRetryableErr{IsCommit: fsm.False}
-		payload := eventNonRetryableErrPayload{
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{
 			err: err,
 		}
 		return ev, payload
@@ -337,7 +329,7 @@ func (ex *connExecutor) isCommitOnReleaseSavepoint(savepoint tree.Name) bool {
 // transaction's state at a previous point in time.
 //
 // Savepoints' behavior on RELEASE differs based on commitOnRelease, and their
-// behavior on ROLLBACK after retryable errors differs based on
+// behavior on ROLLBACK after retriable errors differs based on
 // kvToken.Initial().
 type savepoint struct {
 	name tree.Name
@@ -345,7 +337,7 @@ type savepoint struct {
 	// commitOnRelease is set if the special syntax "SAVEPOINT cockroach_restart"
 	// was used. Such a savepoint is special in that a RELEASE actually commits
 	// the transaction - giving the client a change to find out about any
-	// retryable error and issue another "ROLLBACK TO SAVEPOINT cockroach_restart"
+	// retriable error and issue another "ROLLBACK TO SAVEPOINT cockroach_restart"
 	// afterwards. Regular savepoints (even top-level savepoints) cannot commit
 	// the transaction on RELEASE.
 	//

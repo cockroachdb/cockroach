@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -402,8 +403,8 @@ func TestACLWatcher(t *testing.T) {
 		require.Nil(t, err)
 
 		var l *listener
-		watcher.listeners.Ascend(func(lst *listener) bool {
-			l = lst
+		watcher.listeners.Ascend(func(i btree.Item) bool {
+			l = i.(*listener)
 			return false
 		})
 		require.NotNil(t, l)

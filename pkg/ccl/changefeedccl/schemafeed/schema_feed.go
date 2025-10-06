@@ -11,7 +11,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -35,10 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 )
 
 // TODO(ajwerner): Ideally we could have a centralized worker which reads the
@@ -59,7 +55,7 @@ func (e TableEvent) Timestamp() hlc.Timestamp {
 // leaseAcquirer is an interface containing the methods on *lease.Manager used
 // by the schema feed.
 type leaseAcquirer interface {
-	Acquire(ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID) (lease.LeasedDescriptor, error)
+	Acquire(ctx context.Context, timestamp hlc.Timestamp, id descpb.ID) (lease.LeasedDescriptor, error)
 	AcquireFreshestFromStore(ctx context.Context, id descpb.ID) error
 	// TODO(yang): Investigate whether the codec can be stored in the schema feed itself.
 	Codec() keys.SQLCodec
@@ -240,22 +236,8 @@ func (tf *schemaFeed) init() error {
 	return nil
 }
 
-// targetsTableIDsString returns a comma-separated string of table IDs in the targets.
-func targetsTableIDsString(ts changefeedbase.Targets) string {
-	var ids []string
-	_ = ts.EachTableID(func(id descpb.ID) error {
-		ids = append(ids, fmt.Sprintf("%d", id))
-		return nil
-	})
-	return strings.Join(ids, ",")
-}
-
 // Run will run the SchemaFeed. It is an error to run a feed more than once.
 func (tf *schemaFeed) Run(ctx context.Context) error {
-	ctx = logtags.AddTag(ctx, "table_ids", targetsTableIDsString(tf.targets))
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.schemafeed.run")
-	defer sp.Finish()
-
 	if err := tf.init(); err != nil {
 		return err
 	}
@@ -335,8 +317,6 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 // the periodic polling can be paused and Peek/Pop will always just return nil.
 // Read commentary in peekOrPop for more explanations.
 func (tf *schemaFeed) periodicallyMaybePollTableHistory(ctx context.Context) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.schemafeed.periodically_maybe_poll_table_history")
-	defer sp.Finish()
 	for {
 		if !tf.pollingPaused() {
 			if err := tf.updateTableHistory(ctx, tf.clock.Now()); err != nil {
@@ -358,9 +338,6 @@ func (tf *schemaFeed) periodicallyMaybePollTableHistory(ctx context.Context) err
 // updateTableHistory attempts to advance `frontier` to `endTS` by fetching
 // descriptor versions from the current `frontier` to `endTS`.
 func (tf *schemaFeed) updateTableHistory(ctx context.Context, endTS hlc.Timestamp) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.schemafeed.update_table_history")
-	defer sp.Finish()
-
 	startTS := func() hlc.Timestamp {
 		tf.mu.Lock()
 		defer tf.mu.Unlock()
@@ -505,7 +482,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 
 	if canPausePolling, err := tf.targets.EachTableIDWithBool(func(id descpb.ID) (bool, error) {
 		// Check if target table is schema-locked at the current frontier.
-		ld1, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(frontier), id)
+		ld1, err := tf.leaseMgr.Acquire(ctx, frontier, id)
 		if err != nil {
 			return false, err
 		}
@@ -513,7 +490,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		desc1 := ld1.Underlying().(catalog.TableDescriptor)
 		if !desc1.IsSchemaLocked() {
 			if log.V(2) {
-				log.Changefeed.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
+				log.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
 			}
 			return false, nil
 		}
@@ -523,7 +500,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		}
 
 		// Check if target table remains at the same version at atOrBefore.
-		ld2, err := tf.leaseMgr.Acquire(ctx, lease.TimestampToReadTimestamp(atOrBefore), id)
+		ld2, err := tf.leaseMgr.Acquire(ctx, atOrBefore, id)
 		if err != nil {
 			return false, err
 		}
@@ -531,7 +508,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		desc2 := ld2.Underlying().(catalog.TableDescriptor)
 		if desc1.GetVersion() != desc2.GetVersion() {
 			if log.V(1) {
-				log.Changefeed.Infof(ctx,
+				log.Infof(ctx,
 					"desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
 					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
 			}
@@ -548,7 +525,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		// We swallow any non-terminal errors so that the slow path can be tried
 		// after we resume polling.
 		if log.V(1) {
-			log.Changefeed.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
+			log.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
 		}
 		return nil
 	}
@@ -571,7 +548,7 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 // transactionally).
 func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	if log.V(1) {
-		log.Changefeed.Infof(ctx, "waiting for frontier to reach %s", ts)
+		log.Infof(ctx, "waiting for frontier to reach %s", ts)
 	}
 
 	waitCh, needToWait := func() (<-chan error, bool) {
@@ -580,22 +557,22 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 		return tf.mu.ts.wait(ts)
 	}()
 
-	start := crtime.NowMono()
+	start := timeutil.Now()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-waitCh:
 		if needToWait {
-			waited := start.Elapsed()
+			waited := timeutil.Since(start)
 			if log.V(1) {
-				log.Changefeed.Infof(ctx, "waited %s for frontier to reach %s: err=%v", waited, ts, err)
+				log.Infof(ctx, "waited %s for frontier to reach %s: err=%v", waited, ts, err)
 			}
 			if tf.metrics != nil {
 				tf.metrics.TableMetadataNanos.Inc(waited.Nanoseconds())
 			}
 		} else {
 			if log.V(1) {
-				log.Changefeed.Infof(ctx, "fastpath taken when waiting for %s", ts)
+				log.Infof(ctx, "fastpath taken when waiting for %s", ts)
 			}
 		}
 		return err
@@ -827,10 +804,10 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	ctx context.Context, startTS, endTS hlc.Timestamp,
 ) ([]catalog.Descriptor, error) {
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Changefeed.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
+		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
 	codec := tf.leaseMgr.Codec()
-	start := crtime.NowMono()
+	start := timeutil.Now()
 	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
 	span.EndKey = span.Key.PrefixEnd()
 
@@ -842,7 +819,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 		res, err := sendExportRequestWithPriorityOverride(
 			ctx, tf.settings, tf.db.KV().NonTransactionalSender(), span, startTS, endTS)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Changefeed.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, start.Elapsed(), err)
+			log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
 		}
 		if err != nil {
 			return nil, err

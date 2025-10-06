@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -51,9 +52,48 @@ func registerNodeJSPostgres(r registry.Registry) {
 		err = alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0])
 		require.NoError(t, err)
 
-		// Install NodeJS 18.x, update NPM to the latest
-		// and install Yarn and Lerna.
-		err = installNode18(ctx, t, c, node, nodeOpts{withYarn: true, withLerna: true})
+		// In case we are running into a state where machines are being reused, we first check to see if we
+		// can use npm to reduce the potential of trying to add another nodesource key
+		// (preventing gpg: dearmoring failed: File exists) errors.
+		err = c.RunE(
+			ctx, option.WithNodes(node), `sudo npm i -g npm`,
+		)
+
+		if err != nil {
+			err = repeatRunE(
+				ctx,
+				t,
+				c,
+				node,
+				"add nodesource key and deb repository",
+				`
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+			)
+			require.NoError(t, err)
+		}
+
+		err = repeatRunE(
+			ctx, t, c, node, "install yarn", `sudo npm i -g yarn`,
+		)
+		require.NoError(t, err)
+
+		err = repeatRunE(
+			ctx, t, c, node, "install lerna", `sudo npm i --g lerna`,
+		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
@@ -109,33 +149,19 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)
-
-		// Get version for reporting
-		version, versionErr := fetchCockroachVersion(ctx, t.L(), c, node[0])
-		if versionErr != nil {
-			version = "unknown"
-		}
-
-		// Use the new parsing system with blocklist and ignorelist
-		const blocklistName = "nodePostgresBlockList"
-		const ignorelistName = "nodePostgresIgnoreList"
-		expectedFailures := nodePostgresBlockList
-		ignorelist := nodePostgresIgnoreList
-
-		status := fmt.Sprintf("Running cockroach version %s, using blocklist %s, using ignorelist %s",
-			version, blocklistName, ignorelistName)
-		t.L().Printf("%s", status)
-
-		// Parse and summarize the test results
-		// If there were no command errors, the test passed completely
-		if err == nil {
-			t.L().Printf("All tests passed successfully")
-		} else {
-			// Parse the output and check against blocklist/ignorelist
-			parseAndSummarizeNodeJSTestResults(
-				ctx, t, c, node, "node-postgres", rawResultsStr,
-				blocklistName, expectedFailures, ignorelist, version,
-			)
+		if err != nil {
+			// The one failing test is `pool size of 1` which
+			// fails because it does SELECT count(*) FROM pg_stat_activity which is
+			// not implemented in CRDB.
+			if strings.Contains(rawResultsStr, "1 failing") &&
+				// Failing tests are listed numerically, we only expect one.
+				// The one failing test should be "pool size of 1".
+				strings.Contains(rawResultsStr, "1) pool size of 1") {
+				err = nil
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -144,7 +170,7 @@ PGSSLCERT=$HOME/certs/client.%[1]s.crt PGSSLKEY=$HOME/certs/client.%[1]s.key PGS
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(1),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
+		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNodeJSPostgres(ctx, t, c)

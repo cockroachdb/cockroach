@@ -8,13 +8,12 @@ package concurrency
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -22,12 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -116,51 +112,6 @@ var BatchPushedLockResolution = settings.RegisterBoolSetting(
 	true,
 )
 
-// UnreplicatedLockReliabilitySplit controls whether the replica will attempt
-// to keep unreplicated locks during range split operations.
-var UnreplicatedLockReliabilitySplit = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.lock_table.unreplicated_lock_reliability.split.enabled",
-	"whether the replica should attempt to keep unreplicated locks during range splits",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", true),
-)
-
-// UnreplicatedLockReliabilityLeaseTransfer controls whether the replica will attempt
-// to keep unreplicated locks during lease transfer operations.
-var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
-	"whether the replica should attempt to keep unreplicated locks during lease transfers",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
-)
-
-// UnreplicatedLockReliabilityMerge controls whether the replica will attempt to
-// keep unreplicated locks during range merge operations.
-var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
-	"whether the replica should attempt to keep unreplicated locks during range merges",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
-)
-
-var MaxLockFlushSize = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
-	"kv.lock_table.unreplicated_lock_reliability.max_flush_size",
-	"maximum size of locks that will be flushed during merge and transfer operations (if 0, defaults to half of the MaxCommandSizeDefault)",
-	0,
-)
-
-// MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
-// flush during merge and transfer operations.
-func GetMaxLockFlushSize(sv *settings.Values) int64 {
-	s := MaxLockFlushSize.Get(sv)
-	if s > 0 {
-		return s
-	} else {
-		return kvserverbase.MaxCommandSize.Get(sv) / 2
-	}
-}
-
 // managerImpl implements the Manager interface.
 type managerImpl struct {
 	st *cluster.Settings
@@ -219,7 +170,6 @@ func NewManager(cfg Config) Manager {
 				cfg.SlowLatchGauge,
 				cfg.Settings,
 				cfg.LatchWaitDurations,
-				cfg.Clock,
 			),
 		},
 		lt: lt,
@@ -308,7 +258,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 	// them.
 	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
 		log.Event(ctx, "waiting on latches without acquiring")
-		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy, g.Req.Batch)
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy, g.Req.BaFmt)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
@@ -352,7 +302,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 				panic(redact.Safe(fmt.Sprintf("must not be holding latches\n"+
 					"this is tracked in github.com/cockroachdb/cockroach/issues/77663; please comment if seen\n"+
 					"eval_kind=%d, holding_latches=%t, branch=%d, first_iteration=%t, stack=\n%s",
-					g.EvalKind, g.HoldingLatches(), branch, firstIteration, debugutil.Stack())))
+					g.EvalKind, g.HoldingLatches(), branch, firstIteration, string(debug.Stack()))))
 			}
 			log.Event(ctx, "optimistic failed, so waiting for latches")
 			g.lg, err = m.lm.WaitUntilAcquired(ctx, g.lg)
@@ -508,7 +458,7 @@ func (m *managerImpl) HandleLockConflictError(
 	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
 ) (*Guard, *Error) {
 	if g.ltg == nil {
-		log.KvExec.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
+		log.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
@@ -538,7 +488,7 @@ func (m *managerImpl) HandleLockConflictError(
 		foundLock := &t.Locks[i]
 		added, err := m.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, g.ltg)
 		if err != nil {
-			log.KvExec.Fatalf(ctx, "%v", err)
+			log.Fatalf(ctx, "%v", err)
 		}
 		if !added {
 			log.VEventf(ctx, 2,
@@ -584,30 +534,21 @@ func (m *managerImpl) HandleTransactionPushError(
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
 	if err := m.lt.AcquireLock(acq); err != nil {
 		if errors.IsAssertionFailure(err) {
-			log.KvExec.Fatalf(ctx, "%v", err)
+			log.Fatalf(ctx, "%v", err)
 		}
 		// It's reasonable to expect benign errors here that the layer above
 		// (command evaluation) isn't equipped to deal with. As long as we're not
 		// violating any assertions, we simply log and move on. One benign case is
 		// when an unreplicated lock is being acquired by a transaction at an older
 		// epoch.
-		log.KvExec.Errorf(ctx, "%v", err)
-	}
-}
-
-// OnLockMissing implements the Lockmanager interface.
-func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
-		// We don't currently expect any errors other than assertion failures that represent
-		// programming errors from this method.
-		log.KvExec.Fatalf(ctx, "%v", err)
+		log.Errorf(ctx, "%v", err)
 	}
 }
 
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
 	if err := m.lt.UpdateLocks(up); err != nil {
-		log.KvExec.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -616,13 +557,6 @@ func (m *managerImpl) QueryLockTableState(
 	ctx context.Context, span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
 	return m.lt.QueryLockTableState(span, opts)
-}
-
-// ExportUnreplicatedLocks implements the LockManager interface.
-func (m *managerImpl) ExportUnreplicatedLocks(
-	span roachpb.Span, f func(*roachpb.LockAcquisition) bool,
-) {
-	m.lt.ExportUnreplicatedLocks(span, f)
 }
 
 // OnTransactionUpdated implements the TransactionManager interface.
@@ -640,28 +574,6 @@ func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 	m.twq.OnRangeDescUpdated(desc)
 }
 
-var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
-
-// OnRangeLeaseTransferEval implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, int64) {
-	if !UnreplicatedLockReliabilityLeaseTransfer.Get(&m.st.SV) {
-		return nil, 0
-	}
-
-	return m.exportUnreplicatedLocks()
-}
-
-// OnRangeSubumeEval implements the RangeStateListener interface. It is called
-// during evalutation of Subsume. The returned LockAcquisition structs represent
-// held locks that we may want to flush to disk as replicated.
-func (m *managerImpl) OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64) {
-	if !UnreplicatedLockReliabilityMerge.Get(&m.st.SV) {
-		return nil, 0
-	}
-
-	return m.exportUnreplicatedLocks()
-}
-
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeaseholder bool) {
 	if isLeaseholder {
@@ -676,22 +588,14 @@ func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeasehold
 	}
 }
 
-// OnRangeSplit implements the RangeStateListener interface. It is called on the
-// LHS replica of a split and should be passed the new RHS start key (LHS
-// EndKey).
-func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquisition {
-	if UnreplicatedLockReliabilitySplit.Get(&m.st.SV) {
-		lockToMove := m.lt.ClearGE(rhsStartKey)
-		m.twq.ClearGE(rhsStartKey)
-		return lockToMove
-	} else {
-		// TODO(ssd): We could call ClearGE here but ignore the
-		// response. But for now we leave the old behaviour unchanged.
-		const disable = false
-		m.lt.Clear(disable)
-		m.twq.Clear(disable)
-		return nil
-	}
+// OnRangeSplit implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeSplit() {
+	// TODO(nvanbenschoten): it only essential that we clear the half of the
+	// lockTable which contains locks in the key range that is being split off
+	// from the current range. For now though, we clear it all.
+	const disable = false
+	m.lt.Clear(disable)
+	m.twq.Clear(disable)
 }
 
 // OnRangeMerge implements the RangeStateListener interface.
@@ -730,18 +634,6 @@ func (m *managerImpl) LatchMetrics() LatchMetrics {
 // LockTableMetrics implements the MetricExporter interface.
 func (m *managerImpl) LockTableMetrics() LockTableMetrics {
 	return m.lt.Metrics()
-}
-
-func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int64) {
-	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
-	approximateBatchSize := int64(0)
-	acquistions := make([]*roachpb.LockAcquisition, 0)
-	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) bool {
-		approximateBatchSize += storage.ApproximateLockTableSize(acq)
-		acquistions = append(acquistions, acq)
-		return true
-	})
-	return acquistions, approximateBatchSize
 }
 
 // TestingLockTableString implements the MetricExporter interface.

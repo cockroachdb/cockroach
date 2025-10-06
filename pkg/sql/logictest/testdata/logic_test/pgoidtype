@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 query OO
 SELECT 3::OID, '3'::OID
 ----

@@ -225,19 +225,3 @@ laptop online. The CI job is run as follows:
   * Changes → Build branch: `<branch>`
   * Parameters → `env.TESTS`: `^<test>$`
   * Parameters → `env.COUNT`: `<runs>`
-
-### Cockroach node logs and artifacts for roachtests running locally
-
-When running tests locally, you may want to inspect cockroach node logs
-`logs/<n>.cockroach.log` or specific channel / stderr logs that are in `<n>.unredacted/`
-e.g.
-* `logs/1.cockroach.log`
-* `logs/1.unredacted/cockroach-kv-distribution.log`
-
-When using roachtest locally, these logs are placed in your home directory in 
-`~/local/<n>/` e.g. `~/local/1/`.
-
-Note: These directories will be cleared when your deployment is being deleted,
-i.e. after your test run. To keep these logs & artifacts use `roachtest run`
-flags `--debug` or `--debug-always` to keep your deployment. See `roachtest run -h`
-for more information.

@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -292,10 +291,10 @@ func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.S
 	assert(!ssNew.Expiration.IsEmpty(), "requested support with zero expiration")
 	if ss.Epoch == ssNew.Epoch && !ss.Expiration.IsEmpty() {
 		if log.ExpensiveLogEnabled(ctx, 3) {
-			log.KvExec.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
+			log.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
 		}
 	} else {
-		log.KvExec.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
+		log.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
 	}
 }
 
@@ -303,30 +302,29 @@ func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.S
 
 // withdrawSupport handles a single support withdrawal. It updates the
 // inProgress view of supporterStateForUpdate only if there are any changes.
-// The function returns the store IDs for which support was withdrawn.
+// The function returns the number of stores for which support was withdrawn.
 func (ssfu *supporterStateForUpdate) withdrawSupport(
 	ctx context.Context, now hlc.ClockTimestamp,
-) (supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
+) (numWithdrawn int) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
 		len(ssfu.inProgress.supportFor) == 0, "reading from supporterStateForUpdate."+
 			"checkedIn.supportFor while supporterStateForUpdate.inProgress.supportFor is not empty",
 	)
-	supportWithdrawnForStoreIDs = make(map[roachpb.StoreID]struct{})
 	for id, ss := range ssfu.checkedIn.supportFor {
 		ssNew := maybeWithdrawSupport(ss, now)
 		if ss != ssNew {
 			ssfu.inProgress.supportFor[id] = ssNew
-			log.KvExec.Infof(ctx, "withdrew support for %s", supportChangeStr(ss, ssNew))
+			log.Infof(ctx, "withdrew support for %s", supportChangeStr(ss, ssNew))
 			meta := ssfu.getMeta()
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
 			}
-			supportWithdrawnForStoreIDs[id.StoreID] = struct{}{}
+			numWithdrawn++
 		}
 	}
-	return supportWithdrawnForStoreIDs
+	return numWithdrawn
 }
 
 // maybeWithdrawSupport contains the core logic for updating the epoch and

@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for lag.eg.go and lead.eg.go. It's
@@ -78,7 +79,7 @@ func New_UPPERCASE_NAMEOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unsupported _OP_NAME window operator type %s", argType.Name())
+	return nil, errors.Errorf("unsupported _OP_NAME window operator type %s", argType.Name())
 }
 
 // _OP_NAMEBase extracts common fields and methods of the _OP_NAME windower

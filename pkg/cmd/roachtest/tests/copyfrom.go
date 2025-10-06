@@ -148,9 +148,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	// Enable the verbose logging on relevant files to have better understanding
 	// in case the test fails.
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=copy_from=2,insert=2")
-	// roachtest frequently runs on overloaded instances and can timeout as a result
-	clusterSettings := install.MakeClusterSettings(install.ClusterSettingsOption{"kv.closed_timestamp.target_duration": "60s"})
-	c.Start(ctx, t.L(), startOpts, clusterSettings, c.All())
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 	initTest(ctx, t, c, sf)
 	db, err := c.ConnE(ctx, t.L(), 1)
 	require.NoError(t, err)
@@ -171,7 +169,7 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	}
 	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
-	m := c.NewDeprecatedMonitor(ctx, c.All())
+	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		// psql w/ url first doesn't support --db arg so have to do this.
 		urlstr := strings.Replace(urls[0], "?", "/defaultdb?", 1)

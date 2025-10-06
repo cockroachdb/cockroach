@@ -50,13 +50,13 @@ t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
   term=1 index=1  tokens=1048576
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n2,s2):2: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -87,7 +87,7 @@ r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3,(n4,s4):4NON_VOTER]
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -122,7 +122,7 @@ t1/s4: eval reg=+0 B/+16 MiB ela=-1.0 MiB/+8.0 MiB
 # Note the deducted value. Replica 4 is waiting for a scheduler event.
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -144,7 +144,7 @@ scheduled-replicas: 3 4
 # Scheduler event. The non-voter now has an empty send-queue.
 handle_scheduler_event range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+1.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -152,13 +152,13 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
   term=1 index=1  tokens=1048576
 ++++
-(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,2) precise_q_size=+0 B
+(n4,s4):4NON_VOTER: state=replicate closed=false inflight=[1,2) send_queue=[2,2) precise_q_size=+0 B
 eval deducted: reg=+0 B ela=+1.0 MiB
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:

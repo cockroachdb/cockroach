@@ -16,19 +16,19 @@ CREATE TABLE mr1.t(x INT) LOCALITY REGIONAL BY TABLE;
 CREATE TABLE mr1.t2(x INT) LOCALITY REGIONAL BY ROW;
 
 statement ok
-BACKUP TABLE mr1.t INTO 'nodelocal://1/mr1_t/'
+BACKUP TABLE mr1.t TO 'nodelocal://1/mr1_t/'
 
 statement ok
-BACKUP TABLE mr1.t2 INTO 'nodelocal://1/mr1_t2/'
+BACKUP TABLE mr1.t2 TO 'nodelocal://1/mr1_t2/'
 
 statement ok
-BACKUP DATABASE "mr1" INTO 'nodelocal://1/mr-backup-1/';
+BACKUP DATABASE "mr1" TO 'nodelocal://1/mr-backup-1/';
 
 statement ok
 DROP DATABASE mr1;
 
 statement ok
-RESTORE DATABASE "mr1" FROM LATEST IN 'nodelocal://1/mr-backup-1/'
+RESTORE DATABASE "mr1" FROM 'nodelocal://1/mr-backup-1/'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.t;
@@ -76,10 +76,10 @@ DROP TABLE mr1.t2;
 # Restore table into database with super regions.
 
 statement ok
-RESTORE TABLE mr1.t FROM LATEST IN 'nodelocal://1/mr1_t/'
+RESTORE TABLE mr1.t FROM 'nodelocal://1/mr1_t/'
 
 statement ok
-RESTORE TABLE mr1.t2 FROM LATEST IN 'nodelocal://1/mr1_t2/'
+RESTORE TABLE mr1.t2 FROM 'nodelocal://1/mr1_t2/'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE mr1.t;

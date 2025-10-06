@@ -38,11 +38,7 @@ func TestEncodeDecode(t *testing.T) {
 	var scratch []byte
 	properties.Property("roundtrip", prop.ForAll(
 		func(d tree.Datum) string {
-			var (
-				b   []byte
-				err error
-			)
-			b, scratch, err = valueside.EncodeWithScratch(nil, 0, d, scratch[:0])
+			b, err := valueside.Encode(nil, 0, d, scratch)
 			if err != nil {
 				return "error: " + err.Error()
 			}
@@ -82,8 +78,8 @@ func TestDecode(t *testing.T) {
 		{tree.DBoolTrue, types.Int, "decoding failed"},
 	} {
 		t.Run("", func(t *testing.T) {
-			var prefix []byte
-			buf, err := valueside.Encode(prefix, 0 /* colID */, tc.in)
+			var prefix, scratch []byte
+			buf, err := valueside.Encode(prefix, 0 /* colID */, tc.in, scratch)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -112,7 +108,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 	} {
 		t.Run(d.String(), func(t *testing.T) {
 			var b []byte
-			encoded, err := valueside.Encode(b, 1 /* colID */, d)
+			encoded, err := valueside.Encode(b, 1 /* colID */, d, []byte{})
 			require.NoError(t, err)
 			a := &tree.DatumAlloc{}
 			decoded, _, err := valueside.Decode(a, d.ResolvedType(), encoded)
@@ -127,7 +123,7 @@ func TestDecodeTableValueOutOfRangeTimestamp(t *testing.T) {
 func TestDecodeTupleValueWithType(t *testing.T) {
 	tupleType := types.MakeLabeledTuple([]*types.T{types.Int, types.String}, []string{"a", "b"})
 	datum := tree.NewDTuple(tupleType, tree.NewDInt(tree.DInt(1)), tree.NewDString("foo"))
-	buf, err := valueside.Encode(nil, valueside.NoColumnID, datum)
+	buf, err := valueside.Encode(nil, valueside.NoColumnID, datum, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,7 +10,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -39,9 +38,7 @@ const entrySizeShift = 4     // sizeof(kvBufEntry) is 16, or shift 4.
 const minEntryGrow = 1 << 14 // 16k items or 256KiB of entry size.
 const maxEntryGrow = (4 << 20) >> entrySizeShift
 const minSlabGrow = 512 << 10
-const defaultMaxSlabGrow = 64 << 20 // 64MiB
-
-var maxSlabGrow = sz(envutil.EnvOrDefaultInt64("COCKROACH_KV_BULK_MAX_SLAB_GROW", defaultMaxSlabGrow))
+const maxSlabGrow = 64 << 20
 
 const (
 	lenBits, lenMask  = 28, 1<<lenBits - 1 // 512mb item limit, 32gb buffer limit.

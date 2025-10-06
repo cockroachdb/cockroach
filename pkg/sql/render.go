@@ -28,7 +28,10 @@ type renderNode struct {
 	// Enforce this using NoCopy.
 	_ util.NoCopy
 
-	singleInputPlanNode
+	// source describes where the data is coming from.
+	// populated initially by initFrom().
+	// potentially modified by index selection.
+	source planDataSource
 
 	// Rendering expressions for rows and corresponding output columns.
 	render []tree.TypedExpr
@@ -48,7 +51,7 @@ var _ tree.IndexedVarContainer = &renderNode{}
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
-	return r.columns[idx].Typ
+	return r.source.columns[idx].Typ
 }
 
 func (r *renderNode) startExec(runParams) error {
@@ -63,7 +66,7 @@ func (r *renderNode) Values() tree.Datums {
 	panic("renderNode can't be run in local mode")
 }
 
-func (r *renderNode) Close(ctx context.Context) { r.input.Close(ctx) }
+func (r *renderNode) Close(ctx context.Context) { r.source.plan.Close(ctx) }
 
 // getTimestamp will get the timestamp for an AS OF clause. It will also
 // verify the timestamp against the transaction. If AS OF SYSTEM TIME is

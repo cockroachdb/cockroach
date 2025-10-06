@@ -997,11 +997,11 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				}
 				// Note: Cross DB references are deprecated, but this should be
 				// a cached look up when they don't exist.
-				refDB, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Database(ctx, refTable.GetParentID())
+				refDB, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Database(ctx, refTable.GetParentID())
 				if err != nil {
 					return err
 				}
-				refSchema, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Schema(ctx, refTable.GetParentSchemaID())
+				refSchema, err := p.Descriptors().ByIDWithoutLeased(p.Txn()).Get().Schema(ctx, refTable.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -1832,7 +1832,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
-			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn())
 			if err != nil {
 				return err
 			}
@@ -1890,7 +1890,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Schema(ctx, id)
+				sc, err := p.Descriptors().ByIDWithLeased(p.txn).Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -2404,105 +2404,12 @@ var informationSchemaTriggeredUpdateColumnsTable = virtualSchemaTable{
 }
 
 var informationSchemaTriggersTable = virtualSchemaTable{
-	comment: `triggers contains information about triggers
-https://www.postgresql.org/docs/current/infoschema-triggers.html`,
-	schema: vtable.InformationSchemaTriggers,
-	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		opts := forEachTableDescOptions{virtualOpts: hideVirtual} /* virtual schemas have no triggers */
-		return forEachTableDesc(ctx, p, dbContext, opts,
-			func(ctx context.Context, descCtx tableDescContext) error {
-				db, sc, table := descCtx.database, descCtx.schema, descCtx.table
-				dbNameStr := tree.NewDString(db.GetName())
-				scNameStr := tree.NewDString(sc.GetName())
-				tbNameStr := tree.NewDString(table.GetName())
-
-				triggers := table.GetTriggers()
-				for i := range triggers {
-					trigger := &triggers[i]
-
-					// Process each event for the trigger.
-					for _, event := range trigger.Events {
-						var eventManipulation string
-						switch event.Type {
-						case semenumpb.TriggerEventType_INSERT:
-							eventManipulation = "INSERT"
-						case semenumpb.TriggerEventType_UPDATE:
-							eventManipulation = "UPDATE"
-						case semenumpb.TriggerEventType_DELETE:
-							eventManipulation = "DELETE"
-						case semenumpb.TriggerEventType_TRUNCATE:
-							eventManipulation = "TRUNCATE"
-						}
-
-						var actionTiming string
-						switch trigger.ActionTime {
-						case semenumpb.TriggerActionTime_BEFORE:
-							actionTiming = "BEFORE"
-						case semenumpb.TriggerActionTime_AFTER:
-							actionTiming = "AFTER"
-						case semenumpb.TriggerActionTime_INSTEAD_OF:
-							actionTiming = "INSTEAD OF"
-						}
-
-						actionOrientation := "STATEMENT"
-						if trigger.ForEachRow {
-							actionOrientation = "ROW"
-						}
-
-						// Build the action statement.
-						funcDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Function(ctx, trigger.FuncID)
-						if err != nil {
-							return err
-						}
-						funcName := tree.Name(funcDesc.GetName())
-						actionStatement := fmt.Sprintf(`EXECUTE FUNCTION %s`, funcName.String())
-						if len(trigger.FuncArgs) > 0 {
-							actionStatement += fmt.Sprintf("(%s)", strings.Join(trigger.FuncArgs, ", "))
-						} else {
-							actionStatement += "()"
-						}
-
-						// Handle action condition (WHEN clause).
-						var actionCondition tree.Datum = tree.DNull
-						if trigger.WhenExpr != "" {
-							actionCondition = tree.NewDString(trigger.WhenExpr)
-						}
-
-						// Handle transition table names
-						var oldTableName, newTableName tree.Datum = tree.DNull, tree.DNull
-						if trigger.OldTransitionAlias != "" {
-							oldTableName = tree.NewDString(trigger.OldTransitionAlias)
-						}
-						if trigger.NewTransitionAlias != "" {
-							newTableName = tree.NewDString(trigger.NewTransitionAlias)
-						}
-
-						if err := addRow(
-							dbNameStr,                          // trigger_catalog
-							scNameStr,                          // trigger_schema
-							tree.NewDString(trigger.Name),      // trigger_name
-							tree.NewDString(eventManipulation), // event_manipulation
-							dbNameStr,                          // event_object_catalog
-							scNameStr,                          // event_object_schema
-							tbNameStr,                          // event_object_table
-							tree.DNull,                         // action_order
-							actionCondition,                    // action_condition
-							tree.NewDString(actionStatement),   // action_statement
-							tree.NewDString(actionOrientation), // action_orientation
-							tree.NewDString(actionTiming),      // action_timing
-							oldTableName,                       // action_reference_old_table
-							newTableName,                       // action_reference_new_table
-							tree.DNull,                         // action_reference_old_row
-							tree.DNull,                         // action_reference_new_row
-							tree.DNull,                         // created
-						); err != nil {
-							return err
-						}
-					}
-				}
-				return nil
-			})
+	comment: "triggers was created for compatibility and is currently unimplemented",
+	schema:  vtable.InformationSchemaTriggers,
+	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return nil
 	},
+	unimplemented: true,
 }
 
 var informationSchemaTablesExtensionsTable = virtualSchemaTable{
@@ -2550,7 +2457,7 @@ func forEachSchema(
 	fn func(ctx context.Context, sc catalog.SchemaDescriptor) error,
 ) error {
 	forEachDatabase := func(db catalog.DatabaseDescriptor) error {
-		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		c, err := p.Descriptors().GetAllSchemasInDatabase(ctx, p.txn, db)
 		if err != nil {
 			return err
 		}
@@ -2586,7 +2493,7 @@ func forEachSchema(
 	if dbContext != nil {
 		return iterutil.Map(forEachDatabase(dbContext))
 	}
-	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn)
 	if err != nil {
 		return err
 	}
@@ -2612,7 +2519,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []catalog.DatabaseDescriptor
 	if dbContext == nil {
-		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn)
 		if err != nil {
 			return err
 		}
@@ -2658,9 +2565,9 @@ func forEachTypeDesc(
 	var all nstree.Catalog
 	if dbContext != nil &&
 		useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	}
 	if err != nil {
 		return err
@@ -2740,9 +2647,9 @@ func forEachTableDesc(
 ) (err error) {
 	var all nstree.Catalog
 	if dbContext != nil && useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	}
 	if err != nil {
 		return err
@@ -2933,6 +2840,11 @@ func (r roleOptions) validUntil(p *planner) (tree.Datum, error) {
 func (r roleOptions) createDB() (tree.DBool, error) {
 	createDB, err := r.Exists("CREATEDB")
 	return tree.DBool(createDB), err
+}
+
+func (r roleOptions) createRole() (tree.DBool, error) {
+	createRole, err := r.Exists("CREATEROLE")
+	return tree.DBool(createRole), err
 }
 
 // forEachRoleAtCacheReadTS reads from system.users and related tables using a

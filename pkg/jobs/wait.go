@@ -53,7 +53,7 @@ func (r *Registry) NotifyToResume(ctx context.Context, jobs ...jobspb.JobID) {
 // WaitForJobs waits for a given list of jobs to reach some sort
 // of terminal state.
 func (r *Registry) WaitForJobs(ctx context.Context, jobs []jobspb.JobID) error {
-	log.Dev.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
 	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
 	return r.waitForJobs(ctx, jobs, jobFinishedLocally)
@@ -62,7 +62,7 @@ func (r *Registry) WaitForJobs(ctx context.Context, jobs []jobspb.JobID) error {
 // WaitForJobsIgnoringJobErrors is like WaitForJobs but it only
 // returns an error in the case that polling the jobs table fails.
 func (r *Registry) WaitForJobsIgnoringJobErrors(ctx context.Context, jobs []jobspb.JobID) error {
-	log.Dev.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
 	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
 	return r.waitForJobsToBeTerminalOrPaused(ctx, jobs, jobFinishedLocally)
@@ -128,7 +128,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 		}
 		count := int64(tree.MustBeDInt(row[0]))
 		if log.V(3) {
-			log.Dev.Infof(ctx, "waiting for %d queued jobs to complete", count)
+			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
 		}
 		if count == 0 {
 			return nil
@@ -145,7 +145,7 @@ func (r *Registry) waitForJobs(
 	}
 	start := timeutil.Now()
 	defer func() {
-		log.Dev.Infof(ctx, "waited for %d %v queued jobs to complete %v",
+		log.Infof(ctx, "waited for %d %v queued jobs to complete %v",
 			len(jobs), jobs, timeutil.Since(start))
 	}()
 
@@ -164,7 +164,7 @@ func (r *Registry) waitForJobs(
 			decodedErr := errors.DecodeError(ctx, *j.Payload().FinalResumeError)
 			return decodedErr
 		}
-		if j.State() == StatePaused {
+		if j.Status() == StatusPaused {
 			if reason := j.Payload().PauseReason; reason != "" {
 				return errors.Newf("job %d was paused before it completed with reason: %s", jobs[i], reason)
 			}
@@ -180,11 +180,11 @@ func (r *Registry) waitForJobs(
 func makeWaitForJobsQuery(jobs []jobspb.JobID) string {
 	var buf strings.Builder
 	buf.WriteString(`SELECT count(*) FROM system.jobs WHERE status NOT IN ( ` +
-		`'` + string(StateSucceeded) + `', ` +
-		`'` + string(StateFailed) + `',` +
-		`'` + string(StateCanceled) + `',` +
-		`'` + string(StateRevertFailed) + `',` +
-		`'` + string(StatePaused) + `'` +
+		`'` + string(StatusSucceeded) + `', ` +
+		`'` + string(StatusFailed) + `',` +
+		`'` + string(StatusCanceled) + `',` +
+		`'` + string(StatusRevertFailed) + `',` +
+		`'` + string(StatusPaused) + `'` +
 		` ) AND id IN (`)
 	for i, id := range jobs {
 		if i > 0 {
@@ -225,7 +225,7 @@ type jobWaitingSets map[jobspb.JobID]map[*waitingSet]struct{}
 // Registry.removeFromWaitingSet() were placed anywhere in the package, no
 // resources would be wasted. In order to deal with the fact that the waiting
 // set is an optimization, the caller still polls the job state to wait for it
-// to transition to a terminal state (or paused). This is unavoidable: the job
+// to transition to a terminal status (or paused). This is unavoidable: the job
 // may end up running elsewhere.
 type waitingSet struct {
 	// jobDoneCh is closed when the set becomes empty because all
@@ -252,7 +252,7 @@ func newJobIDSet(ids ...jobspb.JobID) jobIDSet {
 }
 
 // installWaitingSet constructs a waiting set and installs it in the registry.
-// If all the jobs execute to a terminal state in this registry, the done
+// If all the jobs execute to a terminal status in this registry, the done
 // channel will be closed. The cleanup function must be called to avoid
 // leaking memory.
 func (r *Registry) installWaitingSet(
@@ -279,7 +279,7 @@ func (r *Registry) installWaitingSet(
 			set, ok := r.mu.waiting[id]
 			if !ok {
 				// This should never happen and indicates a programming error.
-				log.Dev.Errorf(
+				log.Errorf(
 					r.ac.AnnotateCtx(context.Background()),
 					"corruption detected in waiting set for id %d", id,
 				)

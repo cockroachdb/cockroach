@@ -7,23 +7,29 @@ prev index=100 term=9
 
 handle index=150 term=9
 ----
+apply: true
 state: /Local/RangeID/12/u/RaftTruncatedState -> index=150 term=9
 head: /Local/RangeID/12/u/RaftLog/logIndex:151
 
 # Simulate another truncation that moves forward.
+
 handle index=170 term=9
 ----
+apply: true
 state: /Local/RangeID/12/u/RaftTruncatedState -> index=170 term=9
 head: /Local/RangeID/12/u/RaftLog/logIndex:171
 
 # ... and one that moves backwards and should not take effect.
+
 handle index=150 term=9
 ----
+apply: false
 state: /Local/RangeID/12/u/RaftTruncatedState -> index=170 term=9
 head: /Local/RangeID/12/u/RaftLog/logIndex:171
 
 # A huge truncation (beyond raftLogTruncationClearRangeThreshold) also works.
 handle index=12345678901234567890 term=9
 ----
+apply: true
 state: /Local/RangeID/12/u/RaftTruncatedState -> index=12345678901234567890 term=9
 head: /Local/RangeID/12/u/RaftLog/logIndex:12345678901234567891

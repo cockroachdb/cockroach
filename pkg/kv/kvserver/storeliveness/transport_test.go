@@ -119,18 +119,14 @@ func (tt *transportTester) AddNodeWithoutGossip(
 	tt.clocks[nodeID] = clockWithManualSource{manual: manual, clock: clock}
 	grpcServer, err := rpc.NewServer(context.Background(), tt.nodeRPCContext)
 	require.NoError(tt.t, err)
-	drpcServer, err := rpc.NewDRPCServer(context.Background(), tt.nodeRPCContext)
-	require.NoError(tt.t, err)
-	transport, err := NewTransport(
+	transport := NewTransport(
 		log.MakeTestingAmbientCtxWithNewTracer(),
 		tt.stopper,
 		clock,
 		nodedialer.New(tt.nodeRPCContext, gossip.AddressResolver(tt.gossip)),
 		grpcServer,
-		drpcServer,
 		nil, /* knobs */
 	)
-	require.NoError(tt.t, err)
 	tt.transports[nodeID] = transport
 
 	listener, err := netutil.ListenAndServeGRPC(stopper, grpcServer, util.TestAddr)

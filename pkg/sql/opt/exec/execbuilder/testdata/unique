@@ -358,27 +358,27 @@ vectorized: true
 │ arbiter indexes: uniq_pkey, uniq_v_key
 │ arbiter constraints: unique_w, unique_x_y
 │
-└── • hash join (right anti)
+└── • cross join (right anti)
     │ columns: (column1, column2, column3, column4, column5)
     │ estimated row count: 0 (missing stats)
-    │ equality: (x, y) = (column4, column5)
-    │ right cols are key
     │
     ├── • scan
-    │     columns: (x, y)
-    │     estimated row count: 1,000 (missing stats)
+    │     columns: (k)
+    │     estimated row count: 1 (missing stats)
     │     table: uniq@uniq_pkey
-    │     spans: FULL SCAN
+    │     spans: /1/0
     │
-    └── • cross join (right anti)
+    └── • hash join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
         │ estimated row count: 0 (missing stats)
+        │ equality: (w) = (column3)
+        │ right cols are key
         │
         ├── • scan
-        │     columns: (k)
-        │     estimated row count: 1 (missing stats)
+        │     columns: (w)
+        │     estimated row count: 1,000 (missing stats)
         │     table: uniq@uniq_pkey
-        │     spans: /1/0
+        │     spans: FULL SCAN
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4, column5)
@@ -386,16 +386,15 @@ vectorized: true
             │ table: uniq@uniq_v_key
             │ equality: (column2) = (v)
             │ equality cols are key
-            │ parallel
             │
             └── • hash join (right anti)
                 │ columns: (column1, column2, column3, column4, column5)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (column3)
+                │ equality: (x, y) = (column4, column5)
                 │ right cols are key
                 │
                 ├── • scan
-                │     columns: (w)
+                │     columns: (x, y)
                 │     estimated row count: 1,000 (missing stats)
                 │     table: uniq@uniq_pkey
                 │     spans: FULL SCAN
@@ -609,7 +608,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -620,7 +619,7 @@ quality of service: regular
 ├── • insert
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 2
+│   │ actual row count: 1
 │   │ execution time: 0µs
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
@@ -664,6 +663,7 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
+│           │     KV contention time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -705,6 +705,7 @@ quality of service: regular
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
+            │     KV contention time: 0µs
             │     KV rows decoded: 2
             │     KV pairs read: 4
             │     KV bytes read: 16 B
@@ -734,7 +735,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 6 (48 B, 12 KVs, 6 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -745,7 +746,7 @@ quality of service: regular
 ├── • insert
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 2
+│   │ actual row count: 1
 │   │ execution time: 0µs
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
@@ -789,6 +790,7 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
+│           │     KV contention time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -820,6 +822,7 @@ quality of service: regular
 │           │ actual row count: 0
 │           │ execution time: 0µs
 │           │ estimated max memory allocated: 0 B
+│           │ estimated max sql temp disk usage: 0 B
 │           │ equality: (b, c) = (column2, column3)
 │           │
 │           ├── • scan
@@ -828,6 +831,7 @@ quality of service: regular
 │           │     regions: <hidden>
 │           │     actual row count: 2
 │           │     KV time: 0µs
+│           │     KV contention time: 0µs
 │           │     KV rows decoded: 2
 │           │     KV pairs read: 4
 │           │     KV bytes read: 16 B
@@ -859,6 +863,7 @@ quality of service: regular
             │ actual row count: 0
             │ execution time: 0µs
             │ estimated max memory allocated: 0 B
+            │ estimated max sql temp disk usage: 0 B
             │ equality: (a) = (column1)
             │
             ├── • scan
@@ -867,6 +872,7 @@ quality of service: regular
             │     regions: <hidden>
             │     actual row count: 2
             │     KV time: 0µs
+            │     KV contention time: 0µs
             │     KV rows decoded: 2
             │     KV pairs read: 4
             │     KV bytes read: 16 B
@@ -1065,7 +1071,6 @@ vectorized: true
         │ table: uniq_enum@uniq_enum_pkey
         │ equality cols are key
         │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
-        │ parallel
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
@@ -1073,7 +1078,6 @@ vectorized: true
             │ table: uniq_enum@uniq_enum_r_s_j_key
             │ equality cols are key
             │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
-            │ parallel
             │
             └── • values
                   columns: (column1, column2, column3, column4)
@@ -1506,7 +1510,6 @@ vectorized: true
                     │ table: uniq_partial_enum@uniq_partial_enum_pkey
                     │ equality: (column1, column2) = (r, a)
                     │ equality cols are key
-                    │ parallel
                     │
                     └── • values
                           columns: (column1, column2, column3, column4)
@@ -2630,7 +2633,7 @@ vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 10 (80 B, 20 KVs, 10 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -2641,7 +2644,7 @@ quality of service: regular
 ├── • update
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
-│   │ actual row count: 2
+│   │ actual row count: 1
 │   │ execution time: 0µs
 │   │ table: uniq_fk_parent
 │   │ set: c
@@ -2661,6 +2664,7 @@ quality of service: regular
 │                 regions: <hidden>
 │                 actual row count: 2
 │                 KV time: 0µs
+│                 KV contention time: 0µs
 │                 KV rows decoded: 2
 │                 KV pairs read: 4
 │                 KV bytes read: 16 B
@@ -2697,6 +2701,7 @@ quality of service: regular
 │       │           │ actual row count: 2
 │       │           │ execution time: 0µs
 │       │           │ estimated max memory allocated: 0 B
+│       │           │ estimated max sql temp disk usage: 0 B
 │       │           │ equality: (b, c) = (b, c)
 │       │           │
 │       │           ├── • scan
@@ -2705,6 +2710,7 @@ quality of service: regular
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
+│       │           │     KV contention time: 0µs
 │       │           │     KV rows decoded: 2
 │       │           │     KV pairs read: 4
 │       │           │     KV bytes read: 16 B
@@ -2754,6 +2760,7 @@ quality of service: regular
 │       │           │     regions: <hidden>
 │       │           │     actual row count: 2
 │       │           │     KV time: 0µs
+│       │           │     KV contention time: 0µs
 │       │           │     KV rows decoded: 2
 │       │           │     KV pairs read: 4
 │       │           │     KV bytes read: 16 B
@@ -2784,6 +2791,7 @@ quality of service: regular
 │                   │ actual row count: 0
 │                   │ execution time: 0µs
 │                   │ estimated max memory allocated: 0 B
+│                   │ estimated max sql temp disk usage: 0 B
 │                   │ equality: (b, c) = (b, c_new)
 │                   │
 │                   ├── • scan
@@ -2792,6 +2800,7 @@ quality of service: regular
 │                   │     regions: <hidden>
 │                   │     actual row count: 2
 │                   │     KV time: 0µs
+│                   │     KV contention time: 0µs
 │                   │     KV rows decoded: 2
 │                   │     KV pairs read: 4
 │                   │     KV bytes read: 16 B
@@ -2846,6 +2855,7 @@ quality of service: regular
                   regions: <hidden>
                   actual row count: 2
                   KV time: 0µs
+                  KV contention time: 0µs
                   KV rows decoded: 2
                   KV pairs read: 4
                   KV bytes read: 16 B
@@ -3318,7 +3328,7 @@ vectorized: true
             │
             └── • lookup join (semi)
                 │ columns: (r, a, b_new, c)
-                │ estimated row count: 1
+                │ estimated row count: 0
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (b_new = b)
                 │ pred: (r != r) OR (a != a)
@@ -3628,8 +3638,10 @@ vectorized: true
 │               │ equality cols are key
 │               │ locking strength: for update
 │               │
-│               └── • values
-│                     size: 3 columns, 2 rows
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 3 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -3688,8 +3700,10 @@ vectorized: true
 │               │ equality cols are key
 │               │ locking strength: for update
 │               │
-│               └── • values
-│                     size: 3 columns, 2 rows
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 3 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -3749,8 +3763,10 @@ vectorized: true
 │               │ equality cols are key
 │               │ locking strength: for update
 │               │
-│               └── • values
-│                     size: 2 columns, 2 rows
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 2 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -3804,27 +3820,25 @@ vectorized: true
 │       │
 │       └── • render
 │           │
-│           └── • lookup join (left outer)
-│               │ table: uniq@uniq_pkey
-│               │ equality: (k) = (k)
-│               │ equality cols are key
+│           └── • hash join (left outer)
+│               │ equality: (v) = (v)
 │               │
-│               └── • lookup join (left outer)
-│                   │ table: uniq@uniq_v_key
-│                   │ equality: (v) = (v)
-│                   │ equality cols are key
-│                   │
-│                   └── • distinct
-│                       │ distinct on: v
-│                       │ nulls are distinct
-│                       │ error on duplicate
-│                       │
-│                       └── • render
-│                           │
-│                           └── • scan
-│                                 missing stats
-│                                 table: other@other_pkey
-│                                 spans: FULL SCAN
+│               ├── • distinct
+│               │   │ distinct on: v
+│               │   │ nulls are distinct
+│               │   │ error on duplicate
+│               │   │
+│               │   └── • render
+│               │       │
+│               │       └── • scan
+│               │             missing stats
+│               │             table: other@other_pkey
+│               │             spans: FULL SCAN
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: uniq@uniq_pkey
+│                     spans: FULL SCAN
 │
 ├── • constraint-check
 │   │
@@ -3885,8 +3899,10 @@ vectorized: true
 │               │     table: uniq@uniq_pkey
 │               │     spans: FULL SCAN
 │               │
-│               └── • values
-│                     size: 3 columns, 2 rows
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 3 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -3965,13 +3981,17 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
+        └── • hash join (semi)
             │ equality: (k) = (a)
             │ pred: v != b
             │
-            └── • scan buffer
-                  label: buffer 1
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • scan
+                  missing stats
+                  table: uniq_overlaps_pk@uniq_overlaps_pk_pkey
+                  spans: FULL SCAN
 
 # Upsert with non-constant input.
 # Add inequality filters for the hidden primary key column.
@@ -4320,7 +4340,6 @@ vectorized: true
 │                       │ equality: (column1, column3) = (r, i)
 │                       │ equality cols are key
 │                       │ locking strength: for update
-│                       │ parallel
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -4438,7 +4457,6 @@ vectorized: true
 │                       │ equality cols are key
 │                       │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
 │                       │ locking strength: for update
-│                       │ parallel
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -4566,8 +4584,10 @@ vectorized: true
 │               │ equality cols are key
 │               │ locking strength: for update
 │               │
-│               └── • values
-│                     size: 2 columns, 2 rows
+│               └── • render
+│                   │
+│                   └── • values
+│                         size: 2 columns, 2 rows
 │
 ├── • constraint-check
 │   │
@@ -4949,7 +4969,6 @@ vectorized: true
 │                       │ equality: (column1, column2) = (r, a)
 │                       │ equality cols are key
 │                       │ locking strength: for update
-│                       │ parallel
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -5031,7 +5050,6 @@ vectorized: true
             │ table: uniq_partial_enum@uniq_partial_enum_pkey
             │ equality: (r, a) = (r, a)
             │ equality cols are key
-            │ parallel
             │
             └── • lookup join (left outer)
                 │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b)
@@ -5403,7 +5421,7 @@ vectorized: true
             │ pred: (id_default != id) AND (email != name)
             │
             └── • filter
-                │ estimated row count: 1
+                │ estimated row count: 0
                 │ filter: column2 != column1
                 │
                 └── • scan buffer

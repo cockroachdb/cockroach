@@ -15,15 +15,6 @@
             "pkg/.*_generated\\.go$": "generated code"
         }
     },
-    "roachtestgo": {
-        "exclude_files": {
-            "pkg/cmd/roachtest/roachtestutil/task": "task manager implements goroutine management",
-            "pkg/cmd/roachtest/roachtestutil/mixedversion": "part of the roachtest framework",
-            "pkg/cmd/roachtest/operations": "operations do not run under the managed roachtest framework",
-            "pkg/cmd/roachtest/[^/]+\\.go$": "roachtest framework",
-            "_test\\.go$": "tests"
-        }
-    },
     "deepequalerrors": {
         "exclude_files": {
             "external/": "exclude all third-party code for all analyzers",
@@ -39,9 +30,9 @@
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
             "_test\\.go$": "tests",
-            "pkg/backup/backupinfo/manifest_handling.go": "flagged by linter, should be evaluated",
-            "pkg/backup/restore_job.go": "flagged by linter, should be evaluated",
-            "pkg/backup/restore_progress.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/backupccl/backupinfo/manifest_handling.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/backupccl/restore_job.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/backupccl/restore_progress.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/cdctest/mock_webhook_sink.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/changefeed_processors.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/event_processing.go": "flagged by linter, should be evaluated",
@@ -54,7 +45,7 @@
             "pkg/ccl/multitenantccl/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
             "pkg/ccl/sqlproxyccl/acl/watcher.go": "flagged by linter, should be evaluated",
             "pkg/ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go": "flagged by linter, should be evaluated",
-            "pkg/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
+            "pkg/ccl/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlexec/format_csv_tsv.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlshell/sql.go": "flagged by linter, should be evaluated",
             "pkg/cli/syncbench/syncbench.go": "flagged by linter, should be evaluated",
@@ -151,11 +142,11 @@
             "pkg/sql/rowexec/indexbackfiller.go": "flagged by linter, should be evaluated",
             "pkg/sql/rowflow/routers.go": "flagged by linter, should be evaluated",
             "pkg/sql/schemachanger/corpus/corpus.go": "flagged by linter, should be evaluated",
+            "pkg/sql/sem/builtins/builtins.go": "flagged by linter, should be evaluated",
             "pkg/sql/sqlliveness/slinstance/slinstance.go": "flagged by linter, should be evaluated",
             "pkg/sql/sqlstats/ssmemstorage/ss_mem_iterator.go": "flagged by linter, should be evaluated",
             "pkg/sql/stats/stats_cache.go": "flagged by linter, should be evaluated",
             "pkg/sql/stmtdiagnostics/statement_diagnostics.go": "flagged by linter, should be evaluated",
-            "pkg/sql/vecindex/manager.go": "flagged by linter, should be evaluated",
             "pkg/storage/metamorphic/deck.go": "flagged by linter, should be evaluated",
             "pkg/storage/pebble.go": "flagged by linter, should be evaluated",
             "pkg/util/admission/work_queue.go": "flagged by linter, should be evaluated",
@@ -184,7 +175,6 @@
             "pkg/util/tracing/crdbspan.go": "flagged by linter, should be evaluated",
             "pkg/util/tracing/span.go": "flagged by linter, should be evaluated",
             "pkg/util/tracing/tracer.go": "flagged by linter, should be evaluated",
-            "pkg/util/unique/unique.go": "flagged by linter, should be evaluated",
             "pkg/testutils/net.go": "flagged by linter, should be evaluated",
             "pkg/testutils/storageutils/mocking.go": "flagged by linter, should be evaluated",
             "pkg/testutils/testfixtures/test_fixtures.go": "flagged by linter, should be evaluated",
@@ -1634,7 +1624,7 @@
             "github.com/elastic/gosigar": "third-party",
             "github.com/shirou/gopsutil": "third-party code",
             "pkg/.*\\.eg\\.go$": "generated code",
-            ".*\\.pb(_[0-9]+)?\\.go$": "generated code",
+            ".*\\.pb\\.go$": "generated code",
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code"
         }

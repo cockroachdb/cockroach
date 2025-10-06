@@ -147,7 +147,7 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 		return Request{
 			Txn:       &txn,
 			Timestamp: ba.Timestamp,
-			Batch:     ba,
+			BaFmt:     ba,
 		}
 	}
 
@@ -230,7 +230,7 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 		return Request{
 			Timestamp:      ba.Timestamp,
 			NonTxnPriority: ba.UserPriority,
-			Batch:          ba,
+			BaFmt:          ba,
 		}
 	}
 
@@ -431,7 +431,7 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 			Txn:        &txn,
 			Timestamp:  ba.Timestamp,
 			WaitPolicy: ba.WaitPolicy,
-			Batch:      ba,
+			BaFmt:      ba,
 		}
 	}
 	makeHighPriReq := func() Request {
@@ -599,7 +599,7 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 				Txn:         ba.Txn,
 				Timestamp:   ba.Timestamp,
 				LockTimeout: ba.LockTimeout,
-				Batch:       ba,
+				BaFmt:       ba,
 			}
 		}
 		if !txn {
@@ -610,7 +610,7 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 				return Request{
 					Timestamp:   ba.Timestamp,
 					LockTimeout: ba.LockTimeout,
-					Batch:       ba,
+					BaFmt:       ba,
 				}
 			}
 		}
@@ -787,7 +787,7 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	req := Request{
 		Txn:       ba.Txn,
 		Timestamp: ba.Timestamp,
-		Batch:     ba,
+		BaFmt:     ba,
 	}
 
 	// Test with both synchronous and asynchronous pushes.
@@ -847,7 +847,7 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	req := Request{
 		Txn:       ba.Txn,
 		Timestamp: ba.Timestamp,
-		Batch:     ba,
+		BaFmt:     ba,
 	}
 	keyA := roachpb.Key("keyA")
 	pusheeTxn := makeTxnProto("pushee")

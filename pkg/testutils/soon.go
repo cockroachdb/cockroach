@@ -70,7 +70,7 @@ func SucceedsWithinError(fn func() error, duration time.Duration) error {
 	wrappedFn := func() error {
 		err := fn()
 		if timeutil.Since(tBegin) > 3*time.Second && err != nil {
-			log.Dev.InfofDepth(context.Background(), 4, "SucceedsSoon: %v", err)
+			log.InfofDepth(context.Background(), 4, "SucceedsSoon: %v", err)
 		}
 		return err
 	}

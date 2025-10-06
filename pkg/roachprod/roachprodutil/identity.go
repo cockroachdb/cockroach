@@ -7,173 +7,129 @@ package roachprodutil
 
 import (
 	"context"
-	"net/http"
+	"io"
 	"os"
-	"time"
+	"path/filepath"
+	"strings"
 
-	"github.com/binxio/gcloudconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/impersonate"
+	"google.golang.org/api/idtoken"
 	"google.golang.org/api/option"
 )
 
-const (
-	// CredentialsEnvironmentVariable is the environment variable that takes
-	// precedence over the GCP default credentials mechanism.
-	CredentialsEnvironmentVariable = "GOOGLE_EPHEMERAL_CREDENTIALS"
-	cloudPlatformScope             = "https://www.googleapis.com/auth/cloud-platform"
+var (
+	userHome, _ = os.UserHomeDir()
+	// serviceAccountCredFile is where the service account credentials are
+	// stored that enable Google IDP auth.
+	serviceAccountCredFile = filepath.Join(userHome, ".roachprod", "service-account-secrets")
 )
 
-// IAPTokenSource is an interface that defines the methods
-// for the IAPTokenSource.
-type IAPTokenSource interface {
-	Token() (*oauth2.Token, error)
-	GetHTTPClient() *http.Client
-}
-
-// IAPTokenSourceImpl is a struct that holds the token source and HTTP client
-// authenticated with the Identity-Aware Proxy.
-// This struct satisfies the oauth2.TokenSource interface.
-type IAPTokenSourceImpl struct {
-	tokenSource oauth2.TokenSource
-	httpClient  *http.Client
-}
-
-// IAPTokenSourceOptions is a struct that holds the options for the IAPTokenSource.
-type IAPTokenSourceOptions struct {
-	// OAuthClientID is the OAuth client ID for the Identity-Aware Proxy.
-	OAuthClientID string
-	// ServiceAccountEmail is the service account email to impersonate.
-	ServiceAccountEmail string
-	// Force gcloud credentials to be used.
-	ForceGcloud bool
-}
-
-type IAPAuthMethod int
+// FetchedFrom indicates where the credentials have been fetched from.
+// this helps in debugging and testing.
+type FetchedFrom string
 
 const (
-	// Env is used when a GOOGLE_EPHEMERAL_CREDENTIALS env var is detected.
-	Env IAPAuthMethod = iota
-	// ADC means authentication went through Application Default Credentials.
-	ADC
-	// GCloud means authentication went through gcloud auth print-identity-token.
-	GCloud
+	ServiceAccountJson     = "ROACHPROD_SERVICE_ACCOUNT_JSON"
+	ServiceAccountAudience = "ROACHPROD_SERVICE_ACCOUNT_AUDIENCE"
+
+	Env   FetchedFrom = "Env"   // fetched from environment
+	File  FetchedFrom = "File"  // fetched from the serviceAccountCredFile
+	Store FetchedFrom = "Store" // fetched from the store
+
+	// secretsDelimiter is used as a delimiter between service account audience and JSON when stored in
+	// serviceAccountCredFile or cloud storage
+	secretsDelimiter = "--||--"
+
+	// bucket and objectLocation are for fetching the creds for store.
+	//
+	// N.B. although the bucket is called promhelpers, the service account stored
+	// works for any service that requires Google IDP, i.e. Grafana annotations.
+	bucket         = "promhelpers"
+	objectLocation = "promhelpers-secrets"
 )
 
-// NewIAPTokenSource returns a new IAPTokenSource struct with the given options.
-func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) {
-
-	if opts.OAuthClientID == "" {
-		return nil, errors.New("OAuthClientID is required")
+// SetServiceAccountCredsEnv sets the environment variables ServiceAccountAudience and
+// ServiceAccountJson based on the following conditions:
+// > check if forceFetch is false
+//
+//	> forceFetch is false
+//	  > if env is set return
+//	  > if env is not set read from the serviceAccountCredFile
+//	  > if file is available and the creds can be read, set env return
+//	> read the creds from secrets manager
+//
+// > set the env variable and save the creds to the serviceAccountCredFile
+func SetServiceAccountCredsEnv(ctx context.Context, forceFetch bool) (FetchedFrom, error) {
+	creds := ""
+	fetchedFrom := Env
+	if !forceFetch { // bypass environment and creds file if forceFetch is false
+		// check if environment is set
+		audience := os.Getenv(ServiceAccountAudience)
+		saJson := os.Getenv(ServiceAccountJson)
+		if audience != "" && saJson != "" {
+			return fetchedFrom, nil
+		}
+		// check if the secrets file is available
+		b, err := os.ReadFile(serviceAccountCredFile)
+		if err == nil {
+			creds = string(b)
+			fetchedFrom = File
+		}
 	}
+	if creds == "" {
+		// creds == "" means (env is not set and the file does not have the creds) or forceFetch is true
+		options := []option.ClientOption{option.WithScopes(storage.ScopeReadOnly)}
+		cj := os.Getenv("GOOGLE_EPHEMERAL_CREDENTIALS")
+		if cj != "" {
+			options = append(options, option.WithCredentialsJSON([]byte(cj)))
+		}
 
-	if opts.ServiceAccountEmail == "" {
-		return nil, errors.New("ServiceAccountEmail is required")
-	}
-
-	var method IAPAuthMethod
-
-	ctx := context.Background()
-	var err error
-	var creds *google.Credentials
-	if cj := os.Getenv(CredentialsEnvironmentVariable); cj != "" {
-		// In case a GOOGLE_EPHEMERAL_CREDENTIALS environment variable exist,
-		// it takes precedence over other sources, and we use it as our identity.
-		creds, err = google.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
+		client, err := storage.NewClient(ctx, options...)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get credentials from environment variable")
+			return "", err
 		}
-
-		method = Env
-	} else {
-		// Unless ForceGcloud is set, we try to use ADC first.
-		// ForceGcloud might be set if we were able to detect ADC, but there was
-		// an error obtaining the credentials during the impersonation.
-		if !opts.ForceGcloud {
-			// Try and access Google's Application Default Credentials (ADC).
-			// This is the default way to get credentials in a GCP environment,
-			// and it checks the following sources, in order:
-			// - Environment variable GOOGLE_APPLICATION_CREDENTIALS
-			// - Default service account file (APP_DATA/application_default_credentials.json)
-			// - App Engine standard environment
-			// - GCE metadata server
-			creds, err = google.FindDefaultCredentials(ctx, cloudPlatformScope)
-
-			method = ADC
+		defer func() { _ = client.Close() }()
+		fetchedFrom = Store
+		obj := client.Bucket(bucket).Object(objectLocation)
+		r, err := obj.NewReader(ctx)
+		if err != nil {
+			return "", err
 		}
-
-		// Either error while looking for ADC or ForceGcloud is set (meaning ADC
-		// was not attempted).
-		if err != nil || opts.ForceGcloud {
-			// We default to using `gcloud auth print-identity-token`.
-			// This is useful if `gcloud auth application-default login` was not run
-			// or if the user has a different set of credentials for application default.
-			creds, err = gcloudconfig.GetCredentials("")
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to get default credentials")
-			}
-
-			method = GCloud
+		defer func() { _ = r.Close() }()
+		body, err := io.ReadAll(r)
+		creds = string(body)
+		if err != nil {
+			return "", err
 		}
+		_ = os.WriteFile(serviceAccountCredFile, body, 0700)
 	}
+	secretValues := strings.Split(creds, secretsDelimiter)
+	if len(secretValues) == 2 {
+		_ = os.Setenv(ServiceAccountAudience, secretValues[0])
+		_ = os.Setenv(ServiceAccountJson, secretValues[1])
+		return fetchedFrom, nil
+	}
+	return "", errors.Newf("invalid secret values - %s", creds)
+}
 
-	// Create a new ID token source with the impersonate config.
-	// This allows us to impersonate the service account and get an OAuth token.
-	// The IncludeEmail field is required for Identity-Aware Proxy.
-	ts, err := impersonate.IDTokenSource(ctx, impersonate.IDTokenConfig{
-		Audience:        opts.OAuthClientID,
-		TargetPrincipal: opts.ServiceAccountEmail,
-		IncludeEmail:    true,
-	}, option.WithCredentials(creds))
+// GetServiceAccountToken returns a GCS oauth token based on the service account key and audience
+// set through the ServiceAccountJson and ServiceAccountAudience env vars.
+// Assumes that the env vars have been set already, i.e. through SetServiceAccountCredsEnv.
+func GetServiceAccountToken(
+	ctx context.Context,
+	tokenSource func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error),
+) (string, error) {
+	key := os.Getenv(ServiceAccountJson)
+	audience := os.Getenv(ServiceAccountAudience)
+	ts, err := tokenSource(ctx, audience, idtoken.WithCredentialsJSON([]byte(key)))
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to create impersonated token source")
+		return "", errors.Wrap(err, "error creating GCS oauth token source from specified credential")
 	}
-
-	// Test the token source by trying to get a token. If this fails and we used ADC,
-	// try falling back to gcloud credentials. This handles cases where ADC is detected
-	// but lacks impersonation permissions, while the gcloud account has the necessary permissions.
-	_, err = ts.Token()
-	if err != nil && method == ADC {
-		// Try again with ForceGcloud to use gcloud credentials
-		gcloudOpts := opts
-		gcloudOpts.ForceGcloud = true
-		return NewIAPTokenSource(gcloudOpts)
-	} else if err != nil {
-		// ForceGcloud was set or other error, return the error
-		return nil, errors.Wrapf(err, "failed to get token")
+	token, err := ts.Token()
+	if err != nil {
+		return "", errors.Wrap(err, "error getting identity token")
 	}
-
-	// oauth2.ReuseTokenSourceWithExpiry caches the token and reuses it,
-	// or refreshes it if it's expired. The token will be refreshed 30 seconds
-	// before it expires to avoid any race condition in the token refresh.
-	iapTokenSource := &IAPTokenSourceImpl{
-		tokenSource: oauth2.ReuseTokenSourceWithExpiry(nil, ts, time.Second*30),
-	}
-
-	// Create a new HTTP client with the IAP token source.
-	// It automatically adds the Authorization header with the OAuth token.
-	// This client uses the httputil.StandardHTTPTimeout as the default timeout.
-	iapTokenSource.httpClient = &http.Client{
-		Timeout: httputil.StandardHTTPTimeout,
-		Transport: &oauth2.Transport{
-			Source: iapTokenSource,
-			Base:   http.DefaultTransport,
-		},
-	}
-
-	return iapTokenSource, nil
-}
-
-// Token returns the token from the IAPTokenSource.
-// This methods satisfies the oauth2.TokenSource interface.
-func (ts *IAPTokenSourceImpl) Token() (*oauth2.Token, error) {
-	return ts.tokenSource.Token()
-}
-
-// GetHTTPClient returns the HTTP client authenticated with the IAPTokenSource.
-func (ts *IAPTokenSourceImpl) GetHTTPClient() *http.Client {
-	return ts.httpClient
+	return token.AccessToken, nil
 }

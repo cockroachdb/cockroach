@@ -45,16 +45,6 @@ var ExclusiveLocksBlockNonLockingReads = settings.RegisterBoolSetting(
 	true,
 )
 
-// LockNonExistentKeys controls whether the replica allows locking on
-// non-existent keys is allowed. When true, locking Get and Delete requests that
-// don't find a key will acquire a lock. This isn't a setting because in the
-// most important places a setting doesn't help since we need to check the lock
-// table if it is possible that any currenly running transaction might have
-// locked a non-existent key. For now this is a simple bool that will allow us
-// to quickly turn off the riskier parts of the feature if we need to back out
-// close to development.
-const LockNonExistentKeys = true
-
 // MaxStrength is the maximum value in the Strength enum.
 const MaxStrength = Intent
 

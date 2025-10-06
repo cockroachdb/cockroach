@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run ./generate_visitor.go scop DeferredMutation deferred_mutation.go deferred_mutation_visitor_generated.go
@@ -20,10 +19,6 @@ type deferredMutationOp struct{ baseOp }
 var _ = deferredMutationOp{baseOp: baseOp{}}
 
 func (deferredMutationOp) Type() Type { return MutationType }
-
-func (deferredMutationOp) Description() redact.RedactableString {
-	return "Updating schema metadata"
-}
 
 // CreateGCJobForDatabase creates a GC job for a given database.
 type CreateGCJobForDatabase struct {
@@ -53,7 +48,7 @@ type UpdateSchemaChangerJob struct {
 	deferredMutationOp
 	IsNonCancelable       bool
 	JobID                 jobspb.JobID
-	RunningStatus         redact.RedactableString
+	RunningStatus         string
 	DescriptorIDsToRemove []descpb.ID
 }
 
@@ -69,7 +64,7 @@ type CreateSchemaChangerJob struct {
 	// NonCancelable maps to the job's property, but in the schema changer can
 	// be thought of as !Revertible.
 	NonCancelable bool
-	RunningStatus redact.RedactableString
+	RunningStatus string
 }
 
 // RemoveDatabaseRoleSettings is used to delete a role setting for a database.
@@ -93,16 +88,6 @@ type RefreshStats struct {
 // MaybeAddSplitForIndex adds a admin split range temproarily on this index.
 type MaybeAddSplitForIndex struct {
 	deferredMutationOp
-	TableID     descpb.ID
-	IndexID     descpb.IndexID
-	CopyIndexID descpb.IndexID
-}
-
-// UpdateTTLScheduleMetadata updates the TTL schedule metadata for a table
-// when its name changes. This ensures TTL jobs continue to work properly
-// after table renames.
-type UpdateTTLScheduleMetadata struct {
-	deferredMutationOp
 	TableID descpb.ID
-	NewName string
+	IndexID descpb.IndexID
 }

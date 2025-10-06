@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/bench/rttanalysis"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 const numNodes = 4
@@ -42,7 +42,7 @@ var reg = rttanalysis.NewRegistry(numNodes, rttanalysis.MakeClusterConstructor(f
 	if _, err := db.Exec("GRANT admin TO testuser"); err != nil {
 		tb.Fatal(err)
 	}
-	url, testuserCleanup := pgurlutils.PGUrl(
+	url, testuserCleanup := sqlutils.PGUrl(
 		tb, cluster.Server(0).ApplicationLayer().AdvSQLAddr(), "rttanalysisccl", url.User("testuser"),
 	)
 	conn, err := gosql.Open("postgres", url.String())
@@ -217,7 +217,7 @@ func init() {
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
+CREATE TABLE test (p int) LOCALITY GLOBAL;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL IN PRIMARY REGION`,
 			Reset: "DROP DATABASE test",
@@ -227,7 +227,7 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL IN PRIMARY REGION;
+CREATE TABLE test (p int) LOCALITY REGIONAL IN PRIMARY REGION;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
 			Reset: "DROP DATABASE test",
@@ -237,7 +237,7 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL IN PRIM
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
+CREATE TABLE test (p int) LOCALITY GLOBAL;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
 			Reset: "DROP DATABASE test",
@@ -247,7 +247,7 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY GLOBAL;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+CREATE TABLE test (p int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY ROW`,
 			Reset: "DROP DATABASE test",
@@ -257,7 +257,7 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY TABL
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
+CREATE TABLE test (p int) LOCALITY REGIONAL BY ROW;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
 			Reset: "DROP DATABASE test",
@@ -267,7 +267,7 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 			Setup: `
 CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3";
 USE test;
-CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
+CREATE TABLE test (p int) LOCALITY REGIONAL BY ROW;
 `,
 			Stmt:  `ALTER TABLE test SET LOCALITY GLOBAL`,
 			Reset: "DROP DATABASE test",

@@ -17,10 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,7 +29,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // mockReplica is a mock implementation of the Replica interface.
@@ -46,44 +43,15 @@ type mockReplica struct {
 	canBump        bool
 	cantBumpReason CantCloseReason
 	lai            kvpb.LeaseAppliedIndex
-	policy         atomic.Int32 // stores ctpb.RangeClosedTimestampPolicy
+	policy         roachpb.RangeClosedTimestampPolicy
 }
 
 var _ Replica = &mockReplica{}
 
 func (m *mockReplica) StoreID() roachpb.StoreID    { return m.storeID }
 func (m *mockReplica) GetRangeID() roachpb.RangeID { return m.rangeID }
-
-func (m *mockReplica) RefreshPolicy(latencies map[roachpb.NodeID]time.Duration) {
-	policy := func() ctpb.RangeClosedTimestampPolicy {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		desc := m.mu.desc
-		if latencies == nil {
-			return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO
-		}
-		maxLatency := time.Duration(-1)
-		for _, peer := range desc.InternalReplicas {
-			peerLatency, ok := latencies[peer.NodeID]
-			if !ok {
-				continue
-			}
-			// Calculate latency bucket by dividing latency by interval size and adding
-			// base policy.
-			maxLatency = max(maxLatency, peerLatency)
-		}
-		// FindBucketBasedOnNetworkRTT returns
-		// LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO if maxLatency is negative.
-		return closedts.FindBucketBasedOnNetworkRTT(maxLatency)
-	}
-	if m.policy.Load() == int32(ctpb.LAG_BY_CLUSTER_SETTING) {
-		return
-	}
-	m.policy.Store(int32(policy()))
-}
-
 func (m *mockReplica) BumpSideTransportClosed(
-	_ context.Context, _ hlc.ClockTimestamp, _ map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
+	_ context.Context, _ hlc.ClockTimestamp, _ [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
 ) BumpSideTransportClosedResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,7 +64,7 @@ func (m *mockReplica) BumpSideTransportClosed(
 		FailReason: reason,
 		Desc:       &m.mu.desc,
 		LAI:        m.lai,
-		Policy:     ctpb.RangeClosedTimestampPolicy(m.policy.Load()),
+		Policy:     m.policy,
 	}
 }
 
@@ -132,21 +100,16 @@ func (c *mockConn) run(context.Context, *stop.Stopper) { c.running = true }
 func (c *mockConn) close()                             { c.closed = true }
 func (c *mockConn) getState() connState                { return connState{} }
 
-func newMockSenderWithSt(connFactory connFactory, st *cluster.Settings) (*Sender, *stop.Stopper) {
+func newMockSender(connFactory connFactory) (*Sender, *stop.Stopper) {
 	stopper := stop.NewStopper()
+	st := cluster.MakeTestingClusterSettings()
 	clock := hlc.NewClockForTesting(nil)
 	s := newSenderWithConnFactory(stopper, st, clock, connFactory)
 	s.nodeID = 1 // usually set in (*Sender).Run
 	return s, stopper
 }
 
-func newMockSender(connFactory connFactory) (*Sender, *stop.Stopper) {
-	return newMockSenderWithSt(connFactory, cluster.MakeTestingClusterSettings())
-}
-
-func newMockReplica(
-	id roachpb.RangeID, policy ctpb.RangeClosedTimestampPolicy, nodes ...roachpb.NodeID,
-) *mockReplica {
+func newMockReplica(id roachpb.RangeID, nodes ...roachpb.NodeID) *mockReplica {
 	var desc roachpb.RangeDescriptor
 	desc.RangeID = id
 	for _, nodeID := range nodes {
@@ -157,8 +120,8 @@ func newMockReplica(
 		rangeID: id,
 		canBump: true,
 		lai:     5,
+		policy:  roachpb.LAG_BY_CLUSTER_SETTING,
 	}
-	r.policy.Store(int32(policy))
 	r.mu.desc = desc
 	return r
 }
@@ -174,14 +137,14 @@ func newMockReplicaEx(id roachpb.RangeID, replicas ...roachpb.ReplicationTarget)
 		rangeID: id,
 		canBump: true,
 		lai:     5,
+		policy:  roachpb.LAG_BY_CLUSTER_SETTING,
 	}
-	r.policy.Store(int32(ctpb.LAG_BY_CLUSTER_SETTING))
 	r.mu.desc = desc
 	return r
 }
 
 func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdate {
-	targetForPolicy := func(pol ctpb.RangeClosedTimestampPolicy) hlc.Timestamp {
+	targetForPolicy := func(pol roachpb.RangeClosedTimestampPolicy) hlc.Timestamp {
 		return closedts.TargetForPolicy(
 			now,
 			s.clock.MaxOffset(),
@@ -192,24 +155,8 @@ func expGroupUpdates(s *Sender, now hlc.ClockTimestamp) []ctpb.Update_GroupUpdat
 		)
 	}
 	return []ctpb.Update_GroupUpdate{
-		{Policy: ctpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(ctpb.LAG_BY_CLUSTER_SETTING)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_40MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_80MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_100MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_140MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_160MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_180MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_200MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_240MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_260MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_280MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_300MS)},
-		{Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS, ClosedTimestamp: targetForPolicy(ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS)},
+		{Policy: roachpb.LAG_BY_CLUSTER_SETTING, ClosedTimestamp: targetForPolicy(roachpb.LAG_BY_CLUSTER_SETTING)},
+		{Policy: roachpb.LEAD_FOR_GLOBAL_READS, ClosedTimestamp: targetForPolicy(roachpb.LEAD_FOR_GLOBAL_READS)},
 	}
 }
 
@@ -238,12 +185,12 @@ func TestSenderBasic(t *testing.T) {
 	require.Nil(t, up.AddedOrUpdated)
 
 	// Add a leaseholder that can close.
-	r1 := newMockReplica(15, ctpb.LAG_BY_CLUSTER_SETTING, 1, 2, 3)
+	r1 := newMockReplica(15, 1, 2, 3)
 	s.RegisterLeaseholder(ctx, r1, 1)
 	now = s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 1)
 	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: ctpb.LAG_BY_CLUSTER_SETTING},
+		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
 	}, s.trackedMu.tracked)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	require.Len(t, s.connsMu.conns, 2)
@@ -257,7 +204,7 @@ func TestSenderBasic(t *testing.T) {
 	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
 	require.Nil(t, up.Removed)
 	require.Equal(t, []ctpb.Update_RangeUpdate{
-		{RangeID: 15, LAI: 5, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
+		{RangeID: 15, LAI: 5, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
 	}, up.AddedOrUpdated)
 
 	c2, ok := s.connsMu.conns[2]
@@ -340,7 +287,7 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	now := s.publish(ctx)
 	require.Len(t, s.trackedMu.tracked, 1)
 	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: ctpb.LAG_BY_CLUSTER_SETTING},
+		15: {lai: 5, policy: roachpb.LAG_BY_CLUSTER_SETTING},
 	}, s.trackedMu.tracked)
 	require.Len(t, s.leaseholdersMu.leaseholders, 1)
 	// Ensure that we have two connections, one for remote node and one for local.
@@ -357,160 +304,8 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
 	require.Nil(t, up.Removed)
 	require.Equal(t, []ctpb.Update_RangeUpdate{
-		{RangeID: 15, LAI: 5, Policy: ctpb.LAG_BY_CLUSTER_SETTING},
+		{RangeID: 15, LAI: 5, Policy: roachpb.LAG_BY_CLUSTER_SETTING},
 	}, up.AddedOrUpdated)
-}
-
-// TestSenderPolicyCountForDifferentVersions verifies that the sender tracks the
-// correct number of policies based on the cluster version.
-func TestSenderPolicyCountForDifferentVersions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	testutils.RunTrueAndFalse(t, "cluster version", func(t *testing.T, useOldVersion bool) {
-		var st *cluster.Settings
-		var expectedPolicyCount int
-		if useOldVersion {
-			prevVersion := roachpb.Version{Major: 25, Minor: 1}
-			st = cluster.MakeTestingClusterSettingsWithVersions(prevVersion, prevVersion, true)
-			expectedPolicyCount = int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		} else {
-			st = cluster.MakeTestingClusterSettings()
-			expectedPolicyCount = int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		}
-		connFactory := &mockConnFactory{}
-		s, stopper := newMockSenderWithSt(connFactory, st)
-		defer stopper.Stop(ctx)
-
-		s.publish(ctx)
-		require.Len(t, s.trackedMu.tracked, 0)
-		require.Len(t, s.trackedMu.lastClosed, expectedPolicyCount)
-	})
-}
-
-// TestSenderWithLatencyTracker verifies that the sender correctly updates
-// closed timestamp policies based on network latency between nodes.
-func TestSenderWithLatencyTracker(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	connFactory := &mockConnFactory{}
-
-	st := cluster.MakeTestingClusterSettings()
-	closedts.RangeClosedTimestampPolicyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
-	closedts.RangeClosedTimestampPolicyLatencyRefreshInterval.Override(ctx, &st.SV, 5*time.Millisecond)
-	closedts.LeadForGlobalReadsAutoTuneEnabled.Override(ctx, &st.SV, true)
-
-	var furthestNodeLatency atomic.Int64
-	furthestNodeLatency.Store(int64(100 * time.Millisecond))
-	extendCrossRegionLatency := func() {
-		furthestNodeLatency.Store(int64(200 * time.Millisecond))
-	}
-
-	// Mock latency function that simulates network latency between nodes.
-	getLatencyFn := func() map[roachpb.NodeID]time.Duration {
-		return map[roachpb.NodeID]time.Duration{
-			1: 1 * time.Millisecond,
-			2: 50 * time.Millisecond,
-			3: time.Duration(furthestNodeLatency.Load()),
-		}
-	}
-
-	s, stopper := newMockSender(connFactory)
-	policyRefresher := policyrefresher.NewPolicyRefresher(stopper, st, s.GetLeaseholders, getLatencyFn, nil)
-	defer stopper.Stop(ctx)
-	policyRefresher.Run(ctx)
-
-	// Verify initial state with no leaseholders.
-	now := s.publish(ctx)
-	require.Len(t, s.trackedMu.tracked, 0)
-	require.Len(t, s.trackedMu.lastClosed, int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY))
-	require.Len(t, s.leaseholdersMu.leaseholders, 0)
-	require.Len(t, s.connsMu.conns, 0)
-
-	require.Equal(t, ctpb.SeqNum(1), s.trackedMu.lastSeqNum)
-	up, ok := s.buf.GetBySeq(ctx, 1)
-	require.True(t, ok)
-	require.Equal(t, roachpb.NodeID(1), up.NodeID)
-	require.Equal(t, ctpb.SeqNum(1), up.SeqNum)
-	require.True(t, up.Snapshot)
-	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
-	require.Nil(t, up.Removed)
-	require.Nil(t, up.AddedOrUpdated)
-
-	// Add a leaseholder with replicas in different regions.
-	r := newMockReplica(15, ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, 1, 2, 3)
-
-	// Verify policy updates when adding a leaseholder with far-away replicas.
-	s.RegisterLeaseholder(ctx, r, 1)
-	testutils.SucceedsSoon(t, func() error {
-		if ctpb.RangeClosedTimestampPolicy(r.policy.Load()) != ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS {
-			return errors.New("policy not updated")
-		}
-		return nil
-	})
-	now = s.publish(ctx)
-	require.Len(t, s.trackedMu.tracked, 1)
-	require.Len(t, s.trackedMu.lastClosed, int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY))
-	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS},
-	}, s.trackedMu.tracked)
-	require.Len(t, s.leaseholdersMu.leaseholders, 1)
-	require.Len(t, s.connsMu.conns, 2)
-
-	require.Equal(t, ctpb.SeqNum(2), s.trackedMu.lastSeqNum)
-	up, ok = s.buf.GetBySeq(ctx, 2)
-	require.True(t, ok)
-	require.Equal(t, roachpb.NodeID(1), up.NodeID)
-	require.Equal(t, ctpb.SeqNum(2), up.SeqNum)
-	require.Equal(t, false, up.Snapshot)
-	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
-	require.Nil(t, up.Removed)
-	require.Equal(t, []ctpb.Update_RangeUpdate{
-		{RangeID: 15, LAI: 5, Policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_120MS},
-	}, up.AddedOrUpdated)
-
-	// Verify policy updates when far-away replica latency increases.
-	extendCrossRegionLatency()
-	testutils.SucceedsSoon(t, func() error {
-		if ctpb.RangeClosedTimestampPolicy(r.policy.Load()) != ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS {
-			return errors.New("policy not updated")
-		}
-		return nil
-	})
-	now = s.publish(ctx)
-	require.Equal(t, ctpb.SeqNum(3), s.trackedMu.lastSeqNum)
-	up, ok = s.buf.GetBySeq(ctx, 3)
-	require.True(t, ok)
-	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
-	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_220MS},
-	}, s.trackedMu.tracked)
-
-	// Verify policy updates when removing the high-latency replica.
-	r.removeReplica(3)
-	testutils.SucceedsSoon(t, func() error {
-		if ctpb.RangeClosedTimestampPolicy(r.policy.Load()) != ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS {
-			return errors.New("policy not updated")
-		}
-		return nil
-	})
-	now = s.publish(ctx)
-	require.Equal(t, ctpb.SeqNum(4), s.trackedMu.lastSeqNum)
-	up, ok = s.buf.GetBySeq(ctx, 4)
-	require.True(t, ok)
-	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
-	require.Equal(t, map[roachpb.RangeID]trackedRange{
-		15: {lai: 5, policy: ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_60MS},
-	}, s.trackedMu.tracked)
-
-	// Verify cleanup after unregistering the leaseholder.
-	s.UnregisterLeaseholder(ctx, 1, 15)
-	s.publish(ctx)
-	require.Len(t, s.trackedMu.tracked, 0)
-	require.Len(t, s.leaseholdersMu.leaseholders, 0)
-	require.Len(t, s.connsMu.conns, 0)
 }
 
 func TestSenderSameRangeDifferentStores(t *testing.T) {
@@ -622,7 +417,7 @@ type mockDialer struct {
 	}
 }
 
-var _ rpcbase.NodeDialer = &mockDialer{}
+var _ nodeDialer = &mockDialer{}
 
 type nodeAddr struct {
 	nid  roachpb.NodeID
@@ -645,7 +440,7 @@ func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 }
 
 func (m *mockDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, _ error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -660,12 +455,6 @@ func (m *mockDialer) Dial(
 		m.mu.conns = append(m.mu.conns, c)
 	}
 	return c, err
-}
-
-func (m *mockDialer) DRPCDial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (_ drpc.Conn, _ error) {
-	return nil, errors.New("DRPCDial unimplemented")
 }
 
 func (m *mockDialer) Close() {
@@ -708,7 +497,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	const numReplicas = 10000
 	replicas := make([]*mockReplica, numReplicas)
 	for i := 0; i < numReplicas; i++ {
-		replicas[i] = newMockReplica(roachpb.RangeID(i+1), ctpb.LAG_BY_CLUSTER_SETTING, 1, 2)
+		replicas[i] = newMockReplica(roachpb.RangeID(i+1), 1, 2)
 		s.RegisterLeaseholder(ctx, replicas[i], 1 /* leaseSeq */)
 	}
 
@@ -808,7 +597,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 	s.Run(ctx, roachpb.NodeID(1))
 
 	// Add a replica with replicas on n2 and n3.
-	r1 := newMockReplica(15, ctpb.LAG_BY_CLUSTER_SETTING, 1, 2, 3)
+	r1 := newMockReplica(15, 1, 2, 3)
 	s.RegisterLeaseholder(ctx, r1, 1 /* leaseSeq */)
 	// Check that connections to n2,3 are established.
 	<-receivers[1].testingKnobs[1].onFirstMsg
@@ -825,19 +614,13 @@ type failingDialer struct {
 	dialCount int32
 }
 
-var _ rpcbase.NodeDialer = &failingDialer{}
+var _ nodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")
-}
-
-func (f *failingDialer) DRPCDial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (_ drpc.Conn, err error) {
-	return nil, errors.New("DRPCDial unimplemented")
 }
 
 func (f *failingDialer) callCount() int32 {
@@ -858,14 +641,8 @@ func TestRPCConnStopOnClose(t *testing.T) {
 
 	dialer := &failingDialer{}
 	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
-
-	s, stopper := newMockSender(factory)
-	defer stopper.Stop(ctx)
-
-	// While sender is strictly not needed to dial a connection as dialer
-	// always fails dial attempts, it is needed to check if DRPC is enabled
-	// or disabled.
-	connection := factory.new(s, roachpb.NodeID(1))
+	connection := factory.new(nil, /* sender is not needed as dialer always fails Dial attempts */
+		roachpb.NodeID(1))
 	connection.run(ctx, stopper)
 
 	// Wait for first dial attempt for sanity reasons.

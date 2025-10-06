@@ -1034,7 +1034,7 @@ func (rc *rangeController) testingNonBlockingAdmit(
 	// connected to the leader. Expect there to be at least one voter set and no
 	// joint configuration (multiple voter sets).
 	if len(vss) != 1 {
-		log.KvDistribution.Fatalf(ctx, "expected exactly one voter set, found %d", len(vss))
+		log.Fatalf(ctx, "expected exactly one voter set, found %d", len(vss))
 	}
 	// Similar to the token counter non-blocking admit, we also don't care about
 	// replica types, or waiting for only a quorum. We just wait for all
@@ -1084,7 +1084,7 @@ func (r *testingRCRange) testingDeductTokens(
 	t *testing.T, ctx context.Context, pri admissionpb.WorkPriority, tokens kvflowcontrol.Tokens,
 ) {
 	if r.rc == nil {
-		log.KvDistribution.Fatal(ctx, "operating on a closed RangeController")
+		log.Fatal(ctx, "operating on a closed RangeController")
 	}
 	r.mu.quorumPosition.Index++
 	entry := testingCreateEntry(t, entryInfo{
@@ -1136,7 +1136,7 @@ func (r *testingRCRange) testingReturnTokens(
 	rid := r.testingFindReplStreamOrFatal(ctx, stream)
 	rs := r.rc.replicaMap[rid]
 	if rs == nil || rs.sendStream == nil {
-		log.KvDistribution.Fatalf(ctx, "expected to find non-closed replica send stream for %v", stream)
+		log.Fatalf(ctx, "expected to find non-closed replica send stream for %v", stream)
 	}
 
 	// We need to determine the index at which we're returning tokens via
@@ -1177,7 +1177,7 @@ func (r *testingRCRange) testingFindReplStreamOrFatal(
 			return rs.desc.ReplicaID
 		}
 	}
-	log.KvDistribution.Fatalf(ctx, "expected to find replica for stream %v", stream)
+	log.Fatalf(ctx, "expected to find replica for stream %v", stream)
 	panic("unreachable")
 }
 
@@ -1188,7 +1188,7 @@ func (r *testingRCRange) testingConnectStream(
 	t *testing.T, ctx context.Context, stream kvflowcontrol.Stream,
 ) {
 	if r.rc == nil {
-		log.KvDistribution.Fatal(ctx, "operating on a closed RangeController")
+		log.Fatal(ctx, "operating on a closed RangeController")
 	}
 	r.mu.r.replicaSet[roachpb.ReplicaID(stream.StoreID)] = testingReplica{
 		desc: roachpb.ReplicaDescriptor{

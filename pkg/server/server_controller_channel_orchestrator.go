@@ -223,10 +223,8 @@ func (o *channelOrchestrator) startControlledServer(
 	// stopper will have its own tracer which is incompatible with the
 	// tracer attached to the incoming context.
 	tenantCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
-	tags := logtags.BuildBuffer()
-	tags.Add("tenant-orchestration", nil)
-	tags.Add("tenant", tenantName)
-	tenantCtx = logtags.AddTags(tenantCtx, tags.Finish())
+	tenantCtx = logtags.AddTag(tenantCtx, "tenant-orchestration", nil)
+	tenantCtx = logtags.AddTag(tenantCtx, "tenant", tenantName)
 
 	// ctlStopper is a stopper uniquely responsible for the control
 	// loop. It is separate from the tenantStopper defined below so
@@ -247,12 +245,12 @@ func (o *channelOrchestrator) startControlledServer(
 	// Ensure that if the surrounding server requests shutdown, we
 	// propagate it to the new server.
 	if err := o.parentStopper.RunAsyncTask(ctx, "propagate-close", func(ctx context.Context) {
-		defer log.Dev.Infof(ctx, "propagate-close task terminating")
+		defer log.Infof(ctx, "propagate-close task terminating")
 		select {
 		case <-stoppedCh:
 			// Server control loop is terminating prematurely before a
 			// request was made to terminate it.
-			log.Dev.Infof(ctx, "tenant %q terminating", tenantName)
+			log.Infof(ctx, "tenant %q terminating", tenantName)
 
 		case <-o.parentStopper.ShouldQuiesce():
 			// Surrounding server is stopping; propagate the stop to the
@@ -260,19 +258,19 @@ func (o *channelOrchestrator) startControlledServer(
 			// Note: we can't do a graceful drain in that case because
 			// the RPC service in the surrounding server may already
 			// be unavailable.
-			log.Dev.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
+			log.Infof(ctx, "server terminating; telling tenant %q to terminate", tenantName)
 			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 
 		case <-gracefulStopRequestCh:
 			// Someone requested a graceful shutdown.
-			log.Dev.Infof(ctx, "received request for tenant %q to terminate gracefully", tenantName)
+			log.Infof(ctx, "received request for tenant %q to terminate gracefully", tenantName)
 			markDrainMode(true)
 			ctlStopper.Stop(tenantCtx)
 
 		case <-immediateStopRequestCh:
 			// Someone requested a graceful shutdown.
-			log.Dev.Infof(ctx, "received request for tenant %q to terminate immediately", tenantName)
+			log.Infof(ctx, "received request for tenant %q to terminate immediately", tenantName)
 			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 
@@ -281,7 +279,7 @@ func (o *channelOrchestrator) startControlledServer(
 			// Note: we can't do a graceful drain in that case because
 			// the RPC service in the surrounding server may already
 			// be unavailable.
-			log.Dev.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
+			log.Infof(ctx, "startup context cancelled; telling tenant %q to terminate", tenantName)
 			markDrainMode(false)
 			ctlStopper.Stop(tenantCtx)
 		}
@@ -378,7 +376,7 @@ func (o *channelOrchestrator) startControlledServer(
 				// to ensure preStart() properly stops prematurely in that case.
 				startCtx := s.annotateCtx(ctx)
 				startCtx = logtags.AddTag(startCtx, "start-server", nil)
-				log.Dev.Infof(startCtx, "starting tenant server")
+				log.Infof(startCtx, "starting tenant server")
 				if err := s.preStart(startCtx); err != nil {
 					return nil, errors.Wrap(err, "while starting server")
 				}
@@ -400,7 +398,7 @@ func (o *channelOrchestrator) startControlledServer(
 				if startErrorFn != nil {
 					startErrorFn(ctx, tenantName, err)
 				}
-				log.Dev.Warningf(ctx,
+				log.Warningf(ctx,
 					"unable to start server for tenant %q (attempt %d, will retry): %v",
 					tenantName, retry.CurrentAttempt(), err)
 				state.startErr = err
@@ -441,11 +439,11 @@ func (o *channelOrchestrator) startControlledServer(
 		for {
 			select {
 			case <-tenantStopper.ShouldQuiesce():
-				log.Dev.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
+				log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
 				return
 
 			case shutdownRequest := <-tenantServer.shutdownRequested():
-				log.Dev.Infof(ctx, "tenant %q requesting their own shutdown: %v",
+				log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
 					tenantName, shutdownRequest.ShutdownCause())
 				// Make the async stop goroutine above pick up the task of shutting down.
 				if shutdownRequest.TerminateUsingGracefulDrain() {
@@ -472,7 +470,7 @@ func (o *channelOrchestrator) propagateUngracefulStopAsync(
 	immediateStopRequestCh <-chan struct{},
 ) error {
 	return ctlStopper.RunAsyncTask(ctx, "propagate-ungraceful-stop", func(ctx context.Context) {
-		defer log.Dev.Infof(ctx, "propagate-ungraceful-stop task terminating")
+		defer log.Infof(ctx, "propagate-ungraceful-stop task terminating")
 		select {
 		case <-tenantStopper.ShouldQuiesce():
 			// Tenant server shutting down on its own.
@@ -497,7 +495,7 @@ func (o *channelOrchestrator) propagateGracefulDrainAsync(
 	tenantServer orchestratedServer,
 ) error {
 	return ctlStopper.RunAsyncTask(ctx, "propagate-graceful-drain", func(ctx context.Context) {
-		defer log.Dev.Infof(ctx, "propagate-graceful-drain task terminating")
+		defer log.Infof(ctx, "propagate-graceful-drain task terminating")
 		select {
 		case <-tenantStopper.ShouldQuiesce():
 			// Tenant server shutting down on its own.
@@ -523,7 +521,7 @@ func (o *channelOrchestrator) propagateGracefulDrainAsync(
 				drainCtx, cancel2 = tenantStopper.WithCancelOnQuiesce(drainCtx)
 				defer cancel2()
 
-				log.Dev.Infof(drainCtx, "starting graceful drain")
+				log.Infof(drainCtx, "starting graceful drain")
 				// Call the drain service on that tenant's server. This may take a
 				// while as it needs to wait for clients to disconnect and SQL
 				// activity to clear up, possibly waiting for various configurable

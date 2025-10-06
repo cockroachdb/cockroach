@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -138,30 +137,26 @@ statement ok
 CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
-  z JSONB,
-  v VECTOR(3)
+  z JSONB
 )
 
 statement ok
 CREATE INVERTED INDEX ON telemetry (z);
-CREATE VECTOR INDEX ON telemetry (v);
 CREATE INDEX ON telemetry (y) USING HASH WITH (bucket_count=4)
 
 query T rowsort
 SELECT feature_name FROM crdb_internal.feature_usage
 WHERE feature_name IN (
   'sql.schema.inverted_index',
-  'sql.schema.vector_index',
   'sql.schema.hash_sharded_index'
 )
 ----
 sql.schema.inverted_index
-sql.schema.vector_index
 sql.schema.hash_sharded_index
 
 subtest create_index_concurrently
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE create_index_concurrently_tbl (a int)
 
 onlyif config weak-iso-level-configs
@@ -181,7 +176,6 @@ query T noticetrace
 CREATE INDEX CONCURRENTLY IF NOT EXISTS create_index_concurrently_idx ON create_index_concurrently_tbl(a)
 ----
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
@@ -190,18 +184,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
                                  INDEX create_index_concurrently_idx (a ASC)
-                               );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE create_index_concurrently_tbl
-----
-create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
-                                 a INT8 NULL,
-                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
-                                 INDEX create_index_concurrently_idx (a ASC)
-                               ) WITH (schema_locked = true);
+                               )
 
 # Weak isolation levels emit extra notices, so skip them.
 skipif config weak-iso-level-configs
@@ -223,7 +206,6 @@ onlyif config weak-iso-level-configs
 statement ok
 DROP INDEX CONCURRENTLY create_index_concurrently_idx
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE create_index_concurrently_tbl
 ----
@@ -231,17 +213,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  a INT8 NULL,
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
-                               );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE create_index_concurrently_tbl
-----
-create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
-                                 a INT8 NULL,
-                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
-                               ) WITH (schema_locked = true);
+                               )
 
 statement ok
 DROP TABLE create_index_concurrently_tbl
@@ -269,7 +241,7 @@ subtest names-with-escaped-chars
 
 # Similarly try using special characters making an index for a new table, we
 # will attempt to recreate it and expect the look up to find the old one.
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE "'t1-esc'"(name int);
 
 statement ok
@@ -287,9 +259,6 @@ SELECT value FROM information_schema.session_variables where variable='use_decla
 # part of the test, since we are pausing jobs intentionally below.
 statement ok
 SET use_declarative_schema_changer = 'off'
-
-statement ok
-SET create_table_with_schema_locked=false
 
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.adopt = '50ms';
@@ -413,9 +382,6 @@ SET CLUSTER SETTING jobs.registry.interval.cancel = DEFAULT;
 statement ok
 SET use_declarative_schema_changer = $schema_changer_state
 
-statement ok
-RESET create_table_with_schema_locked
-
 subtest test_old_bucket_count_syntax
 
 statement ok
@@ -432,7 +398,6 @@ CREATE INDEX idx_t_hash_a ON t_hash (a) USING HASH WITH BUCKET_COUNT = 5;
 statement ok
 CREATE UNIQUE INDEX idx_t_hash_b ON t_hash (b) USING HASH WITH BUCKET_COUNT = 5;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
 ----
@@ -446,35 +411,19 @@ CREATE TABLE public.t_hash (
   INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
   FAMILY fam_0_pk_a_b (pk, a, b)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t_hash]
-----
-CREATE TABLE public.t_hash (
-  pk INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  crdb_internal_a_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 5:::INT8)) VIRTUAL,
-  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
-  CONSTRAINT t_hash_pkey PRIMARY KEY (pk ASC),
-  INDEX idx_t_hash_a (a ASC) USING HASH WITH (bucket_count=5),
-  UNIQUE INDEX idx_t_hash_b (b ASC) USING HASH WITH (bucket_count=5),
-  FAMILY fam_0_pk_a_b (pk, a, b)
-) WITH (schema_locked = true);
+)
 
 statement ok
 CREATE TABLE opclasses (a INT PRIMARY KEY, b TEXT, c JSON)
 
 # Make sure that we don't permit creating indexes with opclasses that aren't
 # inverted.
-statement error pgcode 42804 operator classes are only allowed for the last column of an inverted or vector index
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
 CREATE INDEX ON opclasses(b blah_ops)
 
 # Make sure that we don't permit creating indexes with opclasses that aren't
 # inverted, even if the type is invertible.
-statement error pgcode 42804 operator classes are only allowed for the last column of an inverted or vector index
+statement error pgcode 42804 operator classes are only allowed for the last column of an inverted index
 CREATE INDEX ON opclasses(c blah_ops)
 
 # Make sure that we don't permit creating indexes with opclasses that don't exist
@@ -613,95 +562,5 @@ SET CLUSTER SETTING sql.defaults.disallow_full_table_scans.enabled = $disallow_f
 
 statement ok
 DROP TABLE t_disable_full_ts
-
-subtest end
-
-subtest create_index_duplicate_storage_params
-
-statement ok
-CREATE TABLE create_index_duplicate_storage_params_a (
-  a INT PRIMARY KEY,
-  b INT
-);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE INDEX idx_a ON create_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE INDEX IF NOT EXISTS idx_b ON create_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
-
-statement error pgcode 22023 pq: parameter "bucket_count" specified more than once
-CREATE INDEX ON create_index_duplicate_storage_params_a (b) USING HASH WITH (bucket_count=10, bucket_count=12);
-
-subtest end
-
-subtest create_inverted_index_duplicate_storage_params
-
-statement ok
-CREATE TABLE create_inverted_index_duplicate_storage_params_a (
-  a INT PRIMARY KEY,
-  b JSONB
-);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE INVERTED INDEX idx_a ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
-
-statement error pgcode 22023 pq: parameter "fillfactor" specified more than once
-CREATE INVERTED INDEX IF NOT EXISTS idx_b ON create_inverted_index_duplicate_storage_params_a (b) WITH (fillfactor=10, fillfactor=20);
-
-subtest end
-
-
-subtest create_index_expression_with_default_collation
-
-statement disable-cf-mutator ok
-CREATE TABLE tbl_with_collate (c1 int);
-
-statement ok
-CREATE UNIQUE INDEX tbl_with_collate_expr ON tbl_with_collate ((c1::text COLLATE "C"));
-
-statement ok
-CREATE UNIQUE INDEX tbl_with_collate_expr2 ON tbl_with_collate ((c1::text COLLATE "POSIX"));
-
-statement ok
-CREATE UNIQUE INDEX tbl_with_collate_expr3 ON tbl_with_collate ((c1::text COLLATE "en-us"));
-
-
-onlyif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE tbl_with_collate
-----
-tbl_with_collate  CREATE TABLE public.tbl_with_collate (
-                    c1 INT8 NULL,
-                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                    CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
-                    UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
-                    UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
-                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
-                  );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE tbl_with_collate
-----
-tbl_with_collate  CREATE TABLE public.tbl_with_collate (
-                    c1 INT8 NULL,
-                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                    CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
-                    UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
-                    UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
-                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
-                  ) WITH (schema_locked = true);
-
-subtest end
-
-
-subtest index_name_conflicts_with_primary_key
-
-statement ok
-CREATE TABLE t_index_name_conflicts_with_primary_key (a INT PRIMARY KEY, b INT);
-
-statement error pgcode 42P07 index with name \"t_index_name_conflicts_with_primary_key_pkey\" already exists
-CREATE INDEX t_index_name_conflicts_with_primary_key_pkey ON t_index_name_conflicts_with_primary_key (a);
 
 subtest end

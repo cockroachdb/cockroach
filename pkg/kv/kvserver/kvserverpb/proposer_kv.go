@@ -70,44 +70,5 @@ func (r *ReplicatedEvalResult) IsTrivial() bool {
 	allowlist.PrevLeaseProposal = nil
 	allowlist.IsProbe = false // probes are trivial, they always get refused in CheckForcedErr
 	allowlist.State = nil
-	// DoTimelyApplicationToAllReplicas is trivial since it can be combined in
-	// an apply.Batch -- this is done by using the Command index in
-	// apply.Batch.Stage to set the ForceFlushIndex. Different replicas can
-	// combine different sets of Commands in an apply.Batch, but since the
-	// Command index that specified DoTimelyApplicationToAllReplicas is the
-	// same, the state machine will have the same state.
-	allowlist.DoTimelyApplicationToAllReplicas = false
 	return allowlist.IsZero()
-}
-
-// SetRaftTruncatedState puts the given RaftTruncatedState into this evaluation
-// result.
-func (r *ReplicatedEvalResult) SetRaftTruncatedState(ts *RaftTruncatedState) {
-	r.RaftTruncatedState = ts
-}
-
-// GetRaftTruncatedState returns the RaftTruncatedState present in this
-// evaluation result. Since v25.1, it can be present in one of the two places.
-//
-// TODO(#97613): use r.RaftTruncatedState unconditionally when the truncated
-// state field in ReplicaState is removed and can't be set. Currently,
-// historical proposals can still have it.
-func (r *ReplicatedEvalResult) GetRaftTruncatedState() *RaftTruncatedState {
-	if ts := r.RaftTruncatedState; ts != nil {
-		return ts
-	} else if r.State == nil {
-		return nil
-	}
-	return r.State.TruncatedState
-}
-
-// DiscardRaftTruncation discards the RaftTruncatedState and the associated
-// metadata from this ReplicatedEvalResult.
-func (r *ReplicatedEvalResult) DiscardRaftTruncation() {
-	if r.State != nil {
-		r.State.TruncatedState = nil
-	}
-	r.RaftTruncatedState = nil
-	r.RaftLogDelta = 0
-	r.RaftExpectedFirstIndex = 0
 }

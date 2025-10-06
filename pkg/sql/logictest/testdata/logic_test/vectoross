@@ -1,0 +1,4 @@
+# LogicTest: !local-mixed-24.1 !enterprise-configs
+
+statement error OSS binaries do not include enterprise features
+CREATE TABLE v (v vector)

@@ -9,7 +9,6 @@ go_library(
         "//pkg/cmd/cmp-protocol/pgconnect",
         "//pkg/sql/oidext",
         "//pkg/sql/pgwire/pgwirebase",
-        "@com_github_lib_pq//oid",
     ],
 )
 

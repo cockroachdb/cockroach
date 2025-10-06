@@ -23,9 +23,7 @@ sql/colexec/colexecspan
 sql/colexec/colexecwindow
 sql/colfetcher
 sql/execinfrapb
-sql/lexbase
 sql/opt
-sql/plpgsql/parser/lexbase
 sql/row
 sql/sem/tree
 storage
@@ -35,7 +33,4 @@ util
 util/admission
 util/hlc
 util/intsets
-util/jsonpath/parser/lexbase
 util/mon
-util/num32
-util/vector

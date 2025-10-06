@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement error pq: invalid locale bad_locale: language: subtag "locale" is well-formed but unknown
 SELECT 'a' COLLATE bad_locale
 
@@ -194,16 +193,6 @@ SELECT 'ü' COLLATE de < 'x' COLLATE de
 ----
 true
 
-query B
-SELECT e'\u00E9' COLLATE "en_US" = e'\u0065\u0301' COLLATE "en_US";
-----
-true
-
-query B
-SELECT e'\u00E9' COLLATE "en_US" LIKE e'\u0065\u0301' COLLATE "en_US";
-----
-true
-
 
 statement error syntax error: invalid locale e: language: tag is not well-formed
 CREATE TABLE e1 (
@@ -220,12 +209,11 @@ CREATE TABLE e3 (
   a INT COLLATE en
 )
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t (
   a STRING COLLATE en
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t
 ----
@@ -233,17 +221,7 @@ t  CREATE TABLE public.t (
      a STRING COLLATE en NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t
-----
-t  CREATE TABLE public.t (
-     a STRING COLLATE en NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+   )
 
 statement ok
 INSERT INTO t VALUES
@@ -381,7 +359,6 @@ CREATE TABLE quoted_coll (
   FAMILY "primary" (a, b, c, d, e, rowid)
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE quoted_coll
 ----
@@ -393,21 +370,7 @@ quoted_coll  CREATE TABLE public.quoted_coll (
                e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
-             );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE quoted_coll
-----
-quoted_coll  CREATE TABLE public.quoted_coll (
-               a STRING COLLATE en NULL,
-               b STRING COLLATE en_US NULL,
-               c STRING COLLATE en_US NULL DEFAULT ('c':::STRING COLLATE en_US),
-               d STRING COLLATE en_u_ks_level1 NULL DEFAULT ('d':::STRING COLLATE en_u_ks_level1),
-               e STRING COLLATE en_US NULL AS (a COLLATE en_US) STORED,
-               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT quoted_coll_pkey PRIMARY KEY (rowid ASC)
-             ) WITH (schema_locked = true);
+             )
 
 # Regression for #46570.
 statement ok
@@ -523,10 +486,9 @@ SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
 ----
 Bbb
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE collation_name_case (s STRING COLLATE en_us_u_ks_level2);
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE collation_name_case
 ----
@@ -534,17 +496,7 @@ collation_name_case  CREATE TABLE public.collation_name_case (
                        s STRING COLLATE en_US_u_ks_level2 NULL,
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                        CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
-                     );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE collation_name_case
-----
-collation_name_case  CREATE TABLE public.collation_name_case (
-                       s STRING COLLATE en_US_u_ks_level2 NULL,
-                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
-                     ) WITH (schema_locked = true);
+                     )
 
 statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed
 CREATE TABLE nocase_strings (s STRING COLLATE "en-US-u-ks-le""vel2");
@@ -658,138 +610,3 @@ SELECT string_field FROM test_collate WHERE string_field >= 'baz' ORDER BY id
 Str_Collate_1
 Foo
 Baz
-
-subtest collate_array
-
-# Test collation of string arrays.
-
-query T
-SELECT NULL COLLATE "en_US_u_ks_level2"
-----
-NULL
-
-query T
-SELECT NULL::STRING[] COLLATE "en_US_u_ks_level2"
-----
-NULL
-
-query T
-SELECT ARRAY['a'] COLLATE "en_US_u_ks_level2"
-----
-{a}
-
-query T
-SELECT ARRAY[]::STRING[] COLLATE "en_US_u_ks_level2"
-----
-{}
-
-query T
-SELECT ARRAY[NULL] COLLATE "en_US_u_ks_level2"
-----
-{NULL}
-
-query T
-SELECT ARRAY[NULL]::STRING[] COLLATE "en_US_u_ks_level2"
-----
-{NULL}
-
-query T
-SELECT ARRAY['a', NULL] COLLATE "en_US_u_ks_level2"
-----
-{a,NULL}
-
-query T
-SELECT ARRAY['a' COLLATE "en_US_u_ks_level2"] COLLATE "en_US_u_ks_level2"
-----
-{a}
-
-query T
-SELECT '{}'::STRING[] COLLATE "en_US_u_ks_level2"
-----
-{}
-
-query T
-SELECT '{a}'::STRING[] COLLATE "en_US_u_ks_level2"
-----
-{a}
-
-query T
-SELECT '{a,b,c}'::STRING[] COLLATE "en_US_u_ks_level2"
-----
-{a,b,c}
-
-query T
-SELECT ARRAY['a' COLLATE "en_US_u_ks_level2", 'b' COLLATE "en_US_u_ks_level2", NULL] COLLATE "en_US_u_ks_level2"
-----
-{a,b,NULL}
-
-# TODO(32552): We don't fully support nested arrays, but we can do a hacky check
-# here by turning off DistSQL and only using the ARRAY scalar constructor. These
-# results don't match PostgreSQL, but we're mostly just checking that we don't
-# error or panic when using this syntax.
-
-statement ok
-SET distsql = off
-
-query T
-SELECT ARRAY[ARRAY['a' COLLATE "en_US_u_ks_level2"]]
-----
-{"{a}"}
-
-query T
-SELECT ARRAY[ARRAY['a'] COLLATE "en_US_u_ks_level2"]
-----
-{"{a}"}
-
-query T
-SELECT ARRAY[ARRAY['a']] COLLATE "en_US_u_ks_level2"
-----
-{"{a}"}
-
-statement ok
-RESET distsql
-
-query T
-SELECT string_to_array('a/b/c', '/') COLLATE "en_US_u_ks_level2"
-----
-{a,b,c}
-
-statement ok
-CREATE TABLE str_arr (a STRING[], b STRING COLLATE "en_US_u_ks_level2")
-
-statement ok
-INSERT INTO str_arr VALUES ('{d,e,f}', 'd'), ('{h,i,j}', 'h'), (NULL, NULL)
-
-query T rowsort
-SELECT a COLLATE "en_US_u_ks_level2" FROM str_arr
-----
-{d,e,f}
-{h,i,j}
-NULL
-
-query T
-SELECT b COLLATE "en_US_u_ks_level2" FROM str_arr ORDER BY 1
-----
-NULL
-d
-h
-
-query error unsupported comparison operator: <collatedstring{en_US}> LIKE <collatedstring{de_DE}>
-SELECT 'TEST' COLLATE "en_US" LIKE 'TEST' COLLATE "de_DE"
-
-query error nondeterministic collations are not supported for LIKE
-SELECT 'TEST' COLLATE "en_US-u-ks-level1" LIKE 'TEST' COLLATE "en_US-u-ks-level1"
-
-# Regression test for attempting to use optimized vectorized operator which
-# doesn't handle collated strings (#147559).
-statement ok
-CREATE TABLE t147559 (
-    a INT,
-    b TEXT COLLATE en_u_ks_level1
-);
-
-statement ok
-INSERT INTO t147559 VALUES (1, 'abc');
-
-query error nondeterministic collations are not supported for LIKE
-SELECT * FROM t147559 WHERE b LIKE 'abc%';

@@ -12,17 +12,11 @@ type targetSpec struct {
 	transitionSpecs []transitionSpec
 }
 
-type RevertibleFn func(scpb.Element, *opGenContext) bool
-
 type transitionSpec struct {
 	from       scpb.Status
 	to         scpb.Status
-	revertible RevertibleFn
+	revertible bool
 	emitFns    []interface{}
-}
-
-func notRevertible(_ scpb.Element, _ *opGenContext) bool {
-	return false
 }
 
 type transitionProperty interface {
@@ -32,16 +26,12 @@ type transitionProperty interface {
 func to(to scpb.Status, properties ...transitionProperty) transitionSpec {
 	ts := transitionSpec{
 		to:         to,
-		revertible: nil, /* revertible */
+		revertible: true,
 	}
 	for _, p := range properties {
 		p.apply(&ts)
 	}
 	return ts
-}
-
-func revertibleFunc(fn RevertibleFn) transitionProperty {
-	return fn
 }
 
 func revertible(b bool) transitionProperty {
@@ -55,14 +45,7 @@ func emit(fn interface{}) transitionProperty {
 type revertibleProperty bool
 
 func (r revertibleProperty) apply(spec *transitionSpec) {
-	spec.revertible = nil /* revertible */
-	if !r {
-		spec.revertible = notRevertible
-	}
-}
-
-func (r RevertibleFn) apply(spec *transitionSpec) {
-	spec.revertible = r
+	spec.revertible = bool(r)
 }
 
 var _ transitionProperty = revertibleProperty(true)

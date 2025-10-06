@@ -21,7 +21,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -58,9 +58,7 @@ upsert descriptor #104
      nextFamilyId: 1
      nextIndexId: 2
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -83,7 +81,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 7 MutationType ops
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -154,9 +152,7 @@ upsert descriptor #104
      nextFamilyId: 1
      nextIndexId: 2
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -192,11 +188,11 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitPhase stage 1 of 3 with 1 ValidationType op
+## PostCommitPhase stage 1 of 2 with 1 ValidationType op
 validate CHECK constraint check_b in table #104
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 2 of 3 with 4 MutationType ops
+## PostCommitPhase stage 2 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
        expr: '[FUNCTION 100105](b) > 1:::INT8'
@@ -204,44 +200,6 @@ upsert descriptor #104
   -    validity: Validating
      columns:
      - id: 1
-  ...
-     id: 104
-     modificationTime: {}
-  -  mutations:
-  -  - constraint:
-  -      check:
-  -        columnIds:
-  -        - 2
-  -        constraintId: 2
-  -        expr: '[FUNCTION 100105](b) > 1:::INT8'
-  -        name: crdb_internal_constraint_2_name_placeholder
-  -        validity: Validating
-  -      foreignKey: {}
-  -      name: crdb_internal_constraint_2_name_placeholder
-  -      uniqueWithoutIndexConstraint: {}
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
-upsert descriptor #105
-  ...
-         oid: 20
-         width: 64
-  -  version: "2"
-  +  version: "3"
-     volatility: VOLATILE
-persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 3 of 3)."
-commit transaction #4
-begin transaction #5
-## PostCommitPhase stage 3 of 3 with 4 MutationType ops
-upsert descriptor #104
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -277,12 +235,30 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     replacementOf:
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        constraintId: 2
+  -        expr: '[FUNCTION 100105](b) > 1:::INT8'
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
        time: {}
-  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "3"
-  +  version: "4"
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #105
    function:
   -  declarativeSchemaChangerState:
@@ -298,8 +274,8 @@ upsert descriptor #105
   ...
          oid: 20
          width: 64
-  -  version: "3"
-  +  version: "4"
+  -  version: "2"
+  +  version: "3"
      volatility: VOLATILE
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
@@ -308,5 +284,5 @@ updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #5
+commit transaction #4
 # end PostCommitPhase

@@ -146,8 +146,14 @@ message IgnoredSeqNumRange {
 // NB: a shallow copy of this value has to equal a deep copy, i.e. there
 // must be (recursively) no pointers in this type. Should this need to
 // change, need to update mvccGet.
+//
+// NB: ensure that this struct stays in sync with MVCCValueHeader{Pure,CrdbTest}.
+// See kvpb.RequestHeader for details on how they help us keep the KVNemesisSeq
+// field out of production code.
 message MVCCValueHeader {
   option (gogoproto.equal) = true;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
 
   message Empty{};
   // Empty is zero-size in production. It's an int64 under the crdb_test build tag.
@@ -160,7 +166,6 @@ message MVCCValueHeader {
   Empty kvnemesis_seq = 2 [
     (gogoproto.customname) = "KVNemesisSeq",
     (gogoproto.nullable) = false,
-    (gogoproto.omitempty) = true,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
 
   // The local clock timestamp records the value of the local HLC clock on the
@@ -186,11 +191,7 @@ message MVCCValueHeader {
   // this will simply lead to additional uncertainty restarts. However, it is
   // not safe for the local clock timestamp to be rounded up, as this could lead
   // to stale reads.
-  //
-  // TODO(radu): use gogoproto.omitempty (after investigating if changing the
-  // encoding is a problem).
-  util.hlc.Timestamp local_timestamp = 1 [
-    (gogoproto.nullable) = false,
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
 
   // When set to true, this value will be filtered out by rangefeeds and will
@@ -206,18 +207,46 @@ message MVCCValueHeader {
   // Data Replication (LDR). 0 identifies a local write and the default value
   // when LDR is not being run, 1 identifies a remote write, and 2+ are reserved
   // to identify remote clusters.
-  uint32 origin_id = 5 [(gogoproto.customname) = "OriginID"];
+  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
   
   // OriginTimestamp identifies the timestamp this kv was written on the
   // original source cluster during Logical Data Replication. A default empty
   // timestamp implies that this kv did not originate from a Logical Data
   // Replication stream. 
-  util.hlc.Timestamp origin_timestamp = 6 [
-    (gogoproto.nullable) = false,
-    (gogoproto.omitempty) = true,
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
+  util.hlc.Timestamp origin_timestamp = 6  [(gogoproto.nullable) = false,(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
 
    // NextID = 7.
+}
+
+// MVCCValueHeaderPure is not to be used directly. It's generated only for use of
+// its marshaling methods by MVCCValueHeader. See the comment there.
+message MVCCValueHeaderPure {
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  bool omit_in_rangefeeds = 3;
+  uint32 import_epoch = 4;
+  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+
+  // OriginTimestamp is not-nullable in MVCCValueHeader but here it is nullable.
+  // This is because it leads to more efficient marshaling when the timestamp is
+  // not set. See the pure() conversion method.
+  util.hlc.Timestamp origin_timestamp = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
+}
+// MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
+// its marshaling methods by MVCCValueHeader. See the comment there.
+message MVCCValueHeaderCrdbTest {
+  message Empty{};
+  Empty kvnemesis_seq = 2 [
+    (gogoproto.customname) = "KVNemesisSeq",
+    (gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
+  util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  bool omit_in_rangefeeds = 3;
+  uint32 import_epoch = 4;
+  uint32 origin_id = 5  [(gogoproto.customname) = "OriginID"];
+  util.hlc.Timestamp origin_timestamp = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.Timestamp"];
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width

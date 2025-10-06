@@ -139,16 +139,9 @@ func TestAllRegisteredSetup(t *testing.T) {
 				t.Fatal(err)
 			}
 		case `interleavedpartitioned`:
-			// This require a specific node locality setup.
+			// This require a specific node locality setup
 			continue
 		case `ttlbench`:
-			continue
-		case `vecann`:
-			// This requires downloading from a GCP bucket and storing in the
-			// machine's ~/.cache directory.
-			continue
-		case `workload_generator`:
-			// This will take its schema generation data from flags at run time, so static checks are not valid.
 			continue
 		}
 
@@ -247,18 +240,6 @@ func hashTableInitialData(
 				for i := 0; i < b.Length(); i++ {
 					_, _ = h.Write(colBytes.Get(i))
 				}
-			case types.TimestampFamily, types.TimestampTZFamily:
-				colTime := col.Timestamp()
-
-				for i := 0; i < b.Length(); i++ {
-					binary.LittleEndian.PutUint64(scratch[:8], uint64(colTime[i].UnixNano()))
-					_, _ = h.Write(scratch[:8])
-				}
-			case types.DecimalFamily:
-				colDecimal := col.Decimal()
-				for i := 0; i < b.Length(); i++ {
-					_, _ = h.Write([]byte(colDecimal[i].String()))
-				}
 			default:
 				return errors.Errorf(`unhandled type %s`, col.Type())
 			}
@@ -282,21 +263,21 @@ func TestDeterministicInitialData(t *testing.T) {
 	// TODO(dan): We're starting to accumulate these various lists, bigInitialData
 	// is another. Consider moving them to be properties on the workload.Meta.
 	fingerprintGoldens := map[string]uint64{
-		`bank`:       0xb443139c2fc1a1a3,
+		`bank`:       0xb9065bb21c3594a2,
 		`bulkingest`: 0xcf3e4028ac084aea,
 		`indexes`:    0xcbf29ce484222325,
 		`intro`:      0x81c6a8cfd9c3452a,
 		`json`:       0xcbf29ce484222325,
 		`ledger`:     0xebe27d872d980271,
-		`movr`:       0x05e20fbb5586c9b0,
+		`movr`:       0x79940f4ba5d5e6a3,
 		`queue`:      0xcbf29ce484222325,
 		`rand`:       0xcbf29ce484222325,
 		`roachmart`:  0xda5e73423dbdb2d9,
 		`sqlsmith`:   0xcbf29ce484222325,
 		`startrek`:   0xa0249fbdf612734c,
-		`tpcc`:       0xccfecd06eed59975,
-		`tpch`:       0xcd2abbd021ed895d,
-		`ycsb`:       0xa00a7efc9d3b8532,
+		`tpcc`:       0xab32e4f5e899eb2f,
+		`tpch`:       0xe4fd28db230b9149,
+		`ycsb`:       0xcfd3f148a01a2c47,
 	}
 
 	var a bufalloc.ByteAllocator

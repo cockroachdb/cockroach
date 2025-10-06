@@ -35,10 +35,6 @@ const DefaultFluentFormat = `json-fluent-compact`
 // when not specified in a configuration.
 const DefaultHTTPFormat = `json-compact`
 
-// DefaultOTLPFormat is the entry format for OpenTelemetry sinks
-// when not specified in a configuration.
-const DefaultOTLPFormat = `json`
-
 // DefaultFilePerms is the default permissions used in file-defaults. It
 // is applied literally via os.Chmod, without considering the umask.
 const DefaultFilePerms = FilePermissions(0o640)
@@ -73,16 +69,7 @@ http-defaults:
     exit-on-error: false
     timeout: 2s
     buffering:
-      max-staleness: 5s
-      flush-trigger-size: 1mib
-      max-buffer-size: 50mib
-otlp-defaults:
-    filter: INFO
-    format: ` + DefaultOTLPFormat + `
-    redactable: true
-    exit-on-error: false
-    buffering:
-      max-staleness: 5s
+      max-staleness: 5s	
       flush-trigger-size: 1mib
       max-buffer-size: 50mib
 sinks:
@@ -137,11 +124,6 @@ type Config struct {
 	// inherited when a specific HTTP sink config does not provide a
 	// configuration value.
 	HTTPDefaults HTTPDefaults `yaml:"http-defaults,omitempty"`
-
-	// OTLPDefaults represents the default configuration for OpenTelemetry sinks,
-	// inherited when a specific OpenTelemetry sink config does not provide a
-	// configuration value.
-	OTLPDefaults OTLPDefaults `yaml:"otlp-defaults,omitempty"`
 
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
@@ -267,8 +249,6 @@ type SinkConfig struct {
 	FluentServers map[string]*FluentSinkConfig `yaml:"fluent-servers,omitempty"`
 	// HTTPServers represents the list of configured http sinks.
 	HTTPServers map[string]*HTTPSinkConfig `yaml:"http-servers,omitempty"`
-	// OTLPServers represents the list of configured opentelemetry sinks.
-	OTLPServers map[string]*OTLPSinkConfig `yaml:"otlp-servers,omitempty"`
 	// Stderr represents the configuration for the stderr sink.
 	Stderr StderrSinkConfig `yaml:",omitempty"`
 }
@@ -587,78 +567,6 @@ type HTTPSinkConfig struct {
 
 	// sinkName is populated during validation.
 	sinkName string
-}
-
-var OTLPModeGRPC = "grpc"
-var OTLPModeHTTP = "http"
-
-type OTLPDefaults struct {
-	// Mode decides which protocol to use for exporting logs, can be "grpc" or "http".
-	// Set to "grpc" by default.
-	Mode *string `yaml:",omitempty"`
-
-	// Headers is a list of headers to attach to each gRPC or HTTP request depending
-	// on the mode selected, the sink adds the standard headers so this option should
-	// only be used for specific headers like api keys which the downstream app expects.
-	Headers map[string]string `yaml:",omitempty,flow"`
-
-	// Compression can be "none" or "gzip" to enable gzip compression.
-	// Set to "gzip" by default.
-	Compression *string `yaml:",omitempty"`
-
-	CommonSinkConfig `yaml:",inline"`
-}
-
-// OTLPSinkConfig represents the configuration for one OpenTelemetry sink.
-//
-// User-facing documentation follows.
-// TITLE: Output to OpenTelemetry compatible collectors.
-//
-// This sink type causes logging data to be sent over the network through gRPC to
-// a collector that can ingest log data in an [OTLP](https://opentelemetry.io) format.
-//
-// The configuration key under the `sinks` key in the YAML
-// configuration is `otlp-servers`. Example configuration:
-//
-//	sinks:
-//	   otlp-servers:
-//	      health:
-//	         channels: HEALTH
-//	         address: 127.0.0.1:4317
-//
-// Every new server sink configured automatically inherits the configuration set in the `otlp-defaults` section.
-//
-// For example:
-//
-//	otlp-defaults:
-//	    redactable: false # default: disable redaction markers
-//	sinks:
-//	  otlp-servers:
-//	    health:
-//	       channels: HEALTH
-//	       # This sink has redactable set to false,
-//	       # as the setting is inherited from fluent-defaults
-//	       # unless overridden here.
-//
-// The default output format for OTLP sinks is
-// `json`. [Other supported formats.](log-formats.html)
-//
-// {{site.data.alerts.callout_info}}
-// Run `cockroach debug check-log-config` to verify the effect of defaults inheritance.
-// {{site.data.alerts.end}}
-type OTLPSinkConfig struct {
-	// Channels is the list of logging channels that use this sink.
-	Channels ChannelFilters `yaml:",omitempty,flow"`
-
-	// Address is the network address of the gRPC endpoint for
-	// ingestion of logs on your OpenTelemetry Collector/Platform.
-	// The host/address and port parts are separated with a colon.
-	Address string `yaml:""`
-
-	OTLPDefaults `yaml:",inline"`
-
-	// SinkName is populated during validation.
-	SinkName string
 }
 
 // IterateDirectories calls the provided fn on every directory linked to

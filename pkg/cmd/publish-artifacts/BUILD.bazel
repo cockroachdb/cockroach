@@ -8,7 +8,6 @@ go_library(
     deps = [
         "//pkg/release",
         "@com_github_kr_pretty//:pretty",
-        "@com_github_spf13_cobra//:cobra",
     ],
 )
 

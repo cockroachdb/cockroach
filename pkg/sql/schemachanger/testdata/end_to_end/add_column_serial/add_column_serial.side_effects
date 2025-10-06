@@ -1,0 +1,638 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++object {104 105 tbl} -> 106
+
+/* test */
+ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.qualifcation.default_expr
+increment telemetry for sql.schema.new_column_type.int8
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 106
+    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹serial_id› INT8
+    tag: ALTER TABLE
+    user: root
+  tableName: db.public.tbl
+## StatementPhase stage 1 of 1 with 10 MutationType ops
+upsert descriptor #106
+  ...
+     - columnIds:
+       - 1
+  +    - 2
+       columnNames:
+       - i
+  +    - serial_id
+  +    defaultColumnId: 2
+       name: primary
+     formatVersion: 3
+     id: 106
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      defaultExpr: unique_rowid()
+  +      id: 2
+  +      name: serial_id
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - serial_id
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - serial_id
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+  -  nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextColumnId: 3
+  +  nextConstraintId: 4
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 14 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": serial_id
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 106
+  +      indexes:
+  +        "2": tbl_pkey
+  +      name: tbl
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹serial_id› INT8
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL8
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+       - 1
+  +    - 2
+       columnNames:
+       - i
+  +    - serial_id
+  +    defaultColumnId: 2
+       name: primary
+     formatVersion: 3
+     id: 106
+     modificationTime: {}
+  +  mutations:
+  +  - column:
+  +      defaultExpr: unique_rowid()
+  +      id: 2
+  +      name: serial_id
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 2
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - serial_id
+  +      unique: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      storeColumnNames:
+  +      - serial_id
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: tbl
+  -  nextColumnId: 2
+  -  nextConstraintId: 2
+  +  nextColumnId: 3
+  +  nextConstraintId: 4
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 104
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE db.public.tbl ADD COLUMN serial_id INT8"
+  descriptor IDs: [106]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 7 with 5 MutationType ops
+upsert descriptor #106
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 2
+  +    expr: serial_id IS NOT NULL
+  +    isNonNullConstraint: true
+  +    name: serial_id_auto_not_null
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+       direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 2
+  +        expr: serial_id IS NOT NULL
+  +        isNonNullConstraint: true
+  +        name: serial_id_auto_not_null
+  +        validity: Validating
+  +      constraintType: NOT_NULL
+  +      foreignKey: {}
+  +      name: serial_id_auto_not_null
+  +      notNullColumn: 2
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 2 of 7 with 1 BackfillType op pending"
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+backfill indexes [2] from index #1 in table #106
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+upsert descriptor #106
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 4 of 7 with 1 MutationType op pending"
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+upsert descriptor #106
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 5 of 7 with 1 BackfillType op pending"
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+merge temporary indexes [3] into backfilled indexes [2] in table #106
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
+upsert descriptor #106
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 3
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     - constraint:
+         check:
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitPhase stage 7 of 7 with 2 ValidationType ops pending"
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 7 with 2 ValidationType ops
+validate forward indexes [2] in table #106
+validate CHECK constraint serial_id_auto_not_null in table #106
+commit transaction #9
+begin transaction #10
+## PostCommitNonRevertiblePhase stage 1 of 3 with 12 MutationType ops
+upsert descriptor #106
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 2
+  -    expr: serial_id IS NOT NULL
+  -    isNonNullConstraint: true
+  -    name: serial_id_auto_not_null
+  -    validity: Validating
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  +  - defaultExpr: unique_rowid()
+  +    id: 2
+  +    name: serial_id
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+           statement: ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL8
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+     modificationTime: {}
+     mutations:
+  -  - column:
+  -      defaultExpr: unique_rowid()
+  -      id: 2
+  -      name: serial_id
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 2
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - serial_id
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     - direction: DROP
+       index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning: {}
+         sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      storeColumnNames:
+  -      - serial_id
+         unique: true
+  -      useDeletePreservingEncoding: true
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 2
+  -        expr: serial_id IS NOT NULL
+  -        isNonNullConstraint: true
+  -        name: serial_id_auto_not_null
+  -        validity: Validating
+  -      constraintType: NOT_NULL
+  -      foreignKey: {}
+  -      name: serial_id_auto_not_null
+  -      notNullColumn: 2
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+       state: WRITE_ONLY
+     name: tbl
+  ...
+     parentId: 104
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 2
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 2
+       interleave: {}
+       keyColumnDirections:
+  ...
+       partitioning: {}
+       sharded: {}
+  +    storeColumnIds:
+  +    - 2
+  +    storeColumnNames:
+  +    - serial_id
+       unique: true
+       version: 4
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+adding table for stats refresh: 106
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
+set schema change job #1 to non-cancellable
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
+upsert descriptor #106
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops pending"
+commit transaction #11
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 3 with 5 MutationType ops
+upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": serial_id
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 106
+  -      indexes:
+  -        "2": tbl_pkey
+  -      name: tbl
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹serial_id› INT8
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL8
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     id: 106
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: tbl
+     nextColumnId: 3
+  ...
+       time: {}
+     unexposedParentSchemaId: 105
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for ALTER TABLE db.public.tbl ADD COLUMN serial_id INT8"
+  descriptor IDs: [106]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
+commit transaction #12
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

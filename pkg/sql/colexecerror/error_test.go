@@ -184,32 +184,22 @@ func BenchmarkSQLCatchVectorizedRuntimeError(b *testing.B) {
 	// crdb_test-build behavior.
 	defer colexecerror.ProductionBehaviorForTests()()
 
-	const maxParallelism = 32
-	maxNumConns := runtime.GOMAXPROCS(0) * maxParallelism
-	// Create as many warm connections as we will need for the benchmark. These
-	// will be reused across all test cases to avoid the connection churn.
-	connsPool := make([]*gosql.DB, maxNumConns)
-	for i := range connsPool {
-		conn := s.ApplicationLayer().SQLConn(b, serverutils.DBName(""))
-		// Make sure we're using local, vectorized execution.
-		sqlDB := sqlutils.MakeSQLRunner(conn)
-		sqlDB.Exec(b, "SET distsql = off")
-		sqlDB.Exec(b, "SET vectorize = on")
-		connsPool[i] = conn
-	}
-
-	for _, parallelism := range []int{1, 8, maxParallelism} {
+	for _, parallelism := range []int{1, 20, 50} {
 		numConns := runtime.GOMAXPROCS(0) * parallelism
 		b.Run(fmt.Sprintf("conns=%d", numConns), func(b *testing.B) {
 			for _, tc := range cases {
 				stmt := fmt.Sprintf(sqlFmt, tc.builtin)
 				b.Run(tc.name, func(b *testing.B) {
+					// Create as many warm connections as we will need for the benchmark.
 					conns := make(chan *gosql.DB, numConns)
 					for i := 0; i < numConns; i++ {
-						conn := connsPool[i]
-						// Warm up the connection by executing the statement
-						// once. We should always go through the query plan
-						// cache after this.
+						conn := s.ApplicationLayer().SQLConn(b, serverutils.DBName(""))
+						// Make sure we're using local, vectorized execution.
+						sqlDB := sqlutils.MakeSQLRunner(conn)
+						sqlDB.Exec(b, "SET distsql = off")
+						sqlDB.Exec(b, "SET vectorize = on")
+						// Warm up the connection by executing the statement once. We should
+						// always go through the query plan cache after this.
 						_, _ = conn.Exec(stmt)
 						conns <- conn
 					}

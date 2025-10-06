@@ -2,15 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "structlogging",
-    srcs = [
-        "hot_ranges_log.go",
-        "hot_ranges_log_job.go",
-    ],
+    srcs = ["hot_ranges_log.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/structlogging",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/jobs",
-        "//pkg/jobs/jobspb",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -21,14 +16,12 @@ go_library(
         "//pkg/util/log/logutil",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
-        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "structlogging_test",
     srcs = [
-        "hot_ranges_log_job_test.go",
         "hot_ranges_log_test.go",
         "main_test.go",
     ],
@@ -39,24 +32,24 @@ go_test(
     deps = [
         ":structlogging",
         "//pkg/base",
-        "//pkg/jobs",
+        "//pkg/keys",
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/plan",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/randutil",
-        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_stretchr_testify//require",
     ],
 )

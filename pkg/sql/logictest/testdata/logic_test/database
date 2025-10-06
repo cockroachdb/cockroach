@@ -262,7 +262,7 @@ subtest missing-db-error-issue-68060
 statement ok
 CREATE DATABASE db1;
 
-statement ok
+statement ok;
 USE db1;
 
 statement ok

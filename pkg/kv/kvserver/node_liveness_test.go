@@ -53,10 +53,9 @@ func verifyLiveness(t *testing.T, tc *testcluster.TestCluster) {
 		return nil
 	})
 }
-
 func verifyLivenessServer(s serverutils.TestServerInterface, numServers int64) error {
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
-	if !nl.GetNodeVitalityFromCache(s.NodeID()).IsLive(livenesspb.TestingIsAliveAndHasHeartbeated) {
+	if !nl.GetNodeVitalityFromCache(s.NodeID()).IsLive(livenesspb.IsAliveNotification) {
 		return errors.Errorf("node %d not live", s.NodeID())
 	}
 	if a, e := nl.Metrics().LiveNodes.Value(), numServers; a != e {
@@ -128,7 +127,7 @@ func TestNodeLiveness(t *testing.T) {
 				break
 			}
 			if errors.Is(err, liveness.ErrEpochIncremented) {
-				log.KvExec.Warningf(context.Background(), "retrying after %s", err)
+				log.Warningf(context.Background(), "retrying after %s", err)
 				continue
 			}
 
@@ -181,7 +180,7 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	nl, ok := tc.Servers[0].NodeLiveness().(*liveness.NodeLiveness).GetLiveness(tc.Servers[0].NodeID())
 	assert.True(t, ok)
 	if nl.Epoch != 1 {
-		t.Fatalf("expected epoch to be set to 1 initially; got %d; liveness %s", nl.Epoch, nl)
+		t.Errorf("expected epoch to be set to 1 initially; got %d", nl.Epoch)
 	}
 
 	// Restart the node and verify the epoch is incremented with initial heartbeat.
@@ -519,7 +518,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	require.NoError(t, tc.RestartServerWithInspect(1, func(s serverutils.TestServerInterface) {
 		livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 		s.GossipI().(*gossip.Gossip).
-			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value, _ int64) {
+			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value) {
 				keysMu.Lock()
 				defer keysMu.Unlock()
 				for _, k := range keysMu.keys {
@@ -579,7 +578,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// the node's own node ID returns the "correct" value.
 	key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 	var count int32
-	g.RegisterCallback(key, func(_ string, val roachpb.Value, _ int64) {
+	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
 		atomic.AddInt32(&count, 1)
 	})
 	testutils.SucceedsSoon(t, func() error {
@@ -1125,17 +1124,13 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 	defer s.Stopper().Stop(ctx)
 	nl := s.NodeLiveness().(*liveness.NodeLiveness)
 
-	testutils.SucceedsSoon(t, func() error {
-		return verifyLivenessServer(s, 1)
-	})
-
 	// We want to control the heartbeats.
 	nl.PauseHeartbeatLoopForTest()
 
 	sem = make(chan struct{})
 
 	l, ok := nl.Self()
-	require.True(t, ok)
+	assert.True(t, ok)
 
 	hbCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -1376,7 +1371,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 			}
 			if l == 0 {
 				// Since did many flushes, compact everything down.
-				require.NoError(b, eng.Compact(ctx))
+				require.NoError(b, eng.Compact())
 			} else {
 				// Flush the next level. This will become a L0 sub-level.
 				require.NoError(b, eng.Flush())
@@ -1435,7 +1430,7 @@ func BenchmarkNodeLivenessScanStorage(b *testing.B) {
 							eng := setupEng(b, numLiveVersions, haveDeadKeys)
 							defer eng.Close()
 							if compacted {
-								require.NoError(b, eng.Compact(ctx))
+								require.NoError(b, eng.Compact())
 							}
 							b.ResetTimer()
 							blockBytes := uint64(0)

@@ -9,4 +9,3 @@ drop_ddl_stmt ::=
 	| drop_func_stmt
 	| drop_proc_stmt
 	| drop_trigger_stmt
-	| drop_policy_stmt

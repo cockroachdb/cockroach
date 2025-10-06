@@ -41,7 +41,6 @@ func EtagHandler(contentHashes map[string]string, next http.Handler) http.Handle
 			//   incorrect If-None-Match header, the content has changed since the
 			//   last value and must be served with its identifying hash.
 			w.Header().Add("ETag", wrappedChecksum)
-			w.Header().Set("Cache-Control", "no-cache")
 		}
 
 		if ifNoneMatch != "" && wrappedChecksum == ifNoneMatch {

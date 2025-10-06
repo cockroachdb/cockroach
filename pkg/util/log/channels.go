@@ -72,7 +72,7 @@ func logfDepthInternal(
 		defer t.Stop()
 
 		if MaybeSendCrashReport != nil {
-			err := errors.NewWithDepthf(depth+1, "log.Dev.Fatal: "+format, args...)
+			err := errors.NewWithDepthf(depth+1, "log.Fatal: "+format, args...)
 			MaybeSendCrashReport(ctx, err)
 		}
 		if ch != channel.OPS {

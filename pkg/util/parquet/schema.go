@@ -367,16 +367,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (d
 		}
 		result.colWriter = scalarWriter(writeCollatedString)
 		return result, nil
-	case types.LTreeFamily:
-		result.node, err = schema.NewPrimitiveNode(colName,
-			repetitions, parquet.Types.ByteArray,
-			defaultTypeLength, defaultSchemaFieldID,
-		)
-		if err != nil {
-			return datumColumn{}, err
-		}
-		result.colWriter = scalarWriter(writeLTree)
-		return result, nil
 	case types.ArrayFamily:
 		// Arrays for type T are represented by the following:
 		// message schema {                 -- toplevel schema
@@ -485,8 +475,6 @@ func makeColumn(colName string, typ *types.T, repetitions parquet.Repetition) (d
 		}
 		return result, nil
 	default:
-		// TODO(cdc): VECTOR, JSONPATH, TSQUERY, TSVECTOR types are missing
-		// here.
 		return result, pgerror.Newf(pgcode.FeatureNotSupported,
 			"parquet writer does not support the type family %v", typ.Family())
 	}

@@ -77,7 +77,7 @@ func TestNotExprProjOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Dev.Infof(ctx, "%s", c.desc)
+		log.Infof(ctx, "%s", c.desc)
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return NewNotExprProjOp(types.BoolFamily, testAllocator, input[0], 0, 1)
 		}
@@ -150,7 +150,7 @@ func TestNotExprSelOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Dev.Infof(ctx, "%s", c.desc)
+		log.Infof(ctx, "%s", c.desc)
 		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			return NewNotExprSelOp(types.BoolFamily, sources[0], 0)
 		}
@@ -181,7 +181,7 @@ func TestNotNullProjOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Dev.Infof(ctx, "%s", c.desc)
+		log.Infof(ctx, "%s", c.desc)
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return newNotNullProjOp(testAllocator, input[0], 0, 1), nil
 		}

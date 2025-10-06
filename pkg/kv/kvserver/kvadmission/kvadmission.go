@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -109,6 +111,7 @@ var FlowTokenDropInterval = settings.RegisterDurationSetting(
 	"the interval at which the raft transport checks for pending flow token dispatches "+
 		"to nodes we're no longer connected to, in order to drop them; set to 0 to disable the mechanism",
 	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // FlowTokenDispatchInterval determines the frequency at which we check for
@@ -140,34 +143,17 @@ var ConnectedStoreExpiration = settings.RegisterDurationSetting(
 	"kvadmission.raft_transport.connected_store_expiration",
 	"the interval at which the raft transport prunes its set of connected stores; set to 0 to disable the mechanism",
 	5*time.Minute,
-)
-
-// useRangeTenantIDForNonAdminEnabled determines whether the range's tenant ID
-// is used by admission control when called by the system tenant. When false,
-// the requester's tenant ID (i.e., the system tenant ID) is used.
-var useRangeTenantIDForNonAdminEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kvadmission.use_range_tenant_id_for_non_admin.enabled",
-	"when true, and the caller is the system tenant, the tenantID used by admission control "+
-		"for non-admin requests is overridden to the range's tenantID",
-	true,
+	settings.NonNegativeDuration,
 )
 
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
 	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
-	// populated for admission to work correctly. The requestTenantID represents
-	// the authenticated caller and must be populated. The rangeTenantID
-	// represents the tenant of the range on which the work is being performed
-	// -- in rare cases it may be unpopulated.
-	//
-	// If err is non-nil, the returned handle can be ignored. If err is nil,
-	// AdmittedKVWorkDone must be called after the KV work is done executing.
-	AdmitKVWork(
-		_ context.Context, requestTenantID roachpb.TenantID, rangeTenantID roachpb.TenantID,
-		_ *kvpb.BatchRequest,
-	) (Handle, error)
+	// populated for admission to work correctly. If err is non-nil, the
+	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
+	// called after the KV work is done executing.
+	AdmitKVWork(context.Context, roachpb.TenantID, *kvpb.BatchRequest) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
@@ -189,6 +175,11 @@ type Controller interface {
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
+	// AdmitRaftEntry informs admission control of a raft log entry being
+	// written to storage.
+	AdmitRaftEntry(
+		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
+		leaderTerm uint64, _ raftpb.Entry)
 	replica_rac2.ACWorkQueue
 	// GetSnapshotQueue returns the SnapshotQueue which is used for ingesting raft
 	// snapshots.
@@ -225,7 +216,8 @@ type controllerImpl struct {
 	kvAdmissionQ               *admission.WorkQueue
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowHandles              kvflowcontrol.ReplicationAdmissionHandles
+	kvflowController           kvflowcontrol.Controller
+	kvflowHandles              kvflowcontrol.Handles
 
 	settings *cluster.Settings
 	every    log.EveryN
@@ -268,7 +260,8 @@ func MakeController(
 	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
-	kvflowHandles kvflowcontrol.ReplicationAdmissionHandles,
+	kvflowController kvflowcontrol.Controller,
+	kvflowHandles kvflowcontrol.Handles,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
@@ -276,6 +269,7 @@ func MakeController(
 		kvAdmissionQ:               kvAdmissionQ,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
+		kvflowController:           kvflowController,
 		kvflowHandles:              kvflowHandles,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
@@ -287,16 +281,50 @@ func MakeController(
 // TODO(irfansharif): There's a fair bit happening here and there's no test
 // coverage. Fix that.
 func (n *controllerImpl) AdmitKVWork(
-	ctx context.Context,
-	requestTenantID roachpb.TenantID,
-	rangeTenantID roachpb.TenantID,
-	ba *kvpb.BatchRequest,
-) (_ Handle, retErr error) {
+	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
+) (handle Handle, retErr error) {
+	ah := Handle{tenantID: tenantID}
 	if n.kvAdmissionQ == nil {
-		return Handle{}, nil
+		return ah, nil
 	}
-	admissionInfo := workInfoForBatch(n.settings, requestTenantID, rangeTenantID, ba)
-	ah := Handle{tenantID: admissionInfo.TenantID}
+
+	bypassAdmission := ba.IsAdmin()
+	source := ba.AdmissionHeader.Source
+	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+		// Request is from a SQL node.
+		bypassAdmission = false
+		source = kvpb.AdmissionHeader_FROM_SQL
+	}
+	if source == kvpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
+	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
+		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
+			bypassAdmission = true
+		}
+	}
+	// LeaseInfo requests are used as makeshift replica health probes by
+	// DistSender circuit breakers, make sure they bypass AC.
+	//
+	// TODO(erikgrinaker): the various bypass conditions here should be moved to
+	// one or more request flags.
+	if ba.IsSingleLeaseInfoRequest() {
+		bypassAdmission = true
+	}
+	createTime := ba.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+	}
+
 	admissionEnabled := true
 	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
 	// it would bypass admission, it would consume a slot. When writes are
@@ -307,14 +335,13 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
-		if attemptFlowControl && !admissionInfo.BypassAdmission {
+		if attemptFlowControl && !bypassAdmission {
 			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
 			var err error
-			admitted, err = kvflowHandle.Admit(
-				ctx, admissionInfo.Priority, timeutil.FromUnixNanos(admissionInfo.CreateTime))
+			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
 			if err != nil {
 				return Handle{}, err
 			} else if admitted {
@@ -435,7 +462,7 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 			// This issue is tracked by
 			// https://github.com/cockroachdb/cockroach/issues/126681.
 			if buildutil.CrdbTestBuild {
-				log.KvDistribution.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
+				log.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
 			}
 			cpuTime = 1
 		}
@@ -450,10 +477,10 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 		if err != nil {
 			// This shouldn't be happening.
 			if buildutil.CrdbTestBuild {
-				log.KvDistribution.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
+				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {
-				log.KvDistribution.Errorf(context.Background(), "%s", err)
+				log.Errorf(context.Background(), "%s", err)
 			}
 		}
 	}
@@ -548,18 +575,100 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
 }
 
+// AdmitRaftEntry implements the Controller interface. It is only used for the
+// RACv1 protocol.
+func (n *controllerImpl) AdmitRaftEntry(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	storeID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	leaderTerm uint64,
+	entry raftpb.Entry,
+) {
+	typ, _, err := raftlog.EncodingOf(entry)
+	if err != nil {
+		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
+		return
+	}
+	if !typ.UsesAdmissionControl() {
+		return // nothing to do
+	}
+	meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
+	if err != nil {
+		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
+		return
+	}
+
+	if log.V(1) {
+		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
+			admissionpb.WorkPriority(meta.AdmissionPriority),
+			meta.AdmissionCreateTime,
+			meta.AdmissionOriginNode,
+			n.nodeID.Get(),
+			storeID,
+			tenantID.ToUint64(),
+			kvflowcontrol.Tokens(len(entry.Data)),
+			typ.IsSideloaded(),
+			entry.Term,
+			entry.Index,
+		)
+	}
+
+	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
+	if storeAdmissionQ == nil {
+		log.Errorf(ctx, "unable to find queue for store: %s", storeID)
+		return // nothing to do
+	}
+
+	if len(entry.Data) == 0 {
+		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
+	}
+	wi := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(meta.AdmissionPriority),
+		CreateTime:      meta.AdmissionCreateTime,
+		BypassAdmission: false,
+		RequestedCount:  int64(len(entry.Data)),
+	}
+	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
+		Enabled:    true,
+		RangeID:    rangeID,
+		ReplicaID:  replicaID,
+		LeaderTerm: leaderTerm,
+		LogPosition: admission.LogPosition{
+			Term:  entry.Term,
+			Index: entry.Index,
+		},
+		Origin:       meta.AdmissionOriginNode,
+		IsV2Protocol: false,
+		Ingested:     typ.IsSideloaded(),
+	}
+
+	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
+		WorkInfo: wi,
+	})
+	if err != nil {
+		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		return
+	}
+	if handle.UseAdmittedWorkDone() {
+		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+	}
+}
+
 var _ replica_rac2.ACWorkQueue = &controllerImpl{}
 
 // Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.KvDistribution.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
+		log.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
 		return false // nothing to do
 	}
 
 	if entry.RequestedCount == 0 {
-		log.KvDistribution.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
+		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
 	}
 	wi := admission.WorkInfo{
 		TenantID:        entry.TenantID,
@@ -577,19 +686,21 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 			Term:  0, // Ignored by callback in RACv2.
 			Index: entry.CallbackState.Mark.Index,
 		},
-		RaftPri:  entry.CallbackState.Priority,
-		Ingested: entry.Ingested,
+		Origin:       0,
+		RaftPri:      entry.CallbackState.Priority,
+		IsV2Protocol: true,
+		Ingested:     entry.Ingested,
 	}
 
 	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
 		WorkInfo: wi,
 	})
 	if err != nil {
-		log.KvDistribution.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
 		return false
 	}
 	if handle.UseAdmittedWorkDone() {
-		log.KvDistribution.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
 }
@@ -638,58 +749,4 @@ func (wb *StoreWriteBytes) Release() {
 		return
 	}
 	storeWriteBytesPool.Put(wb)
-}
-
-func workInfoForBatch(
-	st *cluster.Settings,
-	requestTenantID roachpb.TenantID,
-	rangeTenantID roachpb.TenantID,
-	ba *kvpb.BatchRequest,
-) admission.WorkInfo {
-	bypassAdmission := ba.IsAdmin()
-	source := ba.AdmissionHeader.Source
-	tenantID := requestTenantID
-	if requestTenantID.IsSystem() {
-		if useRangeTenantIDForNonAdminEnabled.Get(&st.SV) && !bypassAdmission &&
-			rangeTenantID.IsSet() {
-			tenantID = rangeTenantID
-		}
-		// Else, either it is an admin request (common), or rangeTenantID is not
-		// set (rare), or the cluster setting is disabled, so continue using the
-		// SystemTenantID.
-	} else {
-		// Request is from a SQL node.
-		bypassAdmission = false
-		source = kvpb.AdmissionHeader_FROM_SQL
-	}
-	if source == kvpb.AdmissionHeader_OTHER {
-		bypassAdmission = true
-	}
-	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
-	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&st.SV) {
-		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
-			bypassAdmission = true
-		}
-	}
-	// LeaseInfo requests are used as makeshift replica health probes by
-	// DistSender circuit breakers, make sure they bypass AC.
-	//
-	// TODO(erikgrinaker): the various bypass conditions here should be moved to
-	// one or more request flags.
-	if ba.IsSingleLeaseInfoRequest() {
-		bypassAdmission = true
-	}
-	createTime := ba.AdmissionHeader.CreateTime
-	if !bypassAdmission && createTime == 0 {
-		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-		// of zero CreateTime needs to be revisited. It should use high priority.
-		createTime = timeutil.Now().UnixNano()
-	}
-	admissionInfo := admission.WorkInfo{
-		TenantID:        tenantID,
-		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-		CreateTime:      createTime,
-		BypassAdmission: bypassAdmission,
-	}
-	return admissionInfo
 }

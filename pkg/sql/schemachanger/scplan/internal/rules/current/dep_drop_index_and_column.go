@@ -73,7 +73,7 @@ func init() {
 				to.Type((*scpb.Column)(nil)),
 				ColumnInIndex(ic, from, relationID, columnID, "index-id"),
 				JoinOnColumnID(ic, to, relationID, columnID),
-				from.TargetStatus(scpb.ToPublic, scpb.TransientAbsent),
+				from.TargetStatus(scpb.ToPublic, scpb.Transient),
 				from.CurrentStatus(scpb.Status_BACKFILL_ONLY),
 				to.TargetStatus(scpb.ToAbsent),
 				to.CurrentStatus(scpb.Status_WRITE_ONLY),

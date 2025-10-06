@@ -27,10 +27,15 @@ import (
 )
 
 var isLocalMsg = [...]bool{
-	pb.MsgHup:         true,
-	pb.MsgBeat:        true,
-	pb.MsgUnreachable: true,
-	pb.MsgSnapStatus:  true,
+	pb.MsgHup:               true,
+	pb.MsgBeat:              true,
+	pb.MsgUnreachable:       true,
+	pb.MsgSnapStatus:        true,
+	pb.MsgCheckQuorum:       true,
+	pb.MsgStorageAppend:     true,
+	pb.MsgStorageAppendResp: true,
+	pb.MsgStorageApply:      true,
+	pb.MsgStorageApplyResp:  true,
 }
 
 var isResponseMsg = [...]bool{
@@ -39,6 +44,8 @@ var isResponseMsg = [...]bool{
 	pb.MsgHeartbeatResp:     true,
 	pb.MsgUnreachable:       true,
 	pb.MsgPreVoteResp:       true,
+	pb.MsgStorageAppendResp: true,
+	pb.MsgStorageApplyResp:  true,
 	pb.MsgFortifyLeaderResp: true,
 }
 
@@ -90,24 +97,8 @@ func IsMsgIndicatingLeader(msgt pb.MessageType) bool {
 	return isMsgInArray(msgt, isMsgIndicatingLeader[:])
 }
 
-// senderHasMsgTerm returns true if the message type is one that should have
-// the sender's term.
-func senderHasMsgTerm(m pb.Message) bool {
-	switch {
-	case m.Type == pb.MsgPreVote:
-		// We send pre-vote requests with a term in our future.
-		return false
-	case m.Type == pb.MsgPreVoteResp && !m.Reject:
-		// We send pre-vote requests with a term in our future. If the
-		// pre-vote is granted, we will increment our term when we get a
-		// quorum. If it is not, the term comes from the node that
-		// rejected our vote so we should become a follower at the new
-		// term.
-		return false
-	default:
-		// All other messages are sent with the sender's term.
-		return true
-	}
+func IsLocalMsgTarget(id pb.PeerID) bool {
+	return id == LocalAppendThread || id == LocalApplyThread
 }
 
 // voteResponseType maps vote and prevote message types to their corresponding responses.
@@ -158,11 +149,12 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 		buf.WriteString("Entries:\n")
 		fmt.Fprint(&buf, DescribeEntries(rd.Entries, f))
 	}
-	if rd.Snapshot != nil {
-		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(*rd.Snapshot))
+	if !IsEmptySnap(rd.Snapshot) {
+		fmt.Fprintf(&buf, "Snapshot %s\n", DescribeSnapshot(rd.Snapshot))
 	}
-	if !rd.Committed.Empty() {
-		fmt.Fprintf(&buf, "Committed: %s\n", rd.Committed)
+	if len(rd.CommittedEntries) > 0 {
+		buf.WriteString("CommittedEntries:\n")
+		fmt.Fprint(&buf, DescribeEntries(rd.CommittedEntries, f))
 	}
 	if len(rd.Messages) > 0 {
 		buf.WriteString("Messages:\n")
@@ -171,15 +163,8 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 			buf.WriteByte('\n')
 		}
 	}
-	if len(rd.Responses) > 0 {
-		buf.WriteString("OnSync:\n")
-		for _, msg := range rd.Responses {
-			fmt.Fprint(&buf, DescribeMessage(msg, f))
-			buf.WriteByte('\n')
-		}
-	}
 	if buf.Len() > 0 {
-		return fmt.Sprintf("Ready:\n%s", buf.String())
+		return fmt.Sprintf("Ready MustSync=%t:\n%s", rd.MustSync, buf.String())
 	}
 	return "<empty Ready>"
 }
@@ -188,19 +173,27 @@ func DescribeReady(rd Ready, f EntryFormatter) string {
 // of entry data. Nil is a valid EntryFormatter and will use a default format.
 type EntryFormatter func([]byte) string
 
-var emptyEntryFormatter EntryFormatter = func([]byte) string { return "" }
-
 // DescribeMessage returns a concise human-readable description of a
 // Message for debugging.
 func DescribeMessage(m pb.Message, f EntryFormatter) string {
+	return describeMessageWithIndent("", m, f)
+}
+
+func describeMessageWithIndent(indent string, m pb.Message, f EntryFormatter) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s->%s %v Term:%d Log:%d/%d",
+	fmt.Fprintf(&buf, "%s%s->%s %v Term:%d Log:%d/%d", indent,
 		describeTarget(m.From), describeTarget(m.To), m.Type, m.Term, m.LogTerm, m.Index)
 	if m.Reject {
 		fmt.Fprintf(&buf, " Rejected (Hint: %d)", m.RejectHint)
 	}
 	if m.Commit != 0 {
 		fmt.Fprintf(&buf, " Commit:%d", m.Commit)
+	}
+	if m.Vote != 0 {
+		fmt.Fprintf(&buf, " Vote:%d", m.Vote)
+	}
+	if m.Lead != 0 {
+		fmt.Fprintf(&buf, " Lead:%d", m.Lead)
 	}
 	if m.LeadEpoch != 0 {
 		fmt.Fprintf(&buf, " LeadEpoch:%d", m.LeadEpoch)
@@ -210,13 +203,21 @@ func DescribeMessage(m pb.Message, f EntryFormatter) string {
 	} else if ln > 1 {
 		fmt.Fprint(&buf, " Entries:[")
 		for _, e := range m.Entries {
-			fmt.Fprintf(&buf, "\n  ")
+			fmt.Fprintf(&buf, "\n%s  ", indent)
 			buf.WriteString(DescribeEntry(e, f))
 		}
-		fmt.Fprintf(&buf, "\n]")
+		fmt.Fprintf(&buf, "\n%s]", indent)
 	}
-	if s := m.Snapshot; s != nil {
-		fmt.Fprintf(&buf, "\n  Snapshot: %s", DescribeSnapshot(*s))
+	if s := m.Snapshot; s != nil && !IsEmptySnap(*s) {
+		fmt.Fprintf(&buf, "\n%s  Snapshot: %s", indent, DescribeSnapshot(*s))
+	}
+	if len(m.Responses) > 0 {
+		fmt.Fprintf(&buf, " Responses:[")
+		for _, m := range m.Responses {
+			buf.WriteString("\n")
+			buf.WriteString(describeMessageWithIndent(indent+"  ", m, f))
+		}
+		fmt.Fprintf(&buf, "\n%s]", indent)
 	}
 	return buf.String()
 }
@@ -226,10 +227,16 @@ func DescribeTarget(id pb.PeerID) string {
 }
 
 func describeTarget(id pb.PeerID) string {
-	if id == None {
+	switch id {
+	case None:
 		return "None"
+	case LocalAppendThread:
+		return "AppendThread"
+	case LocalApplyThread:
+		return "ApplyThread"
+	default:
+		return fmt.Sprintf("%x", id)
 	}
-	return fmt.Sprintf("%x", id)
 }
 
 // DescribeEntry returns a concise human-readable description of an

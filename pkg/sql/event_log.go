@@ -16,13 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
@@ -165,11 +165,6 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 		User:            p.SessionData().SessionUser().Normalized(),
 		ApplicationName: p.SessionData().ApplicationName,
 	}
-	txn := p.InternalSQLTxn()
-	if txn != nil {
-		commonSQLEventDetails.TxnReadTimestamp = txn.KV().ReadTimestamp().WallTime
-	}
-
 	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
@@ -252,8 +247,12 @@ func logEventInternalForSQLStatements(
 ) error {
 	// Inject the common fields into the payload provided by the caller.
 	injectCommonFields := func(event logpb.EventPayload) error {
-		event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
-
+		if txn == nil {
+			// No txn is set (e.g. for COPY or BEGIN), so use now instead.
+			event.CommonDetails().Timestamp = timeutil.Now().UnixNano()
+		} else {
+			event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
+		}
 		sqlCommon, ok := event.(eventpb.EventWithCommonSQLPayload)
 		if !ok {
 			return errors.AssertionFailedf("unknown event type: %T", event)
@@ -371,7 +370,7 @@ func LogEventForJobs(
 	jobID int64,
 	payload jobspb.Payload,
 	user username.SQLUsername,
-	status jobs.State,
+	status jobs.Status,
 ) error {
 	event.CommonDetails().Timestamp = txn.KV().ReadTimestamp().WallTime
 	jobCommon, ok := event.(eventpb.EventWithCommonJobPayload)
@@ -401,6 +400,23 @@ func LogEventForJobs(
 		event,
 	)
 }
+
+var eventLogSystemTableEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"server.eventlog.enabled",
+	"if set, logged notable events are also stored in the table system.eventlog",
+	true,
+	settings.WithPublic)
+
+// EventLogTestingKnobs provides hooks and knobs for event logging.
+type EventLogTestingKnobs struct {
+	// SyncWrites causes events to be written on the same txn as
+	// the SQL statement that causes them.
+	SyncWrites bool
+}
+
+// ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
+func (*EventLogTestingKnobs) ModuleTestingKnobs() {}
 
 // LogEventDestination indicates for InsertEventRecords where the
 // event should be directed to.
@@ -507,13 +523,13 @@ func insertEventRecords(
 			// The VDepth() call ensures that we are matching the vmodule
 			// setting to where the depth is equal to 1 in the caller stack.
 			for i := range entries {
-				log.Dev.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
+				log.InfofDepth(ctx, depth, "SQL event: payload %+v", entries[i])
 			}
 		}
 	}
 
 	// If we only want to log externally and not write to the events table, early exit.
-	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventlog.SystemTableEnabled.Get(&execCfg.Settings.SV)
+	loggingToSystemTable := opts.dst.hasFlag(LogToSystemTable) && eventLogSystemTableEnabled.Get(&execCfg.Settings.SV)
 	if !loggingToSystemTable {
 		// Simply emit the events to their respective channels and call it a day.
 		if opts.dst.hasFlag(LogExternally) {
@@ -589,8 +605,8 @@ func asyncWriteToOtelAndSystemEventsTable(
 			query, args := prepareEventWrite(ctx, execCfg, entries)
 
 			// We use a retry loop in case there are transient
-			// non-retryable errors on the cluster during the table write.
-			// (retryable errors are already processed automatically
+			// non-retriable errors on the cluster during the table write.
+			// (retriable errors are already processed automatically
 			// by db.Txn)
 			retryOpts := base.DefaultRetryOptions()
 			retryOpts.Closer = ctx.Done()
@@ -615,7 +631,7 @@ func asyncWriteToOtelAndSystemEventsTable(
 			// background context here.
 			err = errors.NewAssertionErrorWithWrappedErrf(err, "unexpected stopper error")
 		}
-		log.Dev.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
+		log.Warningf(ctx, "failed to start task to save %d events in eventlog: %v", len(entries), err)
 	}
 }
 

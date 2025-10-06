@@ -49,7 +49,6 @@ proto_library(
     srcs = [
         "changefeed_events.proto",
         "cluster_events.proto",
-        "contention_events.proto",
         "ddl_events.proto",
         "debug_events.proto",
         "events.proto",

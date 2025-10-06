@@ -25,6 +25,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				revertible(false),
 				emit(func(this *scpb.Sequence) *scop.InitSequence {
 					return &scop.InitSequence{
 						SequenceID:     this.SequenceID,

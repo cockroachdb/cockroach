@@ -50,14 +50,6 @@ type ManagerTestingKnobs struct {
 	// the lease manager attempts to acquire a lease for descriptor `id`.
 	TestingBeforeAcquireLeaseDuringRefresh func(id descpb.ID) error
 
-	// TestingOnNewVersion invoked when the range feed detects a new descriptor.
-	TestingOnNewVersion func(id descpb.ID)
-
-	// TestingOnLeaseGenerationBumpForNewVersion invoked when the lease generation,
-	// after a new descriptor or initial descriptor version are observed via
-	// the range feed.
-	TestingOnLeaseGenerationBumpForNewVersion func(id descpb.ID)
-
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 
@@ -67,10 +59,6 @@ type ManagerTestingKnobs struct {
 	// RangeFeedReset channel is closed to indicate that the range feed
 	// has been reset.
 	RangeFeedResetChannel chan struct{}
-
-	// TestingOnRangeFeedCheckPoint is invoked when a range feed checkpoint is
-	// hit.
-	TestingOnRangeFeedCheckPoint func()
 
 	LeaseStoreTestingKnobs StorageTestingKnobs
 }
@@ -92,7 +80,7 @@ func (m *Manager) TestingAcquireAndAssertMinVersion(
 	if err := ensureVersion(ctx, id, minVersion, m); err != nil {
 		return nil, err
 	}
-	desc, _, err := t.findForTimestamp(ctx, TimestampToReadTimestamp(timestamp))
+	desc, _, err := t.findForTimestamp(ctx, timestamp)
 	if err != nil {
 		return nil, err
 	}

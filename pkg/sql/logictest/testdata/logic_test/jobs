@@ -1,16 +1,9 @@
-# LogicTest: !local-prepared
-
-# Disable declarative schema changer for this test and schema locked by
-# default for this test.
+# Disable declarative schema changer for this test.
 statement ok
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 
-statement ok
-SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = 'off'
-
-statement ok
+statement ok;
 SET use_declarative_schema_changer = 'off';
-SET create_table_with_schema_locked = 'off';
 
 # These test verify that a user's job are visible via
 # crdb_internal.jobs and SHOW JOBS.
@@ -35,6 +28,9 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     updating version for role membership table         root
+SCHEMA CHANGE     updating version for role options table            root
+SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 
 query TTT
@@ -43,6 +39,9 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 ----
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     updating version for role membership table         root
+SCHEMA CHANGE     updating version for role options table            root
+SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 
 query TTT
@@ -95,6 +94,9 @@ AND job_type LIKE 'SCHEMA CHANGE%' ORDER BY 1, 2, 3
 SCHEMA CHANGE     CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE     CREATE INDEX ON test.public.u (x)                  testuser
 SCHEMA CHANGE     updating privileges for database 104               root
+SCHEMA CHANGE     updating version for role membership table         root
+SCHEMA CHANGE     updating version for role options table            root
+SCHEMA CHANGE     updating version for users table                   root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  root
 SCHEMA CHANGE GC  GC for temporary index used during index backfill  testuser
 
@@ -106,6 +108,9 @@ AUTO SPAN CONFIG RECONCILIATION  reconciling span configurations                
 SCHEMA CHANGE                    CREATE INDEX ON test.public.t (x)                  root
 SCHEMA CHANGE                    CREATE INDEX ON test.public.u (x)                  testuser
 SCHEMA CHANGE                    updating privileges for database 104               root
+SCHEMA CHANGE                    updating version for role membership table         root
+SCHEMA CHANGE                    updating version for role options table            root
+SCHEMA CHANGE                    updating version for users table                   root
 SCHEMA CHANGE GC                 GC for temporary index used during index backfill  root
 SCHEMA CHANGE GC                 GC for temporary index used during index backfill  testuser
 
@@ -265,7 +270,7 @@ SELECT count(*) FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'POLL JOBS STATS' AN
 
 subtest control_job_priv
 
-user testuser2
+user testuser
 
 statement ok
 CREATE TABLE t_control_job_priv(x INT)
@@ -279,9 +284,7 @@ statement ok
 DROP TABLE t_control_job_priv
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
-
-user testuser
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv'
 
 statement error user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)
@@ -305,7 +308,7 @@ subtest end
 
 subtest control_job_priv_inherited
 
-user testuser2
+user testuser
 
 statement ok
 CREATE TABLE t_control_job_priv_inherited(x INT)
@@ -319,9 +322,7 @@ statement ok
 DROP TABLE t_control_job_priv_inherited
 
 let $job_id
-SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser2' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
-
-user testuser
+SELECT job_id FROM [SHOW JOBS] WHERE user_name = 'testuser' AND job_type = 'SCHEMA CHANGE GC' AND description LIKE 'GC for DROP TABLE test.public.t_control_job_priv_inherited'
 
 statement error user testuser does not have privileges for job
 PAUSE JOB (SELECT $job_id)

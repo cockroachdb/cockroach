@@ -654,7 +654,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 
 	pauseLookupResumeAndAssert := func(key string, evictToken EvictionToken) {
 		var wg sync.WaitGroup
-		log.Dev.Infof(ctx, "test pausing lookups; token: %s", evictToken)
+		log.Infof(ctx, "test pausing lookups; token: %s", evictToken)
 		db.pauseRangeLookups()
 
 		// We're going to perform 3 lookups on the close-by keys, in parallel, while
@@ -676,7 +676,7 @@ func TestRangeCacheDetectSplit(t *testing.T) {
 			<-coalesced
 		}
 
-		log.Dev.Infof(ctx, "test resuming lookups")
+		log.Infof(ctx, "test resuming lookups")
 		db.resumeRangeLookups()
 		wg.Wait()
 		db.assertLookupCountEq(t, 1, key)

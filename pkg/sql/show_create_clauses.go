@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -169,7 +170,7 @@ func formatViewQueryForDisplay(
 	defer func() {
 		parsed, parseErr := parser.ParseOne(query)
 		if parseErr != nil {
-			log.Dev.Warningf(ctx, "error parsing query for view %s (%v): %+v",
+			log.Warningf(ctx, "error parsing query for view %s (%v): %+v",
 				desc.GetName(), desc.GetID(), err)
 			return
 		}
@@ -187,7 +188,7 @@ func formatViewQueryForDisplay(
 
 	typeReplacedViewQuery, err := formatViewQueryTypesForDisplay(ctx, evalCtx, semaCtx, sessionData, desc)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
+		log.Warningf(ctx, "error deserializing user defined types for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
 		return desc.GetViewQuery(), nil
 	}
@@ -195,7 +196,7 @@ func formatViewQueryForDisplay(
 	// Convert sequences referenced by ID in the view back to their names.
 	sequenceReplacedViewQuery, err := formatQuerySequencesForDisplay(ctx, semaCtx, typeReplacedViewQuery, false /* multiStmt */, catpb.Function_SQL)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
+		log.Warningf(ctx, "error converting sequence IDs to names for view %s (%v): %+v",
 			desc.GetName(), desc.GetID(), err)
 		return typeReplacedViewQuery, nil
 	}
@@ -266,68 +267,11 @@ func formatQuerySequencesForDisplay(
 		}
 		stmts = plstmt.AST
 
-		v := plpgsqltree.SQLStmtVisitor{Fn: replaceFunc}
+		v := utils.SQLStmtVisitor{Fn: replaceFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		fmtCtx.FormatNode(newStmt)
 	}
 	return fmtCtx.CloseAndGetString(), nil
-}
-
-// Drops the database component of the table names (i.e. unqualifies) when it matches the name provided.
-func formatUnqualifyTableNames(
-	queries string, databaseName string, lang catpb.Function_Language,
-) (string, error) {
-
-	// walking the table names using the reformat option. the buffer is simply discarded
-	unqualifyTableNamesCtx := tree.NewFmtCtx(tree.FmtSimple, tree.FmtReformatTableNames(func(ctx *tree.FmtCtx, tn *tree.TableName) {
-		if string(tn.CatalogName) == databaseName {
-			tn.ExplicitCatalog = false
-		}
-	}))
-	defer unqualifyTableNamesCtx.Close()
-
-	// a fresh buffer to rebuild the queries string
-	prettyPrintCtx := tree.NewFmtCtx(tree.FmtSimple)
-
-	switch lang {
-	case catpb.Function_SQL:
-		parsedStmts, err := parser.Parse(queries)
-		if err != nil {
-			return "", err
-		}
-
-		stmts := make(tree.Statements, len(parsedStmts))
-		for i, stmt := range parsedStmts {
-			stmts[i] = stmt.AST
-		}
-
-		for _, stmt := range stmts {
-			unqualifyTableNamesCtx.FormatNode(stmt)
-		}
-
-		for i, stmt := range stmts {
-			if i > 0 {
-				prettyPrintCtx.WriteString("\n")
-			}
-			prettyPrintCtx.FormatNode(stmt)
-			prettyPrintCtx.WriteString(";")
-		}
-	case catpb.Function_PLPGSQL:
-		var stmts plpgsqltree.Statement
-		plstmt, err := plpgsql.Parse(queries)
-		if err != nil {
-			return "", err
-		}
-		stmts = plstmt.AST
-
-		unqualifyTableNamesCtx.FormatNode(stmts)
-
-		prettyPrintCtx.FormatNode(stmts)
-	default:
-		return queries, nil
-	}
-
-	return prettyPrintCtx.CloseAndGetString(), nil
 }
 
 // formatViewQueryTypesForDisplay walks the view query and
@@ -504,12 +448,12 @@ func formatFunctionQueryTypesForDisplay(
 		}
 		stmts = plstmt.AST
 
-		v := plpgsqltree.SQLStmtVisitor{Fn: replaceFunc}
+		v := utils.SQLStmtVisitor{Fn: replaceFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		// Some PLpgSQL statements (i.e., declarations), may contain type
 		// annotations containing the UDT. We need to walk the AST to replace them,
 		// too.
-		v2 := plpgsqltree.TypeRefVisitor{Fn: replaceTypeFunc}
+		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
 		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
 	}
@@ -673,10 +617,8 @@ func ShowCreateSequence(
 	if opts.Virtual {
 		f.Printf(" VIRTUAL")
 	}
-	if opts.SessionCacheSize > 1 {
-		f.Printf(" PER SESSION CACHE %d", opts.SessionCacheSize)
-	} else if opts.NodeCacheSize > 1 {
-		f.Printf(" PER NODE CACHE %d", opts.NodeCacheSize)
+	if opts.CacheSize > 1 {
+		f.Printf(" CACHE %d", opts.CacheSize)
 	}
 	return f.CloseAndGetString(), nil
 }
@@ -882,12 +824,6 @@ func showConstraintClause(
 		if e.IsHashShardingConstraint() && !e.IsConstraintUnvalidated() {
 			continue
 		}
-		// Don't include the constraint if it's in the process of being dropped. If
-		// the column is being dropped with the constraint, it might not even have a
-		// valid name.
-		if e.GetConstraintValidity() == descpb.ConstraintValidity_Dropping {
-			continue
-		}
 		f.WriteString(",\n\t")
 		if len(e.GetName()) > 0 {
 			f.WriteString("CONSTRAINT ")
@@ -899,7 +835,7 @@ func showConstraintClause(
 			ctx, desc, e.GetExpr(), evalCtx, semaCtx, sessionData, exprFmtFlags,
 		)
 		if err != nil {
-			return errors.Wrapf(err, "failed to format check constraint for table %s", desc.GetName())
+			return err
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
@@ -908,9 +844,6 @@ func showConstraintClause(
 		}
 	}
 	for _, c := range desc.UniqueConstraintsWithoutIndex() {
-		if c.GetConstraintValidity() == descpb.ConstraintValidity_Dropping {
-			continue
-		}
 		f.WriteString(",\n\t")
 		if len(c.GetName()) > 0 {
 			f.WriteString("CONSTRAINT ")
@@ -930,7 +863,7 @@ func showConstraintClause(
 				ctx, desc, c.GetPredicate(), evalCtx, semaCtx, sessionData, exprFmtFlags,
 			)
 			if err != nil {
-				return errors.Wrapf(err, "failed to format unique constraint without index for table %s", desc.GetName())
+				return err
 			}
 			f.WriteString(pred)
 		}

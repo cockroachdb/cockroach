@@ -206,9 +206,9 @@ func TestInvertedJoiner(t *testing.T) {
 		return tree.NewDInt(tree.DInt(row))
 	}
 	bFn := func(row int) tree.Datum {
-		return tree.NewDArrayFromDatums(
-			types.Int, tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))},
-		)
+		arr := tree.NewDArray(types.Int)
+		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
+		return arr
 	}
 	cFn := func(row int) tree.Datum {
 		j, err := json.ParseJSON(fmt.Sprintf(`{"c1": %d, "c2": %d}`, row/10, row%10))
@@ -625,7 +625,7 @@ func TestInvertedJoiner(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -749,9 +749,9 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		return tree.NewDInt(tree.DInt(row))
 	}
 	bFn := func(row int) tree.Datum {
-		return tree.NewDArrayFromDatums(
-			types.Int, tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))},
-		)
+		arr := tree.NewDArray(types.Int)
+		arr.Array = tree.Datums{tree.NewDInt(tree.DInt(row / 10)), tree.NewDInt(tree.DInt(row % 10))}
+		return arr
 	}
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"a INT PRIMARY KEY, b INT ARRAY, INVERTED INDEX bi (b)",
@@ -764,7 +764,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -774,7 +774,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
 	flowCtx := execinfra.FlowCtx{

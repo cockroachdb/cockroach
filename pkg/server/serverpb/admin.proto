@@ -596,7 +596,13 @@ message SettingsRequest {
   // The array of setting keys or names to retrieve.
   // An empty keys array means "all".
   repeated string keys = 1;
-  reserved 2;
+
+  // Indicate whether to see unredacted setting values.
+  // This is opt-in so that a previous version `cockroach zip`
+  // does not start reporting values when this becomes active.
+  // For good security, the server only obeys this after it checks
+  // that the logger-in user has admin privilege.
+  bool unredacted_values = 2;
 }
 
 // SettingsResponse is the response to SettingsRequest.
@@ -681,12 +687,6 @@ message JobRequest {
   int64 job_id = 1;
 }
 
-message JobMessage {
-  string kind = 1;
-  google.protobuf.Timestamp timestamp = 2 [(gogoproto.nullable)=false, (gogoproto.stdtime) = true];
-  string message = 3;
-}
-
 // JobResponse contains the job record for a job.
 message JobResponse {
   int64 id = 1 [(gogoproto.customname) = "ID"];
@@ -737,8 +737,6 @@ message JobResponse {
   // coordinator_id identifies the node coordinating the job. This value will
   // only be present for jobs that are currently running or recently ran.
   int64 coordinator_id = 21 [(gogoproto.customname) = "CoordinatorID"];
-
-  repeated JobMessage messages = 22 [(gogoproto.nullable)=false];
 }
 
 // LocationsRequest requests system locality location information.
@@ -848,8 +846,6 @@ message MetricMetadataRequest {
 // MetricMetadataResponse contains the metadata for all metrics.
 message MetricMetadataResponse {
   map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
-  // Maps of metric metadata names to the tsdb recorded metric names
-  map<string, string> recordedNames = 2 [(gogoproto.nullable) = false];
 }
 
 message EnqueueRangeRequest {

@@ -34,16 +34,6 @@ func init() {
 						Namespace: *protoutil.Clone(this).(*scpb.Namespace),
 					}
 				}),
-				emit(func(this *scpb.Namespace) *scop.UpdateTTLScheduleMetadata {
-					// TTL schedules are only relevant for tables.
-					if this.DatabaseID != 0 && this.SchemaID != 0 {
-						return &scop.UpdateTTLScheduleMetadata{
-							TableID: this.DescriptorID,
-							NewName: this.Name,
-						}
-					}
-					return nil
-				}),
 			),
 		),
 		toAbsent(

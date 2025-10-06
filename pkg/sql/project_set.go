@@ -27,7 +27,7 @@ import (
 // of R prefixed. Formally, this performs a lateral cross join of R
 // with zip(a,b,c).
 type projectSetNode struct {
-	singleInputPlanNode
+	source planNode
 	projectSetPlanningInfo
 }
 
@@ -67,5 +67,5 @@ func (n *projectSetNode) Values() tree.Datums {
 }
 
 func (n *projectSetNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.source.Close(ctx)
 }

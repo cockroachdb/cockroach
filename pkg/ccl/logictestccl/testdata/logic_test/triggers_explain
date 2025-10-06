@@ -1,0 +1,1180 @@
+# LogicTest: local
+
+# Put both columns in a family to avoid column-family randomization changing the
+# plans non-deterministically.
+statement ok
+CREATE TABLE xy (x INT, y INT, FAMILY (x, y));
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE '%: % -> %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# ==============================================================================
+# Display BEFORE triggers in the EXPLAIN output.
+# ==============================================================================
+
+subtest explain_before
+
+statement ok
+CREATE TRIGGER t BEFORE INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query T
+EXPLAIN INSERT INTO xy VALUES (1, 2);
+----
+distribution: local
+vectorized: true
+·
+• insert
+│ into: xy(x, y, rowid)
+│ auto commit
+│
+├── • before-triggers
+│     trigger: t
+│
+└── • render
+    │
+    └── • filter
+        │ estimated row count: 1
+        │ filter: f IS DISTINCT FROM NULL
+        │
+        └── • render
+            │
+            └── • values
+                  size: 4 columns, 1 row
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM xy WHERE y = 2;
+----
+distribution: local
+vectorized: true
+·
+• delete
+│ columns: ()
+│ estimated row count: 0 (missing stats)
+│ from: xy
+│ auto commit
+│
+├── • before-triggers
+│     trigger: t
+│
+└── • project
+    │ columns: (rowid)
+    │
+    └── • filter
+        │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, old)
+        │ estimated row count: 10 (missing stats)
+        │ filter: f IS DISTINCT FROM NULL
+        │
+        └── • render
+            │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, old)
+            │ render f: f(NULL, old, 't', 'BEFORE', 'ROW', 'DELETE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+            │ render x: x
+            │ render y: y
+            │ render rowid: rowid
+            │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+            │ render tableoid: tableoid
+            │ render crdb_internal_origin_id: crdb_internal_origin_id
+            │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+            │ render old: old
+            │
+            └── • render
+                │ columns: (old, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render old: ((x, y) AS x, y)
+                │ render x: x
+                │ render y: y
+                │ render rowid: rowid
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • filter
+                    │ columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                    │ estimated row count: 10 (missing stats)
+                    │ filter: y = 2
+                    │
+                    └── • scan
+                          columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                          estimated row count: 1,000 (missing stats)
+                          table: xy@xy_pkey
+                          spans: FULL SCAN
+
+query T
+EXPLAIN ANALYZE (VERBOSE) UPDATE xy SET x = 3 WHERE y = 2;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• update
+│ columns: ()
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ actual row count: 1
+│ vectorized batch count: 0
+│ execution time: 0µs
+│ estimated row count: 0 (missing stats)
+│ table: xy
+│ set: x, y
+│ auto commit
+│
+├── • before-triggers
+│     trigger: t
+│
+└── • render
+    │ columns: (x, y, rowid, x_new, y_new)
+    │ render x_new: (f).x
+    │ render y_new: (f).y
+    │ render x: x
+    │ render y: y
+    │ render rowid: rowid
+    │
+    └── • filter
+        │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, x_new, old, new)
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ actual row count: 0
+        │ vectorized batch count: 0
+        │ execution time: 0µs
+        │ estimated row count: 10 (missing stats)
+        │ filter: f IS DISTINCT FROM NULL
+        │
+        └── • render
+            │ columns: (f, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp, x_new, old, new)
+            │ render f: f(new, old, 't', 'BEFORE', 'ROW', 'UPDATE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+            │ render x: x
+            │ render y: y
+            │ render rowid: rowid
+            │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+            │ render tableoid: tableoid
+            │ render crdb_internal_origin_id: crdb_internal_origin_id
+            │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+            │ render x_new: x_new
+            │ render old: old
+            │ render new: new
+            │
+            └── • render
+                │ columns: (new, old, x_new, x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                │ render new: ((3, y) AS x, y)
+                │ render old: ((x, y) AS x, y)
+                │ render x_new: 3
+                │ render x: x
+                │ render y: y
+                │ render rowid: rowid
+                │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+                │ render tableoid: tableoid
+                │ render crdb_internal_origin_id: crdb_internal_origin_id
+                │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
+                │
+                └── • filter
+                    │ columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                    │ sql nodes: <hidden>
+                    │ regions: <hidden>
+                    │ actual row count: 0
+                    │ vectorized batch count: 0
+                    │ execution time: 0µs
+                    │ estimated row count: 10 (missing stats)
+                    │ filter: y = 2
+                    │
+                    └── • scan
+                          columns: (x, y, rowid, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+                          sql nodes: <hidden>
+                          kv nodes: <hidden>
+                          regions: <hidden>
+                          actual row count: 0
+                          vectorized batch count: 0
+                          KV time: 0µs
+                          KV contention time: 0µs
+                          KV rows decoded: 0
+                          KV pairs read: 0
+                          KV bytes read: 0 B
+                          KV gRPC calls: 0
+                          estimated max memory allocated: 0 B
+                          MVCC step count (ext/int): 0/0
+                          MVCC seek count (ext/int): 0/0
+                          estimated row count: 1,000 (missing stats)
+                          table: xy@xy_pkey
+                          spans: FULL SCAN
+
+statement ok
+DROP TRIGGER t ON xy;
+
+# ==============================================================================
+# Display AFTER triggers in the EXPLAIN output.
+# ==============================================================================
+
+subtest explain_after
+
+statement ok
+CREATE TRIGGER t AFTER INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query T
+EXPLAIN INSERT INTO xy VALUES (1, 2);
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: xy(x, y, rowid)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+└── • after-triggers
+    │ trigger: t
+    │
+    └── • render
+        │
+        └── • render
+            │
+            └── • scan buffer
+                  estimated row count: 100
+                  label: buffer 1000000
+
+query T
+EXPLAIN (VERBOSE) UPDATE xy SET x = 3 WHERE y = 2;
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: xy
+│   │ set: x
+│   │
+│   └── • buffer
+│       │ columns: (x, y, rowid, x_new)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (x, y, rowid, x_new)
+│           │ render x_new: 3
+│           │ render x: x
+│           │ render y: y
+│           │ render rowid: rowid
+│           │
+│           └── • filter
+│               │ columns: (x, y, rowid)
+│               │ estimated row count: 10 (missing stats)
+│               │ filter: y = 2
+│               │
+│               └── • scan
+│                     columns: (x, y, rowid)
+│                     estimated row count: 1,000 (missing stats)
+│                     table: xy@xy_pkey
+│                     spans: FULL SCAN
+│
+└── • after-triggers
+    │ trigger: t
+    │
+    └── • render
+        │ columns: (f, x_old, y_old, x_new_new, y_new, old, new)
+        │ render f: f(new, old, 't', 'AFTER', 'ROW', 'UPDATE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+        │ render x_old: x_old
+        │ render y_old: y_old
+        │ render x_new_new: x_new_new
+        │ render y_new: y_new
+        │ render old: old
+        │ render new: new
+        │
+        └── • render
+            │ columns: (new, old, x_old, y_old, x_new_new, y_new)
+            │ render new: ((x_new, y) AS x, y)
+            │ render old: ((x, y) AS x, y)
+            │ render x_old: x
+            │ render y_old: y
+            │ render x_new_new: x_new
+            │ render y_new: y
+            │
+            └── • project
+                │ columns: (x, y, x_new, y)
+                │
+                └── • scan buffer
+                      columns: (x, y, rowid, x_new)
+                      estimated row count: 100
+                      label: buffer 1000000
+
+# Since the implicit transaction is auto-committed and the AFTER trigger was not
+# fired during execution, a truncated output is displayed.
+query T
+EXPLAIN ANALYZE (VERBOSE) DELETE FROM xy WHERE y = 2;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ actual row count: 1
+│   │ vectorized batch count: 0
+│   │ execution time: 0µs
+│   │ estimated row count: 0 (missing stats)
+│   │ from: xy
+│   │
+│   └── • buffer
+│       │ columns: (rowid, x, y)
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 0
+│       │ vectorized batch count: 0
+│       │ execution time: 0µs
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ columns: (rowid, x, y)
+│           │ sql nodes: <hidden>
+│           │ regions: <hidden>
+│           │ actual row count: 0
+│           │ vectorized batch count: 0
+│           │ execution time: 0µs
+│           │ estimated row count: 10 (missing stats)
+│           │ filter: y = 2
+│           │
+│           └── • scan
+│                 columns: (x, y, rowid)
+│                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
+│                 regions: <hidden>
+│                 actual row count: 0
+│                 vectorized batch count: 0
+│                 KV time: 0µs
+│                 KV contention time: 0µs
+│                 KV rows decoded: 0
+│                 KV pairs read: 0
+│                 KV bytes read: 0 B
+│                 KV gRPC calls: 0
+│                 estimated max memory allocated: 0 B
+│                 MVCC step count (ext/int): 0/0
+│                 MVCC seek count (ext/int): 0/0
+│                 estimated row count: 1,000 (missing stats)
+│                 table: xy@xy_pkey
+│                 spans: FULL SCAN
+│
+└── • after-triggers
+      trigger: t
+      input: buffer 1
+
+# Insert a row so that the trigger fires, and show the trigger plan.
+statement ok
+INSERT INTO xy VALUES (1, 2);
+
+query T
+EXPLAIN ANALYZE (VERBOSE) DELETE FROM xy WHERE y = 2;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ actual row count: 1
+│   │ vectorized batch count: 0
+│   │ execution time: 0µs
+│   │ estimated row count: 0 (missing stats)
+│   │ from: xy
+│   │
+│   └── • buffer
+│       │ columns: (rowid, x, y)
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 1
+│       │ vectorized batch count: 0
+│       │ execution time: 0µs
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ columns: (rowid, x, y)
+│           │ sql nodes: <hidden>
+│           │ regions: <hidden>
+│           │ actual row count: 1
+│           │ vectorized batch count: 0
+│           │ execution time: 0µs
+│           │ estimated row count: 10 (missing stats)
+│           │ filter: y = 2
+│           │
+│           └── • scan
+│                 columns: (x, y, rowid)
+│                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
+│                 regions: <hidden>
+│                 actual row count: 1
+│                 vectorized batch count: 0
+│                 KV time: 0µs
+│                 KV contention time: 0µs
+│                 KV rows decoded: 1
+│                 KV pairs read: 2
+│                 KV bytes read: 8 B
+│                 KV gRPC calls: 1
+│                 estimated max memory allocated: 0 B
+│                 MVCC step count (ext/int): 0/0
+│                 MVCC seek count (ext/int): 0/0
+│                 estimated row count: 1,000 (missing stats)
+│                 table: xy@xy_pkey
+│                 spans: FULL SCAN
+│
+└── • after-triggers
+    │ trigger: t
+    │
+    └── • render
+        │ columns: (f, x_old, y_old, old, new)
+        │ render f: f(NULL, old, 't', 'AFTER', 'ROW', 'DELETE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+        │ render x_old: x_old
+        │ render y_old: y_old
+        │ render old: old
+        │ render new: new
+        │
+        └── • render
+            │ columns: (new, old, x_old, y_old)
+            │ render new: NULL
+            │ render old: ((x, y) AS x, y)
+            │ render x_old: x
+            │ render y_old: y
+            │
+            └── • project
+                │ columns: (x, y)
+                │
+                └── • scan buffer
+                      columns: (rowid, x, y)
+                      sql nodes: <hidden>
+                      regions: <hidden>
+                      actual row count: 1
+                      vectorized batch count: 0
+                      execution time: 0µs
+                      estimated row count: 1
+                      label: buffer 1000000
+
+# Multiple AFTER triggers are displayed in the EXPLAIN output.
+statement ok
+CREATE TRIGGER t2 AFTER INSERT OR UPDATE OR DELETE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM xy WHERE y = 2;
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ from: xy
+│   │
+│   └── • buffer
+│       │ columns: (rowid, x, y)
+│       │ label: buffer 1
+│       │
+│       └── • filter
+│           │ columns: (rowid, x, y)
+│           │ estimated row count: 10 (missing stats)
+│           │ filter: y = 2
+│           │
+│           └── • scan
+│                 columns: (x, y, rowid)
+│                 estimated row count: 1,000 (missing stats)
+│                 table: xy@xy_pkey
+│                 spans: FULL SCAN
+│
+└── • after-triggers
+    │ trigger: t
+    │ trigger: t2
+    │
+    └── • render
+        │ columns: (f, x_old, y_old, old, new, f)
+        │ render f: f(new, old, 't2', 'AFTER', 'ROW', 'DELETE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+        │ render x_old: x_old
+        │ render y_old: y_old
+        │ render old: old
+        │ render new: new
+        │ render f: f
+        │
+        └── • render
+            │ columns: (f, x_old, y_old, old, new)
+            │ render f: f(NULL, old, 't', 'AFTER', 'ROW', 'DELETE', 106, 'xy', 'xy', 'public', 0, ARRAY[])
+            │ render x_old: x_old
+            │ render y_old: y_old
+            │ render old: old
+            │ render new: new
+            │
+            └── • render
+                │ columns: (new, old, x_old, y_old)
+                │ render new: NULL
+                │ render old: ((x, y) AS x, y)
+                │ render x_old: x
+                │ render y_old: y
+                │
+                └── • project
+                    │ columns: (x, y)
+                    │
+                    └── • scan buffer
+                          columns: (rowid, x, y)
+                          estimated row count: 100
+                          label: buffer 1000000
+
+statement ok
+DROP TRIGGER t ON xy;
+
+statement ok
+DROP TRIGGER t2 ON xy;
+
+statement ok
+DROP FUNCTION f;
+
+# Test a cyclical trigger.
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO xy VALUES ((NEW).y, (NEW).x);
+    RETURN NULL;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER t AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query T
+EXPLAIN (VERBOSE, TYPES) INSERT INTO xy VALUES (1, 2);
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: xy(x, y, rowid)
+│   │
+│   └── • buffer
+│       │ columns: (column1 int, column2 int, rowid_default int)
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             columns: (column1 int, column2 int, rowid_default int)
+│             size: 3 columns, 1 row
+│             row 0, expr 0: (1)[int]
+│             row 0, expr 1: (2)[int]
+│             row 0, expr 2: (unique_rowid())[int]
+│
+└── • after-triggers
+    │ trigger: t
+    │
+    └── • render
+        │ columns: (f tuple{int AS x, int AS y}, column1_new int, column2_new int, old tuple{int AS x, int AS y}, new tuple{int AS x, int AS y})
+        │ render f: (f((new)[tuple{int AS x, int AS y}], (NULL)[unknown], (('t')[string])[name], ('AFTER')[string], ('ROW')[string], ('INSERT')[string], (106)[oid], ('xy')[string], ('xy')[string], ('public')[string], (0)[int], (ARRAY[])[string[]]))[tuple{int AS x, int AS y}]
+        │ render column1_new: (column1_new)[int]
+        │ render column2_new: (column2_new)[int]
+        │ render old: (old)[tuple{int AS x, int AS y}]
+        │ render new: (new)[tuple{int AS x, int AS y}]
+        │
+        └── • render
+            │ columns: (new tuple{int AS x, int AS y}, old unknown, column1_new int, column2_new int)
+            │ render new: ((((column1)[int], (column2)[int]) AS x, y))[tuple{int AS x, int AS y}]
+            │ render old: (NULL)[unknown]
+            │ render column1_new: (column1)[int]
+            │ render column2_new: (column2)[int]
+            │
+            └── • project
+                │ columns: (column1 int, column2 int)
+                │
+                └── • scan buffer
+                      columns: (column1 int, column2 int, rowid_default int)
+                      estimated row count: 100
+                      label: buffer 1000000
+
+statement ok
+DROP TRIGGER t ON xy;
+
+statement ok
+DROP FUNCTION f;
+
+# ==============================================================================
+# Display triggers fired on a cascaded mutation.
+# ==============================================================================
+
+subtest explain_cascade_trigger
+
+statement ok
+CREATE FUNCTION f() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE '%: % -> %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TABLE parent (k INT PRIMARY KEY);
+
+# Put both columns in a family to avoid column-family randomization changing the
+# plans non-deterministically.
+statement ok
+CREATE TABLE child (k INT PRIMARY KEY, fk INT REFERENCES parent(k) ON DELETE CASCADE ON UPDATE CASCADE, FAMILY (k, fk));
+
+statement ok
+CREATE TRIGGER t BEFORE INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+CREATE TRIGGER t2 AFTER INSERT OR UPDATE OR DELETE ON child FOR EACH ROW EXECUTE FUNCTION f();
+
+# Since there are no rows, the FK cascade is not executed. The implicit
+# transaction auto-commits before the EXPLAIN output is generated, so the full
+# plan is not displayed.
+query T
+EXPLAIN ANALYZE (VERBOSE) UPDATE parent SET k = 2 WHERE k = 1;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ actual row count: 1
+│   │ vectorized batch count: 0
+│   │ execution time: 0µs
+│   │ estimated row count: 0 (missing stats)
+│   │ table: parent
+│   │ set: k
+│   │
+│   └── • buffer
+│       │ columns: (k, k_new)
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 0
+│       │ vectorized batch count: 0
+│       │ execution time: 0µs
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (k, k_new)
+│           │ render k_new: 2
+│           │ render k: k
+│           │
+│           └── • scan
+│                 columns: (k)
+│                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
+│                 regions: <hidden>
+│                 actual row count: 0
+│                 vectorized batch count: 0
+│                 KV time: 0µs
+│                 KV contention time: 0µs
+│                 KV rows decoded: 0
+│                 KV pairs read: 0
+│                 KV bytes read: 0 B
+│                 KV gRPC calls: 0
+│                 estimated max memory allocated: 0 B
+│                 MVCC step count (ext/int): 0/0
+│                 MVCC seek count (ext/int): 0/0
+│                 estimated row count: 1 (missing stats)
+│                 table: parent@parent_pkey
+│                 spans: /1/0
+│                 locking strength: for update
+│
+└── • fk-cascade
+      fk: child_fk_fkey
+      input: buffer 1
+
+# Insert rows so that the cascade fires and the plan is generated.
+statement ok
+INSERT INTO parent VALUES (1);
+INSERT INTO child VALUES (1, 1);
+
+query T
+EXPLAIN ANALYZE (VERBOSE) UPDATE parent SET k = 2 WHERE k = 1;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+rows decoded from KV: 3 (24 B, 6 KVs, 3 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ actual row count: 1
+│   │ vectorized batch count: 0
+│   │ execution time: 0µs
+│   │ estimated row count: 0 (missing stats)
+│   │ table: parent
+│   │ set: k
+│   │
+│   └── • buffer
+│       │ columns: (k, k_new)
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ actual row count: 1
+│       │ vectorized batch count: 0
+│       │ execution time: 0µs
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (k, k_new)
+│           │ render k_new: 2
+│           │ render k: k
+│           │
+│           └── • scan
+│                 columns: (k)
+│                 sql nodes: <hidden>
+│                 kv nodes: <hidden>
+│                 regions: <hidden>
+│                 actual row count: 1
+│                 vectorized batch count: 0
+│                 KV time: 0µs
+│                 KV contention time: 0µs
+│                 KV rows decoded: 1
+│                 KV pairs read: 2
+│                 KV bytes read: 8 B
+│                 KV gRPC calls: 1
+│                 estimated max memory allocated: 0 B
+│                 MVCC step count (ext/int): 0/0
+│                 MVCC seek count (ext/int): 0/0
+│                 estimated row count: 1 (missing stats)
+│                 table: parent@parent_pkey
+│                 spans: /1/0
+│                 locking strength: for update
+│
+└── • fk-cascade
+    │ fk: child_fk_fkey
+    │
+    └── • root
+        │ columns: ()
+        │
+        ├── • update
+        │   │ columns: ()
+        │   │ sql nodes: <hidden>
+        │   │ regions: <hidden>
+        │   │ actual row count: 0
+        │   │ vectorized batch count: 0
+        │   │ execution time: 0µs
+        │   │ estimated row count: 0 (missing stats)
+        │   │ table: child
+        │   │ set: fk
+        │   │
+        │   ├── • before-triggers
+        │   │     trigger: t
+        │   │
+        │   └── • buffer
+        │       │ columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
+        │       │ sql nodes: <hidden>
+        │       │ regions: <hidden>
+        │       │ actual row count: 1
+        │       │ vectorized batch count: 0
+        │       │ execution time: 0µs
+        │       │ label: buffer 1
+        │       │
+        │       └── • filter
+        │           │ columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
+        │           │ sql nodes: <hidden>
+        │           │ regions: <hidden>
+        │           │ actual row count: 1
+        │           │ vectorized batch count: 0
+        │           │ execution time: 0µs
+        │           │ estimated row count: 3 (missing stats)
+        │           │ filter: f IS DISTINCT FROM NULL
+        │           │
+        │           └── • render
+        │               │ columns: ("check-rows", k, fk, fk_old, fk_new, old, new, f)
+        │               │ render check-rows: CASE WHEN f IS DISTINCT FROM new THEN crdb_internal.plpgsql_raise('ERROR', 'trigger t attempted to modify or filter a row in a cascade operation: ' || new::STRING, e'changing the rows updated or deleted by a foreign-key cascade\n can cause constraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END
+        │               │ render k: k
+        │               │ render fk: fk
+        │               │ render fk_old: fk_old
+        │               │ render fk_new: fk_new
+        │               │ render old: old
+        │               │ render new: new
+        │               │ render f: f
+        │               │
+        │               └── • render
+        │                   │ columns: (f, k, fk, fk_old, fk_new, old, new)
+        │                   │ render f: f(new, old, 't', 'BEFORE', 'ROW', 'UPDATE', 111, 'child', 'child', 'public', 0, ARRAY[])
+        │                   │ render k: k
+        │                   │ render fk: fk
+        │                   │ render fk_old: fk_old
+        │                   │ render fk_new: fk_new
+        │                   │ render old: old
+        │                   │ render new: new
+        │                   │
+        │                   └── • render
+        │                       │ columns: (new, old, k, fk, fk_old, fk_new)
+        │                       │ render new: ((k, k_new) AS k, fk)
+        │                       │ render old: ((k, fk) AS k, fk)
+        │                       │ render k: k
+        │                       │ render fk: fk
+        │                       │ render fk_old: k
+        │                       │ render fk_new: k_new
+        │                       │
+        │                       └── • hash join (inner)
+        │                           │ columns: (k, fk, k, k_new)
+        │                           │ sql nodes: <hidden>
+        │                           │ regions: <hidden>
+        │                           │ actual row count: 1
+        │                           │ vectorized batch count: 0
+        │                           │ execution time: 0µs
+        │                           │ estimated max memory allocated: 0 B
+        │                           │ estimated max sql temp disk usage: 0 B
+        │                           │ estimated row count: 3 (missing stats)
+        │                           │ equality: (fk) = (k)
+        │                           │
+        │                           ├── • scan
+        │                           │     columns: (k, fk)
+        │                           │     sql nodes: <hidden>
+        │                           │     kv nodes: <hidden>
+        │                           │     regions: <hidden>
+        │                           │     actual row count: 1
+        │                           │     vectorized batch count: 0
+        │                           │     KV time: 0µs
+        │                           │     KV contention time: 0µs
+        │                           │     KV rows decoded: 1
+        │                           │     KV pairs read: 2
+        │                           │     KV bytes read: 8 B
+        │                           │     KV gRPC calls: 1
+        │                           │     estimated max memory allocated: 0 B
+        │                           │     MVCC step count (ext/int): 0/0
+        │                           │     MVCC seek count (ext/int): 0/0
+        │                           │     estimated row count: 1,000 (missing stats)
+        │                           │     table: child@child_pkey
+        │                           │     spans: FULL SCAN
+        │                           │
+        │                           └── • filter
+        │                               │ columns: (k, k_new)
+        │                               │ sql nodes: <hidden>
+        │                               │ regions: <hidden>
+        │                               │ actual row count: 1
+        │                               │ vectorized batch count: 0
+        │                               │ execution time: 0µs
+        │                               │ estimated row count: 0
+        │                               │ filter: k IS DISTINCT FROM k_new
+        │                               │
+        │                               └── • scan buffer
+        │                                     columns: (k, k_new)
+        │                                     sql nodes: <hidden>
+        │                                     regions: <hidden>
+        │                                     actual row count: 1
+        │                                     vectorized batch count: 0
+        │                                     execution time: 0µs
+        │                                     estimated row count: 1
+        │                                     label: buffer 1000000
+        │
+        ├── • constraint-check
+        │   │
+        │   └── • error if rows
+        │       │ columns: ()
+        │       │ sql nodes: <hidden>
+        │       │ regions: <hidden>
+        │       │ actual row count: 0
+        │       │ vectorized batch count: 0
+        │       │ execution time: 0µs
+        │       │
+        │       └── • lookup join (anti)
+        │           │ columns: (fk_new)
+        │           │ sql nodes: <hidden>
+        │           │ kv nodes: <hidden>
+        │           │ regions: <hidden>
+        │           │ actual row count: 0
+        │           │ vectorized batch count: 0
+        │           │ KV time: 0µs
+        │           │ KV contention time: 0µs
+        │           │ KV rows decoded: 1
+        │           │ KV pairs read: 2
+        │           │ KV bytes read: 8 B
+        │           │ KV gRPC calls: 1
+        │           │ execution time: 0µs
+        │           │ estimated max memory allocated: 0 B
+        │           │ MVCC step count (ext/int): 0/0
+        │           │ MVCC seek count (ext/int): 0/0
+        │           │ estimated row count: 0 (missing stats)
+        │           │ table: parent@parent_pkey
+        │           │ equality: (fk_new) = (k)
+        │           │ equality cols are key
+        │           │
+        │           └── • filter
+        │               │ columns: (fk_new)
+        │               │ sql nodes: <hidden>
+        │               │ regions: <hidden>
+        │               │ actual row count: 1
+        │               │ vectorized batch count: 0
+        │               │ execution time: 0µs
+        │               │ estimated row count: 3 (missing stats)
+        │               │ filter: fk_new IS NOT NULL
+        │               │
+        │               └── • project
+        │                   │ columns: (fk_new)
+        │                   │
+        │                   └── • scan buffer
+        │                         columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
+        │                         sql nodes: <hidden>
+        │                         regions: <hidden>
+        │                         actual row count: 1
+        │                         vectorized batch count: 0
+        │                         execution time: 0µs
+        │                         estimated row count: 3 (missing stats)
+        │                         label: buffer 1
+        │
+        └── • after-triggers
+            │ trigger: t2
+            │
+            └── • render
+                │ columns: (f, k_old, fk_old, k_new, fk_new_new, old, new)
+                │ render f: f(new, old, 't2', 'AFTER', 'ROW', 'UPDATE', 111, 'child', 'child', 'public', 0, ARRAY[])
+                │ render k_old: k_old
+                │ render fk_old: fk_old
+                │ render k_new: k_new
+                │ render fk_new_new: fk_new_new
+                │ render old: old
+                │ render new: new
+                │
+                └── • render
+                    │ columns: (new, old, k_old, fk_old, k_new, fk_new_new)
+                    │ render new: ((k, fk_new) AS k, fk)
+                    │ render old: ((k, fk) AS k, fk)
+                    │ render k_old: k
+                    │ render fk_old: fk
+                    │ render k_new: k
+                    │ render fk_new_new: fk_new
+                    │
+                    └── • project
+                        │ columns: (k, fk, k, fk_new)
+                        │
+                        └── • scan buffer
+                              columns: (k, fk, fk_new, fk_old, old, new, f, "check-rows")
+                              sql nodes: <hidden>
+                              regions: <hidden>
+                              actual row count: 1
+                              vectorized batch count: 0
+                              execution time: 0µs
+                              estimated row count: 1
+                              label: buffer 1000000
+
+
+# Ensure that the intent on 'parent' is resolved so that we don't see any
+# contention time reported for 'delete range' below.
+statement ok
+SELECT count(*) FROM parent
+
+query T
+EXPLAIN ANALYZE (VERBOSE) DELETE FROM parent WHERE k = 2;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+maximum memory usage: <hidden>
+network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• root
+│ columns: ()
+│
+├── • delete range
+│     columns: ()
+│     sql nodes: <hidden>
+│     regions: <hidden>
+│     actual row count: 1
+│     vectorized batch count: 0
+│     execution time: 0µs
+│     estimated row count: 0 (missing stats)
+│     from: parent
+│     spans: /2/0
+│
+└── • fk-cascade
+    │ fk: child_fk_fkey
+    │
+    └── • root
+        │ columns: ()
+        │
+        ├── • delete
+        │   │ columns: ()
+        │   │ sql nodes: <hidden>
+        │   │ regions: <hidden>
+        │   │ actual row count: 0
+        │   │ vectorized batch count: 0
+        │   │ execution time: 0µs
+        │   │ estimated row count: 0 (missing stats)
+        │   │ from: child
+        │   │
+        │   ├── • before-triggers
+        │   │     trigger: t
+        │   │
+        │   └── • buffer
+        │       │ columns: (k, fk, old, f, "check-rows")
+        │       │ sql nodes: <hidden>
+        │       │ regions: <hidden>
+        │       │ actual row count: 1
+        │       │ vectorized batch count: 0
+        │       │ execution time: 0µs
+        │       │ label: buffer 1
+        │       │
+        │       └── • filter
+        │           │ columns: (k, fk, old, f, "check-rows")
+        │           │ sql nodes: <hidden>
+        │           │ regions: <hidden>
+        │           │ actual row count: 1
+        │           │ vectorized batch count: 0
+        │           │ execution time: 0µs
+        │           │ estimated row count: 10 (missing stats)
+        │           │ filter: f IS DISTINCT FROM NULL
+        │           │
+        │           └── • render
+        │               │ columns: ("check-rows", k, fk, old, f)
+        │               │ render check-rows: CASE WHEN f IS DISTINCT FROM old THEN crdb_internal.plpgsql_raise('ERROR', 'trigger t attempted to modify or filter a row in a cascade operation: ' || old::STRING, e'changing the rows updated or deleted by a foreign-key cascade\n can cause constraint violations, and therefore is not allowed', e'to enable this behavior (with risk of constraint violation), set\nthe session variable \'unsafe_allow_triggers_modifying_cascades\' to true', '27000') ELSE CAST(NULL AS INT8) END
+        │               │ render k: k
+        │               │ render fk: fk
+        │               │ render old: old
+        │               │ render f: f
+        │               │
+        │               └── • render
+        │                   │ columns: (f, k, fk, old)
+        │                   │ render f: f(NULL, old, 't', 'BEFORE', 'ROW', 'DELETE', 111, 'child', 'child', 'public', 0, ARRAY[])
+        │                   │ render k: k
+        │                   │ render fk: fk
+        │                   │ render old: old
+        │                   │
+        │                   └── • render
+        │                       │ columns: (old, k, fk)
+        │                       │ render old: ((k, fk) AS k, fk)
+        │                       │ render k: k
+        │                       │ render fk: fk
+        │                       │
+        │                       └── • filter
+        │                           │ columns: (k, fk)
+        │                           │ sql nodes: <hidden>
+        │                           │ regions: <hidden>
+        │                           │ actual row count: 1
+        │                           │ vectorized batch count: 0
+        │                           │ execution time: 0µs
+        │                           │ estimated row count: 10 (missing stats)
+        │                           │ filter: fk = 2
+        │                           │
+        │                           └── • scan
+        │                                 columns: (k, fk)
+        │                                 sql nodes: <hidden>
+        │                                 kv nodes: <hidden>
+        │                                 regions: <hidden>
+        │                                 actual row count: 1
+        │                                 vectorized batch count: 0
+        │                                 KV time: 0µs
+        │                                 KV contention time: 0µs
+        │                                 KV rows decoded: 1
+        │                                 KV pairs read: 2
+        │                                 KV bytes read: 8 B
+        │                                 KV gRPC calls: 1
+        │                                 estimated max memory allocated: 0 B
+        │                                 MVCC step count (ext/int): 0/0
+        │                                 MVCC seek count (ext/int): 0/0
+        │                                 estimated row count: 1,000 (missing stats)
+        │                                 table: child@child_pkey
+        │                                 spans: FULL SCAN
+        │
+        └── • after-triggers
+            │ trigger: t2
+            │
+            └── • render
+                │ columns: (f, k_old, fk_old, old, new)
+                │ render f: f(NULL, old, 't2', 'AFTER', 'ROW', 'DELETE', 111, 'child', 'child', 'public', 0, ARRAY[])
+                │ render k_old: k_old
+                │ render fk_old: fk_old
+                │ render old: old
+                │ render new: new
+                │
+                └── • render
+                    │ columns: (new, old, k_old, fk_old)
+                    │ render new: NULL
+                    │ render old: ((k, fk) AS k, fk)
+                    │ render k_old: k
+                    │ render fk_old: fk
+                    │
+                    └── • project
+                        │ columns: (k, fk)
+                        │
+                        └── • scan buffer
+                              columns: (k, fk, old, f, "check-rows")
+                              sql nodes: <hidden>
+                              regions: <hidden>
+                              actual row count: 1
+                              vectorized batch count: 0
+                              execution time: 0µs
+                              estimated row count: 1
+                              label: buffer 1000000
+
+statement ok
+DROP TABLE child;
+DROP TABLE parent;
+DROP FUNCTION f;

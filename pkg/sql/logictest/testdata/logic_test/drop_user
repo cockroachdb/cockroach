@@ -1,52 +1,48 @@
 statement ok
 CREATE USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
 
 statement ok
 DROP USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement ok
 CREATE USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
 
 statement ok
 DROP USER USEr1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement error user "user1" does not exist
 DROP USER user1
@@ -87,46 +83,43 @@ CREATE USER user3
 statement ok
 CREATE USER user4
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
-user2     {}       {}
-user3     {}       {}
-user4     {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
+user2     ·        {}
+user3     ·        {}
+user4     ·        {}
 
 statement ok
 DROP USER user1,user2
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user3     {}       {}
-user4     {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user3     ·        {}
+user4     ·        {}
 
 statement error user "user1" does not exist
 DROP USER user1,user3
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user3     {}       {}
-user4     {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user3     ·        {}
+user4     ·        {}
 
 statement ok
 CREATE USER user1
@@ -155,14 +148,13 @@ statement ok
 PREPARE du AS DROP USER user4;
 EXECUTE du
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 user testuser
 
@@ -213,80 +205,5 @@ RESET DATABASE
 
 statement error role schema_owner cannot be dropped because some objects depend on it\nowner of schema defaultdb.the_schema\nowner of schema test.the_schema
 DROP ROLE schema_owner
-
-subtest end
-
-# Regression test for #150543. Ensure that DROP USER is blocked when role has
-# default privileges. 
-subtest default_privileges_dependency
-
-statement ok
-CREATE USER default_priv_user
-
-# Create default privileges with REVOKE. Target routines and types initially. These undo
-# the implicitly created default privileges for new roles.
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user REVOKE EXECUTE ON ROUTINES FROM public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user REVOKE USAGE ON TYPES FROM public
-
-# The next threes REVOKE's are essentially no-op since they don't change anything
-# as nothing was implicitly granted for them.
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user REVOKE USAGE ON SEQUENCES FROM public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user REVOKE ALL ON TABLES FROM public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user REVOKE ALL ON SCHEMAS FROM public
-
-statement error role default_priv_user cannot be dropped because some objects depend on it\nowner of default privileges that revokes privileges of routines from public in database test\nowner of default privileges that revokes privileges of types from public in database test\nHINT: USE test; ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user GRANT EXECUTE ON ROUTINES TO public;\nUSE test; ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user GRANT USAGE ON TYPES TO public;
-DROP USER default_priv_user
-
-# Test with GRANT case 
-statement ok
-CREATE USER default_priv_user2
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 GRANT ALL ON TABLES TO public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 GRANT ALL ON SCHEMAS TO public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 GRANT USAGE ON SEQUENCES TO public
-
-statement error role default_priv_user2 cannot be dropped because some objects depend on it\nowner of default privileges on new relations belonging to role default_priv_user2 in database test\nowner of default privileges on new schemas belonging to role default_priv_user2 in database test\nowner of default privileges on new sequences belonging to role default_priv_user2 in database test\nHINT: USE test; ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 REVOKE ALL ON TABLES FROM public;\nUSE test; ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 REVOKE ALL ON SCHEMAS FROM public;\nUSE test; ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 REVOKE ALL ON SEQUENCES FROM public;
-DROP USER default_priv_user2
-
-# Clean up for successful drop
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user GRANT EXECUTE ON FUNCTIONS TO public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user GRANT USAGE ON TYPES TO public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 REVOKE ALL ON TABLES FROM public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 REVOKE ALL ON SCHEMAS FROM public
-
-statement ok
-ALTER DEFAULT PRIVILEGES FOR ROLE default_priv_user2 REVOKE USAGE ON SEQUENCES FROM public
-
-statement ok
-DROP USER default_priv_user
-
-statement ok
-DROP USER default_priv_user2
-
-# Ensure there are no invalid objects left around. This was how the issue was
-# found prior to #150543.
-query TTTT
-SELECT database_name, schema_name, obj_name, error FROM crdb_internal.invalid_objects;
-----
 
 subtest end

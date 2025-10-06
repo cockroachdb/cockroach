@@ -13,14 +13,12 @@ import "util/hlc/timestamp.proto";
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/enum.proto";
-import "sql/sem/idxtype/idxtype.proto";
 import "sql/sem/semenumpb/constraint.proto";
 import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/privilege.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
-import "sql/vecindex/vecpb/vec.proto";
 import "geo/geopb/config.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/metadata.proto";
@@ -324,6 +322,12 @@ message InterleaveDescriptor {
 message IndexDescriptor {
   option (gogoproto.equal) = true;
 
+  // The type of the index.
+  enum Type {
+    FORWARD = 0;
+    INVERTED = 1;
+  }
+
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "IndexID"];
@@ -417,8 +421,8 @@ message IndexDescriptor {
   // is partitioned into spans of keys each addressable by zone configs.
   optional cockroach.sql.catalog.catpb.PartitioningDescriptor partitioning = 15 [(gogoproto.nullable) = false];
 
-  // Type is the type of index, forward, inverted, vector, etc.
-  optional cockroach.sql.sem.idxtype.T type = 16 [(gogoproto.nullable)=false];
+  // Type is the type of index, inverted or forward.
+  optional Type type = 16 [(gogoproto.nullable)=false];
 
   // CreatedExplicitly specifies whether this index was created explicitly
   // (i.e. via 'CREATE INDEX' statement).
@@ -504,15 +508,7 @@ message IndexDescriptor {
   // with index visibility in-between as partially not visible.
   optional double invisibility = 29 [(gogoproto.nullable) = false];
 
-  // VecConfig, if it's not the zero value, describes configuration for
-  // this vector index.
-  optional vecindex.vecpb.Config vec_config = 30 [(gogoproto.nullable) = false];
-
-  // HideForPrimaryKeyRecreate, if set this index is not usable for reads until the
-  // new primary index becomes public.
-  optional bool hide_for_primary_key_recreate = 31  [(gogoproto.nullable) = false];
-
-  // Next ID: 32
+  // Next ID: 30
 }
 
 // TriggerDescriptor describes a trigger on a table.
@@ -699,65 +695,6 @@ message MaterializedViewRefresh {
   optional bool should_backfill = 4 [(gogoproto.nullable) = false];
 }
 
-// PolicyDescriptor is a representation of a row-level security policy. It's
-// stored in the TableDescriptor.
-message PolicyDescriptor {
-  option (gogoproto.equal) = true;
-
-  // ID is used within the table descriptor to uniquely identify policies.
-  optional uint32 id = 1 [(gogoproto.customname) = "ID",
-    (gogoproto.casttype) = "PolicyID", (gogoproto.nullable) = false];
-
-  // The name of the policy. Unique within a table, and cannot be qualified.
-  optional string name = 2 [(gogoproto.nullable) = false];
-
-  // Type indicates whether the policy is permissive or restrictive.
-  optional cockroach.sql.catalog.catpb.PolicyType type = 3 [(gogoproto.nullable) = false];
-
-  // Command specifies the SQL commands to which the policy applies.
-  optional cockroach.sql.catalog.catpb.PolicyCommand command = 4 [(gogoproto.nullable) = false];
-
-  // RoleNames is a list of roles that this policy applies to.
-  repeated string role_names = 5;
-
-  // The next two fields are the expressions to use for the policy. It is not
-  // correct to use either expression as output to display to a user. User
-  // defined types within the expressions have been serialized in a internal
-  // format. Instead, use one of the schemaexpr.FormatExpr* functions.
-
-  // UsingExpr defines the condition applied to read existing rows. If this
-  // field is omitted, the policy will not be used for reads.
-  optional string using_expr = 6 [(gogoproto.nullable) = false];
-
-  // UsingColumnIDs is an ordered list of column IDs used by the USING expression.
-  repeated uint32 using_column_ids = 11 [(gogoproto.customname) = "UsingColumnIDs",
-    (gogoproto.casttype) = "ColumnID"];
-
-  // WithCheck defines the condition applied to validate new rows during
-  // write operations (e.g., INSERT or UPDATE). If omitted, the UsingExpr
-  // will serve as a fallback, provided it is defined.
-  optional string with_check_expr = 7 [(gogoproto.nullable) = false];
-
-  // WithCheckColumnIDs is an ordered list of column IDs used by the WITH CHECK
-  // expression.
-  repeated uint32 with_check_column_ids = 12 [(gogoproto.customname) = "WithCheckColumnIDs",
-    (gogoproto.casttype) = "ColumnID"];
-
-  // DependsOnTypes are the IDs of all user defined types that the policy
-  // expressions depend on.
-  repeated uint32 depends_on_types = 8 [(gogoproto.casttype) = "ID"];
-
-  // DependsOnFunctions are the IDs of the function that the policy expressions
-  // depend on.
-  repeated uint32 depends_on_functions = 9 [(gogoproto.casttype) = "ID"];
-
-  // DependsOnRelations are the IDs of the tables, views and sequences that the
-  // policy expressions depend on.
-  repeated uint32 depends_on_relations = 10 [(gogoproto.casttype) = "ID"];
-
-  // Next ID: 13
-}
-
 // A DescriptorMutation represents a column or an index that
 // has either been added or dropped and hasn't yet transitioned
 // into a stable state: completely backfilled and visible, or
@@ -828,8 +765,8 @@ message DescriptorMutation {
     // this state is a programming error.
     //
     // Index: INSERT, UPDATE and DELETE treat this index like a
-    // WRITE_ONLY index, but use Put in instead of CPut, effectively
-    // ignoring unique constraints.
+    // WRITE_ONLY index, but use Put in instead of CPut or
+    // InitPut, effectively ignoring unique constraints.
     MERGING = 4;
 
   }
@@ -1198,8 +1135,8 @@ message TableDescriptor {
     optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
 
     // The number of values (which have already been created in KV)
-    // that a session can cache locally.
-    optional int64 session_cache_size = 7 [(gogoproto.nullable) = false];
+    // that a node can cache locally.
+    optional int64 cache_size = 7 [(gogoproto.nullable) = false];
     // AS option value for CREATE SEQUENCE, which specifies the default
     // min and max values a sequence can take on.
     optional string as_integer_type = 8 [(gogoproto.nullable) = false];
@@ -1359,26 +1296,7 @@ message TableDescriptor {
   optional uint32 next_trigger_id = 65 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "NextTriggerID", (gogoproto.casttype) = "TriggerID"];
 
-  // Policies are the row-level security policies that are defined on this table.
-  repeated PolicyDescriptor policies = 66 [(gogoproto.nullable) = false];
-
-  // NextPolicyID is the ID for the next policy created.
-  optional uint32 next_policy_id = 67 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "NextPolicyID", (gogoproto.casttype) = "PolicyID"];
-
-  // row_level_security_enabled indicates whether row level security is enabled on this table.
-  optional bool row_level_security_enabled = 68 [(gogoproto.nullable) = false];
-
-  // row_level_security_forced indicates whether row level security is forced on this table.
-  // When forced is set the table's RLS policies are enforced even on the table owner.
-  optional bool row_level_security_forced = 69 [(gogoproto.nullable) = false];
-
-  // RBRUsingConstraint is the ID of the foreign-key constraint that is used to
-  // look up values for the region column of a REGIONAL BY ROW table.
-  optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
-
-  // Next ID: 71
+  // Next ID: 66
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
@@ -1845,11 +1763,6 @@ message FunctionDescriptor {
       (gogoproto.casttype) = "ConstraintID"];
     repeated uint32 trigger_ids = 5 [(gogoproto.customname) = "TriggerIDs",
       (gogoproto.casttype) = "TriggerID"];
-    repeated uint32 policy_ids = 6 [(gogoproto.customname) = "PolicyIDs",
-      (gogoproto.casttype) = "PolicyID"];
-    // ViewQuery indicates that this function is referenced in the query of a
-    // view.
-    optional bool view_query = 7 [(gogoproto.nullable) = false];
   }
 
   optional string name = 1 [(gogoproto.nullable) = false];

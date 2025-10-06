@@ -16,7 +16,7 @@ import (
 )
 
 func sqlStatsTTLChange(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.SystemDeps,
 ) error {
 	tables := []string{
 		"system.statement_statistics",
@@ -25,16 +25,10 @@ func sqlStatsTTLChange(
 		"system.transaction_activity",
 	}
 
-	id, _, _ := readerTenantInfo(ctx, d)
-	if id.IsSet() {
-		// Don't perform upgrade for read from standby tenants.
-		return nil
-	}
-
 	// These migrations are skipped for backup tests because these tables are not part
 	// of the backup.
 	shouldConfigureTTL := true
-	if knobs := d.TestingKnobs; knobs != nil {
+	if knobs := d.SQLStatsKnobs; knobs != nil {
 		shouldConfigureTTL = !knobs.SkipZoneConfigBootstrap
 	}
 

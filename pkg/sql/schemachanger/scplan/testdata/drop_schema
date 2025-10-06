@@ -510,7 +510,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, ABSENT]
   to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnDefaultExpression:{DescID: 106, ColumnID: 3, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
@@ -4345,7 +4345,7 @@ PreCommitPhase stage 2 of 2 with 243 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: 'Pending: Updating schema metadata (11 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops pending
       Statements:
       - statement: DROP SCHEMA defaultdb.sc1 CASCADE
         redactedstatement: DROP SCHEMA defaultdb.sc1 CASCADE

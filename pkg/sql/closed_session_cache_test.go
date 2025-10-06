@@ -46,7 +46,7 @@ func TestSessionCacheBasic(t *testing.T) {
 
 				st := &cluster.Settings{}
 				monitor := mon.NewUnlimitedMonitor(ctx, mon.Options{
-					Name:     mon.MakeName("test"),
+					Name:     "test",
 					Settings: st,
 				})
 				cache = NewClosedSessionCache(st, monitor, time.Now)

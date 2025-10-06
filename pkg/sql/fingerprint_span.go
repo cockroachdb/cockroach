@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -29,8 +30,8 @@ import (
 var maxFingerprintNumWorkers = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"sql.fingerprint.max_span_parallelism",
-	"the maximum number of workers per partition used to issue fingerprint ExportRequests",
-	5,
+	"the maximum number of workers used to issue fingerprint ExportRequests",
+	64,
 	settings.PositiveInt,
 )
 
@@ -101,7 +102,7 @@ func (p *planner) fingerprintSpanFanout(
 	defer sp.Finish()
 
 	var (
-		txn        = p.EvalContext().Txn
+		evalCtx    = p.EvalContext()
 		execCfg    = p.ExecutorConfig().(*ExecutorConfig)
 		dsp        = p.DistSQLPlanner()
 		extEvalCtx = p.ExtendedEvalContext()
@@ -109,7 +110,7 @@ func (p *planner) fingerprintSpanFanout(
 
 	maxWorkerCount := int(maxFingerprintNumWorkers.Get(execCfg.SV()))
 	if maxWorkerCount == 1 {
-		return fingerprintSpanImpl(ctx, txn, span, startTime, allRevisions, stripped)
+		return fingerprintSpanImpl(ctx, evalCtx, span, startTime, allRevisions, stripped)
 	}
 
 	planCtx, _, err := dsp.SetupAllNodesPlanning(ctx, extEvalCtx, execCfg)
@@ -117,10 +118,34 @@ func (p *planner) fingerprintSpanFanout(
 		return 0, nil, err
 	}
 
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, []roachpb.Span{span}, PartitionSpansBoundDefault)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, []roachpb.Span{span})
 	if err != nil {
 		return 0, nil, err
 	}
+
+	maxLen := 0
+	count := 0
+	for _, partition := range spanPartitions {
+		length := len(partition.Spans)
+		maxLen = max(maxLen, length)
+		count += length
+	}
+	// Take as many workers as partitions to efficiently distribute work
+	maxWorkerCount = min(maxWorkerCount, count)
+
+	// Each span partition contains spans that are likely to be served by
+	// the same node. By round robin grabbing a span from each partition
+	// and pushing to the channel, ideally sequential workers won't attempt
+	// to read from the same node at the same time.
+	spanChannel := make(chan roachpb.Span, count)
+	for i := range maxLen {
+		for _, partition := range spanPartitions {
+			if i < len(partition.Spans) {
+				spanChannel <- partition.Spans[i]
+			}
+		}
+	}
+	close(spanChannel)
 
 	rv := struct {
 		syncutil.Mutex
@@ -130,110 +155,40 @@ func (p *planner) fingerprintSpanFanout(
 		ssts: make([][]byte, 0, len(spanPartitions)),
 	}
 
-	fingerprintPartition := func(
-		partition roachpb.Spans,
-	) func(ctx context.Context) error {
-		return func(ctx context.Context) (retErr error) {
-			// workCh is used to divide up the partition between workers. It is
-			// closed whenever there is no work to do. It might not be closed if
-			// the coordinator encounters an error.
-			workCh := make(chan roachpb.Span)
-			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
-
-			grp := ctxgroup.WithContext(ctx)
-			for range maxWorkerCount {
-				grp.GoCtx(func(ctx context.Context) error {
-					// Run until the work channel is empty or the coordinator
-					// exits.
-					for {
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case sp, ok := <-workCh:
-							if !ok {
-								// No more work.
-								return nil
-							}
-							localFingerprint, localSSTs, err := fingerprintSpanImpl(ctx, txn, sp, startTime, allRevisions, stripped)
-							if err != nil {
-								return err
-							}
-							rv.Lock()
-							rv.ssts = append(rv.ssts, localSSTs...) // nolint:deferunlockcheck
-							rv.fingerprint = rv.fingerprint ^ localFingerprint
-							rv.Unlock()
-						}
-					}
-				})
-			}
-			defer func() {
-				// Either workCh is closed (meaning that we've processed all the
-				// work), or we hit an error in the loop below. If it's the
-				// latter, we need to cancel the context to signal to the
-				// workers to shutdown ASAP.
-				if retErr != nil {
-					cancel()
-				}
-				// Regardless of how we got here, ensure that we always block
-				// until all workers exit.
-				// TODO(yuzefovich): refactor the logic here so that the
-				// coordinator goroutine had a single return point. This will
-				// also allow us to prevent a hypothetical scenario where we're
-				// blocked forever (i.e. until the context is canceled) writing
-				// into workCh which can happen if all worker goroutines exit
-				// due to an error.
-				grpErr := grp.Wait()
-				if retErr == nil {
-					retErr = grpErr
-				}
-			}()
-
-			for _, part := range partition {
-				rdi, err := p.execCfg.RangeDescIteratorFactory.NewLazyIterator(ctx, part, 64)
-				if err != nil {
-					return err
-				}
-				remainingSpan := part
-				for ; rdi.Valid(); rdi.Next() {
-					rangeDesc := rdi.CurRangeDescriptor()
-					rangeSpan := roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
-					subspan := remainingSpan.Intersect(rangeSpan)
-					if !subspan.Valid() {
-						return errors.AssertionFailedf("%s not in %s of %s", rangeSpan, remainingSpan, part)
-					}
-					select {
-					case workCh <- subspan:
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-					remainingSpan.Key = subspan.EndKey
-				}
-				if err := rdi.Error(); err != nil {
-					return err
-				}
-			}
-			close(workCh)
-			return nil
-		}
-	}
-
-	// Start one span splitter/group of workers per partition, each of which waits
-	// for all its workers to finish before returning, and then wait for them all.
 	grp := ctxgroup.WithContext(ctx)
-	for _, part := range spanPartitions {
-		grp.GoCtx(fingerprintPartition(part.Spans))
+	for range maxWorkerCount {
+		grp.GoCtx(func(ctx context.Context) error {
+			// Run until channel is empty
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case sp, ok := <-spanChannel:
+					if !ok {
+						return nil
+					}
+					localFingerprint, localSSTs, err := fingerprintSpanImpl(ctx, evalCtx, sp, startTime, allRevisions, stripped)
+					if err != nil {
+						return err
+					}
+					rv.Lock()
+					rv.ssts = append(rv.ssts, localSSTs...) // nolint:deferunlockcheck
+					rv.fingerprint = rv.fingerprint ^ localFingerprint
+					rv.Unlock()
+				}
+			}
+		})
 	}
+
 	if err := grp.Wait(); err != nil {
 		return 0, nil, err
 	}
-
 	return rv.fingerprint, rv.ssts, nil
 }
 
 func fingerprintSpanImpl(
 	ctx context.Context,
-	txn *kv.Txn,
+	evalCtx *eval.Context,
 	span roachpb.Span,
 	startTime hlc.Timestamp,
 	allRevisions, stripped bool,
@@ -244,7 +199,7 @@ func fingerprintSpanImpl(
 		filter = kvpb.MVCCFilter_All
 	}
 	header := kvpb.Header{
-		Timestamp: txn.ReadTimestamp(),
+		Timestamp: evalCtx.Txn.ReadTimestamp(),
 		// NOTE(ssd): Setting this disables async sending in
 		// DistSender.
 		ReturnElasticCPUResumeSpans: true,
@@ -277,7 +232,7 @@ func fingerprintSpanImpl(
 			5*time.Minute, func(ctx context.Context) error {
 				sp := tracing.SpanFromContext(ctx)
 				ctx, exportSpan := sp.Tracer().StartSpanCtx(ctx, "fingerprint.ExportRequest", tracing.WithParent(sp))
-				rawResp, pErr = kv.SendWrappedWithAdmission(ctx, txn.DB().NonTransactionalSender(), header, admissionHeader, req)
+				rawResp, pErr = kv.SendWrappedWithAdmission(ctx, evalCtx.Txn.DB().NonTransactionalSender(), header, admissionHeader, req)
 				recording = exportSpan.FinishAndGetConfiguredRecording()
 				if pErr != nil {
 					return pErr.GoError()
@@ -286,7 +241,7 @@ func fingerprintSpanImpl(
 			})
 		if exportRequestErr != nil {
 			if recording != nil {
-				log.Dev.Errorf(ctx, "failed export request trace:\n%s", recording)
+				log.Errorf(ctx, "failed export request trace:\n%s", recording)
 			}
 			return 0, nil, exportRequestErr
 		}

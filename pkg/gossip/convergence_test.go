@@ -56,13 +56,13 @@ func TestConvergence(t *testing.T) {
 
 	const maxCycles = 100
 	if connectedCycle := network.RunUntilFullyConnected(); connectedCycle > maxCycles {
-		log.Dev.Warningf(context.Background(), "expected a fully-connected network within %d cycles; took %d",
+		log.Warningf(context.Background(), "expected a fully-connected network within %d cycles; took %d",
 			maxCycles, connectedCycle)
 	}
 
 	const maxConnsRefused = 50
 	if connsRefused := connectionsRefused(network); connsRefused > maxConnsRefused {
-		log.Dev.Warningf(context.Background(),
+		log.Warningf(context.Background(),
 			"expected network to fully connect with <= %d connections refused; took %d",
 			maxConnsRefused, connsRefused)
 	}
@@ -98,7 +98,7 @@ func TestNetworkReachesEquilibrium(t *testing.T) {
 			cyclesWithoutChange++
 		}
 		if cycle%5 == 0 {
-			log.Dev.Infof(context.Background(), "cycle: %d, cyclesWithoutChange: %d, fullyConnected: %v",
+			log.Infof(context.Background(), "cycle: %d, cyclesWithoutChange: %d, fullyConnected: %v",
 				cycle, cyclesWithoutChange, network.IsNetworkConnected())
 		}
 		return cyclesWithoutChange < 5
@@ -106,13 +106,13 @@ func TestNetworkReachesEquilibrium(t *testing.T) {
 
 	const maxCycles = 200
 	if numCycles > maxCycles {
-		log.Dev.Warningf(context.Background(), "expected a non-thrashing network within %d cycles; took %d",
+		log.Warningf(context.Background(), "expected a non-thrashing network within %d cycles; took %d",
 			maxCycles, numCycles)
 	}
 
 	const maxConnsRefused = 500
 	if connsRefused > maxConnsRefused {
-		log.Dev.Warningf(context.Background(),
+		log.Warningf(context.Background(),
 			"expected thrashing to die down with <= %d connections refused; took %d",
 			maxConnsRefused, connsRefused)
 	}

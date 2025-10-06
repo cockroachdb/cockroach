@@ -20,7 +20,6 @@ type SettingOption struct {
 	validateFloat64Fn  func(float64) error
 	validateStringFn   func(*Values, string) error
 	validateProtoFn    func(*Values, protoutil.Message) error
-	validateEnumFn     func(string) error
 }
 
 // NameStatus indicates the status of a setting name.
@@ -118,11 +117,6 @@ func WithValidateString(fn func(*Values, string) error) SettingOption {
 // WithValidateProto adds a validation function for a proto setting.
 func WithValidateProto(fn func(*Values, protoutil.Message) error) SettingOption {
 	return SettingOption{validateProtoFn: fn}
-}
-
-// WithValidateEnum adds a validation function for an enum setting.
-func WithValidateEnum(fn func(string) error) SettingOption {
-	return SettingOption{validateEnumFn: fn}
 }
 
 func (c *common) apply(opts []SettingOption) {

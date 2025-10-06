@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -32,7 +30,7 @@ type StatementOptions struct {
 	// Rework changefeed_stmt.go so that we can have one static StatementOptions
 	// that validates everything at once and don't need this cache.
 	cache struct {
-		*EncodingOptions
+		EncodingOptions
 	}
 }
 
@@ -64,16 +62,6 @@ type InitialScanType int
 // SinkSpecificJSONConfig is a JSON string that the sink is responsible
 // for parsing, validating, and honoring.
 type SinkSpecificJSONConfig string
-
-// EnrichedProperty is used with the `enriched_properties` option to specify
-// which properties are included in the enriched envelope. That option is specified
-// as a csv of these values.
-type EnrichedProperty string
-
-const (
-	EnrichedPropertySource EnrichedProperty = `source`
-	EnrichedPropertySchema EnrichedProperty = `schema`
-)
 
 // Constants for the initial scan types
 const (
@@ -115,10 +103,6 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
-	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
-	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
-	OptHeadersJSONColumnName = `headers_json_column_name`
-	OptExtraHeaders          = `extra_headers`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -160,20 +144,16 @@ const (
 
 	OptInitialScanOnly = `initial_scan_only`
 
-	OptEnrichedProperties = `enriched_properties`
-
 	OptEnvelopeKeyOnly       EnvelopeType = `key_only`
 	OptEnvelopeRow           EnvelopeType = `row`
 	OptEnvelopeDeprecatedRow EnvelopeType = `deprecated_row`
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 	OptEnvelopeBare          EnvelopeType = `bare`
-	OptEnvelopeEnriched      EnvelopeType = `enriched`
 
-	OptFormatJSON     FormatType = `json`
-	OptFormatAvro     FormatType = `avro`
-	OptFormatCSV      FormatType = `csv`
-	OptFormatParquet  FormatType = `parquet`
-	OptFormatProtobuf FormatType = `protobuf`
+	OptFormatJSON    FormatType = `json`
+	OptFormatAvro    FormatType = `avro`
+	OptFormatCSV     FormatType = `csv`
+	OptFormatParquet FormatType = `parquet`
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
@@ -251,11 +231,9 @@ const (
 	SinkParamConfluentAPIKey    = `api_key`
 	SinkParamConfluentAPISecret = `api_secret`
 
-	SinkSchemeAzureKafka             = `azure-event-hub`
-	SinkParamAzureAccessKeyName      = `shared_access_key_name`
-	SinkParamAzureAccessKeyNameCamel = `SharedAccessKeyName`
-	SinkParamAzureAccessKey          = `shared_access_key`
-	SinkParamAzureAccessKeyCamel     = `SharedAccessKey`
+	SinkSchemeAzureKafka        = `azure-event-hub`
+	SinkParamAzureAccessKeyName = `shared_access_key_name`
+	SinkParamAzureAccessKey     = `shared_access_key`
 
 	RegistryParamCACert     = `ca_cert`
 	RegistryParamClientCert = `client_cert`
@@ -303,8 +281,6 @@ const (
 	OptionTypeEnum
 
 	OptionTypeJSON
-
-	OptionTypeCommaSepStrings
 )
 
 // OptionPermittedValues is used in validations and is meant to be self-documenting.
@@ -316,10 +292,6 @@ type OptionPermittedValues struct {
 	// EnumValues lists all possible values for OptionTypeEnum.
 	// Empty for non-enums.
 	EnumValues map[string]struct{}
-
-	// CSVValues lists all possible values for OptionTypeCommaSepStrings.
-	// Empty for non-CSVs.
-	CSVValues map[string]struct{}
 
 	// CanBeEmpty describes an option that can be provided either as a key with no value,
 	// or a key/value pair.
@@ -340,14 +312,6 @@ func enum(strs ...string) OptionPermittedValues {
 		Type:       OptionTypeEnum,
 		EnumValues: makeStringSet(strs...),
 		desc:       describeEnum(strs...),
-	}
-}
-
-func csv(strs ...string) OptionPermittedValues {
-	return OptionPermittedValues{
-		Type:      OptionTypeCommaSepStrings,
-		CSVValues: makeStringSet(strs...),
-		desc:      describeCSV(strs...),
 	}
 }
 
@@ -378,8 +342,8 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptCursor:                             timestampOption,
 	OptCustomKeyColumn:                    stringOption,
 	OptEndTime:                            timestampOption,
-	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare", "enriched"),
-	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet", "protobuf"),
+	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
+	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet"),
 	OptFullTableName:                      flagOption,
 	OptKeyInValue:                         flagOption,
 	OptTopicInValue:                       flagOption,
@@ -411,9 +375,6 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
-	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
-	OptHeadersJSONColumnName:              stringOption,
-	OptExtraHeaders:                       jsonOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -427,20 +388,20 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptInitialScan, OptNoInitialScan, OptInitialScanOnly, OptUnordered, OptCustomKeyColumn,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
-	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
+	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
 
 // WebhookValidOptions is options exclusive to webhook sink
-var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression, OptExtraHeaders)
+var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig)
 
 // PubsubValidOptions is options exclusive to pubsub sink
 var PubsubValidOptions = makeStringSet(OptPubsubSinkConfig)
@@ -483,7 +444,6 @@ func RedactUserFromURI(uri string) (string, error) {
 // RedactedOptions are options whose values should be replaced with "redacted" in job descriptions and errors.
 var RedactedOptions = map[string]redactionFunc{
 	OptWebhookAuthHeader:       redactSimple,
-	OptExtraHeaders:            redactSimple,
 	SinkParamClientKey:         redactSimple,
 	OptConfluentSchemaRegistry: RedactUserFromURI,
 }
@@ -685,30 +645,6 @@ func (s StatementOptions) getEnumValue(k string) (string, error) {
 	return rawVal, nil
 }
 
-func (s StatementOptions) getCSVValues(k string) (map[string]struct{}, error) {
-	permitted := ChangefeedOptionExpectValues[k]
-	rawVal, present := s.m[k]
-	if !present {
-		return nil, nil
-	}
-	if rawVal == `` {
-		return nil, nil
-	}
-
-	vals := strings.Split(rawVal, `,`)
-	set := make(map[string]struct{}, len(vals))
-	for _, val := range vals {
-		val = strings.TrimSpace(val)
-		if _, ok := permitted.CSVValues[val]; !ok {
-			return nil, errors.Errorf(
-				`unknown %s: %s, %s`, k, val, permitted.desc)
-		}
-		set[val] = struct{}{}
-	}
-
-	return set, nil
-}
-
 // getDurationValue validates that the option `k` was supplied with a
 // valid duration.
 func (s StatementOptions) getDurationValue(k string) (*time.Duration, error) {
@@ -818,7 +754,6 @@ type CanHandle struct {
 	MultipleColumnFamilies bool
 	VirtualColumns         bool
 	RequiredColumns        []string
-	RequiredColumnTypes    map[string]*types.T
 }
 
 // GetCanHandle returns a populated CanHandle.
@@ -831,13 +766,6 @@ func (s StatementOptions) GetCanHandle() CanHandle {
 	}
 	if s.IsSet(OptCustomKeyColumn) {
 		h.RequiredColumns = append(h.RequiredColumns, s.m[OptCustomKeyColumn])
-	}
-	if s.IsSet(OptHeadersJSONColumnName) {
-		h.RequiredColumns = append(h.RequiredColumns, s.m[OptHeadersJSONColumnName])
-		if h.RequiredColumnTypes == nil {
-			h.RequiredColumnTypes = make(map[string]*types.T)
-		}
-		h.RequiredColumnTypes[s.m[OptHeadersJSONColumnName]] = types.Jsonb
 	}
 	return h
 }
@@ -858,15 +786,13 @@ type EncodingOptions struct {
 	SchemaRegistryURI           string
 	Compression                 string
 	CustomKeyColumn             string
-	EnrichedProperties          map[EnrichedProperty]struct{}
-	HeadersJSONColName          string
 }
 
 // GetEncodingOptions populates and validates an EncodingOptions.
 func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o := EncodingOptions{}
-	if s.cache.EncodingOptions != nil {
-		return *s.cache.EncodingOptions, nil
+	if s.cache.EncodingOptions != o {
+		return s.cache.EncodingOptions, nil
 	}
 	format, err := s.getEnumValue(OptFormat)
 	if err != nil {
@@ -907,21 +833,8 @@ func (s StatementOptions) GetEncodingOptions() (EncodingOptions, error) {
 	o.AvroSchemaPrefix = s.m[OptAvroSchemaPrefix]
 	o.Compression = s.m[OptCompression]
 	o.CustomKeyColumn = s.m[OptCustomKeyColumn]
-	o.HeadersJSONColName = s.m[OptHeadersJSONColumnName]
 
-	enrichedProperties, err := s.getCSVValues(OptEnrichedProperties)
-	if err != nil {
-		return o, err
-	}
-	if len(enrichedProperties) > 0 {
-		o.EnrichedProperties = make(map[EnrichedProperty]struct{}, len(enrichedProperties))
-		for k := range enrichedProperties {
-			o.EnrichedProperties[EnrichedProperty(k)] = struct{}{}
-		}
-	}
-
-	s.cache.EncodingOptions = &o
-
+	s.cache.EncodingOptions = o
 	return o, o.Validate()
 }
 
@@ -935,32 +848,12 @@ func (e EncodingOptions) Validate() error {
 	if e.Format != OptFormatJSON && e.EncodeJSONValueNullAsObject {
 		return errors.Errorf(`%s is only usable with %s=%s`, OptEncodeJSONValueNullAsObject, OptFormat, OptFormatJSON)
 	}
-
-	if e.Envelope == OptEnvelopeEnriched {
-		if e.Format != OptFormatJSON && e.Format != OptFormatAvro && e.Format != OptFormatProtobuf {
-			return errors.Errorf(`%s=%s is only usable with %s=%s/%s/%s`, OptEnvelope, OptEnvelopeEnriched, OptFormat, OptFormatJSON, OptFormatAvro, OptFormatProtobuf)
-		}
-	} else {
-		if len(e.EnrichedProperties) > 0 {
-			return errors.Errorf(`%s is only usable with %s=%s`, OptEnrichedProperties, OptEnvelope, OptEnvelopeEnriched)
-		}
-	}
-
-	if e.HeadersJSONColName != `` && (e.Format != OptFormatJSON && e.Format != OptFormatAvro) {
-		return errors.Errorf(`%s is only usable with %s=%s/%s`, OptHeadersJSONColumnName, OptFormat, OptFormatJSON, OptFormatAvro)
-	}
-
-	// TODO(#140110): refactor this logic.
-	if (e.Envelope != OptEnvelopeWrapped && e.Envelope != OptEnvelopeEnriched) && e.Format != OptFormatProtobuf && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
+	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
 			b bool
 		}{
 			{OptKeyInValue, e.KeyInValue},
-			// NOTE: topic_in_value is allowed for envelope=enriched, but has no
-			// effect. This is because the enriched envelope already has much of
-			// the information contained in the topic (ie table name), but this
-			// option is required for the webhook sink so we must permit it.
 			{OptTopicInValue, e.TopicInValue},
 			{OptUpdatedTimestamps, e.UpdatedTimestamps},
 			{OptMVCCTimestamps, e.MVCCTimestamps},
@@ -968,8 +861,8 @@ func (e EncodingOptions) Validate() error {
 		}
 		for _, v := range requiresWrap {
 			if v.b {
-				return errors.Errorf(`%[1]s is only usable with %[2]s=%[3]s or %[2]s=%[4]s`,
-					v.k, OptEnvelope, OptEnvelopeWrapped, OptEnvelopeEnriched)
+				return errors.Errorf(`%s is only usable with %s=%s`,
+					v.k, OptEnvelope, OptEnvelopeWrapped)
 			}
 		}
 	}
@@ -1019,15 +912,10 @@ type Filters struct {
 
 // GetFilters returns a populated Filters.
 func (s StatementOptions) GetFilters() Filters {
-	envelopeType := s.m[OptEnvelope]
 	_, withDiff := s.m[OptDiff]
 	_, withIgnoreDisableChangefeedReplication := s.m[OptIgnoreDisableChangefeedReplication]
 	return Filters{
-		// Feeds using the enriched envelope need their kvfeed to send the previous
-		// version of a row even when the `diff` changefeed option is not set
-		// in order to populate the `op` field. The use this data to differentiate
-		// between inserts and updates.
-		WithDiff:      withDiff || envelopeType == string(OptEnvelopeEnriched),
+		WithDiff:      withDiff,
 		WithFiltering: !withIgnoreDisableChangefeedReplication,
 	}
 }
@@ -1039,84 +927,25 @@ func (s StatementOptions) GetFilters() Filters {
 type WebhookSinkOptions struct {
 	JSONConfig    SinkSpecificJSONConfig
 	AuthHeader    string
-	ExtraHeaders  map[string]string
 	ClientTimeout *time.Duration
-	Compression   string
 }
 
 // GetWebhookSinkOptions includes arbitrary json to be interpreted
 // by the webhook sink.
 func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
-	o := WebhookSinkOptions{
-		JSONConfig:  s.getJSONValue(OptWebhookSinkConfig),
-		AuthHeader:  s.m[OptWebhookAuthHeader],
-		Compression: s.m[OptCompression],
-	}
+	o := WebhookSinkOptions{JSONConfig: s.getJSONValue(OptWebhookSinkConfig), AuthHeader: s.m[OptWebhookAuthHeader]}
 	timeout, err := s.getDurationValue(OptWebhookClientTimeout)
 	if err != nil {
 		return o, err
 	}
 	o.ClientTimeout = timeout
-
-	headersMap, err := parseHeaders[string](s.m[OptExtraHeaders])
-	if err != nil {
-		return o, err
-	}
-	o.ExtraHeaders = headersMap
 	return o, nil
 }
 
-func parseHeaders[S interface{ string | []byte }](headers string) (map[string]S, error) {
-	if headers == "" {
-		return nil, nil
-	}
-	headersJ, err := json.ParseJSON(headers)
-	if err != nil {
-		return nil, errors.Wrap(err, "parsing headers")
-	}
-	it, err := headersJ.ObjectIter()
-	if err != nil {
-		return nil, errors.Wrap(err, "parsing headers as object")
-	}
-	if it == nil {
-		return nil, errors.Newf("headers is not a JSON object: %s", headers)
-	}
-	headersMap := make(map[string]S, headersJ.Len())
-	for it.Next() {
-		k := it.Key()
-		v := it.Value()
-		s, err := v.AsText()
-		if err != nil {
-			return nil, errors.Wrap(err, "parsing header value as text")
-		}
-		if s == nil {
-			continue
-		}
-		headersMap[k] = S(*s)
-	}
-	return headersMap, nil
-}
-
-type KafkaSinkOptions struct {
-	// JSONConfig is arbitrary json to be interpreted
-	// by the kafka sink.
-	JSONConfig SinkSpecificJSONConfig
-
-	// Headers is a map of header names to values.
-	Headers map[string][]byte
-}
-
-func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
-	headersMap, err := parseHeaders[[]byte](s.m[OptExtraHeaders])
-	if err != nil {
-		return KafkaSinkOptions{}, err
-	}
-
-	o := KafkaSinkOptions{
-		JSONConfig: s.getJSONValue(OptKafkaSinkConfig),
-		Headers:    headersMap,
-	}
-	return o, nil
+// GetKafkaConfigJSON returns arbitrary json to be interpreted
+// by the kafka sink.
+func (s StatementOptions) GetKafkaConfigJSON() SinkSpecificJSONConfig {
+	return s.getJSONValue(OptKafkaSinkConfig)
 }
 
 // GetPubsubConfigJSON returns arbitrary json to be interpreted
@@ -1207,7 +1036,7 @@ func (s StatementOptions) GetPTSExpiration() (time.Duration, error) {
 // resoluting encoding options.
 func (s StatementOptions) ForceKeyInValue() error {
 	s.m[OptKeyInValue] = ``
-	s.cache.EncodingOptions = &EncodingOptions{}
+	s.cache.EncodingOptions = EncodingOptions{}
 	_, err := s.GetEncodingOptions()
 	return err
 }
@@ -1216,7 +1045,7 @@ func (s StatementOptions) ForceKeyInValue() error {
 // resoluting encoding options.
 func (s StatementOptions) ForceTopicInValue() error {
 	s.m[OptTopicInValue] = ``
-	s.cache.EncodingOptions = &EncodingOptions{}
+	s.cache.EncodingOptions = EncodingOptions{}
 	_, err := s.GetEncodingOptions()
 	return err
 }
@@ -1224,7 +1053,7 @@ func (s StatementOptions) ForceTopicInValue() error {
 // ForceDiff sets diff to true regardess of its previous value.
 func (s StatementOptions) ForceDiff() {
 	s.m[OptDiff] = ``
-	s.cache.EncodingOptions = &EncodingOptions{}
+	s.cache.EncodingOptions = EncodingOptions{}
 }
 
 // SetTopics stashes the list of topics in the options as a handy place
@@ -1238,20 +1067,15 @@ func (s StatementOptions) SetTopics(topics []string) {
 // ClearDiff clears diff option.
 func (s StatementOptions) ClearDiff() {
 	delete(s.m, OptDiff)
-	s.cache.EncodingOptions = &EncodingOptions{}
+	s.cache.EncodingOptions = EncodingOptions{}
 }
 
 // SetDefaultEnvelope sets the envelope if not already set.
 func (s StatementOptions) SetDefaultEnvelope(t EnvelopeType) {
 	if _, ok := s.m[OptEnvelope]; !ok {
 		s.m[OptEnvelope] = string(t)
-		s.cache.EncodingOptions = &EncodingOptions{}
+		s.cache.EncodingOptions = EncodingOptions{}
 	}
-}
-
-// Unset unsets an option.
-func (s StatementOptions) Unset(opt string) {
-	delete(s.m, opt)
 }
 
 // GetOnError validates and returns the desired behavior when a non-retriable error is encountered.
@@ -1282,10 +1106,6 @@ func describeEnum(strs ...string) string {
 		}
 		return s
 	}
-}
-
-func describeCSV(strs ...string) string {
-	return fmt.Sprintf("valid values are: %s", strings.Join(strs, ", "))
 }
 
 // ValidateForCreateChangefeed checks that the provided options are
@@ -1362,10 +1182,6 @@ func (s StatementOptions) validateAgainst(m map[string]OptionPermittedValues) er
 			}
 		case OptionTypeEnum:
 			if _, err := s.getEnumValue(k); err != nil {
-				return err
-			}
-		case OptionTypeCommaSepStrings:
-			if _, err := s.getCSVValues(k); err != nil {
 				return err
 			}
 		}

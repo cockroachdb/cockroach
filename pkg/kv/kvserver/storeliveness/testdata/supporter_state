@@ -116,7 +116,7 @@ epoch: 2, support provided: true
 # the past.
 # -------------------------------------------------------------
 
-send-heartbeats now=301 support-duration=10s # just to forward the clock
+send-heartbeats now=301 liveness-interval=10s # just to forward the clock
 ----
 heartbeats:
 

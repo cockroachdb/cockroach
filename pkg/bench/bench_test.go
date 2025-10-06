@@ -1587,7 +1587,7 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 			require.NoError(b, err)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
+				_, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
 				require.NoError(b, err)
 			}
 		})

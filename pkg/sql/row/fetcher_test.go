@@ -167,7 +167,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, _, err := rf.NextRowDecoded(ctx)
+				datums, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -272,7 +272,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, _, err := rf.NextRowDecoded(ctx)
+				datums, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -347,7 +347,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	// we can test whether scans of wide tables are prevented if
 	// we have insufficient memory to do them.
 	memMon := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test"),
+		Name:     "test",
 		Settings: settings,
 	})
 	memMon.Start(ctx, nil, mon.NewStandaloneBudget(1<<20))
@@ -450,7 +450,7 @@ INDEX(c)
 	for {
 		// Just try to grab the row - we don't need to validate the contents
 		// in this test.
-		datums, _, err := rf.NextRowDecoded(ctx)
+		datums, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -607,7 +607,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				datums, _, err := rf.NextRowDecoded(ctx)
+				datums, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}

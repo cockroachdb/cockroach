@@ -54,8 +54,7 @@ var (
 // instead of a method so that other packages can iterate over the map directly.
 // Note that additional elements for the array Oid types are added in init().
 var OidToType = map[oid.Oid]*T{
-	oid.T_anyelement: AnyElement,
-	oid.T_any:        Any,
+	oid.T_anyelement: Any,
 	oid.T_bit:        typeBit,
 	oid.T_bool:       Bool,
 	oid.T_bpchar:     BPChar,
@@ -106,9 +105,6 @@ var OidToType = map[oid.Oid]*T{
 	oidext.T_geography: Geography,
 	oidext.T_box2d:     Box2D,
 	oidext.T_pgvector:  PGVector,
-	oidext.T_jsonpath:  Jsonpath,
-	oidext.T_citext:    CIText,
-	oidext.T_ltree:     LTree,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -157,9 +153,6 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oidext.T_geography: oidext.T__geography,
 	oidext.T_box2d:     oidext.T__box2d,
 	oidext.T_pgvector:  oidext.T__pgvector,
-	oidext.T_jsonpath:  oidext.T__jsonpath,
-	oidext.T_citext:    oidext.T__citext,
-	oidext.T_ltree:     oidext.T__ltree,
 }
 
 // familyToOid maps each type family to a default OID value that is used when
@@ -197,8 +190,6 @@ var familyToOid = map[Family]oid.Oid{
 	GeographyFamily: oidext.T_geography,
 	Box2DFamily:     oidext.T_box2d,
 	PGVectorFamily:  oidext.T_pgvector,
-	JsonpathFamily:  oidext.T_jsonpath,
-	LTreeFamily:     oidext.T_ltree,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.

@@ -594,7 +594,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	if uint32(startID) <= keys.MaxReservedDescID {
 		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
 		if err != nil {
-			log.Dev.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
+			log.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
 		}
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
@@ -606,7 +606,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	// Find the split key in the system tenant's user space.
 	endID, err := s.GetLargestObjectID(0 /* maxReservedDescID */, keys.PseudoTableIDs)
 	if err != nil {
-		log.Dev.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
+		log.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
 	return findSplitKey(startID, endID)
@@ -634,7 +634,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 		// would consider splitting on is the following ID.
 		_, lowTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.Key)
 		if err != nil {
-			log.Dev.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
+			log.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
 			return nil
 		}
 		if lowTenIDExcl.ToUint64() >= roachpb.MaxTenantID.ToUint64() {
@@ -649,7 +649,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 	} else {
 		rem, highTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.EndKey)
 		if err != nil {
-			log.Dev.Errorf(ctx, "unable to decode tenant ID from end key: %s", err)
+			log.Errorf(ctx, "unable to decode tenant ID from end key: %s", err)
 			return nil
 		}
 		if len(rem) == 0 {
@@ -687,7 +687,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 	splitKey := s.Values[lowIndex].Key
 	splitTenID, err := keys.SystemSQLCodec.DecodeTenantMetadataID(splitKey)
 	if err != nil {
-		log.Dev.Errorf(ctx, "unable to decode tenant ID from system config: %s", err)
+		log.Errorf(ctx, "unable to decode tenant ID from system config: %s", err)
 		return nil
 	}
 	if splitTenID.ToUint64() > highTenID.ToUint64() {

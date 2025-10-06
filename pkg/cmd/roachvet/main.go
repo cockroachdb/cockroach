@@ -9,7 +9,6 @@
 package main
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferloop"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/deferunlockcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/errwrap"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/nocopy"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/redactcheck"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/returnerrcheck"
+	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/timer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/lint/passes/unconvert"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/asmdecl"
@@ -58,13 +58,13 @@ func main() {
 		nocopy.Analyzer,
 		redactcheck.Analyzer,
 		returnerrcheck.Analyzer,
+		timer.Analyzer,
 		unconvert.Analyzer,
 		fmtsafe.Analyzer,
 		errcmp.Analyzer,
 		nilness.Analyzer,
 		errwrap.Analyzer,
 		deferunlockcheck.Analyzer,
-		deferloop.Analyzer,
 	)
 
 	// Standard go vet analyzers:

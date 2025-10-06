@@ -107,7 +107,7 @@ func TestSampleReservoir(t *testing.T) {
 			for _, mem := range []int64{1 << 8, 1 << 10, 1 << 12} {
 				t.Run(fmt.Sprintf("n=%d/k=%d/mem=%d", n, k, mem), func(t *testing.T) {
 					monitor := mon.NewMonitor(mon.Options{
-						Name:      mon.MakeName("test-monitor"),
+						Name:      "test-monitor",
 						Limit:     mem,
 						Increment: 1,
 						Settings:  st,
@@ -201,7 +201,7 @@ func TestSampleReservoirMemAccounting(t *testing.T) {
 		{getStringDatum(maxBytesPerSample), getStringDatum(0)}, // rank 1
 	}
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeName("test-monitor"),
+		Name:      "test-monitor",
 		Limit:     memLimit,
 		Increment: 1,
 		Settings:  st,

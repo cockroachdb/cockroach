@@ -218,12 +218,16 @@ module.exports = {
     "^.+\\.tsx?$": "ts-jest",
     "^.+\\.js?$": [
       "babel-jest",
-      { configFile: path.resolve(srcDir, "babel.config.js") },
+	{ configFile: path.resolve(srcDir, "babel.config.js") },
     ],
   },
 
   // An array of regexp pattern strings that are matched against all source file paths, matched files will skip transformation
-  transformIgnorePatterns: [],
+  transformIgnorePatterns: [
+    "/node_module\\/@cockroachlabs\\/crdb-protobuf-client/",
+    "/node_module\\/@cockroachlabs\\/cluster-ui/",
+    "/cluster-ui\\/dist\\/js\\/main.js$/",
+  ],
 
   // An array of regexp pattern strings that are matched against all modules before the module loader will automatically return a mock for them
   // unmockedModulePathPatterns: undefined,

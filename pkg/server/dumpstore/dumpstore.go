@@ -87,7 +87,7 @@ func (s *DumpStore) GC(ctx context.Context, now time.Time, dumper Dumper) {
 	// This brings the oldest files first.
 	files, err := ioutil.ReadDir(s.dir)
 	if err != nil {
-		log.Dev.Warningf(ctx, "%v", err)
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 
@@ -102,7 +102,7 @@ func (s *DumpStore) GC(ctx context.Context, now time.Time, dumper Dumper) {
 	// to keep.
 	preserved, err := dumper.PreFilter(ctx, files, cleanupFn)
 	if err != nil {
-		log.Dev.Warningf(ctx, "%v", err)
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 
@@ -147,7 +147,7 @@ func removeOldAndTooBigExcept(
 		if actualSize > maxS {
 			// Yes: pass it to the closure.
 			if err := fn(fi.Name()); err != nil {
-				log.Dev.Warningf(ctx, "cannot remove file %s: %v", fi.Name(), err)
+				log.Warningf(ctx, "cannot remove file %s: %v", fi.Name(), err)
 			}
 		}
 	}

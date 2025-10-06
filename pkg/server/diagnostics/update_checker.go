@@ -89,6 +89,7 @@ func (u *UpdateChecker) PeriodicallyCheckForUpdates(ctx context.Context, stopper
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
+				timer.Read = true
 			}
 		}
 	})
@@ -117,7 +118,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 
 	if res.StatusCode != http.StatusOK {
 		b, err := io.ReadAll(res.Body)
-		log.Dev.Infof(ctx, "failed to check for updates: status: %s, body: %s, error: %v",
+		log.Infof(ctx, "failed to check for updates: status: %s, body: %s, error: %v",
 			res.Status, b, err)
 		return false
 	}
@@ -129,7 +130,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 
 	err = decoder.Decode(&r)
 	if err != nil && err != io.EOF {
-		log.Dev.Warningf(ctx, "error decoding updates info: %v", err)
+		log.Warningf(ctx, "error decoding updates info: %v", err)
 		return false
 	}
 
@@ -140,7 +141,7 @@ func (u *UpdateChecker) CheckForUpdates(ctx context.Context) bool {
 		r.Details = r.Details[len(r.Details)-updateMaxVersionsToReport:]
 	}
 	for _, v := range r.Details {
-		log.Dev.Infof(ctx, "a new version is available: %s, details: %s", v.Version, v.Details)
+		log.Infof(ctx, "a new version is available: %s, details: %s", v.Version, v.Details)
 	}
 	return true
 }

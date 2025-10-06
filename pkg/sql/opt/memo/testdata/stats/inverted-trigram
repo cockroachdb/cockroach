@@ -32,12 +32,12 @@ select
  ├── stats: [rows=330, distinct(1)=100, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=111.111]
+ │    ├── stats: [rows=111.1111]
  │    └── scan a@inv,inverted
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted constraint: /5/2
  │         │    └── spans: ["foo", "foo"]
- │         ├── stats: [rows=111.111, distinct(5)=100, null(5)=0]
+ │         ├── stats: [rows=111.1111, distinct(5)=100, null(5)=0]
  │         └── key: (2)
  └── filters
       └── a:1 LIKE '%foo%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
@@ -90,10 +90,10 @@ SELECT * FROM a WHERE a LIKE '%blah%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.333, distinct(1)=10, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=10, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=111.111]
+ │    ├── stats: [rows=111.1111]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -106,7 +106,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["lah", "lah"]
- │         ├── stats: [rows=111.111]
+ │         ├── stats: [rows=111.1111]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -114,7 +114,7 @@ select
  │              │    └── spans
  │              │         ├── ["bla", "bla"]
  │              │         └── ["lah", "lah"]
- │              └── stats: [rows=111.111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
+ │              └── stats: [rows=111.1111, distinct(2)=111.111, null(2)=0, distinct(5)=100, null(5)=0]
  └── filters
       └── a:1 LIKE '%blah%' [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
 
@@ -222,10 +222,10 @@ SELECT * FROM a WHERE a LIKE '%blah%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=4]
+ │    ├── stats: [rows=20]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -238,7 +238,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["lah", "lah"]
- │         ├── stats: [rows=4]
+ │         ├── stats: [rows=20]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -258,10 +258,10 @@ SELECT * FROM a@inv WHERE a LIKE '%zooo%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=396]
+ │    ├── stats: [rows=1980]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -274,7 +274,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["zoo", "zoo"]
- │         ├── stats: [rows=396]
+ │         ├── stats: [rows=1980]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -324,7 +324,7 @@ SELECT * FROM a WHERE a % 'blah'
 select
  ├── columns: a:1(string)
  ├── stable
- ├── stats: [rows=333.333]
+ ├── stats: [rows=333.3333]
  ├── index-join a
  │    ├── columns: a:1(string)
  │    ├── stats: [rows=8]
@@ -464,10 +464,10 @@ SELECT * FROM a WHERE a LIKE '%blah%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=4]
+ │    ├── stats: [rows=20]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -480,7 +480,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["lah", "lah"]
- │         ├── stats: [rows=4]
+ │         ├── stats: [rows=20]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)
@@ -500,10 +500,10 @@ SELECT * FROM a@inv WHERE a LIKE '%zooo%'
 ----
 select
  ├── columns: a:1(string!null)
- ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── index-join a
  │    ├── columns: a:1(string)
- │    ├── stats: [rows=396]
+ │    ├── stats: [rows=1980]
  │    └── inverted-filter
  │         ├── columns: rowid:2(int!null)
  │         ├── inverted expression: /5
@@ -516,7 +516,7 @@ select
  │         │         └── span expression
  │         │              ├── tight: false, unique: false
  │         │              └── union spans: ["zoo", "zoo"]
- │         ├── stats: [rows=396]
+ │         ├── stats: [rows=1980]
  │         ├── key: (2)
  │         └── scan a@inv,inverted
  │              ├── columns: rowid:2(int!null) a_inverted_key:5(encodedkey!null)

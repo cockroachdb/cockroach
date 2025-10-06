@@ -136,9 +136,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				flowCtx := &execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Mon:     evalCtx.TestingMon,
-					Cfg: &execinfra.ServerConfig{
-						Settings: st,
-					},
+					Cfg:     &execinfra.ServerConfig{Settings: st},
 				}
 				rng, _ := randutil.NewTestRand()
 				var (
@@ -196,12 +194,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
 				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
-					&execinfra.FlowCtx{
-						Gateway: false,
-						Cfg: &execinfra.ServerConfig{
-							Settings: st,
-						},
-					},
+					&execinfra.FlowCtx{Gateway: false},
 					0, /* processorID */
 					allocators,
 					colexecargs.OpWithMetaInfo{
@@ -245,12 +238,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
 					outbox, err := colrpc.NewOutbox(
-						&execinfra.FlowCtx{
-							Gateway: false,
-							Cfg: &execinfra.ServerConfig{
-								Settings: st,
-							},
-						},
+						&execinfra.FlowCtx{Gateway: false},
 						0, /* processorID */
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
 						outboxConverterMemAcc,

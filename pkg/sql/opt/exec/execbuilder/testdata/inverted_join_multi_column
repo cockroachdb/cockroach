@@ -68,17 +68,17 @@ vectorized: true
 └── • inverted join
     │ table: j2@isj_idx
     │
-    └── • render
+    └── • cross join
         │
-        └── • cross join
-            │
-            ├── • scan
-            │     missing stats
-            │     table: j1@j1_pkey
-            │     spans: FULL SCAN
-            │
-            └── • values
-                  size: 1 column, 2 rows
+        ├── • render
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: j1@j1_pkey
+        │         spans: FULL SCAN
+        │
+        └── • values
+              size: 1 column, 2 rows
 
 query T
 EXPLAIN SELECT j1.k
@@ -124,14 +124,14 @@ vectorized: true
 └── • inverted join
     │ table: j2@isj_idx
     │
-    └── • render
+    └── • cross join
         │
-        └── • cross join
-            │
-            ├── • scan
-            │     missing stats
-            │     table: j1@j1_pkey
-            │     spans: FULL SCAN
-            │
-            └── • values
-                  size: 1 column, 2 rows
+        ├── • render
+        │   │
+        │   └── • scan
+        │         missing stats
+        │         table: j1@j1_pkey
+        │         spans: FULL SCAN
+        │
+        └── • values
+              size: 1 column, 2 rows

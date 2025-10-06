@@ -65,7 +65,7 @@ func NewStatsProfiler(
 		),
 	}
 
-	log.Dev.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), hp.resetInterval())
+	log.Infof(ctx, "writing memory stats to %s at last every %s", log.SafeManaged(dir), hp.resetInterval())
 
 	return hp, nil
 }
@@ -80,7 +80,7 @@ func (o *StatsProfiler) MaybeTakeProfile(
 func saveStats(ctx context.Context, path string, cs *status.CGoMemStats) bool {
 	f, err := os.Create(path)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error creating stats profile %s: %v", path, err)
+		log.Warningf(ctx, "error creating stats profile %s: %v", path, err)
 		return false
 	}
 	defer f.Close()
@@ -88,17 +88,17 @@ func saveStats(ctx context.Context, path string, cs *status.CGoMemStats) bool {
 	runtime.ReadMemStats(ms)
 	msJ, err := json.MarshalIndent(ms, "", "  ")
 	if err != nil {
-		log.Dev.Warningf(ctx, "error marshaling stats profile %s: %v", path, err)
+		log.Warningf(ctx, "error marshaling stats profile %s: %v", path, err)
 		return false
 	}
 	csJ, err := json.MarshalIndent(cs, "", "  ")
 	if err != nil {
-		log.Dev.Warningf(ctx, "error marshaling stats profile %s: %v", path, err)
+		log.Warningf(ctx, "error marshaling stats profile %s: %v", path, err)
 		return false
 	}
 	_, err = fmt.Fprintf(f, "Go memory stats:\n%s\n----\nNon-Go stats:\n%s\n", msJ, csJ)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error writing stats profile %s: %v", path, err)
+		log.Warningf(ctx, "error writing stats profile %s: %v", path, err)
 		return false
 	}
 	return true

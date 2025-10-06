@@ -8,14 +8,13 @@ package kvstorage
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -61,11 +60,11 @@ func (e *env) close() {
 func (e *env) handleNewReplica(
 	t *testing.T,
 	ctx context.Context,
-	id roachpb.FullReplicaID,
+	id storage.FullReplicaID,
 	skipRaftReplicaID bool,
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
-	sl := stateloader.Make(id.RangeID)
+	sl := logstore.NewStateLoader(id.RangeID)
 	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
 		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))
@@ -101,8 +100,7 @@ func TestDataDriven(t *testing.T) {
 	// Scan stats (shown after loading the range descriptors) can be non-deterministic.
 	reStripScanStats := regexp.MustCompile(`stats: .*$`)
 
-	dir := filepath.Join(datapathutils.TestDataPath(t), t.Name())
-	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		e := newEnv(t)
 		defer e.close()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (output string) {
@@ -156,7 +154,7 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, "skip-raft-replica-id", &skipRaftReplicaID)
 				}
 				if desc := e.handleNewReplica(t, ctx,
-					roachpb.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
+					storage.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
 					skipRaftReplicaID, keys.MustAddr(roachpb.Key(k)), keys.MustAddr(roachpb.Key(ek)),
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)

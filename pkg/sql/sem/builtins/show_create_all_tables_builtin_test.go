@@ -22,7 +22,7 @@ func TestTopologicalSort(t *testing.T) {
 
 	ctx := context.Background()
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-mem"),
+		Name:     "test-mem",
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))

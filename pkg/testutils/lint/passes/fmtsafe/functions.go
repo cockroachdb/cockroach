@@ -38,14 +38,11 @@ in the form (main.yourStruct).yourFuncF
 var requireConstFmt = map[string]bool{
 	// Logging things.
 	"log.Printf":           true,
-	"log.Dev.Fatalf":       true,
+	"log.Fatalf":           true,
 	"log.Panicf":           true,
 	"(*log.Logger).Fatalf": true,
 	"(*log.Logger).Panicf": true,
 	"(*log.Logger).Printf": true,
-
-	"(*github.com/cockroachdb/cockroach/pkg/util/hlc/logger.logLogger).Fatalf":   true,
-	"(*github.com/cockroachdb/cockroach/pkg/util/hlc/logger.logLogger).Warningf": true,
 
 	"github.com/cockroachdb/cockroach/pkg/util/log.Shoutf":          true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.Eventf":          true,
@@ -177,13 +174,6 @@ var requireConstFmt = map[string]bool{
 
 	"(*github.com/cockroachdb/cockroach/pkg/cloud/amazon.awsLogAdapter).Logf": true,
 
-	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).logfDepth": true,
-	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Infof":     true,
-	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Warningf":  true,
-	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Errorf":    true,
-	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).Fatalf":    true,
-	"(github.com/cockroachdb/cockroach/pkg/util/log.Migrator).VEventf":   true,
-
 	// Error things are populated in the init() message.
 }
 
@@ -194,13 +184,13 @@ func title(s string) string {
 func init() {
 	for _, sev := range logpb.Severity_name {
 		capsev := title(strings.ToLower(sev))
-		// log.Dev.Infof, log.Dev.Warningf etc.
+		// log.Infof, log.Warningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"f"] = true
-		// log.Dev.VInfof, log.Dev.VWarningf etc.
+		// log.VInfof, log.VWarningf etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log.V"+capsev+"f"] = true
-		// log.Dev.InfofDepth, log.Dev.WarningfDepth, etc.
+		// log.InfofDepth, log.WarningfDepth, etc.
 		requireConstFmt["github.com/cockroachdb/cockroach/pkg/util/log."+capsev+"fDepth"] = true
-		// log.Dev.Info, log.Dev.Warning, etc.
+		// log.Info, log.Warning, etc.
 		requireConstMsg["github.com/cockroachdb/cockroach/pkg/util/log."+capsev] = true
 
 		for _, ch := range logpb.Channel_name {

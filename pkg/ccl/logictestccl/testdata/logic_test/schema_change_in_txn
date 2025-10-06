@@ -1,5 +1,3 @@
-# LogicTest: !local-schema-locked
-
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
@@ -12,9 +10,6 @@ skip_on_retry
 # Regression test for a situation involving creating a table in a transaction
 # and altering the index when referenced by name.
 subtest index_resolution_does_not_lead_to_new_version
-
-statement ok
-SET autocommit_before_ddl = false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -34,9 +29,6 @@ SELECT (crdb_internal.pb_to_json('desc', descriptor)->'table'->>'version')::INT8
  WHERE id = 'db.t'::regclass;
 ----
 1
-
-statement ok
-RESET autocommit_before_ddl
 
 statement ok
 DROP DATABASE db

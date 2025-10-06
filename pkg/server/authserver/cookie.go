@@ -98,7 +98,7 @@ func FindAndDecodeSessionCookie(
 			// Multiple cookies with the same name may be included in the
 			// header. We continue searching even if we find a matching
 			// name with an invalid value.
-			log.Dev.Infof(ctx, "found a matching cookie that failed decoding: %v", err)
+			log.Infof(ctx, "found a matching cookie that failed decoding: %v", err)
 			found = false
 			continue
 		}

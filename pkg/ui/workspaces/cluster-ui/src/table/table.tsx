@@ -70,18 +70,12 @@ export function Table<T extends object & { children?: T[] }>(
             }
             return expanded ? (
               <CaretDownOutlined
-                onClick={e => {
-                  e.stopPropagation();
-                  onExpand(record, e);
-                }}
+                onClick={e => onExpand(record, e)}
                 className={cx("expand-toggle")}
               />
             ) : (
               <CaretRightOutlined
-                onClick={e => {
-                  e.stopPropagation();
-                  onExpand(record, e);
-                }}
+                onClick={e => onExpand(record, e)}
                 className={cx("expand-toggle")}
               />
             );

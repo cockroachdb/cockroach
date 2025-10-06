@@ -124,14 +124,14 @@ func (e *executionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
 	}
 	resp, err := e.srv.Profile(ctx, &profileRequest)
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to collect goroutines for job %d: %v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to collect goroutines for job %d: %v", e.jobID, err.Error())
 		return
 	}
-	filename := fmt.Sprintf("%s/job-goroutines.txt", timeutil.Now().Format("20060102_150405.00"))
+	filename := fmt.Sprintf("goroutines.%s.txt", timeutil.Now().Format("20060102_150405.00"))
 	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jobs.WriteExecutionDetailFile(ctx, filename, resp.Data, txn, e.jobID)
 	}); err != nil {
-		log.Dev.Errorf(ctx, "failed to write goroutine for job %d: %v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to write goroutine for job %d: %v", e.jobID, err.Error())
 	}
 }
 
@@ -141,18 +141,18 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	row, err := e.db.Executor().QueryRowEx(ctx, "profiler-bundler-add-diagram", nil, /* txn */
 		sessiondata.NoSessionDataOverride, query, e.jobID)
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
 		return
 	}
 	if row != nil && row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
-		filename := fmt.Sprintf("%s/distsql-plan.html", timeutil.Now().Format("20060102_150405.00"))
+		filename := fmt.Sprintf("distsql.%s.html", timeutil.Now().Format("20060102_150405.00"))
 		if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return jobs.WriteExecutionDetailFile(ctx, filename,
 				[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL)),
 				txn, e.jobID)
 		}); err != nil {
-			log.Dev.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
+			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
 		}
 	}
 }
@@ -163,19 +163,19 @@ func (e *executionDetailsBuilder) addClusterWideTraces(ctx context.Context) {
 	z := zipper.MakeInternalExecutorInflightTraceZipper(e.db.Executor())
 	traceID, err := jobs.GetJobTraceID(ctx, e.db, e.jobID)
 	if err != nil {
-		log.Dev.Warningf(ctx, "failed to fetch job trace ID: %+v", err.Error())
+		log.Warningf(ctx, "failed to fetch job trace ID: %+v", err.Error())
 		return
 	}
 	zippedTrace, err := z.Zip(ctx, int64(traceID))
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to collect cluster wide traces for job %d: %v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to collect cluster wide traces for job %d: %v", e.jobID, err.Error())
 		return
 	}
 
-	filename := fmt.Sprintf("%s/trace.zip", timeutil.Now().Format("20060102_150405.00"))
+	filename := fmt.Sprintf("trace.%s.zip", timeutil.Now().Format("20060102_150405.00"))
 	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return jobs.WriteExecutionDetailFile(ctx, filename, zippedTrace, txn, e.jobID)
 	}); err != nil {
-		log.Dev.Errorf(ctx, "failed to write traces for job %d: %v", e.jobID, err.Error())
+		log.Errorf(ctx, "failed to write traces for job %d: %v", e.jobID, err.Error())
 	}
 }

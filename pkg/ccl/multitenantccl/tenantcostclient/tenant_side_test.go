@@ -445,7 +445,7 @@ func (ts *testState) advance(t *testing.T, d *datadriven.TestData, args cmdArgs)
 		d.Fatalf(t, "failed to parse input as duration: %v", err)
 	}
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Dev.Infof(ctx, "Advance %v", dur)
+		log.Infof(ctx, "Advance %v", dur)
 	}
 	ts.timeSrc.Advance(dur)
 	if args.wait {
@@ -636,19 +636,19 @@ func (ts *testState) metrics(*testing.T, *datadriven.TestData, cmdArgs) string {
 			typ.Inspect(func(v interface{}) {
 				switch it := v.(type) {
 				case *metric.Gauge:
-					state[typ.GetName(false /* useStaticLabels */)] = it.Value()
+					state[typ.GetName()] = it.Value()
 				case *metric.Counter:
-					state[typ.GetName(false /* useStaticLabels */)] = it.Count()
+					state[typ.GetName()] = it.Count()
 				case *metric.CounterFloat64:
-					state[typ.GetName(false /* useStaticLabels */)] = fmt.Sprintf("%.2f", it.Count())
+					state[typ.GetName()] = fmt.Sprintf("%.2f", it.Count())
 				case *aggmetric.AggCounter:
-					state[typ.GetName(false /* useStaticLabels */)] = it.Count()
+					state[typ.GetName()] = it.Count()
 					promIter, ok := v.(metric.PrometheusIterable)
 					if !ok {
 						return
 					}
-					promIter.Each(it.GetLabels(false /* useStaticLabels */), func(m *prometheusgo.Metric) {
-						childMetrics += fmt.Sprintf("%s{", typ.GetName(false /* useStaticLabels */))
+					promIter.Each(it.GetLabels(), func(m *prometheusgo.Metric) {
+						childMetrics += fmt.Sprintf("%s{", typ.GetName())
 						for i, l := range m.Label {
 							if i > 0 {
 								childMetrics += ","
@@ -698,7 +698,7 @@ func (ew *eventWaiter) Event(now time.Time, typ tenantcostclient.TestEventType) 
 	select {
 	case ew.ch <- ev:
 		if testing.Verbose() {
-			log.Dev.Infof(context.Background(), "event %s at %s\n",
+			log.Infof(context.Background(), "event %s at %s\n",
 				eventTypeStr[typ], now.Format(timeFormat))
 		}
 	default:

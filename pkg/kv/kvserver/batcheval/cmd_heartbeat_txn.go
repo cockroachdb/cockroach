@@ -46,7 +46,7 @@ func HeartbeatTxn(
 	h := cArgs.Header
 	reply := resp.(*kvpb.HeartbeatTxnResponse)
 
-	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING); err != nil {
+	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING); err != nil {
 		return result.Result{}, err
 	}
 

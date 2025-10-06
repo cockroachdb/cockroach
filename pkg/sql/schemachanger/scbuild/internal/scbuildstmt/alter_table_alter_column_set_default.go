@@ -34,10 +34,10 @@ func alterTableSetDefault(
 	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, colID)
 
 	// Block alters on system columns.
-	panicIfSystemColumn(col, t.Column)
+	panicIfSystemColumn(col, t.Column.String())
 
 	// Block disallowed operations on computed columns.
-	panicIfComputedColumn(b, tn.ObjectName, colType, t.Column, t.Default)
+	panicIfComputedColumn(b, tn.ObjectName, colType, t.Column.String(), t.Default)
 
 	// For DROP DEFAULT.
 	if t.Default == nil {
@@ -80,7 +80,7 @@ func panicIfInvalidNonComputedColumnExpr(
 	}
 
 	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, col.ColumnID)
-	typedNewExpr, _, err := sanitizeColumnExpression(b, b.SemaCtx(), newExpr, colType, schemaChange)
+	typedNewExpr, _, err := sanitizeColumnExpression(context.Background(), b.SemaCtx(), newExpr, colType, schemaChange)
 	if err != nil {
 		panic(err)
 	}
@@ -148,7 +148,7 @@ func sanitizeColumnExpression(
 
 // panicIfComputedColumn blocks disallowed operations on computed columns.
 func panicIfComputedColumn(
-	b BuildCtx, tn tree.Name, col *scpb.ColumnType, colName tree.Name, def tree.Expr,
+	b BuildCtx, tn tree.Name, col *scpb.ColumnType, colName string, def tree.Expr,
 ) {
 	computeExpr := retrieveColumnComputeExpression(b, col.TableID, col.ColumnID)
 	// Block setting a column default if the column is computed.
@@ -158,12 +158,12 @@ func panicIfComputedColumn(
 			panic(pgerror.Newf(
 				pgcode.Syntax,
 				"column %q of relation %q is a computed column",
-				tree.ErrString(&colName),
+				colName,
 				tn))
 		}
 		panic(pgerror.Newf(
 			pgcode.Syntax,
-			"computed column %q cannot also have a DEFAULT or ON UPDATE expression",
-			tree.ErrString(&colName)))
+			"computed column %q cannot also have a DEFAULT expression",
+			colName))
 	}
 }

@@ -36,13 +36,15 @@ func DecomposeToElements(t *testing.T, dir string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderRace(t)
 	skip.UnderStress(t)
-	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
 		factory.Run(ctx, t, func(_ serverutils.TestServerInterface, db *gosql.DB) {
 			tdb := sqlutils.MakeSQLRunner(db)
+			// We need to disable the declarative schema changer so that we don't end
+			// up high-fiving ourselves here.
+			tdb.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 				return runDecomposeTest(ctx, t, d, tdb)
 			})

@@ -94,7 +94,7 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 			)
 			path := gd.store.GetFullPath(filename)
 			if err := gd.takeGoroutineDump(path); err != nil {
-				log.Dev.Warningf(ctx, "error dumping goroutines: %s", err)
+				log.Warningf(ctx, "error dumping goroutines: %s", err)
 				continue
 			}
 			gd.maxGoroutinesDumped = goroutines
@@ -114,7 +114,7 @@ func NewGoroutineDumper(
 		return nil, errors.New("directory to store dumps could not be determined")
 	}
 
-	log.Dev.Infof(ctx, "writing goroutine dumps to %s", log.SafeManaged(dir))
+	log.Infof(ctx, "writing goroutine dumps to %s", log.SafeManaged(dir))
 
 	gd := &GoroutineDumper{
 		heuristics: []heuristic{

@@ -170,8 +170,8 @@ func (c Catalog) LookupZoneConfig(id descpb.ID) catalog.ZoneConfig {
 }
 
 // LookupNamespaceEntry looks up a descriptor ID by name.
-func (c Catalog) LookupNamespaceEntry(key descpb.NameInfo) NamespaceEntry {
-	if !c.IsInitialized() {
+func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) NamespaceEntry {
+	if !c.IsInitialized() || key == nil {
 		return nil
 	}
 	e := c.byName.getByName(key.GetParentID(), key.GetParentSchemaID(), key.GetName())
@@ -257,7 +257,7 @@ func (c Catalog) Validate(
 // ValidateNamespaceEntry returns an error if the specified namespace entry
 // is invalid.
 func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
-	ne := c.LookupNamespaceEntry(catalog.MakeNameInfo(key))
+	ne := c.LookupNamespaceEntry(key)
 	if ne == nil {
 		return errors.AssertionFailedf("invalid namespace entry")
 	}
@@ -360,13 +360,12 @@ func (c Catalog) FilterByNames(nameInfos []descpb.NameInfo) Catalog {
 		return Catalog{}
 	}
 	var ret MutableCatalog
-	for i := range nameInfos {
-		ni := &nameInfos[i]
+	for _, ni := range nameInfos {
 		found := c.byName.getByName(ni.ParentID, ni.ParentSchemaID, ni.Name)
 		if found == nil {
 			continue
 		}
-		e := ret.ensureForName(ni)
+		e := ret.ensureForName(&ni)
 		*e = *found.(*byNameEntry)
 		if foundByID := c.byID.get(e.id); foundByID != nil {
 			e := ret.ensureForID(e.id)

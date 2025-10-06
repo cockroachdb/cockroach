@@ -261,7 +261,7 @@ func RequestUnitModelFromSettings(sv *settings.Values) RequestUnitModel {
 	if err != nil {
 		// This should not happen unless someone manually updates the settings
 		// table, bypassing the validation.
-		log.Dev.Errorf(
+		log.Errorf(
 			context.Background(),
 			"failed to parse the network cost table %q: err=%v",
 			tableStr,
@@ -299,7 +299,7 @@ func EstimatedCPUModelFromSettings(sv *settings.Values) EstimatedCPUModel {
 		if err != nil {
 			// This should not happen unless someone manually updates the settings
 			// table, bypassing the validation.
-			log.Dev.Errorf(
+			log.Errorf(
 				context.Background(),
 				"failed to parse the estimated cpu model %q: err=%v",
 				jsonStr,

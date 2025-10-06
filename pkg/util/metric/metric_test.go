@@ -8,7 +8,6 @@ package metric
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -17,13 +16,11 @@ import (
 	"time"
 
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/kr/pretty"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {
@@ -127,22 +124,6 @@ func TestCounter(t *testing.T) {
 	}
 
 	testMarshal(t, c, "90")
-}
-
-func TestUniqueCounter(t *testing.T) {
-	c := NewUniqueCounter(emptyMetadata)
-	expected := int64(10_000)
-	for i := int64(0); i < expected; i++ {
-		c.Add([]byte(fmt.Sprintf("test-%d", i)))
-	}
-	// UniqueCounter is an approximation
-	margin := float64(expected) * 0.005
-	actual := c.Count()
-	if math.Abs(float64(actual-expected)) > margin {
-		t.Fatalf("unexpected value: %d", actual)
-	}
-
-	testMarshal(t, c, fmt.Sprintf("%d", actual))
 }
 
 func TestCounterFloat64(t *testing.T) {
@@ -455,7 +436,7 @@ func TestNewHistogramRotate(t *testing.T) {
 			h.RecordValue(12345)
 			f := float64(12345) + sum
 			_, wSum := h.WindowedSnapshot().Total()
-			require.Equal(t, f, wSum)
+			require.Equal(t, wSum, f)
 		}
 		// Tick. This rotates the histogram.
 		now = now.Add(time.Duration(i+1) * 10 * time.Second)
@@ -937,190 +918,4 @@ func TestHistogramVec(t *testing.T) {
 		require.Equal(t, uint64(1), *metrics[1].Histogram.SampleCount)
 		require.Equal(t, float64(1), *metrics[1].Histogram.SampleSum)
 	})
-}
-
-func BenchmarkHistogramRecordValue(b *testing.B) {
-	h := NewHistogram(HistogramOptions{
-		Metadata: Metadata{
-			Name:       "my.test.metric",
-			MetricType: prometheusgo.MetricType_HISTOGRAM,
-		},
-		Duration:     0,
-		BucketConfig: IOLatencyBuckets,
-		Mode:         HistogramModePrometheus,
-	})
-
-	b.ResetTimer()
-	r, _ := randutil.NewTestRand()
-
-	b.Run("insert integers", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			h.RecordValue(int64(i))
-		}
-	})
-	b.Run("insert zero", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			h.RecordValue(0)
-		}
-	})
-	b.Run("random integers", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			h.RecordValue(int64(randutil.RandIntInRange(r, int(IOLatencyBuckets.min), int(IOLatencyBuckets.max))))
-		}
-	})
-}
-
-func TestMetadataGetLabels(t *testing.T) {
-	tests := []struct {
-		name            string
-		metadata        Metadata
-		useStaticLabels bool
-		wantLabels      []*prometheusgo.LabelPair
-	}{
-		{
-			name: "only regular labels",
-			metadata: Metadata{
-				Labels: []*LabelPair{
-					{Name: proto.String("regular1"), Value: proto.String("value1")},
-					{Name: proto.String("regular2"), Value: proto.String("value2")},
-				},
-			},
-			useStaticLabels: false,
-			wantLabels: []*prometheusgo.LabelPair{
-				{Name: proto.String("regular1"), Value: proto.String("value1")},
-				{Name: proto.String("regular2"), Value: proto.String("value2")},
-			},
-		},
-		{
-			name: "only static labels",
-			metadata: Metadata{
-				StaticLabels: []*LabelPair{
-					{Name: proto.String("static1"), Value: proto.String("value1")},
-					{Name: proto.String("static2"), Value: proto.String("value2")},
-				},
-			},
-			useStaticLabels: true,
-			wantLabels: []*prometheusgo.LabelPair{
-				{Name: proto.String("static1"), Value: proto.String("value1")},
-				{Name: proto.String("static2"), Value: proto.String("value2")},
-			},
-		},
-		{
-			name: "both regular and static labels",
-			metadata: Metadata{
-				Labels: []*LabelPair{
-					{Name: proto.String("regular1"), Value: proto.String("value1")},
-				},
-				StaticLabels: []*LabelPair{
-					{Name: proto.String("static1"), Value: proto.String("value1")},
-				},
-			},
-			useStaticLabels: true,
-			wantLabels: []*prometheusgo.LabelPair{
-				{Name: proto.String("static1"), Value: proto.String("value1")},
-				{Name: proto.String("regular1"), Value: proto.String("value1")},
-			},
-		},
-		{
-			name: "both regular and static labels but static disabled",
-			metadata: Metadata{
-				Labels: []*LabelPair{
-					{Name: proto.String("regular1"), Value: proto.String("value1")},
-				},
-				StaticLabels: []*LabelPair{
-					{Name: proto.String("static1"), Value: proto.String("value1")},
-				},
-			},
-			useStaticLabels: false,
-			wantLabels: []*prometheusgo.LabelPair{
-				{Name: proto.String("regular1"), Value: proto.String("value1")},
-			},
-		},
-		{
-			name:            "no labels",
-			metadata:        Metadata{},
-			useStaticLabels: false,
-			wantLabels:      []*prometheusgo.LabelPair{},
-		},
-		{
-			name:            "no labels with static enabled",
-			metadata:        Metadata{},
-			useStaticLabels: true,
-			wantLabels:      []*prometheusgo.LabelPair{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.metadata.GetLabels(tt.useStaticLabels)
-			if len(got) != len(tt.wantLabels) {
-				t.Errorf("GetLabels() returned %d labels, want %d", len(got), len(tt.wantLabels))
-				return
-			}
-			for i := range got {
-				if *got[i].Name != *tt.wantLabels[i].Name {
-					t.Errorf("label %d: got name %q, want %q", i, *got[i].Name, *tt.wantLabels[i].Name)
-				}
-				if *got[i].Value != *tt.wantLabels[i].Value {
-					t.Errorf("label %d: got value %q, want %q", i, *got[i].Value, *tt.wantLabels[i].Value)
-				}
-			}
-		})
-	}
-}
-
-func TestMakeLabelPairs(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        []string
-		want        []*LabelPair
-		expectPanic bool
-	}{
-		{
-			name: "empty args",
-			args: []string{},
-			want: []*LabelPair{},
-		},
-		{
-			name:        "single arg",
-			args:        []string{"label1"},
-			expectPanic: true,
-		},
-		{
-			name:        "odd number of args",
-			args:        []string{"label1", "value1", "label2", "value2", "label3"},
-			expectPanic: true,
-		},
-		{
-			name: "even number of args",
-			args: []string{"label1", "value1", "label2", "value2"},
-			want: []*LabelPair{
-				{Name: proto.String("label1"), Value: proto.String("value1")},
-				{Name: proto.String("label2"), Value: proto.String("value2")},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.expectPanic {
-				require.Panics(t, func() { MakeLabelPairs(tt.args...) })
-				return
-			}
-
-			got := MakeLabelPairs(tt.args...)
-			if len(got) != len(tt.want) {
-				t.Errorf("MakeLabelPairs() returned %d pairs, want %d", len(got), len(tt.want))
-				return
-			}
-			for i := range got {
-				if *got[i].Name != *tt.want[i].Name {
-					t.Errorf("pair %d: got name %q, want %q", i, *got[i].Name, *tt.want[i].Name)
-				}
-				if *got[i].Value != *tt.want[i].Value {
-					t.Errorf("pair %d: got value %q, want %q", i, *got[i].Value, *tt.want[i].Value)
-				}
-			}
-		})
-	}
 }

@@ -5,7 +5,6 @@
 
 export * from "./fetchData";
 export * from "./statementDiagnosticsApi";
-export * from "./transactionDiagnosticsApi";
 export * from "./statementsApi";
 export * from "./basePath";
 export * from "./nodesApi";
@@ -19,6 +18,8 @@ export * from "./sqlApi";
 export * from "./tracezApi";
 export * from "./databasesApi";
 export * from "./eventsApi";
+export * from "./databaseDetailsApi";
+export * from "./tableDetailsApi";
 export * from "./types";
 export * from "./jobProfilerApi";
 export * from "./txnInsightDetailsApi";

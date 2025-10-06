@@ -1,0 +1,197 @@
+# TODO(ibrahim): Remove this test once store liveness is on by default since we
+# have the test forget_leader outside the mixedversions directory that assumes
+# that store liveness is enabled.
+
+log-level none
+----
+ok
+
+# Start 4 nodes that have the older version 24.2.
+add-nodes 4 voters=(1,2,3) learners=(4) index=10 crdb-version=24.2
+----
+ok
+
+campaign 1
+----
+ok
+
+stabilize
+----
+ok
+
+log-level debug
+----
+ok
+
+# ForgetLeader is a noop on the leader.
+forget-leader 1
+----
+ok
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+
+# ForgetLeader causes a follower to forget its leader, but remain in the current
+# term. It's a noop if it's called again.
+forget-leader 2
+----
+INFO 2 forgetting leader 1 at term 1
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+
+forget-leader 2
+----
+INFO 2 no leader at term 1; dropping forget leader msg
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+
+# ForgetLeader also works on learners.
+forget-leader 4
+----
+INFO 4 forgetting leader 1 at term 1
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:0 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:0 LeadEpoch:0
+
+# When receiving a heartbeat from the leader, they revert to followers.
+tick-heartbeat 1
+----
+ok
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=false:
+  Messages:
+  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+  1->4 MsgHeartbeat Term:1 Log:0/0 Commit:11
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:0 LeadEpoch:0
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Commit:11 Lead:0 LeadEpoch:0
+> 2 receiving messages
+  1->2 MsgHeartbeat Term:1 Log:0/0 Commit:11
+> 3 receiving messages
+  1->3 MsgHeartbeat Term:1 Log:0/0 Commit:11
+> 4 receiving messages
+  1->4 MsgHeartbeat Term:1 Log:0/0 Commit:11
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:0
+  Messages:
+  2->1 MsgHeartbeatResp Term:1 Log:0/0
+> 3 handling Ready
+  Ready MustSync=false:
+  Messages:
+  3->1 MsgHeartbeatResp Term:1 Log:0/0
+> 4 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Commit:11 Lead:1 LeadEpoch:0
+  Messages:
+  4->1 MsgHeartbeatResp Term:1 Log:0/0
+> 1 receiving messages
+  2->1 MsgHeartbeatResp Term:1 Log:0/0
+  3->1 MsgHeartbeatResp Term:1 Log:0/0
+  4->1 MsgHeartbeatResp Term:1 Log:0/0
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+3: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+
+# ForgetLeader is a noop on candidates.
+campaign 3
+----
+INFO 3 is starting a new election at term 1
+INFO 3 became candidate at term 2
+INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
+INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+3: StateCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+
+forget-leader 3
+----
+ok
+
+raft-state
+----
+1: StateLeader (Voter) Term:1 Lead:1 LeadEpoch:0
+2: StateFollower (Voter) Term:1 Lead:1 LeadEpoch:0
+3: StateCandidate (Voter) Term:2 Lead:0 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:1 Lead:1 LeadEpoch:0
+
+stabilize log-level=none
+----
+ok
+
+raft-state
+----
+1: StateFollower (Voter) Term:2 Lead:3 LeadEpoch:0
+2: StateFollower (Voter) Term:2 Lead:3 LeadEpoch:0
+3: StateLeader (Voter) Term:2 Lead:3 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:2 Lead:3 LeadEpoch:0
+
+# ForgetLeader shouldn't affect the election timeout: if a follower
+# forgets the leader 1 tick before the election timeout fires, it
+# will still campaign on the next tick.
+set-randomized-election-timeout 2 timeout=3
+----
+ok
+
+tick-heartbeat 2
+----
+ok
+
+tick-heartbeat 2
+----
+ok
+
+forget-leader 2
+----
+INFO 2 forgetting leader 3 at term 2
+
+tick-heartbeat 2
+----
+INFO 2 is starting a new election at term 2
+INFO 2 became candidate at term 3
+INFO 2 [logterm: 2, index: 12] sent MsgVote request to 1 at term 3
+INFO 2 [logterm: 2, index: 12] sent MsgVote request to 3 at term 3
+
+stabilize log-level=none
+----
+ok
+
+raft-state
+----
+1: StateFollower (Voter) Term:3 Lead:2 LeadEpoch:0
+2: StateLeader (Voter) Term:3 Lead:2 LeadEpoch:0
+3: StateFollower (Voter) Term:3 Lead:2 LeadEpoch:0
+4: StateFollower (Non-Voter) Term:3 Lead:2 LeadEpoch:0

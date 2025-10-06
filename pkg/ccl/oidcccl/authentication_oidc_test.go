@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -26,8 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/certnames"
-	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -35,10 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/coreos/go-oidc"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
@@ -87,21 +82,13 @@ func (m mockOidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) 
 	return m.oauth2Config.AuthCodeURL(s, option...)
 }
 
-func (m mockOidcManager) ExchangeVerifyGetTokenInfo(
-	ctx context.Context, code, idTokenKey string, _ bool,
-) (map[string]json.RawMessage, map[string]json.RawMessage, string, string, error) {
-	claims := map[string]json.RawMessage{
-		"email": json.RawMessage(`"test@example.com"`),
-	}
-	// Return nil for access token claims, and the raw token strings.
-	return claims, nil, "dummy-id-token", "dummy-access-token", nil
-}
-
-func (m mockOidcManager) UserInfo(
-	ctx context.Context, ts oauth2.TokenSource,
-) (*oidc.UserInfo, error) {
-	// This mock is not used in this test file, so it can return nil.
-	return nil, nil
+func (m mockOidcManager) ExchangeVerifyGetClaims(
+	ctx context.Context, s string, s2 string,
+) (map[string]json.RawMessage, error) {
+	x := map[string]json.RawMessage{}
+	// The email is surrounded by double quotes because it's a serialized JSON string.
+	x["email"] = json.RawMessage([]byte(fmt.Sprintf(`"%s"`, m.claimEmail)))
+	return x, nil
 }
 
 var _ IOIDCManager = &mockOidcManager{}
@@ -152,9 +139,6 @@ func TestOIDCEnabled(t *testing.T) {
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
-
-	// Set a reasonable timeout for the client to prevent flakiness under stress.
-	client.Timeout = 30 * time.Second
 
 	// Don't follow redirects so we can inspect the 302
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -568,8 +552,8 @@ func TestOIDCProviderInitialization(t *testing.T) {
 	// Initialize the OIDC manager.
 	clientTimeout := 10 * time.Second
 	oidcConf := oidcAuthenticationConf{
-		providerURL: testServerURL,
-		httpClient:  httputil.NewClientWithTimeout(clientTimeout),
+		providerURL:   testServerURL,
+		clientTimeout: clientTimeout,
 	}
 	iOIDCMgr, err := NewOIDCManager(context.Background(), oidcConf, "redirectURL", []string{})
 	require.NoError(t, err)
@@ -615,113 +599,10 @@ func TestOIDCProviderInitializationTimeout(t *testing.T) {
 	oidcConf := oidcAuthenticationConf{
 		providerURL: testServerURL,
 		// Set a small client timeout and assert that the initialization times out.
-		httpClient: httputil.NewClientWithTimeout(time.Millisecond),
+		clientTimeout: time.Millisecond,
 	}
 	_, err := NewOIDCManager(context.Background(), oidcConf, "redirectURL", []string{})
 	var urlError *url.Error
 	require.ErrorAs(t, err, &urlError)
 	require.True(t, urlError.Timeout())
-}
-
-func TestOIDCProviderCustomCACert(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Initiate a test server to handle `./well-known/openid-configuration`.
-	testServer := httptest.NewUnstartedServer(nil)
-	testServerURL := "https://" + testServer.Listener.Addr().String()
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(
-		"GET /.well-known/openid-configuration",
-		func(w http.ResponseWriter, r *http.Request) {
-			// Serve the response locally from testdata.
-			dataBytes, err := os.ReadFile("testdata/issuer_well_known_openid_configuration")
-			require.NoError(t, err)
-
-			// We need to match the 'issuer' key in the response to the test server URL.
-			// Hence, we read the test response and overwrite the 'issuer'.
-			type providerJSON struct {
-				Issuer      string   `json:"issuer"`
-				AuthURL     string   `json:"authorization_endpoint"`
-				TokenURL    string   `json:"token_endpoint"`
-				JWKSURI     string   `json:"jwks_uri"`
-				UserInfoURL string   `json:"userinfo_endpoint"`
-				Algorithms  []string `json:"id_token_signing_alg_values_supported"`
-			}
-
-			var p providerJSON
-			err = json.Unmarshal(dataBytes, &p)
-			require.NoError(t, err)
-
-			p.Issuer = testServerURL
-
-			updatedBytes, err := json.Marshal(p)
-			require.NoError(t, err)
-
-			_, err = w.Write(updatedBytes)
-			require.NoError(t, err)
-		},
-	)
-
-	testServer.Config = &http.Server{
-		Handler: mux,
-	}
-
-	certPEMBlock, err := securityassets.GetLoader().ReadFile(
-		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedNodeCert))
-	require.NoError(t, err)
-	keyPEMBlock, err := securityassets.GetLoader().ReadFile(
-		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedNodeKey))
-	require.NoError(t, err)
-	tlsCert, err := tls.X509KeyPair(certPEMBlock, keyPEMBlock)
-	require.NoError(t, err)
-
-	testServer.TLS = &tls.Config{Certificates: []tls.Certificate{tlsCert}}
-	testServer.StartTLS()
-	defer testServer.Close()
-
-	for _, testCase := range []struct {
-		testName string
-		// caCertName is the name of the certificate looked up within `test_certs`.
-		// Empty value is treated as no certificate.
-		caCertName string
-		assertFn   func(t require.TestingT, err error, msgAndArgs ...interface{})
-	}{
-		{
-			testName:   "fail if no CA certificate is provided",
-			caCertName: "",
-			assertFn:   require.Error,
-		},
-		{
-			testName:   "fail if an incorrect CA certificate is provided",
-			caCertName: certnames.EmbeddedTestUserCert,
-			assertFn:   require.Error,
-		},
-		{
-			testName:   "success if the correct CA certificate is provided",
-			caCertName: certnames.EmbeddedCACert,
-			assertFn:   require.NoError,
-		},
-	} {
-		t.Run(testCase.testName, func(t *testing.T) {
-			clientOpts := []httputil.ClientOption{httputil.WithClientTimeout(10 * time.Second)}
-
-			if testCase.caCertName != "" {
-				publicKeyPEM, err := securityassets.GetLoader().ReadFile(
-					filepath.Join(certnames.EmbeddedCertsDir, testCase.caCertName))
-				require.NoError(t, err)
-
-				clientOpts = append(clientOpts, httputil.WithCustomCAPEM(string(publicKeyPEM)))
-			}
-
-			// Initialize the OIDC manager.
-			oidcConf := oidcAuthenticationConf{
-				providerURL: testServerURL,
-				httpClient:  httputil.NewClient(clientOpts...),
-			}
-			_, err := NewOIDCManager(context.Background(), oidcConf, "redirectURL", []string{})
-			testCase.assertFn(t, err)
-		})
-	}
 }

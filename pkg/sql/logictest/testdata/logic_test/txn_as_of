@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # This test makes use of 'kv.gc_ttl.strict_enforcement.enabled = false', which
 # is not available to tenants. We use a cluster option instead.
 # cluster-opt: ignore-tenant-strict-gc-enforcement

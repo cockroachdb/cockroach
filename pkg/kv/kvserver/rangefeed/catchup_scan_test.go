@@ -29,8 +29,6 @@ import (
 // bugs in time-bound iterators.
 var smallEngineBlocks = metamorphic.ConstantWithTestBool("small-engine-blocks", false)
 
-const noBulkDelivery = 0
-
 // TODO(erikgrinaker): This should be migrated to a data-driven test harness for
 // end-to-end rangefeed testing, with more exhaustive test cases. See:
 // https://github.com/cockroachdb/cockroach/issues/82715
@@ -162,7 +160,7 @@ func TestCatchupScan(t *testing.T) {
 				require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 					events = append(events, *e.Val)
 					return nil
-				}, withDiff, withFiltering, false /* withOmitRemote */, noBulkDelivery))
+				}, withDiff, withFiltering, false /* withOmitRemote */))
 				if !(withFiltering && omitInRangefeeds) {
 					require.Equal(t, 7, len(events))
 				} else {
@@ -240,7 +238,7 @@ func TestCatchupScanOriginID(t *testing.T) {
 		require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 			events = append(events, *e.Val)
 			return nil
-		}, false /* withDiff */, false /* withFiltering */, omitRemote, noBulkDelivery))
+		}, false /* withDiff */, false /* withFiltering */, omitRemote))
 		if omitRemote {
 			require.Equal(t, 1, len(events))
 		} else {
@@ -271,7 +269,7 @@ func TestCatchupScanInlineError(t *testing.T) {
 	require.NoError(t, err)
 	defer iter.Close()
 
-	err = iter.CatchUpScan(ctx, nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery)
+	err = iter.CatchUpScan(ctx, nil, false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unexpected inline value")
 }
@@ -319,7 +317,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	require.NoError(t, iter.CatchUpScan(ctx, func(e *kvpb.RangeFeedEvent) error {
 		keys[string(e.Val.Key)] = struct{}{}
 		return nil
-	}, true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery))
+	}, true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */))
 	require.Equal(t, map[string]struct{}{
 		"b": {},
 		"e": {},

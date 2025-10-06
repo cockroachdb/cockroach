@@ -6,9 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/cmdccl/clusterrepl",
     visibility = ["//visibility:private"],
     deps = [
+        "//pkg/ccl/crosscluster",
+        "//pkg/ccl/crosscluster/streamclient",
         "//pkg/cli/exit",
-        "//pkg/crosscluster",
-        "//pkg/crosscluster/streamclient",
         "//pkg/keys",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
@@ -18,7 +18,7 @@ go_library(
         "//pkg/util/span",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgx_v5//:pgx",
+        "@com_github_jackc_pgx_v4//:pgx",
     ],
 )
 

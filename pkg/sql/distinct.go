@@ -14,7 +14,7 @@ import (
 
 // distinctNode de-duplicates rows returned by a wrapped planNode.
 type distinctNode struct {
-	singleInputPlanNode
+	plan planNode
 
 	// distinctOnColIdxs are the column indices of the child planNode and
 	// is what defines the distinct key.
@@ -66,5 +66,5 @@ func (n *distinctNode) Values() tree.Datums {
 }
 
 func (n *distinctNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.plan.Close(ctx)
 }

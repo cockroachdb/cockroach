@@ -40,7 +40,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		}
 
 		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx, c.CRDBNodes()),
+			ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx, c.CRDBNodes()),
 			c.CRDBNodes(), true, /* disableMergeQueue */
 		); err != nil {
 			t.Fatal(err)
@@ -85,7 +85,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 			}
 		}
 
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			t.Status(fmt.Sprintf("running with concurrency = %d", concurrency))
 			// Run each query once on each connection.
@@ -208,7 +208,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  cockroachBinary,
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
@@ -224,7 +223,6 @@ func registerTPCHConcurrency(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  cockroachBinary,
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},

@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for const.eg.go. It's formatted in a
@@ -77,7 +78,7 @@ func NewConstOp(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unsupported const type %s", t.Name())
+	return nil, errors.Errorf("unsupported const type %s", t.Name())
 }
 
 // {{range .}}
@@ -127,12 +128,12 @@ func (c const_TYPEOp) Next() coldata.Batch {
 // {{end}}
 // {{end}}
 
-// NewConstNullOp creates a new operator that produces a constant NULL value at
-// index outputIdx. The column will be typed according to the passed in 't'.
+// NewConstNullOp creates a new operator that produces a constant (untyped) NULL
+// value at index outputIdx.
 func NewConstNullOp(
-	allocator *colmem.Allocator, t *types.T, input colexecop.Operator, outputIdx int,
+	allocator *colmem.Allocator, input colexecop.Operator, outputIdx int,
 ) colexecop.Operator {
-	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		outputIdx:      outputIdx,

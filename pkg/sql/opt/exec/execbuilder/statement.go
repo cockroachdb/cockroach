@@ -65,7 +65,6 @@ func (b *Builder) buildCreateView(
 		cols,
 		cv.Deps,
 		cv.TypeDeps,
-		cv.FuncDeps,
 	)
 	return execPlan{root: root}, colOrdMap{}, err
 }
@@ -177,33 +176,14 @@ func (b *Builder) buildExplain(
 			// annotates nodes with extra information when the factory is an
 			// exec.ExplainFactory so it must be the outer factory and the gist
 			// factory must be the inner factory.
-			var gf explain.PlanGistFactory
-			gf.Init(f)
-			ef := explain.NewFactory(&gf, b.semaCtx, b.evalCtx)
+			gf := explain.NewPlanGistFactory(f)
+			ef := explain.NewFactory(gf, b.semaCtx, b.evalCtx)
 
 			explainBld := New(
 				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input,
 				b.semaCtx, b.evalCtx, b.initialAllowAutoCommit, b.IsANSIDML,
 			)
 			explainBld.disableTelemetry = true
-			if b.evalCtx.TxnReadOnly {
-				// Since we're building a "pure" EXPLAIN (as opposed to EXPLAIN
-				// ANALYZE variant which the execbuilder is unaware of), we
-				// won't actually execute the plan, and in order to match the
-				// behavior of Postgres we want to allow EXPLAINing the
-				// mutations even in the read-only state.
-				//
-				// Out of caution, we'll only allow this for "regular" mutation
-				// statements (where it's most useful and less risky),
-				// prohibiting EXPLAINing DDLs and ALTERs.
-				switch explainExpr.Input.Op() {
-				case opt.DeleteOp, opt.InsertOp, opt.UpdateOp, opt.UpsertOp:
-					b.evalCtx.TxnReadOnly = false
-					defer func() {
-						b.evalCtx.TxnReadOnly = true
-					}()
-				}
-			}
 			plan, err := explainBld.Build()
 			if err != nil {
 				return nil, err
@@ -238,7 +218,8 @@ func (b *Builder) buildAlterTableSplit(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	expiration, err := b.buildScalar(&emptyBuildScalarCtx, split.Expiration)
+	scalarCtx := buildScalarCtx{}
+	expiration, err := b.buildScalar(&scalarCtx, split.Expiration)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -313,11 +294,12 @@ func (b *Builder) buildAlterRangeRelocate(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	toStoreID, err := b.buildScalar(&emptyBuildScalarCtx, relocate.ToStoreID)
+	scalarCtx := buildScalarCtx{}
+	toStoreID, err := b.buildScalar(&scalarCtx, relocate.ToStoreID)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	fromStoreID, err := b.buildScalar(&emptyBuildScalarCtx, relocate.FromStoreID)
+	fromStoreID, err := b.buildScalar(&scalarCtx, relocate.FromStoreID)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -342,7 +324,8 @@ func (b *Builder) buildControlJobs(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	reason, err := b.buildScalar(&emptyBuildScalarCtx, ctl.Reason)
+	scalarCtx := buildScalarCtx{}
+	reason, err := b.buildScalar(&scalarCtx, ctl.Reason)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -432,9 +415,7 @@ func (b *Builder) buildCancelSessions(
 func (b *Builder) buildCreateStatistics(
 	c *memo.CreateStatisticsExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
-	table := b.mem.Metadata().Table(c.Table)
-	index := table.Index(c.Index)
-	node, err := b.factory.ConstructCreateStatistics(c.Syntax, table, index, c.Constraint)
+	node, err := b.factory.ConstructCreateStatistics(c.Syntax)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -450,7 +431,8 @@ func (b *Builder) buildExport(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	fileName, err := b.buildScalar(&emptyBuildScalarCtx, export.FileName)
+	scalarCtx := buildScalarCtx{}
+	fileName, err := b.buildScalar(&scalarCtx, export.FileName)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -459,7 +441,7 @@ func (b *Builder) buildExport(
 	for i, o := range export.Options {
 		opts[i].Key = o.Key
 		var err error
-		opts[i].Value, err = b.buildScalar(&emptyBuildScalarCtx, o.Value)
+		opts[i].Value, err = b.buildScalar(&scalarCtx, o.Value)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, err
 		}

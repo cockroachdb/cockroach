@@ -12,7 +12,6 @@ type Metrics struct {
 	LeaseRequestError            int // lease request error at evaluation time
 	LeaseTransferSuccess         int // lease transfer evaluated successfully
 	LeaseTransferError           int // lease transfer error at evaluation time
-	LeaseTransferLocksWritten    int // number of locks written during a lease transfer
 	ResolveCommit                int // intent commit evaluated successfully
 	ResolveAbort                 int // non-poisoning intent abort evaluated successfully
 	ResolvePoison                int // poisoning intent abort evaluated successfully
@@ -27,7 +26,6 @@ func (mt *Metrics) Add(o Metrics) {
 	mt.LeaseRequestError += o.LeaseRequestError
 	mt.LeaseTransferSuccess += o.LeaseTransferSuccess
 	mt.LeaseTransferError += o.LeaseTransferError
-	mt.LeaseTransferLocksWritten += o.LeaseTransferLocksWritten
 	mt.ResolveCommit += o.ResolveCommit
 	mt.ResolveAbort += o.ResolveAbort
 	mt.ResolvePoison += o.ResolvePoison

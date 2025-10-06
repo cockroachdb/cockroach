@@ -31,9 +31,9 @@ func maybeSetupPCRStandbyReader(
 		return nil
 	}
 	if ts.IsEmpty() {
-		log.Dev.Warning(ctx, "replicated timestamp is zero")
+		log.Warning(ctx, "replicated timestamp is zero")
 	} else {
-		log.Dev.Infof(ctx, "setting up read-only catalog as of %s reading from tenant %s", ts, id)
+		log.Infof(ctx, "setting up read-only catalog as of %s reading from tenant %s", ts, id)
 		if err := replication.SetupOrAdvanceStandbyReaderCatalog(ctx, id, ts, d.DB, d.Settings); err != nil {
 			return err
 		}

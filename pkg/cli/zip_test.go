@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,8 +83,8 @@ table_name NOT IN (
 	'forward_dependencies',
 	'gossip_network',
 	'index_columns',
-	'index_spans',
-	'kv_builtin_function_comments',
+  'index_spans',
+  'kv_builtin_function_comments',
 	'kv_catalog_comments',
 	'kv_catalog_descriptor',
 	'kv_catalog_namespace',
@@ -135,7 +134,6 @@ ORDER BY name ASC`)
 		tables = append(tables, table)
 	}
 	tables = append(tables, "crdb_internal.probe_ranges_1s_read_limit_100")
-	tables = append(tables, "cluster_settings_history")
 	sort.Strings(tables)
 
 	var exp []string
@@ -166,7 +164,7 @@ func TestZip(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +210,7 @@ func TestZipQueryFallback(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +241,7 @@ func TestZipRedacted(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --redact --validate-zip-file=false " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --redact " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +290,7 @@ func TestZipIncludeGoroutineStacks(t *testing.T) {
 				}},
 			})
 			defer c.Cleanup()
-			cmd := "debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false "
+			cmd := "debug zip --concurrency=1 --cpu-profile-duration=1s "
 			if !tc.includeStacks {
 				cmd = cmd + "--include-goroutine-stacks=false "
 			}
@@ -333,7 +331,7 @@ func TestZipIncludeRangeInfo(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info --validate-zip-file=false " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +366,7 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 	defer c.Cleanup()
 
 	out, err := c.RunWithCapture(
-		"debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false --validate-zip-file=false " + os.DevNull)
+		"debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +419,7 @@ func TestConcurrentZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s --validate-zip-file=false " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --timeout=30s --cpu-profile-duration=0s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,10 +431,6 @@ func TestConcurrentZip(t *testing.T) {
 	lines := strings.Split(out, "\n")
 	sort.Strings(lines)
 	out = strings.TrimSpace(strings.Join(lines, "\n"))
-	// Remove all "dumping SQL tables" messages since non-deterministic order in
-	// which the original messages interleve with other messages mean the number
-	// of them after each series is collapsed is also non-derministic.
-	out = regexp.MustCompile(`<dumping SQL tables>\n`).ReplaceAllString(out, "")
 
 	// We use datadriven simply to read the golden output file; we don't actually
 	// run any commands. Using datadriven allows TESTFLAGS=-rewrite.
@@ -640,6 +634,7 @@ func containsAssert(t *testing.T, actual string, expected []string) {
 func baseZipOutput(nodeId int) []string {
 	output := []string{
 		fmt.Sprintf("[node %d] using SQL connection URL", nodeId),
+		fmt.Sprintf("[node %d] retrieving SQL data", nodeId),
 		fmt.Sprintf("[node %d] requesting stacks... received response...", nodeId),
 		fmt.Sprintf("[node %d] requesting stacks with labels... received response...", nodeId),
 		fmt.Sprintf("[node %d] requesting heap profile list... received response...", nodeId),
@@ -688,8 +683,6 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ execution traces found$`)
-	out = re.ReplaceAllString(out, `[node ?] ? execution traces found`)
 
 	return out
 }
@@ -736,7 +729,7 @@ func TestPartialZip(t *testing.T) {
 	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
 	stderr = os.Stdout
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0s --validate-zip-file=false " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,8 +744,7 @@ func TestPartialZip(t *testing.T) {
 		})
 
 	// Now do it again and exclude the down node explicitly.
-	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0" +
-		"  --validate-zip-file=false")
+	out, err = c.RunWithCapture("debug zip " + os.DevNull + " --concurrency=1 --exclude-nodes=2 --cpu-profile-duration=0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -787,7 +779,7 @@ func TestPartialZip(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "zip", "partial2"),
 		func(t *testing.T, td *datadriven.TestData) string {
 			f := func() string {
-				out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0  --validate-zip-file=false " + os.DevNull)
+				out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + os.DevNull)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1276,7 +1268,7 @@ func TestCommandFlags(t *testing.T) {
 	}
 
 	for _, f := range r.File {
-		if f.Name == "debug/"+debugZipCommandFlagsFileName {
+		if f.Name == "debug/debug_zip_command_flags.txt" {
 			rc, err := f.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -1293,207 +1285,9 @@ func TestCommandFlags(t *testing.T) {
 			return
 		}
 	}
-	assert.Fail(t, "debug/"+debugZipCommandFlagsFileName+" is not generated")
+	assert.Fail(t, "debug/debug_zip_command_flags.txt is not generated")
 
 	if err = r.Close(); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// This tests the operation of zip over excluded nodes.
-func TestPartialZipForExcludedNodes(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
-	})
-	defer c.Cleanup()
-	zipName := filepath.Join(dir, "debug.zip")
-
-	// We want a low timeout so that the test doesn't take forever;
-	// however low timeouts make race runs flaky with false positives.
-	skip.UnderShort(t)
-	skip.UnderRace(t)
-
-	sc := log.ScopeWithoutShowLogs(t)
-	defer sc.Close(t)
-	// Reduce the number of output log files to just what's expected.
-	defer sc.SetupSingleFileLogging()()
-
-	ctx := context.Background()
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Insecure:          true,
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	_, err := c.RunWithCapture("debug zip --concurrency=1 --exclude-nodes=1 --cpu-profile-duration=0 " + dir + "/debug.zip")
-	require.NoError(t, err)
-
-	r, err := zip.OpenReader(zipName)
-	defer func() { _ = r.Close() }()
-	require.NoError(t, err)
-
-	d, err := r.Open("debug/nodes/1")
-	defer func() {
-		if d != nil {
-			_ = d.Close()
-		}
-	}()
-
-	require.True(t, oserror.IsNotExist(err), "node directory should not be present in the zip")
-}
-
-// This tests the operation of zip over excluded nodes.
-func TestIncludeFiles(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	dir, cleanupFn := testutils.TempDir(t)
-	defer cleanupFn()
-	c := NewCLITest(TestCLIParams{
-		StoreSpecs: []base.StoreSpec{{
-			Path: dir,
-		}},
-	})
-	defer c.Cleanup()
-	zipName := filepath.Join(dir, "debug.zip")
-
-	// We want a low timeout so that the test doesn't take forever;
-	// however low timeouts make race runs flaky with false positives.
-	skip.UnderShort(t)
-	skip.UnderRace(t)
-
-	sc := log.ScopeWithoutShowLogs(t)
-	defer sc.Close(t)
-	// Reduce the number of output log files to just what's expected.
-	defer sc.SetupSingleFileLogging()()
-
-	ctx := context.Background()
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Insecure:          true,
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	_, err := c.RunWithCapture("debug zip --concurrency=1 --include-files=*.json --cpu-profile-duration=0 " + dir + "/debug.zip")
-	require.NoError(t, err)
-
-	r, err := zip.OpenReader(zipName)
-	defer func() { _ = r.Close() }()
-	require.NoError(t, err)
-
-	for _, f := range r.File {
-		fmt.Println(f.Name)
-	}
-
-	d, _ := r.Open("debug/nodes/1")
-	defer func() {
-		if d != nil {
-			_ = d.Close()
-		}
-	}()
-}
-
-func trimNonDeterministicZipOutputFiles(out string) string {
-	re := regexp.MustCompile(`(?m).*\.log$`)
-	out = re.ReplaceAllString(out, `deterministic.log`)
-
-	//Below files are generated non-deterministically on eng-flow.
-	re = regexp.MustCompile(`(?m).*job_message\.txt$` + "\n")
-	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m).*job_progress\.txt$` + "\n")
-	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m).*job_progress_history\.txt$` + "\n")
-	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m).*job_status\.txt$` + "\n")
-	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m).*(memprof|memstats|memmonitoring).*\.(txt|pprof)$` + "\n")
-	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m).*goroutine_dump.*\.txt\.gz$` + "\n")
-	out = re.ReplaceAllString(out, ``)
-	return out
-}
-
-func TestZipIncludeAndExcludeFilesDataDriven(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	datadriven.Walk(t, "testdata/zip/file-filters", func(t *testing.T, path string) {
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			// We want a low timeout so that the test doesn't take forever;
-			// however low timeouts make race runs flaky with false positives.
-			skip.UnderShort(t)
-			skip.UnderRace(t)
-
-			sc := log.ScopeWithoutShowLogs(t)
-			defer sc.Close(t)
-			// Reduce the number of output log files to just what's expected.
-			defer sc.SetupSingleFileLogging()()
-
-			ctx := context.Background()
-
-			tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-				ServerArgs: base.TestServerArgs{
-					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-					Insecure:          true,
-				},
-			})
-			defer tc.Stopper().Stop(ctx)
-			commandFlag := d.Cmd
-			commandArgs := d.CmdArgs
-			for _, arg := range commandArgs {
-				commandFlag = commandFlag + " " + arg.String()
-			}
-
-			dir, cleanupFn := testutils.TempDir(t)
-			defer cleanupFn()
-			c := NewCLITest(TestCLIParams{
-				StoreSpecs: []base.StoreSpec{{
-					Path: dir,
-				}},
-			})
-			defer c.Cleanup()
-
-			zipName := filepath.Join(dir, "debug.zip")
-			var command = "debug zip " + dir + "/debug.zip --concurrency=1 --cpu-profile-duration=1s " + commandFlag
-			_, err := c.RunWithCapture(command)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			r, _ := zip.OpenReader(zipName)
-			defer func() {
-				if r != nil {
-					_ = r.Close()
-				}
-			}()
-
-			var fileLists []string
-			for _, f := range r.File {
-				fileLists = append(fileLists, f.Name)
-			}
-			sort.Strings(fileLists)
-			fileList := strings.Join(fileLists, "\n")
-			fileList = trimNonDeterministicZipOutputFiles(fileList)
-			fmt.Println(fileList)
-
-			err = r.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-			return fileList
-		})
-	})
 }

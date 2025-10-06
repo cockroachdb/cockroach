@@ -60,7 +60,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SettingName": {},
 						"ValueOrigin": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/crosscluster/logical": {
+					"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/logical": {
 						"processorType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/cli/exit": {
@@ -74,8 +74,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"timing": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/jobs": {
-						"StatusMessage": {},
-						"State":         {},
+						"RunningStatus": {},
+						"Status":        {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/jobs/jobspb": {
 						"Type":                      {},
@@ -135,14 +135,12 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb": {
 						"Epoch": {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb": {
+					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/raft/raftpb": {
 						"Epoch":                {},
 						"PeerID":               {},
-						"Index":                {},
-						"Term":                 {},
 						"MessageType":          {},
 						"EntryType":            {},
 						"ConfChangeType":       {},
@@ -178,10 +176,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"DescriptorType": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
-						"JobID":         {},
-						"PolicyCommand": {},
-						"PolicyType":    {},
-						"ScheduleID":    {},
+						"JobID":      {},
+						"ScheduleID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb": {
 						"ConstraintValidity":           {},
@@ -218,10 +214,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"Phase": {},
 						"Type":  {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb": {
-						"Status":       {},
-						"TargetStatus": {},
-					},
 					"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph": {
 						"RuleName": {},
 					},
@@ -233,14 +225,10 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"IndexID":        {},
 						"PGAttributeNum": {},
 						"TriggerID":      {},
-						"PolicyID":       {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/tree": {
 						"IsolationLevel": {},
 						"PlaceholderIdx": {},
-						"PolicyCommand":  {},
-						"PolicyType":     {},
-						"TableRLSMode":   {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness": {
 						"SessionID": {},
@@ -264,12 +252,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
 					},
-					"github.com/cockroachdb/cockroach/pkg/util/uuid": {
-						"Bytes":     {},
-						"Short":     {},
-						"UUID":      {},
-						"Timestamp": {},
-					},
 					"github.com/cockroachdb/pebble": {
 						"FormatMajorVersion": {},
 					},
@@ -285,9 +267,6 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/redact/internal/redact": {
 						"safeWrapper": {},
-					},
-					"github.com/cockroachdb/cockroach/pkg/util/debugutil": {
-						"SafeStack": {},
 					},
 				}
 				ty := recv[0].Type

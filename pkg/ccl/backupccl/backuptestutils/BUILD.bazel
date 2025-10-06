@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "backuptestutils",
+    testonly = 1,
+    srcs = ["testutils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuptestutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/backupccl/backupbase",
+        "//pkg/clusterversion",
+        "//pkg/jobs",
+        "//pkg/keyvisualizer",
+        "//pkg/kv/kvserver",
+        "//pkg/sql/sqlstats",
+        "//pkg/testutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/metamorphic",
+        "//pkg/workload/bank",
+        "//pkg/workload/workloadsql",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+    ],
+)

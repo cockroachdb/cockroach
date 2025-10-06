@@ -29,6 +29,7 @@ var (
 		"server.log_gc.period",
 		"the period at which log-like system tables are checked for old entries",
 		time.Hour,
+		settings.NonNegativeDuration,
 		settings.WithPublic)
 
 	systemLogGCLimit = settings.RegisterIntSetting(
@@ -202,9 +203,9 @@ func runSystemLogGC(
 		}
 
 		if rowsAffected, err := runSystemLogGCForOneTable(ctx, sqlServer, st, gcConfig); err != nil {
-			log.Dev.Warningf(ctx, "error garbage collecting %s.%s: %v", gcConfig.table, gcConfig.timestampCol, err)
+			log.Warningf(ctx, "error garbage collecting %s.%s: %v", gcConfig.table, gcConfig.timestampCol, err)
 		} else {
-			log.Dev.Infof(ctx, "garbage collected %d rows from %s.%s", rowsAffected, gcConfig.table, gcConfig.timestampCol)
+			log.Infof(ctx, "garbage collected %d rows from %s.%s", rowsAffected, gcConfig.table, gcConfig.timestampCol)
 		}
 	}
 }
@@ -258,6 +259,8 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 		for ; ; timer.Reset(getPeriod()) {
 			select {
 			case <-timer.C:
+				timer.Read = true
+
 				// Do the work for all system tables.
 				runSystemLogGC(ctx, sqlServer, st, systemLogsToGC)
 

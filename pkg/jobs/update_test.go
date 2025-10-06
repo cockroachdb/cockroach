@@ -76,7 +76,7 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 		expectedProgress jobspb.Progress) {
 		infoStorage := createdJob.InfoStorage(txn)
 
-		payload, exists, err := infoStorage.GetLegacyPayload(ctx, "verifyPayloadAndProgress")
+		payload, exists, err := infoStorage.GetLegacyPayload(ctx)
 		require.NoError(t, err)
 		require.True(t, exists)
 		data, err := protoutil.Marshal(&expectedPayload)
@@ -85,7 +85,7 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 		}
 		require.Equal(t, data, payload)
 
-		progress, exists, err := infoStorage.GetLegacyProgress(ctx, "verifyPayloadAndProgress")
+		progress, exists, err := infoStorage.GetLegacyProgress(ctx)
 		require.NoError(t, err)
 		require.True(t, exists)
 		data, err = protoutil.Marshal(&expectedProgress)

@@ -44,7 +44,7 @@ func TestPendingLogTruncations(t *testing.T) {
 	require.Equal(t, 2, truncs.capacity())
 	require.True(t, truncs.isEmptyLocked())
 	require.EqualValues(t, 55, truncs.computePostTruncLogSize(55))
-	require.EqualValues(t, 4, truncs.nextCompactedIndex(4))
+	require.EqualValues(t, 5, truncs.computePostTruncFirstIndex(5))
 
 	// One pending truncation.
 	truncs.mu.truncs[0].logDeltaBytes = -50
@@ -60,11 +60,11 @@ func TestPendingLogTruncations(t *testing.T) {
 	// Added -50 and bumped up to 0.
 	require.EqualValues(t, 0, truncs.computePostTruncLogSize(45))
 	// Advances to Index+1.
-	require.EqualValues(t, 20, truncs.nextCompactedIndex(4))
-	require.EqualValues(t, 20, truncs.nextCompactedIndex(19))
+	require.EqualValues(t, 21, truncs.computePostTruncFirstIndex(5))
+	require.EqualValues(t, 21, truncs.computePostTruncFirstIndex(20))
 	// Does not advance.
-	require.EqualValues(t, 20, truncs.nextCompactedIndex(20))
-	require.EqualValues(t, 29, truncs.nextCompactedIndex(29))
+	require.EqualValues(t, 21, truncs.computePostTruncFirstIndex(21))
+	require.EqualValues(t, 30, truncs.computePostTruncFirstIndex(30))
 
 	// Two pending truncations.
 	truncs.mu.truncs[1].logDeltaBytes = -70
@@ -83,11 +83,11 @@ func TestPendingLogTruncations(t *testing.T) {
 	// Added -120 and bumped up to 0.
 	require.EqualValues(t, 0, truncs.computePostTruncLogSize(115))
 	// Advances to Index+1 of second entry.
-	require.EqualValues(t, 30, truncs.nextCompactedIndex(4))
-	require.EqualValues(t, 30, truncs.nextCompactedIndex(29))
+	require.EqualValues(t, 31, truncs.computePostTruncFirstIndex(5))
+	require.EqualValues(t, 31, truncs.computePostTruncFirstIndex(30))
 	// Does not advance.
-	require.EqualValues(t, 30, truncs.nextCompactedIndex(30))
-	require.EqualValues(t, 39, truncs.nextCompactedIndex(39))
+	require.EqualValues(t, 31, truncs.computePostTruncFirstIndex(31))
+	require.EqualValues(t, 40, truncs.computePostTruncFirstIndex(40))
 
 	// Pop first.
 	last := truncs.mu.truncs[1]
@@ -140,14 +140,16 @@ func (r *replicaTruncatorTest) getPendingTruncs() *pendingLogTruncations {
 	return &r.pendingTruncs
 }
 
-func (r *replicaTruncatorTest) sideloadedStats(
-	_ context.Context, span kvpb.RaftSpan,
-) (entries uint64, size int64, _ error) {
-	fmt.Fprintf(r.buf, "r%d.sideloadedStats(%d, %d)\n", r.rangeID, span.After, span.Last)
-	if r.sideloadedFreed != 0 {
-		entries = 1 // Make it look like we are removing some sideloaded entries.
-	}
-	return entries, r.sideloadedFreed, r.sideloadedErr
+func (r *replicaTruncatorTest) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
+	fmt.Fprintf(r.buf, "r%d.setTruncationDeltaAndTrusted(delta:%d, trusted:%t)\n",
+		r.rangeID, deltaBytes, isDeltaTrusted)
+}
+
+func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
+	_ context.Context, from, to kvpb.RaftIndex,
+) (freed int64, _ error) {
+	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n", r.rangeID, from, to)
+	return r.sideloadedFreed, r.sideloadedErr
 }
 
 func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
@@ -155,16 +157,17 @@ func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
 	return r.stateLoader
 }
 
-func (r *replicaTruncatorTest) stagePendingTruncation(_ context.Context, pt pendingTruncation) {
-	trusted := pt.isDeltaTrusted && r.truncState.Index+1 == pt.expectedFirstIndex
+func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
+	_ context.Context,
+	truncState *kvserverpb.RaftTruncatedState,
+	expectedFirstIndexPreTruncation kvpb.RaftIndex,
+) (expectedFirstIndexWasAccurate bool) {
+	expectedFirstIndexWasAccurate = r.truncState.Index+1 == expectedFirstIndexPreTruncation
+	r.truncState = *truncState
 	fmt.Fprintf(r.buf,
-		"r%d.stagePendingTruncation(..., expFirstIndex:%d, delta:%v, trusted:%t) => trusted:%t\n",
-		r.rangeID, pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted, trusted)
-	r.truncState = pt.RaftTruncatedState
-}
-
-func (r *replicaTruncatorTest) finalizeTruncation(_ context.Context) {
-	fmt.Fprintf(r.buf, "r%d.finalizeTruncation\n", r.rangeID)
+		"r%d.setTruncatedStateAndSideEffects(..., expectedFirstIndex:%d) => trusted:%t\n",
+		r.rangeID, expectedFirstIndexPreTruncation, expectedFirstIndexWasAccurate)
+	return expectedFirstIndexWasAccurate
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
@@ -389,69 +392,5 @@ func printTruncatorState(t *testing.T, buf *strings.Builder, truncator *raftLogT
 	for _, id := range ranges {
 		fmt.Fprintf(buf, "%s%d", prefixStr, id)
 		prefixStr = ", "
-	}
-}
-
-func (pt pendingTruncation) delta(delta int64, hasSideloaded, trusted bool) pendingTruncation {
-	pt.logDeltaBytes = delta
-	pt.isDeltaTrusted = trusted
-	pt.hasSideloaded = hasSideloaded
-	return pt
-}
-
-func TestPendingTruncationMerge(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	pt := func(from, to, term uint64) pendingTruncation {
-		return pendingTruncation{
-			RaftTruncatedState: kvserverpb.RaftTruncatedState{
-				Index: kvpb.RaftIndex(to),
-				Term:  kvpb.RaftTerm(term),
-			},
-			expectedFirstIndex: kvpb.RaftIndex(from + 1),
-		}
-	}
-	const hasSL, noSL = true, false
-	for _, tt := range []struct {
-		prev pendingTruncation
-		next pendingTruncation
-		want pendingTruncation
-	}{{
-		prev: pt(100, 200, 10).delta(1024, noSL, true),
-		next: pt(200, 300, 11).delta(1024, noSL, true),
-		want: pt(100, 300, 11).delta(2048, noSL, true),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, noSL, false),
-		next: pt(200, 300, 11).delta(1024, noSL, true),
-		want: pt(100, 300, 11).delta(2048, noSL, false),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, noSL, true),
-		next: pt(200, 300, 11).delta(1024, noSL, false),
-		want: pt(100, 300, 11).delta(2048, noSL, false),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, hasSL, true),
-		next: pt(200, 300, 11).delta(1024, noSL, true),
-		want: pt(100, 300, 11).delta(2048, hasSL, true),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, noSL, true),
-		next: pt(200, 300, 11).delta(1024, hasSL, true),
-		want: pt(100, 300, 11).delta(2048, hasSL, true),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, hasSL, true),
-		next: pt(200, 300, 11).delta(1024, hasSL, true),
-		want: pt(100, 300, 11).delta(2048, hasSL, true),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, noSL, true),
-		next: pt(150, 300, 11).delta(2048, noSL, true),
-		want: pt(100, 300, 11).delta(3072, noSL, false),
-	}, {
-		prev: pt(100, 200, 10).delta(1024, noSL, false),
-		next: pt(250, 400, 11).delta(2048, noSL, true),
-		want: pt(100, 400, 11).delta(3072, noSL, false),
-	}} {
-		t.Run("", func(t *testing.T) {
-			require.Equal(t, tt.want, tt.next.merge(tt.prev))
-		})
 	}
 }

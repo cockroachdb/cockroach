@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
@@ -71,12 +70,8 @@ func TestClusterVersionAtLeast(t *testing.T) {
 			clusterVersions.Store([]roachpb.Version{currentVersion})
 			runner := testTestRunner()
 			runner.systemService.clusterVersions = &clusterVersions
-			descriptor := &ServiceDescriptor{
-				Name:  "test",
-				Nodes: option.NodeListOption{1, 2, 3, 4},
-			}
 
-			h := runner.newHelper(ctx, nilLogger, Context{System: &ServiceContext{Finalizing: false, Descriptor: descriptor}})
+			h := runner.newHelper(ctx, nilLogger, Context{System: &ServiceContext{Finalizing: false}})
 
 			supportedFeature, err := h.ClusterVersionAtLeast(rng, tc.minVersion)
 			if tc.expectedErr == "" {

@@ -39,7 +39,7 @@
 // channel. Different channels are aimed at different audiences and
 // can be redirected to different sinks.
 //
-// If the channel name is omitted (e.g. log.Dev.Info), the Dev channel is
+// If the channel name is omitted (e.g. log.Info), the Dev channel is
 // used.
 //
 // The second word e.g. "Info", "Fatal" etc is the severity level.
@@ -56,7 +56,7 @@
 // Examples:
 //
 //	if log.V(2) {
-//		log.Dev.Info(ctx, "starting transaction...")
+//		log.Info(ctx, "starting transaction...")
 //	}
 //
 // Additionally, severity functions also exist in a V variant for

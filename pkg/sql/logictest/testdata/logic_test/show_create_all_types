@@ -66,6 +66,7 @@ SHOW CREATE ALL TYPES;
 subtest bug-show-create-all-types-#126005
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 CREATE TYPE address AS (
         street STRING,
@@ -75,10 +76,12 @@ CREATE TYPE address AS (
     );
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE address IS 'comment for composite type address';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query T colnames
 SHOW CREATE ALL TYPES
 ----
@@ -87,18 +90,22 @@ CREATE TYPE public.address AS (street STRING, city STRING, state STRING, zipcode
 COMMENT ON TYPE public.address IS 'comment for composite type address';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 DROP TYPE address;
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 CREATE TYPE roaches AS ENUM('papa_roach','mama_roach','baby_roach');
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 statement ok
 COMMENT ON TYPE roaches IS 'comment for enum type roaches';
 
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
 query T colnames
 SHOW CREATE ALL TYPES
 ----

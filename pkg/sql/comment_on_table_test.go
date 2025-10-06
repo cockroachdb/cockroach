@@ -22,7 +22,7 @@ func TestCommentOnTable(t *testing.T) {
 		if _, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (i INT ) WITH (schema_locked=false);
+		CREATE TABLE t (i INT );
 	`); err != nil {
 			t.Fatal(err)
 		}

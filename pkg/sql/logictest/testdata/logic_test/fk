@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
 
@@ -159,15 +158,8 @@ INSERT INTO child VALUES (1, 10) ON CONFLICT (c) DO UPDATE SET p = 1
 statement error foreign key
 INSERT INTO child VALUES (1, 10) ON CONFLICT (c) DO UPDATE SET p = 10
 
-
-statement ok
-ALTER TABLE child SET (schema_locked=false)
-
 statement ok
 TRUNCATE child
-
-statement ok
-ALTER TABLE child RESET (schema_locked)
 
 statement ok
 INSERT INTO child VALUES (1, 1)
@@ -502,7 +494,6 @@ CREATE TABLE delivery (
   FAMILY "primary" (ts, "order", shipment, item, rowid)
 )
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE delivery
 ----
@@ -516,23 +507,7 @@ delivery  CREATE TABLE public.delivery (
             CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
             CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
             INDEX delivery_item_idx (item ASC)
-          );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE delivery
-----
-delivery  CREATE TABLE public.delivery (
-            ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
-            "order" INT8 NULL,
-            shipment INT8 NULL,
-            item STRING NULL,
-            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT delivery_pkey PRIMARY KEY (rowid ASC),
-            CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
-            CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
-            INDEX delivery_item_idx (item ASC)
-          ) WITH (schema_locked = true);
+          )
 
 statement ok
 INSERT INTO delivery ("order", shipment, item) VALUES
@@ -604,28 +579,9 @@ ALTER TABLE "user content"."customer reviews"
 statement ok
 INSERT INTO "user content"."customer reviews" (id, product, body, "order") VALUES (3, '780', 'i ordered 100 of them', 9)
 
-# Cross database references are used below
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE orders SET (schema_locked=false);
-
-
 statement ok
 ALTER TABLE "user content"."customer reviews"
   ADD CONSTRAINT orderfk2 FOREIGN KEY ("order", shipment) REFERENCES orders (id, shipment)
-
-# Cross database references are used below
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE "user content"."customer reviews" RESET (schema_locked);
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE orders RESET (schema_locked);
 
 # This is allowed because we match using MATCH SIMPLE.
 statement ok
@@ -645,21 +601,8 @@ INSERT INTO "user content"."customer reviews" (id, product, body, shipment, "ord
 statement ok
 ALTER TABLE delivery DROP CONSTRAINT delivery_order_shipment_fkey
 
-
-statement ok
-ALTER TABLE orders SET (schema_locked=false);
-
-statement ok
-ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
-
 statement ok
 TRUNCATE orders, "user content"."customer reviews"
-
-statement ok
-ALTER TABLE orders RESET (schema_locked)
-
-statement ok
-ALTER TABLE "user content"."customer reviews" RESET (schema_locked)
 
 # Changing now non-referenced and secondary field is fine.
 statement ok
@@ -672,78 +615,24 @@ UPDATE products SET sku = '780', upc = 'blah' WHERE sku = '750'
 statement error pgcode 23503 delete on table "products" violates foreign key constraint "delivery_item_fkey" on table "delivery"\nDETAIL: Key \(upc\)=\('885155001450'\) is still referenced from table "delivery"\.
 DELETE FROM products WHERE sku = '750'
 
-statement ok
-ALTER TABLE products SET (schema_locked=false);
-
 statement error "products" is referenced by foreign key from table "orders"
 TRUNCATE products
-
-statement ok
-ALTER TABLE products RESET (schema_locked)
 
 query I
 SELECT count(*) FROM delivery
 ----
 4
 
-
-statement ok
-ALTER TABLE products SET (schema_locked=false);
-
-statement ok
-ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
-
-statement ok
-ALTER TABLE orders SET (schema_locked=false);
-
-statement ok
-ALTER TABLE delivery SET (schema_locked=false);
-
 statement ok
 TRUNCATE products CASCADE
-
-statement ok
-ALTER TABLE products RESET (schema_locked)
-
-statement ok
-ALTER TABLE "user content"."customer reviews" RESET (schema_locked)
-
-statement ok
-ALTER TABLE orders RESET (schema_locked)
-
-statement ok
-ALTER TABLE delivery RESET (schema_locked)
 
 query I
 SELECT count(*) FROM delivery
 ----
 0
 
-
-statement ok
-ALTER TABLE delivery SET (schema_locked=false);
-
-statement ok
-ALTER TABLE products SET (schema_locked=false);
-
-statement ok
-ALTER TABLE orders SET (schema_locked=false);
-
-statement ok
-ALTER TABLE "user content"."customer reviews" SET (schema_locked=false);
-
 statement ok
 TRUNCATE delivery, products, orders, "user content"."customer reviews"
-
-statement ok
-ALTER TABLE delivery RESET (schema_locked)
-
-
-statement ok
-ALTER TABLE orders RESET (schema_locked)
-
-statement ok
-ALTER TABLE "user content"."customer reviews" RESET (schema_locked)
 
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM orders] ORDER BY constraint_name
@@ -753,23 +642,9 @@ orders      orders_pkey          PRIMARY KEY      PRIMARY KEY (id ASC, shipment 
 orders      orders_product_fkey  FOREIGN KEY      FOREIGN KEY (product) REFERENCES products(sku) ON DELETE RESTRICT ON UPDATE RESTRICT  true
 orders      valid_customer       FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
 
-skipif config local-legacy-schema-changer
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
-DROP INDEX products@products_upc_key
-
-skipif config local-legacy-schema-changer
-skipif config local-mixed-25.2
-skipif config local-mixed-25.3
-statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
-DROP INDEX products@products_upc_key RESTRICT
-
-onlyif config local-legacy-schema-changer
 statement error pq: index "products_upc_key" is in use as unique constraint
 DROP INDEX products@products_upc_key
 
-onlyif config local-legacy-schema-changer
 statement error pq: index "products_upc_key" is in use as unique constraint
 DROP INDEX products@products_upc_key RESTRICT
 
@@ -944,7 +819,6 @@ refpairs    refpairs_pkey       false       2             a            a        
 refpairs    refpairs_pkey       false       3             b            b           N/A        true     false     true     1
 refpairs    refpairs_pkey       false       4             c            c           N/A        true     false     true     1
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE refpairs
 ----
@@ -956,21 +830,7 @@ refpairs  CREATE TABLE public.refpairs (
             CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
             CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
             INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
-          );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE refpairs
-----
-refpairs  CREATE TABLE public.refpairs (
-            a INT8 NULL,
-            b STRING NULL,
-            c INT8 NULL,
-            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
-            CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
-            INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
-          ) WITH (schema_locked = true);
+          )
 
 statement error pgcode 23503 insert on table "refpairs" violates foreign key constraint "refpairs_a_b_fkey"\nDETAIL: Key \(a, b\)=\(100, 'two'\) is not present in table "pairs".
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
@@ -1152,12 +1012,6 @@ SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC
 ----
 SCHEMA CHANGE GC  GC for DROP TABLE test.public.a
 
-onlyif config local-legacy-schema-changer
-query TT
-SELECT job_type, description FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC' AND
- description LIKE 'GC for DROP TABLE test.public.a';
-----
-
 statement ok
 DROP TABLE b
 
@@ -1166,8 +1020,7 @@ statement ok
 CREATE TABLE referee (id INT PRIMARY KEY);
 
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
+BEGIN TRANSACTION
 
 statement ok
 CREATE TABLE refers (
@@ -1185,7 +1038,6 @@ CREATE INDEX foo ON refers (a)
 statement ok
 ALTER INDEX refers@b_idx RENAME TO another_idx
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE refers
 ----
@@ -1197,21 +1049,7 @@ refers  CREATE TABLE public.refers (
           CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
           INDEX another_idx (b ASC),
           INDEX foo (a ASC)
-        );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE refers
-----
-refers  CREATE TABLE public.refers (
-          a INT8 NULL,
-          b INT8 NULL,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT refers_pkey PRIMARY KEY (rowid ASC),
-          CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
-          INDEX another_idx (b ASC),
-          INDEX foo (a ASC)
-        ) WITH (schema_locked = true);
+        )
 
 statement ok
 DROP INDEX refers@another_idx
@@ -1243,8 +1081,7 @@ COMMIT
 
 # CREATE AND DROP a table with a fk in the same transaction.
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
+BEGIN TRANSACTION
 
 statement ok
 CREATE TABLE refers1 (a INT REFERENCES referee);
@@ -1284,7 +1121,6 @@ CREATE TABLE pkref_a (a INT PRIMARY KEY)
 statement ok
 CREATE TABLE pkref_b (b INT PRIMARY KEY REFERENCES pkref_a ON UPDATE NO ACTION ON DELETE RESTRICT)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE pkref_b
 ----
@@ -1292,17 +1128,7 @@ pkref_b  CREATE TABLE public.pkref_b (
            b INT8 NOT NULL,
            CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
            CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
-         );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE pkref_b
-----
-pkref_b  CREATE TABLE public.pkref_b (
-           b INT8 NOT NULL,
-           CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
-           CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
-         ) WITH (schema_locked = true);
+         )
 
 subtest 20042
 
@@ -2067,13 +1893,7 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
@@ -2082,13 +1902,7 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
@@ -2450,13 +2264,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', NULL)
@@ -2465,13 +2273,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, NULL, 'z1')
@@ -2480,13 +2282,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', 'y1', NULL)
@@ -2495,13 +2291,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x1', NULL, 'z1')
@@ -2510,13 +2300,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES (NULL, 'y1', 'z1')
@@ -2525,13 +2309,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
@@ -2540,13 +2318,7 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z1')
@@ -2555,13 +2327,7 @@ statement error foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2', row
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x) MATCH FULL
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y2', 'z2')
@@ -2739,13 +2505,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2760,13 +2520,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2781,13 +2535,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2802,13 +2550,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2823,13 +2565,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2844,13 +2580,7 @@ statement error foreign key violation: MATCH FULL does not allow mixing of null 
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2865,13 +2595,7 @@ statement error pq: foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2',
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -2886,13 +2610,7 @@ statement error pq: foreign key violation: "b" row a_z='z1', a_y='y2', a_x='x2',
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
 statement ok
-ALTER TABLE b SET (schema_locked=false);
-
-statement ok
 TRUNCATE b
-
-statement ok
-ALTER TABLE b RESET (schema_locked);
 
 statement ok
 ALTER TABLE b DROP CONSTRAINT fk_ref
@@ -3011,31 +2729,11 @@ CREATE TABLE childid (
 statement ok
 INSERT INTO parentid (k, v) VALUES (0, 1); INSERT INTO childid (id) VALUES (2);
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE parentid SET (schema_locked=false);
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE childid SET (schema_locked=false);
-
 statement error column \"id\" does not exist
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
-ALTER TABLE parentid ADD id INT NOT NULL AS (k + 2) STORED;
-ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES parentid (id);
+BEGIN; ALTER TABLE parentid ADD id INT NOT NULL AS (k + 2) STORED; ALTER TABLE childid ADD CONSTRAINT fk_id FOREIGN KEY (id) REFERENCES parentid (id);
 
 statement ok
 ROLLBACK;
-
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE parentid RESET (schema_locked)
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE childid RESET (schema_locked)
 
 subtest dont_check_nulls
 # Make sure that nulls are never checked while executing FK constraints.
@@ -3173,13 +2871,7 @@ statement error update on table "self" violates foreign key constraint "self_y_f
 UPDATE self SET x = 5 WHERE y = 1
 
 statement ok
-ALTER TABLE self SET (schema_locked=false);
-
-statement ok
 TRUNCATE self
-
-statement ok
-ALTER TABLE self RESET (schema_locked);
 
 statement ok
 INSERT INTO self VALUES (1, 1)
@@ -3493,22 +3185,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE NO ACTION', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3534,22 +3214,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE RESTRICT', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3576,22 +3244,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE RESTRICT', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3617,22 +3273,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE CASCADE', followed by 'ON DELETE SET DEFAULT'
 statement ok
@@ -3658,22 +3302,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE CASCADE', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3699,22 +3331,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE CASCADE'
 statement ok
@@ -3740,22 +3360,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE SET DEFAULT', followed by 'ON DELETE SET NULL'
 statement ok
@@ -3781,22 +3389,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON DELETE SET NULL', followed by 'ON DELETE SET DEFAULT'
 statement ok
@@ -3823,22 +3419,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 statement ok
 DROP TABLE t2 CASCADE;
@@ -3884,22 +3468,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE NO ACTION', followed by 'ON UPDATE CASCADE'
 statement ok
@@ -3926,22 +3498,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE RESTRICT', followed by 'ON UPDATE SET NULL'
 statement ok
@@ -3968,22 +3528,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE RESTRICT', followed by 'ON UPDATE CASCADE'
 statement ok
@@ -4010,22 +3558,10 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
 statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
-statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE CASCADE', followed by 'ON UPDATE SET DEFAULT'
 statement ok
@@ -4051,24 +3587,11 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
-
-statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE CASCADE', followed by 'ON UPDATE SET NULL'
 statement ok
@@ -4094,24 +3617,11 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
-
-statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE CASCADE'
 statement ok
@@ -4137,24 +3647,11 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
-
-statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE SET DEFAULT', followed by 'ON UPDATE SET NULL'
 statement ok
@@ -4180,24 +3677,11 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
-
-statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 # 'ON UPDATE SET NULL', followed by 'ON UPDATE SET DEFAULT'
 statement ok
@@ -4223,24 +3707,11 @@ ALTER TABLE t2 DROP CONSTRAINT fk1;
 statement ok
 ALTER TABLE t2 DROP CONSTRAINT fk2;
 
-
-statement ok
-ALTER TABLE t2 SET (schema_locked=false);
-
-statement ok
-ALTER TABLE t1 SET (schema_locked=false);
-
 statement ok
 TRUNCATE TABLE t2;
 
 statement ok
 TRUNCATE TABLE t1
-
-statement ok
-ALTER TABLE t2 RESET (schema_locked)
-
-statement ok
-ALTER TABLE t1 RESET (schema_locked)
 
 statement ok
 DROP TABLE t2 CASCADE;
@@ -4333,9 +3804,6 @@ DROP TABLE add_self_fk_fail
 # cluster setting.
 
 subtest cross_db_fks
-
-statement ok
-SET create_table_with_schema_locked=false
 
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = FALSE
@@ -4450,9 +3918,6 @@ ALTER TABLE child_59582 ADD FOREIGN KEY (i) REFERENCES child_59582(rowid)
 
 statement ok
 DROP TABLE parent_59582, child_59582
-
-statement ok
-RESET create_table_with_schema_locked
 
 # Regression test for #65890. Duplicate column IDs in the input of an insert
 # fast path should not cause internal errors when shuffling columns during FK
@@ -4672,17 +4137,8 @@ statement ok
 CREATE TABLE drop_fk_during_addition (name INT8);
 CREATE TABLE drop_fk_during_addition_ref (name INT8 PRIMARY KEY);
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE drop_fk_during_addition SET (schema_locked=false);
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE drop_fk_during_addition_ref SET (schema_locked=false);
-
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE drop_fk_during_addition
 	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
 DROP TABLE drop_fk_during_addition_ref;
@@ -4696,7 +4152,6 @@ subtest 80828
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE parent80828 (id int primary key);
 CREATE TABLE child80828 (id INT PRIMARY KEY, pid INT NOT NULL REFERENCES parent80828(id) ON DELETE CASCADE, UNIQUE INDEX (pid));
 INSERT INTO parent80828 VALUES (1);
@@ -4779,6 +4234,8 @@ NOTICE: type of foreign key column "t1_fk_col1" (CHAR(8)) is not identical to re
 
 # Test trivial data type change
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col2 SET DATA TYPE INT8
@@ -4793,7 +4250,10 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col2" (INT8) is not identical to referenced column "t1_fk"."col2" (INT4)
 
 # Test validation data type change
-skipif config local-legacy-schema-changer weak-iso-level-configs
+skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
+skipif config weak-iso-level-configs
 query T noticetrace
 ALTER TABLE t2_fk ALTER COLUMN t1_fk_col1 SET DATA TYPE CHAR(5)
 ----
@@ -4807,8 +4267,9 @@ NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 NOTICE: type of foreign key column "t1_fk_col1" (CHAR(5)) is not identical to referenced column "t1_fk"."col1" (CHAR(7))
 
 
-onlyif config schema-locked-disabled
 skipif config local-legacy-schema-changer
+skipif config local-mixed-24.1
+skipif config local-mixed-24.2
 query TT
 SHOW CREATE TABLE t2_fk
 ----
@@ -4820,21 +4281,7 @@ t2_fk  CREATE TABLE public.t2_fk (
          CONSTRAINT t2_fk_pkey PRIMARY KEY (pk ASC),
          CONSTRAINT t2_fk_t1_fk_col1_t1_fk_col2_fkey FOREIGN KEY (t1_fk_col1, t1_fk_col2) REFERENCES public.t1_fk(col1, col2),
          FAMILY f1 (pk, t1_fk_col1, t1_fk_col2, col3)
-       );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t2_fk
-----
-t2_fk  CREATE TABLE public.t2_fk (
-         pk INT8 NOT NULL,
-         t1_fk_col1 CHAR(5) NULL,
-         t1_fk_col2 INT8 NULL,
-         col3 INT8 NULL,
-         CONSTRAINT t2_fk_pkey PRIMARY KEY (pk ASC),
-         CONSTRAINT t2_fk_t1_fk_col1_t1_fk_col2_fkey FOREIGN KEY (t1_fk_col1, t1_fk_col2) REFERENCES public.t1_fk(col1, col2),
-         FAMILY f1 (pk, t1_fk_col1, t1_fk_col2, col3)
-       ) WITH (schema_locked = true);
+       )
 
 statement ok
 DROP TABLE t2_fk;

@@ -34,7 +34,7 @@ func newInterner() *interner {
 func (i *interner) add(ctx context.Context, conf roachpb.SpanConfig) *roachpb.SpanConfig {
 	marshalled, err := protoutil.Marshal(&conf)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	if canonical, found := i.configToCanonical[spanConfigKey(marshalled)]; found {
@@ -59,7 +59,7 @@ func (i *interner) remove(ctx context.Context, conf *roachpb.SpanConfig) {
 
 	marshalled, err := protoutil.Marshal(conf)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	delete(i.refCounts, conf)

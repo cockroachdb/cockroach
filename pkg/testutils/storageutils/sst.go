@@ -7,22 +7,15 @@ package storageutils
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/blockiter"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -127,122 +120,4 @@ func KeysFromSST(t *testing.T, data []byte) ([]storage.MVCCKey, []storage.MVCCRa
 		it.Next()
 	}
 	return results, rangeKeyRes
-}
-
-// ReportSSTEntries iterates through an SST and dumps the raw SST data into the
-// buffer in a format suitable for datadriven testing output.
-func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error {
-	r, err := sstable.NewMemReader(sst, sstable.ReaderOptions{
-		Comparer:   &storage.EngineComparer,
-		KeySchemas: sstable.MakeKeySchemas(storage.KeySchemas...),
-	})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = r.Close() }()
-	buf.Printf(">> %s:\n", name)
-
-	// Dump point keys.
-	iter, err := r.NewIter(sstable.NoTransforms, nil, nil, sstable.AssertNoBlobHandles)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = iter.Close() }()
-	for kv := iter.First(); kv != nil; kv = iter.Next() {
-		if err := iter.Error(); err != nil {
-			return err
-		}
-		key, ok := storage.DecodeEngineKey(kv.K.UserKey)
-		if !ok {
-			return errors.Errorf("invalid engine key: %x", kv.K.UserKey)
-		}
-		v, _, err := kv.Value(nil)
-		if err != nil {
-			return err
-		}
-		value, err := storage.DecodeMVCCValue(v)
-		if err != nil {
-			return err
-		}
-		if !key.IsMVCCKey() {
-			buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
-			continue
-		}
-		mk, err := key.ToMVCCKey()
-		if err != nil {
-			return err
-		}
-		if mk.IsValue() {
-			buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), mk, value)
-		} else {
-			buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), mk,
-				print.SprintMVCCKeyValue(storage.MVCCKeyValue{Key: mk, Value: v}, false /* printKey */))
-		}
-	}
-
-	// Dump rangedels.
-	if rdIter, err := r.NewRawRangeDelIter(context.Background(), blockiter.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
-		return err
-	} else if rdIter != nil {
-		defer rdIter.Close()
-		s, err := rdIter.First()
-		for ; s != nil; s, err = rdIter.Next() {
-			start, ok := storage.DecodeEngineKey(s.Start)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.Start)
-			}
-			end, ok := storage.DecodeEngineKey(s.End)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.End)
-			}
-			for _, k := range s.Keys {
-				buf.Printf("%s: %s\n", strings.ToLower(k.Kind().String()),
-					roachpb.Span{Key: start.Key, EndKey: end.Key})
-			}
-		}
-		if err != nil {
-			return err
-		}
-	}
-
-	// Dump range keys.
-	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), blockiter.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
-		return err
-	} else if rkIter != nil {
-		defer rkIter.Close()
-		s, err := rkIter.First()
-		for ; s != nil; s, err = rkIter.Next() {
-			start, ok := storage.DecodeEngineKey(s.Start)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.Start)
-			}
-			end, ok := storage.DecodeEngineKey(s.End)
-			if !ok {
-				return errors.Errorf("invalid engine key: %x", s.End)
-			}
-			for _, k := range s.Keys {
-				buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
-					roachpb.Span{Key: start.Key, EndKey: end.Key})
-				if len(k.Suffix) > 0 {
-					ts, err := mvccencoding.DecodeMVCCTimestampSuffix(k.Suffix)
-					if err != nil {
-						return err
-					}
-					buf.Printf("/%s", ts)
-				}
-				if k.Kind() == pebble.InternalKeyKindRangeKeySet {
-					value, err := storage.DecodeMVCCValue(k.Value)
-					if err != nil {
-						return err
-					}
-					buf.Printf(" -> %s", value)
-				}
-				buf.Printf("\n")
-			}
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -41,29 +39,14 @@ const (
 // information for users or app developers.
 const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cockroachlabs.com/docs/stable/cost-based-optimizer.html#control-whether-queries-are-limited-to-a-single-region"
 
-// QueryNotRunningInHomeRegionMessagePrefix is the common message prefix for
-// erroring out queries with no home region when the enforce_home_region session
-// flag is set.
-const QueryNotRunningInHomeRegionMessagePrefix = "Query is not running in its home region"
-
 // NewSchemaChangeOnLockedTableErr creates an error signaling schema
 // change statement is attempted on a table with locked schema.
 func NewSchemaChangeOnLockedTableErr(tableName string) error {
-	return errors.WithHintf(
-		errors.WithDetailf(
-			pgerror.Newf(
-				pgcode.OperatorIntervention,
-				`this schema change is disallowed because table %q is locked and this operation cannot automatically unlock the table`,
-				tableName,
-			),
-			"To unlock the table, execute `ALTER TABLE %v SET (schema_locked = false);`"+
-				"\nAfter the schema change completes, we recommend setting it back to true with "+
-				"`ALTER TABLE %v SET (schema_locked = true);`.",
-			tableName, tableName,
-		),
-		"Locking the table improves changefeed performance; see %s",
-		docs.URL("changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables"),
-	)
+	return errors.WithHintf(pgerror.Newf(pgcode.OperatorIntervention,
+		`schema changes are disallowed on table %q because it is locked`, tableName),
+		"To unlock the table, try \"ALTER TABLE %v SET (schema_locked = false);\" "+
+			"\nAfter schema change completes, we recommend setting it back to true with "+
+			"\"ALTER TABLE %v SET (schema_locked = true);\"", tableName, tableName)
 }
 
 // NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that
@@ -104,30 +87,21 @@ func NewNonNullViolationError(columnName string) error {
 }
 
 func NewAlterColumnTypeColOwnsSequenceNotSupportedErr() error {
-	return errors.WithHint(
-		unimplemented.NewWithIssuef(
-			48244, "ALTER COLUMN TYPE requiring a rewrite of on-disk data is "+
-				"not supported for columns that own a sequence"),
-		"Consider modifying the sequence to assign a different column as its owner.",
-	)
+	return unimplemented.NewWithIssuef(
+		48244, "ALTER COLUMN TYPE for a column that owns a sequence "+
+			"is currently not supported")
 }
 
 func NewAlterColumnTypeColWithConstraintNotSupportedErr() error {
-	return errors.WithHint(
-		unimplemented.NewWithIssuef(
-			48288, "ALTER COLUMN TYPE requiring a rewrite of on-disk data is "+
-				"not supported for columns that have constraints"),
-		"Consider temporarily dropping the constraint.",
-	)
+	return unimplemented.NewWithIssuef(
+		48288, "ALTER COLUMN TYPE for a column that has a constraint "+
+			"is currently not supported")
 }
 
 func NewAlterColumnTypeColInIndexNotSupportedErr() error {
-	return errors.WithHint(
-		unimplemented.NewWithIssuef(
-			47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
-				"data is currently not supported for columns that are part of an index"),
-		"Consider modifying the index.",
-	)
+	return unimplemented.NewWithIssuef(
+		47636, "ALTER COLUMN TYPE requiring rewrite of on-disk "+
+			"data is currently not supported for columns that are part of an index")
 }
 
 // NewInvalidAssignmentCastError creates an error that is used when a mutation
@@ -329,20 +303,8 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentName string) error {
 	return errors.WithHintf(
 		NewDependentObjectErrorf("cannot %s %s %q because %s %q depends on it",
-			redact.SafeString(op), redact.SafeString(objType), objName, redact.SafeString(dependentType), dependentName),
+			op, objType, objName, dependentType, dependentName),
 		"consider dropping %q first.", dependentName)
-}
-
-func NewAlterColTypeInCombinationNotSupportedError() error {
-	return unimplemented.NewWithIssuef(
-		49351, "ALTER COLUMN TYPE operations that require rewriting on-disk "+
-			"data cannot be combined with other ALTER TABLE commands")
-}
-
-func NewAlterColTypeInTxnNotSupportedErr() error {
-	return unimplemented.NewWithIssuef(
-		49351, "ALTER COLUMN TYPE requiring a rewrite of on-disk data is "+
-			"not supported inside a transaction")
 }
 
 const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
@@ -389,17 +351,6 @@ func NewAlterDependsOnExpirationExprError(
 		),
 		"use ALTER TABLE %s SET (ttl_expiration_expression = ...) to change the expression",
 		tabName,
-	)
-}
-
-// NewAlterDependsOnPolicyExprError generates an error when a column change
-// is prevented because the column is referenced in a row-level security
-// policy expression.
-func NewAlterDependsOnPolicyExprError(op, objType, colName string) error {
-	return pgerror.Newf(
-		pgcode.InvalidTableDefinition,
-		`cannot %s %s %q because it is referenced in a policy expression`,
-		redact.SafeString(op), redact.SafeString(objType), colName,
 	)
 }
 
@@ -474,13 +425,7 @@ func NewUndefinedConstraintError(constraintName, tableName string) error {
 // NewUndefinedTriggerError returns a missing constraint error.
 func NewUndefinedTriggerError(triggerName, tableName string) error {
 	return pgerror.Newf(pgcode.UndefinedObject,
-		"trigger %q for table %q does not exist", triggerName, tableName)
-}
-
-// NewUndefinedPolicyError return an error that the policy doesn't exist
-func NewUndefinedPolicyError(policyName, tableName string) error {
-	return pgerror.Newf(pgcode.UndefinedObject,
-		"policy %q for table %q does not exist", policyName, tableName)
+		"trigger %q of relation %q does not exist", triggerName, tableName)
 }
 
 // NewRangeUnavailableError creates an unavailable range error.
@@ -527,53 +472,6 @@ func NewInsufficientPrivilegeOnDescriptorError(
 	return pgerror.Newf(pgcode.InsufficientPrivilege,
 		"user %s does not have %s privilege on %s %s",
 		user, privsStr, descType, descName)
-}
-
-// NewColumnNotIndexableError returns an error for a column type that cannot be
-// indexed.
-func NewColumnNotIndexableError(colDesc string, colType string, detail string) error {
-	return unimplemented.NewWithIssueDetailf(35730,
-		detail, "column %s has type %s, which is not indexable", colDesc, colType)
-}
-
-// NewInvalidLastColumnError returns an error for the type of the last column in
-// an inverted or vector index.
-func NewInvalidLastColumnError(colDesc, colType string, indexType idxtype.T) error {
-	err := pgerror.Newf(
-		pgcode.FeatureNotSupported,
-		"column %s has type %s, which is not allowed as the last column in %s",
-		colDesc, colType, idxtype.ErrorText(indexType))
-	if indexType == idxtype.INVERTED {
-		err = errors.WithHint(err,
-			"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"))
-	}
-	return err
-}
-
-// NewColumnOnlyIndexableError returns an error for a column with a type that
-// can only be indexed as the last column in an inverted or vector index.
-func NewColumnOnlyIndexableError(colDesc string, colType string, indexType idxtype.T) error {
-	err := pgerror.Newf(
-		pgcode.FeatureNotSupported,
-		"column %s has type %s, which is only allowed as the last column in %s",
-		colDesc, colType, idxtype.ErrorText(indexType))
-	if indexType == idxtype.INVERTED {
-		err = errors.WithHint(err,
-			"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"))
-	}
-	return err
-}
-
-// NewComputedColReferencesRegionColError returns an error for a computed column
-// that references the region column in a REGIONAL BY ROW table that is using a
-// foreign key to populate the region column.
-func NewComputedColReferencesRegionColError(computedColName, regionColName tree.Name) error {
-	return pgerror.Newf(
-		pgcode.InvalidTableDefinition,
-		`computed column %q cannot reference the region column %q in a REGIONAL BY ROW table`+
-			` with "%s" specified`,
-		computedColName, regionColName, catpb.RBRUsingConstraintTableSettingName,
-	)
 }
 
 // QueryTimeoutError is an error representing a query timeout.
@@ -666,7 +564,6 @@ var (
 	ErrNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
 	ErrNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	ErrNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
-	ErrUnsafeTableAccess = errors.WithHint(pgerror.New(pgcode.InsufficientPrivilege, "Access to crdb_internal and system is restricted."), "These interfaces are unsupported in production. To proceed, set the session variable allow_unsafe_internals = true (not recommended), or contact Cockroach Labs for a supported alternative.")
 )
 
 var ErrNoZoneConfigApplies = errors.New("no zone config applies")

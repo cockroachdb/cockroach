@@ -6,17 +6,13 @@
 package backfill
 
 import (
-	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,8 +28,6 @@ type (
 // to ensure that it properly classifies columns needed for evaluation in an
 // index backfill.
 func TestIndexBackfillerColumns(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
 	asIndexSlice := func(in indexes) (out []catalog.Index) {
 		for _, idx := range in {
 			out = append(out, idx)
@@ -118,8 +112,9 @@ func TestIndexBackfillerColumns(t *testing.T) {
 					keyCols: colIDs{1},
 				},
 			},
-			expCols:   colIDs{1, 2},
-			expNeeded: colIDs{1},
+			expCols:     colIDs{1, 2, 3},
+			expComputed: colIDs{3},
+			expNeeded:   colIDs{1},
 		},
 		{
 			name: "one virtual, one computed mutation column in primary",
@@ -337,7 +332,7 @@ func TestIndexBackfillerColumns(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out, err := makeIndexBackfillColumns(
-				nil, asColumnSlice(tc.cols), tc.src, asIndexSlice(tc.toEncode),
+				asColumnSlice(tc.cols), tc.src, asIndexSlice(tc.toEncode),
 			)
 			if tc.expErr != "" {
 				require.Regexp(t, tc.expErr, err)
@@ -372,7 +367,6 @@ func TestIndexBackfillerColumns(t *testing.T) {
 // TestInitIndexesAllowList tests that initIndexes works correctly with
 // "allowList" to populate the "added" field of the index backfiller.
 func TestInitIndexesAllowList(t *testing.T) {
-	defer leaktest.AfterTest(t)()
 	desc := &tabledesc.Mutable{}
 	desc.TableDescriptor = descpb.TableDescriptor{
 		Mutations: []descpb.DescriptorMutation{
@@ -417,15 +411,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 	t.Run("nil allowList", func(t *testing.T) {
 		// A nil allowList means no filtering.
 		ib := &IndexBackfiller{}
-		err := ib.initIndexes(
-			context.Background(),
-			&eval.Context{Codec: keys.SystemSQLCodec},
-			desc,
-			nil, /* allowList */
-			0,   /* sourceIndexID */
-			nil, /* vecIndexMgr */
-		)
-		require.NoError(t, err)
+		ib.initIndexes(desc, nil /* allowList */)
 		require.Equal(t, 2, len(ib.added))
 		require.Equal(t, catid.IndexID(2), ib.added[0].GetID())
 		require.Equal(t, catid.IndexID(3), ib.added[1].GetID())
@@ -433,15 +419,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 
 	t.Run("non-nil allowList", func(t *testing.T) {
 		ib := &IndexBackfiller{}
-		err := ib.initIndexes(
-			context.Background(),
-			&eval.Context{Codec: keys.SystemSQLCodec},
-			desc,
-			[]catid.IndexID{3}, /* allowList */
-			0,                  /* sourceIndexID */
-			nil,                /* vecIndexMgr */
-		)
-		require.NoError(t, err)
+		ib.initIndexes(desc, []catid.IndexID{3} /* allowList */)
 		require.Equal(t, 1, len(ib.added))
 		require.Equal(t, catid.IndexID(3), ib.added[0].GetID())
 	})

@@ -106,7 +106,7 @@ sequence req=reqTimeout1
 [4] sequence reqTimeout1: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = true, priority enforcement = false, wait policy error = false
 [4] sequence reqTimeout1: pushing timestamp of txn 00000001 above 12.000000000,1
 [4] sequence reqTimeout1: pushee not abandoned
-[4] sequence reqTimeout1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[4] sequence reqTimeout1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence reqTimeout1: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=lock_timeout]
 
 # -------------------------------------------------------------
@@ -119,7 +119,7 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [3] sequence req3: resolving intent ‹"k2"› for txn 00000001 with COMMITTED status
 [3] sequence req3: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"k3"› (queuedLockingRequests: 1, queuedReaders: 0)
-[3] sequence req3: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k2"› for 0.000s
+[3] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [3] sequence req3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req3: pushing txn 00000002 to abort
 [3] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -166,7 +166,7 @@ sequence req=reqTimeout2
 [6] sequence reqTimeout2: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = true, priority enforcement = false, wait policy error = false
 [6] sequence reqTimeout2: pushing txn 00000003 to abort
 [6] sequence reqTimeout2: pushee not abandoned
-[6] sequence reqTimeout2: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"k2"› for 0.000s
+[6] sequence reqTimeout2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"k2"› for 0.000s
 [6] sequence reqTimeout2: sequencing complete, returned error: conflicting locks on ‹"k2"› [reason=lock_timeout]
 
 # -------------------------------------------------------------
@@ -200,7 +200,7 @@ sequence req=reqTimeout3
 [9] sequence reqTimeout3: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = true, priority enforcement = false, wait policy error = false
 [9] sequence reqTimeout3: pushing timestamp of txn 00000002 above 12.000000000,1
 [9] sequence reqTimeout3: pushee not abandoned
-[9] sequence reqTimeout3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k4"› for 0.000s
+[9] sequence reqTimeout3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k4"› for 0.000s
 [9] sequence reqTimeout3: sequencing complete, returned error: conflicting locks on ‹"k4"› [reason=lock_timeout]
 
 debug-lock-table
@@ -226,7 +226,7 @@ on-txn-updated txn=txn2 status=aborted
 [-] update txn: aborting txn2
 [3] sequence req3: resolving intent ‹"k3"› for txn 00000002 with ABORTED status
 [3] sequence req3: lock wait-queue event: done waiting
-[3] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"k3"› for 0.000s
+[3] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k3"› for 0.000s
 [3] sequence req3: acquiring latches
 [3] sequence req3: scanning lock table for conflicting locks
 [3] sequence req3: sequencing complete, returned guard

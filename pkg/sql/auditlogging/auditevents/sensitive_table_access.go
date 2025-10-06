@@ -47,7 +47,7 @@ func (s *SensitiveTableAccessEvent) BuildAuditEvent(
 		err = errTxnIsNotOpen
 	}
 	if err != nil {
-		log.Dev.Warningf(ctx, "name for audited table ID %d not found: %v", s.TableDesc.GetID(), err)
+		log.Warningf(ctx, "name for audited table ID %d not found: %v", s.TableDesc.GetID(), err)
 	} else {
 		tableName = tn.FQString()
 	}

@@ -166,7 +166,7 @@ func (a *allocSim) runWithConfig(config Configuration) {
 func (a *allocSim) setup() {
 	db := a.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS allocsim"); err != nil {
-		log.Dev.Fatalf(context.Background(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	blocks := `
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 )
 `
 	if _, err := db.Exec(blocks); err != nil {
-		log.Dev.Fatalf(context.Background(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 }
 
@@ -186,7 +186,7 @@ func (a *allocSim) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) {
 		return
 	}
-	log.Dev.Errorf(context.Background(), "%v", err)
+	log.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&a.stats.errors, 1)
 }
 
@@ -247,11 +247,11 @@ func (a *allocSim) rangeInfo() allocStats {
 				NodeId: "local",
 			})
 			if err != nil {
-				log.Dev.Fatalf(context.Background(), "%v", err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			var metrics map[string]interface{}
 			if err := json.Unmarshal(resp.Data, &metrics); err != nil {
-				log.Dev.Fatalf(context.Background(), "%v", err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			stores := metrics["stores"].(map[string]interface{})
 			for _, v := range stores {
@@ -416,7 +416,7 @@ func main() {
 		var err error
 		config, err = loadConfig(*configFile)
 		if err != nil {
-			log.Dev.Fatalf(context.Background(), "%v", err)
+			log.Fatalf(context.Background(), "%v", err)
 		}
 	}
 
@@ -429,7 +429,7 @@ func main() {
 		if len(locality.OutgoingLatencies) != 0 {
 			separateAddrs = true
 			if runtime.GOOS != "linux" {
-				log.Dev.Fatal(context.Background(),
+				log.Fatal(context.Background(),
 					"configs that set per-locality outgoing latencies are only supported on linux")
 			}
 			break
@@ -475,11 +475,11 @@ func main() {
 			// set up tc rules on the loopback device.
 			tcController = tc.NewController("lo")
 			if err := tcController.Init(); err != nil {
-				log.Dev.Fatalf(context.Background(), "%v", err)
+				log.Fatalf(context.Background(), "%v", err)
 			}
 			defer func() {
 				if err := tcController.CleanUp(); err != nil {
-					log.Dev.Errorf(context.Background(), "%v", err)
+					log.Errorf(context.Background(), "%v", err)
 				}
 			}()
 		}
@@ -491,7 +491,7 @@ func main() {
 							if err := tcController.AddLatency(
 								perNodeCfg[srcNodeIdx].Addr, perNodeCfg[dstNodeIdx].Addr, time.Duration(outgoing.Latency/2),
 							); err != nil {
-								log.Dev.Fatalf(context.Background(), "%v", err)
+								log.Fatalf(context.Background(), "%v", err)
 							}
 						}
 					}
@@ -523,10 +523,10 @@ func main() {
 		var exitStatus int
 		select {
 		case s := <-signalCh:
-			log.Dev.Infof(context.Background(), "signal received: %v", s)
+			log.Infof(context.Background(), "signal received: %v", s)
 			exitStatus = 1
 		case <-time.After(*duration):
-			log.Dev.Infof(context.Background(), "finished run of: %s", *duration)
+			log.Infof(context.Background(), "finished run of: %s", *duration)
 		}
 		c.Close()
 		a.finalStatus()

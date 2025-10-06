@@ -13,7 +13,7 @@ write *eventpb.CreateSequence to event log:
   sequenceName: defaultdb.pg_temp_123_456.sq1
   sql:
     descriptorId: 105
-    statement: CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_456›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
+    statement: CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
     tag: CREATE SEQUENCE
     user: root
 ## StatementPhase stage 1 of 1 with 27 MutationType ops
@@ -59,7 +59,6 @@ upsert descriptor #105
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    vecConfig: {}
   +    version: 4
   +  privileges:
   +    ownerProto: root
@@ -74,11 +73,11 @@ upsert descriptor #105
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
+  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
-  +    sessionCacheSize: "1"
   +    start: "32"
   +  temporary: true
   +  unexposedParentSchemaId: 104
@@ -88,7 +87,7 @@ upsert descriptor #105
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 28 MutationType ops
+## PreCommitPhase stage 2 of 2 with 27 MutationType ops
 initializing sequence 105 with starting value of 31
 add schema namespace entry {100 0 pg_temp_123_456} -> 104
 add object namespace entry {100 104 sq1} -> 105
@@ -131,7 +130,6 @@ upsert descriptor #105
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    vecConfig: {}
   +    version: 4
   +  privileges:
   +    ownerProto: root
@@ -146,16 +144,15 @@ upsert descriptor #105
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
+  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
-  +    sessionCacheSize: "1"
   +    start: "32"
   +  temporary: true
   +  unexposedParentSchemaId: 104
   +  version: "1"
 persist all catalog changes to storage
-update ttl schedule label #105
 # end PreCommitPhase
 commit transaction #1

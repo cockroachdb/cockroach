@@ -1498,8 +1498,7 @@ update inaccessible
  └── project
       ├── columns: k_new:9!null k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
       ├── scan inaccessible
-      │    ├── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
-      │    └── flags: avoid-full-scan
+      │    └── columns: k:5!null v:6 crdb_internal_mvcc_timestamp:7 tableoid:8
       └── projections
            └── k:5 + 1 [as=k_new:9]
 
@@ -1680,7 +1679,7 @@ upsert t127365
       │    │    │    │    ├── computed column expressions
       │    │    │    │    │    └── crdb_internal_idx_expr:11
       │    │    │    │    │         └── a:10 + 1
-      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │    │    │    └── flags: disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── a:10 + 1 [as=crdb_internal_idx_expr:11]
       │    │    └── filters
@@ -1712,10 +1711,9 @@ update t127365
       │    │    │    │    ├── columns: crdb_internal_idx_expr:8 k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    │    │    │    ├── scan t127365
       │    │    │    │    │    ├── columns: k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    │    └── crdb_internal_idx_expr:8
-      │    │    │    │    │    │         └── a:7 + 1
-      │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── computed column expressions
+      │    │    │    │    │         └── crdb_internal_idx_expr:8
+      │    │    │    │    │              └── a:7 + 1
       │    │    │    │    └── projections
       │    │    │    │         └── a:7 + 1 [as=crdb_internal_idx_expr:8]
       │    │    │    └── filters
@@ -1737,9 +1735,8 @@ delete t127365
       ├── columns: crdb_internal_idx_expr:8 k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan t127365
       │    ├── columns: k:6!null a:7 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    ├── computed column expressions
-      │    │    └── crdb_internal_idx_expr:8
-      │    │         └── a:7 + 1
-      │    └── flags: avoid-full-scan
+      │    └── computed column expressions
+      │         └── crdb_internal_idx_expr:8
+      │              └── a:7 + 1
       └── projections
            └── a:7 + 1 [as=crdb_internal_idx_expr:8]

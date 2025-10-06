@@ -160,27 +160,23 @@ func (db *DB) rollupTimeSeries(
 		// For each row, generate a rollup datapoint and add it to the correct
 		// rollupData object.
 		rollupDataMap := make(map[string]rollupData)
-		if err := func() error {
-			account := qmc.workerMonitor.MakeBoundAccount()
-			defer account.Close(ctx)
 
-			childQmc := QueryMemoryContext{
-				workerMonitor:      qmc.workerMonitor,
-				resultAccount:      &account,
-				QueryMemoryOptions: qmc.QueryMemoryOptions,
+		account := qmc.workerMonitor.MakeBoundAccount()
+		defer account.Close(ctx)
+
+		childQmc := QueryMemoryContext{
+			workerMonitor:      qmc.workerMonitor,
+			resultAccount:      &account,
+			QueryMemoryOptions: qmc.QueryMemoryOptions,
+		}
+		for querySpan := targetSpan; querySpan.Valid(); {
+			var err error
+			querySpan, err = db.queryAndComputeRollupsForSpan(
+				ctx, timeSeries, querySpan, targetResolution, rollupDataMap, childQmc,
+			)
+			if err != nil {
+				return err
 			}
-			for querySpan := targetSpan; querySpan.Valid(); {
-				var err error
-				querySpan, err = db.queryAndComputeRollupsForSpan(
-					ctx, timeSeries, querySpan, targetResolution, rollupDataMap, childQmc,
-				)
-				if err != nil {
-					return err
-				}
-			}
-			return nil
-		}(); err != nil {
-			return err
 		}
 
 		// Write computed rollupDataMap to disk

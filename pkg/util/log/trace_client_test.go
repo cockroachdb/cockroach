@@ -75,7 +75,7 @@ func TestTrace(t *testing.T) {
 			log.Event(ctxWithSpan, "test1")
 			log.VEvent(ctxWithSpan, log.NoLogV(), "test2")
 			log.VErrEvent(ctxWithSpan, log.NoLogV(), "testerr")
-			log.Dev.Info(ctxWithSpan, "log")
+			log.Info(ctxWithSpan, "log")
 
 			// Events to parent context should still be no-ops.
 			log.Event(ctx, "should-not-show-up")
@@ -97,7 +97,7 @@ func TestTraceWithTags(t *testing.T) {
 	log.Event(ctxWithSpan, "test1")
 	log.VEvent(ctxWithSpan, log.NoLogV(), "test2")
 	log.VErrEvent(ctxWithSpan, log.NoLogV(), "testerr")
-	log.Dev.Info(ctxWithSpan, "log")
+	log.Info(ctxWithSpan, "log")
 
 	if err := tracing.CheckRecordedSpans(sp.FinishAndGetRecording(tracingpb.RecordingVerbose), `
 		span: s

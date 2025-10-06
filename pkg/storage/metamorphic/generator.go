@@ -36,10 +36,7 @@ type engineConfig struct {
 }
 
 func (e *engineConfig) create(path string, baseFS vfs.FS) (storage.Engine, error) {
-	settings := cluster.MakeTestingClusterSettings()
-	env, err := fs.InitEnv(context.Background(), baseFS, path, fs.EnvConfig{
-		Version: settings.Version,
-	}, nil /* diskWriteStats */)
+	env, err := fs.InitEnv(context.Background(), baseFS, path, fs.EnvConfig{}, nil /* diskWriteStats */)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +47,7 @@ func (e *engineConfig) create(path string, baseFS vfs.FS) (storage.Engine, error
 	if e.opts != nil {
 		configOpts = append(configOpts, storage.PebbleOptions(e.opts.String(), parseHooks))
 	}
-	eng, err := storage.Open(context.Background(), env, settings, configOpts...)
+	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), configOpts...)
 	if err != nil {
 		env.Close()
 		return nil, err

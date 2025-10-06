@@ -135,7 +135,7 @@ func roundToSeconds(d time.Duration) time.Duration {
 
 func roachprodRun(clusterName string, cmdArray []string) error {
 	return roachprod.Run(
-		context.Background(), l, clusterName, "", "", install.SimpleSecureOption(false),
+		context.Background(), l, clusterName, "", "", false,
 		os.Stdout, os.Stderr, cmdArray, install.DefaultRunOptions(),
 	)
 }

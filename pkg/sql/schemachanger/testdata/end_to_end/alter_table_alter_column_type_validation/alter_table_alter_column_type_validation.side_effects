@@ -13,7 +13,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.alter_column_type
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert descriptor #104
    table:
   +  checks:
@@ -50,9 +50,7 @@ upsert descriptor #104
      nextFamilyId: 1
      nextIndexId: 2
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -61,7 +59,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -130,9 +128,7 @@ upsert descriptor #104
      nextFamilyId: 1
      nextIndexId: 2
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -190,7 +186,7 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 2 of 3)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #4
 begin transaction #5
@@ -207,6 +203,7 @@ upsert descriptor #104
          family: StringFamily
   -      oid: 25
   +      oid: 1042
+  +      visibleType: 8
   +      width: 5
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -236,10 +233,10 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 3 of 3)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 1 MutationType op pending"
 commit transaction #5
 begin transaction #6
-## PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -305,9 +302,7 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
-     replacementOf:
        time: {}
-  +  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "4"
   +  version: "5"

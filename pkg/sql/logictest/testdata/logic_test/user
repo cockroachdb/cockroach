@@ -1,37 +1,29 @@
-# LogicTest: local 3node-tenant local-mixed-25.2
+# LogicTest: local 3node-tenant
 
 query T
 SHOW is_superuser
 ----
 on
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
 
 statement ok
 CREATE USER user1
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
-----
-username  options  member_of
-admin     {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
-
-skipif config local-mixed-25.2
-query T noticetrace
 SHOW USERS
 ----
-NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
+username  options  member_of
+admin     ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
 
 statement error pgcode 42710 a role/user named admin already exists
 CREATE USER admin
@@ -96,20 +88,19 @@ statement error user "blix" does not exist
 PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
-skipif config local-mixed-25.2
 query TTT colnames,rowsort
-select username, options, member_of from [SHOW USERS]
+SHOW USERS
 ----
 username  options  member_of
-admin     {}       {}
-foo       {}       {}
-foo-bar   {}       {}
-root      {}       {admin}
-testuser  {}       {}
-user1     {}       {}
-user2     {}       {}
-user3     {}       {}
-ομηρος    {}       {}
+admin     ·        {}
+foo       ·        {}
+foo-bar   ·        {}
+root      ·        {admin}
+testuser  ·        {}
+user1     ·        {}
+user2     ·        {}
+user3     ·        {}
+ομηρος    ·        {}
 
 statement error "": username is empty
 CREATE USER ""
@@ -141,7 +132,7 @@ statement error pq: user testuser does not have CREATEROLE privilege
 CREATE USER user4
 
 statement error pq: user testuser does not have INSERT privilege on relation users
-UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES (user1, 'newpassword', false)
+UPSERT INTO system.users VALUES (user1, 'newpassword', false)
 
 statement error pq: user testuser does not have SELECT privilege on relation user
 SHOW USERS
@@ -184,14 +175,13 @@ CREATE USER user5 NOLOGIN
 
 user root
 
-query TTT rowsort,colnames
-SELECT username, option, value FROM system.role_options
+query TTTO rowsort
+SELECT * FROM system.role_options
 ----
-username  option      value
-testuser  CREATEROLE  NULL
-user4     CREATEROLE  NULL
-user4     NOLOGIN     NULL
-user5     NOLOGIN     NULL
+testuser  CREATEROLE  NULL  100
+user4     CREATEROLE  NULL  108
+user4     NOLOGIN     NULL  108
+user5     NOLOGIN     NULL  109
 
 user testuser
 
@@ -227,82 +217,3 @@ ALTER USER userlongpassword WITH PASSWORD '987654321021'
 
 statement ok
 DROP USER userlongpassword
-
-subtest end
-
-subtest user_provisioning_gating_mixed_version
-
-user root
-
-statement ok
-set cluster setting security.provisioning.ldap.enabled = true;
-
-onlyif config local-mixed-25.2
-statement ok
-DROP user testuser
-
-user testuser nodeidx=0 newsession
-
-onlyif config local-mixed-25.2
-statement error pq: password authentication failed for user testuser
-SHOW session_user
-
-subtest end
-
-subtest user_provisioning_gating_latest_version
-
-user root
-
-statement ok
-set cluster setting security.provisioning.ldap.enabled = true;
-
-skipif config local-mixed-25.2
-statement ok
-DROP user testuser
-
-user testuser nodeidx=0 newsession
-
-# The logictest suite currently doesn't work for external authentication methods
-# as the register auth method for "ldap" is invoked outside of the sql package.
-# For the purpose of validating the release flags for provisioning, test only
-# auth method "cert-password" has been enabled which hasn't been provided with a
-# provisioner(handler for provisioning) which is the obtained error here.
-skipif config local-mixed-25.2
-statement error pq: user identity unknown for identity provider
-SHOW session_user
-
-user root
-
-statement ok
-CREATE user IF NOT EXISTS testuser
-
-subtest end
-
-subtest validate_estimated_last_login_time
-
-user testuser2
-
-# Since the logictest framework does not connect with the user until a command
-# is executed, we need to run a command before checking estimated_last_login_time.
-query T
-SHOW session_user
-----
-testuser2
-
-user root
-
-# The estimated_last_login_time is not guaranteed to be populated synchronously,
-# so we poll until testuser's entry was updated with the last login time.
-skipif config local-mixed-25.2
-query I retry
-SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser2'
-----
-1
-
-user root
-
-onlyif config local-mixed-25.2
-statement error pq: column "estimated_last_login_time" does not exist
-select estimated_last_login_time from [SHOW USERS] where username = 'testuser2';
-
-subtest end

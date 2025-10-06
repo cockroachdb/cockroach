@@ -136,10 +136,3 @@ var tracingEnabled = settings.RegisterBoolSetting(
 	"whether the KV prober should collect traces, in order to log info about"+
 		"leaseholders of ranges probed",
 	false)
-
-var logTracingOnPlanFailureEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"kv.prober.log_tracing_on_plan_failure.enabled",
-	"whether the KV prober should print log traces when planning fails; "+
-		"requires kv.prober.tracing.enabled to be set to true",
-	false)

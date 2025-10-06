@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -43,7 +42,6 @@ func NewJobRunDependencies(
 	indexValidator scexec.Validator,
 	metadataUpdaterFactory MetadataUpdaterFactory,
 	statsRefresher scexec.StatsRefresher,
-	tableStatsCache *stats.TableStatisticsCache,
 	testingKnobs *scexec.TestingKnobs,
 	statements []string,
 	sessionData *sessiondata.SessionData,
@@ -68,7 +66,6 @@ func NewJobRunDependencies(
 		sessionData:           sessionData,
 		kvTrace:               kvTrace,
 		statsRefresher:        statsRefresher,
-		tableStatsCache:       tableStatsCache,
 	}
 }
 
@@ -76,7 +73,6 @@ type jobExecutionDeps struct {
 	collectionFactory     *descs.CollectionFactory
 	db                    descs.DB
 	statsRefresher        scexec.StatsRefresher
-	tableStatsCache       *stats.TableStatisticsCache
 	backfiller            scexec.Backfiller
 	spanSplitter          scexec.IndexSpanSplitter
 	merger                scexec.Merger
@@ -124,7 +120,6 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				jobRegistry:        d.jobRegistry,
 				validator:          d.indexValidator,
 				statsRefresher:     d.statsRefresher,
-				tableStatsCache:    d.tableStatsCache,
 				schemaChangerJobID: d.job.ID(),
 				schemaChangerJob:   d.job,
 				kvTrace:            d.kvTrace,

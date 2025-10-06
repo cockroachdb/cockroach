@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -88,12 +89,6 @@ var (
 // instructs the process to terminate.
 // This method is part of the serverpb.AdminClient interface.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
-	return s.drain(req, stream)
-}
-
-func (s *adminServer) drain(
-	req *serverpb.DrainRequest, stream serverpb.RPCAdmin_DrainStream,
-) error {
 	ctx := stream.Context()
 	ctx = s.AnnotateCtx(ctx)
 
@@ -120,28 +115,11 @@ func (s *adminServer) drain(
 	return s.drainServer.handleDrain(ctx, req, stream)
 }
 
-// Drain puts the node into the specified drain mode(s) and optionally
-// instructs the process to terminate.
-func (s *drpcAdminServer) Drain(
-	req *serverpb.DrainRequest, stream serverpb.DRPCAdmin_DrainStream,
-) error {
-	return s.adminServer.drain(req, stream)
-}
-
-// Drain puts the node into the specified drain mode(s) and optionally
-// instructs the process to terminate.
-func (s *drpcSystemAdminServer) Drain(
-	req *serverpb.DrainRequest, stream serverpb.DRPCAdmin_DrainStream,
-) error {
-	return s.adminServer.drain(req, stream)
-}
-
 type drainServer struct {
 	stopper *stop.Stopper
 	// stopTrigger is used to request that the server is shut down.
 	stopTrigger  *stopTrigger
 	grpc         *grpcServer
-	drpc         *drpcServer
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
 	serverCtl    *serverController
@@ -158,7 +136,6 @@ func newDrainServer(
 	stopper *stop.Stopper,
 	stopTrigger *stopTrigger,
 	grpc *grpcServer,
-	drpc *drpcServer,
 	sqlServer *SQLServer,
 ) *drainServer {
 	var drainSleepFn = time.Sleep
@@ -171,7 +148,6 @@ func newDrainServer(
 		stopper:      stopper,
 		stopTrigger:  stopTrigger,
 		grpc:         grpc,
-		drpc:         drpc,
 		sqlServer:    sqlServer,
 		drainSleepFn: drainSleepFn,
 	}
@@ -184,7 +160,7 @@ func (s *drainServer) setNode(node *Node, nodeLiveness *liveness.NodeLiveness) {
 }
 
 func (s *drainServer) handleDrain(
-	ctx context.Context, req *serverpb.DrainRequest, stream serverpb.RPCAdmin_DrainStream,
+	ctx context.Context, req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer,
 ) error {
 	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", req.DoDrain, req.Shutdown)
 
@@ -250,7 +226,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// The signal-based shutdown path uses a similar time-based escape hatch.
 		// Until we spend (potentially lots of time to) understand and fix this
 		// issue, this will serve us well.
-		log.Dev.Fatal(ctx, "timeout after drain")
+		log.Fatal(ctx, "timeout after drain")
 		return errors.New("unreachable")
 	}
 }
@@ -261,8 +237,8 @@ func (s *drainServer) maybeShutdownAfterDrain(
 func delegateDrain(
 	ctx context.Context,
 	req *serverpb.DrainRequest,
-	client serverpb.RPCAdminClient,
-	stream serverpb.RPCAdmin_DrainStream,
+	client serverpb.AdminClient,
+	stream serverpb.Admin_DrainServer,
 ) error {
 	// Retrieve the stream interface to the target node.
 	drainClient, err := client.Drain(ctx, req)
@@ -375,7 +351,7 @@ func (s *drainServer) drainInner(
 		if stillRunning > 0 {
 			return nil
 		}
-		log.Dev.Infof(ctx, "all tenant servers stopped")
+		log.Infof(ctx, "all tenant servers stopped")
 	}
 
 	// Drain the SQL layer.
@@ -383,7 +359,7 @@ func (s *drainServer) drainInner(
 	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
-	log.Dev.Infof(ctx, "done draining clients")
+	log.Infof(ctx, "done draining clients")
 
 	// Mark the node as draining in liveness and drain all range leases.
 	return s.drainNode(ctx, reporter, verbose)
@@ -399,12 +375,6 @@ func (s *drainServer) isDraining() bool {
 func (s *drainServer) drainClients(
 	ctx context.Context, reporter func(int, redact.SafeString),
 ) error {
-	return s.drainClientsInternal(ctx, reporter, true /* assertOnLeakedDescriptor */)
-}
-
-func (s *drainServer) drainClientsInternal(
-	ctx context.Context, reporter func(int, redact.SafeString), assertOnLeakedDescriptor bool,
-) error {
 	// Setup a cancelable context so that the logOpenConns goroutine exits when
 	// this function returns.
 	var cancel context.CancelFunc
@@ -415,7 +385,6 @@ func (s *drainServer) drainClientsInternal(
 	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
 	// Probes to /health?ready=1 will now notice the change in the node's readiness.
 	s.grpc.setMode(modeDraining)
-	s.drpc.setMode(modeDraining)
 	s.sqlServer.isReady.Store(false)
 
 	// Log the number of connections periodically.
@@ -474,7 +443,7 @@ func (s *drainServer) drainClientsInternal(
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
 	// Flush in-memory SQL stats into the statement stats system table.
-	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
+	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 	// If the SQL server is disabled there is nothing to drain here.
 	if !s.sqlServer.cfg.DisableSQLServer {
 		statsProvider.MaybeFlush(ctx, s.stopper)
@@ -492,7 +461,7 @@ func (s *drainServer) drainClientsInternal(
 	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work and after the background
 	// tasks that may issue SQL statements have shut down.
-	s.sqlServer.leaseMgr.SetDraining(ctx, true, reporter)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
 	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
 	if err != nil {
@@ -511,7 +480,7 @@ func (s *drainServer) drainClientsInternal(
 	s.sqlServer.gracefulDrainComplete.Store(true)
 	// Mark this phase in the logs to clarify the context of any subsequent
 	// errors/warnings, if any.
-	log.Dev.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
+	log.Infof(ctx, "SQL server drained successfully; SQL queries cannot execute any more")
 	return nil
 }
 

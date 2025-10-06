@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Test multiple notices all display at once.
 query T noticetrace
 SELECT crdb_internal.notice('hi'), crdb_internal.notice('i am....'), crdb_internal.notice('otan!!!')
@@ -64,5 +63,5 @@ UNLISTEN temp
 ----
 NOTICE: unimplemented: CRDB does not support LISTEN, making UNLISTEN a no-op
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/41522/v25.4
+See: https://go.crdb.dev/issue-v/41522/v24.3
 SQLSTATE: 0A000

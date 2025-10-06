@@ -39,7 +39,6 @@ export function makeActiveStatementsColumns(
     activeStatementColumnsFromCommon.startTime,
     activeStatementColumnsFromCommon.elapsedTime,
     !isTenant ? activeStatementColumnsFromCommon.timeSpentWaiting : null,
-    activeStatementColumnsFromCommon.isolationLevel,
     activeStatementColumnsFromCommon.applicationName,
   ].filter(col => col != null);
 }

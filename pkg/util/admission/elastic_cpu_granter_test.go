@@ -152,7 +152,7 @@ func TestElasticCPUGranter(t *testing.T) {
 				return ""
 
 			case "try-get":
-				granted := elasticCPUGranter.tryGet(canBurst /*arbitrary*/, duration.Nanoseconds())
+				granted := elasticCPUGranter.tryGet(duration.Nanoseconds())
 				return fmt.Sprintf("granted:         %t\n", granted)
 
 			case "return-grant":
@@ -189,13 +189,13 @@ type testElasticCPURequester struct {
 
 var _ requester = &testElasticCPURequester{}
 
-func (t *testElasticCPURequester) hasWaitingRequests() (bool, burstQualification) {
+func (t *testElasticCPURequester) hasWaitingRequests() bool {
 	var padding string
 	if t.buf.Len() > 0 {
 		padding = "                 "
 	}
 	t.buf.WriteString(fmt.Sprintf("%shas-waiting=%t ", padding, t.numWaitingRequests > 0))
-	return t.numWaitingRequests > 0, canBurst /*arbitrary*/
+	return t.numWaitingRequests > 0
 }
 
 func (t *testElasticCPURequester) granted(grantChainID grantChainID) int64 {

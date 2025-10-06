@@ -56,7 +56,6 @@ update t
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
       │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
       │    └── filters
@@ -102,7 +101,6 @@ update t
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
       │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
       │    └── filters
@@ -149,7 +147,6 @@ update t
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
       │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
       │    └── filters
@@ -203,7 +200,6 @@ update t
       │    │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
       │    │    │    │    └── t_d_idx: filters
       │    │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
-      │    │    │    ├── flags: avoid-full-scan
       │    │    │    ├── key: (12)
       │    │    │    └── fd: (12)-->(13-20)
       │    │    └── filters
@@ -252,7 +248,6 @@ update t
       │    │    │    │    └── g:19 > 1 [outer=(19), constraints=(/19: [/2 - ]; tight)]
       │    │    │    └── t_d_idx: filters
       │    │    │         └── c:15 > 1 [outer=(15), constraints=(/15: [/2 - ]; tight)]
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── key: (12)
       │    │    └── fd: (12)-->(13-20)
       │    └── filters
@@ -299,7 +294,6 @@ update t74385
       │    │    │    └── c:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
       │    │    └── a_idx: filters
       │    │         └── c:10 IS NULL [outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
-      │    ├── flags: avoid-full-scan
       │    ├── key: (7)
       │    └── fd: (7)-->(8-10)
       └── projections
@@ -335,7 +329,6 @@ update t106663
       │    ├── partial index predicates
       │    │    └── t106663_b_idx: filters
       │    │         └── c:9 [outer=(9), constraints=(/9: [/true - /true]; tight), fd=()-->(9)]
-      │    ├── flags: avoid-full-scan
       │    ├── key: (10)
       │    └── fd: (10)-->(7,8)
       └── projections
@@ -369,7 +362,7 @@ lock t
  ├── key columns: k:1
  ├── lock columns: (12-20)
  ├── locking: for-share
- ├── volatile
+ ├── volatile, mutations
  ├── key: (1)
  ├── fd: ()-->(2)
  └── select

@@ -92,7 +92,7 @@ func newTimeSeriesMaintenanceQueue(
 		replicaCountFn: store.ReplicaCount,
 		db:             db,
 		mem: mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-			Name:     mon.MakeName("timeseries-maintenance-queue"),
+			Name:     "timeseries-maintenance-queue",
 			Settings: store.cfg.Settings,
 		}),
 	}
@@ -105,6 +105,7 @@ func newTimeSeriesMaintenanceQueue(
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
 			failures:             store.metrics.TimeSeriesMaintenanceQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.TimeSeriesMaintenanceQueuePending,
 			processingNanos:      store.metrics.TimeSeriesMaintenanceQueueProcessingNanos,
 			disabledConfig:       kvserverbase.TimeSeriesMaintenanceQueueEnabled,
@@ -135,7 +136,7 @@ func (q *timeSeriesMaintenanceQueue) shouldQueue(
 }
 
 func (q *timeSeriesMaintenanceQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	desc := repl.Desc()
 	eng := repl.store.StateEngine()

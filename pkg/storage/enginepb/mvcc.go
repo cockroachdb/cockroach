@@ -60,86 +60,9 @@ func TxnSeqIsIgnored(seq TxnSeq, ignored []IgnoredSeqNumRange) bool {
 		ignored[i].Start <= seq
 }
 
-// TxnSeqListExtends returns true if every interval in b is fully covered by an
-// interval in a.
-//
-// It assumes that the input intervals are non-overlapping, non-contiguous, and
-// sorted. It returns false if the two lists are disjoint.
-func TxnSeqListExtends(a, b []IgnoredSeqNumRange) bool {
-	idxA, idxB := 0, 0
-	for idxB < len(b) {
-		// No more intervals in a but we stil have intervals in b, b must not be
-		// fully covered.
-		if idxA >= len(a) {
-			return false
-		}
-
-		// If the current a start is greater than b start, then b extends to the left
-		// of a and therefore b must not be fully covered.
-		if a[idxA].Start > b[idxB].Start {
-			return false
-		}
-
-		// From above we know b's start is equal to or after the start of a. If a
-		// end is less than b end, then the current a is completely consumed and we
-		// need to move to the next a interval. Otherwise, the b interval is
-		// completely covered and we need to move to the next b interval.
-		if a[idxA].End < b[idxB].End {
-			idxA++
-		} else {
-			idxB++
-		}
-	}
-	return true
-}
-
-// TxnSeqListAppend returns a new slice with the given range added to the
-// given list of ignored seqnum ranges.
-//
-// The following invariants are assumed to hold and are preserved:
-// - the list contains no overlapping ranges
-// - the list contains no contiguous ranges
-// - the list is sorted, with larger seqnums at the end
-//
-// Additionally, the caller must ensure:
-//
-//  1. if the new range overlaps with some range in the list, then it
-//     also overlaps with every subsequent range in the list.
-//
-//  2. the new range's "end" seqnum is larger or equal to the "end"
-//     seqnum of the last element in the list.
-//
-// For example:
-//
-//	current list [3 5] [10 20] [22 24]
-//	new item:    [8 26]
-//	final list:  [3 5] [8 26]
-//
-//	current list [3 5] [10 20] [22 24]
-//	new item:    [28 32]
-//	final list:  [3 5] [10 20] [22 24] [28 32]
-//
-// This corresponds to savepoints semantics:
-//
-//   - Property 1 says that a rollback to an earlier savepoint
-//     rolls back over all writes following that savepoint.
-//   - Property 2 comes from that the new range's 'end' seqnum is the
-//     current write seqnum and thus larger than or equal to every
-//     previously seen value.
-func TxnSeqListAppend(list []IgnoredSeqNumRange, newRange IgnoredSeqNumRange) []IgnoredSeqNumRange {
-	i := sort.Search(len(list), func(i int) bool {
-		return list[i].End >= newRange.Start
-	})
-
-	cpy := make([]IgnoredSeqNumRange, i+1)
-	copy(cpy[:i], list[:i])
-	cpy[i] = newRange
-	return cpy
-}
-
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() redact.SafeString {
-	return redact.SafeString(t.ID.Short().String())
+	return redact.SafeString(t.ID.Short())
 }
 
 // Total returns the range size as the sum of the key and value

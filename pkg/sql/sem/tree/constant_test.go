@@ -386,13 +386,6 @@ func mustParseDTSQuery(t *testing.T, s string) tree.Datum {
 	}
 	return d
 }
-func mustParseDLTree(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDLTree(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return d
-}
 func mustParseDArrayOfType(typ *types.T) func(t *testing.T, s string) tree.Datum {
 	return func(t *testing.T, s string) tree.Datum {
 		evalContext := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -429,7 +422,6 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.RefCursor:        mustParseDRefCursor,
 	types.TSQuery:          mustParseDTSQuery,
 	types.TSVector:         mustParseDTSVector,
-	types.LTree:            mustParseDLTree,
 	types.BytesArray:       mustParseDArrayOfType(types.Bytes),
 	types.DecimalArray:     mustParseDArrayOfType(types.Decimal),
 	types.FloatArray:       mustParseDArrayOfType(types.Float),
@@ -482,12 +474,12 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c: tree.NewStrVal("true"),
 			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Bool, types.Jsonb,
-				types.TSVector, types.TSQuery, types.RefCursor, types.LTree),
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("2010-09-28"),
 			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Date,
-				types.Timestamp, types.TimestampTZ, types.TSVector, types.TSQuery, types.RefCursor, types.LTree),
+				types.Timestamp, types.TimestampTZ, types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal("2010-09-28 12:00:00.1"),
@@ -502,7 +494,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c: tree.NewStrVal("PT12H2M"),
 			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Interval,
-				types.TSVector, types.TSQuery, types.RefCursor, types.LTree),
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c:            tree.NewBytesStrVal("abc 世界"),
@@ -554,7 +546,6 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.TSVector,
 				types.TSQuery,
 				types.RefCursor,
-				types.LTree,
 			),
 		},
 		{
@@ -623,7 +614,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		{
 			c: tree.NewStrVal(`18e7b17e-4ead-4e27-bfd5-bb6d11261bb6`),
 			parseOptions: typeSet(types.String, types.BPChar, types.Bytes, types.Uuid,
-				types.TSVector, types.TSQuery, types.RefCursor, types.LTree),
+				types.TSVector, types.TSQuery, types.RefCursor),
 		},
 		{
 			c: tree.NewStrVal(`{18e7b17e-4ead-4e27-bfd5-bb6d11261bb6, 18e7b17e-4ead-4e27-bfd5-bb6d11261bb7}`),
@@ -732,12 +723,6 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				// will not be able to resolve that exact type. In actual execution, the constant
 				// would be resolved with an actual desired locale.
 				if availType.Family() == types.CollatedStringFamily {
-					continue
-				}
-
-				// TODO(#22513): Skip JsonpathFamily for now, since it will resolve to a
-				// string but in the future we don't want to.
-				if availType.Family() == types.JsonpathFamily {
 					continue
 				}
 

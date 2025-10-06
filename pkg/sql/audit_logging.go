@@ -66,7 +66,7 @@ func (p *planner) maybeAuditRoleBasedAuditEvent(ctx context.Context, execType ex
 		}
 	}()
 	if err != nil {
-		log.Dev.Errorf(ctx, "RoleBasedAuditEvent: error getting user role memberships: %v", err)
+		log.Errorf(ctx, "RoleBasedAuditEvent: error getting user role memberships: %v", err)
 		return
 	}
 
@@ -134,7 +134,7 @@ func (p *planner) initializeReducedAuditConfig(ctx context.Context) {
 		}
 	}()
 	if err != nil {
-		log.Dev.Errorf(ctx, "initialize reduced audit config: error getting user role memberships: %v", err)
+		log.Errorf(ctx, "initialize reduced audit config: error getting user role memberships: %v", err)
 		return
 	}
 	// Get matching audit setting.

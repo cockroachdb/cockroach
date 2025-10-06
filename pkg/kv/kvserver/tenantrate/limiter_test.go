@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -50,7 +50,7 @@ func TestCloser(t *testing.T) {
 	factory := tenantrate.NewLimiterFactory(&st.SV, &tenantrate.TestingKnobs{
 		QuotaPoolOptions: []quotapool.Option{quotapool.WithTimeSource(timeSource)},
 	}, fakeAuthorizer{})
-	tenant := roachpb.MustMakeTenantID(3)
+	tenant := roachpb.MustMakeTenantID(2)
 	closer := make(chan struct{})
 	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.

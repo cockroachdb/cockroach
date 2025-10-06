@@ -18,14 +18,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -46,24 +44,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var importElasticCPUControlEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"bulkio.import.elastic_control.enabled",
-	"determines whether import operations integrate with elastic CPU control",
-	false, // TODO(dt): enable this by default after more benchmarking.
-)
-
-func getTableFromSpec(
-	spec *execinfrapb.ReadImportDataSpec,
-) *execinfrapb.ReadImportDataSpec_ImportTable {
-	if len(spec.Tables) > 0 {
-		for _, t := range spec.Tables {
-			return t
-		}
-	}
-	return spec.Table
-}
-
 func runImport(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -74,15 +54,16 @@ func runImport(
 	// Used to send ingested import rows to the KV layer.
 	kvCh := make(chan row.KVBatch, 10)
 
-	// Install type metadata in the import table.
+	// Install type metadata in all of the import tables.
 	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
 	importResolver := crosscluster.MakeCrossClusterTypeResolver(spec.Types)
-	table := getTableFromSpec(spec)
-	cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
-	if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
-		return nil, err
+	for _, table := range spec.Tables {
+		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
+		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
+			return nil, err
+		}
+		table.Desc = cpy.TableDesc()
 	}
-	table.Desc = cpy.TableDesc()
 
 	evalCtx := flowCtx.NewEvalCtx()
 	evalCtx.Regions = makeImportRegionOperator(spec.DatabasePrimaryRegion)
@@ -92,11 +73,14 @@ func runImport(
 		return nil, err
 	}
 
-	// This group holds the go routines that are responsible for producing KV
-	// batches and ingesting produced KVs.
+	// This group holds the go routines that are responsible for producing KV batches.
+	// and ingesting produced KVs.
+	// Depending on the import implementation both conv.start and conv.readFiles can
+	// produce KVs so we should close the channel only after *both* are finished.
 	group := ctxgroup.WithContext(ctx)
+	conv.start(group)
 
-	// Read input files into kvs.
+	// Read input files into kvs
 	group.GoCtx(func(ctx context.Context) error {
 		defer close(kvCh)
 		ctx, span := tracing.ChildSpan(ctx, "import-files-to-kvs")
@@ -122,7 +106,7 @@ func runImport(
 	// at the end is one row containing an encoded BulkOpSummary.
 	var summary *kvpb.BulkOpSummary
 	group.GoCtx(func(ctx context.Context) error {
-		summary, err = ingestKvs(ctx, flowCtx, spec, table.Desc.Name, progCh, kvCh)
+		summary, err = ingestKvs(ctx, flowCtx, spec, progCh, kvCh)
 		return err
 	})
 
@@ -145,7 +129,9 @@ func runImport(
 	}
 }
 
-// readInputFiles reads each of the passed dataFiles using the passed func. The
+type readFileFunc func(context.Context, *fileReader, int32, int64, chan string) error
+
+// readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
 // the IMPORT. progressFn, if not nil, is periodically invoked with a percentage
 // of the total progress of reading through all of the files. This percentage
@@ -158,7 +144,7 @@ func readInputFiles(
 	dataFiles map[int32]string,
 	resumePos map[int32]int64,
 	format roachpb.IOFileFormat,
-	fileFunc func(context.Context, *fileReader, int32, int64, chan string) error,
+	fileFunc readFileFunc,
 	makeExternalStorage cloud.ExternalStorageFactory,
 	user username.SQLUsername,
 ) error {
@@ -187,7 +173,7 @@ func readInputFiles(
 
 			if sz <= 0 {
 				// Don't log dataFile here because it could leak auth information.
-				log.Dev.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
+				log.Infof(ctx, "could not fetch file size; falling back to per-file progress: %v", err)
 			} else {
 				fileSizes[id] = sz
 			}
@@ -387,6 +373,7 @@ func (f fileReader) ReadFraction() float32 {
 }
 
 type inputConverter interface {
+	start(group ctxgroup.Group)
 	readFiles(ctx context.Context, dataFiles map[int32]string, resumePos map[int32]int64,
 		format roachpb.IOFileFormat, makeExternalStorage cloud.ExternalStorageFactory, user username.SQLUsername) error
 }
@@ -395,10 +382,38 @@ type inputConverter interface {
 // mapped specifically to a particular data column.
 func formatHasNamedColumns(format roachpb.IOFileFormat_FileFormat) bool {
 	switch format {
-	case roachpb.IOFileFormat_Avro:
+	case roachpb.IOFileFormat_Avro,
+		roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
 		return true
 	}
 	return false
+}
+
+func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
+	switch format {
+	case roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
+		return true
+	}
+	return false
+}
+
+func makeRowErr(row int64, code pgcode.Code, format string, args ...interface{}) error {
+	err := pgerror.NewWithDepthf(1, code, format, args...)
+	err = errors.WrapWithDepthf(1, err, "row %d", row)
+	return err
+}
+
+func wrapRowErr(err error, row int64, code pgcode.Code, format string, args ...interface{}) error {
+	if format != "" || len(args) > 0 {
+		err = errors.WrapWithDepthf(1, err, format, args...)
+	}
+	err = errors.WrapWithDepthf(1, err, "row %d", row)
+	if code != pgcode.Uncategorized {
+		err = pgerror.WithCandidateCode(err, code)
+	}
+	return err
 }
 
 // importRowError is an error type describing malformed import data.
@@ -458,7 +473,7 @@ type importFileContext struct {
 // handleCorruptRow reports an error encountered while processing a row
 // in an input file.
 func handleCorruptRow(ctx context.Context, fileCtx *importFileContext, err error) error {
-	log.Dev.Errorf(ctx, "%+v", err)
+	log.Errorf(ctx, "%+v", err)
 
 	if rowErr := (*importRowError)(nil); errors.As(err, &rowErr) && fileCtx.rejected != nil {
 		fileCtx.rejected <- rowErr.row + "\n"
@@ -586,17 +601,9 @@ func runParallelImport(
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-file-to-rows")
 		defer span.Finish()
-
-		// Create a pacer for admission control for the producer.
-		pacer := bulk.NewCPUPacer(ctx, importCtx.db, importElasticCPUControlEnabled)
-		defer pacer.Close()
-
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {
-			if err := pacer.Pace(ctx); err != nil {
-				return err
-			}
 			// Skip rows if needed.
 			count++
 			if count <= fileCtx.skip {
@@ -687,10 +694,6 @@ func (p *parallelImporter) importWorker(
 	fileCtx *importFileContext,
 	minEmitted []int64,
 ) error {
-	// Create a pacer for admission control for this worker.
-	pacer := bulk.NewCPUPacer(ctx, importCtx.db, importElasticCPUControlEnabled)
-	defer pacer.Close()
-
 	conv, err := makeDatumConverter(ctx, importCtx, fileCtx, importCtx.db)
 	if err != nil {
 		return err
@@ -711,11 +714,6 @@ func (p *parallelImporter) importWorker(
 		conv.KvBatch.Progress = batch.progress
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
-			// Pace the admission control before processing each row.
-			if err := pacer.Pace(ctx); err != nil {
-				return err
-			}
-
 			if err := consumer.FillDatums(ctx, record, rowNum, conv); err != nil {
 				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
 					return err

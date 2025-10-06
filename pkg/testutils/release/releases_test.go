@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/version"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -98,9 +98,8 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resetRNG() // deterministic results
-			v := version.MustParse(tc.v)
-			latestPred, latestErr := LatestPredecessor(&v)
-			randomPred, randomErr := RandomPredecessor(rng, &v)
+			latestPred, latestErr := LatestPredecessor(version.MustParse(tc.v))
+			randomPred, randomErr := RandomPredecessor(rng, version.MustParse(tc.v))
 			if tc.expectedErr == "" {
 				require.NoError(t, latestErr)
 				require.NoError(t, randomErr)
@@ -161,9 +160,8 @@ func TestLatestPredecessorHistory(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resetRNG() // deterministic results
-			v := version.MustParse(tc.v)
-			latestHistory, latestErr := LatestPredecessorHistory(&v, tc.k)
-			randomHistory, randomErr := RandomPredecessorHistory(rng, &v, tc.k)
+			latestHistory, latestErr := LatestPredecessorHistory(version.MustParse(tc.v), tc.k)
+			randomHistory, randomErr := RandomPredecessorHistory(rng, version.MustParse(tc.v), tc.k)
 			if tc.expectedErr == "" {
 				require.NoError(t, latestErr)
 				require.NoError(t, randomErr)
@@ -223,11 +221,11 @@ func TestMajorReleasesBetween(t *testing.T) {
 
 			// We should get the same result regardless of the order of
 			// arguments.
-			count, err := MajorReleasesBetween(&vv1, &vv2)
+			count, err := MajorReleasesBetween(vv1, vv2)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, count)
 
-			count, err = MajorReleasesBetween(&vv2, &vv1)
+			count, err = MajorReleasesBetween(vv2, vv1)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, count)
 		})

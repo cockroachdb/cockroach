@@ -1,0 +1,90 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "src/core/index.module";
+
+.database-table {
+  &__col {
+    &-name {
+      font-family: $font-family--semi-bold;
+    }
+
+    &-size,
+    &-range-count,
+    &-column-count,
+    &-index-count,
+    &-user-count {
+      width: 8em;
+      text-align: right;
+      padding-right: $spacing-x-large;
+    }
+  }
+
+  &__no-result {
+    @include text--body-strong;
+  }
+
+  &__cell-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    svg {
+      fill: $colors--warning;
+    }
+  }
+}
+
+.sorted-table {
+  width: 100%;
+}
+
+.icon {
+  &__container {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  &--md {
+    height: 24px;
+    width: 24px;
+    margin-right: 12px;
+  }
+
+  &--s {
+    height: 16px;
+    width: 16px;
+    margin-right: 10px;
+  }
+
+  &--xxs {
+    height: 8px;
+    width: 8px;
+  }
+
+  &--title {
+    fill: $colors--title;
+  }
+
+  &--primary {
+    fill: $colors--primary-text;
+  }
+
+  &--warning {
+    fill: $colors--functional-orange-3;
+  }
+}
+
+.multiple-lines-info {
+  margin-bottom: 0px
+}
+
+.bold {
+  font-weight: $font-weight--extra-bold;
+  color: $colors--neutral-8;
+}
+
+.schema-name {
+  color: $colors--neutral-5;
+}

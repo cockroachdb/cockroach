@@ -92,7 +92,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		startOpts := option.NewStartOpts(sqlClientsInMemoryDB)
 		startOpts.RoachprodOpts.SQLPort = config.DefaultSQLPort
 		// Hibernate uses a hardcoded connection string with ssl disabled.
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.All())
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
 
 		if opt.dbSetupFunc != nil {
 			opt.dbSetupFunc(ctx, t, c)
@@ -251,7 +251,7 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
-		Timeout:          6 * time.Hour,
+		Timeout:          4 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
 		},

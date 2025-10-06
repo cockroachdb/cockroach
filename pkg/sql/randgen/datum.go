@@ -12,14 +12,12 @@ import (
 	"math/bits"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -28,8 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
-	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -232,23 +228,20 @@ func RandDatumWithNullChance(
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
-	case types.JsonpathFamily:
-		jp, err := jsonpathparser.Parse(randJsonpath(rng))
-		if err != nil {
-			return nil
-		}
-		return tree.NewDJsonpath(*jp.AST)
 	case types.TupleFamily:
+		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		if nullChance == 0 {
 			nullChance = 10
 		}
-		datums := make([]tree.Datum, len(typ.TupleContents()))
 		for i := range typ.TupleContents() {
-			datums[i] = RandDatumWithNullChance(
+			tuple.D[i] = RandDatumWithNullChance(
 				rng, typ.TupleContents()[i], nullChance, favorCommonData, targetColumnIsUnique,
 			)
 		}
-		return tree.NewDTuple(typ, datums...)
+		// Calling ResolvedType causes the internal TupleContents types to be
+		// populated.
+		tuple.ResolvedType()
+		return &tuple
 	case types.BitFamily:
 		width := typ.Width()
 		if width == 0 {
@@ -298,22 +291,13 @@ func RandDatumWithNullChance(
 			}
 			buf.WriteRune(r)
 		}
-		var d tree.Datum
-		var err error
-		switch typ.Oid() {
-		case oidext.T_citext:
-			d, err = tree.NewDCIText(buf.String(), &tree.CollationEnvironment{})
-		default:
-			d, err = tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
-		}
+		d, err := tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
 		if err != nil {
 			panic(err)
 		}
 		return d
 	case types.OidFamily:
 		return tree.NewDOidWithType(oid.Oid(rng.Uint32()), typ)
-	case types.LTreeFamily:
-		return tree.NewDLTree(ltree.RandLTree(rng))
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:
@@ -378,9 +362,6 @@ func RandArrayWithCommonDataChance(
 		contents = RandArrayContentsType(rng)
 	}
 	arr := tree.NewDArray(contents)
-	if err := arr.MaybeSetCustomOid(typ); err != nil {
-		panic(err)
-	}
 	for i := 0; i < rng.Intn(10); i++ {
 		if err :=
 			arr.Append(
@@ -396,7 +377,7 @@ func RandArrayWithCommonDataChance(
 // it returns nil if there are no such Datums. Note that it pays attention
 // to the width of the requested type for Int and Float type families.
 func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
-	specials, ok := getRandInterestingDatums(typ.Family())
+	specials, ok := randInterestingDatums[typ.Family()]
 	if !ok || len(specials) == 0 {
 		for _, sc := range types.Scalar {
 			// Panic if a scalar type doesn't have an interesting datum.
@@ -451,8 +432,6 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 		}
 		return datum
 
-	case types.OidFamily:
-		return tree.NewDOidWithType(datum.(*tree.DOid).Oid, typ)
 	default:
 		return datum
 	}
@@ -469,7 +448,7 @@ func randCommonDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 	typeFamily := typ.Family()
 	switch typeFamily {
 	case types.GeographyFamily, types.GeometryFamily:
-		dataSet, ok = getRandInterestingDatums(typeFamily)
+		dataSet, ok = randInterestingDatums[typeFamily]
 	default:
 		dataSet, ok = randCommonDatums[typeFamily]
 	}
@@ -594,661 +573,567 @@ func randJSONSimpleDepth(rng *rand.Rand, depth int) json.JSON {
 	}
 }
 
-const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-// TODO(#22513): Add support for more complex jsonpath queries.
-func randJsonpath(rng *rand.Rand) string {
-	var parts []string
-	depth := 1 + rng.Intn(20)
-
-	for range depth {
-		p := make([]byte, 1+rng.Intn(20))
-		for i := range p {
-			p[i] = charSet[rng.Intn(len(charSet))]
-		}
-		if rng.Intn(5) == 0 {
-			p = append(p, []byte("[*]")...)
-		}
-		parts = append(parts, string(p))
+var (
+	// randInterestingDatums is a collection of interesting datums that can be
+	// used for random testing.
+	randInterestingDatums = map[types.Family][]tree.Datum{
+		types.BoolFamily: {
+			tree.DBoolTrue,
+			tree.DBoolFalse,
+		},
+		types.IntFamily: {
+			tree.NewDInt(tree.DInt(0)),
+			tree.NewDInt(tree.DInt(-1)),
+			tree.NewDInt(tree.DInt(1)),
+			tree.NewDInt(tree.DInt(math.MaxInt8)),
+			tree.NewDInt(tree.DInt(math.MinInt8)),
+			tree.NewDInt(tree.DInt(math.MaxInt16)),
+			tree.NewDInt(tree.DInt(math.MinInt16)),
+			tree.NewDInt(tree.DInt(math.MaxInt32)),
+			tree.NewDInt(tree.DInt(math.MinInt32)),
+			tree.NewDInt(tree.DInt(math.MaxInt64)),
+			// Use +1 because that's the SQL range.
+			tree.NewDInt(tree.DInt(math.MinInt64 + 1)),
+		},
+		types.FloatFamily: {
+			tree.NewDFloat(tree.DFloat(0)),
+			tree.NewDFloat(tree.DFloat(math.Copysign(0, -1))), // -0
+			tree.NewDFloat(tree.DFloat(1)),
+			tree.NewDFloat(tree.DFloat(-1)),
+			tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat32)),
+			tree.NewDFloat(tree.DFloat(math.MaxFloat32)),
+			tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat64)),
+			tree.NewDFloat(tree.DFloat(math.MaxFloat64)),
+			tree.NewDFloat(tree.DFloat(math.Inf(1))),
+			tree.NewDFloat(tree.DFloat(math.Inf(-1))),
+			tree.NewDFloat(tree.DFloat(math.NaN())),
+		},
+		types.DecimalFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"-0",
+				"0",
+				"1",
+				"1.0",
+				"-1",
+				"-1.0",
+				"Inf",
+				"-Inf",
+				"NaN",
+				"-12.34e400",
+			} {
+				d, err := tree.ParseDDecimal(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.DateFamily: {
+			tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(0)),
+			tree.NewDDate(pgdate.LowDate),
+			tree.NewDDate(pgdate.HighDate),
+			tree.NewDDate(pgdate.PosInfDate),
+			tree.NewDDate(pgdate.NegInfDate),
+		},
+		types.TimeFamily: {
+			tree.MakeDTime(timeofday.Min),
+			tree.MakeDTime(timeofday.Max),
+			tree.MakeDTime(timeofday.Time2400),
+		},
+		types.TimeTZFamily: {
+			tree.DMinTimeTZ,
+			tree.DMaxTimeTZ,
+		},
+		types.TimestampFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(randTimestampSpecials))
+			for i, t := range randTimestampSpecials {
+				res[i] = tree.MustMakeDTimestamp(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.TimestampTZFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(randTimestampSpecials))
+			for i, t := range randTimestampSpecials {
+				res[i] = tree.MustMakeDTimestampTZ(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.IntervalFamily: {
+			&tree.DInterval{Duration: duration.MakeDuration(0, 0, 0)},
+			&tree.DInterval{Duration: duration.MakeDuration(0, 1, 0)},
+			&tree.DInterval{Duration: duration.MakeDuration(1, 0, 0)},
+			&tree.DInterval{Duration: duration.MakeDuration(1, 1, 1)},
+			// TODO(mjibson): fix intervals to stop overflowing then this can be larger.
+			&tree.DInterval{Duration: duration.MakeDuration(0, 0, 290*12)},
+		},
+		types.Box2DFamily: {
+			&tree.DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: -10, HiX: 10, LoY: -10, HiY: 10}}},
+		},
+		types.GeographyFamily: {
+			// NOTE(otan): we cannot use WKT here because roachtests do not have geos uploaded.
+			// If we parse WKT ourselves or upload GEOS on every roachtest, we may be able to avoid this.
+			// POINT(1.0 1.0)
+			&tree.DGeography{Geography: geo.MustParseGeography("0101000000000000000000F03F000000000000F03F")},
+			// LINESTRING(1.0 1.0, 2.0 2.0)
+			&tree.DGeography{Geography: geo.MustParseGeography("010200000002000000000000000000F03F000000000000F03F00000000000000400000000000000040")},
+			// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))
+			&tree.DGeography{Geography: geo.MustParseGeography("0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000")},
+			// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2))
+			&tree.DGeography{Geography: geo.MustParseGeography("0103000000020000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000050000009A9999999999C93F9A9999999999C93F9A9999999999C93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999C93F9A9999999999C93F9A9999999999C93F")},
+			// MULTIPOINT ((10 40), (40 30), (20 20), (30 10))
+			&tree.DGeography{Geography: geo.MustParseGeography("010400000004000000010100000000000000000024400000000000004440010100000000000000000044400000000000003E4001010000000000000000003440000000000000344001010000000000000000003E400000000000002440")},
+			// MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))
+			&tree.DGeography{Geography: geo.MustParseGeography("010500000002000000010200000003000000000000000000244000000000000024400000000000003440000000000000344000000000000024400000000000004440010200000004000000000000000000444000000000000044400000000000003E400000000000003E40000000000000444000000000000034400000000000003E400000000000002440")},
+			// MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))
+			&tree.DGeography{Geography: geo.MustParseGeography("01060000000200000001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440010300000002000000060000000000000000003440000000000080414000000000000024400000000000003E40000000000000244000000000000024400000000000003E4000000000000014400000000000804640000000000000344000000000000034400000000000804140040000000000000000003E40000000000000344000000000000034400000000000002E40000000000000344000000000000039400000000000003E400000000000003440")},
+			// GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))
+			&tree.DGeography{Geography: geo.MustParseGeography("01070000000300000001010000000000000000004440000000000000244001020000000300000000000000000024400000000000002440000000000000344000000000000034400000000000002440000000000000444001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440")},
+			// POINT EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("0101000000000000000000F87F000000000000F87F")},
+			// LINESTRING EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("010200000000000000")},
+			// POLYGON EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("010300000000000000")},
+			// MULTIPOINT EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("010400000000000000")},
+			// MULTILINESTRING EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("010500000000000000")},
+			// MULTIPOLYGON EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("010600000000000000")},
+			// GEOMETRYCOLLECTION EMPTY
+			&tree.DGeography{Geography: geo.MustParseGeography("010700000000000000")},
+		},
+		types.GeometryFamily: {
+			// NOTE(otan): we cannot use WKT here because roachtests do not have geos uploaded.
+			// If we parse WKT ourselves or upload GEOS on every roachtest, we may be able to avoid this.
+			// POINT(1.0 1.0)
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("0101000000000000000000F03F000000000000F03F")},
+			// LINESTRING(1.0 1.0, 2.0 2.0)
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010200000002000000000000000000F03F000000000000F03F00000000000000400000000000000040")},
+			// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000")},
+			// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2))
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("0103000000020000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000050000009A9999999999C93F9A9999999999C93F9A9999999999C93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999C93F9A9999999999C93F9A9999999999C93F")},
+			// MULTIPOINT ((10 40), (40 30), (20 20), (30 10))
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010400000004000000010100000000000000000024400000000000004440010100000000000000000044400000000000003E4001010000000000000000003440000000000000344001010000000000000000003E400000000000002440")},
+			// MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010500000002000000010200000003000000000000000000244000000000000024400000000000003440000000000000344000000000000024400000000000004440010200000004000000000000000000444000000000000044400000000000003E400000000000003E40000000000000444000000000000034400000000000003E400000000000002440")},
+			// MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("01060000000200000001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440010300000002000000060000000000000000003440000000000080414000000000000024400000000000003E40000000000000244000000000000024400000000000003E4000000000000014400000000000804640000000000000344000000000000034400000000000804140040000000000000000003E40000000000000344000000000000034400000000000002E40000000000000344000000000000039400000000000003E400000000000003440")},
+			// GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("01070000000300000001010000000000000000004440000000000000244001020000000300000000000000000024400000000000002440000000000000344000000000000034400000000000002440000000000000444001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440")},
+			// POINT EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("0101000000000000000000F87F000000000000F87F")},
+			// LINESTRING EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010200000000000000")},
+			// POLYGON EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010300000000000000")},
+			// MULTIPOINT EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010400000000000000")},
+			// MULTILINESTRING EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010500000000000000")},
+			// MULTIPOLYGON EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010600000000000000")},
+			// GEOMETRYCOLLECTION EMPTY
+			&tree.DGeometry{Geometry: geo.MustParseGeometry("010700000000000000")},
+		},
+		types.StringFamily: {
+			tree.NewDString(""),
+			tree.NewDString("X"),
+			tree.NewDString(`"`),
+			tree.NewDString(`'`),
+			tree.NewDString("\x00"),
+			tree.NewDString("\u2603"), // unicode snowman
+		},
+		types.BytesFamily: {
+			tree.NewDBytes(""),
+			tree.NewDBytes("X"),
+			tree.NewDBytes(`"`),
+			tree.NewDBytes(`'`),
+			tree.NewDBytes("\x00"),
+			tree.NewDBytes("\u2603"), // unicode snowman
+			tree.NewDBytes("\xFF"),   // invalid utf-8 sequence, but a valid bytes
+		},
+		types.OidFamily: {
+			tree.NewDOid(0),
+		},
+		types.UuidFamily: {
+			tree.DMinUUID,
+			tree.DMaxUUID,
+		},
+		types.INetFamily: {
+			tree.DMinIPAddr,
+			tree.DMaxIPAddr,
+		},
+		types.PGLSNFamily: {
+			tree.NewDPGLSN(0),
+			tree.NewDPGLSN(math.MaxInt64),
+			tree.NewDPGLSN(math.MaxInt64 + 1),
+			tree.NewDPGLSN(math.MaxUint64),
+		},
+		types.RefCursorFamily: {
+			tree.NewDRefCursor(""),
+			tree.NewDRefCursor("X"),
+			tree.NewDRefCursor(`"`),
+			tree.NewDRefCursor(`'`),
+			tree.NewDRefCursor("\x00"),
+			tree.NewDRefCursor("\u2603"), // unicode snowman
+		},
+		types.JsonFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				`{}`,
+				`1`,
+				`{"test": "json"}`,
+			} {
+				d, err := tree.ParseDJSON(s)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.BitFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int64{
+				0,
+				1<<63 - 1,
+			} {
+				d, err := tree.NewDBitArrayFromInt(i, 64)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
+			}
+			return res
+		}(),
 	}
-	return "$." + strings.Join(parts, ".")
-}
-
-var once sync.Once
-
-// randInterestingDatumskl contains interesting datums for each type.  Note that
-// this map should never be assessed directly. Use getRandInterestingDatums
-// instead.
-var randInterestingDatums map[types.Family][]tree.Datum
-
-// getRandInterestingDatums is equivalent to getting the values out of the
-// randInterestingDatums map. This function is used to prevent
-// randInterestingDatums from getting initialized unless it is needed.
-// Preventing it's initialization significantly speeds up the tests by reducing
-// heap allocation.
-func getRandInterestingDatums(typ types.Family) ([]tree.Datum, bool) {
-	once.Do(func() {
-
-		randTimestampSpecials := []time.Time{
-			{},
-			time.Date(-2000, time.January, 1, 0, 0, 0, 0, time.UTC),
-			time.Date(3000, time.January, 1, 0, 0, 0, 0, time.UTC),
-			// NOTE(otan): we cannot support this as it does not work with colexec in tests.
-			tree.MinSupportedTime,
-			tree.MaxSupportedTime,
-		}
-
-		randInterestingDatums = map[types.Family][]tree.Datum{
-			types.BoolFamily: {
-				tree.DBoolTrue,
-				tree.DBoolFalse,
-			},
-			types.IntFamily: {
-				tree.NewDInt(tree.DInt(0)),
-				tree.NewDInt(tree.DInt(-1)),
-				tree.NewDInt(tree.DInt(1)),
-				tree.NewDInt(tree.DInt(math.MaxInt8)),
-				tree.NewDInt(tree.DInt(math.MinInt8)),
-				tree.NewDInt(tree.DInt(math.MaxInt16)),
-				tree.NewDInt(tree.DInt(math.MinInt16)),
-				tree.NewDInt(tree.DInt(math.MaxInt32)),
-				tree.NewDInt(tree.DInt(math.MinInt32)),
-				tree.NewDInt(tree.DInt(math.MaxInt64)),
-				// Use +1 because that's the SQL range.
-				tree.NewDInt(tree.DInt(math.MinInt64 + 1)),
-			},
-			types.FloatFamily: {
-				tree.NewDFloat(tree.DFloat(0)),
-				tree.NewDFloat(tree.DFloat(math.Copysign(0, -1))), // -0
-				tree.NewDFloat(tree.DFloat(1)),
-				tree.NewDFloat(tree.DFloat(-1)),
-				tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat32)),
-				tree.NewDFloat(tree.DFloat(math.MaxFloat32)),
-				tree.NewDFloat(tree.DFloat(math.SmallestNonzeroFloat64)),
-				tree.NewDFloat(tree.DFloat(math.MaxFloat64)),
-				tree.NewDFloat(tree.DFloat(math.Inf(1))),
-				tree.NewDFloat(tree.DFloat(math.Inf(-1))),
-				tree.NewDFloat(tree.DFloat(math.NaN())),
-			},
-			types.DecimalFamily: func() []tree.Datum {
-				var res []tree.Datum
-				for _, s := range []string{
-					"-0",
-					"0",
-					"1",
-					"1.0",
-					"-1",
-					"-1.0",
-					"Inf",
-					"-Inf",
-					"NaN",
-					"-12.34e400",
-				} {
-					d, err := tree.ParseDDecimal(s)
-					if err != nil {
-						panic(err)
-					}
-					res = append(res, d)
-				}
-				return res
-			}(),
-			types.DateFamily: {
-				tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(0)),
-				tree.NewDDate(pgdate.LowDate),
-				tree.NewDDate(pgdate.HighDate),
-				tree.NewDDate(pgdate.PosInfDate),
-				tree.NewDDate(pgdate.NegInfDate),
-			},
-			types.TimeFamily: {
-				tree.MakeDTime(timeofday.Min),
-				tree.MakeDTime(timeofday.Max),
-				tree.MakeDTime(timeofday.Time2400),
-			},
-			types.TimeTZFamily: {
-				tree.DMinTimeTZ,
-				tree.DMaxTimeTZ,
-			},
-			types.TimestampFamily: func() []tree.Datum {
-				res := make([]tree.Datum, len(randTimestampSpecials))
-				for i, t := range randTimestampSpecials {
-					res[i] = tree.MustMakeDTimestamp(t, time.Microsecond)
-				}
-				return res
-			}(),
-			types.TimestampTZFamily: func() []tree.Datum {
-				res := make([]tree.Datum, len(randTimestampSpecials))
-				for i, t := range randTimestampSpecials {
-					res[i] = tree.MustMakeDTimestampTZ(t, time.Microsecond)
-				}
-				return res
-			}(),
-			types.IntervalFamily: {
-				&tree.DInterval{Duration: duration.MakeDuration(0, 0, 0)},
-				&tree.DInterval{Duration: duration.MakeDuration(0, 1, 0)},
-				&tree.DInterval{Duration: duration.MakeDuration(1, 0, 0)},
-				&tree.DInterval{Duration: duration.MakeDuration(1, 1, 1)},
-				// TODO(mjibson): fix intervals to stop overflowing then this can be larger.
-				&tree.DInterval{Duration: duration.MakeDuration(0, 0, 290*12)},
-			},
-			types.Box2DFamily: {
-				&tree.DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{BoundingBox: geopb.BoundingBox{LoX: -10, HiX: 10, LoY: -10, HiY: 10}}},
-			},
-			types.GeographyFamily: {
-				// NOTE(otan): we cannot use WKT here because roachtests do not have geos uploaded.
-				// If we parse WKT ourselves or upload GEOS on every roachtest, we may be able to avoid this.
-				// POINT(1.0 1.0)
-				&tree.DGeography{Geography: geo.MustParseGeography("0101000000000000000000F03F000000000000F03F")},
-				// LINESTRING(1.0 1.0, 2.0 2.0)
-				&tree.DGeography{Geography: geo.MustParseGeography("010200000002000000000000000000F03F000000000000F03F00000000000000400000000000000040")},
-				// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))
-				&tree.DGeography{Geography: geo.MustParseGeography("0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000")},
-				// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2))
-				&tree.DGeography{Geography: geo.MustParseGeography("0103000000020000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000050000009A9999999999C93F9A9999999999C93F9A9999999999C93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999C93F9A9999999999C93F9A9999999999C93F")},
-				// MULTIPOINT ((10 40), (40 30), (20 20), (30 10))
-				&tree.DGeography{Geography: geo.MustParseGeography("010400000004000000010100000000000000000024400000000000004440010100000000000000000044400000000000003E4001010000000000000000003440000000000000344001010000000000000000003E400000000000002440")},
-				// MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))
-				&tree.DGeography{Geography: geo.MustParseGeography("010500000002000000010200000003000000000000000000244000000000000024400000000000003440000000000000344000000000000024400000000000004440010200000004000000000000000000444000000000000044400000000000003E400000000000003E40000000000000444000000000000034400000000000003E400000000000002440")},
-				// MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))
-				&tree.DGeography{Geography: geo.MustParseGeography("01060000000200000001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440010300000002000000060000000000000000003440000000000080414000000000000024400000000000003E40000000000000244000000000000024400000000000003E4000000000000014400000000000804640000000000000344000000000000034400000000000804140040000000000000000003E40000000000000344000000000000034400000000000002E40000000000000344000000000000039400000000000003E400000000000003440")},
-				// GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))
-				&tree.DGeography{Geography: geo.MustParseGeography("01070000000300000001010000000000000000004440000000000000244001020000000300000000000000000024400000000000002440000000000000344000000000000034400000000000002440000000000000444001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440")},
-				// POINT EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("0101000000000000000000F87F000000000000F87F")},
-				// LINESTRING EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("010200000000000000")},
-				// POLYGON EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("010300000000000000")},
-				// MULTIPOINT EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("010400000000000000")},
-				// MULTILINESTRING EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("010500000000000000")},
-				// MULTIPOLYGON EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("010600000000000000")},
-				// GEOMETRYCOLLECTION EMPTY
-				&tree.DGeography{Geography: geo.MustParseGeography("010700000000000000")},
-			},
-			types.GeometryFamily: {
-				// NOTE(otan): we cannot use WKT here because roachtests do not have geos uploaded.
-				// If we parse WKT ourselves or upload GEOS on every roachtest, we may be able to avoid this.
-				// POINT(1.0 1.0)
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("0101000000000000000000F03F000000000000F03F")},
-				// LINESTRING(1.0 1.0, 2.0 2.0)
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010200000002000000000000000000F03F000000000000F03F00000000000000400000000000000040")},
-				// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0))
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000")},
-				// POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 1.0, 0.0 0.0), (0.2 0.2, 0.2 0.4, 0.4 0.4, 0.4 0.2, 0.2 0.2))
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("0103000000020000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000050000009A9999999999C93F9A9999999999C93F9A9999999999C93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999D93F9A9999999999C93F9A9999999999C93F9A9999999999C93F")},
-				// MULTIPOINT ((10 40), (40 30), (20 20), (30 10))
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010400000004000000010100000000000000000024400000000000004440010100000000000000000044400000000000003E4001010000000000000000003440000000000000344001010000000000000000003E400000000000002440")},
-				// MULTILINESTRING ((10 10, 20 20, 10 40), (40 40, 30 30, 40 20, 30 10))
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010500000002000000010200000003000000000000000000244000000000000024400000000000003440000000000000344000000000000024400000000000004440010200000004000000000000000000444000000000000044400000000000003E400000000000003E40000000000000444000000000000034400000000000003E400000000000002440")},
-				// MULTIPOLYGON (((40 40, 20 45, 45 30, 40 40)),((20 35, 10 30, 10 10, 30 5, 45 20, 20 35),(30 20, 20 15, 20 25, 30 20)))
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("01060000000200000001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440010300000002000000060000000000000000003440000000000080414000000000000024400000000000003E40000000000000244000000000000024400000000000003E4000000000000014400000000000804640000000000000344000000000000034400000000000804140040000000000000000003E40000000000000344000000000000034400000000000002E40000000000000344000000000000039400000000000003E400000000000003440")},
-				// GEOMETRYCOLLECTION (POINT (40 10),LINESTRING (10 10, 20 20, 10 40),POLYGON ((40 40, 20 45, 45 30, 40 40)))
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("01070000000300000001010000000000000000004440000000000000244001020000000300000000000000000024400000000000002440000000000000344000000000000034400000000000002440000000000000444001030000000100000004000000000000000000444000000000000044400000000000003440000000000080464000000000008046400000000000003E4000000000000044400000000000004440")},
-				// POINT EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("0101000000000000000000F87F000000000000F87F")},
-				// LINESTRING EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010200000000000000")},
-				// POLYGON EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010300000000000000")},
-				// MULTIPOINT EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010400000000000000")},
-				// MULTILINESTRING EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010500000000000000")},
-				// MULTIPOLYGON EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010600000000000000")},
-				// GEOMETRYCOLLECTION EMPTY
-				&tree.DGeometry{Geometry: geo.MustParseGeometry("010700000000000000")},
-			},
-			types.StringFamily: {
-				tree.NewDString(""),
-				tree.NewDString("X"),
-				tree.NewDString(`"`),
-				tree.NewDString(`'`),
-				tree.NewDString("\x00"),
-				tree.NewDString("\u2603"), // unicode snowman
-			},
-			types.BytesFamily: {
-				tree.NewDBytes(""),
-				tree.NewDBytes("X"),
-				tree.NewDBytes(`"`),
-				tree.NewDBytes(`'`),
-				tree.NewDBytes("\x00"),
-				tree.NewDBytes("\u2603"), // unicode snowman
-				tree.NewDBytes("\xFF"),   // invalid utf-8 sequence, but a valid bytes
-			},
-			types.OidFamily: {
-				tree.NewDOid(0),
-			},
-			types.UuidFamily: {
-				tree.DMinUUID,
-				tree.DMaxUUID,
-			},
-			types.INetFamily: {
-				tree.DMinIPAddr,
-				tree.DMaxIPAddr,
-			},
-			types.PGLSNFamily: {
-				tree.NewDPGLSN(0),
-				tree.NewDPGLSN(math.MaxInt64),
-				tree.NewDPGLSN(math.MaxInt64 + 1),
-				tree.NewDPGLSN(math.MaxUint64),
-			},
-			types.RefCursorFamily: {
-				tree.NewDRefCursor(""),
-				tree.NewDRefCursor("X"),
-				tree.NewDRefCursor(`"`),
-				tree.NewDRefCursor(`'`),
-				tree.NewDRefCursor("\x00"),
-				tree.NewDRefCursor("\u2603"), // unicode snowman
-			},
-			types.JsonFamily: func() []tree.Datum {
-				var res []tree.Datum
-				for _, s := range []string{
-					`{}`,
-					`1`,
-					`{"test": "json"}`,
-				} {
-					d, err := tree.ParseDJSON(s)
-					if err != nil {
-						panic(err)
-					}
-					res = append(res, d)
-				}
-				return res
-			}(),
-			types.JsonpathFamily: func() []tree.Datum {
-				var res []tree.Datum
-				for _, s := range []string{
-					"$",
-					"strict $",
-					"lax $",
-					"$.a1[*]",
-					// "$.*",
-					// "$.1a[*]",
-					// "$.a ? (@.b == 1)",
-					// "$.a ? (@.b == 1).b",
-					// "$.a ? (@.b == 'true').c",
-					// "$.a ? (@.b == 1).c ? (@.d == 2)",
-					// "$.a?(@.b==1).c?(@.d==2)",
-					// "$  .  a  ?  (  @  .  b  ==  1  )  .  c  ?  (  @  .  d  ==  2  )  ",
-					// "$.a.type()",
-				} {
-					d, err := tree.ParseDJsonpath(s)
-					if err != nil {
-						panic(err)
-					}
-					res = append(res, d)
-				}
-				return res
-			}(),
-			types.BitFamily: func() []tree.Datum {
-				var res []tree.Datum
-				for _, i := range []int64{
-					0,
-					1<<63 - 1,
-				} {
-					d, err := tree.NewDBitArrayFromInt(i, 64)
-					if err != nil {
-						panic(err)
-					}
-					res = append(res, d)
-				}
-				return res
-			}(),
-			types.LTreeFamily: func() []tree.Datum {
-				var res []tree.Datum
-				for _, s := range []string{
-					"",
-					"foo",
-					"foo.bar",
-					"foo.bar.baz",
-					"foo_bar.baz",
-					"foo-bar.baz",
-				} {
-					d, err := tree.ParseDLTree(s)
-					if err != nil {
-						panic(err)
-					}
-					res = append(res, d)
-				}
-				return res
-			}(),
-		}
-
-	})
-	datums, ok := randInterestingDatums[typ]
-	return datums, ok
-}
-
-var commonTimestampSpecials = func() []time.Time {
-	const secondsPerDay = 24 * 60 * 60
-	var res []time.Time
-	for _, i := range []int{
-		// Number of days since unix epoch
-		-10000, -1000, -100, -10, 0, 10, 100, 1000, 10000,
-	} {
-		for _, j := range []int{
-			// Adjustment in number of seconds
-			-81364, -10000, 0, 500, 12345, 100000,
-		} {
-			t := timeutil.Unix(int64(i*secondsPerDay+j), 0)
-			res = append(res, t)
-		}
+	randTimestampSpecials = []time.Time{
+		{},
+		time.Date(-2000, time.January, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(3000, time.January, 1, 0, 0, 0, 0, time.UTC),
+		// NOTE(otan): we cannot support this as it does not work with colexec in tests.
+		tree.MinSupportedTime,
+		tree.MaxSupportedTime,
 	}
-	return res
-}()
 
-// randCommonDatums is a collection of datums that can be sampled for cases
-// where it's useful to pull data from a common, relatively small data set.
-// For example, an inner equijoin between two tables on an integer column will
-// only return rows if the join columns share some of the same data values.
-var randCommonDatums = map[types.Family][]tree.Datum{
-	types.BoolFamily: {
-		tree.DBoolTrue,
-		tree.DBoolFalse,
-	},
-	types.IntFamily: func() []tree.Datum {
-		var dataSet []tree.Datum
-		dataSet = make([]tree.Datum, 0, 256)
-		for i := -128; i < 128; i++ {
-			dataSet = append(dataSet, tree.NewDInt(tree.DInt(i)))
-		}
-		return dataSet
-	}(),
-	types.FloatFamily: func() []tree.Datum {
-		// 17 digits of precision
-		val := float64(1.2345678901234567e-50)
-		dataSet := make([]tree.Datum, 0, 256)
-		for i := 0; i < 100; i++ {
-			dataSet = append(dataSet, tree.NewDFloat(tree.DFloat(val)))
-			val *= 10
-		}
-		return dataSet
-	}(),
-	types.DecimalFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, s := range []string{
-			"0",
-			"1",
-			"1.1",
-			"1.11",
-			"1.2",
-			"-10.1",
-			".111",
-			"9.9",
-			"9.8",
-			"-9.8",
-			"99.8",
-			"12.01e10",
-			"-10.1e-10",
-			"1e3",
+	commonTimestampSpecials = func() []time.Time {
+		const secondsPerDay = 24 * 60 * 60
+		var res []time.Time
+		for _, i := range []int{
+			// Number of days since unix epoch
+			-10000, -1000, -100, -10, 0, 10, 100, 1000, 10000,
 		} {
-			d, err := tree.ParseDDecimal(s)
-			if err != nil {
-				panic(err)
+			for _, j := range []int{
+				// Adjustment in number of seconds
+				-81364, -10000, 0, 500, 12345, 100000,
+			} {
+				t := timeutil.Unix(int64(i*secondsPerDay+j), 0)
+				res = append(res, t)
 			}
-			res = append(res, d)
 		}
 		return res
-	}(),
-	types.DateFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, i := range []int64{
-			0, -2400000, 2145000000, -100, -1000, -10000, 100, 1000, 1000, 10000,
-			10001, 10002, 10010, 10020, 10030, 11000, 11001, 12000, 20000, 20030,
-		} {
-			postgresDate, err := pgdate.MakeDateFromUnixEpoch(i)
-			if err == nil {
-				d := tree.NewDDate(postgresDate)
+	}()
+
+	// randCommonDatums is a collection of datums that can be sampled for cases
+	// where it's useful to pull data from a common, relatively small data set.
+	// For example, an inner equijoin between two tables on an integer column will
+	// only return rows if the join columns share some of the same data values.
+	randCommonDatums = map[types.Family][]tree.Datum{
+		types.BoolFamily: {
+			tree.DBoolTrue,
+			tree.DBoolFalse,
+		},
+		types.IntFamily: func() []tree.Datum {
+			var dataSet []tree.Datum
+			dataSet = make([]tree.Datum, 0, 256)
+			for i := -128; i < 128; i++ {
+				dataSet = append(dataSet, tree.NewDInt(tree.DInt(i)))
+			}
+			return dataSet
+		}(),
+		types.FloatFamily: func() []tree.Datum {
+			// 17 digits of precision
+			val := float64(1.2345678901234567e-50)
+			dataSet := make([]tree.Datum, 0, 256)
+			for i := 0; i < 100; i++ {
+				dataSet = append(dataSet, tree.NewDFloat(tree.DFloat(val)))
+				val *= 10
+			}
+			return dataSet
+		}(),
+		types.DecimalFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"0",
+				"1",
+				"1.1",
+				"1.11",
+				"1.2",
+				"-10.1",
+				".111",
+				"9.9",
+				"9.8",
+				"-9.8",
+				"99.8",
+				"12.01e10",
+				"-10.1e-10",
+				"1e3",
+			} {
+				d, err := tree.ParseDDecimal(s)
+				if err != nil {
+					panic(err)
+				}
 				res = append(res, d)
 			}
-		}
-		return res
-	}(),
-	types.TimeFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, i := range []int{
-			85400000000, 80400000000, 76400000000, 60000000000, 50000000000, 40000000000, 30000000000,
-			20000000000, 10000000000, 1000000000, 100000000, 99999999, 10000000, 100000010, 100000001,
-			100000100, 100001000, 100010000, 100100000, 101000000, 110000000,
-		} {
-			d := tree.MakeDTime(timeofday.TimeOfDay(i))
-			res = append(res, d)
-		}
-		return res
-	}(),
-	types.TimeTZFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, i := range []int{
-			85400000000, 76400000000, 50000000000, 30000000000, 10000000000, 100000000, 99999999,
-			10000000, 100000010, 100000100, 100001000, 100010000, 100100000, 101000000, 110000000,
-		} {
-			for _, j := range []int32{
-				-15, -9, -6, 0, 8, 15,
+			return res
+		}(),
+		types.DateFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int64{
+				0, -2400000, 2145000000, -100, -1000, -10000, 100, 1000, 1000, 10000,
+				10001, 10002, 10010, 10020, 10030, 11000, 11001, 12000, 20000, 20030,
 			} {
-				timeTZOffsetSecs := int32((time.Duration(j) * time.Hour) / time.Second)
-				d := tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(i), timeTZOffsetSecs)
-				res = append(res, d)
-			}
-		}
-		return res
-	}(),
-	types.TimestampFamily: func() []tree.Datum {
-		res := make([]tree.Datum, len(commonTimestampSpecials))
-		for i, t := range commonTimestampSpecials {
-			res[i] = tree.MustMakeDTimestamp(t, time.Microsecond)
-		}
-		return res
-	}(),
-	types.TimestampTZFamily: func() []tree.Datum {
-		res := make([]tree.Datum, len(commonTimestampSpecials))
-		for i, t := range commonTimestampSpecials {
-			res[i] = tree.MustMakeDTimestampTZ(t, time.Microsecond)
-		}
-		return res
-	}(),
-	types.PGLSNFamily: {
-		tree.NewDPGLSN(0x1000),
-	},
-	types.RefCursorFamily: {
-		tree.NewDRefCursor("a"),
-		tree.NewDRefCursor("a\n"),
-		tree.NewDRefCursor("aa"),
-		tree.NewDRefCursor(`Aa`),
-		tree.NewDRefCursor(`aab`),
-		tree.NewDRefCursor(`aaaaaa`),
-		tree.NewDRefCursor("a "),
-		tree.NewDRefCursor(" a"),
-		tree.NewDRefCursor("	a"),
-		tree.NewDRefCursor("a	"),
-		tree.NewDRefCursor("a	"),
-		tree.NewDRefCursor("\u0001"),
-		tree.NewDRefCursor("\ufffd"),
-		tree.NewDRefCursor("\u00e1"),
-		tree.NewDRefCursor("À"),
-		tree.NewDRefCursor("à"),
-		tree.NewDRefCursor("àá"),
-		tree.NewDRefCursor("À1                à\n"),
-	},
-	types.IntervalFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, nanos := range []int64{
-			0, 999, 987654000, 10000000111, 1000000000000111000,
-		} {
-			for _, days := range []int64{
-				0, 1, 3, 5, 8,
-			} {
-				for _, months := range []int64{
-					0, 1, 12, 200 * 12,
-				} {
-					d := &tree.DInterval{Duration: duration.MakeDuration(nanos, days, months)}
+				postgresDate, err := pgdate.MakeDateFromUnixEpoch(i)
+				if err == nil {
+					d := tree.NewDDate(postgresDate)
 					res = append(res, d)
 				}
 			}
-		}
-		return res
-	}(),
-	types.Box2DFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, lowX := range []float64{
-			-1, 0.44, 10.999, 100000,
-		} {
-			for _, lowY := range []float64{
-				-9.99, 1.1, 15,
+			return res
+		}(),
+		types.TimeFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int{
+				85400000000, 80400000000, 76400000000, 60000000000, 50000000000, 40000000000, 30000000000,
+				20000000000, 10000000000, 1000000000, 100000000, 99999999, 10000000, 100000010, 100000001,
+				100000100, 100001000, 100010000, 100100000, 101000000, 110000000,
 			} {
-				for _, deltas := range []struct {
-					xDelta float64
-					yDelta float64
-				}{
-					{1.234e-10, 9.234e-10},
-					{1.0, 1.0},
-					{10.00000001, 100.000001},
-					{9.99e10, 8.88e10},
-					{300, 400},
+				d := tree.MakeDTime(timeofday.TimeOfDay(i))
+				res = append(res, d)
+			}
+			return res
+		}(),
+		types.TimeTZFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int{
+				85400000000, 76400000000, 50000000000, 30000000000, 10000000000, 100000000, 99999999,
+				10000000, 100000010, 100000100, 100001000, 100010000, 100100000, 101000000, 110000000,
+			} {
+				for _, j := range []int32{
+					-15, -9, -6, 0, 8, 15,
 				} {
-					d := &tree.DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{
-						BoundingBox: geopb.BoundingBox{LoX: lowX, HiX: lowX + deltas.xDelta, LoY: lowY, HiY: lowY + deltas.yDelta}}}
+					timeTZOffsetSecs := int32((time.Duration(j) * time.Hour) / time.Second)
+					d := tree.NewDTimeTZFromOffset(timeofday.TimeOfDay(i), timeTZOffsetSecs)
 					res = append(res, d)
 				}
 			}
-		}
-		return res
-	}(),
-	types.StringFamily: {
-		tree.NewDString("a"),
-		tree.NewDString("a\n"),
-		tree.NewDString("aa"),
-		tree.NewDString(`Aa`),
-		tree.NewDString(`aab`),
-		tree.NewDString(`aaaaaa`),
-		tree.NewDString("a "),
-		tree.NewDString(" a"),
-		tree.NewDString("	a"),
-		tree.NewDString("a	"),
-		tree.NewDString("a	"),
-		tree.NewDString("\u0001"),
-		tree.NewDString("\ufffd"),
-		tree.NewDString("\u00e1"),
-		tree.NewDString("À"),
-		tree.NewDString("à"),
-		tree.NewDString("àá"),
-		tree.NewDString("À1                à\n"),
-	},
-	types.BytesFamily: {
-		tree.NewDBytes("a"),
-		tree.NewDBytes("a\n"),
-		tree.NewDBytes("aa"),
-		tree.NewDBytes(`Aa`),
-		tree.NewDBytes(`aab`),
-		tree.NewDBytes(`aaaaaa`),
-		tree.NewDBytes("a "),
-		tree.NewDBytes(" a"),
-		tree.NewDBytes("	a"),
-		tree.NewDBytes("a	"),
-		tree.NewDBytes("a	"),
-		tree.NewDBytes("\u0001"),
-		tree.NewDBytes("\ufffd"),
-		tree.NewDBytes("\u00e1"),
-		tree.NewDBytes("À"),
-		tree.NewDBytes("à"),
-		tree.NewDBytes("àá"),
-		tree.NewDBytes("À1                à\n"),
-	},
-	types.OidFamily: {
-		// TODO(msirek): Look up valid OIDs based on the type of OID. Need to
-		//               match on specific type instead of just type family.
-		tree.NewDOid(0),
-	},
-	types.UuidFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, i := range []byte{
-			0x01, 0x0a, 0x2b, 0x3c, 0xfe,
-		} {
-			for _, j := range []byte{
-				0x0e, 0xa0, 0x4d, 0x5e, 0xef,
+			return res
+		}(),
+		types.TimestampFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(commonTimestampSpecials))
+			for i, t := range commonTimestampSpecials {
+				res[i] = tree.MustMakeDTimestamp(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.TimestampTZFamily: func() []tree.Datum {
+			res := make([]tree.Datum, len(commonTimestampSpecials))
+			for i, t := range commonTimestampSpecials {
+				res[i] = tree.MustMakeDTimestampTZ(t, time.Microsecond)
+			}
+			return res
+		}(),
+		types.PGLSNFamily: {
+			tree.NewDPGLSN(0x1000),
+		},
+		types.RefCursorFamily: {
+			tree.NewDRefCursor("a"),
+			tree.NewDRefCursor("a\n"),
+			tree.NewDRefCursor("aa"),
+			tree.NewDRefCursor(`Aa`),
+			tree.NewDRefCursor(`aab`),
+			tree.NewDRefCursor(`aaaaaa`),
+			tree.NewDRefCursor("a "),
+			tree.NewDRefCursor(" a"),
+			tree.NewDRefCursor("	a"),
+			tree.NewDRefCursor("a	"),
+			tree.NewDRefCursor("a	"),
+			tree.NewDRefCursor("\u0001"),
+			tree.NewDRefCursor("\ufffd"),
+			tree.NewDRefCursor("\u00e1"),
+			tree.NewDRefCursor("À"),
+			tree.NewDRefCursor("à"),
+			tree.NewDRefCursor("àá"),
+			tree.NewDRefCursor("À1                à\n"),
+		},
+		types.IntervalFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, nanos := range []int64{
+				0, 999, 987654000, 10000000111, 1000000000000111000,
 			} {
-				d := tree.NewDUuid(tree.DUuid{UUID: uuid.UUID{i, j, i, j, i, j, i, j,
-					i, j, i, j, i, j, i, j}})
+				for _, days := range []int64{
+					0, 1, 3, 5, 8,
+				} {
+					for _, months := range []int64{
+						0, 1, 12, 200 * 12,
+					} {
+						d := &tree.DInterval{Duration: duration.MakeDuration(nanos, days, months)}
+						res = append(res, d)
+					}
+				}
+			}
+			return res
+		}(),
+		types.Box2DFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, lowX := range []float64{
+				-1, 0.44, 10.999, 100000,
+			} {
+				for _, lowY := range []float64{
+					-9.99, 1.1, 15,
+				} {
+					for _, deltas := range []struct {
+						xDelta float64
+						yDelta float64
+					}{
+						{1.234e-10, 9.234e-10},
+						{1.0, 1.0},
+						{10.00000001, 100.000001},
+						{9.99e10, 8.88e10},
+						{300, 400},
+					} {
+						d := &tree.DBox2D{CartesianBoundingBox: geo.CartesianBoundingBox{
+							BoundingBox: geopb.BoundingBox{LoX: lowX, HiX: lowX + deltas.xDelta, LoY: lowY, HiY: lowY + deltas.yDelta}}}
+						res = append(res, d)
+					}
+				}
+			}
+			return res
+		}(),
+		types.StringFamily: {
+			tree.NewDString("a"),
+			tree.NewDString("a\n"),
+			tree.NewDString("aa"),
+			tree.NewDString(`Aa`),
+			tree.NewDString(`aab`),
+			tree.NewDString(`aaaaaa`),
+			tree.NewDString("a "),
+			tree.NewDString(" a"),
+			tree.NewDString("	a"),
+			tree.NewDString("a	"),
+			tree.NewDString("a	"),
+			tree.NewDString("\u0001"),
+			tree.NewDString("\ufffd"),
+			tree.NewDString("\u00e1"),
+			tree.NewDString("À"),
+			tree.NewDString("à"),
+			tree.NewDString("àá"),
+			tree.NewDString("À1                à\n"),
+		},
+		types.BytesFamily: {
+			tree.NewDBytes("a"),
+			tree.NewDBytes("a\n"),
+			tree.NewDBytes("aa"),
+			tree.NewDBytes(`Aa`),
+			tree.NewDBytes(`aab`),
+			tree.NewDBytes(`aaaaaa`),
+			tree.NewDBytes("a "),
+			tree.NewDBytes(" a"),
+			tree.NewDBytes("	a"),
+			tree.NewDBytes("a	"),
+			tree.NewDBytes("a	"),
+			tree.NewDBytes("\u0001"),
+			tree.NewDBytes("\ufffd"),
+			tree.NewDBytes("\u00e1"),
+			tree.NewDBytes("À"),
+			tree.NewDBytes("à"),
+			tree.NewDBytes("àá"),
+			tree.NewDBytes("À1                à\n"),
+		},
+		types.OidFamily: {
+			// TODO(msirek): Look up valid OIDs based on the type of OID. Need to
+			//               match on specific type instead of just type family.
+			tree.NewDOid(0),
+		},
+		types.UuidFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []byte{
+				0x01, 0x0a, 0x2b, 0x3c, 0xfe,
+			} {
+				for _, j := range []byte{
+					0x0e, 0xa0, 0x4d, 0x5e, 0xef,
+				} {
+					d := tree.NewDUuid(tree.DUuid{UUID: uuid.UUID{i, j, i, j, i, j, i, j,
+						i, j, i, j, i, j, i, j}})
+					res = append(res, d)
+				}
+			}
+			return res
+		}(),
+		types.INetFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []byte{
+				0x01, 0x0a, 0x2b, 0x3c, 0xfe,
+			} {
+				for _, j := range []byte{
+					0x0e, 0xa0, 0x4d, 0x5e, 0xef,
+				} {
+					ipv4AddrString := fmt.Sprintf("%d.%d.%d.%d", i, j, j, i)
+					ipv4Addr := tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: ipaddr.IPv4family,
+						Addr: ipaddr.Addr(uint128.FromBytes(ipaddr.ParseIP(ipv4AddrString)))}})
+					ipv6AddrString := fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", i, j, j, i, j, i, i, j)
+					ipv6Addr := tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: ipaddr.IPv6family,
+						Addr: ipaddr.Addr(uint128.FromBytes(ipaddr.ParseIP(ipv6AddrString)))}})
+					res = append(res, ipv4Addr)
+					res = append(res, ipv6Addr)
+				}
+			}
+			return res
+		}(),
+		types.JsonFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				`{}`,
+				`1`,
+				`{"test": "json"}`,
+				`{"a": 5, "b": [1, 2]}`,
+				`{"a": 5, "c": [1, 2]}`,
+				`[1, 2]`,
+				`{"cars": [
+					{"make": "Volkswagen", "model": "Rabbit", "trim": "S", "year": "2009"},
+					{"make": "Toyota", "model": "Camry", "trim": "LE", "year": "2002"},
+					{"make": "Ford", "model": "Focus", "trim": "SE", "year": "2011"},
+					{"make": "Buick", "model": "Grand National", "trim": "T-Type", "year": "1987"},
+					{"make": "Buick", "model": "Skylark", "trim": "Gran Sport", "year": "1966"},
+					{"make": "Porsche", "model": "911", "trim": "Turbo S", "year": "2022"},
+					{"make": "Chevrolet", "model": "Corvette", "trim": "C8", "year": "2022"}
+					]}`,
+			} {
+				d, err := tree.ParseDJSON(s)
+				if err != nil {
+					panic(err)
+				}
 				res = append(res, d)
 			}
-		}
-		return res
-	}(),
-	types.INetFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, i := range []byte{
-			0x01, 0x0a, 0x2b, 0x3c, 0xfe,
-		} {
-			for _, j := range []byte{
-				0x0e, 0xa0, 0x4d, 0x5e, 0xef,
+			return res
+		}(),
+		types.BitFamily: func() []tree.Datum {
+			var res []tree.Datum
+			for _, i := range []int64{
+				-123456789, -938456, -100, -1, 0, 1, 100, 2000, 100000, 10000000, 1000000000,
+				3, 4, 5, 6, 7, 8, 9,
 			} {
-				ipv4AddrString := fmt.Sprintf("%d.%d.%d.%d", i, j, j, i)
-				ipv4Addr := tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: ipaddr.IPv4family,
-					Addr: ipaddr.Addr(uint128.FromBytes(ipaddr.ParseIP(ipv4AddrString)))}})
-				ipv6AddrString := fmt.Sprintf("%x:%x:%x:%x:%x:%x:%x:%x", i, j, j, i, j, i, i, j)
-				ipv6Addr := tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipaddr.IPAddr{Family: ipaddr.IPv6family,
-					Addr: ipaddr.Addr(uint128.FromBytes(ipaddr.ParseIP(ipv6AddrString)))}})
-				res = append(res, ipv4Addr)
-				res = append(res, ipv6Addr)
+				d, err := tree.NewDBitArrayFromInt(i, 64)
+				if err != nil {
+					panic(err)
+				}
+				res = append(res, d)
 			}
-		}
-		return res
-	}(),
-	types.JsonFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, s := range []string{
-			`{}`,
-			`1`,
-			`{"test": "json"}`,
-			`{"a": 5, "b": [1, 2]}`,
-			`{"a": 5, "c": [1, 2]}`,
-			`[1, 2]`,
-			`{"cars": [
-						{"make": "Volkswagen", "model": "Rabbit", "trim": "S", "year": "2009"},
-						{"make": "Toyota", "model": "Camry", "trim": "LE", "year": "2002"},
-						{"make": "Ford", "model": "Focus", "trim": "SE", "year": "2011"},
-						{"make": "Buick", "model": "Grand National", "trim": "T-Type", "year": "1987"},
-						{"make": "Buick", "model": "Skylark", "trim": "Gran Sport", "year": "1966"},
-						{"make": "Porsche", "model": "911", "trim": "Turbo S", "year": "2022"},
-						{"make": "Chevrolet", "model": "Corvette", "trim": "C8", "year": "2022"}
-						]}`,
-		} {
-			d, err := tree.ParseDJSON(s)
-			if err != nil {
-				panic(err)
-			}
-			res = append(res, d)
-		}
-		return res
-	}(),
-	types.JsonpathFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, s := range []string{
-			"$.a",
-			"$.b[*]",
-		} {
-			d, err := tree.ParseDJsonpath(s)
-			if err != nil {
-				panic(err)
-			}
-			res = append(res, d)
-		}
-		return res
-	}(),
-	types.BitFamily: func() []tree.Datum {
-		var res []tree.Datum
-		for _, i := range []int64{
-			-123456789, -938456, -100, -1, 0, 1, 100, 2000, 100000, 10000000, 1000000000,
-			3, 4, 5, 6, 7, 8, 9,
-		} {
-			d, err := tree.NewDBitArrayFromInt(i, 64)
-			if err != nil {
-				panic(err)
-			}
-			res = append(res, d)
-		}
-		return res
-	}(),
-}
+			return res
+		}(),
+	}
+)

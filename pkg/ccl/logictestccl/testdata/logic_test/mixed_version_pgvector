@@ -1,0 +1,60 @@
+# LogicTest: cockroach-go-testserver-24.1
+
+# Verify that all nodes are running the previous version.
+
+query T nodeidx=0
+SELECT crdb_internal.node_executable_version()
+----
+24.1
+
+query T nodeidx=1
+SELECT crdb_internal.node_executable_version()
+----
+24.1
+
+query T nodeidx=2
+SELECT crdb_internal.node_executable_version()
+----
+24.1
+
+statement error syntax error
+CREATE TABLE t (v VECTOR(1))
+
+# Upgrade one node to 24.2
+
+upgrade 0
+
+# Verify that node index 0 is now running 24.2 binary.
+
+query T nodeidx=0
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.3
+
+statement error pg_vector not supported until version 24.2
+CREATE TABLE t (v VECTOR(1))
+
+upgrade 1
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version();
+
+query T nodeidx=1
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.3
+
+query T nodeidx=2
+SELECT crdb_internal.release_series(crdb_internal.node_executable_version())
+----
+24.3
+
+query B retry
+SELECT crdb_internal.is_at_least_version('24.1-02')
+----
+true
+
+statement ok
+CREATE TABLE t (v VECTOR(1))

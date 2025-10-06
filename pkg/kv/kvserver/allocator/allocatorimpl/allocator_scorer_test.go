@@ -1557,9 +1557,7 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := &RangeCountScorerOptions{
-		BaseScorerOptions: BaseScorerOptions{
-			DiskCapacity: defaultDiskCapacityOptions(),
-		},
+		DiskCapacityOptions: defaultDiskCapacityOptions(),
 	}
 	newStore := func(id int, locality roachpb.Locality) roachpb.StoreDescriptor {
 		return roachpb.StoreDescriptor{
@@ -1769,7 +1767,7 @@ func TestAllocateDiversityScore(t *testing.T) {
 					continue
 				}
 				var score storeScore
-				actualScore := diversityAllocateScore(s.Locality(), existingStoreLocalities)
+				actualScore := diversityAllocateScore(s, existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1857,23 +1855,6 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				i++
 			}
 		})
-	}
-}
-
-func BenchmarkRebalanceToDiversityScore(b *testing.B) {
-	existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality, len(testStores))
-	store := testStores[testStoreUSa15]
-	for sID := range testStores {
-		if sID == testStoreUSa15 {
-			continue
-		}
-		existingStoreLocalities[testStores[sID].StoreID] = testStores[sID].Locality()
-	}
-
-	b.ResetTimer()
-	sum := float64(0)
-	for i := 0; i < b.N; i++ {
-		sum += diversityRebalanceScore(store, existingStoreLocalities)
 	}
 }
 
@@ -1992,7 +1973,7 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 			s := testStores[storeID]
 			fromStoreID := s.StoreID
 			s.StoreID = 99
-			rebalanceScore := diversityRebalanceFromScore(s.Locality(), fromStoreID, existingLocalities)
+			rebalanceScore := diversityRebalanceFromScore(s, fromStoreID, existingLocalities)
 			if a, e := rebalanceScore, tc.expected; !scoresAlmostEqual(a, e) {
 				t.Errorf("diversityRebalanceFromScore(%v, %d, %v) got %f, want %f",
 					s, fromStoreID, existingLocalities, a, e)
@@ -2010,9 +1991,7 @@ func TestBalanceScoreByRangeCount(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	options := RangeCountScorerOptions{
-		BaseScorerOptions: BaseScorerOptions{
-			DiskCapacity: defaultDiskCapacityOptions(),
-		},
+		DiskCapacityOptions:     defaultDiskCapacityOptions(),
 		rangeRebalanceThreshold: 0.1,
 	}
 	storeList := storepool.StoreList{
@@ -2098,9 +2077,7 @@ func TestRebalanceConvergesRangeCountOnMean(t *testing.T) {
 	}
 
 	options := RangeCountScorerOptions{
-		BaseScorerOptions: BaseScorerOptions{
-			DiskCapacity: defaultDiskCapacityOptions(),
-		},
+		DiskCapacityOptions: defaultDiskCapacityOptions(),
 	}
 	eqClass := equivalenceClass{
 		candidateSL: storeList,
@@ -2178,46 +2155,4 @@ func TestCandidateListString(t *testing.T) {
 		"s2, valid:true, fulldisk:true, necessary:true, voterNecessary:true, diversity:0.00, ioOverloaded: true, ioOverload: 0.00, converges:1, balance:1, hasNonVoter:true, rangeCount:2, queriesPerSecond:0.00, details:(mock detail 2)\n"+
 		"s3, valid:false, fulldisk:false, necessary:false, voterNecessary:false, diversity:1.00, ioOverloaded: false, ioOverload: 1.00, converges:-1, balance:-1, hasNonVoter:false, rangeCount:3, queriesPerSecond:0.00, details:(mock detail 3)]",
 		cl.String())
-}
-
-func TestIOOverloadOptionsDiskUnhealthy(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	options := IOOverloadOptions{
-		UseIOThresholdMax:            false,
-		ReplicaIOOverloadThreshold:   0.2,
-		LeaseIOOverloadThreshold:     0.2,
-		LeaseIOOverloadShedThreshold: 0.2,
-		DiskUnhealthyScore:           0.3,
-	}
-
-	store := roachpb.StoreDescriptor{}
-	o := options
-	o.ReplicaEnforcementLevel = IOOverloadThresholdBlockAll
-	require.True(t, o.allocateReplicaToCheck(ctx, store, storepool.StoreList{}))
-	store.Capacity.IOThreshold.DiskUnhealthy = true
-	require.False(t, o.allocateReplicaToCheck(ctx, store, storepool.StoreList{}))
-
-	store = roachpb.StoreDescriptor{}
-	o = options
-	o.ReplicaEnforcementLevel = IOOverloadThresholdBlockTransfers
-	require.True(t, o.rebalanceReplicaToCheck(ctx, store, storepool.StoreList{}))
-	store.Capacity.IOThreshold.DiskUnhealthy = true
-	require.False(t, o.rebalanceReplicaToCheck(ctx, store, storepool.StoreList{}))
-
-	store = roachpb.StoreDescriptor{}
-	o = options
-	o.LeaseEnforcementLevel = IOOverloadThresholdShed
-	require.True(t, o.ExistingLeaseCheck(ctx, store, storepool.StoreList{}))
-	store.Capacity.IOThreshold.DiskUnhealthy = true
-	require.False(t, o.ExistingLeaseCheck(ctx, store, storepool.StoreList{}))
-
-	store = roachpb.StoreDescriptor{}
-	o = options
-	o.LeaseEnforcementLevel = IOOverloadThresholdBlockTransfers
-	require.True(t, o.transferLeaseToCheck(ctx, store, storepool.StoreList{}))
-	store.Capacity.IOThreshold.DiskUnhealthy = true
-	require.False(t, o.transferLeaseToCheck(ctx, store, storepool.StoreList{}))
 }

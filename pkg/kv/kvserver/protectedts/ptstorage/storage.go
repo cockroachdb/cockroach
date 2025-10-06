@@ -9,6 +9,7 @@ package ptstorage
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -116,7 +117,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 
 	defer func() {
 		if err := it.Close(); err != nil {
-			log.KvDistribution.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+			log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
 		}
 	}()
 
@@ -236,7 +237,7 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
 		if err := rowToRecord(it.Cur(), &record, false /* isDeprecatedRow */); err != nil {
-			log.KvDistribution.Errorf(ctx, "failed to parse row as record: %v", err)
+			log.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
 	}
@@ -287,7 +288,7 @@ func writeDeprecatedPTSRecord(knobs *protectedts.TestingKnobs, r *ptpb.Record) b
 func usePTSMetaTable(
 	ctx context.Context, st *cluster.Settings, knobs *protectedts.TestingKnobs,
 ) bool {
-	return knobs.UseMetaTable
+	return knobs.UseMetaTable || !st.Version.IsActive(ctx, clusterversion.V24_1)
 }
 
 // New creates a new Storage.
@@ -370,7 +371,7 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 	}
 	row := it.Cur()
 	if err := it.Close(); err != nil {
-		log.KvDistribution.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
+		log.Infof(ctx, "encountered %v when writing record %v", err, r.ID)
 	}
 	if failed := *row[0].(*tree.DBool); failed {
 		curNumSpans := int64(*row[1].(*tree.DInt))
@@ -423,7 +424,7 @@ func (p *storage) deprecatedGetRecords(ctx context.Context) ([]ptpb.Record, erro
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		var record ptpb.Record
 		if err := rowToRecord(it.Cur(), &record, true /* isDeprecatedRow */); err != nil {
-			log.KvDistribution.Errorf(ctx, "failed to parse row as record: %v", err)
+			log.Errorf(ctx, "failed to parse row as record: %v", err)
 		}
 		records = append(records, record)
 	}

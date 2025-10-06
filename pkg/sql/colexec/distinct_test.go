@@ -385,7 +385,7 @@ func TestDistinct(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewTestRand()
 	for _, tc := range distinctTestCases {
-		log.Dev.Infof(context.Background(), "unordered")
+		log.Infof(context.Background(), "unordered")
 		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 			ud := NewUnorderedDistinct(
 				testAllocator, input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
@@ -395,7 +395,7 @@ func TestDistinct(t *testing.T) {
 		})
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
-				log.Dev.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
+				log.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
 				orderedCols := make([]uint32, numOrderedCols)
 				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
 					orderedCols[i] = tc.distinctCols[j]
@@ -406,7 +406,7 @@ func TestDistinct(t *testing.T) {
 					)
 				})
 			}
-			log.Dev.Info(context.Background(), "ordered")
+			log.Info(context.Background(), "ordered")
 			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil
 			})

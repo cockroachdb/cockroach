@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -73,7 +72,7 @@ func InitIndexFetchSpec(
 	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 
 	var invertedColumnID descpb.ColumnID
-	if index.GetType() == idxtype.INVERTED {
+	if index.GetType() == descpb.IndexDescriptor_INVERTED {
 		invertedColumnID = index.InvertedColumnID()
 	}
 
@@ -107,7 +106,7 @@ func InitIndexFetchSpec(
 		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
 		for i := range s.FetchedColumns {
 			if !colIDs.Contains(s.FetchedColumns[i].ColumnID) {
-				return errors.AssertionFailedf("requested column '%s' not in index", s.FetchedColumns[i].Name)
+				return errors.AssertionFailedf("requested column %s not in index", s.FetchedColumns[i].Name)
 			}
 		}
 	}

@@ -35,6 +35,12 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// This test sometimes flake on separate-process
+		// deployments. Needs investigation.
+		mixedversion.EnabledDeploymentModes(
+			mixedversion.SystemOnlyDeployment,
+			mixedversion.SharedProcessDeployment,
+		),
 	)
 	n1 := 1
 	n2 := 2

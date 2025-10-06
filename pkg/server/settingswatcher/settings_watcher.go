@@ -185,7 +185,6 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		defer s.mu.Unlock()
 		s.mu.updater.ResetRemaining(ctx)
 		if !initialScan.done {
-			log.Dev.VInfof(ctx, 1, "initial settings scan complete")
 			initialScan.done = true
 			close(initialScan.ch)
 		}
@@ -210,7 +209,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		// `Start` call. This ensures that all the overrides have been
 		// applied by the time the `Start` call completes.
 		overridesCh := s.updateOverrides(ctx)
-		log.Dev.Infof(ctx, "applied initial setting overrides")
+		log.Infof(ctx, "applied initial setting overrides")
 
 		// Set up a worker to watch the monitor asynchronously.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
@@ -354,12 +353,12 @@ func (s *SettingsWatcher) handleKV(
 
 	setting, ok := settings.LookupForLocalAccessByKey(settingKey, s.codec.ForSystemTenant())
 	if !ok {
-		log.Dev.Warningf(ctx, "unknown setting %s, skipping update", settingKey)
+		log.Warningf(ctx, "unknown setting %s, skipping update", settingKey)
 		return nil, false
 	}
 	if !s.codec.ForSystemTenant() {
 		if setting.Class() != settings.ApplicationLevel {
-			log.Dev.Warningf(ctx, "ignoring read-only setting %s", settingKey)
+			log.Warningf(ctx, "ignoring read-only setting %s", settingKey)
 			return nil, false
 		}
 	}
@@ -449,7 +448,7 @@ func (s *SettingsWatcher) setLocked(
 		var newVersion clusterversion.ClusterVersion
 		oldVersion := s.settings.Version.ActiveVersionOrEmpty(ctx)
 		if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
-			log.Dev.Warningf(ctx, "failed to set cluster version: %s", err.Error())
+			log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 		} else if newVersion.LessEq(oldVersion.Version) {
 			// Nothing to do.
 		} else {
@@ -458,28 +457,28 @@ func (s *SettingsWatcher) setLocked(
 			if oldVersion.Version.Equal(roachpb.Version{}) {
 				// Cluster version setting not initialized.
 				if err := clusterversion.Initialize(ctx, newVersion.Version, &s.settings.SV); err != nil {
-					log.Dev.Fatalf(ctx, "failed to initialize cluster version setting: %s", err.Error())
+					log.Fatalf(ctx, "failed to initialize cluster version setting: %s", err.Error())
 					return
 				}
 			}
 			if err := s.settings.Version.SetActiveVersion(ctx, newVersion); err != nil {
-				log.Dev.Warningf(ctx, "failed to set cluster version: %s", err.Error())
+				log.Warningf(ctx, "failed to set cluster version: %s", err.Error())
 			} else {
-				log.Dev.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
+				log.Infof(ctx, "set cluster version from %v to: %v", oldVersion, newVersion)
 			}
 		}
 		return
 	}
 
 	if err := s.mu.updater.SetFromStorage(ctx, key, val, origin); err != nil {
-		log.Dev.Warningf(ctx, "failed to set setting %s to %s: %v", key, val.Value, err)
+		log.Warningf(ctx, "failed to set setting %s to %s: %v", key, val.Value, err)
 	}
 }
 
 // setDefaultLocked sets a setting to its default value.
 func (s *SettingsWatcher) setDefaultLocked(ctx context.Context, key settings.InternalKey) {
 	if err := s.mu.updater.SetToDefault(ctx, key); err != nil {
-		log.Dev.Warningf(ctx, "failed to set setting %s to default: %v", key, err)
+		log.Warningf(ctx, "failed to set setting %s to default: %v", key, err)
 	}
 }
 
@@ -496,7 +495,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 		if key == clusterversion.KeyVersionSetting {
 			var newVersion clusterversion.ClusterVersion
 			if err := protoutil.Unmarshal([]byte(val.Value), &newVersion); err != nil {
-				log.Dev.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
+				log.Warningf(ctx, "ignoring invalid cluster version: %s - %v\n"+
 					"Note: the lack of a refreshed storage cluster version in a secondary tenant may prevent tenant upgrade.",
 					newVersion, err)
 			} else {
@@ -507,7 +506,7 @@ func (s *SettingsWatcher) updateOverrides(ctx context.Context) (updateCh <-chan 
 				// storageClusterVersion for use in determining if it's safe to
 				// upgrade the tenant (since we don't want to upgrade tenants
 				// to a version that's beyond that of the storage cluster).
-				log.Dev.Infof(ctx, "updating storage cluster cached version from: %v to: %v", s.mu.storageClusterVersion, newVersion)
+				log.Infof(ctx, "updating storage cluster cached version from: %v to: %v", s.mu.storageClusterVersion, newVersion)
 				s.mu.storageClusterVersion = newVersion
 			}
 			continue

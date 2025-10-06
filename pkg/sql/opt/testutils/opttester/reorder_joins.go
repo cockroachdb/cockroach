@@ -33,9 +33,6 @@ import (
 func (ot *OptTester) ReorderJoins() (string, error) {
 	ot.builder.Reset()
 	o := ot.makeOptimizer()
-	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
-		return !ot.Flags.DisableRules.Contains(int(ruleName))
-	})
 	jof := newJoinOrderFormatter(o)
 
 	// joinsConsidered counts the number of joins which joinOrderBuilder attempts

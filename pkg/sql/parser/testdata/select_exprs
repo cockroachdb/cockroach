@@ -112,7 +112,7 @@ SELECT _ - _ -- literals removed
 SELECT -0. - -1 -- identifiers removed
 
 parse
-SELECT~+~+~++~bd(*)
+SELECT~~+~++~bd(*)
 ----
 SELECT ~(~(~(~bd(*)))) -- normalized!
 SELECT (~((~((~((~(bd((*)))))))))) -- fully parenthesized
@@ -2138,59 +2138,3 @@ SELECT "[2,2]" < (-"[3,4]") -- normalized!
 SELECT (("[2,2]") < ((-("[3,4]")))) -- fully parenthesized
 SELECT "[2,2]" < (-"[3,4]") -- literals removed
 SELECT _ < (-_) -- identifiers removed
-
-parse
-SELECT '$'::JSONPATH;
-----
-SELECT '$'::JSONPATH -- normalized!
-SELECT (('$')::JSONPATH) -- fully parenthesized
-SELECT '_'::JSONPATH -- literals removed
-SELECT '$'::JSONPATH -- identifiers removed
-
-parse
-SELECT '$'::CITEXT;
-----
-SELECT '$'::CITEXT -- normalized!
-SELECT (('$')::CITEXT) -- fully parenthesized
-SELECT '_'::CITEXT -- literals removed
-SELECT '$'::CITEXT -- identifiers removed
-
-parse
-SELECT 'foo-bar.baz'::LTREE
-----
-SELECT 'foo-bar.baz'::LTREE
-SELECT (('foo-bar.baz')::LTREE) -- fully parenthesized
-SELECT '_'::LTREE -- literals removed
-SELECT 'foo-bar.baz'::LTREE -- identifiers removed
-
-parse
-SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE
-----
-SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE
-SELECT (((ARRAY[('A.B'), ('')])::LTREE[]) ?@> (('A')::LTREE)) -- fully parenthesized
-SELECT ARRAY['_', '_']::LTREE[] ?@> '_'::LTREE -- literals removed
-SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE -- identifiers removed
-
-error
-SELECT ARRAY['A.B', '']::LTREE[] ?@< 'A'::LTREE
-----
-at or near "<": syntax error
-DETAIL: source SQL:
-SELECT ARRAY['A.B', '']::LTREE[] ?@< 'A'::LTREE
-                                   ^
-
-parse
-SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE
-----
-SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE
-SELECT (((ARRAY[('A.B'), ('')])::LTREE[]) ?<@ (('A')::LTREE)) -- fully parenthesized
-SELECT ARRAY['_', '_']::LTREE[] ?<@ '_'::LTREE -- literals removed
-SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE -- identifiers removed
-
-error
-SELECT ARRAY['A.B', '']::LTREE[] ?<< 'A'::LTREE
-----
-at or near "<": syntax error
-DETAIL: source SQL:
-SELECT ARRAY['A.B', '']::LTREE[] ?<< 'A'::LTREE
-                                  ^

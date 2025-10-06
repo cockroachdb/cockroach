@@ -21,7 +21,10 @@ import { Pagination } from "src/pagination";
 import { Filter } from "src/queryFilter";
 import { getActiveStatementFiltersFromURL } from "src/queryFilter/utils";
 import { Search } from "src/search/search";
-import { SortSetting } from "src/sortedtable/sortedtable";
+import {
+  ISortedTablePagination,
+  SortSetting,
+} from "src/sortedtable/sortedtable";
 import LoadingError from "src/sqlActivity/errorComponent";
 import { queryByName, syncHistory } from "src/util/query";
 
@@ -37,7 +40,6 @@ import {
   getFullFiltersAsStringRecord,
 } from "../queryFilter";
 import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
-import { usePagination } from "../util";
 
 import styles from "./statementsPage.module.scss";
 
@@ -87,10 +89,10 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   lastUpdated,
   onManualRefresh,
 }: ActiveStatementsViewProps) => {
-  const [pagination, updatePagination, resetPagination] = usePagination(
-    1,
-    PAGE_SIZE,
-  );
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    current: 1,
+    pageSize: PAGE_SIZE,
+  });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, ACTIVE_STATEMENT_SEARCH_PARAM),
@@ -188,6 +190,13 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     search,
   ]);
 
+  const resetPagination = () => {
+    setPagination({
+      pageSize: PAGE_SIZE,
+      current: 1,
+    });
+  };
+
   const onSortClick = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
@@ -236,6 +245,13 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
     internalAppNamePrefix,
     search,
   );
+
+  const onChangePage = (page: number) => {
+    setPagination({
+      ...pagination,
+      current: page,
+    });
+  };
 
   return (
     <div className={cx("root")}>
@@ -308,8 +324,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             pageSize={pagination.pageSize}
             current={pagination.current}
             total={filteredStatements?.length}
-            onChange={updatePagination}
-            onShowSizeChange={updatePagination}
+            onChange={onChangePage}
           />
           {maxSizeApiReached && (
             <InlineAlert

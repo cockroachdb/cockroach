@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
@@ -157,20 +154,11 @@ type expectedSampleQueryEvent struct {
 }
 
 type telemetrySpy struct {
-	t  *testing.T
-	sv *settings.Values
+	t *testing.T
 
 	sampledQueries    []eventpb.SampledQuery
 	sampledQueriesRaw []logpb.Entry
 	recoveryEvents    []eventpb.RecoveryEvent
-}
-
-func (l *telemetrySpy) channelsToIntercept() []log.Channel {
-	if log.ShouldMigrateEvent(l.sv) {
-		return []log.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC}
-	}
-
-	return []log.Channel{logpb.Channel_TELEMETRY}
 }
 
 func (l *telemetrySpy) Intercept(entry []byte) {
@@ -179,7 +167,7 @@ func (l *telemetrySpy) Intercept(entry []byte) {
 		l.t.Errorf("failed unmarshaling %s: %s", entry, err)
 	}
 
-	if !slices.Contains(l.channelsToIntercept(), rawLog.Channel) {
+	if rawLog.Channel != logpb.Channel_TELEMETRY {
 		return
 	}
 
@@ -215,6 +203,12 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	ctx := context.Background()
 
+	spy := &telemetrySpy{
+		t: t,
+	}
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
 	st := logtestutils.StubTime{}
 	sqm := logtestutils.StubQueryStats{}
 	sts := logtestutils.StubTracingStatus{}
@@ -224,7 +218,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 	testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				EventLog: &eventlog.EventLogTestingKnobs{
+				EventLog: &sql.EventLogTestingKnobs{
 					// The sampling checks below need to have a deterministic
 					// number of statements run by internal executor.
 					SyncWrites: true,
@@ -234,15 +228,6 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 			ExternalIODir: dir,
 		},
 	})
-
-	spy := &telemetrySpy{
-		t:  t,
-		sv: &testCluster.Server(0).ClusterSettings().SV,
-	}
-
-	cleanup := log.InterceptWith(ctx, spy)
-	defer cleanup()
-
 	sqlDB := testCluster.ServerConn(0)
 	defer func() {
 		testCluster.Stopper().Stop(context.Background())
@@ -373,15 +358,13 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 		if strings.Contains(tc.query, "WITH detached") {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID)
-		} else if strings.HasPrefix(tc.query, "IMPORT") {
-			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
 		} else {
-			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused)
+			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
 		}
 		if err != nil {
 			t.Errorf("unexpected error executing query `%s`: %v", tc.query, err)
 		}
-		waitForJobResult(t, testCluster, jobspb.JobID(jobID), jobs.StateSucceeded)
+		waitForJobResult(t, testCluster, jobspb.JobID(jobID), jobs.StatusSucceeded)
 		t.Logf("finished:%q\n", tc.query)
 
 		execTimestamp++
@@ -430,7 +413,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 }
 
 func waitForJobResult(
-	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.State,
+	t *testing.T, tc serverutils.TestClusterInterface, id jobspb.JobID, expected jobs.Status,
 ) {
 	// Force newly created job to be adopted and verify its result.
 	tc.Server(0).JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()

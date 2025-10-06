@@ -51,6 +51,7 @@ func newRaftSnapshotQueue(store *Store) *raftSnapshotQueue {
 			processTimeoutFunc:   makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 			successes:            store.metrics.RaftSnapshotQueueSuccesses,
 			failures:             store.metrics.RaftSnapshotQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.RaftSnapshotQueuePending,
 			processingNanos:      store.metrics.RaftSnapshotQueueProcessingNanos,
 			disabledConfig:       kvserverbase.RaftSnapshotQueueEnabled,
@@ -68,7 +69,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 		for _, p := range status.Progress {
 			if p.State == tracker.StateSnapshot {
 				if log.V(2) {
-					log.KvDistribution.Infof(ctx, "raft snapshot needed, enqueuing")
+					log.Infof(ctx, "raft snapshot needed, enqueuing")
 				}
 				return true, raftSnapshotPriority
 			}
@@ -78,7 +79,7 @@ func (rq *raftSnapshotQueue) shouldQueue(
 }
 
 func (rq *raftSnapshotQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (anyProcessed bool, _ error) {
 	// If a follower requires a Raft snapshot, perform it.
 	if status := repl.RaftStatus(); status != nil {
@@ -86,7 +87,7 @@ func (rq *raftSnapshotQueue) process(
 		for id, p := range status.Progress {
 			if p.State == tracker.StateSnapshot {
 				if log.V(1) {
-					log.KvDistribution.Infof(ctx, "sending raft snapshot")
+					log.Infof(ctx, "sending raft snapshot")
 				}
 				if processed, err := rq.processRaftSnapshot(ctx, repl, roachpb.ReplicaID(id)); err != nil {
 					return false, err

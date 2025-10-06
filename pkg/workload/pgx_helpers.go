@@ -232,7 +232,7 @@ func NewMultiConnPool(
 					// prepared is idempotent and short-circuits before doing any
 					// communication to the server.
 					if _, err := conn.Prepare(ctx, name, sql); err != nil {
-						log.Dev.Warningf(ctx, "error preparing statement. name=%s sql=%s %v", name, sql, err)
+						log.Warningf(ctx, "error preparing statement. name=%s sql=%s %v", name, sql, err)
 						return false
 					}
 				}
@@ -257,7 +257,7 @@ func NewMultiConnPool(
 	}
 
 	if err := m.WarmupConns(ctx, cfg.WarmupConns); err != nil {
-		log.Dev.Warningf(ctx, "warming up connection pool failed (%v), continuing workload", err)
+		log.Warningf(ctx, "warming up connection pool failed (%v), continuing workload", err)
 	}
 
 	return m, nil

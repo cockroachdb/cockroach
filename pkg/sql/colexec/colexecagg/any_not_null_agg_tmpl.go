@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for any_not_null_agg.eg.go. It's formatted
@@ -83,7 +84,7 @@ func newAnyNotNull_AGGKINDAggAlloc(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unsupported any not null agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported any not null agg type %s", t.Name())
 }
 
 // {{range .}}

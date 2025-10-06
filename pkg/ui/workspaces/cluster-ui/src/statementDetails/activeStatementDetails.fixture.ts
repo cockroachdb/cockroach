@@ -29,7 +29,6 @@ export const getActiveStatementDetailsPropsFixture =
         clientAddress: "127.0.0.1",
         isFullScan: true,
         planGist: "AgICABoCBQQf0AEB",
-        isolationLevel: "SERIALIZABLE",
       },
       match: {
         path: "/execution/statement/:statement",

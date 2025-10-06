@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -19,7 +18,7 @@ type dynamicClusterImpl struct {
 
 // Grow adds nodes to the cluster.
 func (c *clusterImpl) Grow(ctx context.Context, l *logger.Logger, nodeCount int) error {
-	err := roachprod.Grow(ctx, l, c.name, install.SimpleSecureOption(c.IsSecure()), nodeCount)
+	err := roachprod.Grow(ctx, l, c.name, c.IsSecure(), nodeCount)
 	if err != nil {
 		return err
 	}

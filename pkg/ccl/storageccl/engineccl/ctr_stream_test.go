@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,17 +29,17 @@ var testData = []byte("Call me Ishmael. Some years ago—never mind how long pre
 	"having little or no money in my purse, and nothing particular to interest me " +
 	"on shore, I thought I would sail about a little and see the watery part of the world.")
 
-func generateKey(encType enginepb.EncryptionType) (*enginepb.SecretKey, error) {
-	key := &enginepb.SecretKey{}
-	key.Info = &enginepb.KeyInfo{}
+func generateKey(encType enginepbccl.EncryptionType) (*enginepbccl.SecretKey, error) {
+	key := &enginepbccl.SecretKey{}
+	key.Info = &enginepbccl.KeyInfo{}
 	key.Info.EncryptionType = encType
 	var keyLength int
 	switch encType {
-	case enginepb.EncryptionType_AES128_CTR:
+	case enginepbccl.EncryptionType_AES128_CTR:
 		keyLength = 16
-	case enginepb.EncryptionType_AES192_CTR:
+	case enginepbccl.EncryptionType_AES192_CTR:
 		keyLength = 24
-	case enginepb.EncryptionType_AES256_CTR:
+	case enginepbccl.EncryptionType_AES256_CTR:
 		keyLength = 32
 	}
 	key.Key = make([]byte, keyLength)
@@ -97,7 +98,7 @@ func TestCTRStreamDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	for _, impl := range []string{"v1", "v2"} {
 		var data []byte
-		keys := map[string]*enginepb.SecretKey{}
+		keys := map[string]*enginepbccl.SecretKey{}
 		ivs := map[string][]byte{}
 		seenCiphertexts := map[string]struct{}{}
 		t.Run(impl, func(t *testing.T) {
@@ -117,17 +118,17 @@ func TestCTRStreamDataDriven(t *testing.T) {
 						d.ScanArgs(t, "name", &name)
 						decoded, err := readHex(d.Input)
 						require.NoError(t, err)
-						key := &enginepb.SecretKey{
-							Info: &enginepb.KeyInfo{},
+						key := &enginepbccl.SecretKey{
+							Info: &enginepbccl.KeyInfo{},
 							Key:  decoded,
 						}
 						switch len(decoded) {
 						case 16:
-							key.Info.EncryptionType = enginepb.EncryptionType_AES128_CTR
+							key.Info.EncryptionType = enginepbccl.EncryptionType_AES128_CTR
 						case 24:
-							key.Info.EncryptionType = enginepb.EncryptionType_AES192_CTR
+							key.Info.EncryptionType = enginepbccl.EncryptionType_AES192_CTR
 						case 32:
-							key.Info.EncryptionType = enginepb.EncryptionType_AES256_CTR
+							key.Info.EncryptionType = enginepbccl.EncryptionType_AES256_CTR
 						default:
 							return fmt.Sprintf("invalid key size %d", len(decoded))
 						}
@@ -199,8 +200,8 @@ func TestCTRStreamDataDriven(t *testing.T) {
 func TestFileCipherStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	encTypes := []enginepb.EncryptionType{enginepb.EncryptionType_AES128_CTR,
-		enginepb.EncryptionType_AES192_CTR, enginepb.EncryptionType_AES256_CTR}
+	encTypes := []enginepbccl.EncryptionType{enginepbccl.EncryptionType_AES128_CTR,
+		enginepbccl.EncryptionType_AES192_CTR, enginepbccl.EncryptionType_AES256_CTR}
 	for _, encType := range encTypes {
 		key, err := generateKey(encType)
 		require.NoError(t, err)
@@ -235,18 +236,18 @@ func TestFileCipherStream(t *testing.T) {
 }
 
 type testKeyManager struct {
-	keys     map[string]*enginepb.SecretKey
+	keys     map[string]*enginepbccl.SecretKey
 	activeID string
 }
 
 var _ PebbleKeyManager = &testKeyManager{}
 
-func (m *testKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepb.SecretKey, error) {
+func (m *testKeyManager) ActiveKeyForWriter(ctx context.Context) (*enginepbccl.SecretKey, error) {
 	key, _ := m.GetKey(m.activeID)
 	return key, nil
 }
 
-func (m *testKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
+func (m *testKeyManager) ActiveKeyInfoForStats() *enginepbccl.KeyInfo {
 	key, _ := m.GetKey(m.activeID)
 	if key != nil {
 		return key.Info
@@ -254,7 +255,7 @@ func (m *testKeyManager) ActiveKeyInfoForStats() *enginepb.KeyInfo {
 	return nil
 }
 
-func (m *testKeyManager) GetKey(id string) (*enginepb.SecretKey, error) {
+func (m *testKeyManager) GetKey(id string) (*enginepbccl.SecretKey, error) {
 	key, found := m.keys[id]
 	if !found {
 		return nil, fmt.Errorf("")
@@ -268,17 +269,17 @@ func TestFileCipherStreamCreator(t *testing.T) {
 	// Key manager with a "foo" active key.
 	km := testKeyManager{}
 	km.activeID = "foo"
-	key, err := generateKey(enginepb.EncryptionType_AES192_CTR)
+	key, err := generateKey(enginepbccl.EncryptionType_AES192_CTR)
 	key.Info.KeyId = "foo"
 	require.NoError(t, err)
-	km.keys = make(map[string]*enginepb.SecretKey)
+	km.keys = make(map[string]*enginepbccl.SecretKey)
 	km.keys["foo"] = key
 	fcs := &FileCipherStreamCreator{envType: enginepb.EnvType_Data, keyManager: &km}
 
 	// Existing stream that uses "foo" key.
 	nonce := make([]byte, 12)
-	encSettings := &enginepb.EncryptionSettings{
-		EncryptionType: enginepb.EncryptionType_AES192_CTR, KeyId: "foo", Nonce: nonce}
+	encSettings := &enginepbccl.EncryptionSettings{
+		EncryptionType: enginepbccl.EncryptionType_AES192_CTR, KeyId: "foo", Nonce: nonce}
 	fs1, err := fcs.CreateExisting(encSettings)
 	require.NoError(t, err)
 	data := append([]byte{}, testData...)
@@ -295,7 +296,7 @@ func TestFileCipherStreamCreator(t *testing.T) {
 	}
 
 	// Encryption/decryption is noop.
-	encSettings.EncryptionType = enginepb.EncryptionType_Plaintext
+	encSettings.EncryptionType = enginepbccl.EncryptionType_Plaintext
 	fs3, err := fcs.CreateExisting(encSettings)
 	require.NoError(t, err)
 	fs3.Encrypt(5, data)
@@ -311,7 +312,7 @@ func TestFileCipherStreamCreator(t *testing.T) {
 	// encrypted state will not be the same as the previous stream.
 	encSettings, fs4, err := fcs.CreateNew(context.Background())
 	require.Equal(t, "foo", encSettings.KeyId)
-	require.Equal(t, enginepb.EncryptionType_AES192_CTR, encSettings.EncryptionType)
+	require.Equal(t, enginepbccl.EncryptionType_AES192_CTR, encSettings.EncryptionType)
 	require.NoError(t, err)
 	fs4.Encrypt(5, data)
 	if diff := pretty.Diff(data, testData); diff == nil {
@@ -330,7 +331,7 @@ func TestFileCipherStreamCreator(t *testing.T) {
 	encSettings, fs5, err := fcs.CreateNew(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "", encSettings.KeyId)
-	require.Equal(t, enginepb.EncryptionType_Plaintext, encSettings.EncryptionType)
+	require.Equal(t, enginepbccl.EncryptionType_Plaintext, encSettings.EncryptionType)
 	fs5.Encrypt(5, data)
 	if diff := pretty.Diff(data, testData); diff != nil {
 		t.Fatalf("%s\n%s", strings.Join(diff, "\n"), data)
@@ -353,19 +354,19 @@ func BenchmarkFileCipherStream(b *testing.B) {
 						if _, err := rand.Read(keyBytes); err != nil {
 							panic(err)
 						}
-						var encType enginepb.EncryptionType
+						var encType enginepbccl.EncryptionType
 						switch keySize {
 						case 128:
-							encType = enginepb.EncryptionType_AES128_CTR
+							encType = enginepbccl.EncryptionType_AES128_CTR
 						case 192:
-							encType = enginepb.EncryptionType_AES192_CTR
+							encType = enginepbccl.EncryptionType_AES192_CTR
 						case 256:
-							encType = enginepb.EncryptionType_AES256_CTR
+							encType = enginepbccl.EncryptionType_AES256_CTR
 						default:
 							panic("unknown key size")
 						}
-						key := &enginepb.SecretKey{
-							Info: &enginepb.KeyInfo{
+						key := &enginepbccl.SecretKey{
+							Info: &enginepbccl.KeyInfo{
 								EncryptionType: encType,
 							},
 							Key: keyBytes,

@@ -150,14 +150,14 @@ func processInvalidObjects(
 
 			// IDs are always non-sensitive, and the validationErr is written to the
 			// table with redact.Sprint, so it's a RedactableString.
-			log.Dev.Warningf(ctx, "found invalid object with ID %d: %s",
+			log.Warningf(ctx, "found invalid object with ID %d: %s",
 				redact.SafeInt(*descID), redact.RedactableString(*validationErr),
 			)
 		}
 
 		metrics.InvalidObjects.Update(count)
 		if count == 0 {
-			log.Dev.Infof(ctx, "schema telemetry job found no invalid objects")
+			log.Infof(ctx, "schema telemetry job found no invalid objects")
 		}
 
 		return nil

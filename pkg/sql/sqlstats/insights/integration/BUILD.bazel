@@ -15,7 +15,6 @@ go_test(
         "//pkg/sql/clusterunique",
         "//pkg/sql/contention",
         "//pkg/sql/sessiondata",
-        "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -26,7 +25,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

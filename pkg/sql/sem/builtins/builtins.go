@@ -27,6 +27,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -48,7 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -71,7 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -82,9 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	jsonpath "github.com/cockroachdb/cockroach/pkg/util/jsonpath/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -98,7 +96,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/unaccent"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -201,16 +198,6 @@ func init() {
 		registerBuiltin(k, v, tree.NormalClass, enforceClass)
 	}
 }
-
-var StartCompactionJob func(
-	ctx context.Context,
-	planner interface{},
-	scheduleID jobspb.ScheduleID,
-	collectionURI, incrLoc []string,
-	fullBackupPath string,
-	encryptionOpts jobspb.BackupEncryptionOptions,
-	start, end hlc.Timestamp,
-) (jobspb.JobID, error)
 
 // builtins contains the built-in functions indexed by name.
 //
@@ -391,50 +378,6 @@ var regularBuiltins = map[string]builtinDefinition{
 	"substr":    makeSubStringImpls(),
 	"substring": makeSubStringImpls(),
 
-	"substring_index": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryString},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "input", Typ: types.String},
-				{Name: "delim", Typ: types.String},
-				{Name: "count", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				input := string(tree.MustBeDString(args[0]))
-				delim := string(tree.MustBeDString(args[1]))
-				count := int(tree.MustBeDInt(args[2]))
-
-				// Handle empty input.
-				if input == "" || delim == "" || count == 0 {
-					return tree.NewDString(""), nil
-				}
-
-				parts := strings.Split(input, delim)
-				length := len(parts)
-
-				// If count is positive, return the first 'count' parts joined by delim
-				if count > 0 {
-					if count >= length {
-						return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
-					}
-					result := strings.Join(parts[:count], delim)
-					return tree.NewDString(result), nil
-				}
-
-				// If count is negative, return the last 'abs(count)' parts joined by delim
-				if -count >= length || count == math.MinInt {
-					return tree.NewDString(input), nil // If count exceeds occurrences, return the full string
-				}
-				start := length + count // count is negative
-				return tree.NewDString(strings.Join(parts[start:], delim)), nil
-			},
-			Info: "Returns a substring of `input` before `count` occurrences of `delim`.\n" +
-				"If `count` is positive, the leftmost part is returned. If `count` is negative, the rightmost part is returned.",
-			Volatility: volatility.Immutable,
-		},
-	),
-
 	// concat concatenates the text representations of all the arguments.
 	// NULL arguments are ignored.
 	"concat": makeBuiltin(
@@ -474,7 +417,7 @@ var regularBuiltins = map[string]builtinDefinition{
 	"concat_ws": makeBuiltin(
 		defProps(),
 		tree.Overload{
-			Types:      tree.VariadicType{FixedTypes: []*types.T{types.String}, VarType: types.Any},
+			Types:      tree.VariadicType{VarType: types.String},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if len(args) == 0 {
@@ -483,24 +426,25 @@ var regularBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
 				}
-				sep := tree.MustBeDString(args[0])
-				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
-				prefix := false
+				sep := string(tree.MustBeDString(args[0]))
+				var buf bytes.Buffer
+				prefix := ""
+				length := 0
 				for _, d := range args[1:] {
 					if d == tree.DNull {
 						continue
 					}
-					if ctx.Buffer.Len()+int(d.Size())+int(sep.Size()) > builtinconstants.MaxAllocatedStringSize {
+					length += len(prefix) + len(string(tree.MustBeDString(d)))
+					if length > builtinconstants.MaxAllocatedStringSize {
 						return nil, errStringTooLarge
 					}
-					if prefix {
-						sep.Format(ctx)
-					} else {
-						prefix = true
-					}
-					d.Format(ctx)
+					// Note: we can't use the range index here because that
+					// would break when the 2nd argument is NULL.
+					buf.WriteString(prefix)
+					prefix = sep
+					buf.WriteString(string(tree.MustBeDString(d)))
 				}
-				return tree.NewDString(ctx.CloseAndGetString()), nil
+				return tree.NewDString(buf.String()), nil
 			},
 			Info: "Uses the first argument as a separator between the concatenation of the " +
 				"subsequent arguments. \n\nFor example `concat_ws('!','wow','great')` " +
@@ -1177,34 +1121,20 @@ var regularBuiltins = map[string]builtinDefinition{
 				sep := string(tree.MustBeDString(args[1]))
 				field := int(tree.MustBeDInt(args[2]))
 
-				if field == 0 {
+				if field <= 0 {
 					return nil, pgerror.Newf(
-						pgcode.InvalidParameterValue, "field position must not be zero")
-				}
-
-				if sep == "" {
-					// Return the entire text if requesting the first or last field.
-					if field == 1 || field == -1 {
-						return tree.NewDString(text), nil
-					}
-					return tree.NewDString(""), nil
+						pgcode.InvalidParameterValue, "field position %d must be greater than zero", field)
 				}
 
 				splits := strings.Split(text, sep)
-				if field > len(splits) || (field < 0 && field < -len(splits)) {
+				if field > len(splits) {
 					return tree.NewDString(""), nil
 				}
-
-				// If field is negative, select from the end
-				if field < 0 {
-					return tree.NewDString(splits[len(splits)+field]), nil
-				}
-				// Otherwise, return from the beginning (1-based index)
 				return tree.NewDString(splits[field-1]), nil
 			},
-			Info: "Splits `input` using `delimiter` and returns the field at `return_index_pos` (starting from 1). " +
-				"If `return_index_pos` is negative, it returns the |`return_index_pos`|'th field from the end. " +
-				"\n\nFor example, `split_part('123.456.789.0', '.', 3)` returns `789`.",
+			Info: "Splits `input` on `delimiter` and return the value in the `return_index_pos`  " +
+				"position (starting at 1). \n\nFor example, `split_part('123.456.789.0','.',3)`" +
+				"returns `789`.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -2015,7 +1945,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
@@ -2053,7 +1983,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			CalledOnNullInput: true,
 		},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
@@ -2197,9 +2127,9 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDInt(tree.DInt(unique.GenerateUniqueInt(
-					unique.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
-				))), nil
+				return tree.NewDInt(GenerateUniqueInt(
+					ProcessUniqueID(evalCtx.NodeID.SQLInstanceID()),
+				)), nil
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
@@ -2218,9 +2148,8 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				instanceID := unique.ProcessUniqueID(evalCtx.NodeID.SQLInstanceID())
-				v := unique.GenerateUniqueUnorderedID(instanceID)
-				return tree.NewDInt(tree.DInt(v)), nil
+				v := GenerateUniqueUnorderedID(evalCtx.NodeID.SQLInstanceID())
+				return tree.NewDInt(v), nil
 			},
 			Info: "Returns a unique ID. The value is a combination of the " +
 				"insert timestamp (bit-reversed) and the ID of the node executing the statement, which " +
@@ -2709,7 +2638,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "timestamp", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := args[0].(*tree.DFloat)
+				ts, ok := tree.AsDFloat(args[0])
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected float argument for to_timestamp")
 				}
@@ -2854,7 +2783,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := args[0].(*tree.DTimestampTZ)
+				ts, ok := tree.AsDTimestampTZ(args[0])
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2870,7 +2799,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := args[0].(*tree.DTimestampTZ)
+				ts, ok := tree.AsDTimestampTZ(args[0])
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2889,7 +2818,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := args[0].(*tree.DInterval)
+				interval, ok := tree.AsDInterval(args[0])
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -2905,7 +2834,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := args[0].(*tree.DInterval)
+				interval, ok := tree.AsDInterval(args[0])
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -4104,6 +4033,7 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Immutable,
 		},
 	),
+	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 	"metaphone": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
@@ -4134,252 +4064,18 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"levenshtein_less_equal": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "source", Typ: types.String},
-				{Name: "target", Typ: types.String},
-				{Name: "max_d", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				d := int(tree.MustBeDInt(args[2]))
-
-				// Same limit as Postgres. Ref: https://github.com/postgres/postgres/blob/53ea2b7ad050ce4ad95c89bb55197209b65886a1/src/backend/utils/adt/levenshtein.c#L26
-				const maxLen = 255
-				if utf8.RuneCountInString(s) > maxLen || utf8.RuneCountInString(t) > maxLen {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-						"levenshtein_less_equal argument exceeds maximum length of %d characters", maxLen)
-				}
-				ld := fuzzystrmatch.LevenshteinLessEqualDistance(s, t, d)
-				return tree.NewDInt(tree.DInt(ld)), nil
-			},
-			Info: "Calculates the Levenshtein distance between two strings. If actual distance is less or equal then max_d, " +
-				"then it returns the distance. Otherwise this function returns a value greater than max_d. " +
-				"The maximum length of the input strings is 255 characters.",
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "source", Typ: types.String},
-				{Name: "target", Typ: types.String},
-				{Name: "ins_cost", Typ: types.Int},
-				{Name: "del_cost", Typ: types.Int},
-				{Name: "sub_cost", Typ: types.Int},
-				{Name: "max_d", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, t := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				ins, del, sub := int(tree.MustBeDInt(args[2])), int(tree.MustBeDInt(args[3])), int(tree.MustBeDInt(args[4]))
-				d := int(tree.MustBeDInt(args[5]))
-				const maxLen = 255
-				if utf8.RuneCountInString(s) > maxLen || utf8.RuneCountInString(t) > maxLen {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-						"levenshtein_less_equal argument exceeds maximum length of %d characters", maxLen)
-				}
-				ld := fuzzystrmatch.LevenshteinLessEqualDistanceWithCost(s, t, ins, del, sub, d)
-				return tree.NewDInt(tree.DInt(ld)), nil
-			},
-			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
-				"charge for each edit operation. If actual distance is less or equal then max_d, " +
-				"then it returns the distance. Otherwise this function returns a value greater than max_d. " +
-				"The maximum length of the input strings is 255 characters.",
-			Volatility: volatility.Immutable,
-		},
-	),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
 	// similar to the behavior of the JSONB data type in Postgres.
 
-	// See https://www.postgresql.org/docs/current/functions-json.html#SQLJSON-QUERY-FUNCTIONS
-	"jsonb_path_exists": makeBuiltin(jsonpathProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn:         makeJsonpathExists,
-			Info:       "Checks whether the JSON path returns any item for the specified JSON value.",
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn:         makeJsonpathExists,
-			Info: `Checks whether the JSON path returns any item for the specified JSON value.
-			The vars argument must be a JSON object, and its fields provide named
-			values to be substituted into the jsonpath expression.`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-				{Name: "silent", Typ: types.Bool},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn:         makeJsonpathExists,
-			Info: `Checks whether the JSON path returns any item for the specified JSON value.
-			The vars argument must be a JSON object, and its fields provide named
-			values to be substituted into the jsonpath expression. If the silent
-			argument is true, the function suppresses the following errors:
-			missing object field or array element, unexpected JSON item type,
-			datetime and numeric errors.`,
-			Volatility: volatility.Immutable,
-		},
-	),
-	"jsonb_path_exists_opr": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_match": makeBuiltin(jsonpathProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn:         makeJsonpathMatch,
-			Info: `Returns the SQL boolean result of a JSON path predicate check
-			for the specified JSON value. (This is useful only with predicate check
-			expressions, not SQL-standard JSON path expressions, since it will
-			either fail or return NULL if the path result is not a single boolean
-			value.)`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn:         makeJsonpathMatch,
-			Info: `Returns the SQL boolean result of a JSON path predicate check
-			for the specified JSON value. (This is useful only with predicate check
-			expressions, not SQL-standard JSON path expressions, since it will
-			either fail or return NULL if the path result is not a single boolean
-			value.) The vars argument must be a JSON object, and its fields provide
-			named values to be substituted into the jsonpath expression.`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-				{Name: "silent", Typ: types.Bool},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn:         makeJsonpathMatch,
-			Info: `Returns the SQL boolean result of a JSON path predicate check
-			for the specified JSON value. (This is useful only with predicate check
-			expressions, not SQL-standard JSON path expressions, since it will
-			either fail or return NULL if the path result is not a single boolean
-			value.) The vars argument must be a JSON object, and its fields provide
-			named values to be substituted into the jsonpath expression. If the
-			silent argument is true, the function suppresses the following errors:
-			missing object field or array element, unexpected JSON item type,
-			datetime and numeric errors.`,
-			Volatility: volatility.Immutable,
-		},
-	),
-	"jsonb_path_match_opr": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJsonpath}),
-	"jsonb_path_query_array": makeBuiltin(jsonpathProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         makeJsonpathQueryArray,
-			Info: `Returns all JSON items returned by the JSON path for the
-			specified JSON value, as a JSON array.`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         makeJsonpathQueryArray,
-			Info: `Returns all JSON items returned by the JSON path for the
-			specified JSON value, as a JSON array. The vars argument must be a
-			JSON object, and its fields provide named values to be substituted
-			into the jsonpath expression.`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-				{Name: "silent", Typ: types.Bool},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         makeJsonpathQueryArray,
-			Info: `Returns all JSON items returned by the JSON path for the
-			specified JSON value, as a JSON array. The vars argument must be a
-			JSON object, and its fields provide named values to be substituted
-			into the jsonpath expression. If the silent argument is true, the
-			function suppresses the following errors: missing object field or
-			array element, unexpected JSON item type, datetime and numeric errors.`,
-			Volatility: volatility.Immutable,
-		},
-	),
-	"jsonb_path_query_first": makeBuiltin(jsonpathProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         makeJsonpathQueryFirst,
-			Info: `Returns the first JSON item returned by the JSON path for the
-			specified JSON value, or NULL if there are no results.`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         makeJsonpathQueryFirst,
-			Info: `Returns the first JSON item returned by the JSON path for the
-			specified JSON value, or NULL if there are no results. The vars
-			argument must be a JSON object, and its fields provide named values
-			to be substituted into the jsonpath expression.`,
-			Volatility: volatility.Immutable,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "target", Typ: types.Jsonb},
-				{Name: "path", Typ: types.Jsonpath},
-				{Name: "vars", Typ: types.Jsonb},
-				{Name: "silent", Typ: types.Bool},
-			},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn:         makeJsonpathQueryFirst,
-			Info: `Returns the first JSON item returned by the JSON path for the
-			specified JSON value, or NULL if there are no results. The vars
-			argument must be a JSON object, and its fields provide named values
-			to be substituted into the jsonpath expression. If the silent argument is true, the
-			function suppresses the following errors: missing object field or
-			array element, unexpected JSON item type, datetime and numeric errors.`,
-			Volatility: volatility.Immutable,
-		},
-	),
+	"jsonb_path_exists":      makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_exists_opr":  makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_match":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_match_opr":   makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_query":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_query_array": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
+	"jsonb_path_query_first": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 22513, Category: builtinconstants.CategoryJSON}),
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
@@ -4495,8 +4191,7 @@ value if you rely on the HLC for accuracy.`,
 
 	"oidvectortypes": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryCompatibility,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategoryCompatibility,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -4687,29 +4382,8 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Volatile,
 		}),
 
-	"crdb_internal.can_view_job": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "owner", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ownerStr := string(tree.MustBeDString(args[0]))
-				owner := username.MakeSQLUsernameFromPreNormalizedString(ownerStr)
-				ok := evalCtx.SessionAccessor.HasViewAccessToJob(ctx, owner)
-				return tree.MakeDBool(tree.DBool(ok)), nil
-			},
-			Info:       "Returns true if the current user can view a job owned by the specified owner.",
-			Volatility: volatility.Stable,
-		},
-	),
-
 	"crdb_internal.read_file": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "uri", Typ: types.String},
@@ -4725,10 +4399,7 @@ value if you rely on the HLC for accuracy.`,
 		}),
 
 	"crdb_internal.write_file": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "data", Typ: types.Bytes},
@@ -5035,7 +4706,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(build.GetInfo().Short().StripMarkers()), nil
+				return tree.NewDString(build.GetInfo().Short()), nil
 			},
 			Info:       "Returns the node's version of CockroachDB.",
 			Volatility: volatility.Volatile,
@@ -5519,7 +5190,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "id", Typ: types.Int},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1::INT, 'service_mode',
+			Body: `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'service_mode',
  'external'))`,
 			Info:       `create_tenant(id) is an alias for create_tenant('{"id": id, "service_mode": "external"}'::jsonb)`,
 			Volatility: volatility.Volatile,
@@ -5532,7 +5203,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1::INT, 'name', $2::STRING))`,
+			Body:       `SELECT crdb_internal.create_tenant(json_build_object('id', $1, 'name', $2))`,
 			Info:       `create_tenant(id, name) is an alias for create_tenant('{"id": id, "name": name}'::jsonb)`,
 			Volatility: volatility.Volatile,
 			Language:   tree.RoutineLangSQL,
@@ -5543,7 +5214,7 @@ value if you rely on the HLC for accuracy.`,
 				{Name: "name", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1::STRING))`,
+			Body:       `SELECT crdb_internal.create_tenant(json_build_object('name', $1))`,
 			Info: `create_tenant(name) is an alias for create_tenant('{"name": name}'::jsonb).
 DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Volatility: volatility.Volatile,
@@ -5622,13 +5293,13 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types: tree.ParamTypes{
 				{Name: "table_id", Typ: types.Int},
 				{Name: "index_id", Typ: types.Int},
-				{Name: "row_tuple", Typ: types.AnyElement},
+				{Name: "row_tuple", Typ: types.Any},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableID := catid.DescID(tree.MustBeDInt(args[0]))
 				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
-				rowDatums, ok := args[2].(*tree.DTuple)
+				rowDatums, ok := tree.AsDTuple(args[2])
 				if !ok {
 					return nil, pgerror.Newf(
 						pgcode.DatatypeMismatch,
@@ -5664,11 +5335,11 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types:      tree.ParamTypes{{Name: "descriptor", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := args[0].(*tree.DBytes)
+				s, ok := tree.AsDBytes(args[0])
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
-				ret, err := evalCtx.CatalogBuiltins.RedactDescriptor(ctx, []byte(*s))
+				ret, err := evalCtx.CatalogBuiltins.RedactDescriptor(ctx, []byte(s))
 				if err != nil {
 					return nil, err
 				}
@@ -5688,7 +5359,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Types:      tree.ParamTypes{{Name: "descriptor", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := args[0].(*tree.DBytes)
+				s, ok := tree.AsDBytes(args[0])
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
@@ -5702,7 +5373,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(*s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
+					ctx, []byte(s), descIDAlwaysValid, jobIDAlwaysValid, roleAlwaysValid,
 				)
 				if err != nil {
 					return nil, err
@@ -5728,23 +5399,23 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				s, ok := args[0].(*tree.DBytes)
+				s, ok := tree.AsDBytes(args[0])
 				if !ok {
 					return nil, errors.Newf("expected bytes value, got %T", args[0])
 				}
 				descIDMightExist := func(id descpb.ID) bool { return true }
 				if args[1] != tree.DNull {
-					descIDs, ok := args[1].(*tree.DArray)
+					descIDs, ok := tree.AsDArray(args[1])
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[1])
 					}
 					descIDMap := make(map[descpb.ID]struct{}, descIDs.Len())
 					for i, n := 0, descIDs.Len(); i < n; i++ {
-						id, isInt := descIDs.Array[i].(*tree.DInt)
+						id, isInt := tree.AsDInt(descIDs.Array[i])
 						if !isInt {
 							return nil, errors.Newf("expected int value, got %T", descIDs.Array[i])
 						}
-						descIDMap[descpb.ID(*id)] = struct{}{}
+						descIDMap[descpb.ID(id)] = struct{}{}
 					}
 					descIDMightExist = func(id descpb.ID) bool {
 						_, found := descIDMap[id]
@@ -5753,17 +5424,17 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				}
 				nonTerminalJobIDMightExist := func(id jobspb.JobID) bool { return true }
 				if args[2] != tree.DNull {
-					jobIDs, ok := args[2].(*tree.DArray)
+					jobIDs, ok := tree.AsDArray(args[2])
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[2])
 					}
 					jobIDMap := make(map[jobspb.JobID]struct{}, jobIDs.Len())
 					for i, n := 0, jobIDs.Len(); i < n; i++ {
-						id, isInt := jobIDs.Array[i].(*tree.DInt)
+						id, isInt := tree.AsDInt(jobIDs.Array[i])
 						if !isInt {
 							return nil, errors.Newf("expected int value, got %T", jobIDs.Array[i])
 						}
-						jobIDMap[jobspb.JobID(*id)] = struct{}{}
+						jobIDMap[jobspb.JobID(id)] = struct{}{}
 					}
 					nonTerminalJobIDMightExist = func(id jobspb.JobID) bool {
 						_, found := jobIDMap[id]
@@ -5775,7 +5446,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				if args[3] != tree.DNull {
-					roles, ok := args[3].(*tree.DArray)
+					roles, ok := tree.AsDArray(args[3])
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[3])
 					}
@@ -5794,7 +5465,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					}
 				}
 				ret, err := evalCtx.CatalogBuiltins.RepairedDescriptor(
-					ctx, []byte(*s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
+					ctx, []byte(s), descIDMightExist, nonTerminalJobIDMightExist, roleMightExist,
 				)
 				if err != nil {
 					return nil, err
@@ -6060,33 +5731,12 @@ SELECT
 					msg += strconv.Itoa(len(msg) / len(foo))
 				case "contextCanceled":
 					panic(context.Canceled)
-				case "stackOverflow":
-					// Cause a stack overflow with infinite recursion.
-					var recurse func(int) int
-					recurse = func(i int) int {
-						if i < 0 {
-							return i
-						}
-						return recurse(i+1) + recurse(i+2) // avoid TCO
-					}
-					return tree.NewDInt(tree.DInt(recurse(0))), nil
-				case "oom":
-					var mem [][]byte
-					// Try to allocate 128 TiB of memory.
-					for range 1024 * 1024 {
-						block := make([]byte, 128*1024*1024) // 128 MiB
-						for j := range 32 * 1024 {
-							block[j*4*1024] = 0xaa // touch each 4 KiB page
-						}
-						mem = append(mem, block)
-					}
-					return tree.NewDInt(tree.DInt(len(mem))), nil
 				default:
 					return nil, errors.Newf(
-						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, " +
-							"contextCanceled, stackOverflow, oom",
+						"expected mode to be one of: internalAssertion, indexOutOfRange, divideByZero, contextCanceled",
 					)
 				}
+				// This code is unreachable.
 				panic(msg)
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -6114,7 +5764,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				log.Dev.Infof(ctx, "crdb_internal.log(): %s", msg)
+				log.Infof(ctx, "crdb_internal.log(): %s", msg)
 				return tree.DVoidDatum, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -6141,7 +5791,7 @@ SELECT
 					return nil, errors.Newf("expected string value, got %T", args[0])
 				}
 				msg := string(s)
-				log.Dev.Fatalf(ctx, "force_log_fatal(): %s", msg)
+				log.Fatalf(ctx, "force_log_fatal(): %s", msg)
 				return nil, nil
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
@@ -6149,15 +5799,15 @@ SELECT
 		},
 	),
 
+	// If force_retry is called during the specified interval from the beginning
+	// of the transaction it returns a retryable error. If not, 0 is returned
+	// instead of an error.
+	// The second version allows one to create an error intended for a transaction
+	// different than the current statement's transaction.
 	"crdb_internal.force_retry": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
 		},
-		// This overload takes an interval parameter. If force_retry is called
-		// within this interval from the beginning of the transaction, it returns a
-		// retryable error. If force_retry is called after this interval, it returns
-		// 0. This allows the transaction to eventually succeed after the interval
-		// has passed, assuming it is being retried.
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -6172,29 +5822,6 @@ SELECT
 			},
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
-		},
-		// This overload takes an integer parameter. If the statement or transaction
-		// has already been retried < the parameter number of times, force_retry
-		// will return a retryable error. If the statement or transaction has
-		// already been retried >= the parameter number of times, force_retry will
-		// return 0. This allows precise control of the number of times the
-		// statement or transaction is retied.
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				retries := int64(evalCtx.Planner.RetryCounter())
-				maxRetries := int64(tree.MustBeDInt(args[0]))
-				if retries < maxRetries {
-					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
-						ctx, "forced by crdb_internal.force_retry()",
-					)
-				}
-				return tree.DZero, nil
-			},
-			Info:             "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility:       volatility.Volatile,
-			DistsqlBlocklist: true, // applicable only on the gateway
 		},
 	),
 
@@ -6224,54 +5851,6 @@ SELECT
 				resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
 
 				return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
-			},
-			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
-			Volatility: volatility.Volatile,
-		},
-	),
-
-	// Fetches the corresponding lease_holder for the request key. If an error
-	// occurs, the query still succeeds and the error is included in the output.
-	"crdb_internal.lease_holder_with_errors": makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
-			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.Txn == nil { // can occur during backfills
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"cannot use crdb_internal.lease_holder_with_errors in this context")
-				}
-				key := []byte(tree.MustBeDBytes(args[0]))
-				b := evalCtx.Txn.DB().NewBatch()
-				b.AddRawRequest(&kvpb.LeaseInfoRequest{
-					RequestHeader: kvpb.RequestHeader{
-						Key: key,
-					},
-				})
-				type leaseholderAndError struct {
-					Leaseholder roachpb.StoreID
-					Error       string
-				}
-				lhae := &leaseholderAndError{}
-				if err := evalCtx.Txn.DB().Run(ctx, b); err != nil {
-					lhae.Error = err.Error()
-				} else {
-					resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
-					lhae.Leaseholder = resp.Lease.Replica.StoreID
-				}
-
-				jsonStr, err := gojson.Marshal(lhae)
-				if err != nil {
-					return nil, err
-				}
-				jsonDatum, err := tree.ParseDJSON(string(jsonStr))
-				if err != nil {
-					return nil, err
-				}
-				return jsonDatum, nil
 			},
 			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
 			Volatility: volatility.Volatile,
@@ -6470,20 +6049,6 @@ SELECT
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Immutable,
 		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "raw_key", Typ: types.Bytes},
-			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return tree.NewDString(catalogkeys.PrettyKey(
-					nil, /* valDirs */
-					roachpb.Key(tree.MustBeDBytes(args[0])),
-					-1)), nil
-			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Immutable,
-		},
 	),
 	// Return if a key belongs to a system table, which should make it to print
 	// within redacted output.
@@ -6593,27 +6158,6 @@ SELECT
 					return nil, err
 				}
 				return jsonDatum, nil
-			},
-			Info:       "This function is used to retrieve range statistics information as a JSON object.",
-			Volatility: volatility.Volatile,
-		},
-	),
-
-	// Return statistics about a range.
-	"crdb_internal.range_stats_with_errors": makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "key", Typ: types.Bytes},
-			},
-			SpecializedVecBuiltin: tree.CrdbInternalRangeStatsWithErrors,
-			ReturnType:            tree.FixedReturnType(types.Jsonb),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// This function is a placeholder and will never be called because
-				// CrdbInternalRangeStatsWithErrors overrides it.
-				return tree.DNull, nil
 			},
 			Info:       "This function is used to retrieve range statistics information as a JSON object.",
 			Volatility: volatility.Volatile,
@@ -6941,8 +6485,8 @@ SELECT
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
-				{Name: "val", Typ: types.AnyElement},
-				{Name: "type", Typ: types.AnyElement},
+				{Name: "val", Typ: types.Any},
+				{Name: "type", Typ: types.Any},
 			},
 			ReturnType: tree.IdentityReturnType(1),
 			FnWithExprs: eval.FnWithExprsOverload(func(
@@ -7260,7 +6804,7 @@ SELECT
 					return tree.DBoolFalse, nil // return false for easier race handling in tests
 				}
 
-				log.Dev.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
+				log.Warningf(ctx, "crdb_internal.unsafe_lock_replica on r%d with lock=%t", rangeID, lock)
 
 				if lock {
 					replicaMu.Lock() // deadlocks if called twice
@@ -7340,7 +6884,7 @@ SELECT
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Body: `SELECT crdb_internal.generate_test_objects(
-json_build_object('names', $1::STRING, 'counts', array[$2::INT]))`,
+json_build_object('names', $1, 'counts', array[$2]))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
 
 generate_test_objects(pat, num) is an alias for
@@ -7356,7 +6900,7 @@ generate_test_objects('{"names":pat, "counts":[num]}'::jsonb)
 			},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Body: `SELECT crdb_internal.generate_test_objects(
-json_build_object('names', $1::STRING, 'counts', $2::INT[]))`,
+json_build_object('names', $1, 'counts', $2))`,
 			Info: `Generates a number of objects whose name follow the provided pattern.
 
 generate_test_objects(pat, counts) is an alias for
@@ -7536,7 +7080,7 @@ Parameters:` + randgencfg.ConfigDoc,
 				if ek, ok := storage.DecodeEngineKey(endKey); !ok || ek.Validate() != nil {
 					endKey = storage.EncodeMVCCKey(storage.MVCCKey{Key: endKey})
 				}
-				log.Dev.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
+				log.Infof(ctx, "crdb_internal.compact_engine_span called for nodeID=%d, storeID=%d, range[startKey=%s, endKey=%s]", nodeID, storeID, startKey, endKey)
 				if err := evalCtx.CompactEngineSpan(
 					ctx, nodeID, storeID, startKey, endKey); err != nil {
 					return nil, err
@@ -7656,10 +7200,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
@@ -7693,10 +7233,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, arg tree.Datums) (tree.Datum, error) {
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
@@ -7736,10 +7272,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				if err := evalCtx.Regions.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 					ctx,
 				); err != nil {
@@ -7765,10 +7297,6 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForTable(
 					ctx,
 					id,
@@ -7795,10 +7323,6 @@ table.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
-				// Check for nil evalCtx.Regions, which can happen in tests.
-				if evalCtx.Regions == nil {
-					return nil, nilRegionsError
-				}
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForDatabase(
 					ctx,
 					id,
@@ -7820,7 +7344,7 @@ enabled.`,
 		},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
-				stmt, err := parserutils.ParseOne(s)
+				stmt, err := parser.ParseOne(s)
 				if err != nil {
 					// Return the same statement if it does not parse.
 					// This can happen for invalid zone config state, in which case
@@ -7929,14 +7453,39 @@ table's zone configuration this will return NULL.`,
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.reset_insights_tables": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				if evalCtx.SQLStatsController == nil {
+					return nil, errors.AssertionFailedf("sql stats controller not set")
+				}
+				if err := evalCtx.SQLStatsController.ResetInsightsTables(ctx); err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(true), nil
+			},
+			Info:       `This function is used to clear the statement and transaction insights statistics.`,
+			Volatility: volatility.Volatile,
+		},
+	),
 	// Deletes the underlying spans backing a table, only
 	// if the user provides explicit acknowledgement of the
 	// form "I acknowledge this will irrevocably delete all revisions
 	// for table %d"
 	"crdb_internal.force_delete_table_data": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemRepair,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "id", Typ: types.Int}},
@@ -7957,8 +7506,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.serialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -7973,8 +7521,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.deserialize_session": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "session", Typ: types.Bytes}},
@@ -7990,8 +7537,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.create_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -8005,8 +7551,7 @@ table's zone configuration this will return NULL.`,
 	),
 	"crdb_internal.validate_session_revival_token": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "token", Typ: types.Bytes}},
@@ -8022,8 +7567,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.validate_ttl_scheduled_jobs": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -8043,8 +7587,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.repair_ttl_table_scheduled_job": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
@@ -8144,8 +7687,7 @@ table's zone configuration this will return NULL.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_all_tables": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -8164,8 +7706,7 @@ in the current database. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraints_in_table": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}},
@@ -8189,8 +7730,7 @@ table. Returns an error if validation fails.`,
 
 	"crdb_internal.revalidate_unique_constraint": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "constraint_name", Typ: types.String}},
@@ -8216,8 +7756,7 @@ table. Returns an error if validation fails.`,
 	),
 	"crdb_internal.is_constraint_active": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "table_name", Typ: types.String}, {Name: "constraint_name", Typ: types.String}},
@@ -8567,8 +8106,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.fingerprint": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category: builtinconstants.CategorySystemInfo,
 		},
 		tree.Overload{
 			// If the second arg is set to true, this overload allows the caller to
@@ -8659,7 +8197,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					return tree.NewDString(""), nil
 				}
 
-				parsed, err := parserutils.ParseOne(sql)
+				parsed, err := parser.ParseOne(sql)
 				if err != nil {
 					// If parsing is unsuccessful, we shouldn't return an error, however
 					// we can't return the original stmt since this function is used to
@@ -8693,7 +8231,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					sqlNoConstants := ""
 
 					if len(sql) != 0 {
-						parsed, err := parserutils.ParseOne(sql)
+						parsed, err := parser.ParseOne(sql)
 						// Leave result as empty string on parsing error.
 						if err == nil {
 							sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
@@ -8788,7 +8326,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	},
 		stringOverload1(
 			func(_ context.Context, _ *eval.Context, sql string) (tree.Datum, error) {
-				parsed, err := parserutils.ParseOne(sql)
+				parsed, err := parser.ParseOne(sql)
 				if err != nil {
 					// If parsing was unsuccessful, mark the entire string as redactable.
 					return tree.NewDString(string(redact.Sprintf("%s", sql))), nil //nolint:returnerrcheck
@@ -8821,7 +8359,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 					sql := string(tree.MustBeDString(sqlDatum))
 					sqlRedactable := ""
 
-					parsed, err := parserutils.ParseOne(sql)
+					parsed, err := parser.ParseOne(sql)
 					if err != nil {
 						// If parsing was unsuccessful, mark the entire string as redactable.
 						sqlRedactable = string(redact.Sprintf("%s", sql))
@@ -9154,9 +8692,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_gen_cursor_name": makeBuiltin(tree.FunctionProperties{
-		Category:         builtinconstants.CategoryIDGeneration,
-		Undocumented:     true,
-		DistsqlBlocklist: true, // applicable only on the gateway
+		Category:     builtinconstants.CategoryIDGeneration,
+		Undocumented: true,
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9176,9 +8713,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_close": makeBuiltin(tree.FunctionProperties{
-		Category:         builtinconstants.CategoryString,
-		Undocumented:     true,
-		DistsqlBlocklist: true, // applicable only on the gateway
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
 	},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "name", Typ: types.RefCursor}},
@@ -9197,16 +8733,15 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 		},
 	),
 	"crdb_internal.plpgsql_fetch": makeBuiltin(tree.FunctionProperties{
-		Category:         builtinconstants.CategoryString,
-		Undocumented:     true,
-		DistsqlBlocklist: true, // applicable only on the gateway
+		Category:     builtinconstants.CategoryString,
+		Undocumented: true,
 	},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "name", Typ: types.RefCursor},
 				{Name: "direction", Typ: types.Int},
 				{Name: "count", Typ: types.Int},
-				{Name: "resultTypes", Typ: types.AnyElement},
+				{Name: "resultTypes", Typ: types.Any},
 			},
 			ReturnType: tree.IdentityReturnType(3),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
@@ -9254,9 +8789,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.protect_mvcc_history": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryClusterReplication,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategoryClusterReplication,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9293,9 +8827,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.extend_mvcc_history_protection": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategoryClusterReplication,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategoryClusterReplication,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types: tree.ParamTypes{
@@ -9318,9 +8851,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.clear_query_plan_cache": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -9335,9 +8867,8 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 	),
 	"crdb_internal.clear_table_stats_cache": makeBuiltin(
 		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemRepair,
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
+			Category:     builtinconstants.CategorySystemRepair,
+			Undocumented: true,
 		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
@@ -9367,11 +8898,7 @@ WHERE object_id = table_descriptor_id
 			Language:   tree.RoutineLangSQL,
 		},
 	),
-	"crdb_internal.type_is_indexable": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true, // applicable only on the gateway
-		},
+	"crdb_internal.type_is_indexable": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -9390,299 +8917,6 @@ WHERE object_id = table_descriptor_id
 			},
 			Info:       "Returns whether the given type OID is indexable.",
 			Volatility: volatility.Stable,
-		},
-	),
-	"crdb_internal.backup_compaction": makeBuiltin(
-		tree.FunctionProperties{
-			Undocumented:     true,
-			DistsqlBlocklist: true, // applicable only on the gateway
-			ReturnLabels:     []string{"job_id"},
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "schedule_id", Typ: types.Int},
-				{Name: "backup_stmt", Typ: types.String},
-				{Name: "full_backup_path", Typ: types.String},
-				{Name: "start_time", Typ: types.Decimal},
-				{Name: "end_time", Typ: types.Decimal},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Info:       "Compacts the chain of incremental backups described by the start and end times (nanosecond epoch).",
-			Volatility: volatility.Volatile,
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if StartCompactionJob == nil {
-					return nil, errors.Newf("missing StartCompactionJob")
-				}
-				backupAST, encryption, err := makeBackupASTFromStmt(args[1])
-				if err != nil {
-					return nil, err
-				}
-				scheduleID := jobspb.ScheduleID(tree.MustBeDInt(args[0]))
-				collectionURI := exprSliceToStrSlice(backupAST.To)
-				incrLoc := exprSliceToStrSlice(backupAST.Options.IncrementalStorage)
-				start := tree.MustBeDDecimal(args[3])
-				startTs, err := hlc.DecimalToHLC(&start.Decimal)
-				if err != nil {
-					return nil, err
-				}
-				end := tree.MustBeDDecimal(args[4])
-				endTs, err := hlc.DecimalToHLC(&end.Decimal)
-				if err != nil {
-					return nil, err
-				}
-				fullPath := string(tree.MustBeDString(args[2]))
-				// See comment above override about why full path cannot be LATEST.
-				if fullPath == "LATEST" {
-					return nil, errors.Newf("full_backup_path must be explicitly specified and not LATEST")
-				}
-				jobID, err := StartCompactionJob(
-					ctx, evalCtx.Planner, scheduleID, collectionURI, incrLoc, fullPath, encryption, startTs, endTs,
-				)
-				return tree.NewDInt(tree.DInt(jobID)), err
-			},
-		},
-	),
-	"crdb_internal.process_vector_index_fixups": makeBuiltin(
-		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryTesting,
-			Undocumented: true,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "table_id", Typ: types.Int},
-				{Name: "index_id", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				tableID := descpb.ID(tree.MustBeDInt(args[0]))
-				indexID := descpb.IndexID(tree.MustBeDInt(args[1]))
-				err := evalCtx.Planner.ProcessVectorIndexFixups(ctx, tableID, indexID)
-				if err != nil {
-					return nil, err
-				}
-				return tree.DVoidDatum, nil
-			},
-			Info:       "Waits until all outstanding fixups for the vector index with the given ID have been processed.",
-			Volatility: volatility.Volatile,
-		},
-	),
-
-	// The following functions are all part of the LTREE extension in Postgres.
-	// They can be found documented in https://www.postgresql.org/docs/9.1/ltree.html#LTREE-FUNC-TABLE.
-	// This includes:
-	// - subltree
-	// - subpath
-	// - nlevel
-	// - index
-	// - text2ltree
-	// - ltree2text
-	// - lca
-
-	"subltree": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "ltree", Typ: types.LTree},
-				{Name: "start", Typ: types.Int},
-				{Name: "end", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.LTree),
-			Info:       "subpath of `ltree` from position `start` to position `end`-1 (counting from 0)",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ltree := tree.MustBeDLTree(args[0]).LTree
-				start := int(tree.MustBeDInt(args[1]))
-				end := int(tree.MustBeDInt(args[2]))
-				if start < 0 || end < 0 || start > end || start >= ltree.Len() {
-					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "invalid positions")
-				}
-				length := end - start
-				subltree, err := ltree.SubPath(start, length)
-				if err != nil {
-					return nil, err
-				}
-
-				return tree.NewDLTree(subltree), nil
-			},
-		},
-	),
-	"subpath": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "ltree", Typ: types.LTree},
-				{Name: "offset", Typ: types.Int},
-				{Name: "length", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.LTree),
-			Info: "subpath of `ltree` starting at position `offset`, length `length`. If `offset` is negative, subpath starts that " +
-				"far from the end of the path. If `length` is negative, leaves that many labels off the end of the path.",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ltree := tree.MustBeDLTree(args[0]).LTree
-				offset := int(tree.MustBeDInt(args[1]))
-				length := int(tree.MustBeDInt(args[2]))
-				subltree, err := ltree.SubPath(offset, length)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDLTree(subltree), nil
-			},
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "ltree", Typ: types.LTree},
-				{Name: "offset", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.LTree),
-			Info: "subpath of `ltree` starting at position `offset`, extending to end of path. If `offset` is negative, " +
-				"subpath starts that far from the end of the path.",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ltree := tree.MustBeDLTree(args[0]).LTree
-				// If offset is negative, then length could extend past the end of `ltree`.
-				offset := int(tree.MustBeDInt(args[1]))
-				length := ltree.Len() - offset
-				subltree, err := ltree.SubPath(offset, length)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDLTree(subltree), nil
-			},
-		},
-	),
-	"nlevel": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "ltree", Typ: types.LTree},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Info:       "number of labels in path `ltree`",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ltree := tree.MustBeDLTree(args[0]).LTree
-				return tree.NewDInt(tree.DInt(ltree.Len())), nil
-			},
-		},
-	),
-	"index": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "a", Typ: types.LTree},
-				{Name: "b", Typ: types.LTree},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Info:       "position of first occurrence of `b` in `a`; -1 if not found",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				a := tree.MustBeDLTree(args[0]).LTree
-				b := tree.MustBeDLTree(args[1]).LTree
-				return tree.NewDInt(tree.DInt(a.IndexOf(b, 0 /* offset */))), nil
-			},
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "a", Typ: types.LTree},
-				{Name: "b", Typ: types.LTree},
-				{Name: "offset", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Info:       "position of first occurrence of `b` in `a`, starting at `offset`; -1 if not found",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				a := tree.MustBeDLTree(args[0]).LTree
-				b := tree.MustBeDLTree(args[1]).LTree
-				offset := tree.MustBeDInt(args[2])
-				return tree.NewDInt(tree.DInt(a.IndexOf(b, int(offset)))), nil
-			},
-		},
-	),
-	"text2ltree": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "text", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.LTree),
-			Info:       "cast `text` to ltree",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				text := tree.MustBeDString(args[0])
-				ltree, err := tree.ParseDLTree(string(text))
-				if err != nil {
-					return nil, err
-				}
-				return ltree, nil
-			},
-		},
-	),
-	"ltree2text": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "ltree", Typ: types.LTree},
-			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Info:       "cast `ltree` to text",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ltree := tree.MustBeDLTree(args[0])
-				return tree.NewDString(ltree.String()), nil
-			},
-		},
-	),
-	"lca": makeBuiltin(
-		ltreeProps(),
-		tree.Overload{
-			Types: tree.VariadicType{
-				FixedTypes: []*types.T{types.LTree, types.LTree},
-				VarType:    types.LTree,
-			},
-			ReturnType: tree.FixedReturnType(types.LTree),
-			Info:       "lowest common ancestor, i.e., longest common prefix of paths",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ltrees := make([]ltree.T, len(args))
-				for i, arg := range args {
-					if arg == tree.DNull {
-						return arg, nil
-					}
-					ltrees[i] = tree.MustBeDLTree(arg).LTree
-				}
-				lca, isNull := ltree.LCA(ltrees) // lint: uppercase function OK
-				if isNull {
-					return tree.DNull, nil
-				}
-				return tree.NewDLTree(lca), nil
-			},
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "ltree[]", Typ: types.MakeArray(types.LTree)},
-			},
-			ReturnType: tree.FixedReturnType(types.LTree),
-			Info:       "lowest common ancestor, i.e., longest common prefix of paths",
-			Volatility: volatility.Immutable,
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				array := tree.MustBeDArray(args[0])
-				if array.Len() == 0 {
-					return tree.DNull, nil
-				}
-				if array.HasNulls() {
-					return nil, pgerror.New(pgcode.NullValueNotAllowed, "array must not contain nulls")
-				}
-				ltrees := make([]ltree.T, array.Len())
-				for i, l := range array.Array {
-					ltrees[i] = tree.MustBeDLTree(l).LTree
-				}
-				lca, isNull := ltree.LCA(ltrees) // lint: uppercase function OK
-				if isNull {
-					return tree.DNull, nil
-				}
-				return tree.NewDLTree(lca), nil
-			},
 		},
 	),
 }
@@ -9748,7 +8982,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLength(str, start, length)
+				substring, err := getSubstringFromIndexOfLength(str, "substring", start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9816,7 +9050,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), start, length)
+				substring, err := getSubstringFromIndexOfLength(bitString.BitArray.String(), "bit subarray", start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9853,7 +9087,7 @@ func makeSubStringImpls() builtinDefinition {
 				start := int(tree.MustBeDInt(args[1]))
 				length := int(tree.MustBeDInt(args[2]))
 
-				substring, err := getSubstringFromIndexOfLengthBytes(byteString, start, length)
+				substring, err := getSubstringFromIndexOfLengthBytes(byteString, "byte subarray", start, length)
 				if err != nil {
 					return nil, err
 				}
@@ -9901,21 +9135,16 @@ func getSubstringFromIndex(str string, start int) string {
 	return string(runes[start:])
 }
 
-// NegativeSubstringLengthErr should be thrown when the substring builtin
-// is given a value of 'length' less than zero.
-var NegativeSubstringLengthErr = pgerror.New(
-	pgcode.InvalidParameterValue, "negative substring length not allowed",
-)
-
 // Returns a substring of given string starting at given position and
 // include up to a certain length.
-func getSubstringFromIndexOfLength(str string, start, length int) (string, error) {
+func getSubstringFromIndexOfLength(str, errMsg string, start, length int) (string, error) {
 	runes := []rune(str)
 	// SQL strings are 1-indexed.
 	start--
 
 	if length < 0 {
-		return "", NegativeSubstringLengthErr
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
 	}
 
 	end := start + length
@@ -9953,13 +9182,14 @@ func getSubstringFromIndexBytes(str string, start int) string {
 
 // Returns a substring of given string starting at given position and include up
 // to a certain length by interpreting the string as raw bytes.
-func getSubstringFromIndexOfLengthBytes(str string, start, length int) (string, error) {
+func getSubstringFromIndexOfLengthBytes(str, errMsg string, start, length int) (string, error) {
 	bytes := []byte(str)
 	// SQL strings are 1-indexed.
 	start--
 
 	if length < 0 {
-		return "", NegativeSubstringLengthErr
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "negative %s length %d not allowed", errMsg, length)
 	}
 
 	end := start + length
@@ -10326,7 +9556,7 @@ func verboseFingerprint(
 
 	// The startTime can either be a timestampTZ or a decimal.
 	var startTimestamp hlc.Timestamp
-	if parsedDecimal, ok := args[1].(*tree.DDecimal); ok {
+	if parsedDecimal, ok := tree.AsDDecimal(args[1]); ok {
 		startTimestamp, err = hlc.DecimalToHLC(&parsedDecimal.Decimal)
 		if err != nil {
 			return nil, err
@@ -10439,7 +9669,7 @@ func darrayToStringSlice(d tree.DArray) (result []string, ok bool) {
 
 // checkHasNulls returns an appropriate error if the array contains a NULL.
 func checkHasNulls(ary tree.DArray) error {
-	if ary.HasNulls() {
+	if ary.HasNulls {
 		for i := range ary.Array {
 			if ary.Array[i] == tree.DNull {
 				return pgerror.Newf(pgcode.NullValueNotAllowed, "path element at position %d is null", i+1)
@@ -10626,7 +9856,7 @@ var jsonBuildObjectImpl = tree.Overload{
 }
 
 var toJSONImpl = tree.Overload{
-	Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
+	Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 		return toJSONObject(evalCtx, args[0])
@@ -10767,12 +9997,6 @@ var jsonStripNullsImpl = tree.Overload{
 	},
 	Info:       "Returns from_json with all object fields that have null values omitted. Other null values are untouched.",
 	Volatility: volatility.Immutable,
-}
-
-func ltreeProps() tree.FunctionProperties {
-	return tree.FunctionProperties{
-		Category: builtinconstants.CategoryLTree,
-	}
 }
 
 var jsonArrayLengthImpl = tree.Overload{
@@ -11156,9 +10380,7 @@ type regexpEscapeKey struct {
 	sqlEscape  string
 }
 
-var _ tree.RegexpCacheKey = regexpEscapeKey{}
-
-// Pattern implements the tree.RegexpCacheKey interface.
+// Pattern implements the RegexpCacheKey interface.
 func (k regexpEscapeKey) Pattern() (string, error) {
 	pattern := k.sqlPattern
 	if k.sqlEscape != `\` {
@@ -11190,9 +10412,7 @@ type regexpFlagKey struct {
 	sqlFlags   string
 }
 
-var _ tree.RegexpCacheKey = regexpFlagKey{}
-
-// Pattern implements the tree.RegexpCacheKey interface.
+// Pattern implements the RegexpCacheKey interface.
 func (k regexpFlagKey) Pattern() (string, error) {
 	return regexpEvalFlags(k.sqlPattern, k.sqlFlags)
 }
@@ -11392,6 +10612,89 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 	return tree.NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
+// GenerateUniqueUnorderedID creates a unique int64 composed of the current time
+// at a 10-microsecond granularity and the instance-id. The top-bit is left
+// empty so that negative values are not returned. The 48 bits following after
+// represent the reversed timestamp and then 15 bits of the node id.
+func GenerateUniqueUnorderedID(instanceID base.SQLInstanceID) tree.DInt {
+	orig := uint64(GenerateUniqueInt(ProcessUniqueID(instanceID)))
+	uniqueUnorderedID := mapToUnorderedUniqueInt(orig)
+	return tree.DInt(uniqueUnorderedID)
+}
+
+// mapToUnorderedUniqueInt is used by GenerateUniqueUnorderedID to convert a
+// serial unique uint64 to an unordered unique int64. It accomplishes this by
+// reversing the timestamp portion of the unique ID. This bit manipulation
+// should preserve the number of 1-bits.
+func mapToUnorderedUniqueInt(uniqueInt uint64) uint64 {
+	// val is [0][48 bits of ts][15 bits of node id]
+	ts := uniqueInt & builtinconstants.UniqueIntTimestampMask
+	nodeID := uniqueInt & builtinconstants.UniqueIntNodeIDMask
+	reversedTS := bits.Reverse64(ts<<builtinconstants.UniqueIntLeadingZeroBits) << builtinconstants.UniqueIntNodeIDBits
+	unorderedUniqueInt := reversedTS | nodeID
+	return unorderedUniqueInt
+}
+
+// ProcessUniqueID is an ID which is unique to this process in the cluster.
+// It is used to generate unique integer keys via GenerateUniqueInt. Generally
+// it is the node ID of a system tenant or the sql instance ID of a secondary
+// tenant.
+//
+// Note that for its uniqueness property to hold, the value must use no more
+// than 15 bits. Nothing enforces this for node IDs, but, in practice, they
+// do not generally get to be more than 16k unless nodes are being added and
+// removed frequently. In order to eliminate this bug, we ought to use the
+// leased SQLInstanceID instead of the NodeID to generate these unique integers
+// in all cases.
+type ProcessUniqueID int32
+
+// GenerateUniqueInt creates a unique int composed of the current time at a
+// 10-microsecond granularity and the instance-id. The instance-id is stored in the
+// lower 15 bits of the returned value and the timestamp is stored in the upper
+// 48 bits. The top-bit is left empty so that negative values are not returned.
+// The 48-bit timestamp field provides for 89 years of timestamps. We use a
+// custom epoch (Jan 1, 2015) in order to utilize the entire timestamp range.
+//
+// Note that GenerateUniqueInt() imposes a limit on instance IDs while
+// generateUniqueBytes() does not.
+//
+// TODO(pmattis): Do we have to worry about persisting the milliseconds value
+// periodically to avoid the clock ever going backwards (e.g. due to NTP
+// adjustment)?
+func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
+	const precision = uint64(10 * time.Microsecond)
+
+	// TODO(andrei): For tenants we need to validate that the current time is
+	// within the validity of the sqlliveness session to which the instanceID is
+	// bound. Without this validation, two different nodes might be calling this
+	// function with the same instanceID at the same time, and both would generate
+	// the same unique int. See #90459.
+	nowNanos := timeutil.Now().UnixNano()
+	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
+	if nowNanos < uniqueIntEpoch {
+		nowNanos = uniqueIntEpoch
+	}
+	timestamp := uint64(nowNanos-uniqueIntEpoch) / precision
+
+	uniqueIntState.Lock()
+	if timestamp <= uniqueIntState.timestamp {
+		timestamp = uniqueIntState.timestamp + 1
+	}
+	uniqueIntState.timestamp = timestamp
+	uniqueIntState.Unlock()
+
+	return GenerateUniqueID(int32(instanceID), timestamp)
+}
+
+// GenerateUniqueID encapsulates the logic to generate a unique number from
+// a nodeID and timestamp.
+func GenerateUniqueID(instanceID int32, timestamp uint64) tree.DInt {
+	// We xor in the instanceID so that instanceIDs larger than 32K will flip bits
+	// in the timestamp portion of the final value instead of always setting them.
+	id := (timestamp << builtinconstants.UniqueIntNodeIDBits) ^ uint64(instanceID)
+	return tree.DInt(id)
+}
+
 func cardinality(arr *tree.DArray) tree.Datum {
 	if arr.ParamTyp.Family() != types.ArrayFamily {
 		return tree.NewDInt(tree.DInt(arr.Len()))
@@ -11410,7 +10713,7 @@ func arrayLength(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return tree.NewDInt(tree.DInt(arr.Len()))
 	}
-	a, ok := arr.Array[0].(*tree.DArray)
+	a, ok := tree.AsDArray(arr.Array[0])
 	if !ok {
 		return tree.DNull
 	}
@@ -11426,7 +10729,7 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return intOne
 	}
-	a, ok := arr.Array[0].(*tree.DArray)
+	a, ok := tree.AsDArray(arr.Array[0])
 	if !ok {
 		return tree.DNull
 	}
@@ -12416,7 +11719,7 @@ func prettyStatementCustomConfig(
 }
 
 func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
-	stmts, err := parserutils.Parse(stmt)
+	stmts, err := parser.Parse(stmt)
 	if err != nil {
 		return "", err
 	}
@@ -12539,10 +11842,6 @@ argument is true, then the bundle will be redacted`
 					redacted = bool(tree.MustBeDBool(args[eaIdx+1]))
 				}
 			}
-			var username string
-			if sd := evalCtx.SessionData(); sd != nil {
-				username = sd.User().Normalized()
-			}
 
 			hasPriv, shouldRedact, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 			if err != nil {
@@ -12571,7 +11870,6 @@ argument is true, then the bundle will be redacted`
 				minExecutionLatency,
 				expiresAfter,
 				redacted,
-				username,
 			); err != nil {
 				return nil, err
 			}
@@ -12667,8 +11965,8 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 			hour := int(tree.MustBeDInt(args[3]))
 			min := int(tree.MustBeDInt(args[4]))
 			sec := float64(tree.MustBeDFloat(args[5]))
-			truncatedSec, remainderSec := math.Modf(sec)
-			nsec := remainderSec * float64(time.Second)
+			truncatedSec := math.Floor(sec)
+			nsec := math.Mod(sec, truncatedSec) * float64(time.Second)
 			t := time.Date(year, month, day, hour, min, int(truncatedSec), int(nsec), location)
 			if withOutputTZ {
 				return tree.MakeDTimestampTZ(t, time.Microsecond)
@@ -12679,106 +11977,3 @@ func makeTimestampStatementBuiltinOverload(withOutputTZ bool, withInputTZ bool) 
 		Volatility: vol,
 	}
 }
-
-func jsonpathArgs(
-	args tree.Datums,
-) (target tree.DJSON, path tree.DJsonpath, vars tree.DJSON, silent tree.DBool, err error) {
-	target = tree.MustBeDJSON(args[0])
-	path = tree.MustBeDJsonpath(args[1])
-	vars = tree.EmptyDJSON
-	silent = tree.DBool(false)
-	if len(args) > 2 {
-		vars = tree.MustBeDJSON(args[2])
-		if vars.Type() != json.ObjectJSONType {
-			err = pgerror.Newf(pgcode.InvalidParameterValue, `"vars" argument is not an object`)
-			return
-		}
-	}
-	if len(args) > 3 {
-		silent = tree.MustBeDBool(args[3])
-	}
-	return target, path, vars, silent, nil
-}
-
-func makeJsonpathExists(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-	target, path, vars, silent, err := jsonpathArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	exists, err := jsonpath.JsonpathExists(target, path, vars, silent)
-	if err != nil {
-		return nil, err
-	}
-	return tree.MakeDBool(exists), nil
-}
-
-func makeJsonpathQueryArray(
-	_ context.Context, _ *eval.Context, args tree.Datums,
-) (tree.Datum, error) {
-	target, path, vars, silent, err := jsonpathArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	j, err := jsonpath.JsonpathQueryArray(target, path, vars, silent)
-	if err != nil {
-		return nil, err
-	}
-	return &j, nil
-}
-
-func makeJsonpathQueryFirst(
-	_ context.Context, _ *eval.Context, args tree.Datums,
-) (tree.Datum, error) {
-	target, path, vars, silent, err := jsonpathArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	return jsonpath.JsonpathQueryFirst(target, path, vars, silent)
-}
-
-func makeJsonpathMatch(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-	target, path, vars, silent, err := jsonpathArgs(args)
-	if err != nil {
-		return nil, err
-	}
-	return jsonpath.JsonpathMatch(target, path, vars, silent)
-}
-
-func makeBackupASTFromStmt(
-	backupStmt tree.Datum,
-) (*tree.Backup, jobspb.BackupEncryptionOptions, error) {
-	stmt := string(tree.MustBeDString(backupStmt))
-	ast, err := parserutils.ParseOne(stmt)
-	if err != nil {
-		return nil, jobspb.BackupEncryptionOptions{}, err
-	}
-	backupAST, ok := ast.AST.(*tree.Backup)
-	if !ok {
-		return nil, jobspb.BackupEncryptionOptions{}, errors.Newf("expected BACKUP statement, got %s", stmt)
-	}
-	opts := backupAST.Options
-	encryption := jobspb.BackupEncryptionOptions{
-		Mode: jobspb.EncryptionMode_None,
-	}
-	if opts.EncryptionPassphrase != nil {
-		encryption.Mode = jobspb.EncryptionMode_Passphrase
-		encryption.RawPassphrase = tree.AsStringWithFlags(
-			opts.EncryptionPassphrase,
-			tree.FmtBareStrings,
-		)
-	} else if opts.EncryptionKMSURI != nil {
-		if encryption.Mode != jobspb.EncryptionMode_None {
-			return nil, jobspb.BackupEncryptionOptions{}, errors.Newf("only one encryption mode can be specified")
-		}
-		encryption.RawKmsUris = exprSliceToStrSlice(opts.EncryptionKMSURI)
-	}
-	return backupAST, encryption, nil
-}
-
-func exprSliceToStrSlice(exprs []tree.Expr) []string {
-	return util.Map(exprs, func(expr tree.Expr) string {
-		return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
-	})
-}
-
-var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")

@@ -495,16 +495,12 @@ func (rw *errReadWriter) Write(p []byte) (int, error) {
 
 // testSelect1Bytes represents the bytes for a SELECT 1 query. This will always
 // be 14 bytes (5 (header) + 8 (query) + 1 (null terminator)).
-var testSelect1Bytes []byte
+var testSelect1Bytes = (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
 
 // buildSrc generates a buffer with count test queries which alternates between
 // SELECT 1 and SELECT 2.
 func buildSrc(t *testing.T, count int) *bytes.Buffer {
 	t.Helper()
-
-	var err error
-	testSelect1Bytes, err = (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
-	require.NoError(t, err)
 
 	// Reset bytes back to SELECT 1.
 	defer func() {

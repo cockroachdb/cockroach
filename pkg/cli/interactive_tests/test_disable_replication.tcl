@@ -9,7 +9,7 @@ eexpect ":/# "
 start_test "Check that demo disables replication properly"
 # Disable multitenant until default zone config is properly propagated to
 # virtual clusters. See #110003 for more details.
-send "$argv demo --multitenant=false -e 'show zone configuration for range default' --log-dir=logs \r"
+send "$argv demo --multitenant=false -e 'show zone configuration for range default'\r"
 eexpect "num_replicas = 1"
 eexpect ":/# "
 end_test

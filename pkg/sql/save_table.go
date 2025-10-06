@@ -19,7 +19,7 @@ import (
 //
 // The node creates the table on startup. If the table exists, it errors out.
 type saveTableNode struct {
-	singleInputPlanNode
+	source planNode
 
 	target tree.TableName
 
@@ -38,13 +38,9 @@ type saveTableNode struct {
 const saveTableInsertBatch = 100
 
 func (p *planner) makeSaveTable(
-	input planNode, target *tree.TableName, colNames []string,
+	source planNode, target *tree.TableName, colNames []string,
 ) planNode {
-	return &saveTableNode{
-		singleInputPlanNode: singleInputPlanNode{input},
-		target:              *target,
-		colNames:            colNames,
-	}
+	return &saveTableNode{source: source, target: *target, colNames: colNames}
 }
 
 func (n *saveTableNode) startExec(params runParams) error {
@@ -52,7 +48,7 @@ func (n *saveTableNode) startExec(params runParams) error {
 		Table: n.target,
 	}
 
-	cols := planColumns(n.input)
+	cols := planColumns(n.source)
 	if len(n.colNames) != len(cols) {
 		return errors.AssertionFailedf(
 			"number of column names (%d) does not match number of columns (%d)",
@@ -98,7 +94,7 @@ func (n *saveTableNode) issue(params runParams) error {
 
 // Next is part of the planNode interface.
 func (n *saveTableNode) Next(params runParams) (bool, error) {
-	res, err := n.input.Next(params)
+	res, err := n.source.Next(params)
 	if err != nil {
 		return res, err
 	}
@@ -107,7 +103,7 @@ func (n *saveTableNode) Next(params runParams) (bool, error) {
 		err := n.issue(params)
 		return false, err
 	}
-	row := n.input.Values()
+	row := n.source.Values()
 	exprs := make(tree.Exprs, len(row))
 	for i := range row {
 		exprs[i] = row[i]
@@ -123,10 +119,10 @@ func (n *saveTableNode) Next(params runParams) (bool, error) {
 
 // Values is part of the planNode interface.
 func (n *saveTableNode) Values() tree.Datums {
-	return n.input.Values()
+	return n.source.Values()
 }
 
 // Close is part of the planNode interface.
 func (n *saveTableNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.source.Close(ctx)
 }

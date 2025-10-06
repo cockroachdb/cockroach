@@ -10,24 +10,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 type lookupJoinNode struct {
-	singleInputPlanNode
-	lookupJoinPlanningInfo
-
-	// columns are the produced columns, namely the input columns and (unless the
-	// join type is semi or anti join) the columns fetched from the table.
-	// It includes an additional continuation column when IsFirstJoinInPairedJoin
-	// is true.
-	columns colinfo.ResultColumns
-}
-
-type lookupJoinPlanningInfo struct {
-	fetch fetchPlanningInfo
+	input planNode
+	table *scanNode
 
 	// joinType is either INNER, LEFT_OUTER, LEFT_SEMI, or LEFT_ANTI.
 	joinType descpb.JoinType
@@ -37,7 +25,7 @@ type lookupJoinPlanningInfo struct {
 	// eqCols identifies the columns from the input which are used for the
 	// lookup. These correspond to a prefix of the index columns (of the index we
 	// are looking up into).
-	eqCols []exec.NodeColumnOrdinal
+	eqCols []int
 
 	// eqColsAreKey is true when each lookup can return at most one row.
 	eqColsAreKey bool
@@ -62,6 +50,12 @@ type lookupJoinPlanningInfo struct {
 	// execution engine uses remoteLookupExpr to search remote nodes.
 	remoteLookupExpr tree.TypedExpr
 
+	// columns are the produced columns, namely the input columns and (unless the
+	// join type is semi or anti join) the columns in the table scanNode. It
+	// includes an additional continuation column when IsFirstJoinInPairedJoin
+	// is true.
+	columns colinfo.ResultColumns
+
 	// onCond is any ON condition to be used in conjunction with the implicit
 	// equality condition on eqCols or the conditions in lookupExpr.
 	onCond tree.TypedExpr
@@ -78,22 +72,6 @@ type lookupJoinPlanningInfo struct {
 	// that read into remote regions, though the lookups are defined in
 	// lookupExpr, not remoteLookupExpr.
 	remoteOnlyLookups bool
-
-	// If true, reverseScans indicates that the lookups should use ReverseScan
-	// requests instead of Scan requests. This causes lookups *for each input row*
-	// to return results in reverse order. This is only useful when each lookup
-	// can return more than one row.
-	reverseScans bool
-
-	// If set, indicates that the DistSender-level cross-range parallelism
-	// should be enabled (which means that the TargetBytes limit cannot be used
-	// by the fetcher). The caller is responsible for ensuring this is safe
-	// (from OOM perspective). Note that this field has no effect when the
-	// Streamer API is used.
-	parallelize bool
-
-	// finalizeLastStageCb will be nil in the spec factory.
-	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }
 
 func (lj *lookupJoinNode) startExec(params runParams) error {
@@ -110,4 +88,5 @@ func (lj *lookupJoinNode) Values() tree.Datums {
 
 func (lj *lookupJoinNode) Close(ctx context.Context) {
 	lj.input.Close(ctx)
+	lj.table.Close(ctx)
 }

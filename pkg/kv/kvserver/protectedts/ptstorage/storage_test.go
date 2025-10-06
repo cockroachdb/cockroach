@@ -648,7 +648,7 @@ func TestCorruptData(t *testing.T) {
 		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
 			log.WithFlattenedSensitiveData)
 		require.NoError(t, err)
-		require.GreaterOrEqual(t, len(entries), 1, "entries: %v", entries)
+		require.GreaterOrEqual(t, 1, len(entries), "entries: %v", entries)
 		for _, e := range entries {
 			require.Equal(t, severity.ERROR, e.Severity)
 		}
@@ -740,7 +740,7 @@ func TestCorruptData(t *testing.T) {
 			entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 100, msg,
 				log.WithFlattenedSensitiveData)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, len(entries), 1, "entries: %v", entries)
+			require.GreaterOrEqual(t, 1, len(entries), "entries: %v", entries)
 			for _, e := range entries {
 				require.Equal(t, severity.ERROR, e.Severity)
 			}

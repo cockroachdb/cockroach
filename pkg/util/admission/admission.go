@@ -56,7 +56,9 @@
 //   across WorkKinds that is used to reflect their shared need for underlying
 //   resources.
 // - The top-level GrantCoordinator which coordinates grants across these
-//   WorkKinds, for CPU.
+//   WorkKinds. The WorkKinds handled by an instantiation of GrantCoordinator
+//   will differ for single-tenant clusters, and multi-tenant clusters
+//   consisting of (multi-tenant) KV nodes and (single-tenant) SQL nodes.
 //
 // The interfaces involved:
 // - requester: handles all requests for a particular WorkKind. Implemented by
@@ -73,7 +75,8 @@
 //   the lock in WorkQueue).
 // - cpuOverloadIndicator: this serves as an optional additional gate on
 //   granting, by providing an (ideally) instantaneous signal of cpu overload.
-//   The kvSlotAdjuster is the concrete implementation.
+//   The kvSlotAdjuster is the concrete implementation, except for SQL
+//   nodes, where this will be implemented by sqlNodeCPUOverloadIndicator.
 //   CPULoadListener is also implemented by these structs, to listen to
 //   the latest CPU load information from the scheduler.
 //
@@ -94,7 +97,7 @@
 // that is setup here.
 //
 
-// Partial usage example:
+// Partial usage example (regular cluster):
 //
 // var metricRegistry *metric.Registry = ...
 // coord, metrics := admission.NewGrantCoordinator(admission.Options{...})
@@ -129,28 +132,13 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-// burstQualification is an optional behavior of certain WorkQueues (which
-// implement requester), that differentiate between tenants that are qualified
-// to burst (in their token consumption) and those that are not. This is a
-// dynamic attribute of a tenant, based on token consumption history
-// maintained in the WorkQueue. The ordering of tenants is also affected in
-// that burstable tenants are ordered before non-burstable tenants.
-type burstQualification uint8
-
-const (
-	canBurst burstQualification = iota
-	noBurst
-	numBurstQualifications
-)
-
 // requester is an interface implemented by an object that orders admission
 // work for a particular WorkKind. See WorkQueue for the implementation of
 // requester.
 type requester interface {
 	// hasWaitingRequests returns whether there are any waiting/queued requests
-	// of this WorkKind, and when true, the qualification of the highest
-	// importance getter.
-	hasWaitingRequests() (bool, burstQualification)
+	// of this WorkKind.
+	hasWaitingRequests() bool
 	// granted is called by a granter to grant admission to a single queued
 	// request. It returns > 0 if the grant was accepted, else returns 0. A
 	// grant may not be accepted if the grant raced with request cancellation
@@ -167,17 +155,15 @@ type requester interface {
 // WorkKind will interact with a granter. See admission.go for an overview of
 // how this fits into the overall structure.
 type granter interface {
+	grantKind() grantKind
 	// tryGet is used by a requester to get slots/tokens for a piece of work
 	// that has encountered no waiting/queued work. This is the fast path that
-	// avoids queueing in the requester. The optional parameter
-	// burstQualification identifies the qualification of the getter, which is
-	// useful for certain granters.
+	// avoids queueing in the requester.
 	//
 	// REQUIRES: count > 0. count == 1 for slots.
-	tryGet(getterQual burstQualification, count int64) (granted bool)
+	tryGet(count int64) (granted bool)
 	// returnGrant is called for:
 	// - returning slots after use.
-	// - returning tokens after use, if all the granted tokens were not used.
 	// - returning either slots or tokens when the grant raced with the work
 	//   being canceled, and the grantee did not end up doing any work.
 	//
@@ -214,9 +200,7 @@ type granter interface {
 	// the grantee after its goroutine runs and notices that it has been granted
 	// a slot/tokens. This provides a natural throttling that reduces grant
 	// bursts by taking into immediate account the capability of the goroutine
-	// scheduler to schedule such work. Grant chains are only used for the CPU
-	// resource in the hybrid slot/token scheme, where slots are used for KVWork
-	// and tokens for SQLKVResponseWork and SQLSQLResponseWork.
+	// scheduler to schedule such work.
 	//
 	// In an experiment, using such grant chains reduced burstiness of grants by
 	// 5x and shifted ~2s of latency (at p99) from the scheduler into admission
@@ -233,17 +217,16 @@ type granter interface {
 }
 
 // granterWithLockedCalls is an encapsulation of typically one
-// granter-requester pair. It is used as an internal
+// granter-requester pair, and for kvStoreTokenGranter of two
+// granter-requester pairs (one for each workClass). It is used as an internal
 // implementation detail of the GrantCoordinator. An implementer of
 // granterWithLockedCalls responds to calls from its granter(s) by calling
 // into the GrantCoordinator, which then calls the various *Locked() methods.
 // The demuxHandle is meant to be opaque to the GrantCoordinator, and is used
 // when this interface encapsulates multiple granter-requester pairs -- it is
-// currently unused and will be removed. The
+// currently used only by kvStoreTokenGranter, where it is a workClass. The
 // *Locked() methods are where the differences in slots and various kinds of
 // tokens are handled.
-//
-// TODO(sumeer): remove the demuxHandle.
 type granterWithLockedCalls interface {
 	// tryGetLocked is the real implementation of tryGet from the granter
 	// interface. demuxHandle is an opaque handle that was passed into the
@@ -286,7 +269,7 @@ type granterWithIOTokens interface {
 	// negative, though that will be rare, since it is possible for tokens to be
 	// returned.
 	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64, elasticDiskReadTokens int64,
+		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64,
 		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
 		lastTick bool,
 	) (tokensUsed int64, tokensUsedByElasticWork int64)
@@ -378,9 +361,8 @@ type elasticCPULimiter interface {
 // expect this to be called every scheduler_latency.sample_period.
 type SchedulerLatencyListener = schedulerlatency.LatencyObserver
 
-// There are two ways we grant admission: using a slot or a token.
-//
-// The slot terminology is akin to a scheduler, where a scheduling
+// grantKind represents the two kind of ways we grant admission: using a slot
+// or a token. The slot terminology is akin to a scheduler, where a scheduling
 // slot must be free for a thread to run. But unlike a scheduler, we don't
 // have visibility into the fact that work execution may be blocked on IO. So
 // a slot can also be viewed as a limit on concurrency of ongoing work. The
@@ -402,6 +384,12 @@ type SchedulerLatencyListener = schedulerlatency.LatencyObserver
 // completion information such as how many tokens were actually used, which
 // can differ from the up front information, and is utilized to adjust the
 // available tokens.
+type grantKind int8
+
+const (
+	slot grantKind = iota
+	token
+)
 
 type grantResult int8
 
@@ -430,8 +418,10 @@ type WorkKind int8
 // (for details on how this ordering is enacted, see the GrantCoordinator
 // code).
 //
-// KVWork, SQLKVResponseWork, SQLSQLResponseWork can all be CPU bound. These
-// are prioritized in the order
+// KVWork, SQLKVResponseWork, SQLSQLResponseWork are the lower-level work
+// units that are expected to be primarily CPU bound (with disk IO for KVWork,
+// but cache hit rates are typically high), and expected to be where most of
+// the CPU consumption happens. These are prioritized in the order
 //
 //	KVWork > SQLKVResponseWork > SQLSQLResponseWork
 //
@@ -442,6 +432,15 @@ type WorkKind int8
 // RPC tree. We expect that if SQLSQLResponseWork is delayed, it will
 // eventually reduce new work being issued, which is a desirable form of
 // natural backpressure.
+//
+// Furthermore, SQLStatementLeafStartWork and SQLStatementRootStartWork are
+// prioritized lowest with
+//
+//	SQLStatementLeafStartWork > SQLStatementRootStartWork
+//
+// This follows the same idea of prioritizing lower layers above higher layers
+// since it releases memory caught up in lower layers, and exerts natural
+// backpressure on the higher layer.
 //
 // Consider the example of a less important long-running single statement OLAP
 // query competing with more important small OLTP queries in a single node
@@ -472,12 +471,34 @@ type WorkKind int8
 //     provided by kvSlotAdjuster, provides instantaneous feedback (which is
 //     viable only because KVWork is the highest priority).
 //
-// This strict prioritization across WorkKinds can cause "priority inversion":
-// lower importance KVWork, or later started KVWork, happens before
-// user-facing SQLKVResponseWork. This is because the backpressure, described
-// in the example above, does not apply to work generated from within the KV
-// layer. See https://github.com/cockroachdb/cockroach/issues/85471 for
-// details.
+// Weaknesses of this strict prioritization across WorkKinds:
+//   - Priority inversion: Lower importance KVWork, not derived from SQL, like
+//     GC of MVCC versions, will happen before user-facing SQLKVResponseWork.
+//     This is because the backpressure, described in the example above, does
+//     not apply to work generated from within the KV layer.
+//     TODO(sumeer): introduce a KVLowPriWork and put it last in this ordering,
+//     to get over this limitation.
+//   - Insufficient competition leading to poor isolation: Putting
+//     SQLStatementLeafStartWork, SQLStatementRootStartWork in this list, within
+//     the same GrantCoordinator, does provide node overload protection, but not
+//     necessarily performance isolation when we have WorkKinds of different
+//     importance. Consider the same OLAP example above: if the KVWork slots
+//     being full due to the OLAP query prevents SQLStatementRootStartWork for
+//     the OLTP queries, the competition is starved out before it has an
+//     opportunity to submit any KVWork. Given that control over admitting
+//     SQLStatement{Leaf,Root}StartWork is not primarily about CPU control (the
+//     lower-level work items are where cpu is consumed), we could decouple
+//     these two into a separate GrantCoordinator and only gate them with (high)
+//     fixed slot counts that allow for enough competition, plus a memory
+//     overload indicator.
+//     TODO(sumeer): experiment with this approach.
+//   - Continuing the previous bullet, low priority long-lived
+//     {SQLStatementLeafStartWork, SQLStatementRootStartWork} could use up all
+//     the slots, if there was no high priority work for some period of time,
+//     and therefore starve admission of the high priority work when it does
+//     appear. The typical solution to this is to put a max on the number of
+//     slots low priority can use. This would be viable if we did not allow
+//     arbitrary int8 values to be set for Priority.
 const (
 	// KVWork represents requests submitted to the KV layer, from the same node
 	// or a different node. They may originate from the SQL layer or the KV
@@ -491,6 +512,12 @@ const (
 	// responses. This is root work happening in response to leaf SQL work,
 	// i.e., it is inter-node.
 	SQLSQLResponseWork
+	// SQLStatementLeafStartWork represents the start of leaf-level processing
+	// for a SQL statement.
+	SQLStatementLeafStartWork
+	// SQLStatementRootStartWork represents the start of root-level processing
+	// for a SQL statement.
+	SQLStatementRootStartWork
 	numWorkKinds
 )
 
@@ -506,6 +533,10 @@ func (wk WorkKind) String() string {
 		return "sql-kv-response"
 	case SQLSQLResponseWork:
 		return "sql-sql-response"
+	case SQLStatementLeafStartWork:
+		return "sql-leaf-start"
+	case SQLStatementRootStartWork:
+		return "sql-root-start"
 	default:
 		panic(errors.AssertionFailedf("unknown WorkKind"))
 	}

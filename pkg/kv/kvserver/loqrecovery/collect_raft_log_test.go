@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -37,57 +36,54 @@ func TestFindUpdateDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
-		func(t *testing.T, leaseType roachpb.LeaseType) {
-			ctx := context.Background()
+	ctx := context.Background()
 
-			const testNode = 0
+	const testNode = 0
 
-			var testRangeID roachpb.RangeID
-			var rHS roachpb.RangeDescriptor
-			var lHSBefore roachpb.RangeDescriptor
-			var lHSAfter roachpb.RangeDescriptor
-			checkRaftLog(t, ctx, testNode,
-				func(ctx context.Context, tc *testcluster.TestCluster) roachpb.RKey {
-					scratchKey, err := tc.Server(0).ScratchRange()
-					require.NoError(t, err, "failed to get scratch range")
-					srk, err := keys.Addr(scratchKey)
-					require.NoError(t, err, "failed to resolve scratch key")
+	var testRangeID roachpb.RangeID
+	var rHS roachpb.RangeDescriptor
+	var lHSBefore roachpb.RangeDescriptor
+	var lHSAfter roachpb.RangeDescriptor
+	checkRaftLog(t, ctx, testNode,
+		func(ctx context.Context, tc *testcluster.TestCluster) roachpb.RKey {
+			scratchKey, err := tc.Server(0).ScratchRange()
+			require.NoError(t, err, "failed to get scratch range")
+			srk, err := keys.Addr(scratchKey)
+			require.NoError(t, err, "failed to resolve scratch key")
 
-					rd, err := tc.LookupRange(scratchKey)
-					testRangeID = rd.RangeID
-					require.NoError(t, err, "failed to get descriptor for scratch range")
+			rd, err := tc.LookupRange(scratchKey)
+			testRangeID = rd.RangeID
+			require.NoError(t, err, "failed to get descriptor for scratch range")
 
-					splitKey := testutils.MakeKey(scratchKey, []byte("z"))
-					lHSBefore, rHS, err = tc.SplitRange(splitKey)
-					require.NoError(t, err, "failed to split scratch range")
+			splitKey := testutils.MakeKey(scratchKey, []byte("z"))
+			lHSBefore, rHS, err = tc.SplitRange(splitKey)
+			require.NoError(t, err, "failed to split scratch range")
 
-					lHSAfter, err = tc.Servers[0].MergeRanges(scratchKey)
-					require.NoError(t, err, "failed to merge scratch range")
+			lHSAfter, err = tc.Servers[0].MergeRanges(scratchKey)
+			require.NoError(t, err, "failed to merge scratch range")
 
-					require.NoError(t,
-						tc.Server(testNode).DB().Put(ctx, testutils.MakeKey(scratchKey, []byte("|first")),
-							"some data"),
-						"failed to put test value in LHS")
+			require.NoError(t,
+				tc.Server(testNode).DB().Put(ctx, testutils.MakeKey(scratchKey, []byte("|first")),
+					"some data"),
+				"failed to put test value in LHS")
 
-					return srk
-				},
-				func(t *testing.T, ctx context.Context, reader storage.Reader) {
-					seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
-						ctx, testRangeID, 0, math.MaxInt64, reader)
-					require.NoError(t, err, "failed to read raft log data")
+			return srk
+		},
+		func(t *testing.T, ctx context.Context, reader storage.Reader) {
+			seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
+				ctx, testRangeID, 0, math.MaxInt64, reader)
+			require.NoError(t, err, "failed to read raft log data")
 
-					requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
-						ChangeType: loqrecoverypb.DescriptorChangeType_Split,
-						Desc:       &lHSBefore,
-						OtherDesc:  &rHS,
-					}, seq)
-					requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
-						ChangeType: loqrecoverypb.DescriptorChangeType_Merge,
-						Desc:       &lHSAfter,
-						OtherDesc:  &rHS,
-					}, seq)
-				}, leaseType)
+			requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
+				ChangeType: loqrecoverypb.DescriptorChangeType_Split,
+				Desc:       &lHSBefore,
+				OtherDesc:  &rHS,
+			}, seq)
+			requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
+				ChangeType: loqrecoverypb.DescriptorChangeType_Merge,
+				Desc:       &lHSAfter,
+				OtherDesc:  &rHS,
+			}, seq)
 		})
 }
 
@@ -97,43 +93,41 @@ func TestFindUpdateDescriptor(t *testing.T) {
 func TestFindUpdateRaft(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(),
-		func(t *testing.T, leaseType roachpb.LeaseType) {
-			ctx := context.Background()
 
-			const testNode = 0
+	ctx := context.Background()
 
-			var sRD roachpb.RangeDescriptor
-			checkRaftLog(t, ctx, testNode,
-				func(ctx context.Context, tc *testcluster.TestCluster) roachpb.RKey {
-					scratchKey, err := tc.Server(0).ScratchRange()
-					require.NoError(t, err, "failed to get scratch range")
-					srk, err := keys.Addr(scratchKey)
-					require.NoError(t, err, "failed to resolve scratch key")
-					rd, err := tc.AddVoters(scratchKey, tc.Target(1))
-					require.NoError(t, err, "failed to upreplicate scratch range")
-					tc.TransferRangeLeaseOrFatal(t, rd, tc.Target(0))
-					tc.RemoveVotersOrFatal(t, scratchKey, tc.Targets(1)...)
+	const testNode = 0
 
-					sRD, err = tc.LookupRange(scratchKey)
-					require.NoError(t, err, "failed to get descriptor after remove replicas")
+	var sRD roachpb.RangeDescriptor
+	checkRaftLog(t, ctx, testNode,
+		func(ctx context.Context, tc *testcluster.TestCluster) roachpb.RKey {
+			scratchKey, err := tc.Server(0).ScratchRange()
+			require.NoError(t, err, "failed to get scratch range")
+			srk, err := keys.Addr(scratchKey)
+			require.NoError(t, err, "failed to resolve scratch key")
+			rd, err := tc.AddVoters(scratchKey, tc.Target(1))
+			require.NoError(t, err, "failed to upreplicate scratch range")
+			tc.TransferRangeLeaseOrFatal(t, rd, tc.Target(0))
+			tc.RemoveVotersOrFatal(t, scratchKey, tc.Targets(1)...)
 
-					require.NoError(t,
-						tc.Server(testNode).DB().Put(ctx, testutils.MakeKey(scratchKey, []byte("|first")),
-							"some data"),
-						"failed to put test value in range")
+			sRD, err = tc.LookupRange(scratchKey)
+			require.NoError(t, err, "failed to get descriptor after remove replicas")
 
-					return srk
-				},
-				func(t *testing.T, ctx context.Context, reader storage.Reader) {
-					seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
-						ctx, sRD.RangeID, 0, math.MaxInt64, reader)
-					require.NoError(t, err, "failed to read raft log data")
-					requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
-						ChangeType: loqrecoverypb.DescriptorChangeType_ReplicaChange,
-						Desc:       &sRD,
-					}, seq)
-				}, leaseType)
+			require.NoError(t,
+				tc.Server(testNode).DB().Put(ctx, testutils.MakeKey(scratchKey, []byte("|first")),
+					"some data"),
+				"failed to put test value in range")
+
+			return srk
+		},
+		func(t *testing.T, ctx context.Context, reader storage.Reader) {
+			seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
+				ctx, sRD.RangeID, 0, math.MaxInt64, reader)
+			require.NoError(t, err, "failed to read raft log data")
+			requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
+				ChangeType: loqrecoverypb.DescriptorChangeType_ReplicaChange,
+				Desc:       &sRD,
+			}, seq)
 		})
 }
 
@@ -143,7 +137,6 @@ func checkRaftLog(
 	nodeToMonitor int,
 	action func(ctx context.Context, tc *testcluster.TestCluster) roachpb.RKey,
 	assertRaftLog func(*testing.T, context.Context, storage.Reader),
-	leaseType roachpb.LeaseType,
 ) {
 	t.Helper()
 
@@ -162,20 +155,13 @@ func checkRaftLog(
 
 	testRaftConfig := base.RaftConfig{
 		// High enough interval to be longer than test but not overflow duration.
+		RaftTickInterval:           math.MaxInt32,
+		RaftElectionTimeoutTicks:   1000000,
 		RaftLogTruncationThreshold: math.MaxInt64,
 	}
 
-	// Leader leases typically has a stable leader without high election ticks.
-	if leaseType != roachpb.LeaseLeader {
-		testRaftConfig.RaftTickInterval = math.MaxInt32
-		testRaftConfig.RaftElectionTimeoutTicks = 1000000
-	}
-
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 	tc := testcluster.NewTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableGCQueue: true,
@@ -197,7 +183,6 @@ func checkRaftLog(
 				StoreSpecs: []base.StoreSpec{{InMemory: true}},
 				RaftConfig: testRaftConfig,
 				Insecure:   true,
-				Settings:   st,
 			},
 		},
 	})

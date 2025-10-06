@@ -106,7 +106,7 @@ func lookupNumRunningJobs(
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
-		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStateTupleString)
+		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
 	row, err := txn.QueryRowEx(
 		ctx, "lookup-num-running",
 		txn.KV(),
@@ -168,7 +168,7 @@ func (s *jobScheduler) processSchedule(
 	}
 
 	// Grab job executor and execute the job.
-	log.Dev.Infof(ctx,
+	log.Infof(ctx,
 		"Starting job for schedule %d (%q); scheduled to run at %s; next run scheduled for %s",
 		schedule.ScheduleID(), schedule.ScheduleLabel(),
 		schedule.ScheduledRunTime(), schedule.NextRun())
@@ -239,12 +239,12 @@ func (s *jobScheduler) executeCandidateSchedule(
 			return nil
 		}
 		s.metrics.NumMalformedSchedules.Inc(1)
-		log.Dev.Errorf(ctx, "error parsing schedule %d: %s", candidate, err)
+		log.Errorf(ctx, "error parsing schedule %d: %s", candidate, err)
 		return err
 	}
 
 	if !s.env.IsExecutorEnabled(schedule.ExecutorType()) {
-		log.Dev.Infof(ctx, "Ignoring schedule %d: %s executor disabled",
+		log.Infof(ctx, "Ignoring schedule %d: %s executor disabled",
 			schedule.ScheduleID(), schedule.ExecutorType())
 		return nil
 	}
@@ -273,7 +273,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 
 		// Failed to process schedule.
 		s.metrics.NumErrSchedules.Inc(1)
-		log.Dev.Errorf(ctx,
+		log.Errorf(ctx,
 			"error processing schedule %d: %+v", schedule.ScheduleID(), processErr)
 
 		// Try updating schedule record to indicate schedule execution error.
@@ -300,7 +300,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 				return errors.Wrapf(err,
 					"savepoint error for schedule %d", schedule.ScheduleID())
 			}
-			log.Dev.Errorf(ctx, "error recording processing error for schedule %d: %+v",
+			log.Errorf(ctx, "error recording processing error for schedule %d: %+v",
 				schedule.ScheduleID(), err)
 		}
 	}
@@ -342,7 +342,7 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 		if err := s.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return s.executeCandidateSchedule(ctx, candidateID, txn)
 		}); err != nil {
-			log.Dev.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
+			log.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
 		}
 	}
 
@@ -383,7 +383,7 @@ func (sf *syncCancelFunc) withCancelOnDisabled(
 		sf.CancelFunc = cancel
 
 		if !schedulerEnabledSetting.Get(sv) {
-			log.Dev.Warning(ctx, "scheduled job system disabled by setting, cancelling execution")
+			log.Warning(ctx, "scheduled job system disabled by setting, cancelling execution")
 			cancel()
 		}
 
@@ -404,10 +404,10 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 		defer cancel()
 
 		initialDelay := getInitialScanDelay(s.TestingKnobs)
-		log.Dev.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
+		log.Infof(ctx, "waiting %v before scheduled jobs daemon start", initialDelay)
 
 		if err := RegisterExecutorsMetrics(s.registry); err != nil {
-			log.Dev.Errorf(ctx, "error registering executor metrics: %+v", err)
+			log.Errorf(ctx, "error registering executor metrics: %+v", err)
 		}
 
 		whenDisabled := newCancelWhenDisabled(&s.Settings.SV)
@@ -419,7 +419,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				return
 			case <-timer.C:
 				if !schedulerEnabledSetting.Get(&s.Settings.SV) {
-					log.Dev.Warning(ctx, "scheduled job system disabled by setting")
+					log.Warning(ctx, "scheduled job system disabled by setting")
 					continue
 				}
 
@@ -427,7 +427,7 @@ func (s *jobScheduler) runDaemon(ctx context.Context, stopper *stop.Stopper) {
 				if err := whenDisabled.withCancelOnDisabled(ctx, &s.Settings.SV, func(ctx context.Context) error {
 					return s.executeSchedules(ctx, maxSchedules)
 				}); err != nil {
-					log.Dev.Errorf(ctx, "error executing schedules: %v", err)
+					log.Errorf(ctx, "error executing schedules: %v", err)
 				}
 			}
 		}
@@ -446,7 +446,6 @@ var schedulerPaceSetting = settings.RegisterDurationSetting(
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
-	settings.PositiveDuration,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(
@@ -498,7 +497,7 @@ func getWaitPeriod(
 	pace := schedulerPaceSetting.Get(sv)
 	if pace < minPacePeriod {
 		if warnIfPaceTooLow.ShouldLog() {
-			log.Dev.Warningf(ctx,
+			log.Warningf(ctx,
 				"job.scheduler.pace setting too low (%s < %s)", pace, minPacePeriod)
 		}
 		pace = minPacePeriod

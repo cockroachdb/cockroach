@@ -28,7 +28,4 @@ type Object interface {
 	//
 	// Used for invalidating cached plans.
 	Equals(other Object) bool
-
-	// Version returns the underlying version of the descriptor backing this object.
-	Version() uint64
 }

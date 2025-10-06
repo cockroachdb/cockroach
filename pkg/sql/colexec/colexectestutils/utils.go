@@ -364,7 +364,7 @@ func RunTestsWithOrderedCols(
 		ctx := context.Background()
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(ctx)
-		log.Dev.Info(ctx, "allNullsInjection")
+		log.Info(ctx, "allNullsInjection")
 		// This test replaces all values in the input tuples with nulls and ensures
 		// that the output is different from the "original" output (i.e. from the
 		// one that is returned without nulls injection).
@@ -431,6 +431,21 @@ func RunTestsWithOrderedCols(
 			require.True(t, foundDifference, "since there were "+
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
+		}
+		closeIfCloser(t, originalOp)
+		closeIfCloser(t, opWithNulls)
+	}
+}
+
+// closeIfCloser is a testing utility function that checks whether op is a
+// colexecop.Closer and closes it if so.
+//
+// RunTests harness needs to do that once it is done with op. In non-test
+// setting, the closing happens at the end of the query execution.
+func closeIfCloser(t *testing.T, op colexecop.Operator) {
+	if c, ok := op.(colexecop.Closer); ok {
+		if err := c.Close(context.Background()); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
@@ -522,16 +537,17 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			errorHandler(err)
 		}
 		if isOperatorChainResettable(op) {
-			log.Dev.Info(ctx, "reusing after reset")
+			log.Info(ctx, "reusing after reset")
 			out.Reset(ctx)
 			if err := verifyFn(out); err != nil {
 				errorHandler(err)
 			}
 		}
+		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
-		log.Dev.Info(ctx, "verifySelAndNullResets")
+		log.Info(ctx, "verifySelAndNullResets")
 		// This test ensures that operators that "own their own batches", such as
 		// any operator that has to reshape its output, are not affected by
 		// downstream modification of batches.
@@ -555,6 +571,8 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			if err != nil {
 				t.Fatal(err)
 			}
+			// We might short-circuit, so defer the closing of the operator.
+			defer closeIfCloser(t, op)
 			op.Init(ctx)
 			// NOTE: this test makes sense only if the operator returns two
 			// non-zero length batches (if not, we short-circuit the test since
@@ -612,7 +630,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 	}
 
 	if !skipRandomNullsInjection {
-		log.Dev.Info(ctx, "randomNullsInjection")
+		log.Info(ctx, "randomNullsInjection")
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
 		inputSources := make([]colexecop.Operator, len(tups))
@@ -636,6 +654,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		}); err != nil {
 			errorHandler(err)
 		}
+		closeIfCloser(t, op)
 	}
 }
 
@@ -672,7 +691,7 @@ func RunTestsWithFn(
 
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
-			log.Dev.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
+			log.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
 			if useSel {
@@ -710,7 +729,7 @@ func RunTestsWithFixedSel(
 	test func(t *testing.T, inputs []colexecop.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
-		log.Dev.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
+		log.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
 		inputSources := make([]colexecop.Operator, len(tups))
 		for i, tup := range tups {
 			inputSources[i] = NewOpFixedSelTestInput(allocator, sel, batchSize, tup, typs)
@@ -1772,8 +1791,9 @@ func MakeRandWindowFrameRangeOffset(t *testing.T, rng *rand.Rand, typ *types.T) 
 // EncodeWindowFrameOffset returns the given datum offset encoded as bytes, for
 // use in testing window functions in RANGE mode with offsets.
 func EncodeWindowFrameOffset(t *testing.T, offset tree.Datum) []byte {
-	var encoded []byte
-	encoded, err := valueside.Encode(encoded, valueside.NoColumnID, offset)
+	var encoded, scratch []byte
+	encoded, err := valueside.Encode(
+		encoded, valueside.NoColumnID, offset, scratch)
 	require.NoError(t, err)
 	return encoded
 }

@@ -25,6 +25,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	selectivity     = .5
+	nullProbability = .1
+)
+
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -159,7 +164,7 @@ func runSelOpBenchmarks(
 			batch := testAllocator.NewMemBatchWithMaxCapacity(inputTypes)
 			nullProb := 0.0
 			if hasNulls {
-				nullProb = 0.1
+				nullProb = nullProbability
 			}
 			for _, colVec := range batch.ColVecs() {
 				coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{

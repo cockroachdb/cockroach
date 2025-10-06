@@ -8,12 +8,12 @@ package spanset
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -265,7 +265,7 @@ func (s *SpanSet) Intersects(other *SpanSet) bool {
 // only the span boundaries are checked.
 func (s *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 	if err := s.CheckAllowed(access, span); err != nil {
-		log.KvExec.Fatalf(context.TODO(), "%v", err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 }
 
@@ -360,7 +360,7 @@ func (s *SpanSet) checkAllowed(
 		}
 	}
 
-	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debugutil.Stack())
+	return errors.Errorf("cannot %s undeclared span %s\ndeclared:\n%s\nstack:\n%s", access, span, s, debug.Stack())
 }
 
 // contains returns whether s1 contains s2. Unlike Span.Contains, this function

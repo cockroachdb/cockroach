@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/crypto/pbkdf2"
@@ -80,7 +79,7 @@ func AppearsEncrypted(text []byte) bool {
 type encWriter struct {
 	gcm        cipher.AEAD
 	iv         []byte
-	ciphertext objstorage.Writable
+	ciphertext io.WriteCloser
 	buf        []byte
 	bufPos     int
 }
@@ -98,32 +97,26 @@ func (NopCloser) Close() error {
 // EncryptFile encrypts a file with the supplied key and a randomly chosen IV
 // which is prepended in a header on the returned ciphertext.
 func EncryptFile(plaintext, key []byte) ([]byte, error) {
-	var b objstorage.MemObj
-	w, err := EncryptingWriter(&b, key)
+	b := &bytes.Buffer{}
+	w, err := EncryptingWriter(NopCloser{b}, key)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := w.Write(plaintext); err != nil {
-		w.Abort()
+	_, err = io.Copy(w, bytes.NewReader(plaintext))
+	if err != nil {
 		return nil, err
 	}
-
-	if err := w.Finish(); err != nil {
+	if err := w.Close(); err != nil {
 		return nil, err
 	}
-
-	return b.Data(), nil
+	return b.Bytes(), nil
 }
 
 // EncryptingWriter returns a writer that wraps an underlying sink writer but
 // which encrypts bytes written to it before flushing them to the wrapped sink.
-//
-// EncryptingWriter takes ownership over the ciphertext writable.
-func EncryptingWriter(ciphertext objstorage.Writable, key []byte) (objstorage.Writable, error) {
+func EncryptingWriter(ciphertext io.WriteCloser, key []byte) (io.WriteCloser, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
-		ciphertext.Abort()
 		return nil, err
 	}
 
@@ -135,56 +128,53 @@ func EncryptingWriter(ciphertext objstorage.Writable, key []byte) (objstorage.Wr
 	ivStart := len(encryptionPreamble) + 1
 	iv := make([]byte, nonceSize)
 	if _, err := crypto_rand.Read(iv); err != nil {
-		ciphertext.Abort()
 		return nil, err
 	}
 	copy(header[ivStart:], iv)
 
 	// Write our header (preamble+version+IV) to the ciphertext sink.
-	if err := ciphertext.Write(header); err != nil {
-		ciphertext.Abort()
+	if n, err := ciphertext.Write(header); err != nil {
 		return nil, err
+	} else if n != len(header) {
+		return nil, io.ErrShortWrite
 	}
 
 	return &encWriter{gcm: gcm, iv: iv, ciphertext: ciphertext, buf: make([]byte, encryptionChunkSizeV2+tagSize)}, nil
 }
 
-func (e *encWriter) Write(p []byte) error {
+func (e *encWriter) Write(p []byte) (int, error) {
 	var wrote int
 	for wrote < len(p) {
 		copied := copy(e.buf[e.bufPos:encryptionChunkSizeV2], p[wrote:])
 		e.bufPos += copied
 		if e.bufPos == encryptionChunkSizeV2 {
 			if err := e.flush(); err != nil {
-				return err
+				return wrote, err
 			}
 		}
 		wrote += copied
 	}
-	return nil
+	return wrote, nil
 }
 
-func (e *encWriter) Finish() error {
+func (e *encWriter) Close() error {
 	// Note: there may not be any plaintext left to seal if the chunk we just
 	// finished was the end of it, but sealing the (empty) remainder in a final
 	// chunk maintains the invariant that a chunked file always ends in a sealed
 	// chunk of less than chunk size, thus making tuncation, even along a chunk
 	// boundary, detectable.
-	if err := e.flush(); err != nil {
-		e.ciphertext.Abort()
-		return err
-	}
-	return e.ciphertext.Finish()
-}
-
-func (e *encWriter) Abort() {
-	e.ciphertext.Abort()
+	err := e.flush()
+	return errors.CombineErrors(err, e.ciphertext.Close())
 }
 
 func (e *encWriter) flush() error {
 	e.buf = e.gcm.Seal(e.buf[:0], e.iv, e.buf[:e.bufPos], nil)
-	if err := e.ciphertext.Write(e.buf); err != nil {
-		return err
+	for flushed := 0; flushed < len(e.buf); {
+		n, err := e.ciphertext.Write(e.buf[flushed:])
+		flushed += n
+		if err != nil {
+			return err
+		}
 	}
 	binary.BigEndian.PutUint64(e.iv[4:], binary.BigEndian.Uint64(e.iv[4:])+1)
 	e.bufPos = 0

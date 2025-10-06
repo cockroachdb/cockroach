@@ -153,9 +153,7 @@ func ReadCurrentDatabaseFromDB(t *testing.T, tdb *sqlutils.SQLRunner) (db string
 // ReadSessionDataFromDB reads the session data out of tdb and then
 // allows the caller to modify it with the passed function.
 func ReadSessionDataFromDB(
-	t *testing.T,
-	tdb *sqlutils.SQLRunner,
-	override func(sd *sessiondata.SessionData, localData sessiondatapb.LocalOnlySessionData),
+	t *testing.T, tdb *sqlutils.SQLRunner, override func(sd *sessiondata.SessionData),
 ) sessiondata.SessionData {
 	hexSessionData := tdb.QueryStr(t, `SELECT encode(crdb_internal.serialize_session(), 'hex')`)
 	if len(hexSessionData) == 0 {
@@ -175,7 +173,7 @@ func ReadSessionDataFromDB(
 		t.Fatal(err)
 	}
 	sd.SessionData = m.SessionData
-	override(sd, m.LocalOnlySessionData)
+	override(sd)
 	return *sd
 }
 

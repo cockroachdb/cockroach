@@ -38,6 +38,7 @@ go_test(
         "data_distribution_test.go",
         "gc_int_test.go",
         "gc_iterator_test.go",
+        "gc_old_test.go",
         "gc_random_test.go",
         "gc_test.go",
         "main_test.go",

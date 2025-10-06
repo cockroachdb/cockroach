@@ -44,9 +44,6 @@ func TestingCreateAndStartJob(
 	c := config{
 		jobID: r.MakeJobID(),
 	}
-	if record.JobID != 0 {
-		c.jobID = record.JobID
-	}
 	for _, opt := range opts {
 		opt(&c)
 	}
@@ -55,7 +52,7 @@ func TestingCreateAndStartJob(
 	}); err != nil {
 		if rj != nil {
 			if cleanupErr := rj.CleanupOnRollback(ctx); cleanupErr != nil {
-				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
 		return nil, err

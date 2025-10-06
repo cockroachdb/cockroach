@@ -174,17 +174,3 @@ query B
 WITH tab(x) AS (VALUES (NULL:::VOID)) SELECT x IS NOT NULL FROM tab
 ----
 false
-
-# Regression test for #84224. Arrays of type VOID are not allowed.
-statement error pgcode 42704 pq: array of type VOID is not supported
-SELECT ARRAY[''::VOID]
-
-statement error pgcode 42704 pq: array of type VOID is not supported
-SELECT ARRAY[NULL::VOID]
-
-statement ok
-CREATE TABLE t84224 (a STRING)
-
-statement error pgcode 42704 pq: array of type VOID is not supported
-SELECT ARRAY[a::VOID] FROM t84224
-

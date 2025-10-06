@@ -135,12 +135,11 @@ statement ok
 SELECT 1;
 
 statement async fk_delete
-WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
+WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
 
 user testuser
 
 statement ok
-SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -175,12 +174,11 @@ statement ok
 SELECT 1;
 
 statement async fk_update
-WITH sleep AS (SELECT pg_sleep(2)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
+WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
 
 user testuser
 
 statement ok
-SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -202,61 +200,6 @@ query II
 SELECT * FROM child_150282;
 ----
 4 4
-
-# Test the fk delete fast path
-statement ok
-DELETE FROM parent_150282;
-
-statement ok
-DELETE FROM child_150282;
-
-statement ok
-INSERT INTO parent_150282 VALUES (1, 2, 3);
-
-user root
-
-statement ok
-BEGIN ISOLATION LEVEL READ COMMITTED;
-
-statement ok
-SELECT 1;
-
-statement async fk_delete
-WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_150282 WHERE p = 1;
-
-user testuser
-
-statement ok
-SET lock_timeout = '10s';
-SET enable_implicit_fk_locking_for_serializable = on;
-SET enable_shared_locking_for_serializable = on;
-SET enable_durable_locking_for_serializable = on;
-INSERT INTO child_150282 VALUES (4, 1);
-
-user root
-
-awaitstatement fk_delete
-
-statement ok
-COMMIT;
-
-query III
-SELECT * FROM parent_150282;
-----
-
-query II
-SELECT * FROM child_150282;
-----
-
-user testuser
-
-statement ok
-RESET lock_timeout;
-RESET enable_implicit_fk_locking_for_serializable;
-RESET enable_shared_locking_for_serializable;
-RESET enable_durable_locking_for_serializable
-
-user root
 
 subtest end
 
@@ -377,7 +320,7 @@ user root
 
 # Give the delete a moment to wait on the p=3 lock by testuser2.
 statement ok
-SELECT pg_sleep(2)
+SELECT pg_sleep(1)
 
 # The serializable insert needs this locking to properly sychronize with the
 # read committed delete.
@@ -396,7 +339,7 @@ user testuser
 
 # Give the insert a moment to wait on the p=2 update by testuser.
 statement ok
-SELECT pg_sleep(2)
+SELECT pg_sleep(1)
 
 statement ok
 ROLLBACK
@@ -405,7 +348,7 @@ user testuser2
 
 # Give the insert a moment to lock p=1.
 statement ok
-SELECT pg_sleep(2)
+SELECT pg_sleep(1)
 
 statement ok
 ROLLBACK

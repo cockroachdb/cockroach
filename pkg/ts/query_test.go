@@ -396,7 +396,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 		{
 			// Swap model's memory monitor in order to adjust allocation size.
 			adjustedMon := mon.NewMonitor(mon.Options{
-				Name:      mon.MakeName("timeseries-test-worker-adjusted"),
+				Name:      "timeseries-test-worker-adjusted",
 				Increment: 1,
 				Settings:  cluster.MakeTestingClusterSettings(),
 			})
@@ -469,7 +469,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 		// Create a limited bytes monitor.
 		memoryBudget := int64(100 * 1024)
 		limitedMon := mon.NewMonitor(mon.Options{
-			Name:      mon.MakeName("timeseries-test-limited"),
+			Name:      "timeseries-test-limited",
 			Limit:     memoryBudget,
 			Increment: 100,
 			Settings:  cluster.MakeTestingClusterSettings(),

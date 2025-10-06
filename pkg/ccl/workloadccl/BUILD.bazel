@@ -17,6 +17,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/util/ctxgroup",
+        "//pkg/util/errorutil",
         "//pkg/util/humanizeutil",
         "//pkg/util/limit",
         "//pkg/util/log",

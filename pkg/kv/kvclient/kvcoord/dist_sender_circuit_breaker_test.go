@@ -22,13 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,16 +36,7 @@ import (
 // replica and redirect read requests when the lease moves elsewhere.
 func TestDistSenderReplicaStall(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	scope := log.Scope(t)
-	defer scope.Close(t)
-
-	// See https://github.com/cockroachdb/cockroach/issues/140957.
-	// If this test fails again, we should investigate the issue further, as
-	// it could indicate a failure of the DistSender to circuit break.
-	{
-		skip.UnderDuress(t)
-		defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
-	}
+	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "clientTimeout", func(t *testing.T, clientTimeout bool) {
 		ctx := context.Background()
@@ -55,7 +44,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		// The lease won't move unless we use expiration-based leases. We also
 		// speed up the test by reducing various intervals and timeouts.
 		st := cluster.MakeTestingClusterSettings()
-		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseExpiration)
+		kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
 		kvcoord.CircuitBreakersMode.Override(
 			ctx, &st.SV, kvcoord.DistSenderCircuitBreakersAllRanges,
 		)
@@ -87,7 +76,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer time.AfterFunc(29*time.Second, func() {
-			log.Dev.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
+			log.Errorf(ctx, "about to time out, all stacks:\n\n%s", allstacks.Get())
 		}).Stop()
 		defer cancel()
 
@@ -103,7 +92,7 @@ func TestDistSenderReplicaStall(t *testing.T) {
 		// Deadlock n3.
 		repl3, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 		require.NoError(t, err)
-		mu := repl3.TestingGetMutex()
+		mu := repl3.GetMutexForTesting()
 		mu.Lock()
 		defer mu.Unlock()
 		t.Log("deadlocked n3")
@@ -154,14 +143,10 @@ func TestDistSenderCircuitBreakerModes(t *testing.T) {
 			func(t *testing.T, mode kvcoord.DistSenderCircuitBreakersMode) {
 				ctx := context.Background()
 
-				// The lease won't move unless we use expiration-based leases. This is
-				// because a deadlocked range with expiration-based leases would
-				// eventually cause the lease to expire. However, with epoch-based or
-				// leader leases, the lease wouldn't expire due to a deadlocked range
-				// since lease extensions are happening at a different layer.
-				// We also speed up the test by reducing various intervals and timeouts.
+				// The lease won't move unless we use expiration-based leases. We also
+				// speed up the test by reducing various intervals and timeouts.
 				st := cluster.MakeTestingClusterSettings()
-				kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseExpiration)
+				kvserver.ExpirationLeasesOnly.Override(ctx, &st.SV, true)
 				kvcoord.CircuitBreakersMode.Override(ctx, &st.SV, mode)
 				kvcoord.CircuitBreakerCancellation.Override(ctx, &st.SV, true)
 				kvcoord.CircuitBreakerProbeThreshold.Override(ctx, &st.SV, time.Second)
@@ -211,7 +196,7 @@ func TestDistSenderCircuitBreakerModes(t *testing.T) {
 				// Deadlock either liveness or the scratch range.
 				repl, err := tc.GetFirstStoreFromServer(t, 2).GetReplica(desc.RangeID)
 				require.NoError(t, err)
-				mu := repl.TestingGetMutex()
+				mu := repl.GetMutexForTesting()
 				mu.Lock()
 				defer mu.Unlock()
 				t.Logf("deadlocked range on n3 - %v", desc)
@@ -428,7 +413,7 @@ func benchmarkCircuitBreakersTrack(
 	}
 
 	// Setting nowNanos to 1 basically means that we'll never launch a probe.
-	now := crtime.Mono(1)
+	nowNanos := int64(1)
 
 	var wg sync.WaitGroup
 	wg.Add(conc)
@@ -443,12 +428,12 @@ func benchmarkCircuitBreakersTrack(
 			// Adjust b.N for concurrency.
 			for i := 0; i < b.N/conc; i++ {
 				cb := cbs.ForReplica(rangeDesc, replDesc)
-				_, cbToken, err := cb.Track(sendCtx, ba, false /* withCommit */, now)
+				_, cbToken, err := cb.Track(sendCtx, ba, false /* withCommit */, nowNanos)
 				if err != nil {
 					assert.NoError(b, err)
 					return
 				}
-				_ = cbToken.Done(br, sendErr, now) // ignore cancellation error
+				_ = cbToken.Done(br, sendErr, nowNanos) // ignore cancellation error
 			}
 		}()
 	}

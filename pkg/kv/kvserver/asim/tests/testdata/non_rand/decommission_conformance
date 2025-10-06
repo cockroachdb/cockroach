@@ -1,0 +1,54 @@
+# This test reproduces #117886, where decommissioning could become stuck due to
+# incorrect constraint analysis when replacing a decommissioning replica. If a
+# constraint conjunction were initially undersatisfied and a different
+# constraint conjunction currently satisfied by the decommissioning replica
+# being replaced, it was possible that a valid replacement target would never
+# be selected.
+gen_cluster nodes=4
+----
+
+set_locality node=1 locality=region=a
+----
+
+set_locality node=2 locality=region=b
+----
+
+set_locality node=3 locality=region=c
+----
+
+set_locality node=4 locality=region=c
+----
+
+# Generate 5 ranges, where initially there will be two replicas in region c and
+# one replica in region a. 
+gen_ranges ranges=5 repl_factor=3
+----
+
+set_span_config 
+[0,10000): num_replicas=3 constraints={'+region=a':1,'+region=c':2}
+----
+
+set_span_config delay=5m
+[0,10000): num_replicas=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1}
+----
+
+set_liveness node=4 liveness=decommissioning delay=5m
+----
+
+assertion type=conformance under=0 over=0 unavailable=0 violating=0
+----
+
+eval duration=20m
+----
+OK
+
+topology
+----
+a
+  └── [1]
+b
+  └── [2]
+c
+  └── [3 4]
+
+# vim:ft=sh

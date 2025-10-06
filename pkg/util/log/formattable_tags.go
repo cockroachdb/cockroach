@@ -49,7 +49,7 @@ func makeFormattableTags(ctx context.Context, redactable bool) (res formattableT
 		// TODO(obs-inf/server): this assumes that log tag keys are safe,
 		// but this is not enforced throughout the code base. We could
 		// lint that it is true similar to how we lint that the format
-		// strings for `log.Dev.Infof` etc are const strings.
+		// strings for `log.Infof` etc are const strings.
 		res = append(res, t.Key()...)
 		res = append(res, 0)
 

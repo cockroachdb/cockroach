@@ -25,6 +25,5 @@ func TestParseOutputPreamble(t *testing.T) {
 	require.Equal(t, seed, int64(7375396416917217630))
 	require.Equal(t, cfg.name, "random-007")
 	// TODO(jackson): Assert roundtrip equality.
-	cfg.opts.EnsureDefaults()
-	t.Log(cfg.opts.String())
+	t.Log(cfg.opts.EnsureDefaults().String())
 }

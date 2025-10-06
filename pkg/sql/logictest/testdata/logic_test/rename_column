@@ -92,8 +92,9 @@ ALTER TABLE users RENAME COLUMN id TO uid
 statement error cannot rename column "username" because view "v1" depends on it
 ALTER TABLE users RENAME COLUMN username TO name
 
-statement ok
-ALTER TABLE users RENAME COLUMN species TO title
+# TODO(knz): restore test after #17269 / #10083 is fixed.
+#statement ok
+#ALTER TABLE users RENAME COLUMN species TO title
 
 statement ok
 CREATE VIEW v2 AS SELECT id from users
@@ -104,8 +105,9 @@ DROP VIEW v1
 statement error cannot rename column "id" because view "v2" depends on it
 ALTER TABLE users RENAME COLUMN id TO uid
 
-statement ok
-ALTER TABLE users RENAME COLUMN username TO name
+# TODO(knz): restore test after #17269 / #10083 is fixed.
+# statement ok
+# ALTER TABLE users RENAME COLUMN username TO name
 
 statement ok
 DROP VIEW v2
@@ -114,14 +116,14 @@ query T
 SELECT column_name FROM [SHOW COLUMNS FROM users] ORDER BY column_name
 ----
 id
-name
-title
+species
+username
 
 statement ok
 SET vectorize=on
 
 query T
-EXPLAIN ALTER TABLE users RENAME COLUMN title TO woo
+EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
 ----
 distribution: local
 vectorized: true
@@ -136,24 +138,16 @@ query T
 SELECT column_name FROM [SHOW COLUMNS FROM users] ORDER BY column_name
 ----
 id
-name
-title
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE users SET (schema_locked=false);
+species
+username
 
 # Check that a column can be added and renamed in the same statement
 statement ok
-ALTER TABLE users RENAME COLUMN title TO title_old,
-                  ADD COLUMN title STRING AS (title_old || ' woo') STORED
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE users SET (schema_locked=true);
+ALTER TABLE users RENAME COLUMN species TO species_old,
+                  ADD COLUMN species STRING AS (species_old || ' woo') STORED
 
 query T rowsort
-SELECT title FROM users
+SELECT species FROM users
 ----
 cat woo
 rat woo
@@ -197,34 +191,3 @@ query II
 SELECT j, k FROM foo;
 ----
 1  2
-
-# Test that mixed-case column names are handled correctly for rename operations.
-statement ok
-CREATE TABLE mixed_case_table (
-    "CamelCase" INT PRIMARY KEY,
-    "snake_case" TEXT,
-    "UPPERCASE" DECIMAL
-);
-
-statement error column "UPPERCASE" of relation "mixed_case_table" already exists
-ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "UPPERCASE";
-
-statement ok
-ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "CamelCase";
-
-statement ok
-ALTER TABLE mixed_case_table RENAME COLUMN "CamelCase" TO "NewCamelCase";
-
-statement ok
-ALTER TABLE mixed_case_table RENAME COLUMN "snake_case" TO "SnakeCase";
-
-statement ok
-ALTER TABLE mixed_case_table RENAME COLUMN "UPPERCASE" TO "decimal_value";
-
-query T colnames
-SELECT column_name FROM [SHOW COLUMNS FROM mixed_case_table] ORDER BY column_name;
-----
-column_name
-NewCamelCase
-SnakeCase
-decimal_value

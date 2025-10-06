@@ -17,7 +17,7 @@ import (
 // limitNode represents a node that limits the number of rows
 // returned or only return them past a given number (offset).
 type limitNode struct {
-	singleInputPlanNode
+	plan       planNode
 	countExpr  tree.TypedExpr
 	offsetExpr tree.TypedExpr
 }
@@ -35,7 +35,7 @@ func (n *limitNode) Values() tree.Datums {
 }
 
 func (n *limitNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.plan.Close(ctx)
 }
 
 // evalLimit evaluates the Count and Offset fields. If Count is missing, the

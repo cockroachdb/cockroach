@@ -273,8 +273,6 @@ func (loggerDev) InfofDepth(ctx context.Context, depth int, format string, args 
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-//
-// Deprecated: use log.Dev.Infof instead
 func Infof(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
 }
@@ -297,8 +295,6 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-//
-// Deprecated: use log.Dev.VInfof instead
 func VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.INFO, channel.DEV, format, args...)
@@ -323,8 +319,6 @@ func VInfof(ctx context.Context, level Level, format string, args ...interface{}
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-//
-// Deprecated: use log.Dev.Info instead
 func Info(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.INFO, channel.DEV, msg)
 }
@@ -348,8 +342,6 @@ func Info(ctx context.Context, msg string) {
 //
 // The `INFO` severity is used for informational messages that do not
 // require action.
-//
-// Deprecated: use log.Dev.InfofDepth instead
 func InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.INFO, channel.DEV, format, args...)
 }
@@ -467,8 +459,6 @@ func (loggerDev) WarningfDepth(ctx context.Context, depth int, format string, ar
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-//
-// Deprecated: use log.Dev.Warningf instead
 func Warningf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -491,8 +481,6 @@ func Warningf(ctx context.Context, format string, args ...interface{}) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-//
-// Deprecated: use log.Dev.VWarningf instead
 func VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.WARNING, channel.DEV, format, args...)
@@ -517,8 +505,6 @@ func VWarningf(ctx context.Context, level Level, format string, args ...interfac
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-//
-// Deprecated: use log.Dev.Warning instead
 func Warning(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.WARNING, channel.DEV, msg)
 }
@@ -542,8 +528,6 @@ func Warning(ctx context.Context, msg string) {
 //
 // The `WARNING` severity is used for situations which may require special handling,
 // where normal operation is expected to resume automatically.
-//
-// Deprecated: use log.Dev.WarningfDepth instead
 func WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.WARNING, channel.DEV, format, args...)
 }
@@ -666,8 +650,6 @@ func (loggerDev) ErrorfDepth(ctx context.Context, depth int, format string, args
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-//
-// Deprecated: use log.Dev.Errorf instead
 func Errorf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
 }
@@ -691,8 +673,6 @@ func Errorf(ctx context.Context, format string, args ...interface{}) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-//
-// Deprecated: use log.Dev.VErrorf instead
 func VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.ERROR, channel.DEV, format, args...)
@@ -718,8 +698,6 @@ func VErrorf(ctx context.Context, level Level, format string, args ...interface{
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-//
-// Deprecated: use log.Dev.Error instead
 func Error(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.ERROR, channel.DEV, msg)
 }
@@ -744,8 +722,6 @@ func Error(ctx context.Context, msg string) {
 // The `ERROR` severity is used for situations that require special handling,
 // where normal operation could not proceed as expected.
 // Other operations can continue mostly unaffected.
-//
-// Deprecated: use log.Dev.ErrorfDepth instead
 func ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.ERROR, channel.DEV, format, args...)
 }
@@ -868,8 +844,6 @@ func (loggerDev) FatalfDepth(ctx context.Context, depth int, format string, args
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-//
-// Deprecated: use log.Dev.Fatalf instead
 func Fatalf(ctx context.Context, format string, args ...interface{}) {
 	logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
 }
@@ -893,8 +867,6 @@ func Fatalf(ctx context.Context, format string, args ...interface{}) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-//
-// Deprecated: use log.Dev.VFatalf instead
 func VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
 	if VDepth(level, 1) {
 		logfDepth(ctx, 1, severity.FATAL, channel.DEV, format, args...)
@@ -920,8 +892,6 @@ func VFatalf(ctx context.Context, level Level, format string, args ...interface{
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-//
-// Deprecated: use log.Dev.Fatal instead
 func Fatal(ctx context.Context, msg string) {
 	logfDepth(ctx, 1, severity.FATAL, channel.DEV, msg)
 }
@@ -946,8 +916,6 @@ func Fatal(ctx context.Context, msg string) {
 // The `FATAL` severity is used for situations that require an immedate, hard
 // server shutdown. A report is also sent to telemetry if telemetry
 // is enabled.
-//
-// Deprecated: use log.Dev.FatalfDepth instead
 func FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
 	logfDepth(ctx, depth+1, severity.FATAL, channel.DEV, format, args...)
 }
@@ -1056,8 +1024,6 @@ func (loggerDev) VEventfDepth(ctx context.Context, depth int, level Level, forma
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
-//
-// Deprecated: use log.Dev.Shout instead
 func Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, msg)
 }
@@ -1077,8 +1043,6 @@ func Shout(ctx context.Context, sev Severity, msg string) {
 // centralized logging facilities, because they likely contain
 // sensitive operational data.
 // See [Configure logs](configure-logs.html#dev-channel).
-//
-// Deprecated: use log.Dev.Shoutf instead
 func Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.DEV, format, args...)
 }
@@ -6548,576 +6512,4 @@ func (loggerKvDistribution) VEventf(ctx context.Context, level Level, format str
 // ranges.
 func (loggerKvDistribution) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
 	vEventf(ctx, false /* isErr */, 1+depth, level, channel.KV_DISTRIBUTION, format, args...)
-}
-
-// loggerChangefeed is the logger type for the CHANGEFEED channel.
-type loggerChangefeed struct{}
-
-// Changefeed is a logger that logs to the CHANGEFEED channel.
-//
-// The `CHANGEFEED` channel is used to report changefeed events
-var Changefeed loggerChangefeed
-
-// Changefeed and loggerChangefeed implement ChannelLogger.
-//
-// We do not force use of ChannelLogger when instantiating the logger
-// object above (e.g. by giving it the interface type), to ensure
-// the calls to the API methods remain inlinable in the common case.
-var _ ChannelLogger = Changefeed
-
-// Infof logs to the CHANGEFEED channel with severity INFO.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerChangefeed) Infof(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.INFO, channel.CHANGEFEED, format, args...)
-}
-
-// VInfof logs to the CHANGEFEED channel with severity INFO,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerChangefeed) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.INFO, channel.CHANGEFEED, format, args...)
-	}
-}
-
-// Info logs to the CHANGEFEED channel with severity INFO.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerChangefeed) Info(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.INFO, channel.CHANGEFEED, msg)
-}
-
-// InfofDepth logs to the CHANGEFEED channel with severity INFO,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerChangefeed) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.INFO, channel.CHANGEFEED, format, args...)
-}
-
-// Warningf logs to the CHANGEFEED channel with severity WARNING.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerChangefeed) Warningf(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.WARNING, channel.CHANGEFEED, format, args...)
-}
-
-// VWarningf logs to the CHANGEFEED channel with severity WARNING,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerChangefeed) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.WARNING, channel.CHANGEFEED, format, args...)
-	}
-}
-
-// Warning logs to the CHANGEFEED channel with severity WARNING.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerChangefeed) Warning(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.WARNING, channel.CHANGEFEED, msg)
-}
-
-// WarningfDepth logs to the CHANGEFEED channel with severity WARNING,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerChangefeed) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.WARNING, channel.CHANGEFEED, format, args...)
-}
-
-// Errorf logs to the CHANGEFEED channel with severity ERROR.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerChangefeed) Errorf(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.ERROR, channel.CHANGEFEED, format, args...)
-}
-
-// VErrorf logs to the CHANGEFEED channel with severity ERROR,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerChangefeed) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.ERROR, channel.CHANGEFEED, format, args...)
-	}
-}
-
-// Error logs to the CHANGEFEED channel with severity ERROR.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerChangefeed) Error(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.ERROR, channel.CHANGEFEED, msg)
-}
-
-// ErrorfDepth logs to the CHANGEFEED channel with severity ERROR,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerChangefeed) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.ERROR, channel.CHANGEFEED, format, args...)
-}
-
-// Fatalf logs to the CHANGEFEED channel with severity FATAL.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerChangefeed) Fatalf(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.FATAL, channel.CHANGEFEED, format, args...)
-}
-
-// VFatalf logs to the CHANGEFEED channel with severity FATAL,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerChangefeed) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.FATAL, channel.CHANGEFEED, format, args...)
-	}
-}
-
-// Fatal logs to the CHANGEFEED channel with severity FATAL.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerChangefeed) Fatal(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.FATAL, channel.CHANGEFEED, msg)
-}
-
-// FatalfDepth logs to the CHANGEFEED channel with severity FATAL,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// # The `CHANGEFEED` channel is used to report changefeed events
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerChangefeed) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.FATAL, channel.CHANGEFEED, format, args...)
-}
-
-// Shout logs to channel CHANGEFEED, and also to the real stderr if logging
-// is currently redirected to a file.
-//
-// The `CHANGEFEED` channel is used to report changefeed events
-func (loggerChangefeed) Shout(ctx context.Context, sev Severity, msg string) {
-	shoutfDepth(ctx, 1, sev, channel.CHANGEFEED, msg)
-}
-
-// Shoutf logs to channel CHANGEFEED, and also to the real stderr if
-// logging is currently redirected to a file. Arguments are handled in
-// the manner of fmt.Printf.
-//
-// The `CHANGEFEED` channel is used to report changefeed events
-func (loggerChangefeed) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
-	shoutfDepth(ctx, 1, sev, channel.CHANGEFEED, format, args...)
-}
-
-// VEvent either logs a message to the channel (which also outputs to the
-// active trace) or to the trace alone, depending on whether the specified
-// verbosity level is active.
-// The `CHANGEFEED` channel is used to report changefeed events
-func (loggerChangefeed) VEvent(ctx context.Context, level Level, msg string) {
-	vEvent(ctx, false /* isErr */, 1, level, channel.CHANGEFEED, msg)
-}
-
-// VEventf either logs a message to the channel (which also outputs to the
-// active trace) or to the trace alone, depending on whether the specified
-// verbosity level is active.
-// The `CHANGEFEED` channel is used to report changefeed events
-func (loggerChangefeed) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.CHANGEFEED, format, args...)
-}
-
-// VEventfDepth performs the same as VEventf but checks the verbosity level
-// at the given depth in the call stack.
-// The `CHANGEFEED` channel is used to report changefeed events
-func (loggerChangefeed) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
-	vEventf(ctx, false /* isErr */, 1+depth, level, channel.CHANGEFEED, format, args...)
-}
-
-// loggerKvExec is the logger type for the KV_EXEC channel.
-type loggerKvExec struct{}
-
-// KvExec is a logger that logs to the KV_EXEC channel.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-var KvExec loggerKvExec
-
-// KvExec and loggerKvExec implement ChannelLogger.
-//
-// We do not force use of ChannelLogger when instantiating the logger
-// object above (e.g. by giving it the interface type), to ensure
-// the calls to the API methods remain inlinable in the common case.
-var _ ChannelLogger = KvExec
-
-// Infof logs to the KV_EXEC channel with severity INFO.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerKvExec) Infof(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.INFO, channel.KV_EXEC, format, args...)
-}
-
-// VInfof logs to the KV_EXEC channel with severity INFO,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerKvExec) VInfof(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.INFO, channel.KV_EXEC, format, args...)
-	}
-}
-
-// Info logs to the KV_EXEC channel with severity INFO.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerKvExec) Info(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.INFO, channel.KV_EXEC, msg)
-}
-
-// InfofDepth logs to the KV_EXEC channel with severity INFO,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `INFO` severity is used for informational messages that do not
-// require action.
-func (loggerKvExec) InfofDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.INFO, channel.KV_EXEC, format, args...)
-}
-
-// Warningf logs to the KV_EXEC channel with severity WARNING.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerKvExec) Warningf(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.WARNING, channel.KV_EXEC, format, args...)
-}
-
-// VWarningf logs to the KV_EXEC channel with severity WARNING,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerKvExec) VWarningf(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.WARNING, channel.KV_EXEC, format, args...)
-	}
-}
-
-// Warning logs to the KV_EXEC channel with severity WARNING.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerKvExec) Warning(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.WARNING, channel.KV_EXEC, msg)
-}
-
-// WarningfDepth logs to the KV_EXEC channel with severity WARNING,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `WARNING` severity is used for situations which may require special handling,
-// where normal operation is expected to resume automatically.
-func (loggerKvExec) WarningfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.WARNING, channel.KV_EXEC, format, args...)
-}
-
-// Errorf logs to the KV_EXEC channel with severity ERROR.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerKvExec) Errorf(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.ERROR, channel.KV_EXEC, format, args...)
-}
-
-// VErrorf logs to the KV_EXEC channel with severity ERROR,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerKvExec) VErrorf(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.ERROR, channel.KV_EXEC, format, args...)
-	}
-}
-
-// Error logs to the KV_EXEC channel with severity ERROR.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerKvExec) Error(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.ERROR, channel.KV_EXEC, msg)
-}
-
-// ErrorfDepth logs to the KV_EXEC channel with severity ERROR,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `ERROR` severity is used for situations that require special handling,
-// where normal operation could not proceed as expected.
-// Other operations can continue mostly unaffected.
-func (loggerKvExec) ErrorfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.ERROR, channel.KV_EXEC, format, args...)
-}
-
-// Fatalf logs to the KV_EXEC channel with severity FATAL.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerKvExec) Fatalf(ctx context.Context, format string, args ...interface{}) {
-	logfDepth(ctx, 1, severity.FATAL, channel.KV_EXEC, format, args...)
-}
-
-// VFatalf logs to the KV_EXEC channel with severity FATAL,
-// if logging has been enabled for the source file where the call is
-// performed at the provided verbosity level, via the vmodule setting.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerKvExec) VFatalf(ctx context.Context, level Level, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		logfDepth(ctx, 1, severity.FATAL, channel.KV_EXEC, format, args...)
-	}
-}
-
-// Fatal logs to the KV_EXEC channel with severity FATAL.
-// It extracts log tags from the context and logs them along with the given
-// message.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerKvExec) Fatal(ctx context.Context, msg string) {
-	logfDepth(ctx, 1, severity.FATAL, channel.KV_EXEC, msg)
-}
-
-// FatalfDepth logs to the KV_EXEC channel with severity FATAL,
-// offsetting the caller's stack frame by 'depth'.
-// It extracts log tags from the context and logs them along with the given
-// message. Arguments are handled in the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-//
-// The `FATAL` severity is used for situations that require an immedate, hard
-// server shutdown. A report is also sent to telemetry if telemetry
-// is enabled.
-func (loggerKvExec) FatalfDepth(ctx context.Context, depth int, format string, args ...interface{}) {
-	logfDepth(ctx, depth+1, severity.FATAL, channel.KV_EXEC, format, args...)
-}
-
-// Shout logs to channel KV_EXEC, and also to the real stderr if logging
-// is currently redirected to a file.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-func (loggerKvExec) Shout(ctx context.Context, sev Severity, msg string) {
-	shoutfDepth(ctx, 1, sev, channel.KV_EXEC, msg)
-}
-
-// Shoutf logs to channel KV_EXEC, and also to the real stderr if
-// logging is currently redirected to a file. Arguments are handled in
-// the manner of fmt.Printf.
-//
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-func (loggerKvExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
-	shoutfDepth(ctx, 1, sev, channel.KV_EXEC, format, args...)
-}
-
-// VEvent either logs a message to the channel (which also outputs to the
-// active trace) or to the trace alone, depending on whether the specified
-// verbosity level is active.
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-func (loggerKvExec) VEvent(ctx context.Context, level Level, msg string) {
-	vEvent(ctx, false /* isErr */, 1, level, channel.KV_EXEC, msg)
-}
-
-// VEventf either logs a message to the channel (which also outputs to the
-// active trace) or to the trace alone, depending on whether the specified
-// verbosity level is active.
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-func (loggerKvExec) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.KV_EXEC, format, args...)
-}
-
-// VEventfDepth performs the same as VEventf but checks the verbosity level
-// at the given depth in the call stack.
-// The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-func (loggerKvExec) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
-	vEventf(ctx, false /* isErr */, 1+depth, level, channel.KV_EXEC, format, args...)
 }

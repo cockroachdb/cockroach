@@ -9,11 +9,7 @@
 
 package kvserverbase
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-)
+import "time"
 
 // BatchEvalTestingKnobs contains testing helpers that are used during batch evaluation.
 type BatchEvalTestingKnobs struct {
@@ -40,6 +36,11 @@ type BatchEvalTestingKnobs struct {
 	// explanation of why.
 	AllowGCWithNewThresholdAndKeys bool
 
+	// DisableInitPutFailOnTombstones disables FailOnTombstones for InitPut. This
+	// is useful together with e.g. StoreTestingKnobs.GlobalMVCCRangeTombstone,
+	// where we still want InitPut to succeed on top of the range tombstone.
+	DisableInitPutFailOnTombstones bool
+
 	// UseRangeTombstonesForPointDeletes will use point-sized MVCC range
 	// tombstones when deleting point keys, to increase test coverage. These
 	// should not appear different from a point tombstone to a KV client.
@@ -51,13 +52,6 @@ type BatchEvalTestingKnobs struct {
 	// its record (which can be resolved synchronously with EndTxn). This is
 	// useful in certain tests.
 	DisableTxnAutoGC bool
-
-	// CommitTriggerError is called at commit triggers to simulate errors.
-	CommitTriggerError func() error
-
-	// BeforeAbortSpanCheck is called before a request checks the abort span with
-	// the request's txn ID.
-	BeforeAbortSpanCheck func(id uuid.UUID)
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during

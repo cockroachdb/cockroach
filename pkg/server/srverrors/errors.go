@@ -19,7 +19,7 @@ import (
 // ServerError logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func ServerError(ctx context.Context, err error) error {
-	log.Dev.ErrorfDepth(ctx, 1, "%+v", err)
+	log.ErrorfDepth(ctx, 1, "%+v", err)
 
 	// Include the PGCode in the message for easier troubleshooting
 	errCode := pgerror.GetPGCode(err).String()
@@ -41,7 +41,7 @@ func ServerError(ctx context.Context, err error) error {
 // ServerErrorf logs the provided error and returns an error that should be returned by
 // he RPC endpoint method.
 func ServerErrorf(ctx context.Context, format string, args ...interface{}) error {
-	log.Dev.ErrorfDepth(ctx, 1, format, args...)
+	log.ErrorfDepth(ctx, 1, format, args...)
 	return ErrAPIInternalError
 }
 
@@ -59,7 +59,7 @@ var ErrAPIInternalError = grpcstatus.Error(
 // and returns a standard GRPC error which is appropriate to return to the
 // client.
 func APIInternalError(ctx context.Context, err error) error {
-	log.Dev.ErrorfDepth(ctx, 1, "%s", err)
+	log.ErrorfDepth(ctx, 1, "%s", err)
 	return ErrAPIInternalError
 }
 
@@ -68,6 +68,6 @@ func APIInternalError(ctx context.Context, err error) error {
 // of the error to the server log, and sends the standard internal error string
 // over the http.ResponseWriter.
 func APIV2InternalError(ctx context.Context, err error, w http.ResponseWriter) {
-	log.Dev.ErrorfDepth(ctx, 1, "%s", err)
+	log.ErrorfDepth(ctx, 1, "%s", err)
 	http.Error(w, ErrAPIInternalErrorString, http.StatusInternalServerError)
 }

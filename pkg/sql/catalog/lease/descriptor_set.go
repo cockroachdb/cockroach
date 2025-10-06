@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // descriptorSet maintains an ordered set of descriptorVersionState objects
@@ -44,7 +43,7 @@ func (l *descriptorSet) String() string {
 func (l *descriptorSet) insert(s *descriptorVersionState) {
 	i, match := l.findIndex(s.GetVersion())
 	if match {
-		panic(redact.Sprintf("unable to insert duplicate lease for id=%d", s.GetID()))
+		panic("unable to insert duplicate lease")
 	}
 	if i == len(l.data) {
 		l.data = append(l.data, s)
@@ -107,10 +106,12 @@ func (l *descriptorSet) findPreviousToExpire(dropped bool) *descriptorVersionSta
 		// avoid expiring.
 		return nil
 	}
-	// If the refcount has hit zero then this version will be cleaned up
-	// automatically. The expiration time is non-nil only if a version has
-	// been expired or is considered stale.
-	if exp.refcount.Load() == 0 || (exp.expiration.Load() != nil) {
+	exp.mu.Lock()
+	defer exp.mu.Unlock()
+	// If this version is not active, then it will go away on its own
+	// from the leases table, so no expiry needs to be setup. If the
+	// session is already cleared then an expiry has been setup too.
+	if exp.mu.refcount == 0 || exp.mu.session == nil {
 		return nil
 	}
 	return exp

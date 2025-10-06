@@ -8,180 +8,221 @@ package promhelperclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/idtoken"
 	"gopkg.in/yaml.v2"
 )
 
-func TestNewPromClient(t *testing.T) {
-	mockToken := &oauth2.Token{
-		AccessToken: "test-token",
-		TokenType:   "Bearer",
-	}
-	mockSource := &mockIAPTokenSource{
-		token:      mockToken,
-		httpClient: &http.Client{},
-	}
-
-	t.Run("with custom URL and IAP token source", func(t *testing.T) {
-		promURL := "http://test.com"
-		client, err := NewPromClient(
-			WithCustomURL(promURL),
-			WithIAPTokenSource(mockSource),
-		)
-		require.NoError(t, err)
-		require.Equal(t, promURL, client.promUrl)
-		require.False(t, client.disabled)
-		require.Equal(t, mockSource.GetHTTPClient(), client.httpClient)
-	})
-
-	t.Run("with default URL", func(t *testing.T) {
-		client, err := NewPromClient(
-			WithIAPTokenSource(mockSource),
-		)
-		require.NoError(t, err)
-		require.Equal(t, promRegistrationUrl, client.promUrl)
-		require.NotNil(t, client.httpClient)
-	})
-
-	t.Run("verify supported providers", func(t *testing.T) {
-		tests := []struct {
-			provider    string
-			environment CloudEnvironment
-			expected    Reachability
-		}{
-			{"gce", "cockroach-ephemeral", Private},
-			{"gce", Default, Public},
-			{"aws", Default, Public},
-			{"azure", Default, Public},
-			{"unknown", Default, None},
-		}
-
-		for _, tc := range tests {
-			reachability := ProviderReachability(tc.provider, tc.environment)
-			require.Equal(t, tc.expected, reachability)
-		}
-	})
-}
-
-func TestPromClientDisabled(t *testing.T) {
+func TestUpdatePrometheusTargets(t *testing.T) {
 	l := func() *logger.Logger {
 		l, err := logger.RootLogger("", logger.TeeToStdout)
-		require.NoError(t, err)
+		if err != nil {
+			panic(err)
+		}
 		return l
 	}()
-
-	c := &PromClient{
-		disabled: true,
-	}
-
 	ctx := context.Background()
-	err := c.UpdatePrometheusTargets(ctx, "test-cluster", NodeTargets{}, l)
-	require.NoError(t, err)
-
-	err = c.DeleteClusterConfig(ctx, "test-cluster", l)
-	require.NoError(t, err)
-}
-
-func TestUpdatePrometheusTargets(t *testing.T) {
-
-	mockToken := &oauth2.Token{
-		AccessToken: "test-token",
-		TokenType:   "Bearer",
-	}
-	mockSource := &mockIAPTokenSource{
-		token:      mockToken,
-		httpClient: &http.Client{},
-	}
-
-	ctx := context.Background()
-	promURL := "http://test.com"
-
-	t.Run("buildCreateRequestBody", func(t *testing.T) {
-		nodes := NodeTargets{
-			1: {
-				{
-					Target: "127.0.0.1:8080",
-					CustomLabels: map[string]string{
-						"label1": "value1",
-					},
-				},
-			},
-			2: {
-				{
-					Target: "127.0.0.1:8081",
-				},
-			},
+	promUrl := "http://prom_url.com"
+	c := NewPromClient()
+	c.setUrl(promUrl)
+	t.Run("UpdatePrometheusTargets fails with 400", func(t *testing.T) {
+		c.httpPut = func(ctx context.Context, reqUrl string, h *http.Header, body io.Reader) (
+			resp *http.Response, err error) {
+			require.Equal(t, getUrl(promUrl, "c1"), reqUrl)
+			return &http.Response{
+				StatusCode: 400,
+				Body:       io.NopCloser(strings.NewReader("failed")),
+			}, nil
 		}
-
-		client, err := NewPromClient(WithCustomURL(promURL), WithIAPTokenSource(mockSource))
-		require.NoError(t, err)
-		body, err := client.buildCreateRequestBody(nodes)
-		require.NoError(t, err)
-
-		buf := new([]byte)
-		_, err = body.Read(*buf)
-		require.NoError(t, err)
-
-		// Unmarshal the json
-		var instanceConfig instanceConfigRequest
-		err = json.NewDecoder(body).Decode(&instanceConfig)
-		require.NoError(t, err)
-
-		// Unmarshal the yaml
-		var ccParams []*CCParams
-		err = yaml.UnmarshalStrict([]byte(instanceConfig.Config), &ccParams)
-		require.NoError(t, err)
-
-		require.Len(t, ccParams, 2)
-
-		for _, params := range ccParams {
-			if params.Targets[0] == "127.0.0.1:8080" {
-				require.Equal(t, map[string]string{"label1": "value1"}, params.Labels)
-			} else if params.Targets[0] == "127.0.0.1:8081" {
-				require.Empty(t, params.Labels)
-			} else {
-				t.Fatalf("unexpected target: %s", params.Targets[0])
+		err := c.UpdatePrometheusTargets(ctx, "c1", false,
+			map[int]*NodeInfo{1: {Target: "n1"}}, true, l)
+		require.NotNil(t, err)
+		require.Equal(t, fmt.Sprintf(ErrorMessage, 400, getUrl(promUrl, "c1"), "failed"), err.Error())
+	})
+	t.Run("UpdatePrometheusTargets succeeds", func(t *testing.T) {
+		nodeInfos := map[int]*NodeInfo{1: {Target: "n1"}, 3: {
+			Target:       "n3",
+			CustomLabels: map[string]string{"custom": "label"},
+		}}
+		c.httpPut = func(ctx context.Context, url string, h *http.Header, body io.Reader) (
+			resp *http.Response, err error) {
+			require.Equal(t, getUrl(promUrl, "c1"), url)
+			ir, err := getInstanceConfigRequest(io.NopCloser(body))
+			require.Nil(t, err)
+			require.NotNil(t, ir.Config)
+			configs := make([]*CCParams, 0)
+			require.Nil(t, yaml.UnmarshalStrict([]byte(ir.Config), &configs))
+			require.Len(t, configs, 2)
+			for _, c := range configs {
+				if c.Targets[0] == "n1" {
+					require.Empty(t, nodeInfos[1].CustomLabels)
+				} else {
+					require.Equal(t, "n3", c.Targets[0])
+					for k, v := range nodeInfos[3].CustomLabels {
+						require.Equal(t, v, c.Labels[k])
+					}
+				}
 			}
+			return &http.Response{
+				StatusCode: 200,
+			}, nil
 		}
-	})
-
-	t.Run("buildCreateRequest", func(t *testing.T) {
-		nodes := NodeTargets{
-			1: {
-				{
-					Target: "127.0.0.1:8080",
-					CustomLabels: map[string]string{
-						"label1": "value1",
-					},
-				},
-			},
-		}
-
-		client, err := NewPromClient(WithCustomURL(promURL), WithIAPTokenSource(mockSource))
-		require.NoError(t, err)
-		req, err := client.buildCreateRequest(ctx, "test-cluster", nodes)
-		require.NoError(t, err)
-
-		require.Equal(t, promURL+"/v1/instance-configs/test-cluster", req.URL.String())
-		require.Equal(t, "PUT", req.Method)
-		require.Equal(t, "application/json", req.Header.Get("Content-Type"))
+		err := c.UpdatePrometheusTargets(ctx, "c1", false, nodeInfos, true, l)
+		require.Nil(t, err)
 	})
 }
 
-type mockIAPTokenSource struct {
-	token      *oauth2.Token
-	httpClient *http.Client
+func TestDeleteClusterConfig(t *testing.T) {
+	l := func() *logger.Logger {
+		l, err := logger.RootLogger(filepath.Join(t.TempDir(), "test.log"), logger.TeeToStdout)
+		if err != nil {
+			panic(err)
+		}
+		return l
+	}()
+	ctx := context.Background()
+	promUrl := "http://prom_url.com"
+	c := NewPromClient()
+	c.setUrl(promUrl)
+	t.Run("DeleteClusterConfig fails with 400", func(t *testing.T) {
+		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
+			resp *http.Response, err error) {
+			require.Equal(t, getUrl(promUrl, "c1"), url)
+			return &http.Response{
+				StatusCode: 400,
+				Body:       io.NopCloser(strings.NewReader("failed")),
+			}, nil
+		}
+		err := c.DeleteClusterConfig(ctx, "c1", false, false, l)
+		require.NotNil(t, err)
+		require.Equal(
+			t,
+			fmt.Sprintf(ErrorMessage, 400, "http://prom_url.com/v1/instance-configs/c1", "failed"),
+			err.Error(),
+		)
+	})
+	t.Run("DeleteClusterConfig succeeds", func(t *testing.T) {
+		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
+			resp *http.Response, err error) {
+			require.Equal(t, getUrl(promUrl, "c1"), url)
+			return &http.Response{
+				StatusCode: 204,
+			}, nil
+		}
+		err := c.DeleteClusterConfig(ctx, "c1", false, false /* insecure */, l)
+		require.Nil(t, err)
+	})
+	t.Run("DeleteClusterConfig insecure succeeds", func(t *testing.T) {
+		c.httpDelete = func(ctx context.Context, url string, h *http.Header) (
+			resp *http.Response, err error) {
+			require.Equal(t, fmt.Sprintf("%s?insecure=true", getUrl(promUrl, "c1")), url)
+			return &http.Response{
+				StatusCode: 204,
+			}, nil
+		}
+		err := c.DeleteClusterConfig(ctx, "c1", false, true /* insecure */, l)
+		require.Nil(t, err)
+	})
 }
 
-func (m *mockIAPTokenSource) Token() (*oauth2.Token, error) {
-	return m.token, nil
+// getInstanceConfigRequest returns the instanceConfigRequest after parsing the request json
+func getInstanceConfigRequest(body io.ReadCloser) (*instanceConfigRequest, error) {
+	var insConfigReq instanceConfigRequest
+	if err := json.NewDecoder(body).Decode(&insConfigReq); err != nil {
+		return nil, err
+	}
+	return &insConfigReq, nil
 }
 
-func (m *mockIAPTokenSource) GetHTTPClient() *http.Client {
-	return m.httpClient
+func Test_getToken(t *testing.T) {
+	ctx := context.Background()
+	l := func() *logger.Logger {
+		l, err := logger.RootLogger("", logger.TeeToStdout)
+		if err != nil {
+			panic(err)
+		}
+		return l
+	}()
+	c := NewPromClient()
+	t.Run("insecure url", func(t *testing.T) {
+		c.setUrl("http://test.com")
+		token, err := c.getToken(ctx, false, l)
+		require.Nil(t, err)
+		require.Empty(t, token)
+	})
+	t.Run("invalid credentials", func(t *testing.T) {
+		err := os.Setenv(roachprodutil.ServiceAccountJson, "{}")
+		require.Nil(t, err)
+		err = os.Setenv(roachprodutil.ServiceAccountAudience, "dummy_audience")
+		require.Nil(t, err)
+		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
+			return nil, fmt.Errorf("invalid")
+		}
+		c.setUrl("https://test.com")
+		token, err := c.getToken(ctx, false, l)
+		require.NotNil(t, err)
+		require.Empty(t, token)
+		require.Equal(t, "error creating GCS oauth token source from specified credential: invalid", err.Error())
+	})
+	t.Run("invalid token", func(t *testing.T) {
+		err := os.Setenv(roachprodutil.ServiceAccountJson, "{}")
+		require.Nil(t, err)
+		err = os.Setenv(roachprodutil.ServiceAccountAudience, "dummy_audience")
+		require.Nil(t, err)
+		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
+			return &mockToken{token: "", err: fmt.Errorf("failed")}, nil
+		}
+		c.setUrl("https://test.com")
+		token, err := c.getToken(ctx, false, l)
+		require.NotNil(t, err)
+		require.Empty(t, token)
+		require.Equal(t, "error getting identity token: failed", err.Error())
+	})
+	t.Run("success", func(t *testing.T) {
+		err := os.Setenv(roachprodutil.ServiceAccountJson, "{}")
+		require.Nil(t, err)
+		err = os.Setenv(roachprodutil.ServiceAccountAudience, "dummy_audience")
+		require.Nil(t, err)
+		c.newTokenSource = func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (oauth2.TokenSource, error) {
+			return &mockToken{token: "token"}, nil
+		}
+		c.setUrl("https://test.com")
+		token, err := c.getToken(ctx, false, l)
+		require.Nil(t, err)
+		require.Equal(t, "Bearer token", token)
+	})
+}
+
+type mockToken struct {
+	token string
+	err   error
+}
+
+func (tk *mockToken) Token() (*oauth2.Token, error) {
+	if tk.err != nil {
+		return nil, tk.err
+	}
+	return &oauth2.Token{AccessToken: tk.token}, nil
+}
+
+func TestIsNotFoundError(t *testing.T) {
+	t.Run("IsNotFoundError true", func(t *testing.T) {
+		err := fmt.Errorf(ErrorMessage, 404, "http://prom_url.com/v1/instance-configs/c1", "failed")
+		require.True(t, IsNotFoundError(err))
+	})
+	t.Run("IsNotFoundError false", func(t *testing.T) {
+		err := fmt.Errorf(ErrorMessage, 500, "http://prom_url.com/v1/instance-configs/c1", "failed")
+		require.False(t, IsNotFoundError(err))
+	})
 }

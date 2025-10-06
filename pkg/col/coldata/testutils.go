@@ -60,6 +60,9 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 		expectedNulls := expectedVec.Nulls()
 		actualNulls := actualVec.Nulls()
 		oldExpMaybeHasNulls, oldActMaybeHasNulls := expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls
+		defer func() {
+			expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls = oldExpMaybeHasNulls, oldActMaybeHasNulls
+		}()
 		expectedNulls.maybeHasNulls = expectedNulls.maybeHasNulls || actualNulls.maybeHasNulls
 		actualNulls.maybeHasNulls = expectedNulls.maybeHasNulls || actualNulls.maybeHasNulls
 		require.Equal(t, expectedNulls.Slice(0, expected.Length()), actualNulls.Slice(0, actual.Length()))
@@ -144,6 +147,5 @@ func AssertEquivalentBatches(t testingT, expected, actual Batch) {
 				actualVec.Window(0, actual.Length()),
 			)
 		}
-		expectedNulls.maybeHasNulls, actualNulls.maybeHasNulls = oldExpMaybeHasNulls, oldActMaybeHasNulls
 	}
 }

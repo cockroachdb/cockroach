@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for sum_agg.eg.go. It's formatted in a
@@ -93,7 +94,7 @@ func newSum_SUMKIND_AGGKINDAggAlloc(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unsupported sum agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 // {{range .Infos}}

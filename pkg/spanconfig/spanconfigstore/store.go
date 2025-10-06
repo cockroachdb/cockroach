@@ -161,7 +161,7 @@ func (s *Store) getSpanConfigForKeyRLocked(
 	clamped := bounds.Clamp(&conf)
 
 	if clamped {
-		log.Dev.VInfof(ctx, 3, "span config for tenant clamped to %v", conf)
+		log.VInfof(ctx, 3, "span config for tenant clamped to %v", conf)
 	}
 	return conf, confSpan, nil
 }
@@ -192,7 +192,7 @@ func (s *Store) Apply(
 
 	deleted, added, err := s.applyInternal(ctx, updates...)
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	return deleted, added
 }
@@ -226,7 +226,7 @@ func (s *Store) ForEachOverlappingSpanConfig(
 	// system span config, such as a cluster wide protection policy, may still be
 	// applicable to the replica with the empty table span.
 	if !foundOverlapping {
-		log.Dev.VInfof(ctx, 3, "no overlapping span config found for span %s", span)
+		log.VInfof(ctx, 3, "no overlapping span config found for span %s", span)
 		config, _, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(span.Key))
 		if err != nil {
 			return err

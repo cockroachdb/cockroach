@@ -125,20 +125,22 @@ func (im *IndexBackfillerMergePlanner) plan(
 	mergeTimestamp hlc.Timestamp,
 ) (func(context.Context) error, error) {
 	var p *PhysicalPlan
-	var extEvalCtx extendedEvalContext
+	var evalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 
 	if err := DescsTxn(ctx, im.execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewInternalSessionData(ctx, im.execCfg.Settings, "plan-index-backfill-merge")
-		extEvalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
+		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
 		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(
-			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 
-		spec := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
-		var err error
+		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
+		if err != nil {
+			return err
+		}
 		p, err = im.execCfg.DistSQLPlanner.createIndexBackfillerMergePhysicalPlan(ctx, planCtx, spec, todoSpanList)
 		return err
 	}); err != nil {
@@ -154,18 +156,15 @@ func (im *IndexBackfillerMergePlanner) plan(
 			im.execCfg.RangeDescriptorCache,
 			nil, /* txn - the flow does not run wholly in a txn */
 			im.execCfg.Clock,
-			extEvalCtx.Tracing,
+			evalCtx.Tracing,
 		)
 		defer recv.Release()
-		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := extEvalCtx.Context.Copy()
+		evalCtxCopy := evalCtx
 		im.execCfg.DistSQLPlanner.Run(
 			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
-			p,
-			recv,
-			evalCtxCopy,
+			p, recv, &evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 		return cbw.Err()
@@ -316,7 +315,7 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 		if err := imt.jobMu.job.NoTxn().FractionProgressed(
 			ctx, jobs.FractionUpdater(frac),
 		); err != nil {
-			return jobs.SimplifyInvalidStateError(err)
+			return jobs.SimplifyInvalidStatusError(err)
 		}
 	}
 	return nil

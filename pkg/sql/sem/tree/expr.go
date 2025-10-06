@@ -12,17 +12,14 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/lib/pq/oid"
 )
 
 // Expr represents an expression.
@@ -42,7 +39,7 @@ type Expr interface {
 	// The semaCtx parameter defines the context in which to perform type checking.
 	// The desired parameter hints the desired type that the method's caller wants from
 	// the resulting TypedExpr. It is not valid to call TypeCheck with a nil desired
-	// type. Instead, call it with wildcard type types.AnyElement if no specific type is
+	// type. Instead, call it with wildcard type types.Any if no specific type is
 	// desired. This restriction is also true of most methods and functions related
 	// to type checking.
 	TypeCheck(ctx context.Context, semaCtx *SemaContext, desired *types.T) (TypedExpr, error)
@@ -426,7 +423,7 @@ func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
 		Expr:   expr,
 		Locale: locale,
 	}
-	node.typ = types.MakeCollatedType(expr.ResolvedType(), locale)
+	node.typ = types.MakeCollatedString(types.String, locale)
 	return node
 }
 
@@ -811,7 +808,7 @@ func (node *Placeholder) Format(ctx *FmtCtx) {
 // ResolvedType implements the TypedExpr interface.
 func (node *Placeholder) ResolvedType() *types.T {
 	if node.typ == nil {
-		return types.AnyElement
+		return types.Any
 	}
 	return node.typ
 }
@@ -969,7 +966,7 @@ type Subquery struct {
 // ResolvedType implements the TypedExpr interface.
 func (node *Subquery) ResolvedType() *types.T {
 	if node.typ == nil {
-		return types.AnyElement
+		return types.Any
 	}
 	return node.typ
 }
@@ -1048,7 +1045,7 @@ var binaryOpPrio = [...]int{
 	treebin.Bitxor: 6,
 	treebin.Bitor:  7,
 	treebin.Concat: 8, treebin.JSONFetchVal: 8, treebin.JSONFetchText: 8, treebin.JSONFetchValPath: 8, treebin.JSONFetchTextPath: 8,
-	treebin.Distance: 8, treebin.CosDistance: 8, treebin.NegInnerProduct: 8, treebin.FirstContains: 8, treebin.FirstContainedBy: 8,
+	treebin.Distance: 8, treebin.CosDistance: 8, treebin.NegInnerProduct: 8,
 }
 
 // binaryOpFullyAssoc indicates whether an operator is fully associative.
@@ -1062,7 +1059,7 @@ var binaryOpFullyAssoc = [...]bool{
 	treebin.Bitxor: true,
 	treebin.Bitor:  true,
 	treebin.Concat: true, treebin.JSONFetchVal: false, treebin.JSONFetchText: false, treebin.JSONFetchValPath: false, treebin.JSONFetchTextPath: false,
-	treebin.Distance: false, treebin.CosDistance: false, treebin.NegInnerProduct: false, treebin.FirstContains: false, treebin.FirstContainedBy: false,
+	treebin.Distance: false, treebin.CosDistance: false, treebin.NegInnerProduct: false,
 }
 
 // BinaryExpr represents a binary value expression.
@@ -1525,7 +1522,7 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		if typ, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(typ) {
+		if typ, ok := GetStaticallyKnownType(node.Type); ok && typ.Family() == types.CollatedStringFamily {
 			// Need to write closing parentheses before COLLATE clause, so create
 			// equivalent string type without the locale.
 			strTyp := types.MakeScalar(
@@ -1543,25 +1540,6 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
-}
-
-// typeDisplaysCollate is a helper function that returns true if the type
-// displays a COLLATE clause when formatted.
-func typeDisplaysCollate(typ *types.T) bool {
-	if typ.Family() == types.CollatedStringFamily {
-		switch typ.Oid() {
-		case oid.T_text, oid.T_varchar, oid.T_char, oid.T_name, oid.T_bpchar:
-			return true
-		case oidext.T_citext:
-			return false
-		default:
-			if buildutil.CrdbTestBuild {
-				panic(errors.AssertionFailedf("unexpected oid %d for collated string", typ.Oid()))
-			}
-			return false
-		}
-	}
-	return false
 }
 
 // NewTypedCastExpr returns a new CastExpr that is verified to be well-typed.
@@ -1765,14 +1743,12 @@ func (node *DGeometry) String() string        { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
 func (node *DInterval) String() string        { return AsString(node) }
 func (node *DJSON) String() string            { return AsString(node) }
-func (node *DJsonpath) String() string        { return AsString(node) }
 func (node *DUuid) String() string            { return AsString(node) }
 func (node *DIPAddr) String() string          { return AsString(node) }
 func (node *DString) String() string          { return AsString(node) }
 func (node *DCollatedString) String() string  { return AsString(node) }
 func (node *DTimestamp) String() string       { return AsString(node) }
 func (node *DTimestampTZ) String() string     { return AsString(node) }
-func (node *DLTree) String() string           { return AsString(node) }
 func (node *DTuple) String() string           { return AsString(node) }
 func (node *DArray) String() string           { return AsString(node) }
 func (node *DOid) String() string             { return AsString(node) }

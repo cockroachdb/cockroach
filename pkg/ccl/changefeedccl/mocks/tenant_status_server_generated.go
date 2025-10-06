@@ -8,7 +8,6 @@ import (
 	context "context"
 	reflect "reflect"
 
-	gossip "github.com/cockroachdb/cockroach/pkg/gossip"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	serverpb "github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	gomock "github.com/golang/mock/gomock"
@@ -52,36 +51,6 @@ func (mr *MockTenantStatusServerMockRecorder) DownloadSpan(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadSpan", reflect.TypeOf((*MockTenantStatusServer)(nil).DownloadSpan), arg0, arg1)
 }
 
-// EngineStats mocks base method.
-func (m *MockTenantStatusServer) EngineStats(arg0 context.Context, arg1 *serverpb.EngineStatsRequest) (*serverpb.EngineStatsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EngineStats", arg0, arg1)
-	ret0, _ := ret[0].(*serverpb.EngineStatsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// EngineStats indicates an expected call of EngineStats.
-func (mr *MockTenantStatusServerMockRecorder) EngineStats(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EngineStats", reflect.TypeOf((*MockTenantStatusServer)(nil).EngineStats), arg0, arg1)
-}
-
-// Gossip mocks base method.
-func (m *MockTenantStatusServer) Gossip(arg0 context.Context, arg1 *serverpb.GossipRequest) (*gossip.InfoStatus, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Gossip", arg0, arg1)
-	ret0, _ := ret[0].(*gossip.InfoStatus)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Gossip indicates an expected call of Gossip.
-func (mr *MockTenantStatusServerMockRecorder) Gossip(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Gossip", reflect.TypeOf((*MockTenantStatusServer)(nil).Gossip), arg0, arg1)
-}
-
 // HotRangesV2 mocks base method.
 func (m *MockTenantStatusServer) HotRangesV2(arg0 context.Context, arg1 *serverpb.HotRangesRequest) (*serverpb.HotRangesResponseV2, error) {
 	m.ctrl.T.Helper()
@@ -95,21 +64,6 @@ func (m *MockTenantStatusServer) HotRangesV2(arg0 context.Context, arg1 *serverp
 func (mr *MockTenantStatusServerMockRecorder) HotRangesV2(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HotRangesV2", reflect.TypeOf((*MockTenantStatusServer)(nil).HotRangesV2), arg0, arg1)
-}
-
-// NetworkConnectivity mocks base method.
-func (m *MockTenantStatusServer) NetworkConnectivity(arg0 context.Context, arg1 *serverpb.NetworkConnectivityRequest) (*serverpb.NetworkConnectivityResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NetworkConnectivity", arg0, arg1)
-	ret0, _ := ret[0].(*serverpb.NetworkConnectivityResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NetworkConnectivity indicates an expected call of NetworkConnectivity.
-func (mr *MockTenantStatusServerMockRecorder) NetworkConnectivity(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NetworkConnectivity", reflect.TypeOf((*MockTenantStatusServer)(nil).NetworkConnectivity), arg0, arg1)
 }
 
 // Nodes mocks base method.

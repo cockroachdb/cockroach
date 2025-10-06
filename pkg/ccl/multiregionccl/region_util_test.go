@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -95,7 +94,7 @@ func TestGetRegionEnumRepresentations(t *testing.T) {
 	tDB.Exec(t, `CREATE DATABASE foo PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3"`)
 
 	dbID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "foo"))
-	err := sqltestutils.TestingDescsTxn(ctx, tc.Server(0), func(
+	err := sql.TestingDescsTxn(ctx, tc.Server(0), func(
 		ctx context.Context, txn isql.Txn, col *descs.Collection,
 	) error {
 		enumReps, primaryRegion, err := sql.GetRegionEnumRepresentations(ctx, txn.KV(), dbID, col)
@@ -122,7 +121,7 @@ func getEnumMembers(
 ) map[string][]byte {
 	t.Helper()
 	enumMembers := make(map[string][]byte)
-	err := sqltestutils.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
+	err := sql.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
 		dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()

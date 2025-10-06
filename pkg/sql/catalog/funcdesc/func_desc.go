@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -253,7 +253,7 @@ func (desc *immutable) ValidateForwardReferences(
 	}
 
 	for _, depID := range desc.DependsOn {
-		vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), depID, vdg))
+		vea.Report(catalog.ValidateOutboundTableRef(depID, vdg))
 	}
 
 	for _, typeID := range desc.DependsOnTypes {
@@ -328,9 +328,9 @@ func (desc *immutable) validateInboundFunctionRef(
 	}
 	// Validate all other references are unset.
 	if ref.ColumnIDs != nil || ref.IndexIDs != nil ||
-		ref.ConstraintIDs != nil || ref.TriggerIDs != nil || ref.PolicyIDs != nil {
-		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v, %v, %v)",
-			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs, ref.TriggerIDs, ref.PolicyIDs)
+		ref.ConstraintIDs != nil || ref.TriggerIDs != nil {
+		return errors.AssertionFailedf("function reference has invalid references (%v, %v %v, %v)",
+			ref.ColumnIDs, ref.IndexIDs, ref.ConstraintIDs, ref.TriggerIDs)
 	}
 	// Validate a reference exists to this function.
 	for _, refID := range backrefFunctionDesc.GetDependsOnFunctions() {
@@ -385,18 +385,8 @@ func (desc *immutable) validateInboundTableRef(
 			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have an index with ID %d",
 				backRefTbl.GetName(), by.ID, idxID)
 		}
-		fnIDs, err := backRefTbl.GetAllReferencedFunctionIDsInIndex(idxID)
-		if err != nil {
-			return err
-		}
-		if fnIDs.Contains(desc.GetID()) {
-			foundInTable = true
-			continue
-		}
-		return errors.AssertionFailedf(
-			"index %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
-			idxID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
-		)
+		// TODO(chengxiong): add logic to validate reference in index expressions
+		// when UDF usage is allowed in indexes.
 	}
 
 	for _, cstID := range by.ConstraintIDs {
@@ -435,24 +425,6 @@ func (desc *immutable) validateInboundTableRef(
 			triggerID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
 		)
 	}
-	for _, policyID := range by.PolicyIDs {
-		if catalog.FindPolicyByID(backRefTbl, policyID) == nil {
-			return errors.AssertionFailedf(
-				"depended-on-by relation %q (%d) does not have a policy with ID %d",
-				backRefTbl.GetName(), by.ID, policyID,
-			)
-		}
-		fnIDs := backRefTbl.GetAllReferencedFunctionIDsInPolicy(policyID)
-		if fnIDs.Contains(desc.GetID()) {
-			foundInTable = true
-			continue
-		}
-		return errors.AssertionFailedf(
-			"policy %d in depended-on-by relation %q (%d) does not have reference to function %q (%d)",
-			policyID, backRefTbl.GetName(), backRefTbl.GetID(), desc.GetName(), desc.GetID(),
-		)
-	}
-
 	if foundInTable {
 		return nil
 	}
@@ -606,6 +578,11 @@ func (desc *Mutable) SetOffline(reason string) {
 // SetDeclarativeSchemaChangerState implements the catalog.MutableDescriptor interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {
 	desc.DeclarativeSchemaChangerState = state
+}
+
+// AddParams adds function parameters to the parameter list.
+func (desc *Mutable) AddParams(params ...descpb.FunctionDescriptor_Parameter) {
+	desc.Params = append(desc.Params, params...)
 }
 
 // SetVolatility sets the volatility attribute.
@@ -812,139 +789,6 @@ func (desc *Mutable) RemoveTriggerReference(id descpb.ID, triggerID descpb.Trigg
 	}
 }
 
-// AddPolicyReference adds back reference to a policy to the function.
-func (desc *Mutable) AddPolicyReference(id descpb.ID, policyID descpb.PolicyID) error {
-	for _, dep := range desc.DependsOn {
-		if dep == id {
-			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
-				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
-			)
-		}
-	}
-	defer sort.Slice(desc.DependedOnBy, func(i, j int) bool {
-		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
-	})
-	for i := range desc.DependedOnBy {
-		if desc.DependedOnBy[i].ID == id {
-			for _, prevID := range desc.DependedOnBy[i].PolicyIDs {
-				if prevID == policyID {
-					return nil
-				}
-			}
-			desc.DependedOnBy[i].PolicyIDs = append(desc.DependedOnBy[i].PolicyIDs, policyID)
-			return nil
-		}
-	}
-	desc.DependedOnBy = append(desc.DependedOnBy,
-		descpb.FunctionDescriptor_Reference{ID: id, PolicyIDs: []descpb.PolicyID{policyID}},
-	)
-	return nil
-}
-
-// RemovePolicyReference removes back reference to a table's policy from the function.
-func (desc *Mutable) RemovePolicyReference(id descpb.ID, policyID descpb.PolicyID) {
-	for i := range desc.DependedOnBy {
-		if desc.DependedOnBy[i].ID == id {
-			dep := &desc.DependedOnBy[i]
-			for j := range dep.PolicyIDs {
-				if dep.PolicyIDs[j] == policyID {
-					dep.PolicyIDs = append(dep.PolicyIDs[:j], dep.PolicyIDs[j+1:]...)
-					desc.maybeRemoveTableReference(id)
-					return
-				}
-			}
-		}
-	}
-}
-
-// AddIndexReference adds back reference to an index to the function.
-func (desc *Mutable) AddIndexReference(id descpb.ID, indexID descpb.IndexID) error {
-	for _, dep := range desc.DependsOn {
-		if dep == id {
-			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
-				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
-			)
-		}
-	}
-	for i := range desc.DependedOnBy {
-		if desc.DependedOnBy[i].ID == id {
-			for _, prevID := range desc.DependedOnBy[i].IndexIDs {
-				if prevID == indexID {
-					return nil
-				}
-			}
-			desc.DependedOnBy[i].IndexIDs = append(desc.DependedOnBy[i].IndexIDs, indexID)
-			return nil
-		}
-	}
-	desc.DependedOnBy = append(
-		desc.DependedOnBy,
-		descpb.FunctionDescriptor_Reference{
-			ID:       id,
-			IndexIDs: []descpb.IndexID{indexID},
-		},
-	)
-	sort.Slice(desc.DependedOnBy, func(i, j int) bool {
-		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
-	})
-	return nil
-}
-
-// AddViewReference adds back reference to a view to the function.
-func (desc *Mutable) AddViewReference(id descpb.ID) error {
-	for _, dep := range desc.DependsOn {
-		if dep == id {
-			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
-				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
-			)
-		}
-	}
-	for i := range desc.DependedOnBy {
-		if desc.DependedOnBy[i].ID == id {
-			desc.DependedOnBy[i].ViewQuery = true
-			return nil
-		}
-	}
-	desc.DependedOnBy = append(
-		desc.DependedOnBy,
-		descpb.FunctionDescriptor_Reference{
-			ID:        id,
-			ViewQuery: true,
-		},
-	)
-	sort.Slice(desc.DependedOnBy, func(i, j int) bool {
-		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
-	})
-	return nil
-}
-
-// RemoveIndexReference removes back reference to an index from the function.
-func (desc *Mutable) RemoveIndexReference(id descpb.ID, indexID descpb.IndexID) {
-	for i := range desc.DependedOnBy {
-		if desc.DependedOnBy[i].ID == id {
-			dep := &desc.DependedOnBy[i]
-			for j := range dep.IndexIDs {
-				if dep.IndexIDs[j] == indexID {
-					dep.IndexIDs = append(dep.IndexIDs[:j], dep.IndexIDs[j+1:]...)
-					desc.maybeRemoveTableReference(id)
-					return
-				}
-			}
-		}
-	}
-}
-
-// RemoveViewReference removes back reference to a view from the function.
-func (desc *Mutable) RemoveViewReference(id descpb.ID) {
-	for i := range desc.DependedOnBy {
-		if desc.DependedOnBy[i].ID == id {
-			desc.DependedOnBy[i].ViewQuery = false
-			desc.maybeRemoveTableReference(id)
-			return
-		}
-	}
-}
-
 // maybeRemoveTableReference removes a table's references from the function if
 // the column, index and constraint references are all empty. This function is
 // only used internally when removing an individual column, index or constraint
@@ -953,8 +797,7 @@ func (desc *Mutable) maybeRemoveTableReference(id descpb.ID) {
 	var ret []descpb.FunctionDescriptor_Reference
 	for _, ref := range desc.DependedOnBy {
 		if ref.ID == id && len(ref.ColumnIDs) == 0 && len(ref.IndexIDs) == 0 &&
-			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 &&
-			len(ref.PolicyIDs) == 0 && !ref.ViewQuery {
+			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 {
 			continue
 		}
 		ret = append(ret, ref)
@@ -986,7 +829,7 @@ func (desc *immutable) ToRoutineObj() (*tree.RoutineObj, error) {
 		}
 		if p.DefaultExpr != nil {
 			var err error
-			ret.Params[i].DefaultVal, err = parserutils.ParseExpr(*p.DefaultExpr)
+			ret.Params[i].DefaultVal, err = parser.ParseExpr(*p.DefaultExpr)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", p.Name)
 			}
@@ -1048,7 +891,7 @@ func (desc *immutable) ToOverload() (ret *tree.Overload, err error) {
 			Class: class,
 		}
 		if param.DefaultExpr != nil {
-			routineParam.DefaultVal, err = parserutils.ParseExpr(*param.DefaultExpr)
+			routineParam.DefaultVal, err = parser.ParseExpr(*param.DefaultExpr)
 			if err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err, "DEFAULT expr for param %s", param.Name)
 			}
@@ -1127,7 +970,7 @@ func (desc *immutable) ToCreateExpr() (ret *tree.CreateRoutine, err error) {
 			Class: ToTreeRoutineParamClass(desc.Params[i].Class),
 		}
 		if desc.Params[i].DefaultExpr != nil {
-			ret.Params[i].DefaultVal, err = parserutils.ParseExpr(*desc.Params[i].DefaultExpr)
+			ret.Params[i].DefaultVal, err = parser.ParseExpr(*desc.Params[i].DefaultExpr)
 			if err != nil {
 				return nil, err
 			}

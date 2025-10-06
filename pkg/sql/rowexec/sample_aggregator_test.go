@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -94,11 +93,13 @@ func runSampleAggregator(
 
 	sketchSpecs := []execinfrapb.SketchSpec{
 		{
+			SketchType:        execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			Columns:           []uint32{0},
 			GenerateHistogram: false,
 			StatName:          "a",
 		},
 		{
+			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			Columns:             []uint32{1},
 			GenerateHistogram:   true,
 			HistogramMaxBuckets: maxBuckets,
@@ -122,7 +123,7 @@ func runSampleAggregator(
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 		for i := 0; i < numSamplers; i++ {
-			rows := randgen.GenEncDatumRowsInt(rowPartitions[i], randgen.DatumEncoding_NONE)
+			rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
 			in[i] = distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 		}
 
@@ -135,7 +136,7 @@ func runSampleAggregator(
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 		for i := 0; i < numSamplers; i++ {
-			rows := randgen.GenEncDatumRowsString(rowPartitions[i], randgen.DatumEncoding_NONE)
+			rows := randgen.GenEncDatumRowsString(rowPartitions[i])
 			in[i] = distsqlutils.NewRowBuffer([]*types.T{types.String, types.String}, rows, distsqlutils.RowBufferArgs{})
 		}
 		// Override original columns in samplerOutTypes.
@@ -146,7 +147,6 @@ func runSampleAggregator(
 		panic(errors.AssertionFailedf("Type %T not supported for inputRows", t))
 	}
 
-	ctx := execversion.TestingWithLatestCtx
 	outputs := make([]*distsqlutils.RowBuffer, numSamplers)
 	for i := 0; i < numSamplers; i++ {
 		outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -157,12 +157,12 @@ func runSampleAggregator(
 			Sketches:      sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
-			ctx, &flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{},
+			context.Background(), &flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{},
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(ctx, outputs[i])
+		p.Run(context.Background(), outputs[i])
 	}
 	// Randomly interleave the output rows from the samplers into a single buffer.
 	samplerResults := distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -191,12 +191,12 @@ func runSampleAggregator(
 	}
 
 	agg, err := newSampleAggregator(
-		ctx, &flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{},
+		context.Background(), &flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agg.Run(ctx, finalOut)
+	agg.Run(context.Background(), finalOut)
 	// Make sure there was no error.
 	finalOut.GetRowsNoMeta(t)
 	r := sqlutils.MakeSQLRunner(sqlDB)

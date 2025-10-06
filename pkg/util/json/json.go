@@ -10,10 +10,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"math/big"
 	"reflect"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
+	uniq "github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,9 +94,9 @@ type JSON interface {
 	// specified, using `dir`, and is appended to `buf` and returned.
 	EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error)
 
-	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of
+	// encodeInvertedIndexKeys takes in a key prefix and returns a slice of
 	// inverted index keys, one per path through the receiver.
-	EncodeInvertedIndexKeys(b []byte) ([][]byte, error)
+	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
 
 	// encodeContainingInvertedIndexSpans takes in a key prefix and returns the
 	// spans that must be scanned in the inverted index to evaluate a contains (@>)
@@ -235,8 +233,6 @@ type JSON interface {
 	// either the empty array or the empty object.
 	HasContainerLeaf() (bool, error)
 }
-
-var EmptyJSONValue = NewObjectBuilder(0).Build()
 
 type jsonTrue struct{}
 
@@ -458,78 +454,6 @@ func (b *FixedKeysObjectBuilder) Build() (JSON, error) {
 	b.updated = intsets.Fast{}
 	// Must copy b.pairs in case builder is reused.
 	return jsonObject(append([]jsonKeyValuePair(nil), b.pairs...)), nil
-}
-
-// PartialObject is a JSON object builder that builds an object using a set of
-// fixed key-values (supplied at construction) and a set of keys which are
-// settable when building the final JSON object.
-type PartialObject struct {
-	basePairs      []jsonKeyValuePair
-	keyOrd         map[string]int
-	allowedNewKeys map[string]struct{}
-}
-
-// NewPartialObject creates a PartialObject with the specified base key-value
-// pairs, and allows for setting the values of newKeys when building the final
-// JSON object.
-func NewPartialObject(base map[string]JSON, newKeys []string) (*PartialObject, error) {
-	// Check that newKeys are unique and disjoint from base keys.
-	newKeySet := make(map[string]struct{}, len(newKeys))
-	for _, k := range newKeys {
-		if _, ok := newKeySet[k]; ok {
-			return nil, errors.AssertionFailedf("expected unique keys, found %v", newKeys)
-		}
-		if _, ok := base[k]; ok {
-			return nil, errors.AssertionFailedf("expected new keys to be disjoint from base keys, found %v in both", k)
-		}
-		newKeySet[k] = struct{}{}
-	}
-
-	keys := slices.Collect(maps.Keys(base))
-	keys = append(keys, newKeys...)
-	sort.Strings(keys)
-
-	pairs := make([]jsonKeyValuePair, 0, len(base))
-	keyOrd := make(map[string]int, len(keys))
-
-	for i, k := range keys {
-		keyOrd[k] = i
-		if _, ok := base[k]; !ok {
-			continue
-		}
-		pairs = append(pairs, jsonKeyValuePair{k: jsonString(k), v: base[k]})
-	}
-
-	return &PartialObject{basePairs: pairs, keyOrd: keyOrd, allowedNewKeys: newKeySet}, nil
-}
-
-// NewObject creates a new JSON object with the specified new key-values. The
-// keys of newData must be exactly the same as the newKeys supplied to the
-// constructor.
-func (po *PartialObject) NewObject(newData map[string]JSON) (JSON, error) {
-	if len(newData) != len(po.allowedNewKeys) {
-		return nil, errors.AssertionFailedf(
-			"expected all %d keys to be updated, %d updated",
-			len(po.allowedNewKeys), len(newData))
-	}
-
-	pairs := make([]jsonKeyValuePair, len(po.basePairs)+len(newData))
-
-	for _, p := range po.basePairs {
-		pairs[po.keyOrd[string(p.k)]] = p
-	}
-
-	for k, v := range newData {
-		if _, ok := po.allowedNewKeys[k]; !ok {
-			return nil, errors.AssertionFailedf("unknown new key %s", k)
-		}
-		if _, ok := po.keyOrd[k]; !ok {
-			return nil, errors.AssertionFailedf("unknown key %s", k)
-		}
-		pairs[po.keyOrd[k]] = jsonKeyValuePair{k: jsonString(k), v: v}
-	}
-
-	return jsonObject(pairs), nil
 }
 
 // pairSorter sorts and uniqueifies JSON pairs. In order to keep
@@ -1043,23 +967,10 @@ func ParseJSON(s string, opts ...ParseOption) (JSON, error) {
 	return cfg.parseJSON(s)
 }
 
-func init() {
-	encoding.PrettyPrintJSONValueEncoded = func(b []byte) (string, error) {
-		rem, j, err := DecodeJSON(b)
-		if err != nil {
-			return "", err
-		}
-		if len(rem) != 0 {
-			return "", errors.Newf("unexpected remainder after decoding JSON: %v", rem)
-		}
-		return j.String(), nil
-	}
-}
-
 // EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 // one per unique path through the receiver.
 func EncodeInvertedIndexKeys(b []byte, json JSON) ([][]byte, error) {
-	return json.EncodeInvertedIndexKeys(encoding.EncodeJSONAscending(b))
+	return json.encodeInvertedIndexKeys(encoding.EncodeJSONAscending(b))
 }
 
 // EncodeContainingInvertedIndexSpans takes in a key prefix and returns the
@@ -1130,11 +1041,11 @@ func EncodeExistsInvertedIndexSpans(
 	// string and objects with keys that are the input string.
 	builder := NewArrayBuilder(1)
 	builder.Add(js)
-	arrayKeys, err := builder.Build().EncodeInvertedIndexKeys(b)
+	arrayKeys, err := builder.Build().encodeInvertedIndexKeys(b)
 	if err != nil {
 		return nil, err
 	}
-	scalarKeys, err := js.EncodeInvertedIndexKeys(b[:len(b):len(b)])
+	scalarKeys, err := js.encodeInvertedIndexKeys(b[:len(b):len(b)])
 	if err != nil {
 		return nil, err
 	}
@@ -1164,7 +1075,7 @@ func EncodeExistsInvertedIndexSpans(
 	), nil
 }
 
-func (j jsonNull) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonNull) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeNullAscending(b)}, nil
 }
@@ -1182,7 +1093,7 @@ func (j jsonNull) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (jsonTrue) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (jsonTrue) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeTrueAscending(b)}, nil
 }
@@ -1200,7 +1111,7 @@ func (j jsonTrue) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (jsonFalse) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (jsonFalse) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	return [][]byte{encoding.EncodeFalseAscending(b)}, nil
 }
@@ -1218,10 +1129,9 @@ func (j jsonFalse) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (j jsonString) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonString) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
-	res := [][]byte{encoding.EncodeStringAscending(b, string(j))}
-	return res, nil
+	return [][]byte{encoding.EncodeStringAscending(b, string(j))}, nil
 }
 
 func (j jsonString) encodeContainingInvertedIndexSpans(
@@ -1237,7 +1147,7 @@ func (j jsonString) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (j jsonNumber) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonNumber) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	b = encoding.AddJSONPathTerminator(b)
 	var dec = apd.Decimal(j)
 	return [][]byte{encoding.EncodeDecimalAscending(b, &dec)}, nil
@@ -1256,7 +1166,7 @@ func (j jsonNumber) encodeContainedInvertedIndexSpans(
 	return invertedExpr, err
 }
 
-func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonArray) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// Checking for an empty array.
 	if len(j) == 0 {
 		return [][]byte{encoding.EncodeJSONEmptyArray(b)}, nil
@@ -1265,7 +1175,7 @@ func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	prefix := encoding.EncodeArrayAscending(b)
 	var outKeys [][]byte
 	for i := range j {
-		children, err := j[i].EncodeInvertedIndexKeys(prefix[:len(prefix):len(prefix)])
+		children, err := j[i].encodeInvertedIndexKeys(prefix[:len(prefix):len(prefix)])
 		if err != nil {
 			return nil, err
 		}
@@ -1276,7 +1186,7 @@ func (j jsonArray) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// to emit duplicate keys from this method, as it's more expensive to
 	// deduplicate keys via KV (which will actually write the keys) than to do
 	// it now (just an in-memory sort and distinct).
-	outKeys = deduplicate.ByteSlices(outKeys)
+	outKeys = uniq.UniquifyByteSlices(outKeys)
 	return outKeys, nil
 }
 
@@ -1382,7 +1292,7 @@ func (j jsonArray) encodeContainedInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
-func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// Checking for an empty object.
 	if len(j) == 0 {
 		return [][]byte{encoding.EncodeJSONEmptyObject(b)}, nil
@@ -1390,7 +1300,7 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 
 	var outKeys [][]byte
 	for i := range j {
-		children, err := j[i].v.EncodeInvertedIndexKeys(nil)
+		children, err := j[i].v.encodeInvertedIndexKeys(nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1400,9 +1310,8 @@ func (j jsonObject) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		end := isEnd(j[i].v)
 
 		for _, childBytes := range children {
-			mid := encoding.EncodeJSONKeyStringAscending(nil, string(j[i].k), end)
 			encodedKey := bytes.Join([][]byte{b,
-				mid,
+				encoding.EncodeJSONKeyStringAscending(nil, string(j[i].k), end),
 				childBytes}, nil)
 
 			outKeys = append(outKeys, encodedKey)
@@ -1570,7 +1479,7 @@ func emptyJSONForType(json JSON) JSON {
 func encodeContainingInvertedIndexSpansFromLeaf(
 	j JSON, b []byte, isRoot, isObjectValue bool,
 ) (invertedExpr inverted.Expression, err error) {
-	keys, err := j.EncodeInvertedIndexKeys(b)
+	keys, err := j.encodeInvertedIndexKeys(b)
 	if err != nil {
 		return nil, err
 	}
@@ -1659,7 +1568,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 			arr := NewArrayBuilder(1)
 			arr.Add(j)
 			jArr := arr.Build()
-			arrKeys, err := jArr.EncodeInvertedIndexKeys(prefix)
+			arrKeys, err := jArr.encodeInvertedIndexKeys(prefix)
 			if err != nil {
 				return nil, err
 			}
@@ -1703,7 +1612,7 @@ func encodeContainingInvertedIndexSpansFromLeaf(
 func encodeContainedInvertedIndexSpansFromLeaf(
 	j JSON, b []byte, isRoot bool,
 ) (invertedExpr inverted.Expression, err error) {
-	keys, err := j.EncodeInvertedIndexKeys(b)
+	keys, err := j.encodeInvertedIndexKeys(b)
 	if err != nil {
 		return nil, err
 	}
@@ -1769,7 +1678,7 @@ func (j jsonArray) numInvertedIndexEntries() (int, error) {
 	if len(j) == 0 {
 		return 1, nil
 	}
-	keys, err := j.EncodeInvertedIndexKeys(nil)
+	keys, err := j.encodeInvertedIndexKeys(nil)
 	if err != nil {
 		return 0, err
 	}

@@ -66,7 +66,6 @@ func makeElasticCPUWorkQueue(
 }
 
 // Admit is called when requesting admission for elastic CPU work.
-// Non-nil errors are returned only if the context is canceled.
 func (e *ElasticCPUWorkQueue) Admit(
 	ctx context.Context, duration time.Duration, info WorkInfo,
 ) (*ElasticCPUWorkHandle, error) {

@@ -141,10 +141,3 @@ const TELEMETRY = logpb.Channel_TELEMETRY
 // replicas between stores in the cluster, or adding (removing) replicas to
 // ranges.
 const KV_DISTRIBUTION = logpb.Channel_KV_DISTRIBUTION
-
-// CHANGEFEED is used to report changefeed events
-const CHANGEFEED = logpb.Channel_CHANGEFEED
-
-// KV_EXEC is used to report KV execution events that don't fall into the
-// KV_DISTRIBUTION channel.
-const KV_EXEC = logpb.Channel_KV_EXEC

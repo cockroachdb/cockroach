@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,7 @@ var ReconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 	"spanconfig.reconciliation_job.checkpoint_interval",
 	"the frequency at which the span config reconciliation job checkpoints itself",
 	5*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // Resume implements the jobs.Resumer interface.
@@ -56,7 +58,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		// TODO(irfansharif): We could instead give the reconciliation job a fixed
 		// ID; comparing cluster IDs during restore doesn't help when we're
 		// restoring into the same cluster the backup was run from.
-		log.Dev.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
+		log.Infof(ctx, "duplicate restored job (source-cluster-id=%s, dest-cluster-id=%s); exiting",
 			r.job.Payload().CreationClusterID, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
 		return nil
 	}
@@ -68,6 +70,21 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	// safe to wind the SQL pod down whenever it's running -- something we
 	// indicate through the job's idle status.
 	r.job.MarkIdle(true)
+
+	// If the Job's NumRuns is greater than 1, reset it to 0 so that future
+	// resumptions are not delayed by the job system.
+	//
+	// Note that we are doing this before the possible error return below. If
+	// there is a problem starting the reconciler this job will aggressively
+	// restart at the job system level with no backoff.
+	if err := r.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if md.RunStats != nil && md.RunStats.NumRuns > 1 {
+			ju.UpdateRunStats(1, md.RunStats.LastRun)
+		}
+		return nil
+	}); err != nil {
+		log.Warningf(ctx, "failed to reset reconciliation job run stats: %v", err)
+	}
 
 	// Start the protected timestamp reconciler. This will periodically poll the
 	// protected timestamp table to cleanup stale records. We take advantage of
@@ -181,12 +198,12 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				// the reconciliation job during restore, or observing a checkpoint in
 				// the restore job, or re-keying restored descriptors to not re-use the
 				// same IDs as previously existing ones) is a lot more invasive.
-				log.Dev.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
+				log.Warningf(ctx, "observed %v, kicking off full reconciliation...", err)
 				lastCheckpoint = hlc.Timestamp{}
 				continue
 			}
 
-			log.Dev.Errorf(ctx, "reconciler failed with %v, retrying...", err)
+			log.Errorf(ctx, "reconciler failed with %v, retrying...", err)
 			continue
 		}
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)

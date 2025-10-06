@@ -39,4 +39,3 @@ show_stmt ::=
 	| show_zone_stmt
 	| show_full_scans_stmt
 	| show_default_privileges_stmt
-	| show_inspect_errors_stmt

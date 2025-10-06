@@ -107,7 +107,7 @@ func (z *zeroSum) run(workers, monkeys int) {
 func (z *zeroSum) setup() uint32 {
 	db := z.Nodes[0].DB()
 	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS zerosum"); err != nil {
-		log.Dev.Fatalf(context.Background(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	accounts := `
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 )
 `
 	if _, err := db.Exec(accounts); err != nil {
-		log.Dev.Fatalf(context.Background(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 
 	tableIDQuery := `
@@ -127,7 +127,7 @@ SELECT tables.id FROM system.namespace tables
 `
 	var tableID uint32
 	if err := db.QueryRow(tableIDQuery, "zerosum", "accounts").Scan(&tableID); err != nil {
-		log.Dev.Fatalf(context.Background(), "%v", err)
+		log.Fatalf(context.Background(), "%v", err)
 	}
 	return tableID
 }
@@ -147,7 +147,7 @@ func (z *zeroSum) maybeLogError(err error) {
 	if localcluster.IsUnavailableError(err) || strings.Contains(err.Error(), "range is frozen") {
 		return
 	}
-	log.Dev.Errorf(context.Background(), "%v", err)
+	log.Errorf(context.Background(), "%v", err)
 	atomic.AddUint64(&z.stats.errors, 1)
 }
 
@@ -178,7 +178,7 @@ func (z *zeroSum) worker() {
 				var id uint64
 				var balance int64
 				if err = rows.Scan(&id, &balance); err != nil {
-					log.Dev.Fatalf(context.Background(), "%v", err)
+					log.Fatalf(context.Background(), "%v", err)
 				}
 				switch id {
 				case from:
@@ -280,7 +280,7 @@ func (z *zeroSum) chaos() {
 	case "flappy":
 		go z.chaosFlappy()
 	default:
-		log.Dev.Fatalf(context.Background(), "unknown chaos type: %s", z.chaosType)
+		log.Fatalf(context.Background(), "unknown chaos type: %s", z.chaosType)
 	}
 }
 
@@ -310,10 +310,10 @@ func (z *zeroSum) verify(d time.Duration) {
 			continue
 		}
 		if total != 0 {
-			log.Dev.Fatalf(context.Background(), "unexpected total balance %d", total)
+			log.Fatalf(context.Background(), "unexpected total balance %d", total)
 		}
 		if accounts < committedAccounts {
-			log.Dev.Fatalf(context.Background(), "expected at least %d accounts, but found %d",
+			log.Fatalf(context.Background(), "expected at least %d accounts, but found %d",
 				committedAccounts, accounts)
 		}
 	}
@@ -444,7 +444,7 @@ func main() {
 
 	go func() {
 		s := <-signalCh
-		log.Dev.Infof(context.Background(), "signal received: %v", s)
+		log.Infof(context.Background(), "signal received: %v", s)
 		c.Close()
 		os.Exit(1)
 	}()

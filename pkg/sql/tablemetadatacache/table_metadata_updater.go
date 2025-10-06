@@ -83,7 +83,7 @@ func (u *tableMetadataUpdater) RunUpdater(ctx context.Context) error {
 	sw := timeutil.NewStopWatch()
 	sw.Start()
 	if _, err := u.pruneCache(ctx); err != nil {
-		log.Dev.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
+		log.Errorf(ctx, "failed to prune table metadata cache: %s", err.Error())
 	}
 	rowsUpdated, err := u.updateCache(ctx)
 	sw.Stop()
@@ -101,14 +101,14 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 	it := newTableMetadataBatchIterator(u.ie, u.spanStatsFetcher, u.testKnobs.GetAOSTClause(), u.batchSize)
 	estimatedRowsToUpdate, err := u.getRowsToUpdateCount(ctx)
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
+		log.Errorf(ctx, "failed to get estimated row count. err=%s", err.Error())
 	}
 	estimatedBatches := int(math.Ceil(float64(estimatedRowsToUpdate) / float64(u.batchSize)))
 	batchNum := 0
 	for {
 		more, batchErr := it.fetchNextBatch(ctx)
 		if batchErr != nil {
-			log.Dev.Errorf(ctx, "failure in batch request: %s", batchErr.Error())
+			log.Errorf(ctx, "failure in batch request: %s", batchErr.Error())
 			u.metrics.Errors.Inc(1)
 			if !more {
 				// If we were able to fetch some rows, we can proceed and move on to the next batch.
@@ -125,7 +125,7 @@ func (u *tableMetadataUpdater) updateCache(ctx context.Context) (updated int, er
 		count, err := u.upsertBatch(ctx, it.batchRows, upsert, batchErr)
 		if err != nil {
 			// If an upsert fails, let's just continue to the next batch for now.
-			log.Dev.Errorf(ctx, "failed to upsert batch of size: %d,  err: %s", len(it.batchRows), err.Error())
+			log.Errorf(ctx, "failed to upsert batch of size: %d,  err: %s", len(it.batchRows), err.Error())
 			u.metrics.Errors.Inc(1)
 			continue
 		}
@@ -192,7 +192,7 @@ func (u *tableMetadataUpdater) upsertBatch(
 	lastUpdated := u.timeSrc.Now()
 	for _, row := range batch {
 		if err := upsertQuery.addRow(ctx, &row, batchErr, lastUpdated); err != nil {
-			log.Dev.Errorf(ctx, "failed to add row to upsert batch: %s", err.Error())
+			log.Errorf(ctx, "failed to add row to upsert batch: %s", err.Error())
 			continue
 		}
 		upsertBatchSize++
@@ -299,7 +299,7 @@ func (q *tableMetadataBatchUpsertQuery) addRow(
 	}
 	detailsStr, err := gojson.Marshal(details)
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to encode details: %v", err)
+		log.Errorf(ctx, "failed to encode details: %v", err)
 	}
 
 	var errMsg string

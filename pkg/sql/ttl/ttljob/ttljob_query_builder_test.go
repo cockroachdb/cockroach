@@ -19,12 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -89,7 +87,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 		desc      string
 		pkColDirs []catenumpb.IndexColumn_Direction
 		numRows   int
-		bounds    spanutils.QueryBounds
+		bounds    ttljob.QueryBounds
 		// [iteration][row][val]
 		iterations [][][]int
 	}{
@@ -148,7 +146,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_ASC,
 			},
-			bounds: spanutils.QueryBounds{
+			bounds: ttljob.QueryBounds{
 				Start: intsToDatums(1),
 			},
 			iterations: [][][]int{
@@ -162,7 +160,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_ASC,
 			},
-			bounds: spanutils.QueryBounds{
+			bounds: ttljob.QueryBounds{
 				End: intsToDatums(0),
 			},
 			iterations: [][][]int{
@@ -176,7 +174,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_DESC,
 			},
-			bounds: spanutils.QueryBounds{
+			bounds: ttljob.QueryBounds{
 				Start: intsToDatums(0),
 			},
 			iterations: [][][]int{
@@ -190,7 +188,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_DESC,
 			},
-			bounds: spanutils.QueryBounds{
+			bounds: ttljob.QueryBounds{
 				End: intsToDatums(1),
 			},
 			iterations: [][][]int{
@@ -496,66 +494,4 @@ func testHistogram() *aggmetric.Histogram {
 	return aggmetric.MakeBuilder().Histogram(metric.HistogramOptions{
 		SigFigs: 1,
 	}).AddChild()
-}
-
-// BenchmarkTTLExpiration will benchmark the performance of queries that mimic
-// the different kinds of TTL expiration expressions.
-func BenchmarkTTLExpiration(b *testing.B) {
-	defer log.Scope(b).Close(b)
-
-	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
-
-	tdb := sqlutils.MakeSQLRunner(db)
-	tdb.ExecMultiple(b,
-		"create database db1",
-		"create table db1.t1 (created_at timestamptz, expired_at timestamptz)",
-	)
-	// We are ingesting data. But we pick a timestamp so that the queries we do
-	// below don't return any rows. We don't want the process of returning rows to
-	// throw off the benchmark. We insert rows in batches to speed up the test
-	// setup.
-	const numRows = 250000
-	const batchSize = 10000
-	for i := 0; i < numRows; i += batchSize {
-		tdb.Exec(b, fmt.Sprintf(`
-        INSERT INTO db1.t1 (created_at, expired_at)
-        SELECT now(), now() + interval '10 months' + generate_series(%d, %d) * interval '1 second'
-    `, i, i+batchSize-1))
-	}
-
-	for _, tc := range []struct {
-		desc  string
-		query string
-	}{
-		{
-			desc: "query=tz_conv",
-			// This is the query that is very similar to what we only supported with
-			// TTL expressions up until 23.2
-			query: "select * from db1.t1 where (created_at AT TIME ZONE 'utc' + INTERVAL '6 months') AT TIME ZONE 'utc' > expired_at",
-		},
-		{
-			desc: "query=interval_math",
-			// In version 23.2, support was added for TTL expressions that use
-			// TIMESTAMPTZ + INTERVAL. This improvement eliminates the need to
-			// convert the time into a specific time zone, as was previously
-			// required.
-			query: "select * from db1.t1 where created_at + interval '6 months' > expired_at",
-		},
-	} {
-		// Execute the query once outside the timings to prime any caches.
-		tdb.Exec(b, tc.query)
-
-		b.Run(tc.desc, func(b *testing.B) {
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				// Execute the query on the table. The actual results are irrelevant, as there
-				// shouldn't be any rows. We're only interested in measuring the execution time.
-				tdb.Exec(b, tc.query)
-			}
-			b.StopTimer()
-		})
-
-	}
 }

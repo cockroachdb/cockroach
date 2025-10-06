@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -31,9 +30,7 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Timeout:          5 * time.Hour,
 		Cluster:          r.MakeClusterSpec(7),
 		CompatibleClouds: registry.CloudsWithServiceRegistration,
-		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
-		Randomized:       true,
+		Suites:           registry.Suites(registry.Nightly),
 		Owner:            registry.OwnerServer,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runMultitenantUpgrade(ctx, t, c)
@@ -159,18 +156,20 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 		wg.Add(len(tenants))
 
 		for _, tenant := range tenants {
-			h.Go(func(ctx context.Context, l *logger.Logger) error {
-				defer wg.Done()
-				return fn(ctx, l, tenant)
-			}, task.Name(fmt.Sprintf("%s: %s", desc, tenant.name)))
+			h.Background(
+				fmt.Sprintf("%s: %s", desc, tenant.name),
+				func(ctx context.Context, l *logger.Logger) error {
+					defer wg.Done()
+					return fn(ctx, l, tenant)
+				},
+			)
 		}
 
 		returnCh := make(chan struct{})
-		h.Go(func(context.Context, *logger.Logger) error {
+		go func() {
 			wg.Wait()
 			close(returnCh)
-			return nil
-		})
+		}()
 
 		return returnCh
 	}
@@ -297,19 +296,21 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 				},
 			)
 
-			g := h.NewGroup()
-			g.Go(func(_ context.Context, l *logger.Logger) error {
+			var wg sync.WaitGroup
+			wg.Add(2) // tpcc worklaod and upgrade finalization
+
+			go func() {
+				defer wg.Done()
 				<-tpccFinished
 				l.Printf("tpcc workload finished running on tenants")
-				return nil
-			})
-			g.Go(func(_ context.Context, l *logger.Logger) error {
+			}()
+			go func() {
+				defer wg.Done()
 				<-upgradeFinished
 				l.Printf("tenant upgrades finished")
-				return nil
-			})
-			g.Wait()
+			}()
 
+			wg.Wait()
 			return nil
 		},
 	)

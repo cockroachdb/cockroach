@@ -37,28 +37,28 @@ func extractUsernameFromClaims(
 
 	targetClaim, ok := claims[claimKey]
 	if !ok {
-		log.Dev.Errorf(
+		log.Errorf(
 			ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claimKey,
 		)
-		log.Dev.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
+		log.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
 	}
 
 	if err := json.Unmarshal(targetClaim, &principal); err != nil {
 		// Try parsing assuming the claim value is a list and not a string.
 		if log.V(1) {
-			log.Dev.Infof(ctx,
+			log.Infof(ctx,
 				"failed parsing claim as string; attempting to parse as a list",
 			)
 		}
 		if err = json.Unmarshal(targetClaim, &principals); err != nil {
-			log.Dev.Errorf(ctx,
+			log.Errorf(ctx,
 				"OIDC: failed to complete authentication: failed to parse value for the claim %s: %v",
 				claimKey, err,
 			)
 			return "", err
 		}
 		if log.V(1) {
-			log.Dev.Infof(ctx,
+			log.Infof(ctx,
 				"multiple principals in the claim found; selecting first matching principal",
 			)
 		}
@@ -72,7 +72,7 @@ func extractUsernameFromClaims(
 	for _, principal := range principals {
 		match = principalRE.FindStringSubmatch(principal)
 		if len(match) == 2 {
-			log.Dev.Infof(ctx,
+			log.Infof(ctx,
 				"extracted SQL username %s from the target claim %s", match[1], claimKey,
 			)
 			return match[1], nil
@@ -81,9 +81,9 @@ func extractUsernameFromClaims(
 
 	// Error when there is not a match.
 	err := errors.Newf("expected one group in regexp")
-	log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: %v", err)
+	log.Errorf(ctx, "OIDC: failed to complete authentication: %v", err)
 	if log.V(1) {
-		log.Dev.Infof(ctx,
+		log.Infof(ctx,
 			"token payload includes the following claims: %s\n"+
 				"check OIDC cluster settings: %s, %s",
 			strings.Join(claimKeys, ", "),

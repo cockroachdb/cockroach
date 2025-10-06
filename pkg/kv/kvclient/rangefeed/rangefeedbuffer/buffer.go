@@ -73,7 +73,7 @@ func (b *Buffer[E]) Flush(ctx context.Context, frontier hlc.Timestamp) (events [
 	defer b.mu.Unlock()
 
 	if frontier.Less(b.mu.frontier) {
-		log.Dev.Fatalf(ctx, "frontier timestamp regressed: saw %s, previously %s", frontier, b.mu.frontier)
+		log.Fatalf(ctx, "frontier timestamp regressed: saw %s, previously %s", frontier, b.mu.frontier)
 	}
 
 	// Accumulate all events with timestamps <= the given timestamp in sorted

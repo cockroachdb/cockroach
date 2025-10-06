@@ -33,8 +33,6 @@ message ClosureTxnOperation {
   cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
-  bool buffered_writes = 8;
-  double user_priority = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
 }
 
 message GetOperation {
@@ -60,25 +58,12 @@ message ScanOperation {
 message PutOperation {
   bytes key = 1;
   uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
-  bool must_acquire_exclusive_lock = 4;
-
   Result result = 3 [(gogoproto.nullable) = false];
-}
-
-message CPutOperation {
-  bytes key = 1;
-  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
-  bytes exp_val = 3;
-  bool allow_if_does_not_exist = 4;
-
-  Result result = 5 [(gogoproto.nullable) = false];
 }
 
 message DeleteOperation {
   bytes key = 1;
   uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
-  bool must_acquire_exclusive_lock = 4;
-
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
@@ -110,12 +95,6 @@ message BarrierOperation {
   bytes end_key = 2;
   bool with_lease_applied_index = 3;
   Result result = 4 [(gogoproto.nullable) = false];
-}
-
-message FlushLockTableOperation {
-  bytes key = 1;
-  bytes end_key = 2;
-  Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message SplitOperation {
@@ -174,13 +153,6 @@ message SavepointRollbackOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
-message MutateBatchHeaderOperation {
-  int64 max_span_request_keys = 1;
-  int64 target_bytes = 2;
-
-  Result result = 3 [(gogoproto.nullable) = false];
-}
-
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -210,9 +182,6 @@ message Operation {
   SavepointReleaseOperation savepoint_release = 21;
   SavepointRollbackOperation savepoint_rollback = 22;
   BarrierOperation barrier = 23;
-  FlushLockTableOperation flush_lock_table = 24;
-  MutateBatchHeaderOperation mutate_batch_header = 25;
-  CPutOperation cput = 26 [(gogoproto.customname) = "CPut"];
 }
 
 enum ResultType {
@@ -241,7 +210,6 @@ message Result {
   // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
   repeated KeyValue values = 5 [(gogoproto.nullable) = false];
   util.hlc.Timestamp optional_timestamp = 6 [(gogoproto.nullable) = false];
-  roachpb.Span resume_span = 7;
 }
 
 message Step {

@@ -19,18 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -252,171 +246,6 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 
 			run(b, store, numOfConcurrentWriter)
 		})
-	}
-}
-
-func TestLogResolvedEvents(t *testing.T) {
-	ctx := context.Background()
-
-	logCommonDetails := logpb.CommonEventDetails{
-		Timestamp: timeutil.Now().UnixNano(),
-		EventType: "aggregated_contention_info",
-	}
-	// Set up log interception to capture structured AggregatedContentionInfo events
-	spy := logtestutils.NewStructuredLogSpy(
-		t,
-		[]logpb.Channel{logpb.Channel_SQL_EXEC},
-		[]string{"aggregated_contention_info"},
-		func(entry logpb.Entry) (eventpb.AggregatedContentionInfo, error) {
-			le, err := logtestutils.FromLogEntry[eventpb.AggregatedContentionInfo](entry)
-			if err != nil {
-				return le, err
-			}
-			le.CommonEventDetails = logCommonDetails
-			return le, nil
-		},
-	)
-	cleanup := log.InterceptWith(ctx, spy)
-	defer cleanup()
-
-	fingerprintIDToHex := func(id uint64) string {
-		return "\\x" + sqlstatsutil.EncodeStmtFingerprintIDToString(appstatspb.StmtFingerprintID(id))
-	}
-	txnFingerprintIDToHex := func(id uint64) string {
-		return "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(appstatspb.TransactionFingerprintID(id))
-	}
-
-	type testCase struct {
-		events   []contentionpb.ExtendedContentionEvent
-		expected []eventpb.AggregatedContentionInfo
-	}
-
-	testCases := []testCase{
-		{
-			// Two events with same waiting (stmt, txn), blocking txn and key
-			events: []contentionpb.ExtendedContentionEvent{
-				{
-					WaitingStmtFingerprintID: 123,
-					WaitingTxnFingerprintID:  456,
-					BlockingTxnFingerprintID: 789,
-					BlockingEvent: kvpb.ContentionEvent{
-						Key:      []byte("test-key-1"),
-						Duration: 100 * time.Millisecond,
-					},
-				},
-				{
-					WaitingStmtFingerprintID: 123,
-					WaitingTxnFingerprintID:  456,
-					BlockingTxnFingerprintID: 789,
-					BlockingEvent: kvpb.ContentionEvent{
-						Key:      []byte("test-key-1"),
-						Duration: 200 * time.Millisecond,
-					},
-				},
-			},
-			expected: []eventpb.AggregatedContentionInfo{
-				{
-					CommonEventDetails:       logCommonDetails,
-					WaitingStmtFingerprintId: fingerprintIDToHex(123),
-					WaitingTxnFingerprintId:  txnFingerprintIDToHex(456),
-					BlockingTxnFingerprintId: txnFingerprintIDToHex(789),
-					ContendedKey:             redact.Sprint("\"test-key-1\""),
-					Duration:                 300000000,
-				},
-			},
-		},
-		{
-			// Different key.
-			events: []contentionpb.ExtendedContentionEvent{
-				{
-					WaitingStmtFingerprintID: 123,
-					WaitingTxnFingerprintID:  456,
-					BlockingTxnFingerprintID: 789,
-					BlockingEvent: kvpb.ContentionEvent{
-						Key:      []byte("test-key-1"),
-						Duration: 100 * time.Millisecond,
-					},
-				},
-				{
-					WaitingStmtFingerprintID: 123,
-					WaitingTxnFingerprintID:  456,
-					BlockingTxnFingerprintID: 789,
-					BlockingEvent: kvpb.ContentionEvent{
-						Key:      []byte("test-key-2"),
-						Duration: 200 * time.Millisecond,
-					},
-				},
-			},
-			expected: []eventpb.AggregatedContentionInfo{
-				{
-					CommonEventDetails:       logCommonDetails,
-					WaitingStmtFingerprintId: fingerprintIDToHex(123),
-					WaitingTxnFingerprintId:  txnFingerprintIDToHex(456),
-					BlockingTxnFingerprintId: txnFingerprintIDToHex(789),
-					ContendedKey:             redact.Sprint("\"test-key-1\""),
-					Duration:                 100000000,
-				},
-				{
-					CommonEventDetails:       logCommonDetails,
-					WaitingStmtFingerprintId: fingerprintIDToHex(123),
-					WaitingTxnFingerprintId:  txnFingerprintIDToHex(456),
-					BlockingTxnFingerprintId: txnFingerprintIDToHex(789),
-					ContendedKey:             redact.Sprint("\"test-key-2\""),
-					Duration:                 200000000,
-				},
-			},
-		},
-		{
-			// Different fingerprint IDs.
-			events: []contentionpb.ExtendedContentionEvent{
-				{
-					WaitingStmtFingerprintID: 123,
-					WaitingTxnFingerprintID:  456,
-					BlockingTxnFingerprintID: 789,
-					BlockingEvent: kvpb.ContentionEvent{
-						Key:      []byte("test-key-1"),
-						Duration: 100 * time.Millisecond,
-					},
-				},
-				{
-					WaitingStmtFingerprintID: 123,
-					WaitingTxnFingerprintID:  654,
-					BlockingTxnFingerprintID: 789,
-					BlockingEvent: kvpb.ContentionEvent{
-						Key:      []byte("test-key-1"),
-						Duration: 200 * time.Millisecond,
-					},
-				},
-			},
-			expected: []eventpb.AggregatedContentionInfo{
-				{
-					CommonEventDetails:       logCommonDetails,
-					WaitingStmtFingerprintId: fingerprintIDToHex(123),
-					WaitingTxnFingerprintId:  txnFingerprintIDToHex(456),
-					BlockingTxnFingerprintId: txnFingerprintIDToHex(789),
-					ContendedKey:             redact.Sprint("\"test-key-1\""),
-					Duration:                 100000000,
-				},
-				{
-					CommonEventDetails:       logCommonDetails,
-					WaitingStmtFingerprintId: fingerprintIDToHex(123),
-					WaitingTxnFingerprintId:  txnFingerprintIDToHex(654),
-					BlockingTxnFingerprintId: txnFingerprintIDToHex(789),
-					ContendedKey:             redact.Sprint("\"test-key-1\""),
-					Duration:                 200000000,
-				},
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		spy.Reset()
-		logResolvedEvents(ctx, tc.events)
-		contentionLogs := spy.GetLogs(logpb.Channel_SQL_EXEC)
-		require.Len(t, contentionLogs, len(tc.expected))
-		for _, exepectedContentionLog := range tc.expected {
-			require.Contains(t, contentionLogs, exepectedContentionLog)
-		}
 	}
 }
 

@@ -10,6 +10,7 @@ package kvevent
 import (
 	"context"
 	"fmt"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -17,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -103,7 +103,7 @@ type Event struct {
 	ev                 *kvpb.RangeFeedEvent
 	et                 Type
 	backfillTimestamp  hlc.Timestamp
-	bufferAddTimestamp crtime.Mono
+	bufferAddTimestamp time.Time
 	alloc              Alloc
 }
 
@@ -127,7 +127,7 @@ func (t Type) Index() int {
 	case TypeResolved, resolvedBackfill, resolvedRestart, resolvedExit:
 		return int(TypeResolved)
 	default:
-		log.Changefeed.Warningf(context.TODO(),
+		log.Warningf(context.TODO(),
 			"returning TypeFlush boundary type for unknown event type %d", t)
 		return int(TypeFlush)
 	}
@@ -171,7 +171,7 @@ func (e *Event) boundaryType() jobspb.ResolvedSpan_BoundaryType {
 	case resolvedExit:
 		return jobspb.ResolvedSpan_EXIT
 	default:
-		log.Changefeed.Warningf(context.TODO(),
+		log.Warningf(context.TODO(),
 			"returning jobspb.ResolvedSpan_EXIT boundary type for unknown boundary")
 		return jobspb.ResolvedSpan_EXIT
 	}
@@ -197,8 +197,8 @@ func (e *Event) BackfillTimestamp() hlc.Timestamp {
 	return e.backfillTimestamp
 }
 
-// BufferAddTimestamp is the time this event came into the buffer.
-func (e *Event) BufferAddTimestamp() crtime.Mono {
+// BufferAddTimestamp is the time this event came into  the buffer.
+func (e *Event) BufferAddTimestamp() time.Time {
 	return e.bufferAddTimestamp
 }
 
@@ -229,7 +229,7 @@ func (e *Event) getTimestamp(backfillTS hlc.Timestamp) hlc.Timestamp {
 	case TypeFlush:
 		return hlc.Timestamp{}
 	default:
-		log.Changefeed.Warningf(context.TODO(),
+		log.Warningf(context.TODO(),
 			"setting empty timestamp for unknown event type")
 		return hlc.Timestamp{}
 	}

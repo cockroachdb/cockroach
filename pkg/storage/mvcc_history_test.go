@@ -6,12 +6,11 @@
 package storage_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"maps"
 	"math"
 	"regexp"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,10 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,7 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -94,6 +92,7 @@ var (
 // del_range_ts   [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [idempotent] [noCoveredStats]
 // del_range_pred [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> end=<key> [startTime=<int>,max=<int>,maxBytes=<int>,rangeThreshold=<int>]
 // increment      [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] [targetLockConflictBytes=<int>] k=<key> [inc=<val>]
+// initput        [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw] [failOnTombstones]
 // put            [t=<name>] [ts=<int>[,<int>]] [localTs=<int>[,<int>]] [resolve [status=<txnstatus>]] [ambiguousReplay] [maxLockConflicts=<int>] k=<key> v=<string> [raw]
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key> [syntheticBit]
 // put_blind_inline	k=<key> v=<string> [prev=<string>]
@@ -259,6 +258,109 @@ func TestMVCCHistories(t *testing.T) {
 			return err
 		}
 
+		// reportSSTEntries outputs entries from a raw SSTable. It uses a raw
+		// SST iterator in order to accurately represent the raw SST data.
+		reportSSTEntries := func(buf *redact.StringBuilder, name string, sst []byte) error {
+			r, err := sstable.NewMemReader(sst, sstable.ReaderOptions{
+				Comparer: storage.EngineComparer,
+			})
+			if err != nil {
+				return err
+			}
+			buf.Printf(">> %s:\n", name)
+
+			// Dump point keys.
+			iter, err := r.NewIter(sstable.NoTransforms, nil, nil)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = iter.Close() }()
+			for kv := iter.SeekGE(nil, 0); kv != nil; kv = iter.Next() {
+				if err := iter.Error(); err != nil {
+					return err
+				}
+				key, err := storage.DecodeMVCCKey(kv.K.UserKey)
+				if err != nil {
+					return err
+				}
+				v, _, err := kv.Value(nil)
+				if err != nil {
+					return err
+				}
+				value, err := storage.DecodeMVCCValue(v)
+				if err != nil {
+					return err
+				}
+				buf.Printf("%s: %s -> %s\n", strings.ToLower(kv.Kind().String()), key, value)
+			}
+
+			// Dump rangedels.
+			if rdIter, err := r.NewRawRangeDelIter(context.Background(), sstable.NoFragmentTransforms); err != nil {
+				return err
+			} else if rdIter != nil {
+				defer rdIter.Close()
+				s, err := rdIter.First()
+				for ; s != nil; s, err = rdIter.Next() {
+					start, err := storage.DecodeMVCCKey(s.Start)
+					if err != nil {
+						return err
+					}
+					end, err := storage.DecodeMVCCKey(s.End)
+					if err != nil {
+						return err
+					}
+					for _, k := range s.Keys {
+						buf.Printf("%s: %s\n", strings.ToLower(k.Kind().String()),
+							roachpb.Span{Key: start.Key, EndKey: end.Key})
+					}
+				}
+				if err != nil {
+					return err
+				}
+			}
+
+			// Dump range keys.
+			if rkIter, err := r.NewRawRangeKeyIter(context.Background(), sstable.NoFragmentTransforms); err != nil {
+				return err
+			} else if rkIter != nil {
+				defer rkIter.Close()
+				s, err := rkIter.First()
+				for ; s != nil; s, err = rkIter.Next() {
+					start, err := storage.DecodeMVCCKey(s.Start)
+					if err != nil {
+						return err
+					}
+					end, err := storage.DecodeMVCCKey(s.End)
+					if err != nil {
+						return err
+					}
+					for _, k := range s.Keys {
+						buf.Printf("%s: %s", strings.ToLower(k.Kind().String()),
+							roachpb.Span{Key: start.Key, EndKey: end.Key})
+						if k.Suffix != nil {
+							ts, err := storage.DecodeMVCCTimestampSuffix(k.Suffix)
+							if err != nil {
+								return err
+							}
+							buf.Printf("/%s", ts)
+						}
+						if k.Kind() == pebble.InternalKeyKindRangeKeySet {
+							value, err := storage.DecodeMVCCValue(k.Value)
+							if err != nil {
+								return err
+							}
+							buf.Printf(" -> %s", value)
+						}
+						buf.Printf("\n")
+					}
+				}
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
 		// reportLockTable outputs the contents of the lock table.
 		reportLockTable := func(e *evalCtx, buf *redact.StringBuilder) error {
 			// Replicated locks.
@@ -303,7 +405,12 @@ func TestMVCCHistories(t *testing.T) {
 
 			// Unreplicated locks.
 			if len(e.unreplLocks) > 0 {
-				for _, k := range slices.Sorted(maps.Keys(e.unreplLocks)) {
+				var ks []string
+				for k := range e.unreplLocks {
+					ks = append(ks, k)
+				}
+				sort.Strings(ks)
+				for _, k := range ks {
 					info := e.unreplLocks[k]
 					buf.Printf("lock (%s): %v/%s -> %+v\n",
 						lock.Unreplicated, k, info.str, info.txn)
@@ -314,7 +421,7 @@ func TestMVCCHistories(t *testing.T) {
 
 		e := newEvalCtx(ctx, engine)
 		defer func() {
-			require.NoError(t, engine.Compact(ctx))
+			require.NoError(t, engine.Compact())
 			m := engine.GetMetrics().Metrics
 			if m.Keys.MissizedTombstonesCount > 0 {
 				// A missized tombstone is a Pebble DELSIZED tombstone that encodes
@@ -431,7 +538,7 @@ func TestMVCCHistories(t *testing.T) {
 							}
 						}
 						for i, sst := range e.ssts {
-							err = storageutils.ReportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
+							err = reportSSTEntries(&buf, fmt.Sprintf("sst-%d", i), sst)
 							if err != nil {
 								if foundErr == nil {
 									// Handle the error below.
@@ -491,7 +598,7 @@ func TestMVCCHistories(t *testing.T) {
 
 					// Trace the execution in testing.T, to clarify where we
 					// are in case an error occurs.
-					log.Dev.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
+					log.Infof(context.Background(), "TestMVCCHistories:\n\t%s: %s", d.Pos, line)
 
 					// Decompose the current script line.
 					var err error
@@ -748,6 +855,7 @@ var commands = map[string]cmd{
 	"gc_clear_range":        {typDataUpdate, cmdGCClearRange},
 	"gc_points_clear_range": {typDataUpdate, cmdGCPointsClearRange},
 	"increment":             {typDataUpdate, cmdIncrement},
+	"initput":               {typDataUpdate, cmdInitPut},
 	"merge":                 {typDataUpdate, cmdMerge},
 	"put":                   {typDataUpdate, cmdPut},
 	"put_blind_inline":      {typDataUpdate, cmdPutBlindInline},
@@ -1072,14 +1180,7 @@ func cmdAcquireLock(e *evalCtx) error {
 		str := e.getStrength()
 		maxLockConflicts := e.getMaxLockConflicts()
 		targetLockConflictBytes := e.getTargetLockConflictBytes()
-		allowSequenceNumberRegression := e.hasArg("allow_sequence_number_regression")
-		var txnMeta *enginepb.TxnMeta
-		var ignoredSeq []enginepb.IgnoredSeqNumRange
-		if txn != nil {
-			txnMeta = &txn.TxnMeta
-			ignoredSeq = txn.IgnoredSeqNums
-		}
-		return storage.MVCCAcquireLock(e.ctx, rw, txnMeta, ignoredSeq, str, key, e.ms, maxLockConflicts, targetLockConflictBytes, allowSequenceNumberRegression)
+		return storage.MVCCAcquireLock(e.ctx, rw, txn, str, key, e.ms, maxLockConflicts, targetLockConflictBytes)
 	})
 }
 
@@ -1229,6 +1330,38 @@ func cmdCPut(e *evalCtx) error {
 	})
 }
 
+func cmdInitPut(e *evalCtx) error {
+	txn := e.getTxn(optional)
+	ts := e.getTs(txn)
+	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
+
+	key := e.getKey()
+	val := e.getVal()
+	failOnTombstones := e.hasArg("failOnTombstones")
+	resolve, resolveStatus := e.getResolve()
+
+	return e.withWriter("initput", func(rw storage.ReadWriter) error {
+		opts := storage.MVCCWriteOptions{
+			Txn:                            txn,
+			LocalTimestamp:                 localTs,
+			Stats:                          e.ms,
+			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
+			MaxLockConflicts:               e.getMaxLockConflicts(),
+		}
+		acq, err := storage.MVCCInitPut(e.ctx, rw, key, ts, val, failOnTombstones, opts)
+		if err != nil {
+			return err
+		}
+		if !acq.Empty() {
+			e.results.buf.Printf("initput: lock acquisition = %v\n", acq)
+		}
+		if resolve {
+			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{}, 0)
+		}
+		return nil
+	})
+}
+
 func cmdDelete(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	key := e.getKey()
@@ -1242,7 +1375,6 @@ func cmdDelete(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			ExclusionTimestamp:             e.getTsWithName("expect-exclusion-since"),
 		}
 		foundKey, acq, err := storage.MVCCDelete(e.ctx, rw, key, ts, opts)
 		if err == nil || errors.HasType(err, &kvpb.WriteTooOldError{}) {
@@ -1507,7 +1639,6 @@ func cmdPut(e *evalCtx) error {
 			Stats:                          e.ms,
 			ReplayWriteTimestampProtection: e.getAmbiguousReplay(),
 			MaxLockConflicts:               e.getMaxLockConflicts(),
-			ExclusionTimestamp:             e.getTsWithName("expect-exclusion-since"),
 		}
 		acq, err := storage.MVCCPut(e.ctx, rw, key, ts, val, opts)
 		if err != nil {
@@ -1593,7 +1724,7 @@ func cmdExport(e *evalCtx) error {
 	r := e.newReader()
 	defer r.Close()
 
-	var sstFile objstorage.MemObj
+	var sstFile bytes.Buffer
 
 	var summary kvpb.BulkOpSummary
 	var resumeInfo storage.ExportRequestResumeInfo
@@ -1607,7 +1738,7 @@ func cmdExport(e *evalCtx) error {
 			return err
 		}
 		if !hasRangeKeys {
-			sstFile = objstorage.MemObj{}
+			sstFile.Reset()
 		}
 		e.results.buf.Printf("export: %s", &summary)
 		e.results.buf.Print(" fingerprint=true")
@@ -1626,8 +1757,8 @@ func cmdExport(e *evalCtx) error {
 
 	if shouldFingerprint {
 		var ssts [][]byte
-		if len(sstFile.Data()) != 0 {
-			ssts = append(ssts, sstFile.Data())
+		if sstFile.Len() != 0 {
+			ssts = append(ssts, sstFile.Bytes())
 		}
 		// Fingerprint the rangekeys returned as a pebble SST.
 		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions, ssts)
@@ -1642,7 +1773,7 @@ func cmdExport(e *evalCtx) error {
 		return nil
 	}
 
-	iter, err := storage.NewMemSSTIterator(sstFile.Data(), false /* verify */, storage.IterOptions{
+	iter, err := storage.NewMemSSTIterator(sstFile.Bytes(), false /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: keys.MaxKey,
 	})
@@ -1800,7 +1931,7 @@ func cmdPutRangeKey(e *evalCtx) error {
 	// range key writes will use and we want to exercise it. See #129592.
 	if e.hasArg("syntheticBit") {
 		return e.withWriter("put_rangekey", func(rw storage.ReadWriter) error {
-			suffix := mvccencoding.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
+			suffix := storage.EncodeMVCCTimestampSuffixWithSyntheticBitForTesting(rangeKey.Timestamp)
 			valueRaw, err := storage.EncodeMVCCValue(value)
 			if err != nil {
 				return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
@@ -2312,6 +2443,39 @@ func formatStats(ms enginepb.MVCCStats, delta bool) string {
 	return s
 }
 
+// boundSettingReader wraps a storage.Reader and sets unset bounds on
+// NewMVCCIterator.
+type boundSettingReader struct {
+	storage.Reader
+}
+
+// NewMVCCIterator implements the Reader interface.
+func (b boundSettingReader) NewMVCCIterator(
+	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
+) (storage.MVCCIterator, error) {
+	if !opts.Prefix {
+		if len(opts.LowerBound) == 0 {
+			// This logic exists because intentInterleavingIter does not support
+			// iterator bounds spanning the local and global keyspace.
+			if len(opts.UpperBound) != 0 && keys.IsLocal(opts.UpperBound) {
+				opts.LowerBound = keys.MinKey
+			} else {
+				opts.LowerBound = keys.LocalMax
+			}
+		}
+		if len(opts.UpperBound) == 0 {
+			// NB: The above conditional will force a LocalMax min key if lower bound
+			// was initially unset, and LocalMax is not local.
+			if len(opts.LowerBound) != 0 && keys.IsLocal(opts.LowerBound) {
+				opts.UpperBound = keys.LocalMax
+			} else {
+				opts.UpperBound = keys.MaxKey
+			}
+		}
+	}
+	return b.Reader.NewMVCCIterator(ctx, iterKind, opts)
+}
+
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -2475,8 +2639,10 @@ func (e *evalCtx) newReader() storage.Reader {
 		return e.engine.NewReader(storage.StandardDurability)
 	case "batch":
 		return e.engine.NewBatch()
-	case "snapshot", "efos":
+	case "snapshot":
 		return e.engine.NewSnapshot()
+	case "efos":
+		return boundSettingReader{e.engine.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: roachpb.KeyMin, EndKey: roachpb.KeyMax}})}
 	default:
 		e.t.Fatalf("unknown reader type %q", mvccHistoriesReader)
 		return nil

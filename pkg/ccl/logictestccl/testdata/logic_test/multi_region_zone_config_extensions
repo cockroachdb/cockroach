@@ -38,15 +38,15 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
-TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 14400,
-             num_replicas = 5,
-             num_voters = 5,
-             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
-             voter_constraints = '{+region=ca-central-1: 2}',
-             lease_preferences = '[[+region=ca-central-1]]'
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 5,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 
 # REGIONAL zone config extensions.
@@ -70,15 +70,15 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
-TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 14400,
-             num_replicas = 9,
-             num_voters = 5,
-             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
-             voter_constraints = '{+region=ca-central-1: 2}',
-             lease_preferences = '[[+region=ca-central-1]]'
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1]]'
 
 
 # REGIONAL IN zone config extensions.
@@ -107,25 +107,19 @@ DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USIN
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
-TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
-             range_min_bytes = 134217728,
-             range_max_bytes = 536870912,
-             gc.ttlseconds = 14400,
-             num_replicas = 9,
-             num_voters = 5,
-             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
-             voter_constraints = '{+region=ca-central-1: 2}',
-             lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
-
-statement ok
-ALTER TABLE tbl SET (schema_locked = false)
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "ca-central-1"
 
-statement ok
-ALTER TABLE tbl SET (schema_locked = true)
-
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
 ----
@@ -135,18 +129,12 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
              gc.ttlseconds = 14400,
              num_replicas = 9,
              num_voters = 5,
-             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
              voter_constraints = '{+region=ca-central-1: 2}',
              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
 
 statement ok
-ALTER TABLE tbl SET (schema_locked = false)
-
-statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "ap-southeast-2"
-
-statement ok
-ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
@@ -157,18 +145,12 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
              gc.ttlseconds = 14400,
              num_replicas = 9,
              num_voters = 5,
-             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-east-1: 1}',
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
              voter_constraints = '{+region=ap-southeast-2: 2}',
              lease_preferences = '[[+region=ap-southeast-2], [+region=us-east-1]]'
 
 statement ok
-ALTER TABLE tbl SET (schema_locked = false)
-
-statement ok
 ALTER TABLE tbl SET LOCALITY REGIONAL IN "us-east-1"
-
-statement ok
-ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl
@@ -179,20 +161,14 @@ TABLE tbl  ALTER TABLE tbl CONFIGURE ZONE USING
              gc.ttlseconds = 14400,
              num_replicas = 9,
              num_voters = 5,
-             constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 1}',
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
              voter_constraints = '{+region=us-east-1: 2}',
              lease_preferences = '[[+region=us-east-1]]'
 
 # GLOBAL zone config extensions.
 
 statement ok
-ALTER TABLE tbl SET (schema_locked = false)
-
-statement ok
 ALTER TABLE tbl SET LOCALITY GLOBAL
-
-statement ok
-ALTER TABLE tbl SET (schema_locked = true)
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE tbl

@@ -96,12 +96,12 @@ func (tc *sklImpl) boundKeyLengths(start, end roachpb.Key) (roachpb.Key, roachpb
 	// requests to interfere, but will never permit consistency anomalies.
 	if l := len(start); l > maxKeySize {
 		start = start[:maxKeySize]
-		log.KvExec.Warningf(context.TODO(), "start key with length %d exceeds maximum key length of %d; "+
+		log.Warningf(context.TODO(), "start key with length %d exceeds maximum key length of %d; "+
 			"losing precision in timestamp cache", l, maxKeySize)
 	}
 	if l := len(end); l > maxKeySize {
 		end = end[:maxKeySize].PrefixEnd() // PrefixEnd to grow range
-		log.KvExec.Warningf(context.TODO(), "end key with length %d exceeds maximum key length of %d; "+
+		log.Warningf(context.TODO(), "end key with length %d exceeds maximum key length of %d; "+
 			"losing precision in timestamp cache", l, maxKeySize)
 	}
 	return start, end

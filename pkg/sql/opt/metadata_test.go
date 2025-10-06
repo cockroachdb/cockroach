@@ -182,8 +182,8 @@ func TestMetadata(t *testing.T) {
 	newNamesByID, oldNamesByID := mdNew.TestingObjectRefsByName(), md.TestingObjectRefsByName()
 	for id, names := range oldNamesByID {
 		newNames := newNamesByID[id]
-		for i, n := 0, names.Len(); i < n; i++ {
-			if newNames.Get(i) != names.Get(i) {
+		for i, name := range names {
+			if newNames[i] != name {
 				t.Fatalf("expected object name to be copied")
 			}
 		}

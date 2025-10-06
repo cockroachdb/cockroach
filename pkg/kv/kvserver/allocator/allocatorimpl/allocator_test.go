@@ -480,68 +480,60 @@ func mockStorePool(
 	decommissionedStoreIDs []roachpb.StoreID,
 	suspectedStoreIDs []roachpb.StoreID,
 ) {
+	storePool.DetailsMu.Lock()
+	defer storePool.DetailsMu.Unlock()
+
 	liveNodeSet := map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
+	storePool.DetailsMu.StoreDetails = map[roachpb.StoreID]*storepool.StoreDetail{}
 	for _, storeID := range aliveStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
-		detail := storePool.GetStoreDetail(storeID)
-		detail.Lock()
+		detail := storePool.GetStoreDetailLocked(storeID)
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		detail.Unlock()
 	}
 	for _, storeID := range unavailableStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_UNAVAILABLE
-		detail := storePool.GetStoreDetail(storeID)
-		detail.Lock()
+		detail := storePool.GetStoreDetailLocked(storeID)
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		detail.Unlock()
 	}
 	for _, storeID := range deadStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DEAD
-		detail := storePool.GetStoreDetail(storeID)
-		detail.Lock()
+		detail := storePool.GetStoreDetailLocked(storeID)
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		detail.Unlock()
 	}
 	for _, storeID := range decommissioningStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
-		detail := storePool.GetStoreDetail(storeID)
-		detail.Lock()
+		detail := storePool.GetStoreDetailLocked(storeID)
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		detail.Unlock()
 	}
 	for _, storeID := range decommissionedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONED
-		detail := storePool.GetStoreDetail(storeID)
-		detail.Lock()
+		detail := storePool.GetStoreDetailLocked(storeID)
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		detail.Unlock()
 	}
 
 	for _, storeID := range suspectedStoreIDs {
 		liveNodeSet[roachpb.NodeID(storeID)] = livenesspb.NodeLivenessStatus_LIVE
-		detail := storePool.GetStoreDetail(storeID)
-		detail.Lock()
+		detail := storePool.GetStoreDetailLocked(storeID)
 		detail.LastUnavailable = storePool.Clock().Now()
 		detail.Desc = &roachpb.StoreDescriptor{
 			StoreID: storeID,
 			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(storeID)},
 		}
-		detail.Unlock()
 	}
 
 	// Set the node liveness function using the set we constructed.
@@ -1310,7 +1302,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
 
 	options := a.ScorerOptions(ctx)
-	options.BaseScorerOptions.DiskCapacity = testingDiskCapacityOptions
+	options.DiskCapacityOptions = testingDiskCapacityOptions
 
 	// Every rebalance target must be either store 1 or 2.
 	for i := 0; i < 10; i++ {
@@ -1388,20 +1380,16 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	}
 
 	// Initialize 8 stores: where store 6 is the target for rebalancing.
-	updateDescCapacity := func(storeID roachpb.StoreID, capacity roachpb.StoreCapacity) {
-		sd := sp.GetStoreDetail(storeID)
-		sd.Lock()
-		sd.Desc.Capacity = capacity
-		sd.Unlock()
-	}
-	updateDescCapacity(1, ranges(100))
-	updateDescCapacity(2, ranges(100))
-	updateDescCapacity(3, ranges(100))
-	updateDescCapacity(4, ranges(100))
-	updateDescCapacity(5, ranges(100))
-	updateDescCapacity(6, ranges(0))
-	updateDescCapacity(7, ranges(100))
-	updateDescCapacity(8, ranges(100))
+	sp.DetailsMu.Lock()
+	sp.GetStoreDetailLocked(1).Desc.Capacity = ranges(100)
+	sp.GetStoreDetailLocked(2).Desc.Capacity = ranges(100)
+	sp.GetStoreDetailLocked(3).Desc.Capacity = ranges(100)
+	sp.GetStoreDetailLocked(4).Desc.Capacity = ranges(100)
+	sp.GetStoreDetailLocked(5).Desc.Capacity = ranges(100)
+	sp.GetStoreDetailLocked(6).Desc.Capacity = ranges(0)
+	sp.GetStoreDetailLocked(7).Desc.Capacity = ranges(100)
+	sp.GetStoreDetailLocked(8).Desc.Capacity = ranges(100)
+	sp.DetailsMu.Unlock()
 
 	// Each test case should describe a repair situation which has a lower
 	// priority than the previous test case.
@@ -1708,7 +1696,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 			gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 			var rangeUsageInfo allocator.RangeUsageInfo
 			options := TestingQPSLoadScorerOptions(100, 0.2)
-			options.BaseScorerOptions.IOOverload = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
+			options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
 			add, remove, _, ok := a.RebalanceVoter(
 				ctx,
 				sp,
@@ -1822,7 +1810,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		options := TestingQPSLoadScorerOptions(0, 0.1)
-		options.BaseScorerOptions.IOOverload = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
+		options.IOOverloadOptions = IOOverloadOptions{ReplicaEnforcementLevel: IOOverloadThresholdIgnore}
 		remove, _, err := a.RemoveVoter(
 			ctx,
 			sp,
@@ -1940,7 +1928,7 @@ func (r *mockRepl) RaftStatus() *raft.Status {
 	return raftStatus
 }
 
-func (r *mockRepl) GetCompactedIndex() kvpb.RaftIndex {
+func (r *mockRepl) GetFirstIndex() kvpb.RaftIndex {
 	return 0
 }
 
@@ -2052,6 +2040,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{}, /* stats */
+				false,                      /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2183,6 +2172,7 @@ func TestAllocatorTransferLeaseTargetIOOverloadCheck(t *testing.T) {
 					storeID:           tc.leaseholder,
 				},
 				allocator.RangeUsageInfo{}, /* stats */
+				false,                      /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					CheckCandidateFullness: true,
 				},
@@ -2295,6 +2285,7 @@ func TestAllocatorTransferLeaseToReplicasNeedingSnapshot(t *testing.T) {
 				c.existing,
 				repl,
 				allocator.RangeUsageInfo{},
+				false, /* alwaysAllowDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2438,6 +2429,7 @@ func TestAllocatorTransferLeaseToReplicasNeedingCatchup(t *testing.T) {
 				c.existing,
 				repl,
 				allocator.RangeUsageInfo{},
+				false, /* alwaysAllowDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2533,6 +2525,7 @@ func TestAllocatorTransferLeaseTargetConstraints(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
+				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       false,
 					CheckCandidateFullness: true,
@@ -2645,6 +2638,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
+				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -2846,7 +2840,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	}
 
 	for i, tc := range testCases2 {
-		log.KvDistribution.Infof(ctx, "case #%d", i)
+		log.Infof(ctx, "case #%d", i)
 		var rangeUsageInfo allocator.RangeUsageInfo
 		result, _, details, ok := a.RebalanceVoter(
 			ctx,
@@ -3306,6 +3300,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
+				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       false,
 					CheckCandidateFullness: true,
@@ -3325,6 +3320,7 @@ func TestAllocatorLeasePreferences(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
+				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       true,
 					CheckCandidateFullness: true,
@@ -3418,6 +3414,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
+				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       false,
 					CheckCandidateFullness: true,
@@ -3438,6 +3435,7 @@ func TestAllocatorLeasePreferencesMultipleStoresPerLocality(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				allocator.RangeUsageInfo{},
+				false, /* forceDecisionWithoutStats */
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       true,
 					CheckCandidateFullness: true,
@@ -4914,7 +4912,7 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 			sg.GossipStores(test.stores, t)
 			// Enable read disk health checking in candidate exclusion.
 			options := a.ScorerOptions(ctx)
-			options.BaseScorerOptions.IOOverload = IOOverloadOptions{
+			options.IOOverloadOptions = IOOverloadOptions{
 				ReplicaEnforcementLevel:    test.enforcement,
 				ReplicaIOOverloadThreshold: 1,
 				UseIOThresholdMax:          true,
@@ -6074,6 +6072,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 					storeID:           c.leaseholder,
 				},
 				usage,
+				false,
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
@@ -8753,13 +8752,13 @@ func (ts *testStore) rebalance(ots *testStore, bytes int64, qps float64, do Disk
 	// almost out of disk. (In a real allocator this is, for example, in
 	// rankedCandidateListFor{Allocation,Rebalancing}).
 	if !do.maxCapacityCheck(ots.StoreDescriptor) {
-		log.KvDistribution.Infof(
+		log.Infof(
 			context.Background(),
 			"s%d too full to accept snapshot from s%d: %v", ots.StoreID, ts.StoreID, ots.Capacity,
 		)
 		return
 	}
-	log.KvDistribution.Infof(context.Background(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
+	log.Infof(context.Background(), "s%d accepting snapshot from s%d", ots.StoreID, ts.StoreID)
 	ts.Capacity.RangeCount--
 	ts.Capacity.QueriesPerSecond -= qps
 	if ts.immediateCompaction {
@@ -8790,7 +8789,7 @@ func Example_rangeCountRebalancing() {
 			alloc.ScorerOptions(ctx),
 		)
 		if ok {
-			log.KvDistribution.Infof(ctx, "rebalancing to %v; details: %s", target, details)
+			log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
 			ts.rebalance(
 				&testStores[int(target.StoreID)],
 				alloc.randGen.Int63n(1<<20),
@@ -8905,8 +8904,8 @@ func qpsBasedRebalanceFn(
 		opts,
 	)
 	if ok {
-		log.KvDistribution.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
-		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS, opts.BaseScorerOptions.DiskCapacity)
+		log.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
+		candidate.rebalance(&testStores[int(add.StoreID)], alloc.randGen.Int63n(1<<20), jitteredQPS, opts.DiskOptions)
 	}
 }
 
@@ -9119,6 +9118,10 @@ func exampleRebalancing(
 	}, nil)
 
 	var wg sync.WaitGroup
+	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+		func(_ string, _ roachpb.Value) { wg.Done() },
+		// Redundant callbacks are required by this test.
+		gossip.Redundant)
 
 	// Initialize testStores.
 	initTestStores(
@@ -9141,12 +9144,13 @@ func exampleRebalancing(
 	const generations = 100
 	for i := 0; i < generations; i++ {
 		// First loop through test stores and add data.
+		wg.Add(len(testStores))
 		for j := 0; j < len(testStores); j++ {
 			// Add a pretend range to the testStore if there's already one.
 			if testStores[j].Capacity.RangeCount > 0 {
 				testStores[j].add(alloc.randGen.Int63n(1<<20), 0)
 			}
-			if err := g.TestingAddInfoProtoAndWaitForAllCallbacks(
+			if err := g.AddInfoProto(
 				gossip.MakeStoreDescKey(roachpb.StoreID(j)),
 				&testStores[j].StoreDescriptor,
 				0,
@@ -9311,10 +9315,8 @@ func TestingQPSLoadScorerOptions(
 	qpsPerReplica float64, qpsRebalanceThreshold float64,
 ) *LoadScorerOptions {
 	options := &LoadScorerOptions{
-		BaseScorerOptions: BaseScorerOptions{
-			DiskCapacity:  defaultDiskCapacityOptions(),
-			Deterministic: true,
-		},
+		DiskOptions:                  defaultDiskCapacityOptions(),
+		Deterministic:                true,
 		LoadDims:                     []load.Dimension{load.Queries},
 		LoadThreshold:                MakeQPSOnlyDim(qpsRebalanceThreshold),
 		MinLoadThreshold:             LoadMinThresholds(load.Queries),
@@ -9464,183 +9466,5 @@ func TestAllocatorRebalanceTargetVoterConstraintUnsatisfied(t *testing.T) {
 					storeLocalities[demote.StoreID-1], storeLocalities[tc.expectedDemote.StoreID-1], details)
 			}
 		})
-	}
-}
-
-// TestRoundToNearestPriorityCategory tests the RoundToNearestPriorityCategory
-// function.
-func TestRoundToNearestPriorityCategory(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		name     string
-		input    float64
-		expected float64
-	}{
-		{
-			name:     "zero",
-			input:    0.0,
-			expected: 0.0,
-		},
-		{
-			name:     "exact multiple of 100",
-			input:    100.0,
-			expected: 100.0,
-		},
-		{
-			name:     "round down to nearest 100",
-			input:    149.0,
-			expected: 100.0,
-		},
-		{
-			name:     "round up to nearest 100",
-			input:    151.0,
-			expected: 200.0,
-		},
-		{
-			name:     "negative exact multiple of 100",
-			input:    -200.0,
-			expected: -200.0,
-		},
-		{
-			name:     "negative round down to nearest 100",
-			input:    -249.0,
-			expected: -200.0,
-		},
-		{
-			name:     "negative round up to nearest 100",
-			input:    -251.0,
-			expected: -300.0,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, roundToNearestPriorityCategory(tc.input))
-		})
-	}
-}
-
-// TestCheckPriorityInversion tests the CheckPriorityInversion function.
-func TestCheckPriorityInversion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	for action := AllocatorNoop; action <= AllocatorFinalizeAtomicReplicationChange; action++ {
-		t.Run(action.String(), func(t *testing.T) {
-			if action == AllocatorConsiderRebalance || action == AllocatorNoop || action == AllocatorRangeUnavailable {
-				inversion, requeue := CheckPriorityInversion(action.Priority(), AllocatorConsiderRebalance)
-				require.False(t, inversion)
-				require.False(t, requeue)
-			} else {
-				inversion, requeue := CheckPriorityInversion(action.Priority(), AllocatorConsiderRebalance)
-				require.True(t, inversion)
-				require.True(t, requeue)
-			}
-		})
-	}
-
-	testCases := []struct {
-		name               string
-		priorityAtEnqueue  float64
-		actionAtProcessing AllocatorAction
-		expectedInversion  bool
-		expectedRequeue    bool
-	}{
-		{
-			name:               "AllocatorNoop at processing is noop",
-			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority(),
-			actionAtProcessing: AllocatorNoop,
-			expectedInversion:  true,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "AllocatorRangeUnavailable at processing is noop",
-			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority(),
-			actionAtProcessing: AllocatorRangeUnavailable,
-			expectedInversion:  true,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "priority -1 bypasses",
-			priorityAtEnqueue:  -1,
-			actionAtProcessing: AllocatorConsiderRebalance,
-			expectedInversion:  false,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "priority increase",
-			priorityAtEnqueue:  0,
-			actionAtProcessing: AllocatorFinalizeAtomicReplicationChange,
-			expectedInversion:  false,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "above range priority(1e5)",
-			priorityAtEnqueue:  1e5,
-			actionAtProcessing: AllocatorConsiderRebalance,
-			expectedInversion:  false,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "below range priority at -10",
-			priorityAtEnqueue:  -10,
-			actionAtProcessing: -100,
-			expectedInversion:  false,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "inversion but small priority changes",
-			priorityAtEnqueue:  AllocatorFinalizeAtomicReplicationChange.Priority(),
-			actionAtProcessing: AllocatorReplaceDecommissioningNonVoter,
-			expectedInversion:  true,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "inversion but small priority changes",
-			priorityAtEnqueue:  AllocatorRemoveDeadVoter.Priority(),
-			actionAtProcessing: AllocatorAddNonVoter,
-			expectedInversion:  true,
-			expectedRequeue:    false,
-		},
-		{
-			name:               "inversion but small priority changes",
-			priorityAtEnqueue:  AllocatorConsiderRebalance.Priority(),
-			actionAtProcessing: AllocatorNoop,
-			expectedInversion:  false,
-			expectedRequeue:    false,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			inversion, requeue := CheckPriorityInversion(tc.priorityAtEnqueue, tc.actionAtProcessing)
-			require.Equal(t, tc.expectedInversion, inversion)
-			require.Equal(t, tc.expectedRequeue, requeue)
-		})
-	}
-}
-
-// TestAllocatorPriorityInvariance verifies that allocator priorities remain
-// spaced in multiples of 100. This prevents regressions against the contract
-// relied on by CheckPriorityInversion. For details, see the comment above
-// action.Priority().
-func TestAllocatorPriorityInvariance(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	exceptions := map[AllocatorAction]struct{}{
-		AllocatorFinalizeAtomicReplicationChange: {},
-		AllocatorRemoveLearner:                   {},
-		AllocatorReplaceDeadVoter:                {},
-	}
-	lowestPriority := AllocatorNoop.Priority()
-	for action := AllocatorNoop; action < AllocatorMaxPriority; action++ {
-		require.GreaterOrEqualf(t, action.Priority(), lowestPriority,
-			"priority %f is less than AllocatorNoop: likely violating contract",
-			action.Priority())
-		if _, ok := exceptions[action]; !ok {
-			require.Equalf(t, int(action.Priority())%100, 0,
-				"priority %f is not a multiple of 100: likely violating contract",
-				action.Priority())
-
-		}
 	}
 }

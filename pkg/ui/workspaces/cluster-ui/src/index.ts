@@ -6,13 +6,14 @@
 import "./protobufInit";
 import * as api from "./api";
 import * as util from "./util";
-
 export * from "./anchor";
 export * from "./badge";
 export * from "./barCharts";
 export * from "./button";
 export * from "./common";
-export * from "./components";
+export * from "./databaseDetailsPage";
+export * from "./databaseTablePage";
+export * from "./databasesPage";
 export * from "./delayed";
 export * from "./downloadFile";
 export * from "./dropdown";
@@ -49,9 +50,11 @@ export * from "./graphs";
 export * from "./selectors";
 export * from "./contexts";
 export * from "./timestamp";
+export * from "./databases";
 export * from "./antdTheme";
-export * from "./pages";
-export * from "./types";
+export * from "./databasesV2";
+export * from "./databaseDetailsV2";
+export * from "./tableDetailsV2";
 // Reexport ConfigProvider instance from cluster-ui as exact instance
 // required in Db Console to apply Antd theme in Db Console.
 // TODO (koorosh): is it possible to define antd pacakge as peerDependency

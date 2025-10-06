@@ -92,8 +92,6 @@ function getFormattedValue(value: number, yAxisUnits: AxisUnits): string {
       return Bytes(value);
     case AxisUnits.Duration:
       return Duration(value);
-    case AxisUnits.DurationMillis:
-      return Duration(value);
     case AxisUnits.Percentage:
       return Percentage(value, 1);
     default:

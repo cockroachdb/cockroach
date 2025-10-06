@@ -25,7 +25,6 @@ import (
 )
 
 type dropSequenceNode struct {
-	zeroInputPlanNode
 	n  *tree.DropSequence
 	td []toDelete
 }
@@ -261,7 +260,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 				continue
 			}
 
-			if len(dependent.ColumnIDs) > 0 {
+			if dependent.ColumnIDs != nil && len(dependent.ColumnIDs) > 0 {
 				// If we reach here, it means this sequence is depended on by a column in `t`
 				// in its default expression. Remove that column's default expression.
 				err = dropDefaultExprInDepColsOnSeq(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)
@@ -270,7 +269,7 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 				numDependedOnByTablesToSkip++
 			}
 		case *funcdesc.Mutable:
-			err = p.dropFunctionImpl(ctx, t, tree.DropCascade)
+			err = p.dropFunctionImpl(ctx, t)
 		default:
 			err = errors.AssertionFailedf(
 				"unexpected dependent %s %s on sequence %s",

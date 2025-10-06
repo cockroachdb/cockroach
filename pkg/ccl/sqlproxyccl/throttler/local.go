@@ -126,7 +126,7 @@ func (s *localService) ReportAttempt(
 	case status == AttemptInvalidCredentials:
 		throttle.triggerThrottle(s.clock(), s.maxDelay)
 		if throttle.nextBackoff == s.maxDelay {
-			log.Dev.Warningf(ctx, "connection %v at max throttle delay %s", connection, s.maxDelay)
+			log.Warningf(ctx, "connection %v at max throttle delay %s", connection, s.maxDelay)
 		}
 	case status == AttemptOK:
 		throttle.disable()

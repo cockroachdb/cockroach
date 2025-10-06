@@ -69,10 +69,6 @@ func (rsl StateLoader) Load(
 		return kvserverpb.ReplicaState{}, err
 	}
 
-	if s.ForceFlushIndex, err = rsl.LoadRangeForceFlushIndex(ctx, reader); err != nil {
-		return kvserverpb.ReplicaState{}, err
-	}
-
 	as, err := rsl.LoadRangeAppliedState(ctx, reader)
 	if err != nil {
 		return kvserverpb.ReplicaState{}, err
@@ -84,9 +80,13 @@ func (rsl StateLoader) Load(
 	s.Stats = &ms
 	s.RaftClosedTimestamp = as.RaftClosedTimestamp
 
-	// Invariant: TruncatedState == nil. The field is being phased out. The
-	// RaftTruncatedState must be loaded separately.
-	s.TruncatedState = nil
+	// The truncated state should not be optional (i.e. the pointer is
+	// pointless), but it is and the migration is not worth it.
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, reader)
+	if err != nil {
+		return kvserverpb.ReplicaState{}, err
+	}
+	s.TruncatedState = &truncState
 
 	version, err := rsl.LoadVersion(ctx, reader)
 	if err != nil {
@@ -121,6 +121,11 @@ func (rsl StateLoader) Save(
 		return enginepb.MVCCStats{}, err
 	}
 	if err := rsl.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
+	// the Raft log engine is separated. Figure out the ordering required here.
+	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if state.Version != nil {
@@ -347,85 +352,6 @@ func (rsl StateLoader) SetVersion(
 		hlc.Timestamp{}, version, storage.MVCCWriteOptions{Stats: ms})
 }
 
-// LoadRangeForceFlushIndex loads the force-flush index.
-func (rsl StateLoader) LoadRangeForceFlushIndex(
-	ctx context.Context, reader storage.Reader,
-) (roachpb.ForceFlushIndex, error) {
-	var ffIndex roachpb.ForceFlushIndex
-	// If not found, ffIndex.Index will stay 0.
-	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeForceFlushKey(),
-		hlc.Timestamp{}, &ffIndex, storage.MVCCGetOptions{})
-	return ffIndex, err
-}
-
-// SetForceFlushIndex sets the force-flush index.
-func (rsl StateLoader) SetForceFlushIndex(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	ffIndex *roachpb.ForceFlushIndex,
-) error {
-	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeForceFlushKey(),
-		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
-}
-
-// LoadRaftReplicaID loads the RaftReplicaID.
-func (rsl StateLoader) LoadRaftReplicaID(
-	ctx context.Context, reader storage.Reader,
-) (kvserverpb.RaftReplicaID, error) {
-	var replicaID kvserverpb.RaftReplicaID
-	if found, err := storage.MVCCGetProto(
-		ctx, reader, rsl.RaftReplicaIDKey(), hlc.Timestamp{}, &replicaID,
-		storage.MVCCGetOptions{ReadCategory: fs.ReplicationReadCategory},
-	); err != nil {
-		return kvserverpb.RaftReplicaID{}, err
-	} else if !found {
-		return kvserverpb.RaftReplicaID{}, errors.AssertionFailedf("no replicaID persisted")
-	}
-	return replicaID, nil
-}
-
-// SetRaftReplicaID overwrites the RaftReplicaID.
-func (rsl StateLoader) SetRaftReplicaID(
-	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
-) error {
-	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
-	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(
-		ctx,
-		writer,
-		rsl.RaftReplicaIDKey(),
-		hlc.Timestamp{}, /* timestamp */
-		&rid,
-		storage.MVCCWriteOptions{}, /* opts */
-	)
-}
-
-// LoadRangeTombstone loads the RangeTombstone of the range.
-func (rsl StateLoader) LoadRangeTombstone(
-	ctx context.Context, reader storage.Reader,
-) (kvserverpb.RangeTombstone, error) {
-	var ts kvserverpb.RangeTombstone
-	if ok, err := storage.MVCCGetProto(
-		ctx, reader, rsl.RangeTombstoneKey(), hlc.Timestamp{}, &ts, storage.MVCCGetOptions{},
-	); err != nil || !ok {
-		// NB: when err == nil && !ok, there is no RangeTombstone. It is valid to
-		// return RangeTombstone{} with a zero NextReplicaID, signifying that there
-		// hasn't been a single replica removed for the RangeID.
-		return kvserverpb.RangeTombstone{}, err
-	}
-	return ts, nil
-}
-
-// SetRangeTombstone writes the RangeTombstone.
-func (rsl StateLoader) SetRangeTombstone(
-	ctx context.Context, writer storage.Writer, ts kvserverpb.RangeTombstone,
-) error {
-	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, rsl.RangeTombstoneKey(),
-		hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{})
-}
-
 // UninitializedReplicaState returns the ReplicaState of an uninitialized
 // Replica with the given range ID. It is equivalent to StateLoader.Load from an
 // empty storage.
@@ -433,7 +359,7 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 	return kvserverpb.ReplicaState{
 		Desc:           &roachpb.RangeDescriptor{RangeID: rangeID},
 		Lease:          &roachpb.Lease{},
-		TruncatedState: nil, // Invariant: always nil.
+		TruncatedState: &kvserverpb.RaftTruncatedState{},
 		GCThreshold:    &hlc.Timestamp{},
 		Stats:          &enginepb.MVCCStats{},
 		GCHint:         &roachpb.GCHint{},
@@ -442,14 +368,10 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 
 // The rest is not technically part of ReplicaState.
 
-// SynthesizeRaftState creates a Raft state which synthesizes HardState from
-// pre-seeded data in the engine: the state machine state created by
-// WriteInitialReplicaState on a split, and the existing HardState of an
-// uninitialized replica.
-//
-// TODO(sep-raft-log): this is now only used in splits, when initializing a
-// replica. Make the implementation straightforward, most of the stuff here is
-// constant except the existing HardState.
+// SynthesizeRaftState creates a Raft state which synthesizes both a HardState
+// and a lastIndex from pre-seeded data in the engine (typically created via
+// WriteInitialReplicaState and, on a split, perhaps the activity of an
+// uninitialized Raft group)
 func (rsl StateLoader) SynthesizeRaftState(
 	ctx context.Context, readWriter storage.ReadWriter,
 ) error {
@@ -457,13 +379,13 @@ func (rsl StateLoader) SynthesizeRaftState(
 	if err != nil {
 		return err
 	}
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, readWriter)
+	if err != nil {
+		return err
+	}
 	as, err := rsl.LoadRangeAppliedState(ctx, readWriter)
 	if err != nil {
 		return err
 	}
-	applied := logstore.EntryID{
-		Index: as.RaftAppliedIndex,
-		Term:  as.RaftAppliedIndexTerm,
-	}
-	return rsl.SynthesizeHardState(ctx, readWriter, hs, applied)
+	return rsl.SynthesizeHardState(ctx, readWriter, hs, truncState, as.RaftAppliedIndex)
 }

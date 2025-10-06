@@ -148,9 +148,9 @@ func TestLockAgeThresholdSetting(t *testing.T) {
 		require.NoError(t, err)
 		// Acquire some shared and exclusive locks as well.
 		for _, txn := range []*roachpb.Transaction{&txn1, &txn2} {
-			require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Shared, makeKey(local, lock.Shared), nil, 0, 0, false))
+			require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, lock.Shared, makeKey(local, lock.Shared), nil, 0, 0))
 		}
-		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn1.TxnMeta, txn1.IgnoredSeqNums, lock.Exclusive, makeKey(local, lock.Exclusive), nil, 0, 0, false))
+		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn1, lock.Exclusive, makeKey(local, lock.Exclusive), nil, 0, 0))
 	}
 	require.NoError(t, eng.Flush())
 
@@ -217,9 +217,9 @@ func TestIntentCleanupBatching(t *testing.T) {
 			idx := i*len(objectKeys) + j
 			switch idx % 3 {
 			case 0:
-				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Shared, key, nil, 0, 0, false))
+				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn, lock.Shared, key, nil, 0, 0))
 			case 1:
-				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Exclusive, key, nil, 0, 0, false))
+				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn, lock.Exclusive, key, nil, 0, 0))
 			case 2:
 				_, err := storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn})
 				require.NoError(t, err)
@@ -1145,14 +1145,14 @@ func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	expectedStats := dataItems.liveDistribution().setupTest(t, ctrlEng, desc)
 
 	if log.V(1) {
-		log.KvExec.Info(ctx, "Expected data:")
+		log.Info(ctx, "Expected data:")
 		for _, l := range formatTable(engineData(t, ctrlEng, desc), tablePrefix) {
-			log.KvExec.Infof(ctx, "%s", l)
+			log.Infof(ctx, "%s", l)
 		}
 
-		log.KvExec.Info(ctx, "Actual data:")
+		log.Info(ctx, "Actual data:")
 		for _, l := range formatTable(engineData(t, eng, desc), tablePrefix) {
-			log.KvExec.Infof(ctx, "%s", l)
+			log.Infof(ctx, "%s", l)
 		}
 	}
 

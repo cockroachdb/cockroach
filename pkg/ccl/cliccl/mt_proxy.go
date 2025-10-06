@@ -51,7 +51,7 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	}
 	defer stopper.Stop(ctx)
 
-	log.Dev.Infof(ctx, "New proxy with opts: %+v", proxyContext)
+	log.Infof(ctx, "New proxy with opts: %+v", proxyContext)
 
 	var proxyLn net.Listener
 	if proxyContext.ListenAddr != "" {
@@ -83,7 +83,7 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 	errChan := make(chan error, 1)
 
 	if err := stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
-		log.Dev.Infof(ctx, "HTTP metrics server listening at %s", metricsLn.Addr())
+		log.Infof(ctx, "HTTP metrics server listening at %s", metricsLn.Addr())
 		if err := server.ServeHTTP(ctx, metricsLn); err != nil {
 			errChan <- err
 		}
@@ -108,9 +108,7 @@ func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper
 	if err != nil {
 		return ctx, nil, err
 	}
-	// The proxy will shutdown via the stopper, so we can ignore the
-	// cancellation function here.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 	return ctx, stopper, err
 }
 
@@ -148,7 +146,7 @@ func waitForSignals(
 			// 2. Waiting for all connections to close "naturally" or
 			//    waiting for "shutdownConnectionTimeout" to elapse after which
 			//    open TCP connections will be forcefully closed so the server can stop
-			log.Dev.Infof(ctx, "stopping tcp listener")
+			log.Infof(ctx, "stopping tcp listener")
 			if proxyLn != nil {
 				_ = proxyLn.Close()
 			}
@@ -159,7 +157,7 @@ func waitForSignals(
 			case <-server.AwaitNoConnections(ctx):
 			case <-time.After(shutdownConnectionTimeout):
 			}
-			log.Dev.Infof(ctx, "server stopping")
+			log.Infof(ctx, "server stopping")
 			stopper.Stop(ctx)
 		}()
 	case <-log.FatalChan():

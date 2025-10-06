@@ -5,6 +5,7 @@
 
 import React from "react";
 import {RenderFunction} from "storybook__react";
+import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
 import "styl/app.styl";
 import "../styles.css";

@@ -143,7 +143,7 @@ func BenchmarkKVAccessorUpdate(b *testing.B) {
 	for _, batchSize := range []int{100, 1000, 10000} {
 		records := make([]spanconfig.Record, 0, batchSize)
 		for i := 0; i < batchSize; i++ {
-			log.Dev.Infof(ctx, "generating batch: %s", fmt.Sprintf("[%06d,%06d):X", i, i+1))
+			log.Infof(ctx, "generating batch: %s", fmt.Sprintf("[%06d,%06d):X", i, i+1))
 			record := spanconfigtestutils.ParseSpanConfigRecord(b, fmt.Sprintf("[%06d,%06d):X", i, i+1))
 			records = append(records, record)
 		}

@@ -9,7 +9,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -23,7 +23,7 @@ import (
 func ParseSequenceOpts(
 	s string, defaultIntSize int32,
 ) (*descpb.TableDescriptor_SequenceOpts, error) {
-	stmt, err := parserutils.ParseOne("CREATE SEQUENCE fake_seq " + s)
+	stmt, err := parser.ParseOne("CREATE SEQUENCE fake_seq " + s)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot parse sequence option")
 	}
@@ -78,7 +78,7 @@ func AssignSequenceOptions(
 ) error {
 
 	// Set the default integer type of a sequence.
-	integerType := parserutils.NakedIntTypeFromDefaultIntSize(defaultIntSize)
+	integerType := parser.NakedIntTypeFromDefaultIntSize(defaultIntSize)
 	// All other defaults are dependent on the value of increment
 	// and the AS integerType. (i.e. whether the sequence is ascending
 	// or descending, bigint vs. smallint)
@@ -111,7 +111,7 @@ func AssignSequenceOptions(
 			opts.MaxValue = -1
 			opts.Start = opts.MaxValue
 		}
-		opts.SessionCacheSize = 1
+		opts.CacheSize = 1
 	}
 
 	// Set Minvalue and Maxvalue to new types bounds if at current bounds.
@@ -148,19 +148,19 @@ func AssignSequenceOptions(
 				"CYCLE option is not supported")
 		case tree.SeqOptNoCycle:
 			// Do nothing; this is the default.
+		case tree.SeqOptCache:
+			if v := *option.IntVal; v >= 1 {
+				opts.CacheSize = v
+			} else {
+				return errors.Newf(
+					"CACHE (%d) must be greater than zero", v)
+			}
 		case tree.SeqOptCacheNode:
 			if v := *option.IntVal; v >= 1 {
 				opts.NodeCacheSize = v
 			} else {
 				return errors.Newf(
 					"PER NODE CACHE (%d) must be greater than zero", v)
-			}
-		case tree.SeqOptCacheSession:
-			if v := *option.IntVal; v >= 1 {
-				opts.SessionCacheSize = v
-			} else {
-				return errors.Newf(
-					"PER SESSION CACHE (%d) must be greater than zero", v)
 			}
 		case tree.SeqOptIncrement:
 			// Do nothing; this has already been set.

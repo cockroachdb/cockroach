@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "schemaexpr",
@@ -27,7 +26,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/funcdesc",
-        "//pkg/sql/parserutils",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins/builtinsregistry",
@@ -54,7 +53,6 @@ go_test(
         "column_test.go",
         "computed_column_rewrites_test.go",
         "expr_test.go",
-        "inject_parser_test.go",
         "partial_index_test.go",
         "testutils_test.go",
     ],
@@ -62,7 +60,6 @@ go_test(
     embed = [":schemaexpr"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
@@ -78,9 +75,4 @@ go_test(
         "//pkg/util/log",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
-)
-
-disallowed_imports_test(
-    src = "schemaexpr",
-    disallowed_list = ["//pkg/sql/parser"],
 )

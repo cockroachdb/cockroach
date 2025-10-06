@@ -132,7 +132,7 @@ func (g *execPlanGistGen) genPlanGistFactory() {
 
 func (g *execPlanGistGen) genPlanGistDecoder() {
 	g.w.write("\n")
-	g.w.nest("func (d *planGistDecoder) decodeOperatorBody(op execOperator) (*Node, error) {\n")
+	g.w.nest("func (f *PlanGistFactory) decodeOperatorBody(op execOperator) (*Node, error) {\n")
 	g.w.writeIndent("var _n *Node\n")
 	g.w.writeIndent("var reqOrdering exec.OutputOrdering\n")
 	g.w.writeIndent("var err error\n")
@@ -144,7 +144,7 @@ func (g *execPlanGistGen) genPlanGistDecoder() {
 		g.w.nestIndent("var args %sArgs\n", unTitle(string(define.Name)))
 		// table is implicit
 		if strings.HasPrefix(string(define.Name), "AlterTable") {
-			g.w.writeIndent("tbl := d.decodeTable()\n")
+			g.w.writeIndent("tbl := f.decodeTable()\n")
 		}
 		for f, field := range define.Fields {
 			if omitted(string(define.Name), string(field.Name)) {
@@ -184,7 +184,7 @@ func (g *execPlanGistGen) genPlanGistDecoder() {
 			}
 
 			if len(decoder) > 0 {
-				g.w.writeIndent("args.%s = d.%s(%s)\n", argName, decoder, decoderArg)
+				g.w.writeIndent("args.%s = f.%s(%s)\n", argName, decoder, decoderArg)
 			}
 			if len(store) > 0 {
 				g.w.writeIndent("%s = args.%s\n", store, argName)
@@ -198,7 +198,7 @@ func (g *execPlanGistGen) genPlanGistDecoder() {
 
 		for i := len(childrenNames) - 1; i >= 0; i-- {
 			childrenNames[i] = "args." + childrenNames[i]
-			g.w.writeIndent("%s = d.popChild()\n", childrenNames[i])
+			g.w.writeIndent("%s = f.popChild()\n", childrenNames[i])
 		}
 
 		g.w.writeIndent("_n, err = newNode(op, &args, reqOrdering, %s)\n", strings.Join(childrenNames, ","))

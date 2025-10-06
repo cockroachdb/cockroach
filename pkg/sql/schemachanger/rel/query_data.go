@@ -63,7 +63,7 @@ func (tv typedValue) toValue() reflect.Value {
 		}
 		return reflect.ValueOf(tv.value).Convert(tv.typ)
 	}
-	return reflect.ValueOf(tv.value).Convert(reflect.PointerTo(tv.typ)).Elem()
+	return reflect.ValueOf(tv.value).Convert(reflect.PtrTo(tv.typ)).Elem()
 }
 
 func (tv typedValue) toInterface() interface{} {

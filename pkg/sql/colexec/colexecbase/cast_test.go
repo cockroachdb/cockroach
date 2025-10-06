@@ -51,10 +51,10 @@ func TestRandomizedCast(t *testing.T) {
 	}
 	var numTypePairs = rng.Intn(10) + 1
 	numRows := 1 + rng.Intn(coldata.BatchSize()) + rng.Intn(3)*coldata.BatchSize()
-	log.Dev.Infof(ctx, "num rows = %d", numRows)
+	log.Infof(ctx, "num rows = %d", numRows)
 	for run := 0; run < numTypePairs; run++ {
 		from, to := getValidSupportedCast()
-		log.Dev.Infof(ctx, "%s to %s", from.String(), to.String())
+		log.Infof(ctx, "%s to %s", from.String(), to.String())
 		input := colexectestutils.Tuples{}
 		output := colexectestutils.Tuples{}
 		fromConverter := colconv.GetDatumToPhysicalFn(from)
@@ -77,7 +77,7 @@ func TestRandomizedCast(t *testing.T) {
 		colexectestutils.RunTestsWithoutAllNullsInjectionWithErrorHandler(t, testAllocator,
 			[]colexectestutils.Tuples{input}, [][]*types.T{{from}}, output, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
-				return colexecbase.GetCastOperator(ctx, testAllocator, input[0], 0, 1, from, to, &evalCtx)
+				return colexecbase.GetCastOperator(testAllocator, input[0], 0, 1, from, to, &evalCtx)
 			}, func(err error) {
 				if !errorExpected {
 					t.Fatal(err)
@@ -118,7 +118,7 @@ func BenchmarkCastOp(b *testing.B) {
 							coldata.BatchSize(), nullProbability, selectivity,
 						)
 						source := colexecop.NewRepeatableBatchSource(testAllocator, batch, typs)
-						op, err := colexecbase.GetCastOperator(ctx, testAllocator, source, 0, 1, typePair[0], typePair[1], &evalCtx)
+						op, err := colexecbase.GetCastOperator(testAllocator, source, 0, 1, typePair[0], typePair[1], &evalCtx)
 						require.NoError(b, err)
 						b.SetBytes(int64(8 * coldata.BatchSize()))
 						b.ResetTimer()

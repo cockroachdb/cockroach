@@ -7,11 +7,11 @@ package tracing
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -30,6 +30,11 @@ import (
 // 1. external OpenTelemetry-compatible trace collector (Jaeger, Zipkin, Lightstep),
 // 2. /debug/requests endpoint (net/trace package); mostly useful for local debugging
 // 3. CRDB-internal trace span (powers SQL session tracing).
+//
+// When there is no need to allocate either of these three destinations,
+// a "noop span", i.e. an immutable *Span wrapping the *Tracer, may be
+// returned, to allow starting additional nontrivial Spans from the return
+// value later, when direct access to the tracer may no longer be available.
 //
 // The CockroachDB-internal Span (crdbSpan) is more complex because
 // rather than reporting to some external sink, the caller's "owner"
@@ -128,7 +133,19 @@ type Span struct {
 
 	// finishStack is set if debugUseAfterFinish is set. It represents the stack
 	// that called Finish(), in order to report it on further use.
-	finishStack debugutil.SafeStack
+	finishStack string
+}
+
+// IsNoop returns true if this span is a black hole - it doesn't correspond to a
+// CRDB span and it doesn't output either to an OpenTelemetry tracer, or to
+// net.Trace.
+//
+// As opposed to other spans, a noop span can be used after Finish(). In
+// practice, noop spans are pre-allocated by the Tracer and handed out to
+// everybody (shared) if the Tracer is configured to not always create real
+// spans (i.e. TracingModeOnDemand).
+func (sp *Span) IsNoop() bool {
+	return sp.i.isNoop()
 }
 
 // detectUseAfterFinish() checks whether sp has already been Finish()ed. If it
@@ -139,18 +156,21 @@ type Span struct {
 // Exported methods on Span are supposed to call this and short-circuit if true
 // is returrned.
 //
-// Note that a nil span will return true.
+// Note that a nil or no-op span will return true.
 func (sp *Span) detectUseAfterFinish() bool {
 	if sp == nil {
+		return true
+	}
+	if sp.IsNoop() {
 		return true
 	}
 	alreadyFinished := atomic.LoadInt32(&sp.finished) != 0
 	// In test builds, we panic on span use after Finish. This is in preparation
 	// of span pooling, at which point use-after-Finish would become corruption.
 	if alreadyFinished && sp.i.tracer.PanicOnUseAfterFinish() {
-		var finishStack debugutil.SafeStack
-		if sp.finishStack == nil {
-			finishStack = debugutil.SafeStack("<stack not captured. Set debugUseAfterFinish>")
+		var finishStack string
+		if sp.finishStack == "" {
+			finishStack = "<stack not captured. Set debugUseAfterFinish>"
 		} else {
 			finishStack = sp.finishStack
 		}
@@ -197,9 +217,6 @@ func (sp *Span) decRef() bool {
 
 // Tracer exports the tracer this span was created using.
 func (sp *Span) Tracer() *Tracer {
-	if sp == nil {
-		return nil
-	}
 	sp.detectUseAfterFinish()
 	return sp.i.Tracer()
 }
@@ -210,7 +227,7 @@ func (sp *Span) String() string {
 
 // Redactable returns true if this Span's tracer is marked redactable.
 func (sp *Span) Redactable() bool {
-	if sp == nil {
+	if sp == nil || sp.i.isNoop() {
 		return false
 	}
 	sp.detectUseAfterFinish()
@@ -227,11 +244,11 @@ func (sp *Span) Finish() {
 
 // finishInternal finishes the span.
 func (sp *Span) finishInternal() {
-	if sp == nil || sp.detectUseAfterFinish() {
+	if sp == nil || sp.IsNoop() || sp.detectUseAfterFinish() {
 		return
 	}
 	if sp.Tracer().debugUseAfterFinish {
-		sp.finishStack = debugutil.Stack()
+		sp.finishStack = string(debug.Stack())
 	}
 	atomic.StoreInt32(&sp.finished, 1)
 	sp.i.Finish()
@@ -313,16 +330,6 @@ func (sp *Span) GetRecording(recType tracingpb.RecordingType) tracingpb.Recordin
 		return nil
 	}
 	return sp.i.GetRecording(recType, false /* finishing */)
-}
-
-func (sp *Span) GetFullTraceRecording(recType tracingpb.RecordingType) Trace {
-	if sp.detectUseAfterFinish() {
-		return Trace{}
-	}
-	if sp.RecordingType() == tracingpb.RecordingOff {
-		return Trace{}
-	}
-	return sp.i.GetFullTraceRecording(recType)
 }
 
 // GetConfiguredRecording is like GetRecording, except the type of recording it
@@ -459,8 +466,8 @@ func (sp *Span) Recordf(format string, args ...interface{}) {
 
 // RecordStructured adds a Structured payload to the Span. It will be added to
 // the recording even if the Span is not verbose; however it will be discarded
-// if the underlying Span has been optimized out (i.e. is nil). Payloads may
-// also be dropped due to sizing constraints.
+// if the underlying Span has been optimized out (i.e. is a noop span). Payloads
+// may also be dropped due to sizing constraints.
 //
 // RecordStructured does not take ownership of item; it marshals it into an Any
 // proto.
@@ -577,6 +584,9 @@ func (sp *Span) OperationName() string {
 	if sp == nil {
 		return "<nil>"
 	}
+	if sp.IsNoop() {
+		return "noop"
+	}
 	sp.detectUseAfterFinish()
 	return sp.i.crdb.operation
 }
@@ -666,9 +676,6 @@ func (sp *Span) reset(
 	}
 
 	c := sp.i.crdb
-	if c == nil && otelSpan == nil && netTr == nil {
-		panic(errors.AssertionFailedf("must have at least one of crdbSpan, otelSpan, or netTr"))
-	}
 	sp.i = spanInner{
 		tracer:   sp.i.tracer,
 		crdb:     c,
@@ -734,12 +741,12 @@ func (sp *Span) reset(
 	// detect use-after-Finish. Similarly, we do the write atomically to prevent
 	// reorderings.
 	atomic.StoreInt32(&sp.finished, 0)
-	sp.finishStack = nil
+	sp.finishStack = ""
 }
 
 // SetOtelStatus sets the status of the OpenTelemetry span (if any).
 func (sp *Span) SetOtelStatus(code codes.Code, msg string) {
-	if sp == nil || sp.i.otelSpan == nil {
+	if sp.i.otelSpan == nil {
 		return
 	}
 	sp.i.otelSpan.SetStatus(codes.Error, msg)

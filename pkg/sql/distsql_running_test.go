@@ -168,7 +168,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// We need to re-plan every time, since the plan is closed automatically
 		// by PlanAndRun() below making it unusable across retries.
 		p.stmt = makeStatement(stmt, clusterunique.ID{},
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)))
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -286,7 +286,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		)
 
 		p.stmt = makeStatement(stmt, clusterunique.ID{},
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)))
+			tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)))
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -410,7 +410,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 	// This test goes through the trouble of creating a server because it wants to
 	// create a txn. It creates the txn because it wants to test an interaction
 	// between the DistSQLReceiver and the TxnCoordSender: the DistSQLReceiver
-	// will feed retryable errors to the TxnCoordSender which will change those
+	// will feed retriable errors to the TxnCoordSender which will change those
 	// errors to TransactionRetryWithProtoRefreshError.
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
@@ -444,17 +444,17 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		expErr string
 	}{
 		{
-			// Initial error, retryable.
+			// Initial error, retriable.
 			err:    retryErr,
 			expErr: "TransactionRetryWithProtoRefreshError: TransactionRetryError",
 		},
 		{
-			// A non-retryable error overwrites a retryable one.
+			// A non-retriable error overwrites a retriable one.
 			err:    fmt.Errorf("err1"),
 			expErr: "err1",
 		},
 		{
-			// Another non-retryable error doesn't overwrite the previous one.
+			// Another non-retriable error doesn't overwrite the previous one.
 			err:    fmt.Errorf("err2"),
 			expErr: "err1",
 		},
@@ -464,7 +464,7 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",
 		},
 		{
-			// A non-aborted retryable error does not overried the
+			// A non-aborted retriable error does not overried the
 			// TransactionAbortedError.
 			err:    retryErr,
 			expErr: "TransactionRetryWithProtoRefreshError: TransactionAbortedError",

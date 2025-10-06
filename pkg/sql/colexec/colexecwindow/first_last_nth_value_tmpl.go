@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for first_value.eg.go, last_value.eg.go,
@@ -90,7 +91,7 @@ func New_UPPERCASE_NAMEOperator(
 		}
 		// {{end}}
 	}
-	return nil, errors.AssertionFailedf("unsupported _OP_NAME window operator type %s", argType.Name())
+	return nil, errors.Errorf("unsupported _OP_NAME window operator type %s", argType.Name())
 }
 
 type _OP_NAMEBase struct {

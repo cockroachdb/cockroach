@@ -43,7 +43,7 @@ type Options struct {
 	Incrementer Incrementer
 	BlockSize   int64
 	Stopper     *stop.Stopper
-	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.KvExec.Fatalf
+	Fatalf      func(context.Context, string, ...interface{}) // defaults to log.Fatalf
 }
 
 // An Allocator is used to increment a key in allocation blocks of arbitrary
@@ -66,7 +66,7 @@ func NewAllocator(opts Options) (*Allocator, error) {
 		return nil, errors.Errorf("blockSize must be a positive integer: %d", opts.BlockSize)
 	}
 	if opts.Fatalf == nil {
-		opts.Fatalf = log.KvExec.Fatalf
+		opts.Fatalf = log.Fatalf
 	}
 	opts.AmbientCtx.AddLogTag("idalloc", nil)
 	return &Allocator{
@@ -112,7 +112,7 @@ func (ia *Allocator) start() {
 					break
 				}
 
-				log.KvExec.Warningf(
+				log.Warningf(
 					ctx,
 					"unable to allocate %d ids from %s: %+v",
 					ia.opts.BlockSize,

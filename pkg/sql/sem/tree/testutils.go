@@ -87,12 +87,6 @@ func SampleDatum(t *types.T) Datum {
 		return NewDGeography(geo.MustParseGeographyFromEWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")))
 	case types.GeometryFamily:
 		return NewDGeometry(geo.MustParseGeometryFromEWKB([]byte("\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f")))
-	case types.LTreeFamily:
-		l, err := ParseDLTree("a.b.c")
-		if err != nil {
-			panic(err)
-		}
-		return l
 	default:
 		panic(errors.AssertionFailedf("SampleDatum not implemented for %s", t))
 	}

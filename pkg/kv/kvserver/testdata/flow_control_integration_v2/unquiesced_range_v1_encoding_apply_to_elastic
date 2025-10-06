@@ -1,0 +1,148 @@
+# -- When using v1 encoding (V2EnabledWhenLeaderV1Encoding), all entries which
+# -- are subject to admission control are encoded as `raftpb.LowPri`,
+# -- regardless of their original priority; to avoid the overhead of
+# -- deserializing the raft admission metadata. Therefore, as the underlying
+# -- test is shared between the v1 and v2 encoding testdata files, the reader
+# -- should interpret any comments referring to regular tokens as referring to
+# -- elastic token.
+echo
+----
+----
+-- (Issuing 1x1MiB, 3x replicated elastic write that's not admitted.)
+
+
+-- Flow token metrics from n1 after issuing 1x1MiB elastic 3x replicated write
+-- that's not admitted. We see 1*1MiB*3=3MiB deductions of elastic tokens with
+-- no corresponding returns.
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Allow below-raft admission to proceed. We've disabled the piggybacked token
+-- return mechanism so no tokens are returned via this path. But the tokens will
+-- be returned anyway because the range is not quiesced and keeps pinging.)
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Issuing another 1x1MiB 3x elastic write.)
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 21 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 3.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Allow below-raft admission to proceed. We've enabled the piggybacked token
+-- return mechanism so tokens are returned either via this path, or the normal
+-- MsgAppResp flow, depending on which is exercised first.)
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
+
+  kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.eval.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.eval.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.eval.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.eval.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.eval.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.eval.regular.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.elastic.available                       | 24 MiB   
+  kvflowcontrol.tokens.send.elastic.deducted                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.deducted.force_flush_send_queue | 0 B      
+  kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.elastic.returned                        | 6.0 MiB  
+  kvflowcontrol.tokens.send.elastic.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.elastic.unaccounted                     | 0 B      
+  kvflowcontrol.tokens.send.regular.available                       | 48 MiB   
+  kvflowcontrol.tokens.send.regular.deducted                        | 0 B      
+  kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue     | 0 B      
+  kvflowcontrol.tokens.send.regular.returned                        | 0 B      
+  kvflowcontrol.tokens.send.regular.returned.disconnect             | 0 B      
+  kvflowcontrol.tokens.send.regular.unaccounted                     | 0 B      
+
+
+-- (Now the range can quiesce. Wait for it.)
+----
+----
+
+# vim:ft=sql

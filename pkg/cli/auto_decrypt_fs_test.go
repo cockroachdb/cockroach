@@ -72,13 +72,11 @@ func TestAutoDecryptFS(t *testing.T) {
 	expected := `
 $TMPDIR/path1: mkdir-all:  0777
 $TMPDIR/path1: lock: LOCK
-$TMPDIR/path1: open: STORAGE_MIN_VERSION
 $TMPDIR/path1: mkdir-all: $TMPDIR/path1 0755
 $TMPDIR/path1: create: $TMPDIR/path1/bar
 $TMPDIR/path1: close: $TMPDIR/path1/bar
 $TMPDIR/foo/path2: mkdir-all:  0777
 $TMPDIR/foo/path2: lock: LOCK
-$TMPDIR/foo/path2: open: STORAGE_MIN_VERSION
 $TMPDIR/foo/path2: mkdir-all: $TMPDIR/foo/path2 0755
 $TMPDIR/foo/path2: create: $TMPDIR/foo/path2/baz
 $TMPDIR/foo/path2: close: $TMPDIR/foo/path2/baz

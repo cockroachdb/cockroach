@@ -257,7 +257,7 @@ func (s *intervalSkl) AddRange(
 			}
 			msg := fmt.Sprintf("inverted range (issue #32149): key lens = [%d,%d), diff @ index %d",
 				len(from), len(to), d)
-			log.KvExec.Errorf(context.Background(), "%s, [%s,%s)", msg, from, to)
+			log.Errorf(context.Background(), "%s, [%s,%s)", msg, from, to)
 			panic(redact.Safe(msg))
 		case cmp == 0:
 			// Starting key is same as ending key, so just add single node.

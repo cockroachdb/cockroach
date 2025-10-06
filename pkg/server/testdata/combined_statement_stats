@@ -67,12 +67,39 @@ query sort=EXECUTION_COUNT limit=100 start=1 end=2
 --ARGS--
 [1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
 
+query sort=P99_STMTS_ONLY limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'p99')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
 query sort=CONTENTION_TIME limit=100 start=1 end=2
 ----
 --WHERE--
  WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
 --ORDER AND LIMIT--
  ORDER BY (statistics -> 'execution_statistics' -> 'contentionTime' ->> 'mean')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=LATENCY_INFO_P50 limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'p50')::FLOAT DESC LIMIT $3
+--ARGS--
+[1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
+
+query sort=LATENCY_INFO_P90 limit=100 start=1 end=2
+----
+--WHERE--
+ WHERE app_name NOT LIKE '$ internal%' AND app_name NOT LIKE '$$ %' AND aggregated_ts >= $1 AND aggregated_ts <= $2
+--ORDER AND LIMIT--
+ ORDER BY (statistics -> 'statistics' -> 'latencyInfo' ->> 'p90')::FLOAT DESC LIMIT $3
 --ARGS--
 [1970-01-01 00:00:01 +0000 UTC 1970-01-01 00:00:02 +0000 UTC 100]
 

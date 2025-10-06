@@ -70,6 +70,6 @@ func valuesideEncodeCol(
 		}
 		return encoding.EncodeUUIDValue(appendTo, uint32(colID), u), nil
 	default:
-		return valueside.Encode(appendTo, colID, vec.Datum().Get(row).(tree.Datum))
+		return valueside.Encode(appendTo, colID, vec.Datum().Get(row).(tree.Datum), nil)
 	}
 }

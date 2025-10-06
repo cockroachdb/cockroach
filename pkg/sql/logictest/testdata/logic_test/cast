@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 # Tests for assignment casts.
 subtest assignment_casts
 

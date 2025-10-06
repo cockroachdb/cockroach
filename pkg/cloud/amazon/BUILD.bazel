@@ -67,7 +67,6 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_aws_aws_sdk_go//aws/awserr",
         "@com_github_aws_aws_sdk_go//aws/request",

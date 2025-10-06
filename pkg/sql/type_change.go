@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -130,7 +131,7 @@ func (p *planner) writeTypeSchemaChange(
 				// dropped.
 				return !beingDropped
 			})
-		log.Dev.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
+		log.Infof(ctx, "job %d: updated with type change for type %d", record.JobID, typeDesc.ID)
 	} else {
 		// Or, create a new job.
 		newRecord := jobs.Record{
@@ -148,7 +149,7 @@ func (p *planner) writeTypeSchemaChange(
 			NonCancelable: !beingDropped,
 		}
 		p.extendedEvalCtx.jobs.uniqueToCreate[typeDesc.ID] = &newRecord
-		log.Dev.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
+		log.Infof(ctx, "queued new type change job %d for type %d", newRecord.JobID, typeDesc.ID)
 	}
 
 	return p.writeTypeDesc(ctx, typeDesc)
@@ -243,7 +244,7 @@ func refreshTypeDescriptorLeases(
 		if _, updateErr := WaitToUpdateLeases(ctx, leaseMgr, cachedRegions, id); updateErr != nil {
 			// Swallow the descriptor not found error.
 			if errors.Is(updateErr, catalog.ErrDescriptorNotFound) {
-				log.Dev.Infof(ctx,
+				log.Infof(ctx,
 					"could not find type descriptor %d to refresh lease; "+
 						"assuming it was dropped and moving on",
 					id,
@@ -407,7 +408,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		var idsToRemove []int
 		populateIDsToRemove := func(holder context.Context, txn descs.Txn) error {
 			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
-			if err != nil || typeDesc.GetParentID() != keys.SystemDatabaseID {
+			if err != nil {
 				return err
 			}
 			for _, member := range typeDesc.EnumMembers {
@@ -417,7 +418,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 					continue
 				}
 				rows, err := txn.QueryBufferedEx(ctx, "select-invalid-instances", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, `SELECT id FROM system.sql_instances
+					sessiondata.NodeUserSessionDataOverride, `SELECT id FROM system.sql_instances 
  							WHERE crdb_region = $1`, member.PhysicalRepresentation)
 				if err != nil {
 					return err
@@ -832,7 +833,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromUDF(
 		if err != nil {
 			return errors.Wrapf(err, "failed to parse routine %s", udfDesc.GetName())
 		}
-		v := plpgsqltree.SQLStmtVisitor{Fn: visitFunc}
+		v := utils.SQLStmtVisitor{Fn: visitFunc}
 		plpgsqltree.Walk(&v, stmt.AST)
 		if v.Err != nil {
 			return errors.NewAssertionErrorWithWrappedErrf(v.Err, "failed to parse routine %s", udfDesc.GetName())
@@ -1413,7 +1414,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		case errors.Is(tcErr, catalog.ErrDescriptorNotFound):
 			// If the descriptor for the ID can't be found, we assume that another
 			// job executed already and dropped the type.
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				t.typeID,
@@ -1421,7 +1422,7 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 			return nil
 		case !IsPermanentSchemaChangeError(tcErr):
 			// If this isn't a permanent error, then retry.
-			log.Dev.Infof(ctx, "retrying type schema change due to retryable error %v", tcErr)
+			log.Infof(ctx, "retrying type schema change due to retriable error %v", tcErr)
 		default:
 			return tcErr
 		}
@@ -1430,10 +1431,10 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 }
 
 func (t *typeSchemaChanger) logTags() *logtags.Buffer {
-	buf := logtags.BuildBuffer()
+	buf := &logtags.Buffer{}
 	buf.Add("typeChangeExec", nil)
 	buf.Add("type", t.typeID)
-	return buf.Finish()
+	return buf
 }
 
 // typeChangeResumer is the anchor struct for the type change job.
@@ -1484,7 +1485,7 @@ func (t *typeChangeResumer) OnFailOrCancel(
 			pgerror.GetPGCode(rollbackErr) == pgcode.UndefinedObject:
 			// If the descriptor for the ID can't be found, we assume that another
 			// job executed already and dropped the type.
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"descriptor %d not found for type change job; assuming it was dropped, and exiting",
 				tc.typeID,

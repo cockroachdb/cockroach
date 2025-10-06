@@ -8,9 +8,8 @@ package storage
 import (
 	"context"
 	"fmt"
-	"maps"
 	"math/rand"
-	"slices"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1846,7 +1845,10 @@ func (s *randomTest) step(t *testing.T) {
 	s.cycle++
 
 	if s.actionNames == nil {
-		s.actionNames = slices.Sorted(maps.Keys(s.actions))
+		for name := range s.actions {
+			s.actionNames = append(s.actionNames, name)
+		}
+		sort.Strings(s.actionNames)
 	}
 	actName := s.actionNames[s.rng.Intn(len(s.actionNames))]
 
@@ -1931,6 +1933,18 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			return false, err.Error()
 		}
 		return true, ""
+	}
+	actions["InitPut"] = func(s *state) (bool, string) {
+		opts := MVCCWriteOptions{
+			Txn:   s.Txn,
+			Stats: s.MSDelta,
+		}
+		failOnTombstones := s.rng.Intn(2) == 0
+		desc := fmt.Sprintf("failOnTombstones=%t", failOnTombstones)
+		if _, err := MVCCInitPut(ctx, s.batch, s.key, s.TS, s.rngVal(), failOnTombstones, opts); err != nil {
+			return false, desc + ": " + err.Error()
+		}
+		return true, desc
 	}
 	actions["Del"] = func(s *state) (bool, string) {
 		opts := MVCCWriteOptions{
@@ -2041,13 +2055,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 		if s.rng.Intn(2) != 0 {
 			str = lock.Exclusive
 		}
-		var txnMeta *enginepb.TxnMeta
-		var ignoredSeq []enginepb.IgnoredSeqNumRange
-		if s.Txn != nil {
-			txnMeta = &s.Txn.TxnMeta
-			ignoredSeq = s.Txn.IgnoredSeqNums
-		}
-		if err := MVCCAcquireLock(ctx, s.batch, txnMeta, ignoredSeq, str, s.key, s.MSDelta, 0, 0, false); err != nil {
+		if err := MVCCAcquireLock(ctx, s.batch, s.Txn, str, s.key, s.MSDelta, 0, 0); err != nil {
 			return false, err.Error()
 		}
 		return true, ""

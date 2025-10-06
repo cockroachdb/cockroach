@@ -56,24 +56,8 @@ SELECT c FROM abc WHERE NOT EXISTS (SELECT * FROM def WHERE a=d OR a=e)
 # A semi-join emits exactly one row for every matching row in the LHS.
 # The following test ensures that the SemiJoin doesn't commute into an
 # InnerJoin as that guarantee would be lost.
-
 statement ok
-ALTER TABLE abc SET (schema_locked=false)
-
-statement ok
-TRUNCATE TABLE abc;
-
-statement ok
-ALTER TABLE abc RESET (schema_locked)
-
-statement ok
-ALTER TABLE def SET (schema_locked=false)
-
-statement ok
-TRUNCATE TABLE def;
-
-statement ok
-ALTER TABLE def RESET (schema_locked)
+TRUNCATE TABLE abc; TRUNCATE TABLE def;
 
 statement ok
 INSERT INTO abc VALUES (1, 1, 1)

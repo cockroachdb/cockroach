@@ -13,7 +13,7 @@ import (
 // numAttrs is the number of attributes we allow ourselves to store inline.
 // Schemas with entities which have more than this many attributes will need to
 // increase this number.
-const numAttrs = 16
+const numAttrs = 8
 
 // valuesMap is a container for attributes.
 //

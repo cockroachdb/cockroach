@@ -196,7 +196,6 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{types.String, "STRING"},
 		{types.MakeString(10), "STRING(10)"},
 		{types.Bytes, "BYTES"},
-		{types.MakePGVector(3), "VECTOR(3)"},
 	}
 	for i, d := range testData {
 		t.Run(d.colType.DebugString(), func(t *testing.T) {
@@ -963,7 +962,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	defer srv.Stopper().Stop(context.Background())
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
-	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT or ON UPDATE expression`
+	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
 	// Create a table with a computed column.
 	tdb.Exec(t, `CREATE DATABASE t`)
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)

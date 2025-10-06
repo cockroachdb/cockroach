@@ -44,7 +44,7 @@ func (h *testConnHandle) Close() {
 }
 
 // TransferConnection implements the ConnectionHandle interface.
-func (h *testConnHandle) TransferConnection(ctx context.Context) error {
+func (h *testConnHandle) TransferConnection() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mu.onTransferConnectionCount++

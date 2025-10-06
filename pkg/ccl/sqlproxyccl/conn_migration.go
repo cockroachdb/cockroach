@@ -127,7 +127,7 @@ var errTransferCannotStart = errors.New("transfer cannot be started")
 // error).
 //
 // TransferConnection implements the balancer.ConnectionHandle interface.
-func (f *forwarder) TransferConnection(ctx context.Context) (retErr error) {
+func (f *forwarder) TransferConnection() (retErr error) {
 	// A previous non-recoverable transfer would have closed the forwarder, so
 	// return right away.
 	if f.ctx.Err() != nil {
@@ -146,18 +146,18 @@ func (f *forwarder) TransferConnection(ctx context.Context) (retErr error) {
 	// whenever the context expires. We have to close the forwarder because
 	// the transfer may be blocked on I/O, and the only way for now is to close
 	// the connections. This then allow TransferConnection to return and cleanup.
-	transferCtx, cancel := newTransferContext(ctx)
+	ctx, cancel := newTransferContext(f.ctx)
 	defer cancel()
 
 	// Use a separate handler for timeouts. This is the only way to handle
 	// blocked I/Os as described above.
 	go func() {
-		<-transferCtx.Done()
+		<-ctx.Done()
 		// This Close call here in addition to the one in the defer callback
 		// below is on purpose. This would help unblock situations where we're
 		// blocked on sending/reading messages from connections that couldn't
 		// be handled with context.Context.
-		if !transferCtx.isRecoverable() {
+		if !ctx.isRecoverable() {
 			f.Close()
 		}
 	}()
@@ -179,21 +179,21 @@ func (f *forwarder) TransferConnection(ctx context.Context) (retErr error) {
 
 		// When TransferConnection returns, it's either the forwarder has been
 		// closed, or the procesors have been resumed.
-		if !transferCtx.isRecoverable() {
-			log.Dev.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
+		if !ctx.isRecoverable() {
+			log.Infof(logCtx, "transfer failed: connection closed, latency=%v, err=%v", latencyDur, retErr)
 			f.metrics.ConnMigrationErrorFatalCount.Inc(1)
 			f.Close()
 		} else {
 			// Transfer was successful.
 			if retErr == nil {
-				log.Dev.Infof(logCtx, "transfer successful, latency=%v", latencyDur)
+				log.Infof(logCtx, "transfer successful, latency=%v", latencyDur)
 				f.metrics.ConnMigrationSuccessCount.Inc(1)
 			} else {
-				log.Dev.Infof(logCtx, "transfer failed: connection recovered, latency=%v, err=%v", latencyDur, retErr)
+				log.Infof(logCtx, "transfer failed: connection recovered, latency=%v, err=%v", latencyDur, retErr)
 				f.metrics.ConnMigrationErrorRecoverableCount.Inc(1)
 			}
 			if err := f.resumeProcessors(); err != nil {
-				log.Dev.Infof(logCtx, "unable to resume processors: %v", err)
+				log.Infof(logCtx, "unable to resume processors: %v", err)
 				f.Close()
 			}
 		}
@@ -201,16 +201,16 @@ func (f *forwarder) TransferConnection(ctx context.Context) (retErr error) {
 
 	// Suspend both processors before starting the transfer.
 	request, response := f.getProcessors()
-	if err := request.suspend(transferCtx); err != nil {
+	if err := request.suspend(ctx); err != nil {
 		return errors.Wrap(err, "suspending request processor")
 	}
-	if err := response.suspend(transferCtx); err != nil {
+	if err := response.suspend(ctx); err != nil {
 		return errors.Wrap(err, "suspending response processor")
 	}
 
 	// Transfer the connection.
 	clientConn, serverConn := f.getConns()
-	newServerConn, err := transferConnection(transferCtx, f, f.connector, f.metrics, clientConn, serverConn)
+	newServerConn, err := transferConnection(ctx, f, f.connector, f.metrics, clientConn, serverConn)
 	if err != nil {
 		return errors.Wrap(err, "transferring connection")
 	}
@@ -400,10 +400,10 @@ var waitForShowTransferState = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow, size int) (bool, error) {
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow, size int) bool {
 		// This has to be 4 since we validated RowDescription earlier.
 		if len(msg.Values) != 4 {
-			return false, nil
+			return false
 		}
 
 		// Validate transfer key. It is possible that the end-user uses the SHOW
@@ -411,7 +411,7 @@ var waitForShowTransferState = func(
 		// for external usage, so it is fine to just terminate here if the
 		// transfer key does not match.
 		if string(msg.Values[3]) != transferKey {
-			return false, nil
+			return false
 		}
 
 		// NOTE: We have to cast to string and copy here since the slice
@@ -423,7 +423,7 @@ var waitForShowTransferState = func(
 		if metrics != nil {
 			metrics.ConnMigrationTransferResponseMessageSize.RecordValue(int64(size))
 		}
-		return true, nil
+		return true
 	}); err != nil {
 		return "", "", "", errors.Wrap(err, "expecting DataRow")
 	}
@@ -490,8 +490,8 @@ var runAndWaitForDeserializeSession = func(
 	}
 
 	// 2. Read DataRow.
-	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow, _ int) (bool, error) {
-		return len(msg.Values) == 1 && string(msg.Values[0]) == "t", nil
+	if err := expectDataRow(ctx, serverConn, func(msg *pgproto3.DataRow, _ int) bool {
+		return len(msg.Values) == 1 && string(msg.Values[0]) == "t"
 	}); err != nil {
 		return errors.Wrap(err, "expecting DataRow")
 	}
@@ -512,11 +512,7 @@ var runAndWaitForDeserializeSession = func(
 // writeQuery writes a SimpleQuery to the given writer w.
 func writeQuery(w io.Writer, format string, a ...interface{}) error {
 	query := &pgproto3.Query{String: fmt.Sprintf(format, a...)}
-	buf, err := query.Encode(nil)
-	if err != nil {
-		return errors.Wrap(err, "encoding SimpleQuery")
-	}
-	_, err = w.Write(buf)
+	_, err := w.Write(query.Encode(nil))
 	return err
 }
 
@@ -591,11 +587,7 @@ func waitForSmallRowDescription(
 
 		// Matching fails, so forward the message back to the client, and
 		// continue searching.
-		buf, err := msg.Encode(nil)
-		if err != nil {
-			return errors.Wrap(err, "encoding message")
-		}
-		if _, err := clientConn.Write(buf); err != nil {
+		if _, err := clientConn.Write(msg.Encode(nil)); err != nil {
 			return errors.Wrap(err, "writing message")
 		}
 	}
@@ -615,7 +607,7 @@ func waitForSmallRowDescription(
 func expectDataRow(
 	ctx context.Context,
 	serverConn *interceptor.FrontendConn,
-	validateFn func(*pgproto3.DataRow, int) (bool, error),
+	validateFn func(*pgproto3.DataRow, int) bool,
 ) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -632,9 +624,7 @@ func expectDataRow(
 	if !ok {
 		return errors.Newf("unexpected message: %v", jsonOrRaw(msg))
 	}
-	if valid, err := validateFn(pgMsg, size); err != nil {
-		return errors.Wrap(err, "validation failure")
-	} else if !valid {
+	if !validateFn(pgMsg, size) {
 		return errors.Newf("validation failed for message: %v", jsonOrRaw(msg))
 	}
 	return nil

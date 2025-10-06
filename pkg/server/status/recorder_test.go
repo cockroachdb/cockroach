@@ -160,14 +160,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	recorder.AddTenantRegistry(tenantID, regTenant)
 
 	buf := bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf, expfmt.FmtText, false)
+	err = recorder.PrintAsText(buf, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application"} 456`)
 
 	bufTenant := bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText, false)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -178,14 +178,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 	appNameContainer.Set("application2")
 
 	buf = bytes.NewBuffer([]byte{})
-	err = recorder.PrintAsText(buf, expfmt.FmtText, false)
+	err = recorder.PrintAsText(buf, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="system"} 123`)
 	require.Contains(t, buf.String(), `some_metric{node_id="7",tenant="application2"} 456`)
 
 	bufTenant = bytes.NewBuffer([]byte{})
-	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText, false)
+	err = recorderTenant.PrintAsText(bufTenant, expfmt.FmtText)
 	require.NoError(t, err)
 
 	require.NotContains(t, bufTenant.String(), `some_metric{node_id="7",tenant="system"} 123`)
@@ -515,7 +515,7 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testGauge", "gauge", 20},
 		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
-		{"testHistogram", "histogram", 10},
+		{"testHistogram", "histogram", 9},
 		{"testAggGauge", "agggauge", 4},
 		{"testAggCounter", "aggcounter", 7},
 		{"testCounterVec", "counterVec", 7},
@@ -611,14 +611,12 @@ func TestMetricsRecorder(t *testing.T) {
 				})
 				reg.reg.AddMetric(h)
 				h.RecordValue(data.val)
-				for _, q := range metric.HistogramMetricComputers {
-					if !q.IsSummaryMetric {
-						continue
-					}
+				for _, q := range metric.RecordHistogramQuantiles {
 					addExpected(reg.prefix, data.name+q.Suffix, reg.source, 100, 10, reg.isNode)
 				}
 				addExpected(reg.prefix, data.name+"-count", reg.source, 100, 1, reg.isNode)
-				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 10, reg.isNode)
+				addExpected(reg.prefix, data.name+"-sum", reg.source, 100, 9, reg.isNode)
+				addExpected(reg.prefix, data.name+"-avg", reg.source, 100, 9, reg.isNode)
 			case "counterVec":
 				// Note that we don't call addExpected for this case. metric.PrometheusVector
 				// metrics should not be recorded into TSDB.
@@ -724,7 +722,7 @@ func TestMetricsRecorder(t *testing.T) {
 			if _, err := recorder.MarshalJSON(); err != nil {
 				t.Error(err)
 			}
-			_ = recorder.PrintAsText(io.Discard, expfmt.FmtText, false)
+			_ = recorder.PrintAsText(io.Discard, expfmt.FmtText)
 			_ = recorder.GetTimeSeriesData()
 			wg.Done()
 		}()
@@ -757,7 +755,7 @@ func BenchmarkExtractValueAllocs(b *testing.B) {
 
 	// Run a benchmark and report allocations.
 	for n := 0; n < b.N; n++ {
-		if err := extractValue(h.GetName(false /* useStaticLabels */), h, func(string, float64) {}); err != nil {
+		if err := extractValue(h.GetName(), h, func(string, float64) {}); err != nil {
 			b.Error(err)
 		}
 	}

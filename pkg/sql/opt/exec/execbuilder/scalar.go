@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -38,8 +39,6 @@ type buildScalarCtx struct {
 	// If a ColumnID is not in the map, it cannot appear in the expression.
 	ivarMap colOrdMap
 }
-
-var emptyBuildScalarCtx buildScalarCtx
 
 type buildFunc func(b *Builder, ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error)
 
@@ -674,7 +673,7 @@ func (b *Builder) buildExistsSubquery(
 		stmtProps := []*physical.Required{{Presentation: physical.Presentation{aliasedCol}}}
 
 		// Create an wrapRootExprFn that wraps input in a Limit and a Project.
-		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) memo.RelExpr {
+		wrapRootExpr := func(f *norm.Factory, e memo.RelExpr) opt.Expr {
 			return f.ConstructProject(
 				f.ConstructLimit(
 					e,
@@ -692,11 +691,9 @@ func (b *Builder) buildExistsSubquery(
 			params,
 			stmts,
 			stmtProps,
-			nil, /* stmtStr */
-			make([]string, len(stmts)),
+			nil,  /* stmtStr */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
-			0, /* resultBufferID */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -708,14 +705,12 @@ func (b *Builder) buildExistsSubquery(
 				true,  /* calledOnNullInput */
 				false, /* multiColOutput */
 				false, /* generator */
-				false, /* discardLastStmtResult */
 				false, /* tailCall */
 				false, /* procedure */
 				false, /* triggerFunc */
 				false, /* blockStart */
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
-				nil,   /* firstStmtResultWriter */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -760,7 +755,7 @@ func (b *Builder) buildSubquery(
 				if homeRegion != gatewayRegion {
 					return nil, pgerror.Newf(pgcode.QueryNotRunningInHomeRegion,
 						`%s. Try running the query from region '%s'. %s`,
-						sqlerrors.QueryNotRunningInHomeRegionMessagePrefix,
+						execinfra.QueryNotRunningInHomeRegionMessagePrefix,
 						homeRegion,
 						sqlerrors.EnforceHomeRegionFurtherInfo,
 					)
@@ -819,11 +814,9 @@ func (b *Builder) buildSubquery(
 			params,
 			stmts,
 			stmtProps,
-			nil, /* stmtStr */
-			make([]string, len(stmts)),
+			nil,  /* stmtStr */
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
-			0,    /* resultBufferID */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -835,14 +828,12 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
-			false, /* discardLastStmtResult */
 			tailCall,
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
-			nil,   /* firstStmtResultWriter */
 		), nil
 	}
 
@@ -856,11 +847,7 @@ func (b *Builder) buildSubquery(
 		withExprs := make([]builtWithExpr, len(b.withExprs))
 		copy(withExprs, b.withExprs)
 		planGen := func(
-			ctx context.Context,
-			ref tree.RoutineExecFactory,
-			_ tree.RoutineResultWriter,
-			args tree.Datums,
-			fn tree.RoutinePlanGeneratedFunc,
+			ctx context.Context, ref tree.RoutineExecFactory, args tree.Datums, fn tree.RoutinePlanGeneratedFunc,
 		) error {
 			// Analyze the input of the subquery to find tail calls, which will allow
 			// nested routines (including lazy subqueries) to be executed in the same
@@ -871,7 +858,6 @@ func (b *Builder) buildSubquery(
 			ef := ref.(exec.Factory)
 			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
-			eb.routineResultBuffers = b.routineResultBuffers
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			eb.tailCalls = tailCalls
@@ -879,22 +865,18 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			for i := range eb.subqueries {
-				if eb.subqueries[i].Mode != exec.SubqueryDiscardAllRows {
-					return expectedLazyRoutineError("subquery")
-				}
+			if len(eb.subqueries) > 0 {
+				return expectedLazyRoutineError("subquery")
 			}
 			if len(eb.cascades) > 0 {
 				return expectedLazyRoutineError("cascade")
-			}
-			if len(eb.triggers) > 0 {
-				return expectedLazyRoutineError("trigger")
 			}
 			if len(eb.checks) > 0 {
 				return expectedLazyRoutineError("check")
 			}
 			plan, err := b.factory.ConstructPlan(
-				ePlan.root, eb.subqueries, eb.cascades, eb.triggers, eb.checks, inputRowCount, eb.flags,
+				ePlan.root, nil /* subqueries */, nil /* cascades */, nil /* checks */, nil, /* triggers */
+				inputRowCount, eb.flags,
 			)
 			if err != nil {
 				return err
@@ -915,14 +897,12 @@ func (b *Builder) buildSubquery(
 			true,  /* calledOnNullInput */
 			false, /* multiColOutput */
 			false, /* generator */
-			false, /* discardLastStmtResult */
 			tailCall,
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
-			nil,   /* firstStmtResultWriter */
 		), nil
 	}
 
@@ -993,43 +973,28 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Execution expects there to be more than one body statement if a cursor is
-	// opened or the result of the first statement is directed to a buffer.
-	firstStmtOut := udf.Def.FirstStmtOutput
-	if len(udf.Def.Body) <= 1 &&
-		(firstStmtOut.CursorDeclaration != nil || firstStmtOut.TargetBufferID != 0) {
+	// opened.
+	if udf.Def.CursorDeclaration != nil && len(udf.Def.Body) <= 1 {
 		panic(errors.AssertionFailedf(
-			"expected more than one body statement for a routine that " +
-				"redirects the output of the first statement",
+			"expected more than one body statement for a routine that opens a cursor",
 		))
-	}
-	var firstStmtResultWriter tree.RoutineResultWriter
-	if firstStmtOut.TargetBufferID != 0 {
-		// The first statement of this routine is writing to the result set of an
-		// ancestor set-returning PL/pgSQL function.
-		firstStmtResultWriter = b.routineResultBuffers[firstStmtOut.TargetBufferID]
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	// TODO(mgartner): Add support for WITH expressions inside UDF bodies.
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,
 		udf.Def.Body,
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
-		udf.Def.BodyTags,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
-		udf.Def.ResultBufferID,
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
 	// see mutations made by the invoking statement and by previously executed
 	// statements.
 	enableStepping := udf.Def.Volatility == volatility.Volatile
-
-	// A non-zero ResultBufferID indicates that the UDF is a set-returning
-	// function, with sub-routines adding to the result set. In this case, the
-	// last body statement does not directly contribute to the result set.
-	discardLastStmtResult := udf.Def.ResultBufferID != 0
 
 	// The calling routine, if any, will have already determined whether this
 	// routine is in tail-call position.
@@ -1044,14 +1009,12 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.CalledOnNullInput,
 		udf.Def.MultiColDataSource,
 		udf.Def.SetReturning,
-		discardLastStmtResult,
 		tailCall,
 		false, /* procedure */
 		udf.Def.TriggerFunc,
 		udf.Def.BlockStart,
 		blockState,
-		firstStmtOut.CursorDeclaration,
-		firstStmtResultWriter,
+		udf.Def.CursorDeclaration,
 	), nil
 }
 
@@ -1089,10 +1052,8 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.Body,
 			action.BodyProps,
 			action.BodyStmts,
-			action.BodyTags,
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
-			0,     /* resultBufferID */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1105,20 +1066,18 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.CalledOnNullInput,
 			action.MultiColDataSource,
 			action.SetReturning,
-			false, /* discardLastStmtResult */
 			false, /* tailCall */
 			false, /* procedure */
 			false, /* triggerFunc */
 			false, /* blockStart */
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
-			nil,   /* firstStmtResultWriter */
 		)
 	}
 	blockState.ExceptionHandler = exceptionHandler
 }
 
-type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) memo.RelExpr
+type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) opt.Expr
 
 // buildRoutinePlanGenerator returns a tree.RoutinePlanFn that can plan the
 // statements in a routine that has one or more arguments.
@@ -1130,19 +1089,13 @@ type wrapRootExprFn func(f *norm.Factory, e memo.RelExpr) memo.RelExpr
 // so that WithScans within a statement can be planned and executed.
 // wrapRootExpr allows the root expression of all statements to be replaced with
 // an arbitrary expression.
-//
-// resultBufferID, if not zero, specifies the ID of the routine's result buffer.
-// This is for PL/pgSQL set-returning routines, which must allow sub-routines to
-// add to the result set at any point during execution.
 func (b *Builder) buildRoutinePlanGenerator(
 	params opt.ColList,
 	stmts []memo.RelExpr,
 	stmtProps []*physical.Required,
 	stmtStr []string,
-	stmtTags []string,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
-	resultBufferID memo.RoutineResultBufferID,
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1173,13 +1126,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 	//
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
-	originalMemo := b.mem
 	planGen := func(
-		ctx context.Context,
-		ref tree.RoutineExecFactory,
-		resultWriter tree.RoutineResultWriter,
-		args tree.Datums,
-		fn tree.RoutinePlanGeneratedFunc,
+		ctx context.Context, ref tree.RoutineExecFactory, args tree.Datums, fn tree.RoutinePlanGeneratedFunc,
 	) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -1203,23 +1151,15 @@ func (b *Builder) buildRoutinePlanGenerator(
 			}
 		}()
 
-		dbName := b.evalCtx.SessionData().Database
-		appName := b.evalCtx.SessionData().ApplicationName
-
 		for i := range stmts {
 			stmt := stmts[i]
 			props := stmtProps[i]
-			var tag string
-			// Theoretically, stmts and stmtTags should have the same length,
-			// but just to avoid an out-of-bounds panic, we have this check.
-			if i < len(stmtTags) {
-				tag = stmtTags[i]
-			}
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
 			// Copy the expression into a new memo. Replace parameter references
 			// with argument datums.
+			addedWithBindings := false
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {
 				switch t := e.(type) {
@@ -1244,25 +1184,21 @@ func (b *Builder) buildRoutinePlanGenerator(
 					// We lazily add these With expressions to the metadata here
 					// because the call to Factory.CopyAndReplace below clears With
 					// expressions in the metadata.
-					if allowOuterWithRefs {
+					if allowOuterWithRefs && !addedWithBindings {
 						b.mem.Metadata().ForEachWithBinding(func(id opt.WithID, expr opt.Expr) {
-							// Make sure to check for an existing With binding, since we may
-							// have already rewritten the bound expression and added it to the
-							// new memo if the associated WithExpr is part of the routine.
-							if !f.Metadata().HasWithBinding(id) {
-								f.Metadata().AddWithBinding(id, expr)
-							}
+							f.Metadata().AddWithBinding(id, expr)
 						})
+						addedWithBindings = true
 					}
 					// Fall through.
 				}
 
 				return f.CopyAndReplaceDefault(e, replaceFn)
 			}
-			f.CopyAndReplace(originalMemo, stmt, props, replaceFn)
+			f.CopyAndReplace(stmt, props, replaceFn)
 
 			if wrapRootExpr != nil {
-				wrapped := wrapRootExpr(f, f.Memo().RootExpr())
+				wrapped := wrapRootExpr(f, f.Memo().RootExpr().(memo.RelExpr)).(memo.RelExpr)
 				f.Memo().SetRoot(wrapped, props)
 			}
 
@@ -1275,14 +1211,9 @@ func (b *Builder) buildRoutinePlanGenerator(
 			// Identify nested routines that are in tail-call position, and cache them
 			// in the Builder. When a nested routine is evaluated, this information
 			// may be used to enable tail-call optimization.
-			//
-			// Tail-call optimization is not allowed when resultBufferID is non-zero,
-			// because non-zero resultBufferID means that expressions in the body will
-			// add directly to the result set, and the result of the last body
-			// statement will be ignored.
 			isFinalPlan := i == len(stmts)-1
 			var tailCalls map[opt.ScalarExpr]struct{}
-			if isFinalPlan && resultBufferID == 0 {
+			if isFinalPlan {
 				tailCalls = make(map[opt.ScalarExpr]struct{})
 				memo.ExtractTailCalls(optimizedExpr, tailCalls)
 			}
@@ -1294,13 +1225,6 @@ func (b *Builder) buildRoutinePlanGenerator(
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
 			eb.tailCalls = tailCalls
-			eb.routineResultBuffers = b.routineResultBuffers
-			if resultBufferID != 0 {
-				// A PL/pgSQL set-returning function must allow expressions in the body
-				// to add directly to the result set. We achieve this by passing the
-				// RoutineResultWriter to the child Builder.
-				eb.addRoutineResultBuffer(resultBufferID, resultWriter)
-			}
 			plan, err := eb.Build()
 			if err != nil {
 				if errors.IsAssertionFailure(err) {
@@ -1313,65 +1237,21 @@ func (b *Builder) buildRoutinePlanGenerator(
 				}
 				return err
 			}
-			for j := range eb.subqueries {
-				if eb.subqueries[j].Mode != exec.SubqueryDiscardAllRows {
-					return expectedLazyRoutineError("subquery")
-				}
+			if len(eb.subqueries) > 0 {
+				return expectedLazyRoutineError("subquery")
 			}
 			var stmtForDistSQLDiagram string
 			if i < len(stmtStr) {
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
-			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
 			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
-			incrementRoutineStmtCounter(b.evalCtx.ExecutedRoutineStatementCounters, dbName, appName, tag)
 		}
 		return nil
 	}
 	return planGen
-}
-
-func incrementRoutineStmtCounter(
-	counters eval.RoutineStatementCounters, dbName string, appName string, stmtTag string,
-) {
-	switch stmtTag {
-	case "INSERT":
-		if counters.InsertCount != nil {
-			counters.InsertCount.Inc(dbName, appName)
-		}
-	case "UPDATE":
-		if counters.UpdateCount != nil {
-			counters.UpdateCount.Inc(dbName, appName)
-		}
-	case "SELECT":
-		if counters.SelectCount != nil {
-			counters.SelectCount.Inc(dbName, appName)
-		}
-	case "DELETE":
-		if counters.DeleteCount != nil {
-			counters.DeleteCount.Inc(dbName, appName)
-		}
-	}
-}
-
-func (b *Builder) addRoutineResultBuffer(
-	bufferID memo.RoutineResultBufferID, resWriter tree.RoutineResultWriter,
-) {
-	if b.routineResultBuffers == nil {
-		b.routineResultBuffers = make(map[memo.RoutineResultBufferID]tree.RoutineResultWriter)
-	} else {
-		// Copy the map to avoid modifying the original. Note that we expect only to
-		// call this method once for a given Builder.
-		newResultBuffers := make(map[memo.RoutineResultBufferID]tree.RoutineResultWriter)
-		for k, v := range b.routineResultBuffers {
-			newResultBuffers[k] = v
-		}
-		b.routineResultBuffers = newResultBuffers
-	}
-	b.routineResultBuffers[bufferID] = resWriter
 }
 
 func expectedLazyRoutineError(typ string) error {

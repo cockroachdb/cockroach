@@ -9,13 +9,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster"
+	"github.com/cockroachdb/cockroach/pkg/ccl/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster"
-	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -25,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 )
 
 var (
@@ -71,13 +72,13 @@ func main() {
 		fatalf("tenant name required")
 	}
 
-	uri, err := streamclient.ParseClusterUri(*uri)
+	streamAddr, err := url.Parse(*uri)
 	if err != nil {
 		fatalf("parse: %s", err)
 	}
 
 	ctx := cancelOnShutdown(context.Background())
-	if err := streamPartition(ctx, uri); err != nil {
+	if err := streamPartition(ctx, streamAddr); err != nil {
 		if errors.Is(err, context.Canceled) {
 			exit.WithCode(exit.Interrupted())
 		} else {
@@ -86,9 +87,9 @@ func main() {
 	}
 }
 
-func streamPartition(ctx context.Context, uri streamclient.ClusterUri) error {
+func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 	fmt.Println("creating producer stream")
-	client, err := streamclient.NewPartitionedStreamClient(ctx, uri)
+	client, err := streamclient.NewPartitionedStreamClient(ctx, streamAddr)
 	if err != nil {
 		return err
 	}
@@ -131,7 +132,7 @@ func streamPartition(ctx context.Context, uri streamclient.ClusterUri) error {
 
 	fmt.Printf("streaming %s (%s) as of %s\n", *tenant, tenantSpan, sps.InitialScanTimestamp)
 	if *noParse {
-		return rawStream(ctx, uri, replicationProducerSpec.StreamID, spsBytes)
+		return rawStream(ctx, streamAddr, replicationProducerSpec.StreamID, spsBytes)
 	}
 
 	sub, err := client.Subscribe(ctx, replicationProducerSpec.StreamID, 1, 1,
@@ -150,11 +151,11 @@ func streamPartition(ctx context.Context, uri streamclient.ClusterUri) error {
 
 func rawStream(
 	ctx context.Context,
-	uri streamclient.ClusterUri,
+	uri *url.URL,
 	streamID streampb.StreamID,
 	spec streamclient.SubscriptionToken,
 ) error {
-	config, err := pgx.ParseConfig(uri.Serialize())
+	config, err := pgx.ParseConfig(uri.String())
 	if err != nil {
 		return err
 	}

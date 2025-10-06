@@ -115,7 +115,7 @@ CREATE TABLE d.t (a STRING)
 			if err = rows.Scan(&name, &used); err != nil {
 				t.Fatal(err)
 			}
-			log.Dev.Infof(context.Background(), "%s: %d", name, used)
+			log.Infof(context.Background(), "%s: %d", name, used)
 			// We are likely to not have a separate monitor for the aggregator,
 			// so instead we look at the flow monitor for the query. "Our" flow
 			// monitor could be uniquely identified by the FlowID, but we can't

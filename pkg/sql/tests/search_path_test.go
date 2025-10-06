@@ -13,8 +13,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -28,7 +28,7 @@ func TestSearchPathEndToEnd(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	pgURL, cleanupFunc := pgurlutils.PGUrl(
+	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(username.RootUser),
 	)
 	defer cleanupFunc()

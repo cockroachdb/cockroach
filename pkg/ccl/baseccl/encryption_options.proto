@@ -1,0 +1,31 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.ccl.baseccl;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/baseccl";
+
+enum EncryptionKeySource {
+  // Plain key files.
+  KeyFiles = 0;
+}
+
+// EncryptionKeyFiles is used when plain key files are passed.
+message EncryptionKeyFiles {
+  string current_key = 1;
+  string old_key = 2;
+}
+
+// EncryptionOptions defines the per-store encryption options.
+message EncryptionOptions {
+  // The store key source. Defines which fields are useful.
+  EncryptionKeySource key_source = 1;
+
+  // Set if key_source == KeyFiles.
+  EncryptionKeyFiles key_files = 2;
+
+  // Default data key rotation in seconds.
+  int64 data_key_rotation_period = 3;
+}

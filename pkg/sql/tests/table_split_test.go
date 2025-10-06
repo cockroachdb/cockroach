@@ -47,7 +47,7 @@ SELECT tables.id FROM system.namespace tables
 			t.Fatal(err)
 		}
 		if !desc.StartKey.Equal(tableStartKey) {
-			log.Dev.Infof(context.Background(), "waiting on split results")
+			log.Infof(context.Background(), "waiting on split results")
 			return errors.Errorf("expected range start key %s; got %s", tableStartKey, desc.StartKey)
 		}
 		return nil

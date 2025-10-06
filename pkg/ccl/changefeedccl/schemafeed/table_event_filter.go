@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -124,15 +123,8 @@ type tableEventFilter map[tableEventType]bool
 
 func (filter tableEventFilter) shouldFilter(
 	ctx context.Context, e TableEvent, targets changefeedbase.Targets,
-) (ok bool, _ error) {
+) (bool, error) {
 	et := classifyTableEvent(e)
-
-	if log.V(2) {
-		log.Changefeed.Infof(ctx, "table event %v classified as %v", e, et)
-		defer func() {
-			log.Changefeed.Infof(ctx, "should filter table event %v: %t", e, ok)
-		}()
-	}
 
 	// Truncation events are not ignored and return an error.
 	if et.Contains(tableEventTruncate) {
@@ -196,17 +188,6 @@ func shouldFilterAddColumnEvent(e TableEvent, targets changefeedbase.Targets) (b
 	return !watched, nil
 }
 
-// notDeclarativeOrHasMergedIndex returns true if the descriptor has a declarative
-// schema changer with a merged index.
-func notDeclarativeOrHasMergedIndex(desc catalog.TableDescriptor) bool {
-	// If there are no declarative schema changes then this will always be
-	// true.
-	if desc.GetDeclarativeSchemaChangerState() == nil {
-		return true
-	}
-	return catalog.HasDeclarativeMergedPrimaryIndex(desc)
-}
-
 // Returns true if the changefeed targets a column which has a drop mutation inside the table event.
 func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, error) {
 	// If no column families are specified, then all columns are targeted.
@@ -231,13 +212,7 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 		if m.AsColumn() == nil || m.AsColumn().IsHidden() {
 			continue
 		}
-		// For dropped columns wait for WriteAndDeleteOnly to be hit. When using
-		// the declarative schema changer we will wait a bit later in the plan to
-		// publish the dropped column, since schema_locked and the column being
-		// write and delete only happen at the same stage. Since the schema change
-		// is still in progress, there is a gray area in terms of when the change
-		// should be visible.
-		if m.Dropped() && m.WriteAndDeleteOnly() && notDeclarativeOrHasMergedIndex(e.After) && watchedColumnIDs.Contains(int(m.AsColumn().GetID())) {
+		if m.Dropped() && m.WriteAndDeleteOnly() && watchedColumnIDs.Contains(int(m.AsColumn().GetID())) {
 			return true, nil
 		}
 	}
@@ -298,13 +273,7 @@ func dropVisibleColumnMutationExists(desc catalog.TableDescriptor) bool {
 		if m.AsColumn() == nil || m.AsColumn().IsHidden() {
 			continue
 		}
-		// For dropped columns wait for WriteAndDeleteOnly to be hit. When using
-		// the declarative schema changer we will wait a bit later in the plan to
-		// publish the dropped column, since schema_locked and the column being
-		// write and delete only happen at the same stage. Since the schema change
-		// is still in progress, there is a gray area in terms of when the change
-		// should be visible.
-		if m.Dropped() && m.WriteAndDeleteOnly() && notDeclarativeOrHasMergedIndex(desc) {
+		if m.Dropped() && m.WriteAndDeleteOnly() {
 			return true
 		}
 	}

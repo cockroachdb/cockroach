@@ -493,7 +493,7 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 
 		if remaining != 0 && buildutil.CrdbTestBuild {
 			if (remaining^procEventType)&remaining != 0 {
-				log.KvDistribution.Fatalf(ctx,
+				log.Fatalf(ctx,
 					"rangefeed processor attempted to reschedule event type %s that was not present in original event set %s",
 					procEventType, remaining)
 			}
@@ -501,7 +501,7 @@ func (ss *schedulerShard) processEvents(ctx context.Context) {
 
 		if e&Stopped != 0 {
 			if remaining != 0 {
-				log.KvDistribution.VWarningf(ctx, 5,
+				log.VWarningf(ctx, 5,
 					"rangefeed processor %d didn't process all events on close", entry.id)
 			}
 			// We'll keep Stopped state to avoid calling stopped processor again

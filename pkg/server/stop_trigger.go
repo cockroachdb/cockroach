@@ -39,7 +39,7 @@ func (s *stopTrigger) signalStop(ctx context.Context, r serverctl.ShutdownReques
 	defer s.mu.Unlock()
 	if !s.mu.shutdownRequest.Empty() {
 		// Someone else already triggered the shutdown.
-		log.Dev.Infof(ctx, "received a second shutdown request: %s", r.ShutdownCause())
+		log.Infof(ctx, "received a second shutdown request: %s", r.ShutdownCause())
 		// We want to ensure that non-graceful shutdowns are always queued.
 		// We have three possible situations:
 		// - the first shutdown request was graceful, and the second one

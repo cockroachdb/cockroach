@@ -65,7 +65,7 @@ acquire r=req4 k=a durability=u ignored-seqs=2,3 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{2 2} {3 3}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 1)]
 
 # ------------------------------------------------------------------------------
 # Re-acquire the (unreplicated) lock at a higher sequence number. This time,
@@ -78,11 +78,11 @@ new-txn txn=txn1 ts=10,1 epoch=0 seq=8
 new-request r=req5 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
-acquire r=req5 k=a durability=u ignored-seqs=2,3,4 strength=exclusive
+acquire r=req5 k=a durability=u ignored-seqs=4 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 1)] ign seq: [{2 2} {3 3} {4 4}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 1)]
 
 # ------------------------------------------------------------------------------
 # Ensure sequence numbers get pruned when acquiring replicated locks, and the
@@ -111,11 +111,11 @@ new-request r=req7 txn=txn1 ts=10,1 spans=intent@a
 # Because the lock is being acquired as a replicated lock nothing in the
 # unreplicated sequence number tracking gets pruned.
 
-acquire r=req7 k=a durability=r ignored-seqs=2,3,4,8 strength=intent
+acquire r=req7 k=a durability=r ignored-seqs=8 strength=intent
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 1)] ign seq: [{2 2} {3 3} {4 4}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 1)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -124,11 +124,11 @@ num=1
 new-request r=req8 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
-acquire r=req8 k=a durability=u ignored-seqs=2,3,4,8 strength=exclusive
+acquire r=req8 k=a durability=u ignored-seqs=8 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 1)] ign seq: [{2 2} {3 3} {4 4} {8 8}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 1)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 
@@ -142,11 +142,11 @@ new-txn txn=txn1 ts=10,1 epoch=0 seq=11
 new-request r=req9 txn=txn1 ts=10,1 spans=exclusive@a
 ----
 
-acquire r=req9 k=a durability=u ignored-seqs=1,2-9 strength=exclusive
+acquire r=req9 k=a durability=u ignored-seqs=1,5-9 strength=exclusive
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 11)] ign seq: [{1 1} {2 9}]
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent], unrepl [(str: Exclusive seq: 11)]
    queued locking requests:
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
 

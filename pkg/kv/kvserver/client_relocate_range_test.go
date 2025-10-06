@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -53,7 +52,7 @@ func relocateAndCheck(
 			)
 		if err != nil {
 			if every.ShouldLog() {
-				log.KvExec.Infof(context.Background(), "AdminRelocateRange failed with error: %s", err)
+				log.Infof(context.Background(), "AdminRelocateRange failed with error: %s", err)
 			}
 			retries++
 		}
@@ -85,7 +84,7 @@ func requireRelocationFailure(
 			nonVoterTargets,
 			true, /* transferLeaseToFirstVoter */
 		)
-		if kvtestutils.IsExpectedRelocateError(err) {
+		if kv.IsExpectedRelocateError(err) {
 			return err
 		}
 		require.Regexp(t, errRegExp, err)
@@ -571,7 +570,7 @@ func setupReplicaRemovalTest(
 		require.NoError(t, err)
 		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(rangeDesc.RangeID)
 		require.NoError(t, err)
-		_, err = tc.MoveRangeLeaseNonCooperatively(t, ctx, rangeDesc, tc.Target(1), manual)
+		_, err = tc.MoveRangeLeaseNonCooperatively(ctx, rangeDesc, tc.Target(1), manual)
 		require.NoError(t, err)
 
 		// Remove first store from raft group.

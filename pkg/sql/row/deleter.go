@@ -18,30 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// TODO(yuzefovich): we can probably increase this value.
-const defaultDeleteRangeChunkSize = 600
-
-var deleteRangeChunkSize = metamorphic.ConstantWithTestRange(
-	"row-delete-range-chunk-size",
-	defaultDeleteRangeChunkSize,
-	1,
-	32,
-)
-
-// DeleteRangeChunkSize returns the maximum number of keys deleted per chunk via
-// deleteRange fast-path operator.
-func DeleteRangeChunkSize(forceProductionValues bool) int {
-	if forceProductionValues {
-		return defaultDeleteRangeChunkSize
-	}
-	return deleteRangeChunkSize
-}
 
 // Deleter abstracts the key/value operations for deleting table rows.
 type Deleter struct {
@@ -49,13 +28,6 @@ type Deleter struct {
 	FetchCols []catalog.Column
 	// FetchColIDtoRowIndex must be kept in sync with FetchCols.
 	FetchColIDtoRowIndex catalog.TableColMap
-	// primaryLocked, if true, indicates that no lock is needed when deleting
-	// from the primary index because the caller already acquired it.
-	primaryLocked bool
-	// secondaryLocked, if set, indicates that no lock is needed when deleting
-	// from this secondary index because the caller already acquired it.
-	secondaryLocked catalog.Index
-
 	// For allocation avoidance.
 	key         roachpb.Key
 	rawValueBuf []byte
@@ -68,19 +40,12 @@ type Deleter struct {
 // requestedCols is non-nil, then only the requested columns are included in
 // FetchCols; otherwise, all columns that are part of the key of any index
 // (either primary or secondary) are included in FetchCols.
-//
-// lockedIndexes describes the set of indexes such that any keys that might be
-// deleted from the index had already locks acquired on them. In other words,
-// the caller guarantees that the deleter has exclusive access to the keys in
-// these indexes. It is assumed that at most one secondary index is already
-// locked.
 func MakeDeleter(
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
-	lockedIndexes []catalog.Index,
 	requestedCols []catalog.Column,
-	sd *sessiondata.SessionData,
 	sv *settings.Values,
+	internal bool,
 	metrics *rowinfra.Metrics,
 ) Deleter {
 	indexes := tableDesc.DeletableNonPrimaryIndexes()
@@ -125,55 +90,64 @@ func MakeDeleter(
 		}
 	}
 
-	var primaryLocked bool
-	var secondaryLocked catalog.Index
-	for _, index := range lockedIndexes {
-		if index.Primary() {
-			primaryLocked = true
-		} else {
-			secondaryLocked = index
-		}
-	}
-	if buildutil.CrdbTestBuild && len(lockedIndexes) > 1 && !primaryLocked {
-		// We don't expect multiple secondary indexes to be locked, yet if that
-		// happens in prod, we'll just not use the already acquired locks on all
-		// but the last secondary index, which means a possible performance hit
-		// but no correctness issues.
-		panic(errors.AssertionFailedf("locked at least two secondary indexes in the initial scan: %v", lockedIndexes))
-	}
 	rd := Deleter{
-		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics),
+		Helper:               NewRowHelper(codec, tableDesc, indexes, nil /* uniqueWithTombstoneIndexes */, sv, internal, metrics),
 		FetchCols:            fetchCols,
 		FetchColIDtoRowIndex: fetchColIDtoRowIndex,
-		primaryLocked:        primaryLocked,
-		secondaryLocked:      secondaryLocked,
 	}
 
 	return rd
 }
 
 // DeleteRow adds to the batch the kv operations necessary to delete a table row
-// with the given values.
+// with the given values. It also will cascade as required and check for
+// orphaned rows. The bytesMonitor is only used if cascading/fk checking and can
+// be nil if not.
 func (rd *Deleter) DeleteRow(
 	ctx context.Context,
-	batch *kv.Batch,
+	b *kv.Batch,
 	values []tree.Datum,
 	pm PartialIndexUpdateHelper,
-	vh VectorIndexUpdateHelper,
-	oth OriginTimestampCPutHelper,
-	mustValidateOldPKValues bool,
+	oth *OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
-	b := &KVBatchAdapter{Batch: batch}
+
+	// Delete the row from any secondary indices.
+	for i := range rd.Helper.Indexes {
+		// If the index ID exists in the set of indexes to ignore, do not
+		// attempt to delete from the index.
+		if pm.IgnoreForDel.Contains(int(rd.Helper.Indexes[i].GetID())) {
+			continue
+		}
+
+		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
+		entries, err := rowenc.EncodeSecondaryIndex(
+			ctx,
+			rd.Helper.Codec,
+			rd.Helper.TableDesc,
+			rd.Helper.Indexes[i],
+			rd.FetchColIDtoRowIndex,
+			values,
+			true, /* includeEmpty */
+		)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if err := rd.Helper.deleteIndexEntry(ctx, b, rd.Helper.Indexes[i], rd.Helper.secIndexValDirs[i], &e, traceKV); err != nil {
+				return err
+			}
+		}
+	}
 
 	primaryIndexKey, err := rd.Helper.encodePrimaryIndexKey(rd.FetchColIDtoRowIndex, values)
 	if err != nil {
 		return err
 	}
 
-	// Delete the row from the primary index.
+	// Delete the row.
 	var called bool
-	err = rd.Helper.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+	return rd.Helper.TableDesc.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
 		if called {
 			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
 			// after the first, trim primaryIndexKey so nothing gets overwritten.
@@ -185,9 +159,9 @@ func (rd *Deleter) DeleteRow(
 		familyID := family.ID
 		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(familyID))
 
-		if oth.IsSet() || mustValidateOldPKValues {
+		if oth.IsSet() {
 			var expValue []byte
-			if !oth.IsSet() || !oth.PreviousWasDeleted {
+			if !oth.PreviousWasDeleted {
 				prevValue, err := rd.encodeValueForPrimaryIndexFamily(family, values)
 				if err != nil {
 					return err
@@ -196,56 +170,17 @@ func (rd *Deleter) DeleteRow(
 					expValue = prevValue.TagAndDataBytes()
 				}
 			}
-			if oth.IsSet() {
-				oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
-			} else {
-				delWithCPutFn(ctx, b, &rd.key, expValue, traceKV, &rd.Helper, primaryIndexDirs)
-			}
+			oth.DelWithCPut(ctx, &KVBatchAdapter{b}, &rd.key, expValue, traceKV)
 		} else {
-			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, &rd.Helper, primaryIndexDirs)
+			if traceKV {
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
+			}
+			b.Del(&rd.key)
 		}
 
 		rd.key = nil
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	// Delete the row from any secondary indices.
-	for i, index := range rd.Helper.Indexes {
-		// If the index ID exists in the set of indexes to ignore, do not
-		// attempt to delete from the index.
-		if pm.IgnoreForDel.Contains(int(index.GetID())) {
-			continue
-		}
-
-		// We want to include empty k/v pairs because we want to delete all k/v's for this row.
-		entries, err := rowenc.EncodeSecondaryIndex(
-			ctx,
-			rd.Helper.Codec,
-			rd.Helper.TableDesc,
-			index,
-			rd.FetchColIDtoRowIndex,
-			values,
-			vh.GetDel(),
-			true, /* includeEmpty */
-		)
-		if err != nil {
-			return err
-		}
-		alreadyLocked := rd.secondaryLocked != nil && rd.secondaryLocked.GetID() == index.GetID()
-		for _, e := range entries {
-			if err = rd.Helper.deleteIndexEntry(
-				ctx, b, index, &e.Key, alreadyLocked, rd.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
-				traceKV, secondaryIndexDirs(i),
-			); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 // encodeValueForPrimaryIndexFamily encodes the expected roachpb.Value

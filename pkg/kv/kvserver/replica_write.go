@@ -185,7 +185,7 @@ func (r *Replica) executeWriteBatch(
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose. If we return with an error from executeWriteBatch, we
 	// also return the guard which the caller reassumes ownership of.
-	ch, abandonTok, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
+	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
 	if pErr != nil {
 		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
 			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
@@ -226,14 +226,14 @@ func (r *Replica) executeWriteBatch(
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.KvExec.Warningf(ctx, "transaction cleanup failed: %v", err)
+					log.Warningf(ctx, "transaction cleanup failed: %v", err)
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
-					log.KvExec.Warningf(ctx, "intent cleanup failed: %v", err)
+					log.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
 			}
 			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
@@ -335,12 +335,12 @@ func (r *Replica) executeWriteBatch(
 								return ctx.Err()
 							})
 						if err != nil {
-							log.KvExec.Warningf(ctx, "transaction cleanup failed: %v", err)
+							log.Warningf(ctx, "transaction cleanup failed: %v", err)
 							r.store.intentResolver.Metrics.FinalizedTxnCleanupFailed.Inc(1)
 						}
 					})
 			}
-			r.abandon(abandonTok)
+			abandon()
 			dur := timeutil.Since(startTime)
 			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
 				dur.Seconds(), ba)
@@ -351,7 +351,7 @@ func (r *Replica) executeWriteBatch(
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
 			// to the caller that the command may have executed.
-			r.abandon(abandonTok)
+			abandon()
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
 			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(
@@ -377,7 +377,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 	// timestamp, even for isolation levels that can commit with such skew. Sanity
 	// check that this timestamp is equal to the batch timestamp.
 	if ba.Timestamp != ba.Txn.ReadTimestamp || ba.Timestamp != ba.Txn.WriteTimestamp {
-		log.KvExec.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
+		log.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
 			"ba.Timestamp: %s, ba.Txn.ReadTimestamp: %s, ba.Txn.WriteTimestamp: %s",
 			ba.Timestamp, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
@@ -446,7 +446,7 @@ func (r *Replica) evaluateWriteBatch(
 			return ba, res.batch, res.stats, res.br, res.res, nil
 		case onePCFailed:
 			if res.pErr == nil {
-				log.KvExec.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
+				log.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
 			}
 			return ba, nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
@@ -464,7 +464,7 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	if ba.Require1PC() {
-		log.KvExec.Fatalf(ctx,
+		log.Fatalf(ctx,
 			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 

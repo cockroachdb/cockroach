@@ -12,7 +12,6 @@ import "time"
 type TimeSource interface {
 	Now() time.Time
 	Since(t time.Time) time.Duration
-	Until(t time.Time) time.Duration
 	NewTimer() TimerI
 	NewTicker(duration time.Duration) TickerI
 }
@@ -29,6 +28,10 @@ type TimerI interface {
 	// Ch returns the channel which will be notified when the timer reaches its
 	// time.
 	Ch() <-chan time.Time
+
+	// MarkRead should be called when a value is read from the Ch() channel.
+	// If MarkRead is not called, the resetting the timer is less efficient.
+	MarkRead()
 }
 
 // TickerI is an interface wrapping Ticker.
@@ -61,11 +64,6 @@ func (DefaultTimeSource) Since(t time.Time) time.Duration {
 	return Since(t)
 }
 
-// Until implements TimeSource interface
-func (DefaultTimeSource) Until(t time.Time) time.Duration {
-	return Until(t)
-}
-
 // NewTimer returns a TimerI wrapping *Timer.
 func (DefaultTimeSource) NewTimer() TimerI {
 	return (*timer)(new(Timer))
@@ -90,6 +88,10 @@ func (t *timer) Stop() bool {
 
 func (t *timer) Ch() <-chan time.Time {
 	return t.C
+}
+
+func (t *timer) MarkRead() {
+	t.Read = true
 }
 
 type ticker time.Ticker

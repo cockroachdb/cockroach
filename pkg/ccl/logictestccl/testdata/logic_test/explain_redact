@@ -143,7 +143,7 @@ insert p
 query T
 EXPLAIN (OPT, MEMO, REDACT) INSERT INTO p VALUES (1, 1)
 ----
-memo (optimized, ~5KB, required=[presentation: info:9] [distribution: test])
+memo (optimized, ~4KB, required=[presentation: info:9] [distribution: test])
  ├── G1: (explain G2 [distribution: test])
  │    └── [presentation: info:9] [distribution: test]
  │         ├── best: (explain G2="[distribution: test]" [distribution: test])
@@ -294,9 +294,8 @@ EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM q WHERE q > 2
 scan q
  ├── columns: q:1 r:2
  ├── constraint: /1: ‹×›
- ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── cost: 378.02
- ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -308,9 +307,8 @@ EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM q WHERE q > 2
 scan q
  ├── columns: q:1(int!null) r:2(int)
  ├── constraint: /1: ‹×›
- ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
+ ├── stats: [rows=333.3333, distinct(1)=333.333, null(1)=0]
  ├── cost: 378.02
- ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test

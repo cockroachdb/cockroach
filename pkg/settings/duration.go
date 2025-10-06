@@ -147,14 +147,11 @@ func (d *DurationSetting) setToDefault(ctx context.Context, sv *Values) {
 	}
 }
 
-// RegisterDurationSetting defines a new setting with type duration and any
-// supplied validation function(s). If no validation functions are given, then
-// the non-negative duration validation is performed.
+// RegisterDurationSetting defines a new setting with type duration.
 func RegisterDurationSetting(
 	class Class, key InternalKey, desc string, defaultValue time.Duration, opts ...SettingOption,
 ) *DurationSetting {
 	validateFn := func(val time.Duration) error {
-		hasExplicitValidationFn := false
 		for _, opt := range opts {
 			switch {
 			case opt.commonOpt != nil:
@@ -163,14 +160,9 @@ func RegisterDurationSetting(
 			default:
 				panic(errors.AssertionFailedf("wrong validator type"))
 			}
-			hasExplicitValidationFn = true
 			if err := opt.validateDurationFn(val); err != nil {
-				return err
+				return errors.Wrapf(err, "invalid value for %s", key)
 			}
-		}
-		if !hasExplicitValidationFn {
-			// Default validation.
-			return nonNegativeDurationInternal(val)
 		}
 		return nil
 	}
@@ -187,14 +179,13 @@ func RegisterDurationSetting(
 	return setting
 }
 
-// RegisterDurationSettingWithExplicitUnit defines a new setting with type
-// duration which requires an explicit unit when being set. If no validation
-// functions are given, then the non-negative duration validation is performed.
+// RegisterPublicDurationSettingWithExplicitUnit defines a new
+// public setting with type duration which requires an explicit unit when being
+// set.
 func RegisterDurationSettingWithExplicitUnit(
 	class Class, key InternalKey, desc string, defaultValue time.Duration, opts ...SettingOption,
 ) *DurationSettingWithExplicitUnit {
 	validateFn := func(val time.Duration) error {
-		hasExplicitValidationFn := false
 		for _, opt := range opts {
 			switch {
 			case opt.commonOpt != nil:
@@ -203,14 +194,9 @@ func RegisterDurationSettingWithExplicitUnit(
 			default:
 				panic(errors.AssertionFailedf("wrong validator type"))
 			}
-			hasExplicitValidationFn = true
 			if err := opt.validateDurationFn(val); err != nil {
-				return err
+				return errors.Wrapf(err, "invalid value for %s", key)
 			}
-		}
-		if !hasExplicitValidationFn {
-			// Default validation.
-			return nonNegativeDurationInternal(val)
 		}
 		return nil
 	}
@@ -227,6 +213,10 @@ func RegisterDurationSettingWithExplicitUnit(
 	setting.apply(opts)
 	return setting
 }
+
+// NonNegativeDuration checks that the duration is greater or equal to
+// zero. It can be passed to RegisterDurationSetting.
+var NonNegativeDuration SettingOption = WithValidateDuration(nonNegativeDurationInternal)
 
 func nonNegativeDurationInternal(v time.Duration) error {
 	if v < 0 {

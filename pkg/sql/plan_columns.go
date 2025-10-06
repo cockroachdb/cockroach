@@ -52,14 +52,10 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *renderNode:
 		return n.columns
 	case *scanNode:
-		return n.columns
+		return n.resultColumns
 	case *unionNode:
 		return n.columns
 	case *valuesNode:
-		return n.columns
-	case *vectorMutationSearchNode:
-		return n.columns
-	case *vectorSearchNode:
 		return n.columns
 	case *virtualTableNode:
 		return n.columns
@@ -71,11 +67,7 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *deleteNode:
 		return n.columns
-	case *deleteSwapNode:
-		return n.columns
 	case *updateNode:
-		return n.columns
-	case *updateSwapNode:
 		return n.columns
 	case *insertNode:
 		return n.columns
@@ -84,7 +76,7 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *upsertNode:
 		return n.columns
 	case *indexJoinNode:
-		return n.columns
+		return n.resultColumns
 	case *projectSetNode:
 		return n.columns
 	case *applyJoinNode:
@@ -98,15 +90,13 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	case *vTableLookupJoinNode:
 		return n.columns
 	case *invertedFilterNode:
-		return n.columns
+		return n.resultColumns
 	case *invertedJoinNode:
 		return n.columns
 	case *showFingerprintsNode:
 		return n.columns
 	case *callNode:
 		return n.getResultColumns()
-	case *checkExternalConnectionNode:
-		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -146,40 +136,40 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
 	case *bufferNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.plan, mut)
 	case *distinctNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.plan, mut)
 	case *fetchNode:
 		return n.cursor.Types()
 	case *filterNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.source.plan, mut)
 	case *max1RowNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.plan, mut)
 	case *limitNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.plan, mut)
 	case *spoolNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.source, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
 	case *saveTableNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.source, mut)
 	case *scanBufferNode:
 		return getPlanColumns(n.buffer, mut)
 	case *sortNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.plan, mut)
 	case *topKNode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.plan, mut)
 	case *recursiveCTENode:
-		return getPlanColumns(n.input, mut)
+		return getPlanColumns(n.initial, mut)
 
 	case *showVarNode:
 		return colinfo.ResultColumns{
 			{Name: n.name, Typ: types.String},
 		}
 	case *rowSourceToPlanNode:
-		return n.columns
+		return n.planCols
 	case *cdcValuesNode:
-		return n.columns
+		return n.resultColumns
 
 	case *identifySystemNode:
 		return n.getColumns(mut, colinfo.IdentifySystemColumns)

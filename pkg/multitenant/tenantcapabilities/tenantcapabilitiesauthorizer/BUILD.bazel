@@ -13,7 +13,6 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -32,8 +31,8 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
+        "//pkg/multitenant/tenantcapabilities/tenantcapabilitiespb",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils",
-        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils/datapathutils",

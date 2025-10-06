@@ -6,7 +6,6 @@
 package enginepb_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -102,131 +101,6 @@ func TestTxnSeqIsIgnored(t *testing.T) {
 		for _, notIgn := range tc.notIgnored {
 			assert.False(t, enginepb.TxnSeqIsIgnored(notIgn, tc.list))
 		}
-	}
-}
-
-func TestTxnSeqListExtends(t *testing.T) {
-	type s = enginepb.TxnSeq
-	type r = enginepb.IgnoredSeqNumRange
-	mr := func(a, b s) r {
-		return r{Start: a, End: b}
-	}
-
-	testData := []struct {
-		a        []r
-		b        []r
-		isEqual  bool
-		expected bool
-	}{
-		{
-			[]r{},
-			[]r{},
-			true,
-			true,
-		},
-		{
-			[]r{mr(1, 5)},
-			[]r{mr(1, 1)},
-			false,
-			true,
-		},
-		{
-			[]r{mr(2, 5)},
-			[]r{mr(1, 5)},
-			false,
-			false,
-		},
-		{
-			[]r{mr(1, 5)},
-			[]r{mr(2, 4)},
-			false,
-			true,
-		},
-		{
-			[]r{mr(2, 4)},
-			[]r{mr(1, 5)},
-			false,
-			false,
-		},
-		{
-			[]r{mr(3, 5), mr(8, 26)},
-			[]r{mr(3, 5), mr(10, 20), mr(22, 24)},
-			false,
-			true,
-		},
-		{
-			[]r{mr(3, 5), mr(10, 20), mr(22, 24), mr(28, 32)},
-			[]r{mr(3, 5), mr(10, 20), mr(22, 24)},
-			false,
-			true,
-		},
-		{
-			[]r{mr(3, 5), mr(10, 20), mr(22, 24)},
-			[]r{mr(3, 5), mr(10, 20), mr(22, 24)},
-			true,
-			true,
-		},
-	}
-
-	for i, tc := range testData {
-		t.Run(fmt.Sprintf("case=%d", i), func(t *testing.T) {
-			require.Equal(t, tc.expected, enginepb.TxnSeqListExtends(tc.a, tc.b))
-			if !tc.isEqual {
-				require.Equal(t, !tc.expected, enginepb.TxnSeqListExtends(tc.b, tc.a))
-			} else {
-				require.Equal(t, true, enginepb.TxnSeqListExtends(tc.b, tc.a))
-			}
-		})
-	}
-	t.Run("disjoint", func(t *testing.T) {
-		a := []r{mr(1, 2)}
-		b := []r{mr(4, 5)}
-		require.Equal(t, false, enginepb.TxnSeqListExtends(a, b))
-		require.Equal(t, false, enginepb.TxnSeqListExtends(b, a))
-	})
-}
-
-func TestTxnSeqListAppend(t *testing.T) {
-	type r = enginepb.IgnoredSeqNumRange
-
-	mr := func(a, b enginepb.TxnSeq) r {
-		return r{Start: a, End: b}
-	}
-
-	testData := []struct {
-		list     []r
-		newRange r
-		exp      []r
-	}{
-		{
-			[]r{},
-			mr(1, 2),
-			[]r{mr(1, 2)},
-		},
-		{
-			[]r{mr(1, 2)},
-			mr(1, 4),
-			[]r{mr(1, 4)},
-		},
-		{
-			[]r{mr(1, 2), mr(3, 6)},
-			mr(8, 10),
-			[]r{mr(1, 2), mr(3, 6), mr(8, 10)},
-		},
-		{
-			[]r{mr(1, 2), mr(5, 6)},
-			mr(3, 8),
-			[]r{mr(1, 2), mr(3, 8)},
-		},
-		{
-			[]r{mr(1, 2), mr(5, 6)},
-			mr(1, 8),
-			[]r{mr(1, 8)},
-		},
-	}
-
-	for _, tc := range testData {
-		require.Equal(t, tc.exp, enginepb.TxnSeqListAppend(tc.list, tc.newRange))
 	}
 }
 

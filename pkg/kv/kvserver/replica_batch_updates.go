@@ -223,7 +223,7 @@ func tryBumpBatchTimestamp(
 		return ba, false
 	}
 	if ts.Less(ba.Timestamp) {
-		log.KvExec.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
+		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
 	if ba.Txn == nil {
 		log.VEventf(ctx, 2, "bumping batch timestamp to %s from %s", ts, ba.Timestamp)
@@ -232,7 +232,7 @@ func tryBumpBatchTimestamp(
 		return ba, true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
-		log.KvExec.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
+		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
 			"ba.Txn.WriteTimestamp: %s", ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
 	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s",

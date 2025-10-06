@@ -57,11 +57,11 @@ project
  │    │    │    ├── left-join (hash)
  │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null objoid:86 classoid:87 description:89 c.oid:91 relname:92 relnamespace:93 n.oid:128 nspname:129 rownum:134!null
  │    │    │    │    ├── immutable
- │    │    │    │    ├── fd: (134)-->(2-4,8,26,34,35), (4)==(34), (34)==(4), (87)==(91), (91)==(87), (93)==(128), (128)==(93)
+ │    │    │    │    ├── fd: (4)==(34), (34)==(4), (134)-->(2-4,8,26,34,35), (87)==(91), (91)==(87), (93)==(128), (128)==(93)
  │    │    │    │    ├── ordinality
  │    │    │    │    │    ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null rownum:134!null
  │    │    │    │    │    ├── key: (134)
- │    │    │    │    │    ├── fd: (134)-->(2-4,8,26,34,35), (4)==(34), (34)==(4)
+ │    │    │    │    │    ├── fd: (4)==(34), (34)==(4), (134)-->(2-4,8,26,34,35)
  │    │    │    │    │    └── inner-join (hash)
  │    │    │    │    │         ├── columns: t.oid:2!null t.typname:3!null t.typnamespace:4!null t.typtype:8 t.typbasetype:26 n.oid:34!null nspname:35!null
  │    │    │    │    │         ├── fd: (4)==(34), (34)==(4)
@@ -99,7 +99,7 @@ project
  │    │    │    │    │    │    │         │    │    ├── scan kv_catalog_comments
  │    │    │    │    │    │    │         │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:76!null crdb_internal.kv_catalog_comments.objoid:77!null crdb_internal.kv_catalog_comments.objsubid:78!null crdb_internal.kv_catalog_comments.description:79!null
  │    │    │    │    │    │    │         │    │    └── filters
- │    │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:76 != 4294967075 [outer=(76), constraints=(/76: (/NULL - /4294967074] [/4294967076 - ]; tight)]
+ │    │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:76 != 4294967079 [outer=(76), constraints=(/76: (/NULL - /4294967078] [/4294967080 - ]; tight)]
  │    │    │    │    │    │    │         │    └── projections
  │    │    │    │    │    │    │         │         └── crdb_internal.kv_catalog_comments.objsubid:78::INT8 [as=objsubid:85, outer=(78), immutable]
  │    │    │    │    │    │    │         └── filters
@@ -110,7 +110,7 @@ project
  │    │    │    │    │    │         ├── scan kv_builtin_function_comments
  │    │    │    │    │    │         │    └── columns: crdb_internal.kv_builtin_function_comments.oid:81!null crdb_internal.kv_builtin_function_comments.description:82!null
  │    │    │    │    │    │         └── projections
- │    │    │    │    │    │              └── 4294967043 [as=classoid:83]
+ │    │    │    │    │    │              └── 4294967047 [as=classoid:83]
  │    │    │    │    │    ├── inner-join (hash)
  │    │    │    │    │    │    ├── columns: c.oid:91!null relname:92!null relnamespace:93!null n.oid:128!null nspname:129!null
  │    │    │    │    │    │    ├── fd: ()-->(92,129), (93)==(128), (128)==(93)
@@ -248,41 +248,40 @@ sort
       ├── stable
       ├── fd: ()-->(3,167)
       ├── select
-      │    ├── columns: n.nspname:3!null c.relname:8!null attrelid:44!null attname:45!null atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adbin:106 description:122 row_number:165
+      │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45!null atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:71!null typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adnum:105 adbin:106 objoid:119 classoid:120 objsubid:121 description:122 dc.oid:124 dc.relname:125 dc.relnamespace:126 dn.oid:161 dn.nspname:162 row_number:165
       │    ├── immutable
-      │    ├── fd: ()-->(3)
+      │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7), (46)==(71), (71)==(46)
       │    ├── window partition=(44) ordering=+49 opt(3,7,44,60)
-      │    │    ├── columns: n.nspname:3!null c.relname:8!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adbin:106 description:122 row_number:165
+      │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:71!null typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adnum:105 adbin:106 objoid:119 classoid:120 objsubid:121 description:122 dc.oid:124 dc.relname:125 dc.relnamespace:126 dn.oid:161 dn.nspname:162 row_number:165
       │    │    ├── immutable
-      │    │    ├── fd: ()-->(3)
-      │    │    ├── project
-      │    │    │    ├── columns: description:122 n.nspname:3!null c.relname:8!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adbin:106
+      │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7), (46)==(71), (71)==(46)
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:71!null typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adnum:105 adbin:106 objoid:119 classoid:120 objsubid:121 description:122 dc.oid:124 dc.relname:125 dc.relnamespace:126 dn.oid:161 dn.nspname:162
       │    │    │    ├── immutable
-      │    │    │    ├── fd: ()-->(3)
-      │    │    │    ├── inner-join (hash)
-      │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46!null attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null t.oid:71!null typtype:77 typnotnull:94 typbasetype:95 typtypmod:96 adrelid:104 adnum:105 adbin:106 crdb_internal.kv_catalog_comments.classoid:109 crdb_internal.kv_catalog_comments.objoid:110 crdb_internal.kv_catalog_comments.description:112 objsubid:118 dc.oid:124 dc.relname:125 dc.relnamespace:126 dn.oid:161 dn.nspname:162
+      │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7), (46)==(71), (71)==(46)
+      │    │    │    ├── scan pg_type [as=t]
+      │    │    │    │    └── columns: t.oid:71!null typtype:77 typnotnull:94 typbasetype:95 typtypmod:96
+      │    │    │    ├── left-join (hash)
+      │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null adrelid:104 adnum:105 adbin:106 objoid:119 classoid:120 objsubid:121 description:122 dc.oid:124 dc.relname:125 dc.relnamespace:126 dn.oid:161 dn.nspname:162
       │    │    │    │    ├── immutable
-      │    │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7), (46)==(71), (71)==(46)
-      │    │    │    │    ├── scan pg_type [as=t]
-      │    │    │    │    │    └── columns: t.oid:71!null typtype:77 typnotnull:94 typbasetype:95 typtypmod:96
-      │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null adrelid:104 adnum:105 adbin:106 crdb_internal.kv_catalog_comments.classoid:109 crdb_internal.kv_catalog_comments.objoid:110 crdb_internal.kv_catalog_comments.description:112 objsubid:118 dc.oid:124 dc.relname:125 dc.relnamespace:126 dn.oid:161 dn.nspname:162
+      │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    ├── right-join (hash)
+      │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null adrelid:104 adnum:105 adbin:106 objoid:119 classoid:120 objsubid:121 description:122
       │    │    │    │    │    ├── immutable
       │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: adrelid:104!null adnum:105!null adbin:106
+      │    │    │    │    │    │    ├── scan pg_attrdef [as=def]
+      │    │    │    │    │    │    │    └── columns: adrelid:104!null adnum:105 adbin:106
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── adnum:105 > 0 [outer=(105), constraints=(/105: [/1 - ]; tight)]
       │    │    │    │    │    ├── right-join (hash)
-      │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null adrelid:104 adnum:105 adbin:106 crdb_internal.kv_catalog_comments.classoid:109 crdb_internal.kv_catalog_comments.objoid:110 crdb_internal.kv_catalog_comments.description:112 objsubid:118
+      │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null objoid:119 classoid:120 objsubid:121 description:122
       │    │    │    │    │    │    ├── immutable
       │    │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: adrelid:104!null adnum:105!null adbin:106
-      │    │    │    │    │    │    │    ├── scan pg_attrdef [as=def]
-      │    │    │    │    │    │    │    │    └── columns: adrelid:104!null adnum:105 adbin:106
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── adnum:105 > 0 [outer=(105), constraints=(/105: [/1 - ]; tight)]
-      │    │    │    │    │    │    ├── right-join (hash)
-      │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null crdb_internal.kv_catalog_comments.classoid:109 crdb_internal.kv_catalog_comments.objoid:110 crdb_internal.kv_catalog_comments.description:112 objsubid:118
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: objoid:119!null classoid:120!null objsubid:121!null description:122!null
       │    │    │    │    │    │    │    ├── immutable
-      │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (7)==(44), (44)==(7), (2)==(9), (9)==(2)
       │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    ├── columns: crdb_internal.kv_catalog_comments.classoid:109!null crdb_internal.kv_catalog_comments.objoid:110!null crdb_internal.kv_catalog_comments.description:112!null objsubid:118!null
       │    │    │    │    │    │    │    │    ├── immutable
@@ -294,77 +293,86 @@ sort
       │    │    │    │    │    │    │    │    │    │    ├── scan kv_catalog_comments
       │    │    │    │    │    │    │    │    │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:109!null crdb_internal.kv_catalog_comments.objoid:110!null crdb_internal.kv_catalog_comments.objsubid:111!null crdb_internal.kv_catalog_comments.description:112!null
       │    │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.classoid:109 != 4294967075 [outer=(109), constraints=(/109: (/NULL - /4294967074] [/4294967076 - ]; tight)]
+      │    │    │    │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.classoid:109 != 4294967079 [outer=(109), constraints=(/109: (/NULL - /4294967078] [/4294967080 - ]; tight)]
       │    │    │    │    │    │    │    │    │    └── projections
       │    │    │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.objsubid:111::INT8 [as=objsubid:118, outer=(111), immutable]
       │    │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │    │         └── objsubid:118 > 0 [outer=(118), constraints=(/118: [/1 - ]; tight)]
-      │    │    │    │    │    │    │    ├── inner-join (hash)
-      │    │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
-      │    │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7)
+      │    │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │    │         ├── crdb_internal.kv_catalog_comments.objoid:110 [as=objoid:119, outer=(110)]
+      │    │    │    │    │    │    │         ├── crdb_internal.kv_catalog_comments.classoid:109 [as=classoid:120, outer=(109)]
+      │    │    │    │    │    │    │         ├── objsubid:118 [as=objsubid:121, outer=(118)]
+      │    │    │    │    │    │    │         └── crdb_internal.kv_catalog_comments.description:112 [as=description:122, outer=(112)]
+      │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
+      │    │    │    │    │    │    │    ├── fd: ()-->(3,60), (2)==(9), (9)==(2), (7)==(44), (44)==(7)
+      │    │    │    │    │    │    │    ├── inner-join (merge)
+      │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
+      │    │    │    │    │    │    │    │    ├── left ordering: +44
+      │    │    │    │    │    │    │    │    ├── right ordering: +7
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(60), (7)==(44), (44)==(7)
       │    │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49!null atttypmod:52 a.attnotnull:56 attisdropped:60!null
       │    │    │    │    │    │    │    │    │    ├── fd: ()-->(60)
-      │    │    │    │    │    │    │    │    │    ├── scan pg_attribute [as=a]
-      │    │    │    │    │    │    │    │    │    │    └── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49 atttypmod:52 a.attnotnull:56 attisdropped:60
+      │    │    │    │    │    │    │    │    │    ├── ordering: +44 opt(60) [actual: +44]
+      │    │    │    │    │    │    │    │    │    ├── scan pg_attribute@pg_attribute_attrelid_idx [as=a]
+      │    │    │    │    │    │    │    │    │    │    ├── columns: attrelid:44!null attname:45 atttypid:46 attlen:48 attnum:49 atttypmod:52 a.attnotnull:56 attisdropped:60
+      │    │    │    │    │    │    │    │    │    │    └── ordering: +44
       │    │    │    │    │    │    │    │    │    └── filters
       │    │    │    │    │    │    │    │    │         ├── attnum:49 > 0 [outer=(49), constraints=(/49: [/1 - ]; tight)]
       │    │    │    │    │    │    │    │    │         └── NOT attisdropped:60 [outer=(60), constraints=(/60: [/false - /false]; tight), fd=()-->(60)]
-      │    │    │    │    │    │    │    │    ├── inner-join (hash)
-      │    │    │    │    │    │    │    │    │    ├── columns: n.oid:2!null n.nspname:3!null c.oid:7!null c.relname:8!null c.relnamespace:9!null c.relkind:24!null
-      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(3), (2)==(9), (9)==(2)
-      │    │    │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
-      │    │    │    │    │    │    │    │    │    │    ├── scan pg_class [as=c]
-      │    │    │    │    │    │    │    │    │    │    │    └── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
-      │    │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │    │         └── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
-      │    │    │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null
-      │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(3)
-      │    │    │    │    │    │    │    │    │    │    ├── scan pg_namespace [as=n]
-      │    │    │    │    │    │    │    │    │    │    │    └── columns: n.oid:2 n.nspname:3!null
-      │    │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │    │         └── n.nspname:3 LIKE 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
+      │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24!null
+      │    │    │    │    │    │    │    │    │    ├── ordering: +7
+      │    │    │    │    │    │    │    │    │    ├── scan pg_class@pg_class_oid_idx [as=c]
+      │    │    │    │    │    │    │    │    │    │    ├── columns: c.oid:7!null c.relname:8!null c.relnamespace:9 c.relkind:24
+      │    │    │    │    │    │    │    │    │    │    └── ordering: +7
       │    │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │    │         └── c.relnamespace:9 = n.oid:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
+      │    │    │    │    │    │    │    │    │         ├── c.relkind:24 IN ('f', 'm', 'p', 'r', 'v') [outer=(24), constraints=(/24: [/'f' - /'f'] [/'m' - /'m'] [/'p' - /'p'] [/'r' - /'r'] [/'v' - /'v']; tight)]
+      │    │    │    │    │    │    │    │    │         └── c.relname:8 LIKE '%' [outer=(8), constraints=(/8: (/NULL - ])]
+      │    │    │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    ├── columns: n.oid:2 n.nspname:3!null
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(3)
+      │    │    │    │    │    │    │    │    ├── scan pg_namespace [as=n]
+      │    │    │    │    │    │    │    │    │    └── columns: n.oid:2 n.nspname:3!null
       │    │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │    │         └── attrelid:44 = c.oid:7 [outer=(7,44), constraints=(/7: (/NULL - ]; /44: (/NULL - ]), fd=(7)==(44), (44)==(7)]
+      │    │    │    │    │    │    │    │         └── n.nspname:3 LIKE 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]
       │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         ├── c.oid:7 = crdb_internal.kv_catalog_comments.objoid:110 [outer=(7,110), constraints=(/7: (/NULL - ]; /110: (/NULL - ]), fd=(7)==(110), (110)==(7)]
-      │    │    │    │    │    │    │         └── attnum:49 = objsubid:118 [outer=(49,118), constraints=(/49: (/NULL - ]; /118: (/NULL - ]), fd=(49)==(118), (118)==(49)]
+      │    │    │    │    │    │    │         └── c.relnamespace:9 = n.oid:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
       │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         ├── attrelid:44 = adrelid:104 [outer=(44,104), constraints=(/44: (/NULL - ]; /104: (/NULL - ]), fd=(44)==(104), (104)==(44)]
-      │    │    │    │    │    │         └── attnum:49 = adnum:105 [outer=(49,105), constraints=(/49: (/NULL - ]; /105: (/NULL - ]), fd=(49)==(105), (105)==(49)]
-      │    │    │    │    │    ├── left-join (hash)
-      │    │    │    │    │    │    ├── columns: dc.oid:124!null dc.relname:125!null dc.relnamespace:126 dn.oid:161 dn.nspname:162
-      │    │    │    │    │    │    ├── fd: ()-->(125)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: dc.oid:124!null dc.relname:125!null dc.relnamespace:126
-      │    │    │    │    │    │    │    ├── fd: ()-->(125)
-      │    │    │    │    │    │    │    ├── scan pg_class [as=dc]
-      │    │    │    │    │    │    │    │    └── columns: dc.oid:124!null dc.relname:125!null dc.relnamespace:126
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── dc.relname:125 = 'pg_class' [outer=(125), constraints=(/125: [/'pg_class' - /'pg_class']; tight), fd=()-->(125)]
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: dn.oid:161 dn.nspname:162!null
-      │    │    │    │    │    │    │    ├── fd: ()-->(162)
-      │    │    │    │    │    │    │    ├── scan pg_namespace [as=dn]
-      │    │    │    │    │    │    │    │    └── columns: dn.oid:161 dn.nspname:162!null
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── dn.nspname:162 = 'pg_catalog' [outer=(162), constraints=(/162: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(162)]
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── dc.relnamespace:126 = dn.oid:161 [outer=(126,161), constraints=(/126: (/NULL - ]; /161: (/NULL - ]), fd=(126)==(161), (161)==(126)]
+      │    │    │    │    │    │         ├── c.oid:7 = objoid:119 [outer=(7,119), constraints=(/7: (/NULL - ]; /119: (/NULL - ]), fd=(7)==(119), (119)==(7)]
+      │    │    │    │    │    │         └── attnum:49 = objsubid:121 [outer=(49,121), constraints=(/49: (/NULL - ]; /121: (/NULL - ]), fd=(49)==(121), (121)==(49)]
       │    │    │    │    │    └── filters
-      │    │    │    │    │         └── dc.oid:124 = crdb_internal.kv_catalog_comments.classoid:109 [outer=(109,124), constraints=(/109: (/NULL - ]; /124: (/NULL - ]), fd=(109)==(124), (124)==(109)]
+      │    │    │    │    │         ├── attrelid:44 = adrelid:104 [outer=(44,104), constraints=(/44: (/NULL - ]; /104: (/NULL - ]), fd=(44)==(104), (104)==(44)]
+      │    │    │    │    │         └── attnum:49 = adnum:105 [outer=(49,105), constraints=(/49: (/NULL - ]; /105: (/NULL - ]), fd=(49)==(105), (105)==(49)]
+      │    │    │    │    ├── left-join (hash)
+      │    │    │    │    │    ├── columns: dc.oid:124!null dc.relname:125!null dc.relnamespace:126 dn.oid:161 dn.nspname:162
+      │    │    │    │    │    ├── fd: ()-->(125)
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: dc.oid:124!null dc.relname:125!null dc.relnamespace:126
+      │    │    │    │    │    │    ├── fd: ()-->(125)
+      │    │    │    │    │    │    ├── scan pg_class [as=dc]
+      │    │    │    │    │    │    │    └── columns: dc.oid:124!null dc.relname:125!null dc.relnamespace:126
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── dc.relname:125 = 'pg_class' [outer=(125), constraints=(/125: [/'pg_class' - /'pg_class']; tight), fd=()-->(125)]
+      │    │    │    │    │    ├── select
+      │    │    │    │    │    │    ├── columns: dn.oid:161 dn.nspname:162!null
+      │    │    │    │    │    │    ├── fd: ()-->(162)
+      │    │    │    │    │    │    ├── scan pg_namespace [as=dn]
+      │    │    │    │    │    │    │    └── columns: dn.oid:161 dn.nspname:162!null
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── dn.nspname:162 = 'pg_catalog' [outer=(162), constraints=(/162: [/'pg_catalog' - /'pg_catalog']; tight), fd=()-->(162)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── dc.relnamespace:126 = dn.oid:161 [outer=(126,161), constraints=(/126: (/NULL - ]; /161: (/NULL - ]), fd=(126)==(161), (161)==(126)]
       │    │    │    │    └── filters
-      │    │    │    │         └── atttypid:46 = t.oid:71 [outer=(46,71), constraints=(/46: (/NULL - ]; /71: (/NULL - ]), fd=(46)==(71), (71)==(46)]
-      │    │    │    └── projections
-      │    │    │         └── crdb_internal.kv_catalog_comments.description:112 [as=description:122, outer=(112)]
+      │    │    │    │         └── dc.oid:124 = classoid:120 [outer=(120,124), constraints=(/120: (/NULL - ]; /124: (/NULL - ]), fd=(120)==(124), (124)==(120)]
+      │    │    │    └── filters
+      │    │    │         └── atttypid:46 = t.oid:71 [outer=(46,71), constraints=(/46: (/NULL - ]; /71: (/NULL - ]), fd=(46)==(71), (71)==(46)]
       │    │    └── windows
       │    │         └── row-number [as=row_number:165]
       │    └── filters
-      │         └── attname:45 IS NOT NULL [outer=(45), constraints=(/45: (/NULL - ]; tight)]
+      │         └── attname:45 LIKE '%' [outer=(45), constraints=(/45: (/NULL - ])]
       └── projections
            ├── a.attnotnull:56 OR ((typtype:77 = 'd') AND typnotnull:94) [as=attnotnull:166, outer=(56,77,94)]
            ├── NULL [as=attidentity:167]

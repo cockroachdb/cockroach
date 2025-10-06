@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { keys } from "d3";
 import flatMap from "lodash/flatMap";
 import map from "lodash/map";
 import Long from "long";
@@ -79,7 +80,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(Object.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].nextRequest).toEqual(request);
       expect(state.queries[componentID].data).toBeUndefined();
       expect(state.queries[componentID].error).toBeUndefined();
@@ -108,7 +109,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(Object.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].data).toBeUndefined();
       expect(state.queries[componentID].request).toBeUndefined();
       expect(state.queries[componentID].nextRequest).toBeUndefined();
@@ -143,7 +144,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(Object.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].data).toEqual(response);
       expect(state.queries[componentID].request).toEqual(request);
       expect(state.queries[componentID].error).toBeUndefined();
@@ -157,7 +158,7 @@ describe("metrics reducer", function () {
       );
       expect(state.queries).toBeDefined();
       expect(state.queries[componentID]).toBeDefined();
-      expect(Object.keys(state.queries).length).toBe(1);
+      expect(keys(state.queries).length).toBe(1);
       expect(state.queries[componentID].error).toEqual(error);
       expect(state.queries[componentID].request).toBeUndefined();
       expect(state.queries[componentID].data).toBeUndefined();

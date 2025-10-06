@@ -8,6 +8,7 @@
 // Specifically, we pass in our own list of excludes.
 
 //go:build bazel
+// +build bazel
 
 package errcheck
 

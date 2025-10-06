@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
@@ -158,7 +157,7 @@ func CreateDocker(
 	}
 
 	if *cockroachImage == defaultImage && !exists(*CockroachBinary) {
-		log.Dev.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
+		log.Fatalf(ctx, "\"%s\": does not exist", *CockroachBinary)
 	}
 
 	cli, err := client.NewClientWithOpts(client.FromEnv)
@@ -167,7 +166,7 @@ func CreateDocker(
 	cli.NegotiateAPIVersion(ctx)
 
 	clusterID := uuid.MakeV4()
-	clusterIDS := clusterID.Short().String()
+	clusterIDS := clusterID.Short()
 
 	if volumesDir == "" {
 		volumesDir, err = os.MkdirTemp(datapathutils.DebuggableTempDir(), fmt.Sprintf("cockroach-acceptance-%s", clusterIDS))
@@ -181,7 +180,7 @@ func CreateDocker(
 		volumesDir = filepath.Join(pwd, volumesDir)
 	}
 	maybePanic(os.MkdirAll(volumesDir, 0755))
-	log.Dev.Infof(ctx, "cluster volume directory: %s", volumesDir)
+	log.Infof(ctx, "cluster volume directory: %s", volumesDir)
 
 	return &DockerCluster{
 		clusterID: clusterIDS,
@@ -235,7 +234,7 @@ func (l *DockerCluster) OneShot(
 	l.oneshot = c
 	defer func() {
 		if err := l.oneshot.Remove(ctx); err != nil {
-			log.Dev.Errorf(ctx, "ContainerRemove: %s", err)
+			log.Errorf(ctx, "ContainerRemove: %s", err)
 		}
 		l.oneshot = nil
 	}()
@@ -281,7 +280,7 @@ func (l *DockerCluster) createNetwork(ctx context.Context) {
 	l.panicOnStop()
 
 	l.networkName = fmt.Sprintf("%s-%s", networkPrefix, l.clusterID)
-	log.Dev.Infof(ctx, "creating docker network with name: %s", l.networkName)
+	log.Infof(ctx, "creating docker network with name: %s", l.networkName)
 	net, err := l.client.NetworkInspect(ctx, l.networkName, types.NetworkInspectOptions{})
 	if err == nil {
 		// We need to destroy the network and any running containers inside of it.
@@ -303,7 +302,7 @@ func (l *DockerCluster) createNetwork(ctx context.Context) {
 	})
 	maybePanic(err)
 	if resp.Warning != "" {
-		log.Dev.Warningf(ctx, "creating network: %s", resp.Warning)
+		log.Warningf(ctx, "creating network: %s", resp.Warning)
 	}
 	l.networkID = resp.ID
 }
@@ -313,7 +312,7 @@ func (l *DockerCluster) createNetwork(ctx context.Context) {
 func (l *DockerCluster) initCluster(ctx context.Context) {
 	configJSON, err := json.Marshal(l.config)
 	maybePanic(err)
-	log.Dev.Infof(ctx, "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
+	log.Infof(ctx, "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
 	l.panicOnStop()
 
 	pwd, err := os.Getwd()
@@ -417,7 +416,7 @@ func (l *DockerCluster) createRoach(
 	if node.index >= 0 {
 		hostname = fmt.Sprintf("roach-%s-%d", l.clusterID, node.index)
 	}
-	log.Dev.Infof(ctx, "creating docker container with name: %s", hostname)
+	log.Infof(ctx, "creating docker container with name: %s", hostname)
 	var err error
 	node.Container, err = createContainer(
 		ctx,
@@ -485,11 +484,9 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode, singleNod
 	for _, store := range node.stores {
 		storeSpec := base.StoreSpec{
 			Path: store.dir,
+			Size: base.SizeSpec{InBytes: int64(store.config.MaxRanges) * maxRangeBytes},
 		}
-		if store.config.MaxRanges != 0 {
-			storeSpec.Size = storageconfig.BytesSize(int64(store.config.MaxRanges) * maxRangeBytes)
-		}
-		cmd = append(cmd, fmt.Sprintf("--store=%s", base.StoreSpecCmdLineString(storeSpec)))
+		cmd = append(cmd, fmt.Sprintf("--store=%s", storeSpec))
 	}
 	// Append --join flag for all nodes.
 	if !singleNode {
@@ -518,7 +515,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode, singleNod
 	maybePanic(node.Start(ctx))
 	httpAddr := node.Addr(ctx, defaultHTTP)
 
-	log.Dev.Infof(ctx, `*** started %[1]s ***
+	log.Infof(ctx, `*** started %[1]s ***
   ui:        %[2]s
   trace:     %[2]s/debug/requests
   logs:      %[3]s/cockroach.INFO
@@ -553,10 +550,10 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 		},
 	}
 
-	log.Dev.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
+	log.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
 	maybePanic(l.OneShot(ctx, defaultImage, types.ImagePullOptions{},
 		containerConfig, container.HostConfig{}, platforms.DefaultSpec(), "init-command-"+randomID))
-	log.Dev.Info(ctx, "cluster successfully initialized")
+	log.Info(ctx, "cluster successfully initialized")
 }
 
 // returns false is the event
@@ -566,19 +563,19 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 
 	// Logging everything we get from Docker in service of finding the root
 	// cause of #58955.
-	log.Dev.Infof(ctx, "processing event from Docker: %+v", event)
+	log.Infof(ctx, "processing event from Docker: %+v", event)
 
 	// If there's currently a oneshot container, ignore any die messages from
 	// it because those are expected.
 	if l.oneshot != nil && event.ID == l.oneshot.id && event.Status == eventDie {
-		log.Dev.Infof(ctx, "Docker event was: the oneshot container terminated")
+		log.Infof(ctx, "Docker event was: the oneshot container terminated")
 		return true
 	}
 
 	for i, n := range l.Nodes {
 		if n != nil && n.id == event.ID {
 			if log.V(1) {
-				log.Dev.Errorf(ctx, "node=%d status=%s", i, event.Status)
+				log.Errorf(ctx, "node=%d status=%s", i, event.Status)
 			}
 			select {
 			case l.events <- Event{NodeIndex: i, Status: event.Status}:
@@ -589,7 +586,7 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 		}
 	}
 
-	log.Dev.Infof(ctx, "received docker event for unrecognized container: %+v",
+	log.Infof(ctx, "received docker event for unrecognized container: %+v",
 		event)
 
 	// An event on any other container is unexpected. Die.
@@ -599,14 +596,14 @@ func (l *DockerCluster) processEvent(ctx context.Context, event events.Message) 
 	default:
 		// There is a very tiny race here: the signal handler might be closing the
 		// stopper simultaneously.
-		log.Dev.Errorf(ctx, "stopping due to unexpected event: %+v", event)
+		log.Errorf(ctx, "stopping due to unexpected event: %+v", event)
 		if rc, err := l.client.ContainerLogs(context.Background(), event.Actor.ID, types.ContainerLogsOptions{
 			ShowStdout: true,
 			ShowStderr: true,
 		}); err == nil {
 			defer rc.Close()
 			if _, err := io.Copy(os.Stderr, rc); err != nil {
-				log.Dev.Infof(ctx, "error listing logs: %s", err)
+				log.Infof(ctx, "error listing logs: %s", err)
 			}
 		}
 	}
@@ -617,8 +614,8 @@ func (l *DockerCluster) monitor(ctx context.Context, monitorDone chan struct{}) 
 	defer close(monitorDone)
 
 	if log.V(1) {
-		log.Dev.Infof(ctx, "events monitor starts")
-		defer log.Dev.Infof(ctx, "events monitor exits")
+		log.Infof(ctx, "events monitor starts")
+		defer log.Infof(ctx, "events monitor exits")
 	}
 	longPoll := func() bool {
 		// If our context was canceled, it's time to go home.
@@ -634,10 +631,10 @@ func (l *DockerCluster) monitor(ctx context.Context, monitorDone chan struct{}) 
 		for {
 			select {
 			case <-l.monitorCtx.Done():
-				log.Dev.Infof(ctx, "monitor shutting down")
+				log.Infof(ctx, "monitor shutting down")
 				return false
 			case err := <-errq:
-				log.Dev.Infof(ctx, "event stream done, resetting...: %s", err)
+				log.Infof(ctx, "event stream done, resetting...: %s", err)
 				// Sometimes we get a random string-wrapped EOF error back.
 				// Hard to assert on, so we just let this goroutine spin.
 				return true
@@ -668,10 +665,10 @@ func (l *DockerCluster) Start(ctx context.Context) {
 
 	l.createNetwork(ctx)
 	l.initCluster(ctx)
-	log.Dev.Infof(ctx, "creating node certs (%dbit) in: %s", keyLen, certsDir)
+	log.Infof(ctx, "creating node certs (%dbit) in: %s", keyLen, certsDir)
 	l.createNodeCerts()
 
-	log.Dev.Infof(ctx, "starting %d nodes", len(l.Nodes))
+	log.Infof(ctx, "starting %d nodes", len(l.Nodes))
 	l.monitorCtx, l.monitorCtxCancelFunc = context.WithCancel(context.Background())
 	l.monitorDone = make(chan struct{})
 	go l.monitor(ctx, l.monitorDone)
@@ -732,7 +729,7 @@ func (l *DockerCluster) Assert(ctx context.Context, t testing.TB) {
 		t.Fatalf("unexpected extra event %v (after %v)", cur, events)
 	}
 	if log.V(2) {
-		log.Dev.Infof(ctx, "asserted %v", events)
+		log.Infof(ctx, "asserted %v", events)
 	}
 }
 
@@ -746,11 +743,11 @@ func (l *DockerCluster) AssertAndStop(ctx context.Context, t testing.TB) {
 // stop stops the cluster.
 func (l *DockerCluster) stop(ctx context.Context) {
 	if *waitOnStop {
-		log.Dev.Infof(ctx, "waiting for interrupt")
+		log.Infof(ctx, "waiting for interrupt")
 		<-l.stopper.ShouldQuiesce()
 	}
 
-	log.Dev.Infof(ctx, "stopping")
+	log.Infof(ctx, "stopping")
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -774,15 +771,13 @@ func (l *DockerCluster) stop(ctx context.Context) {
 			fmt.Sprintf("stderr.%s.log", strings.Replace(
 				timeutil.Now().Format(time.RFC3339), ":", "_", -1)))
 		maybePanic(os.MkdirAll(filepath.Dir(file), 0755))
-		func() {
-			w, err := os.Create(file)
-			maybePanic(err)
-			defer w.Close()
-			maybePanic(n.Logs(ctx, w))
-		}()
-		log.Dev.Infof(ctx, "node %d: stderr at %s", i, file)
+		w, err := os.Create(file)
+		maybePanic(err)
+		defer w.Close()
+		maybePanic(n.Logs(ctx, w))
+		log.Infof(ctx, "node %d: stderr at %s", i, file)
 		if crashed {
-			log.Dev.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)
+			log.Infof(ctx, "~~~ node %d CRASHED ~~~~", i)
 		}
 		maybePanic(n.Remove(ctx))
 		n.Container = nil
@@ -922,16 +917,16 @@ func (l *DockerCluster) ExecCLI(ctx context.Context, i int, cmd []string) (strin
 func (l *DockerCluster) Cleanup(ctx context.Context, preserveLogs bool) {
 	volumes, err := os.ReadDir(l.volumesDir)
 	if err != nil {
-		log.Dev.Warningf(ctx, "%v", err)
+		log.Warningf(ctx, "%v", err)
 		return
 	}
 	for _, v := range volumes {
 		if preserveLogs && v.Name() == "logs" {
-			log.Dev.Infof(ctx, "preserving log directory: %s", l.volumesDir)
+			log.Infof(ctx, "preserving log directory: %s", l.volumesDir)
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(l.volumesDir, v.Name())); err != nil {
-			log.Dev.Warningf(ctx, "%v", err)
+			log.Warningf(ctx, "%v", err)
 		}
 	}
 }

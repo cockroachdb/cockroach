@@ -1,2 +1,0 @@
-prepare_transaction_stmt ::=
-	'PREPARE' 'TRANSACTION' 'SCONST'

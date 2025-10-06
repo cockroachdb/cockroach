@@ -32,7 +32,6 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/enum",
         "//pkg/sql/regionliveness",
-        "//pkg/sql/regions",
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",

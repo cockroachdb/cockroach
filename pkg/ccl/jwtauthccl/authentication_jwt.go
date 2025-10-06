@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -109,7 +108,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	authenticator.mu.conf = conf
 	authenticator.mu.enabled = authenticator.mu.conf.enabled
 
-	log.Dev.Infof(ctx, "initialized JWT authenticator")
+	log.Infof(ctx, "initialized JWT authenticator")
 }
 
 // mapUsername takes maps the tokenUsername using the identMap corresponding to the issuer.
@@ -147,7 +146,6 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	tokenBytes []byte,
 	identMap *identmap.Conf,
 ) (detailedErrorMsg redact.RedactableString, authError error) {
-	authenticator.reloadConfig(ctx, st)
 	authenticator.mu.Lock()
 	defer authenticator.mu.Unlock()
 
@@ -197,7 +195,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	}
 
 	// Match the input user identity against the user identities mapped within the JWT.
-	user, authError = authenticator.retrieveIdentityLocked(user, tokenBytes, identMap)
+	user, authError = authenticator.RetrieveIdentity(ctx, user, tokenBytes, identMap)
 	if authError != nil {
 		return
 	}
@@ -231,40 +229,10 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	return "", nil
 }
 
-// RetrieveIdentity implements pgwire.JWTVerifier.
-//
-// It reloads the authenticator’s configuration from the passed
-// *cluster.Settings then delegates to retrieveIdentityLocked
-// while holding a.mu.
-//
-// The method parses `tokenBytes`, applies the ident-map, and returns
-// the SQL user that this JWT is allowed to act as. On success the
-// returned username is either `user` (when it matches a token
-// principal) or the single mapped identity. on failure it returns an
-// error context'd with "JWT authentication:".
+// RetrieveIdentity is part of the JWTVerifier interface in pgwire.
 func (authenticator *jwtAuthenticator) RetrieveIdentity(
-	ctx context.Context,
-	st *cluster.Settings,
-	user username.SQLUsername,
-	tokenBytes []byte,
-	identMap *identmap.Conf,
+	ctx context.Context, user username.SQLUsername, tokenBytes []byte, identMap *identmap.Conf,
 ) (retrievedUser username.SQLUsername, authError error) {
-	authenticator.reloadConfig(ctx, st)
-	authenticator.mu.Lock()
-	defer authenticator.mu.Unlock()
-	return authenticator.retrieveIdentityLocked(user, tokenBytes, identMap)
-}
-
-// retrieveIdentityLocked contains the core principal-to-user mapping
-// logic. The caller must already hold a.mu; this helper therefore
-// performs no locking or config reloads and must never call anything
-// that would reacquire the same mutex.
-func (authenticator *jwtAuthenticator) retrieveIdentityLocked(
-	user username.SQLUsername, tokenBytes []byte, identMap *identmap.Conf,
-) (retrievedUser username.SQLUsername, authError error) {
-	if !authenticator.mu.conf.enabled {
-		return user, errors.New("JWT authentication: not enabled")
-	}
 	unverifiedToken, err := jwt.ParseInsecure(tokenBytes)
 	if err != nil {
 		return user, errors.WithDetailf(
@@ -329,7 +297,6 @@ func (authenticator *jwtAuthenticator) retrieveIdentityLocked(
 			break
 		}
 	}
-
 	if !principalMatch {
 		// If the username is not provided, and we match it to a single user,
 		// then use that user identity.
@@ -339,76 +306,9 @@ func (authenticator *jwtAuthenticator) retrieveIdentityLocked(
 		return user, errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid principal"),
 			"token issued for %s and login was for %s", tokenPrincipals, user.Normalized())
-
 	}
 
 	return user, nil
-}
-
-// VerifyAndExtractIssuer checks a JWT’s JWS signature with the configured
-// key set and confirms the `iss` claim matches a configured issuer.
-//
-// It is called from the provisioning path in authJwtToken, AFTER
-// RetrieveIdentity has set the replacement identity. Audience, expiry and
-// other claim checks happen later in Authenticate(); this helper should not
-// modify state.
-//
-// Like ValidateJWTLogin, it returns two error values:
-//
-//	issuer       – the verified `iss` claim to build "jwt_token:<issuer>"
-//	detailedErr  – redactable detail for LogAuthFailed
-//	authErr      – high-level error shown to the client
-func (a *jwtAuthenticator) VerifyAndExtractIssuer(
-	ctx context.Context, st *cluster.Settings, tokenBytes []byte,
-) (issuer string, detailedErr redact.RedactableString, authErr error) {
-	a.reloadConfig(ctx, st)
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if !a.mu.conf.enabled {
-		return "", "", errors.New("JWT authentication: not enabled")
-	}
-
-	// Parse token without verifying signature to pull out issuer & key id.
-	unverified, err := jwt.ParseInsecure(tokenBytes)
-	if err != nil {
-		return "", redact.Sprintf("JWT authentication: invalid token format: %v", err),
-			errors.New("JWT authentication: invalid token")
-	}
-
-	issuer = unverified.Issuer()
-	if err := a.mu.conf.issuersConf.checkIssuerConfigured(issuer); err != nil {
-		return "", "", errors.WithDetail(
-			errors.New("JWT authentication: invalid issuer"),
-			fmt.Sprintf("token issued by %s", issuer),
-		)
-	}
-
-	// Fetch the JWKS (auto-fetch or static) for that issuer.
-	var set jwk.Set
-	if a.mu.conf.jwksAutoFetchEnabled {
-		set, err = a.remoteFetchJWKS(ctx, issuer)
-		if err != nil {
-			return "", redact.Sprintf("JWT authentication: unable to fetch jwks: %v", err),
-				errors.New("JWT authentication: unable to validate token")
-		}
-	} else {
-		set = a.mu.conf.jwks
-	}
-
-	// JWS verification
-	if _, err := jwt.Parse(
-		tokenBytes,
-		jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)),
-		jwt.WithValidate(false),
-	); err != nil {
-		return "", "", errors.WithDetailf(
-			errors.New("JWT authentication: invalid token"),
-			"unable to parse token: %v", err,
-		)
-	}
-
-	return issuer, "", nil
 }
 
 // remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
@@ -470,42 +370,8 @@ func getOpenIdConfigEndpoint(issuerUrl string) string {
 	return openIdConfigEndpoint
 }
 
-// getHTTPResponse issues a GET request using the authenticator’s configured
-// HTTP client, optionally setting the supplied headers.
-//
-//	ctx – caller’s context (for cancellation / deadlines)
-//	url – absolute URL to fetch
-//	a   – the *jwtAuthenticator whose client must be reused
-//	hdr – optional: pass one http.Header with any extra headers, or omit entirely
-//
-// The function returns the response body (fully read) so that callers can
-// inspect the payload without worrying about closing the body.
-//
-// Callers should wrap the returned error with errors.WithDetailf to tag the
-// operation they’re performing.
-var getHttpResponse = func(
-	ctx context.Context,
-	url string,
-	authenticator *jwtAuthenticator,
-	header ...http.Header, // optional variadic param for extra headers
-) ([]byte, error) {
-
-	// Reject misuse: only zero or one header may be supplied.
-	if len(header) > 1 {
-		return nil, errors.New("getHttpResponse: provide at most one extra header")
-	}
-
-	// Build the request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	if len(header) == 1 && header[0] != nil {
-		req.Header = header[0].Clone()
-	}
-
-	client := authenticator.mu.conf.httpClient
-	resp, err := client.Do(req)
+var getHttpResponse = func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
+	resp, err := authenticator.mu.conf.httpClient.Get(context.Background(), url)
 	if err != nil {
 		return nil, err
 	}

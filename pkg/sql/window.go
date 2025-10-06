@@ -9,7 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -33,20 +32,13 @@ import (
 // Therefore, the schema of the source node will be changed to look as follows:
 // pass through column | OVER clauses columns | arguments to window functions.
 type windowNode struct {
-	singleInputPlanNode
-	windowPlanningInfo
-
+	// The source node.
+	plan planNode
 	// columns is the set of result columns.
 	columns colinfo.ResultColumns
-}
 
-type windowPlanningInfo struct {
 	// The window functions handled by this windowNode.
 	funcs []*windowFuncHolder
-
-	partitionIdxs       []uint32
-	columnOrdering      colinfo.ColumnOrdering
-	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
 func (n *windowNode) startExec(params runParams) error {
@@ -62,7 +54,7 @@ func (n *windowNode) Values() tree.Datums {
 }
 
 func (n *windowNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.plan.Close(ctx)
 }
 
 var _ tree.TypedExpr = &windowFuncHolder{}
@@ -76,7 +68,22 @@ type windowFuncHolder struct {
 	filterColIdx int      // optional index of filtering column, -1 if no filter
 	outputColIdx int      // index of the column that the output should be put into
 
-	frame *tree.WindowFrame
+	partitionIdxs  []int
+	columnOrdering colinfo.ColumnOrdering
+	frame          *tree.WindowFrame
+}
+
+// samePartition returns whether w and other have the same PARTITION BY clause.
+func (w *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
+	if len(w.partitionIdxs) != len(other.partitionIdxs) {
+		return false
+	}
+	for i, p := range w.partitionIdxs {
+		if p != other.partitionIdxs[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (*windowFuncHolder) Variable() {}

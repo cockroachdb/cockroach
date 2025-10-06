@@ -9,12 +9,15 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/go-ldap/ldap/v3"
@@ -56,6 +59,9 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 ) (_ []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
 	if err := utilccl.CheckEnterpriseEnabled(st, "LDAP authorization"); err != nil {
 		return nil, "", err
+	}
+	if !st.Version.IsActive(ctx, clusterversion.V24_3) {
+		return nil, "", pgerror.Newf(pgcode.FeatureNotSupported, "LDAP authorization is only supported after v24.3 upgrade is finalized")
 	}
 
 	authManager.mu.Lock()

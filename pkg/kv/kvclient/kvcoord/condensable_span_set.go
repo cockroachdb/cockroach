@@ -122,7 +122,7 @@ func (s *condensableSpanSet) maybeCondense(
 		ri.Seek(ctx, roachpb.RKey(sp.Key), Ascending)
 		if !ri.Valid() {
 			// We haven't modified s.s yet, so it is safe to return.
-			log.Dev.Warningf(ctx, "failed to condense lock spans: %v", ri.Error())
+			log.Warningf(ctx, "failed to condense lock spans: %v", ri.Error())
 			return false
 		}
 		rangeID := ri.Desc().RangeID
@@ -158,7 +158,7 @@ func (s *condensableSpanSet) maybeCondense(
 				// If we didn't fatal here then we would need to ensure that the
 				// spans were restored or a transaction could lose part of its
 				// lock footprint.
-				log.Dev.Fatalf(ctx, "failed to condense lock spans: "+
+				log.Fatalf(ctx, "failed to condense lock spans: "+
 					"combining span %s yielded invalid result", s)
 			}
 		}

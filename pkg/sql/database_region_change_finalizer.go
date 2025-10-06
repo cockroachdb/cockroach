@@ -213,13 +213,11 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 	ctx context.Context, txn descs.Txn,
 ) (repartitioned []*tabledesc.Mutable, zoneConfigUpdates []*zoneConfigUpdate, _ error) {
-	var regionConfigOpts []multiregion.SynthesizeRegionConfigOption
+	var regionConfigOpts []SynthesizeRegionConfigOption
 	// For regional by row tables these will be forced as survive zone on
 	// the system database, even if the system database is survive region
 	if r.dbID == keys.SystemDatabaseID {
-		regionConfigOpts = []multiregion.SynthesizeRegionConfigOption{
-			multiregion.SynthesizeRegionConfigOptionForceSurvivalZone,
-		}
+		regionConfigOpts = []SynthesizeRegionConfigOption{SynthesizeRegionConfigOptionForceSurvivalZone}
 	}
 
 	regionConfig, err := SynthesizeRegionConfig(ctx, txn.KV(), r.dbID, r.localPlanner.Descriptors(), regionConfigOpts...)

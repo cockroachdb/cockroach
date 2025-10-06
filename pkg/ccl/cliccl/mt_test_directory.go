@@ -115,7 +115,7 @@ func startTenant(
 	var f writerFunc = func(p []byte) (int, error) {
 		sc := bufio.NewScanner(strings.NewReader(string(p)))
 		for sc.Scan() {
-			log.Dev.Infof(ctx, "%s", sc.Text())
+			log.Infof(ctx, "%s", sc.Text())
 		}
 		return len(p), nil
 	}
@@ -130,10 +130,10 @@ func startTenant(
 	}))
 	err = stopper.RunAsyncTask(ctx, "cmd-wait", func(ctx context.Context) {
 		if err := c.Wait(); err != nil {
-			log.Dev.Infof(ctx, "finished %s with err %s", c.Args, err)
+			log.Infof(ctx, "finished %s with err %s", c.Args, err)
 			return
 		}
-		log.Dev.Infof(ctx, "finished %s with success", c.Args)
+		log.Infof(ctx, "finished %s with success", c.Args)
 		stopper.Stop(ctx)
 	})
 	if err != nil {
@@ -152,14 +152,14 @@ func startTenant(
 		waitTime := timeutil.Since(start)
 		if err == nil {
 			resp.Body.Close()
-			log.Dev.Infof(ctx, "tenant is healthy")
+			log.Infof(ctx, "tenant is healthy")
 			break
 		}
 		if waitTime > 5*time.Second {
-			log.Dev.Infof(ctx, "waited more than 5 sec for the tenant to get healthy and it still isn't")
+			log.Infof(ctx, "waited more than 5 sec for the tenant to get healthy and it still isn't")
 			break
 		}
-		log.Dev.Infof(ctx, "waiting %s for healthy tenant: %s", waitTime, err)
+		log.Infof(ctx, "waiting %s for healthy tenant: %s", waitTime, err)
 	}
 	return sqlAddress, nil
 }

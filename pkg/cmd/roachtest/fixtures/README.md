@@ -15,9 +15,9 @@ export FIXTURE_VERSION=v24.2.0-rc.1
 git checkout $FIXTURE_VERSION
 ```
 
-2. Make clean builds of CRDB, roachtest, workload, roachprod. Note that the
-   roachtest needs to be run on `amd64` (if you are using a Mac it's recommended
-   to use a gceworker).
+2. Make clean builds of CRDB, roachtest, workload, roachprod. Note that
+   roachtest needs to be run on amd64 (if you are using a Mac it's recommended to
+   use a gceworker).
 
 ```
 ./dev build cockroach short //c-deps:libgeos roachprod workload roachtest
@@ -25,9 +25,7 @@ git checkout $FIXTURE_VERSION
 ./bin/roachprod destroy local
 ```
 
-3. Make sure a license (`COCKROACH_DEV_LICENSE`) is set in the environment.
-
-4. Run `roachtest` against the `FIXTURE_VERSION` binary to generate the updated
+3. Run `roachtest` against the `FIXTURE_VERSION` binary to generate the updated
    fixtures:
 
 ```

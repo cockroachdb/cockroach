@@ -1,140 +1,39 @@
 # Yaml to create a test-cluster. Please make sure that you change the cluster names to avoid conflicts.
 environment:
-  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
-  ROACHPROD_DNS: drt.crdb.io
-  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
-  ROACHPROD_GCE_DNS_ZONE: drt
-  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-ephemeral
   CLUSTER: drt-test
   WORKLOAD_CLUSTER: workload-test
-  CLUSTER_NODES: 3
-  WORKLOAD_NODES: 1
 
 targets:
-  # crdb cluster specs
   - target_name: $CLUSTER
     steps:
-      - command: create
+    - command: create
+      args:
+        - $CLUSTER
+      flags:
+        clouds: gce
+        nodes: 1
+        username: drt
+        gce-machine-type: n2-standard-2
+        gce-use-spot: true
+      on_rollback:
+      - command: destroy
         args:
           - $CLUSTER
-        flags:
-          clouds: gce
-          gce-managed: true
-          gce-enable-multiple-stores: true
-          gce-zones: "us-central1-a"
-          nodes: $CLUSTER_NODES
-          gce-machine-type: n2-standard-2
-          username: drt
-        on_rollback:
-          - command: destroy
-            args:
-              - $CLUSTER
-      - command: sync
-        flags:
-          clouds: gce
-      - command: stage
-        args:
-          - $CLUSTER
-          - cockroach
-      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
-      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
-      - command: start
-        args:
-          - $CLUSTER
-          - "--binary"
-          - "./cockroach"
-        flags:
-          # add flag to set provisioned throughput on each store according to their cloud provider limits
-          enable-fluent-sink: true
-          restart: false
-          sql-port: 26257
-      - command: run
-        args:
-          - $CLUSTER
-          - --
-          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
-  # workload cluster specs
+    - command: stage
+      args:
+        - $CLUSTER
+        - cockroach
+    - command: start
+      args:
+        - $CLUSTER
   - target_name: $WORKLOAD_CLUSTER
     steps:
-      - command: create
-        args:
-          - $WORKLOAD_CLUSTER
-        flags:
-          clouds: gce
-          gce-zones: "us-central1-a"
-          nodes: $WORKLOAD_NODES
-          gce-machine-type: n2-standard-2
-          os-volume-size: 100
-          username: workload
-        on_rollback:
-          - command: destroy
-            args:
-              - $WORKLOAD_CLUSTER
-      - command: sync
-        flags:
-          clouds: gce
-      - command: stage
-        args:
-          - $WORKLOAD_CLUSTER
-          - cockroach
-      - command: stage
-        args:
-          - $WORKLOAD_CLUSTER
-          - workload
-      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
-  - target_name: post_tasks
-    dependent_targets:
-      - $CLUSTER
-      - $WORKLOAD_CLUSTER
-    steps:
-      - script: rm
-        args:
-          - -rf
-          - certs-$CLUSTER
-      - command: get
-        args:
-          - $CLUSTER:1
-          - certs
-          - certs-$CLUSTER
-      - command: put
-        args:
-          - $WORKLOAD_CLUSTER
-          - certs-$CLUSTER
-          - certs
-      - command: ssh
-        args:
-          - $WORKLOAD_CLUSTER
-          - --
-          - chmod
-          - 600
-          - './certs/*'
-      - command: put
-        args:
-          - $WORKLOAD_CLUSTER
-          - artifacts/roachprod
-          - roachprod
-      - command: put
-        args:
-          - $WORKLOAD_CLUSTER
-          - artifacts/roachtest
-          - roachtest-operations
-      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
-        args:
-          - cct_tpcc_1k # suffix added to script name tpcc_init_cct_tpcc_400k.sh
-          - true # determines whether to execute the script immediately on workload node
-        flags:
-          warehouses: 1000
-          db: cct_tpcc
-      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
-        args:
-          - cct_tpcc_1k # suffix added to script name tpcc_run_400k.sh
-          - false # determines whether to execute the script immediately on workload node
-        flags:
-          db: cct_tpcc
-          warehouses: 1000
-          max-rate: 100
-          workers: 50
-          conns: 100
-          duration: 12h
-          ramp: 10m
-          wait: 0
+    - command: create
+      args:
+        - $WORKLOAD_CLUSTER
+      flags:
+        nodes: 1
+        username: workload
+      on_rollback:
+      - command: destroy

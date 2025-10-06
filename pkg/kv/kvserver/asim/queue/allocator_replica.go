@@ -135,11 +135,12 @@ func (sr *SimulatorReplica) RaftStatus() *raft.Status {
 	return sr.state.RaftStatus(sr.rng.RangeID(), sr.repl.StoreID())
 }
 
-// GetCompactedIndex returns the compacted index of the raft log.
-func (sr *SimulatorReplica) GetCompactedIndex() kvpb.RaftIndex {
-	// TODO(kvoli): We always return 1 here as RaftStatus is unimplemented. When
+// GetFirstIndex returns the index of the first entry in the replica's Raft
+// log.
+func (sr *SimulatorReplica) GetFirstIndex() kvpb.RaftIndex {
+	// TODO(kvoli): We always return 2 here as RaftStatus is unimplemented. When
 	// it is implemented, this may become variable.
-	return 1
+	return 2
 }
 
 func (sr *SimulatorReplica) SpanConfig() (*roachpb.SpanConfig, error) {
@@ -159,9 +160,4 @@ func (sr *SimulatorReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 }
 
 func (sr *SimulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
-}
-
-// NodeID returns the Replica's NodeID.
-func (sr *SimulatorReplica) NodeID() roachpb.NodeID {
-	return sr.repl.Descriptor().NodeID
 }

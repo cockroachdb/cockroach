@@ -166,7 +166,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 		return destFileName, nil // cache hit
 	}
 
-	log.Dev.Infof(ctx, "downloading %s to %s", opts.URL.String(), destFileName)
+	log.Infof(ctx, "downloading %s to %s", opts.URL.String(), destFileName)
 	resp, err := httpClient.Get(ctx, opts.URL.String())
 	if err != nil {
 		return "", err
@@ -177,7 +177,7 @@ func Download(ctx context.Context, opts Options) (string, error) {
 		return "", errors.Errorf("unexpected HTTP response from %s: %d\n%s", opts.URL.String(), resp.StatusCode, body)
 	}
 	if opts.Version == "LATEST" {
-		log.Dev.Infof(ctx, "LATEST redirected to %s", resp.Request.URL.String())
+		log.Infof(ctx, "LATEST redirected to %s", resp.Request.URL.String())
 	}
 
 	destFile, err := os.Create(destFileName)

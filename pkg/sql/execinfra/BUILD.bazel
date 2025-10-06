@@ -6,6 +6,7 @@ go_library(
     name = "execinfra",
     srcs = [
         "base.go",
+        "errors.go",
         "flow_context.go",
         "metrics.go",
         "outboxbase.go",
@@ -14,6 +15,7 @@ go_library(
         "server_config.go",
         "testutils.go",
         "utils.go",
+        "version.go",
         ":gen-consumerstatus-stringer",  # keep
         ":gen-procstate-stringer",  # keep
     ],
@@ -28,7 +30,6 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvclient/kvstreamer",
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/diskmap",
@@ -39,7 +40,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
@@ -49,8 +49,8 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/evalcatalog",
-        "//pkg/sql/execinfra/execexpr",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",
@@ -67,7 +67,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
-        "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",
         "//pkg/util/optional",
         "//pkg/util/retry",
@@ -81,6 +80,7 @@ go_library(
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_marusama_semaphore//:semaphore",
         "@io_opentelemetry_go_otel//attribute",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 
@@ -90,6 +90,7 @@ go_test(
     srcs = [
         "base_test.go",
         "main_test.go",
+        "version_test.go",
     ],
     embed = [":execinfra"],
     deps = [
@@ -105,6 +106,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
 
@@ -129,6 +131,5 @@ disallowed_imports_test(
         "//pkg/sql/row",
         "//pkg/sql/rowexec",
         "//pkg/sql/rowflow",
-        "//pkg/sql/sem/builtins",
     ],
 )

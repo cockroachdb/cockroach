@@ -26,8 +26,6 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *PutOperation:
 		return &o.Result
-	case *CPutOperation:
-		return &o.Result
 	case *ScanOperation:
 		return &o.Result
 	case *DeleteOperation:
@@ -39,8 +37,6 @@ func (op Operation) Result() *Result {
 	case *AddSSTableOperation:
 		return &o.Result
 	case *BarrierOperation:
-		return &o.Result
-	case *FlushLockTableOperation:
 		return &o.Result
 	case *SplitOperation:
 		return &o.Result
@@ -63,8 +59,6 @@ func (op Operation) Result() *Result {
 	case *SavepointReleaseOperation:
 		return &o.Result
 	case *SavepointRollbackOperation:
-		return &o.Result
-	case *MutateBatchHeaderOperation:
 		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
@@ -119,14 +113,6 @@ func formatOps(w *strings.Builder, fctx formatCtx, ops []Operation) {
 	}
 }
 
-func (op Operation) OperationHasResultInBatch() bool {
-	if op.MutateBatchHeader != nil {
-		return false
-	} else {
-		return true
-	}
-}
-
 func (op Operation) String() string {
 	fctx := formatCtx{receiver: `x`, indent: ``}
 	var buf strings.Builder
@@ -140,8 +126,6 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		o.format(w, fctx)
 	case *PutOperation:
 		o.format(w, fctx)
-	case *CPutOperation:
-		o.format(w, fctx)
 	case *ScanOperation:
 		o.format(w, fctx)
 	case *DeleteOperation:
@@ -153,8 +137,6 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *AddSSTableOperation:
 		o.format(w, fctx)
 	case *BarrierOperation:
-		o.format(w, fctx)
-	case *FlushLockTableOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -187,32 +169,23 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		newFctx := fctx
 		newFctx.indent = fctx.indent + `  `
 		newFctx.receiver = txnName
-
-		txnFuncf := func(fmtStr string, args ...any) {
-			w.WriteString("\n")
-			w.WriteString(newFctx.indent)
-			w.WriteString(newFctx.receiver)
-			fmt.Fprintf(w, fmtStr, args...)
-		}
-
 		w.WriteString(fctx.receiver)
 		fmt.Fprintf(w, `.Txn(ctx, func(ctx context.Context, %s *kv.Txn) error {`, txnName)
-
-		txnFuncf(`.SetIsoLevel(isolation.%s)`, o.IsoLevel)
-		if o.UserPriority > 0 {
-			txnFuncf(`.SetUserPriority(roachpb.UserPriority(%f))`, float64(o.UserPriority))
-		}
-		txnFuncf(`.SetBufferedWritesEnabled(%v)`, o.BufferedWrites)
-
+		w.WriteString("\n")
+		w.WriteString(newFctx.indent)
+		w.WriteString(newFctx.receiver)
+		fmt.Fprintf(w, `.SetIsoLevel(isolation.%s)`, o.IsoLevel)
 		formatOps(w, newFctx, o.Ops)
 		if o.CommitInBatch != nil {
 			newFctx.receiver = `b`
 			o.CommitInBatch.format(w, newFctx)
 			newFctx.receiver = txnName
-			txnFuncf(`.CommitInBatch(ctx, b)`)
+			w.WriteString("\n")
+			w.WriteString(newFctx.indent)
+			w.WriteString(newFctx.receiver)
+			w.WriteString(`.CommitInBatch(ctx, b)`)
 			o.CommitInBatch.Result.format(w)
 		}
-
 		w.WriteString("\n")
 		w.WriteString(newFctx.indent)
 		switch o.Type {
@@ -235,8 +208,6 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *SavepointReleaseOperation:
 		o.format(w, fctx)
 	case *SavepointRollbackOperation:
-		o.format(w, fctx)
-	case *MutateBatchHeaderOperation:
 		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
@@ -269,20 +240,7 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	verb := "Put"
-	if op.MustAcquireExclusiveLock {
-		verb = "PutMustAcquireExclusiveLock"
-	}
-	fmt.Fprintf(w, `%s.%s(%s%s, sv(%d))`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
-	op.Result.format(w)
-}
-
-func (op CPutOperation) format(w *strings.Builder, fctx formatCtx) {
-	verb := "CPut"
-	if op.AllowIfDoesNotExist {
-		verb = "CPutAllowIfDoesNotExist"
-	}
-	fmt.Fprintf(w, `%s.%s(%s%s, sv(%d), exp(%s))`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq, op.ExpVal)
+	fmt.Fprintf(w, `%s.Put(%s%s, sv(%d))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
@@ -294,12 +252,6 @@ func sv(seq kvnemesisutil.Seq) string {
 // Value returns the value written by this put. This is a function of the
 // sequence number.
 func (op PutOperation) Value() string {
-	return sv(op.Seq)
-}
-
-// Value returns the value written by this cput. This is a function of the
-// sequence number.
-func (op CPutOperation) Value() string {
 	return sv(op.Seq)
 }
 
@@ -333,11 +285,7 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	verb := "Del"
-	if op.MustAcquireExclusiveLock {
-		verb = "DelMustAcquireExclusiveLock"
-	}
-	fmt.Fprintf(w, `%s.%s(%s%s /* @%s */)`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	fmt.Fprintf(w, `%s.Del(%s%s /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
@@ -352,8 +300,8 @@ func (op DeleteRangeUsingTombstoneOperation) format(w *strings.Builder, fctx for
 }
 
 func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.AddSSTable(%s%s, %s, ... /* @%s */)`,
-		fctx.receiver, fctx.maybeCtx(), fmtKey(op.Span.Key), fmtKey(op.Span.EndKey), op.Seq)
+	fmt.Fprintf(w, `%s.AddSSTable(%s%s, %s, ... /* @%s */) // %d bytes`,
+		fctx.receiver, fctx.maybeCtx(), fmtKey(op.Span.Key), fmtKey(op.Span.EndKey), op.Seq, len(op.Data))
 	if op.AsWrites {
 		fmt.Fprintf(w, ` (as writes)`)
 	}
@@ -413,11 +361,6 @@ func (op BarrierOperation) format(w *strings.Builder, fctx formatCtx) {
 	} else {
 		fmt.Fprintf(w, `%s.Barrier(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
 	}
-	op.Result.format(w)
-}
-
-func (op FlushLockTableOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.FlushLockTable(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
 	op.Result.format(w)
 }
 
@@ -482,15 +425,6 @@ func (op SavepointReleaseOperation) format(w *strings.Builder, fctx formatCtx) {
 func (op SavepointRollbackOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.RollbackSavepoint(ctx, %d)`, fctx.receiver, int(op.ID))
 	op.Result.format(w)
-}
-
-func (op MutateBatchHeaderOperation) format(w *strings.Builder, fctx formatCtx) {
-	if op.TargetBytes > 0 {
-		fmt.Fprintf(w, `%s.Header.TargetBytes = %d // MutateBatchHeaderOperation`, fctx.receiver, op.TargetBytes)
-	}
-	if op.MaxSpanRequestKeys > 0 {
-		fmt.Fprintf(w, `%s.Header.MaxSpanRequestKeys = %d // MutateBatchHeaderOperation`, fctx.receiver, op.MaxSpanRequestKeys)
-	}
 }
 
 func (r Result) format(w *strings.Builder) {

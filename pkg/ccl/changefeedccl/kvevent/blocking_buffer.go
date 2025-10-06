@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -284,7 +283,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	}
 
 	if log.V(2) {
-		log.Changefeed.Infof(ctx, "Add event: %s", e.String())
+		log.Infof(ctx, "Add event: %s", e.String())
 	}
 
 	// Immediately enqueue event if it already has allocation,
@@ -296,7 +295,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 
 	// Acquire the quota first.
 	n := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
-	e.bufferAddTimestamp = crtime.NowMono()
+	e.bufferAddTimestamp = timeutil.Now()
 	alloc, err := b.AcquireMemory(ctx, n)
 	if err != nil {
 		return err
@@ -523,13 +522,13 @@ func logSlowAcquisition(
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Changefeed.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)", redact.SafeString(bufType),
+			log.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)", redact.SafeString(bufType),
 				timeutil.Since(start))
 		}
 
 		return func() {
 			if shouldLog {
-				log.Changefeed.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)", timeutil.Since(start), redact.SafeString(bufType))
+				log.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)", timeutil.Since(start), redact.SafeString(bufType))
 			}
 		}
 	}

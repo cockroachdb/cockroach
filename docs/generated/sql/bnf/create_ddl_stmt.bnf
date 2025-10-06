@@ -10,4 +10,3 @@ create_ddl_stmt ::=
 	| create_func_stmt
 	| create_proc_stmt
 	| create_trigger_stmt
-	| create_policy_stmt

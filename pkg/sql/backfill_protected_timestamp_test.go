@@ -97,9 +97,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 		require.NoError(
 			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
 		)
-		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
 	}
 	// Refresh forces the PTS cache to update to at least asOf.
 	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) {
@@ -312,10 +312,10 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 			return errors.New(`could not find replica`)
 		}
 		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
-		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf); err != nil {
+		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf); err != nil {
 			return err
 		}
-		return repl.TestingReadProtectedTimestamps(ctx)
+		return repl.ReadProtectedTimestampsForTesting(ctx)
 	}
 	// Refresh forces the PTS cache to update to at least asOf.
 	refreshPTSCacheTo := func(ctx context.Context, asOf hlc.Timestamp) error {
@@ -324,7 +324,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	}
 
 	for _, sql := range []string{
-		"SET create_table_with_schema_locked=false",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='10ms'",
@@ -332,7 +331,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		rSys.Exec(t, sql)
 	}
 	for _, sql := range []string{
-		"SET create_table_with_schema_locked=false",
 		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
 		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
 	} {
@@ -397,7 +395,7 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 							backfillQueryResume <- struct{}{}
 						}()
 						if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
-							return errors.Wrap(err, "failed to set sql_safe_updates")
+							return err
 						}
 						deletedSoFar := 0
 						for deletedSoFar < rowsDeletedPerIteration {
@@ -417,10 +415,10 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 							return errors.Wrap(err, "failed to INSERT")
 						}
 						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
-							return errors.Wrap(err, "failed to refresh in-memory PTS")
+							return err
 						}
 						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
-							return errors.Wrap(err, "failed to refresh PTS cache")
+							return err
 						}
 						if _, err := db.ExecContext(ctx, fmt.Sprintf(`
 SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
@@ -430,7 +428,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc
 						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
 						var count int
 						if err := row.Scan(&count); err != nil {
-							return errors.Wrap(err, "failed to query protected_ts_records")
+							return err
 						}
 						// First iteration is before the PTS is setup, so it will be 0. Second
 						// iteration the PTS should be setup.
@@ -455,10 +453,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc
 				blockBackFillsForPTSFailure.Swap(true)
 				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
-					if err == nil {
-						return errors.AssertionFailedf("expected error was not hit")
-					}
-					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error was not hit")
+					return errors.AssertionFailedf("expected error was not hit")
 				}
 				err = testutils.SucceedsSoonError(func() error {
 					// Wait until schema change is fully rolled back.
@@ -468,7 +463,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc
 						tc.jobDescriptionPrefix,
 					)).Scan(&status)
 					if err != nil {
-						return errors.Wrap(err, "could not read jobs table")
+						return err
 					}
 					if status != "failed" {
 						return errors.Newf("schema change not rolled back yet; status=%s", status)
@@ -484,7 +479,7 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc
 				blockBackFillsForPTSCheck.Swap(true)
 				_, err = db.ExecContext(ctx, tc.backfillSchemaChange)
 				if err != nil {
-					return errors.Wrap(err, "failed to run backfill")
+					return err
 				}
 				return nil
 			})

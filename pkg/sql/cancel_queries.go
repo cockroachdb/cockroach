@@ -18,7 +18,7 @@ import (
 )
 
 type cancelQueriesNode struct {
-	singleInputPlanNode
+	rows     planNode
 	ifExists bool
 }
 
@@ -31,11 +31,11 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	// accumulate all the query IDs and then send batches to each of the
 	// nodes.
 
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
-	datum := n.input.Values()[0]
+	datum := n.rows.Values()[0]
 	if datum == tree.DNull {
 		return true, nil
 	}
@@ -74,5 +74,5 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 func (*cancelQueriesNode) Values() tree.Datums { return nil }
 
 func (n *cancelQueriesNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.rows.Close(ctx)
 }

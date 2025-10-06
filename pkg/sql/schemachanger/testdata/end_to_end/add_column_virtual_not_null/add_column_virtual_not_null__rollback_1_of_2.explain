@@ -14,7 +14,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnName:{DescID: 106 (tbl), Name: "j", ColumnID: 3 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 3 (j-), TypeName: "INT8"}
-           │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-), Usage: REGULAR}
+           │    └── PUBLIC      → ABSENT ColumnComputeExpression:{DescID: 106 (tbl), ColumnID: 3 (j-)}
            └── 5 Mutation operations
                 ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":106}
                 ├── RemoveColumnComputeExpression {"ColumnID":3,"TableID":106}

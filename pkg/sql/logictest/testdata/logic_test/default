@@ -56,15 +56,8 @@ SELECT a, b <= now(), c >= 0.0, d <= now() FROM t
 ----
 42 true true true
 
-
-statement ok
-ALTER TABLE t SET (schema_locked=false)
-
 statement ok
 TRUNCATE TABLE t
-
-statement ok
-ALTER TABLE t RESET (schema_locked)
 
 statement ok
 INSERT INTO t DEFAULT VALUES

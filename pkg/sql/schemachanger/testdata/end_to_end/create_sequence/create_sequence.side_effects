@@ -57,7 +57,6 @@ upsert descriptor #104
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    vecConfig: {}
   +    version: 4
   +  privileges:
   +    ownerProto: root
@@ -72,11 +71,11 @@ upsert descriptor #104
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
+  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
-  +    sessionCacheSize: "1"
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
@@ -85,7 +84,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 25 MutationType ops
+## PreCommitPhase stage 2 of 2 with 24 MutationType ops
 initializing sequence 104 with starting value of 31
 add object namespace entry {100 101 sq1} -> 104
 upsert descriptor #104
@@ -127,7 +126,6 @@ upsert descriptor #104
   +    sharded: {}
   +    storeColumnNames: []
   +    unique: true
-  +    vecConfig: {}
   +    version: 4
   +  privileges:
   +    ownerProto: root
@@ -142,15 +140,14 @@ upsert descriptor #104
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
+  +    cacheSize: "1"
   +    increment: "1"
   +    maxValue: "9223372036854775807"
   +    minValue: "1"
   +    sequenceOwner: {}
-  +    sessionCacheSize: "1"
   +    start: "32"
   +  unexposedParentSchemaId: 101
   +  version: "1"
 persist all catalog changes to storage
-update ttl schedule label #104
 # end PreCommitPhase
 commit transaction #1

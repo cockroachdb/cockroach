@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // postQueryBuilder is a helper that fills in exec.PostQuery metadata; it
@@ -152,8 +151,9 @@ func makePostQueryBuilder(b *Builder, mutationWithID opt.WithID) (*postQueryBuil
 // setupCascade fills in an exec.PostQuery struct for the given cascade.
 func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery {
 	return exec.PostQuery{
-		FKConstraint: cascade.FKConstraint,
-		Buffer:       cb.mutationBuffer,
+		FKConstraint:             cascade.FKConstraint,
+		CascadeHasBeforeTriggers: cascade.HasBeforeTriggers,
+		Buffer:                   cb.mutationBuffer,
 		PlanFn: func(
 			ctx context.Context,
 			semaCtx *tree.SemaContext,
@@ -163,7 +163,7 @@ func (cb *postQueryBuilder) setupCascade(cascade *memo.FKCascade) exec.PostQuery
 			numBufferedRows int,
 			allowAutoCommit bool,
 		) (exec.Plan, error) {
-			const actionName redact.SafeString = "cascade"
+			const actionName = "cascade"
 			return cb.planPostQuery(
 				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
 				cascade.Builder, actionName,
@@ -186,7 +186,7 @@ func (cb *postQueryBuilder) setupTriggers(triggers *memo.AfterTriggers) exec.Pos
 			numBufferedRows int,
 			allowAutoCommit bool,
 		) (exec.Plan, error) {
-			const actionName redact.SafeString = "trigger"
+			const actionName = "trigger"
 			return cb.planPostQuery(
 				ctx, semaCtx, evalCtx, execFactory, bufferRef, numBufferedRows, allowAutoCommit,
 				triggers.Builder, actionName,
@@ -210,7 +210,7 @@ func (cb *postQueryBuilder) planPostQuery(
 	numBufferedRows int,
 	allowAutoCommit bool,
 	builder memo.PostQueryBuilder,
-	actionName redact.SafeString,
+	actionName string,
 ) (exec.Plan, error) {
 	// 1. Set up a brand new memo in which to plan the cascading query.
 	var err error

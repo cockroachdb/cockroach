@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -93,12 +94,15 @@ func getStatementDetails(
 		serverpb.StatsSortOptions_SERVICE_LAT, //Order is not used on this endpoint, so any value can be passed here.
 	)
 	if err != nil {
-		log.Dev.Errorf(ctx, "Error on getStatementDetails: %s", err)
+		log.Errorf(ctx, "Error on getStatementDetails: %s", err)
 	}
 
 	// This expression is used to merge the metadata column from statement
 	// activity table.
 	mergeAggStmtMetadataColExpr := mergeAggStmtMetadataColumnLatest
+	if !settings.Version.IsActive(ctx, clusterversion.V24_1) {
+		mergeAggStmtMetadataColExpr = mergeAggStmtMetadata_V23_2
+	}
 
 	rb := statementDetailsRespBuilder{
 		ie:                          ie,

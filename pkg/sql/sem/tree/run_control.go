@@ -40,20 +40,6 @@ func (n *ControlJobs) Format(ctx *FmtCtx) {
 	}
 }
 
-// AlterJobOwner represents an ALTER JOB OWNER TO statement.
-type AlterJobOwner struct {
-	Job   Expr
-	Owner RoleSpec
-}
-
-// Format implements the NodeFormatter interface.
-func (n *AlterJobOwner) Format(ctx *FmtCtx) {
-	ctx.WriteString("ALTER JOB ")
-	ctx.FormatNode(n.Job)
-	ctx.WriteString(" OWNER TO ")
-	ctx.FormatNode(&n.Owner)
-}
-
 // CancelQueries represents a CANCEL QUERIES statement.
 type CancelQueries struct {
 	Queries  *Select

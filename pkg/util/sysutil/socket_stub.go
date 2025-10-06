@@ -11,6 +11,12 @@ import (
 	"time"
 )
 
+// SetKeepAliveCount sets the keep alive probe count on a TCP
+// connection.
+func SetKeepAliveCount(conn *net.TCPConn, probeCount int) error {
+	return nil
+}
+
 // GetKeepAliveSettings gets the keep alive socket connections
 // set on a TCP connection.
 func GetKeepAliveSettings(

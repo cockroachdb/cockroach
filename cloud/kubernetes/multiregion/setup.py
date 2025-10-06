@@ -6,6 +6,7 @@
 # included in the /LICENSE file.
 
 
+import distutils.spawn
 import json
 import os
 from subprocess import check_call,check_output
@@ -115,12 +116,12 @@ dns_ips = dict()
 for zone, context in contexts.items():
     external_ip = ''
     while True:
-        external_ip = check_output(['kubectl', 'get', 'svc', 'kube-dns-lb', '--namespace', 'kube-system', '--context', context, '--template', '{{range .status.loadBalancer.ingress}}{{.ip}}{{end}}']).decode('utf-8')
+        external_ip = check_output(['kubectl', 'get', 'svc', 'kube-dns-lb', '--namespace', 'kube-system', '--context', context, '--template', '{{range .status.loadBalancer.ingress}}{{.ip}}{{end}}'])
         if external_ip:
             break
-        print('Waiting for DNS load balancer IP in %s...' % (zone))
+        print  'Waiting for DNS load balancer IP in %s...' % (zone)
         sleep(10)
-    print('DNS endpoint for zone %s: %s' % (zone, external_ip))
+    print 'DNS endpoint for zone %s: %s' % (zone, external_ip)
     dns_ips[zone] = external_ip
 
 # Update each cluster's DNS configuration with an appropriate configmap. Note
@@ -174,7 +175,7 @@ for zone, context in contexts.items():
     check_call(['kubectl', 'apply', '-f', yaml_file, '--namespace', zone, '--context', context])
 
 # Finally, initialize the cluster.
-print('Sleeping 30 seconds before attempting to initialize cluster to give time for volumes to be created and pods started.')
+print 'Sleeping 30 seconds before attempting to initialize cluster to give time for volumes to be created and pods started.'
 sleep(30)
 for zone, context in contexts.items():
     check_call(['kubectl', 'create', '-f', 'cluster-init-secure.yaml', '--namespace', zone, '--context', context])

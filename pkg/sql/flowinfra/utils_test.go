@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,8 +31,8 @@ import (
 func createDummyStream(
 	t *testing.T,
 ) (
-	serverStream execinfrapb.RPCDistSQL_FlowStreamStream,
-	clientStream execinfrapb.RPCDistSQL_FlowStreamClient,
+	serverStream execinfrapb.DistSQL_FlowStreamServer,
+	clientStream execinfrapb.DistSQL_FlowStreamClient,
 	cleanup func(),
 ) {
 	stopper := stop.NewStopper()
@@ -46,11 +45,11 @@ func createDummyStream(
 
 	rpcContext := rpc.NewInsecureTestingContextWithClusterID(ctx, clock, stopper, storageClusterID)
 	conn, err := rpcContext.GRPCDialNode(addr.String(), roachpb.NodeID(execinfra.StaticSQLInstanceID),
-		roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
+		roachpb.Locality{}, rpc.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err = client.FlowStream(ctx)
 	if err != nil {
 		t.Fatal(err)

@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -94,14 +93,8 @@ func getResponseSize(get *kvpb.GetResponse) int64 {
 	return int64(len(get.Value.RawBytes))
 }
 
-// scanResponseSize calculates the size of a ScanResponse or ReverseScanResponse
-// similar to how it is accounted for TargetBytes parameter by the KV layer.
-func scanResponseSize(scan kvpb.Response) int64 {
-	switch response := scan.(type) {
-	case *kvpb.ScanResponse:
-		return response.NumBytes
-	case *kvpb.ReverseScanResponse:
-		return response.NumBytes
-	}
-	panic(errors.AssertionFailedf("unexpected response type: %v", scan))
+// scanResponseSize calculates the size of the ScanResponse similar to how it is
+// accounted for TargetBytes parameter by the KV layer.
+func scanResponseSize(scan *kvpb.ScanResponse) int64 {
+	return scan.NumBytes
 }

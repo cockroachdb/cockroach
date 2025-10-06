@@ -265,7 +265,9 @@ func GC(
 	// Check if optional GC hint on the range is expired (e.g. delete operation is
 	// older than GC threshold) and remove it. Otherwise this range could be
 	// unnecessarily GC'd with high priority again.
-	{
+	// We should only do that when we are doing actual cleanup as we want to have
+	// a hint when request is being handled.
+	if len(args.Keys) != 0 || len(args.RangeKeys) != 0 || args.ClearRange != nil {
 		sl := MakeStateLoader(cArgs.EvalCtx)
 		hint, err := sl.LoadGCHint(ctx, readWriter)
 		if err != nil {

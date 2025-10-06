@@ -387,12 +387,12 @@ func (v *constraintConformanceVisitor) init(ctx context.Context) {
 	maxObjectID, err := v.cfg.GetLargestObjectID(
 		0 /* maxReservedDescID - return the largest ID in the config */, keys.PseudoTableIDs)
 	if err != nil {
-		log.KvDistribution.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
+		log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 	}
 	for i := config.ObjectID(1); i <= maxObjectID; i++ {
 		zone, err := getZoneByID(i, v.cfg)
 		if err != nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
+			log.Fatalf(ctx, "unexpected failure to compute max object id: %s", err)
 		}
 		if zone == nil {
 			continue

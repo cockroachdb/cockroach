@@ -23,9 +23,7 @@ type Pacer struct {
 	cur *ElasticCPUWorkHandle
 }
 
-// Pace will block as needed to pace work that calls it as configured. It is
-// intended to be called in a tight loop, and will attempt to minimize per-call
-// overhead. Non-nil errors are returned only if the context is canceled.
+// Pace is part of the Pacer interface.
 func (p *Pacer) Pace(ctx context.Context) error {
 	if p == nil {
 		return nil

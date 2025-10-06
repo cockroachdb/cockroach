@@ -168,7 +168,7 @@ func ReplanOnChangedFraction(thresholdFn func() float64) PlanChangeDecision {
 		threshold := thresholdFn()
 		replan := threshold != 0.0 && growth > threshold
 		if replan || growth > 0.1 || log.V(1) {
-			log.Dev.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
+			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
 				changed, growth, threshold, replan)
 		}
 		return replan
@@ -257,7 +257,7 @@ func PhysicalPlanChangeChecker(
 				dsp := execCtx.DistSQLPlanner()
 				p, _, err := fn(ctx, dsp)
 				if err != nil {
-					log.Dev.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
+					log.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
 					continue
 				}
 				if decider(ctx, initial, p) {

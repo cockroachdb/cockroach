@@ -135,13 +135,13 @@ func (w *Watcher) startRangeFeed(
 			Value: kv.Value,
 		})
 		if err != nil {
-			log.Dev.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
+			log.Warningf(ctx, "failed to decode settings row %v: %v", kv.Key, err)
 			return nil, false
 		}
 		if allOverrides != nil {
 			// We are in the process of doing a full table scan
 			if tombstone {
-				log.Dev.Warning(ctx, "unexpected empty value during rangefeed scan")
+				log.Warning(ctx, "unexpected empty value during rangefeed scan")
 				return nil, false
 			}
 			allOverrides[tenantID] = append(allOverrides[tenantID], setting)

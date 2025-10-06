@@ -14,9 +14,7 @@ package uuid
 import (
 	"bytes"
 	"encoding/hex"
-
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
+	"fmt"
 )
 
 // FromBytes returns a UUID generated from the raw byte slice input.
@@ -103,7 +101,7 @@ func (u *UUID) UnmarshalText(text []byte) error {
 	stringifiedText := string(text)
 
 	if l < 32 || l > 48 {
-		return errors.Newf("uuid: incorrect UUID length: %s", redact.SafeString(stringifiedText))
+		return fmt.Errorf("uuid: incorrect UUID length: %s", text)
 	} else if stringifiedText[0] == '{' && stringifiedText[l-1] == '}' {
 		return u.decodeHyphenated(text[1 : l-1])
 	} else if bytes.Equal(text[:9], urnPrefix) {
@@ -131,7 +129,7 @@ func (u *UUID) decodeHashLike(t []byte) error {
 func (u *UUID) decodeHyphenated(t []byte) error {
 	l := len(t)
 	if l < 32 || l > 40 {
-		return errors.Newf("uuid: incorrect UUID format: %s", redact.SafeString(string(t)))
+		return fmt.Errorf("uuid: incorrect UUID format: %s", t)
 	}
 
 	hashLike := make([]byte, 32)
@@ -139,11 +137,11 @@ func (u *UUID) decodeHyphenated(t []byte) error {
 	i := 0
 	for _, c := range t {
 		if i >= len(hashLike) {
-			return errors.Newf("uuid: incorrect UUID format: %s", redact.SafeString(string(t)))
+			return fmt.Errorf("uuid: incorrect UUID format: %s", t)
 		}
 		if c == '-' {
 			if countSinceHyphen == 0 || countSinceHyphen%4 != 0 {
-				return errors.Newf("uuid: incorrect UUID format: %s", redact.SafeString(string(t)))
+				return fmt.Errorf("uuid: incorrect UUID format: %s", t)
 			}
 			countSinceHyphen = 0
 			continue
@@ -153,7 +151,7 @@ func (u *UUID) decodeHyphenated(t []byte) error {
 		countSinceHyphen++
 	}
 	if i != len(hashLike) {
-		return errors.Newf("uuid: incorrect UUID format: %s", redact.SafeString(string(t)))
+		return fmt.Errorf("uuid: incorrect UUID format: %s", t)
 	}
 	return u.decodeHashLike(hashLike)
 }
@@ -167,10 +165,7 @@ func (u UUID) MarshalBinary() ([]byte, error) {
 // It will return an error if the slice isn't 16 bytes long.
 func (u *UUID) UnmarshalBinary(data []byte) error {
 	if len(data) != Size {
-		return errors.Newf(
-			"uuid: UUID must be exactly 16 bytes long, got %d bytes",
-			len(data),
-		)
+		return fmt.Errorf("uuid: UUID must be exactly 16 bytes long, got %d bytes", len(data))
 	}
 	copy(u[:], data)
 

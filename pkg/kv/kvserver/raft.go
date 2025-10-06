@@ -56,62 +56,62 @@ type raftLogger struct {
 
 func (r *raftLogger) Debug(v ...interface{}) {
 	if log.V(3) {
-		log.KvExec.InfofDepth(r.ctx, 1, "", v...)
+		log.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(3) {
-		log.KvExec.InfofDepth(r.ctx, 1, format, v...)
+		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
 	if log.V(2) {
-		log.KvExec.InfofDepth(r.ctx, 1, "", v...)
+		log.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(2) {
-		log.KvExec.InfofDepth(r.ctx, 1, format, v...)
+		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Warning(v ...interface{}) {
-	log.KvExec.WarningfDepth(r.ctx, 1, "", v...)
+	log.WarningfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
-	log.KvExec.WarningfDepth(r.ctx, 1, format, v...)
+	log.WarningfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Error(v ...interface{}) {
-	log.KvExec.ErrorfDepth(r.ctx, 1, "", v...)
+	log.ErrorfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
-	log.KvExec.ErrorfDepth(r.ctx, 1, format, v...)
+	log.ErrorfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.KvExec.FatalfDepth(r.ctx, 1, "", v...)
+	log.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.KvExec.FatalfDepth(r.ctx, 1, format, v...)
+	log.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Panic(v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.KvExec.FatalfDepth(r.ctx, 1, "", v...)
+	log.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
 	wrapNumbersAsSafe(v)
-	log.KvExec.FatalfDepth(r.ctx, 1, format, v...)
+	log.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func wrapNumbersAsSafe(v ...interface{}) {
@@ -150,18 +150,11 @@ func verboseRaftLoggingEnabled() bool {
 	return log.V(5)
 }
 
-func (r *Replica) maybeLogRaftReadyRaftMuLocked(ctx context.Context, ready raft.Ready) {
-	fn := r.store.TestingKnobs().RaftLogReadyRaftMuLocked
-	switch {
-	case verboseRaftLoggingEnabled():
-	case fn != nil && fn(ctx, r.RangeID, r.ReplicaID(), ready):
-	default:
+func logRaftReady(ctx context.Context, ready raft.Ready) {
+	if !verboseRaftLoggingEnabled() {
 		return
 	}
-	logRaftReady(ctx, ready)
-}
 
-func logRaftReady(ctx context.Context, ready raft.Ready) {
 	var buf bytes.Buffer
 	if ready.SoftState != nil {
 		fmt.Fprintf(&buf, "  SoftState updated: %+v\n", *ready.SoftState)
@@ -173,9 +166,12 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  New Entry[%d]: %.200s\n",
 			i, raft.DescribeEntry(e, raftEntryFormatter))
 	}
-	fmt.Fprintf(&buf, "  Committed: %v\n", ready.Committed)
-	if ready.Snapshot != nil {
-		snap := *ready.Snapshot
+	for i, e := range ready.CommittedEntries {
+		fmt.Fprintf(&buf, "  Committed Entry[%d]: %.200s\n",
+			i, raft.DescribeEntry(e, raftEntryFormatter))
+	}
+	if !raft.IsEmptySnap(ready.Snapshot) {
+		snap := ready.Snapshot
 		snap.Data = nil
 		fmt.Fprintf(&buf, "  Snapshot updated: %v\n", snap)
 	}
@@ -183,7 +179,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 		fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 			i, raft.DescribeMessage(m, raftEntryFormatter))
 	}
-	log.KvExec.Infof(ctx, "raft ready\n%s", buf.String())
+	log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
 }
 
 func raftEntryFormatter(data []byte) string {

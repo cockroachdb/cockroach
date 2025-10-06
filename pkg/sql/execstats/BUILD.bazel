@@ -20,7 +20,6 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//types",
     ],
@@ -38,7 +37,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",
-        "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

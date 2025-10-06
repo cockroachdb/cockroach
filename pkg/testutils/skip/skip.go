@@ -9,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -215,14 +214,6 @@ func UnderRemoteExecutionWithIssue(t SkippableTest, githubIssueID int, args ...i
 
 }
 
-func OnArch(t SkippableTest, arch string, args ...interface{}) {
-	t.Helper()
-	if runtime.GOARCH == arch {
-		skipReason := fmt.Sprintf("on-arch %s (current config %s)", arch, testConfig())
-		maybeSkip(t, skipReason, args...)
-	}
-}
-
 func testConfig() string {
 	configs := []string{}
 	if Stress() {
@@ -253,16 +244,4 @@ func maybeSkip(t SkippableTest, reason string, args ...interface{}) {
 	}
 
 	t.Skip(append([]interface{}{reason}, args...)...)
-}
-
-var miscNightly = envutil.EnvOrDefaultBool("COCKROACH_MISC_NIGHTLY", false)
-
-// IfNotMiscNightly skips this test unless the COCKROACH_MISC_NIGHTLY env var is
-// set to 'true'.
-//
-// Does not respect COCKROACH_FORCE_RUN_SKIPPED_TESTS.
-func IfNotMiscNightly(t SkippableTest) {
-	if !miscNightly {
-		t.Skip("only runs in Misc Nightly CI")
-	}
 }

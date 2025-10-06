@@ -26,14 +26,6 @@ stage-exec phase=PostCommitPhase stage=7
 DELETE FROM bittab
 ----
 
-# At this stage the column is now public. The code in tree.NewDefaultDatum was
-# only called when adding or dropping a column. So, the missing column values
-# are NULL.
-stage-exec phase=PostCommitNonRevertiblePhase stage=2
-INSERT INTO bittab(c1) VALUES (2);
-----
-pq: null value in column "vb" violates not-null constraint
-
 test
 ALTER TABLE bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL
 ----

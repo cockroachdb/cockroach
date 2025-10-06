@@ -175,7 +175,8 @@ func TestListFailuresFromJSON(t *testing.T) {
 				message: `=== RUN   TestPretty/["hello",_["world"]]
     --- FAIL: TestPretty/["hello",_["world"]] (0.00s)
     	json_test.go:1656: injected failure`,
-				labels: []string{"C-test-failure", "release-blocker", "T-sql-queries"},
+				mention: []string{"@cockroachdb/unowned"},
+				labels:  []string{"C-test-failure", "release-blocker"},
 			}},
 			formatter: DefaultFormatter,
 		},
@@ -392,6 +393,7 @@ TestXXA - 1.00s
 					require.Equal(t, expRepro, actRepro)
 				}
 				assert.Equal(t, c.expIssues[curIssue].mention, req.MentionOnCreate)
+				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
 				assert.Equal(t, c.expIssues[curIssue].labels, req.Labels)
 				// On next invocation, we'll check the next expected issue.
 				curIssue++

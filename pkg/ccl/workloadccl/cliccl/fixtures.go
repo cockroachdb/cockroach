@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -249,7 +250,7 @@ func fixturesMake(gen workload.Generator, urls []string, _ string) error {
 		return err
 	}
 	for _, table := range fixture.Tables {
-		log.Dev.Infof(ctx, `stored backup %s`, table.BackupURI)
+		log.Infof(ctx, `stored backup %s`, table.BackupURI)
 	}
 	return nil
 }
@@ -265,19 +266,16 @@ type restoreDataLoader struct {
 func (l restoreDataLoader) InitialDataLoad(
 	ctx context.Context, db *gosql.DB, gen workload.Generator,
 ) (int64, error) {
-	log.Dev.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
+	log.Infof(ctx, "starting restore of %d tables", len(gen.Tables()))
 	start := timeutil.Now()
-	err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
+	bytes, err := workloadccl.RestoreFixture(ctx, db, l.fixture, l.database, true /* injectStats */)
 	if err != nil {
 		return 0, errors.Wrap(err, `restoring fixture`)
 	}
 	elapsed := timeutil.Since(start)
-	log.Dev.Infof(ctx, "restored %d tables (took %s)",
-		len(gen.Tables()), elapsed)
-	// As of #134516, RESTORE no longer returns the number of bytes restored.
-	// We still return 0 here to implement the interface, although as of right
-	// now the value is never used.
-	return 0, nil
+	log.Infof(ctx, "restored %s bytes in %d tables (took %s, %s)",
+		humanizeutil.IBytes(bytes), len(gen.Tables()), elapsed, humanizeutil.DataRate(bytes, elapsed))
+	return bytes, nil
 }
 
 func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
@@ -308,7 +306,7 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Dev.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
+			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}
@@ -339,7 +337,7 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 
 	if hooks, ok := gen.(workload.Hookser); *fixturesRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
-			log.Dev.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
+			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}

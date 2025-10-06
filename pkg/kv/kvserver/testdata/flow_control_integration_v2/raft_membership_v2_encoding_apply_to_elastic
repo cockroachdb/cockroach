@@ -7,15 +7,10 @@ echo
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of tokens with
 -- no corresponding returns.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -47,21 +42,15 @@ ORDER BY
 
 -- Observe the total tracked tokens per-stream on n1. s1-s3 should have 1MiB
 -- tracked each, and s4 should have none.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 1.0 MiB               
-  a        | 2        | 1.0 MiB               
-  a        | 3        | 1.0 MiB               
-  a        | 4        | 0 B                   
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+  70       | 4        | 0 B                   
 
 
 -- (Issuing 1x1MiB, 4x replicated write that's not admitted.)
@@ -70,21 +59,15 @@ ORDER BY
 -- Observe the individual tracked tokens per-stream on the scratch range. s1-s3
 -- should have 2MiB tracked (they've observed 2x1MiB writes), s4 should have
 -- 1MiB.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 2.0 MiB               
-  a        | 2        | 2.0 MiB               
-  a        | 3        | 2.0 MiB               
-  a        | 4        | 1.0 MiB               
+  70       | 1        | 2.0 MiB               
+  70       | 2        | 2.0 MiB               
+  70       | 3        | 2.0 MiB               
+  70       | 4        | 1.0 MiB               
 
 
 -- (Removing voting replica from n3.)
@@ -100,56 +83,39 @@ ORDER BY
 -- should have 3MiB tracked (they've observed 3x1MiB writes), there should be
 -- no s3 since it was removed, s4 and s5 should have 2MiB and 1MiB
 -- respectively.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 3.0 MiB               
-  a        | 2        | 3.0 MiB               
-  a        | 4        | 2.0 MiB               
-  a        | 5        | 1.0 MiB               
+  70       | 1        | 3.0 MiB               
+  70       | 2        | 3.0 MiB               
+  70       | 4        | 2.0 MiB               
+  70       | 5        | 1.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
 
 
 -- Observe that there no tracked tokens across s1,s2,s4,s5.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+    FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 0 B                   
-  a        | 2        | 0 B                   
-  a        | 4        | 0 B                   
-  a        | 5        | 0 B                   
+  70       | 1        | 0 B                   
+  70       | 2        | 0 B                   
+  70       | 4        | 0 B                   
+  70       | 5        | 0 B                   
 
 
 -- Flow token metrics from n1 after work gets admitted. All {regular,elastic}
 -- tokens deducted are returned, including from when s3 was removed as a raft
 -- member.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 40 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 11 MiB   

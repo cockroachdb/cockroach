@@ -6,7 +6,7 @@ go_library(
     srcs = [
         "doc.go",
         "frontier.go",
-        "multi_frontier.go",
+        "llrb_frontier.go",
         "test_helper.go",
         ":btreefrontierentry_interval_btree.go",  #keep
     ],
@@ -16,10 +16,10 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/util/buildutil",
-        "//pkg/util/container/heap",
-        "//pkg/util/container/heaputil",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
+        "//pkg/util/metamorphic",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -31,21 +31,19 @@ go_test(
     srcs = [
         "frontier_fuzz_test.go",
         "frontier_test.go",
-        "multi_frontier_test.go",
         ":btreefrontierentry_interval_btree_test.go",  #keep
     ],
     data = glob(["testdata/**"]),
     embed = [":span"],
     deps = [
         "//pkg/roachpb",
-        "//pkg/util/container/heap",
+        "//pkg/testutils",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
-        "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",  #keep
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

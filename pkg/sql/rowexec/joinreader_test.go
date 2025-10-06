@@ -1050,7 +1050,7 @@ func TestJoinReader(t *testing.T) {
 		},
 	}
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1242,7 +1242,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := cluster.MakeTestingClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1347,7 +1347,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	st := s.ClusterSettings()
-	tempEngine, _, err := storage.NewTempEngine(context.Background(), base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(context.Background(), base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1364,7 +1364,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer diskMonitor.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
 
@@ -1676,11 +1676,13 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
 	defer cleanupTempDir()
+	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
+	require.NoError(b, err)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     tempStoragePath,
 		Mon:      diskMonitor,
 		Settings: st,
-	}, nil /* statsCollector */)
+	}, tempStoreSpec, nil /* statsCollector */)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
@@ -1812,9 +1814,8 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 								spec := execinfrapb.JoinReaderSpec{
 									FetchSpec:           fetchSpec,
-									LookupColumnsAreKey: parallel && columnDef.matchesPerLookupRow == 1,
+									LookupColumnsAreKey: parallel,
 									MaintainOrdering:    reqOrdering,
-									Parallelize:         parallel,
 								}
 								if lookupExpr {
 									// @1 is the column in the input, @2 is the only fetched column.
@@ -1944,11 +1945,13 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 
 	tempStoragePath, cleanupTempDir := testutils.TempDir(b)
 	defer cleanupTempDir()
+	tempStoreSpec, err := base.NewStoreSpec(fmt.Sprintf("path=%s", tempStoragePath))
+	require.NoError(b, err)
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     tempStoragePath,
 		Mon:      diskMonitor,
 		Settings: st,
-	}, nil /* statsCollector */)
+	}, tempStoreSpec, nil /* statsCollector */)
 	require.NoError(b, err)
 	defer tempEngine.Close()
 	flowCtx.Cfg.TempStorage = tempEngine
@@ -2023,10 +2026,9 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 				b.Fatal(err)
 			}
 			spec := execinfrapb.JoinReaderSpec{
-				FetchSpec:           fetchSpec,
-				LookupColumnsAreKey: true,
-				MaintainOrdering:    false,
-				Parallelize:         true,
+				FetchSpec: fetchSpec,
+				LookupColumnsAreKey:/*parallel=*/ true,
+				MaintainOrdering:/*reqOrdering=*/ false,
 			}
 			lookupExprString := "@1 = @2"
 			for i := 0; i < numExprs; i++ {

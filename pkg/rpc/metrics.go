@@ -6,30 +6,14 @@
 package rpc
 
 import (
-	"context"
-	"net/http"
 	"strings"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
-	prometheusgo "github.com/prometheus/client_model/go"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"storj.io/drpc/drpcmetadata"
-	"storj.io/drpc/drpcmux"
 )
-
-// gwRequestKey is a field set on the context to indicate a request
-// is coming from RPC gateway.
-const gwRequestKey = "gw-request"
 
 var (
 	// The below gauges store the current state of running heartbeat loops.
@@ -45,9 +29,6 @@ var (
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionUnhealthy = metric.Metadata{
@@ -55,9 +36,6 @@ var (
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
 	}
 
 	metaConnectionInactive = metric.Metadata{
@@ -79,9 +57,6 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
 	}
 
 	metaConnectionUnhealthyNanos = metric.Metadata{
@@ -93,9 +68,6 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
 	}
 
 	metaConnectionHeartbeats = metric.Metadata{
@@ -103,9 +75,6 @@ for how long a given peer has been unreachable`,
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionFailures = metric.Metadata{
@@ -120,19 +89,12 @@ Decommissioned peers are excluded.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `See Description.`,
 	}
 
 	metaConnectionAvgRoundTripLatency = metric.Metadata{
 		Name: "rpc.connection.avg_round_trip_latency",
 		Unit: metric.Unit_NANOSECONDS,
 		Help: `Sum of exponentially weighted moving average of round-trip latencies, as measured through a gRPC RPC.
-
-Since this metric is based on gRPC RPCs, it is affected by application-level
-processing delays and CPU overload effects. See rpc.connection.tcp_rtt for a
-metric that is obtained from the kernel's TCP stack.
 
 Dividing this Gauge by rpc.connection.healthy gives an approximation of average
 latency, but the top-level round-trip-latency histogram is more useful. Instead,
@@ -144,43 +106,6 @@ This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
 `,
 		Measurement: "Latency",
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
-	}
-
-	metaConnectionTCPRTT = metric.Metadata{
-		Name: "rpc.connection.tcp_rtt",
-		Unit: metric.Unit_NANOSECONDS,
-		Help: `Kernel-level TCP round-trip time as measured by the Linux TCP stack.
-
-This metric reports the smoothed round-trip time (SRTT) as maintained by the
-kernel's TCP implementation. Unlike application-level RPC latency measurements,
-this reflects pure network latency and is less affected by CPU overload effects.
-
-This metric is only available on Linux.
-`,
-		Measurement: "Latency",
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.`,
-	}
-
-	metaConnectionTCPRTTVar = metric.Metadata{
-		Name: "rpc.connection.tcp_rtt_var",
-		Unit: metric.Unit_NANOSECONDS,
-		Help: `Kernel-level TCP round-trip time variance as measured by the Linux TCP stack.
-
-This metric reports the smoothed round-trip time variance (RTTVAR) as maintained
-by the kernel's TCP implementation. This measures the stability of the
-connection latency.
-
-This metric is only available on Linux.
-`,
-		Measurement: "Latency Variance",
-		Essential:   true,
-		Category:    metric.Metadata_NETWORKING,
-		HowToUse:    `High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
 	metaConnectionConnected = metric.Metadata{
 		Name: "rpc.connection.connected",
@@ -204,13 +129,6 @@ over this connection.
 		Unit:        metric.Unit_BYTES,
 		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
 		Measurement: "Bytes",
-	}
-	metaRequestDuration = metric.Metadata{
-		Name:        "rpc.server.request.duration.nanos",
-		Help:        "Duration of an grpc request in nanoseconds.",
-		Measurement: "Duration",
-		Unit:        metric.Unit_NANOSECONDS,
-		MetricType:  prometheusgo.MetricType_HISTOGRAM,
 	}
 )
 
@@ -266,8 +184,6 @@ func newMetrics(locality roachpb.Locality) *Metrics {
 		ConnectionBytesSent:           aggmetric.NewCounter(metaNetworkBytesEgress, localityLabels...),
 		ConnectionBytesRecv:           aggmetric.NewCounter(metaNetworkBytesIngress, localityLabels...),
 		ConnectionAvgRoundTripLatency: aggmetric.NewGauge(metaConnectionAvgRoundTripLatency, childLabels...),
-		ConnectionTCPRTT:              aggmetric.NewGauge(metaConnectionTCPRTT, childLabels...),
-		ConnectionTCPRTTVar:           aggmetric.NewGauge(metaConnectionTCPRTTVar, childLabels...),
 	}
 	m.mu.peerMetrics = make(map[string]peerMetrics)
 	m.mu.localityMetrics = make(map[string]localityMetrics)
@@ -312,8 +228,6 @@ type Metrics struct {
 	ConnectionBytesSent           *aggmetric.AggCounter
 	ConnectionBytesRecv           *aggmetric.AggCounter
 	ConnectionAvgRoundTripLatency *aggmetric.AggGauge
-	ConnectionTCPRTT              *aggmetric.AggGauge
-	ConnectionTCPRTTVar           *aggmetric.AggGauge
 	mu                            struct {
 		syncutil.Mutex
 		// peerMetrics is a map of peerKey to peerMetrics.
@@ -362,12 +276,6 @@ type peerMetrics struct {
 	// Updated on each successful heartbeat, reset (along with roundTripLatency)
 	// after runHeartbeatUntilFailure returns.
 	AvgRoundTripLatency *aggmetric.Gauge
-	// TCP-level round trip time as measured by the kernel's TCP stack.
-	// This provides network-level latency without application overhead.
-	TCPRTT *aggmetric.Gauge
-	// TCP-level round trip time variance as measured by the kernel's TCP stack.
-	// This indicates connection stability and jitter.
-	TCPRTTVar *aggmetric.Gauge
 	// roundTripLatency is the source for the AvgRoundTripLatency gauge. We don't
 	// want to maintain a full histogram per peer, so instead on each heartbeat we
 	// update roundTripLatency and flush the result into AvgRoundTripLatency.
@@ -403,8 +311,6 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 			ConnectionHeartbeats:   m.ConnectionHeartbeats.AddChild(labelVals...),
 			ConnectionFailures:     m.ConnectionFailures.AddChild(labelVals...),
 			AvgRoundTripLatency:    m.ConnectionAvgRoundTripLatency.AddChild(labelVals...),
-			TCPRTT:                 m.ConnectionTCPRTT.AddChild(labelVals...),
-			TCPRTTVar:              m.ConnectionTCPRTTVar.AddChild(labelVals...),
 			// We use a SimpleEWMA which uses the zero value to mean "uninitialized"
 			// and operates on a ~60s decay rate.
 			roundTripLatency: &ThreadSafeMovingAverage{ma: &ewma.SimpleEWMA{}},
@@ -427,114 +333,4 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 	// We temporarily increment the inactive count until we actually connect.
 	pm.ConnectionInactive.Inc(1)
 	return pm, lm
-}
-
-const (
-	RpcMethodLabel     = "methodName"
-	RpcStatusCodeLabel = "statusCode"
-)
-
-// RequestMetrics contains metrics for RPC requests.
-type RequestMetrics struct {
-	Duration *metric.HistogramVec
-}
-
-func NewRequestMetrics() *RequestMetrics {
-	return &RequestMetrics{
-		Duration: metric.NewExportedHistogramVec(
-			metaRequestDuration,
-			metric.ResponseTime30sBuckets,
-			[]string{RpcMethodLabel, RpcStatusCodeLabel}),
-	}
-}
-
-type RequestMetricsInterceptor grpc.UnaryServerInterceptor
-
-// NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
-// the duration of each RPC. The metric is labeled by the method name and the
-// status code of the RPC. The interceptor will only record durations if
-// shouldRecord returns true. Otherwise, this interceptor will be a no-op.
-func NewRequestMetricsInterceptor(
-	requestMetrics *RequestMetrics, shouldRecord func(fullMethodName string) bool,
-) RequestMetricsInterceptor {
-	return func(
-		ctx context.Context,
-		req interface{},
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (interface{}, error) {
-		if !shouldRecord(info.FullMethod) {
-			return handler(ctx, req)
-		}
-
-		startTime := timeutil.Now()
-		resp, err := handler(ctx, req)
-		duration := timeutil.Since(startTime)
-		var code codes.Code
-		if err != nil {
-			code = status.Code(err)
-		} else {
-			code = codes.OK
-		}
-
-		requestMetrics.Duration.Observe(map[string]string{
-			RpcMethodLabel:     info.FullMethod,
-			RpcStatusCodeLabel: code.String(),
-		}, float64(duration.Nanoseconds()))
-		return resp, err
-	}
-}
-
-// MarkGatewayRequest returns a grpc metadata object that contains the
-// gwRequestKey field. This is used by the gRPC gateway that forwards HTTP
-// requests to their respective gRPC handlers. See gatewayRequestRecoveryInterceptor below.
-func MarkGatewayRequest(ctx context.Context, r *http.Request) metadata.MD {
-	return metadata.Pairs(gwRequestKey, "true")
-}
-
-// gatewayRequestRecoveryInterceptor recovers from panics in gRPC handlers that
-// are invoked due to DB console requests. For these requests, we do not want
-// an uncaught panic to crash the node.
-func gatewayRequestRecoveryInterceptor(
-	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
-) (resp interface{}, err error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if ok {
-		val := md.Get(gwRequestKey)
-		if len(val) > 0 {
-			defer func() {
-				if p := recover(); p != nil {
-					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
-					// The gRPC gateway will put this message in the HTTP response to the client.
-					err = errors.New("an unexpected error occurred")
-				}
-			}()
-		}
-	}
-	resp, err = handler(ctx, req)
-	return resp, err
-}
-
-// MarkDRPCGatewayRequest annotates ctx so that downstream DRPC calls can
-// be recognized as originating from the DB Console HTTP gateway.
-func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
-	return drpcmetadata.Add(ctx, gwRequestKey, "true")
-}
-
-// DRPCGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
-// that are invoked due to DB console requests. For these requests, we do not
-// want an uncaught panic to crash the node.
-func DRPCGatewayRequestRecoveryInterceptor(
-	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
-) (resp interface{}, err error) {
-	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
-		defer func() {
-			if p := recover(); p != nil {
-				logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
-				err = errors.New("an unexpected error occurred")
-			}
-		}()
-	}
-	resp, err = handler(ctx, req)
-	return resp, err
 }

@@ -286,7 +286,7 @@ func (s *serialOrderedSynchronizer) advanceRoot() error {
 func (s *serialOrderedSynchronizer) drainSources() {
 	for _, srcIdx := range s.heap {
 		if err := s.consumeMetadata(&s.sources[srcIdx], drain); err != nil {
-			log.Dev.Fatalf(context.TODO(), "unexpected draining error: %s", err)
+			log.Fatalf(context.TODO(), "unexpected draining error: %s", err)
 		}
 	}
 }

@@ -33,17 +33,14 @@ func PopulateDatumWithJSON(
 		n := j.Len()
 		elementTyp := desiredType.ArrayContents()
 		d := tree.NewDArray(elementTyp)
-		d.Array = make(tree.Datums, 0, n)
+		d.Array = make(tree.Datums, n)
 		for i := 0; i < n; i++ {
 			elt, err := j.FetchValIdx(i)
 			if err != nil {
 				return nil, err
 			}
-			elem, err := PopulateDatumWithJSON(ctx, evalCtx, elt, elementTyp)
+			d.Array[i], err = PopulateDatumWithJSON(ctx, evalCtx, elt, elementTyp)
 			if err != nil {
-				return nil, err
-			}
-			if err = d.Append(elem); err != nil {
 				return nil, err
 			}
 		}

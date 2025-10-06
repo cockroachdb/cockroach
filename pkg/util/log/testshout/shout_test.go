@@ -40,7 +40,7 @@ func Example_shout_before_log() {
 	log.OrigStderr = os.Stdout
 	defer func() { log.OrigStderr = origStderr }()
 
-	log.Dev.Shout(context.Background(), severity.INFO, "hello world")
+	log.Shout(context.Background(), severity.INFO, "hello world")
 
 	// output:
 	// *

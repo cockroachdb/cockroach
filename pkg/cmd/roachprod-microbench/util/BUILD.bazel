@@ -6,6 +6,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachprod",
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_x_exp//maps",
     ],

@@ -85,11 +85,10 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
            │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (sq1+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
            │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
-           └── 25 Mutation operations
+           └── 24 Mutation operations
                 ├── CreateSequenceDescriptor {"SequenceID":105}
                 ├── SetNameInDescriptor {"DescriptorID":105,"Name":"sq1"}
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sq1","SchemaID":101}}
-                ├── UpdateTTLScheduleMetadata {"NewName":"sq1","TableID":105}
                 ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":101}}
                 ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}

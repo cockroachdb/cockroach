@@ -179,58 +179,84 @@ const (
 	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
 	V24_1
 
+	// V24_2Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 24.1 to 24.2.
+	V24_2Start
+
+	// V24_2_StmtDiagRedacted is the migration to add `redacted` column to the
+	// system.statement_diagnostics_requests table.
+	V24_2_StmtDiagRedacted
+
+	// V24_2_TenantSystemTables is the migration that creates the system tables
+	// in app tenants that were previously missing due to only being present in
+	// the system tenant.
+	V24_2_TenantSystemTables
+
+	// V24_2_TenantRates is the migration to add the `current_rates` and
+	// `next_rates` consumption rate columns to the system.tenant_usage table.
+	V24_2_TenantRates
+
+	// V24_2_DeleteTenantSettingsVersion is the migration that deletes
+	// the `system.tenant_settings` row for the `version` setting.
+	V24_2_DeleteTenantSettingsVersion
+
+	// V24_2_LeaseMinTimestamp is the earlier version which supports the lease
+	// minimum timestamp field.
+	V24_2_LeaseMinTimestamp
+
 	// V24_2 is CockroachDB v24.2. It's used for all v24.2.x patch releases.
 	V24_2
 
+	// V24_3_Start demarcates the start of cluster versions stepped through during
+	// the process of upgrading from 24.2 to 24.3.
+	V24_3_Start
+
+	// V24_3_StoreLivenessEnabled is the earliest version which supports the use
+	// of the StoreLiveness fabric.
+	V24_3_StoreLivenessEnabled
+
+	// V24_3_AddTimeseriesZoneConfig is the version that adds an explicit zone
+	// config for the timeseries range if one does not exist currently.
+	V24_3_AddTimeseriesZoneConfig
+
+	// V24_3_TableMetadata is the migration to add the table_metadata table
+	// to the system tenant.
+	V24_3_TableMetadata
+
+	// V24_3_TenantExcludeDataFromBackup is the migration to add
+	// `exclude_data_from_backup` on certain system tables with low GC
+	// TTL to mirror the behaviour on the system tenant.
+	V24_3_TenantExcludeDataFromBackup
+
+	// V24_3_AdvanceCommitIndexViaMsgApps is the version that makes the commit
+	// index advancement using MsgApps only, and not MsgHeartbeat.
+	V24_3_AdvanceCommitIndexViaMsgApps
+
+	// V24_3_SQLInstancesAddDraining is the migration to add the `is_draining`
+	// column to the system.sql_instances table.
+	V24_3_SQLInstancesAddDraining
+
+	// V24_3_MaybePreventUpgradeForCoreLicenseDeprecation is the migration step
+	// that checks for the core license deprecation. It checks to make sure that
+	// the cluster would not be unknowingly in violation of the new license
+	// policies.
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation
+
+	// V24_3_UseRACV2WithV1EntryEncoding is the earliest version which supports
+	// ranges using replication flow control v2, still with v1 entry encoding.
+	V24_3_UseRACV2WithV1EntryEncoding
+
+	// V24_3_UseRACV2Full is the earliest version which supports ranges using
+	// replication flow control v2, with v2 entry encoding. Replication flow
+	// control v1 is unsupported at this version.
+	V24_3_UseRACV2Full
+
+	// V24_3_AddTableMetadataCols is the migration to add additional columns
+	// to the system.table_metadata table
+	V24_3_AddTableMetadataCols
+
 	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
 	V24_3
-
-	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
-	V25_1
-
-	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
-	V25_2
-
-	V25_3_Start
-
-	V25_3_AddEventLogColumnAndIndex
-
-	V25_3_AddEstimatedLastLoginTime
-
-	V25_3_AddHotRangeLoggerJob
-
-	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
-	V25_3
-
-	V25_4_Start
-
-	// V25_4_WriteInitialTruncStateBeforeSplitApplication is the version above
-	// which we write the initial truncated state before applying a split. By
-	// extension, we no longer need to replicate the truncated state when
-	// constructing the split write batch.
-	V25_4_WriteInitialTruncStateBeforeSplitApplication
-
-	// V25_4_PebbleFormatV2BlobFiles bumps the pebble format to FormatV2BlobFiles.
-	V25_4_PebbleFormatV2BlobFiles
-
-	// V25_4_InspectErrorsTable adds the system.inspect_errors table. The table
-	// will be used to log the results of INSPECT jobs.
-	V25_4_InspectErrorsTable
-
-	// V25_4_TransactionDiagnosticsSupport adds the system.transaction_diagnostics_requests and
-	// system.transaction_diagnostics tables, and adds a transaction_diagnostics_id column to
-	// system.statement_diagnostics to support transaction-level diagnostic bundle collection.
-	V25_4_TransactionDiagnosticsSupport
-
-	// V25_4_SystemStatsTablesAutostatsFraction sets the autostats fraction for
-	// system.statement_statistics and system.transaction_statistics to 0.9
-	// to reduce frequent automatic statistics collection.
-	V25_4_SystemStatsTablesAutostatsFraction
-
-	// V25_4_AddSystemStatementHintsTable adds the system.statement_hints table.
-	// The table is used to contain "external" hints, i.e. hints that are
-	// associated with a query without modifying the query or application itself.
-	V25_4_AddSystemStatementHintsTable
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -265,35 +291,33 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
 	V24_1: {Major: 24, Minor: 1, Internal: 0},
+
+	// v24.2 versions. Internal versions must be even.
+	V24_2Start: {Major: 24, Minor: 1, Internal: 2},
+
+	V24_2_StmtDiagRedacted:            {Major: 24, Minor: 1, Internal: 4},
+	V24_2_TenantSystemTables:          {Major: 24, Minor: 1, Internal: 6},
+	V24_2_TenantRates:                 {Major: 24, Minor: 1, Internal: 8},
+	V24_2_DeleteTenantSettingsVersion: {Major: 24, Minor: 1, Internal: 10},
+	V24_2_LeaseMinTimestamp:           {Major: 24, Minor: 1, Internal: 12},
+
 	V24_2: {Major: 24, Minor: 2, Internal: 0},
+
+	// v24.3 versions. Internal versions must be even.
+	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
+
+	V24_3_StoreLivenessEnabled:                         {Major: 24, Minor: 2, Internal: 4},
+	V24_3_AddTimeseriesZoneConfig:                      {Major: 24, Minor: 2, Internal: 6},
+	V24_3_TableMetadata:                                {Major: 24, Minor: 2, Internal: 8},
+	V24_3_TenantExcludeDataFromBackup:                  {Major: 24, Minor: 2, Internal: 10},
+	V24_3_AdvanceCommitIndexViaMsgApps:                 {Major: 24, Minor: 2, Internal: 12},
+	V24_3_SQLInstancesAddDraining:                      {Major: 24, Minor: 2, Internal: 14},
+	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
+	V24_3_UseRACV2WithV1EntryEncoding:                  {Major: 24, Minor: 2, Internal: 18},
+	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
+	V24_3_AddTableMetadataCols:                         {Major: 24, Minor: 2, Internal: 22},
+
 	V24_3: {Major: 24, Minor: 3, Internal: 0},
-	V25_1: {Major: 25, Minor: 1, Internal: 0},
-	V25_2: {Major: 25, Minor: 2, Internal: 0},
-
-	// v25.3 versions. Internal versions must be even.
-	V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
-
-	V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
-
-	V25_3_AddEstimatedLastLoginTime: {Major: 25, Minor: 2, Internal: 6},
-
-	V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
-
-	V25_3: {Major: 25, Minor: 3, Internal: 0},
-
-	// v25.4 versions. Internal versions must be even.
-	V25_4_Start: {Major: 25, Minor: 3, Internal: 2},
-
-	V25_4_WriteInitialTruncStateBeforeSplitApplication: {Major: 25, Minor: 3, Internal: 4},
-	V25_4_PebbleFormatV2BlobFiles:                      {Major: 25, Minor: 3, Internal: 6},
-
-	V25_4_InspectErrorsTable: {Major: 25, Minor: 3, Internal: 8},
-
-	V25_4_TransactionDiagnosticsSupport: {Major: 25, Minor: 3, Internal: 10},
-
-	V25_4_SystemStatsTablesAutostatsFraction: {Major: 25, Minor: 3, Internal: 12},
-
-	V25_4_AddSystemStatementHintsTable: {Major: 25, Minor: 3, Internal: 14},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
@@ -306,19 +330,13 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V25_2
+const MinSupported Key = V24_1
 
-// PreviousRelease is the logical cluster version of the previous release (which must
-// have at least an RC build published).
-const PreviousRelease Key = V25_3
-
-// V25_4 is a placeholder that will eventually be replaced by the actual 25.4
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 25.4 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.4.
-const V25_4 = Latest
+// PreviousRelease is the logical cluster version of the previous release.
+//
+// Note: this is always the last element of SupportedPreviousReleases(); it is
+// also provided as a constant for convenience.
+const PreviousRelease Key = V24_2
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -331,29 +349,16 @@ const V25_4 = Latest
 //     binary in a dev cluster.
 //
 // See devOffsetKeyStart for more details.
-const DevelopmentBranch = true
+const DevelopmentBranch = false
 
 // finalVersion should be set on a release branch to the minted final cluster
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
 // Setting it has the effect of ensuring no versions are subsequently added (see
 // TestFinalVersion).
-const finalVersion Key = -1
-
-// TestingExtraVersions may be set to true by packages of tests which will
-// intentionally use Keys greater than Latest, which otherwise would crash
-// and/or cause errors. This should only be done in packages of tests
-// specifically focused on upgrade infrastructure, as it may make mistaken use
-// of Keys greater than latest, which would likely cause odd behavior, harder to
-// notice and debug.
-var TestingExtraVersions = false
+const finalVersion Key = V24_3
 
 // Version returns the roachpb.Version corresponding to a key.
 func (k Key) Version() roachpb.Version {
-	if TestingExtraVersions && k > Latest {
-		v := versionTable[Latest]
-		v.Internal += int32(k-Latest) * 2
-		return maybeApplyDevOffset(k, v)
-	}
 	version := versionTable[k]
 	return maybeApplyDevOffset(k, version)
 }
@@ -390,7 +395,7 @@ func (k Key) String() string {
 // cluster).
 func SupportedPreviousReleases() []Key {
 	res := make([]Key, 0, 2)
-	for k := MinSupported; k <= PreviousRelease; k++ {
+	for k := MinSupported; k < Latest; k++ {
 		if k.IsFinal() {
 			res = append(res, k)
 		}
@@ -403,7 +408,7 @@ func SupportedPreviousReleases() []Key {
 func ListBetween(from, to roachpb.Version) []roachpb.Version {
 	var cvs []roachpb.Version
 	for k := Key(0); k < numKeys; k++ {
-		if v := k.Version(); from.Cmp(v) < 0 && v.Cmp(to) <= 0 {
+		if v := k.Version(); from.Less(v) && v.LessEq(to) {
 			cvs = append(cvs, v)
 		}
 	}

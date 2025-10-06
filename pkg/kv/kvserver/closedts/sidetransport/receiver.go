@@ -76,23 +76,8 @@ func NewReceiver(
 	return r
 }
 
-func (s *Receiver) AsDRPCServer() ctpb.DRPCSideTransportServer {
-	return (*drpcReceiver)(s)
-}
-
-type drpcReceiver Receiver
-
-// PushUpdates is the streaming RPC handler.
-func (s *drpcReceiver) PushUpdates(stream ctpb.DRPCSideTransport_PushUpdatesStream) error {
-	return (*Receiver)(s).pushUpdates(stream)
-}
-
 // PushUpdates is the streaming RPC handler.
 func (s *Receiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) error {
-	return s.pushUpdates(stream)
-}
-
-func (s *Receiver) pushUpdates(stream ctpb.RPCSideTransport_PushUpdatesStream) error {
 	// Create a steam to service this connection. The stream will call back into
 	// the Receiver through onFirstMsg to register itself once it finds out the
 	// sender's node id.
@@ -147,7 +132,7 @@ func (s *Receiver) onRecvErr(ctx context.Context, nodeID roachpb.NodeID, err err
 	defer s.mu.Unlock()
 
 	if err != io.EOF {
-		log.KvDistribution.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
+		log.Warningf(ctx, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	} else {
 		log.VEventf(ctx, 2, "closed timestamps side-transport connection dropped from node: %d (%s)", nodeID, err)
 	}
@@ -236,11 +221,11 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 	log.VEventf(ctx, 4, "received side-transport update: %v", msg)
 
 	if msg.NodeID == 0 {
-		log.KvDistribution.Fatalf(ctx, "missing NodeID in message: %s", msg)
+		log.Fatalf(ctx, "missing NodeID in message: %s", msg)
 	}
 
 	if msg.NodeID != r.nodeID {
-		log.KvDistribution.Fatalf(ctx, "wrong NodeID; expected %d, got %d", r.nodeID, msg.NodeID)
+		log.Fatalf(ctx, "wrong NodeID; expected %d, got %d", r.nodeID, msg.NodeID)
 	}
 
 	// Handle the removed ranges. In order to not lose closed ts info, before we
@@ -259,13 +244,10 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 		for _, rangeID := range msg.Removed {
 			info, ok := r.mu.tracked[rangeID]
 			if !ok {
-				log.KvDistribution.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
+				log.Fatalf(ctx, "attempting to unregister a missing range: r%d", rangeID)
 			}
-			ts, ok := r.mu.lastClosed[info.policy]
-			if !ok {
-				log.KvDistribution.Fatalf(ctx, "missing closed timestamp policy %v for range r%d", info.policy, rangeID)
-			}
-			r.stores.ForwardSideTransportClosedTimestampForRange(ctx, rangeID, ts, info.lai)
+			r.stores.ForwardSideTransportClosedTimestampForRange(
+				ctx, rangeID, r.mu.lastClosed[info.policy], info.lai)
 		}
 		r.mu.RUnlock()
 	}
@@ -276,10 +258,12 @@ func (r *incomingStream) processUpdate(ctx context.Context, msg *ctpb.Update) {
 
 	// Reset all the state on snapshots.
 	if msg.Snapshot {
-		r.mu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, len(r.mu.lastClosed))
+		for i := range r.mu.lastClosed {
+			r.mu.lastClosed[i] = hlc.Timestamp{}
+		}
 		r.mu.tracked = make(map[roachpb.RangeID]trackedRange, len(r.mu.tracked))
 	} else if msg.SeqNum != r.mu.lastSeqNum+1 {
-		log.KvDistribution.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
+		log.Fatalf(ctx, "expected closed timestamp side-transport message with sequence number "+
 			"%d, got %d", r.mu.lastSeqNum+1, msg.SeqNum)
 	}
 	r.mu.lastSeqNum = msg.SeqNum
@@ -303,7 +287,7 @@ func (r *incomingStream) Run(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	// The gRPC stream with incoming messages.
-	stream ctpb.RPCSideTransport_PushUpdatesStream,
+	stream ctpb.SideTransport_PushUpdatesServer,
 ) error {
 	// We have to do the stream processing on a separate goroutine because Recv()
 	// is blocking, with no way to interrupt it other than returning from the RPC
@@ -328,13 +312,13 @@ func (r *incomingStream) Run(
 				r.nodeID = msg.NodeID
 
 				if err := r.server.onFirstMsg(ctx, r, r.nodeID); err != nil {
-					log.KvDistribution.Warningf(ctx, "%s", err.Error())
+					log.Warningf(ctx, "%s", err.Error())
 					return
 				} else if ch := r.testingKnobs.onFirstMsg; ch != nil {
 					ch <- struct{}{}
 				}
 				if !msg.Snapshot {
-					log.KvDistribution.Fatal(ctx, "expected the first message to be a snapshot")
+					log.Fatal(ctx, "expected the first message to be a snapshot")
 				}
 				r.AddLogTag("remote", r.nodeID)
 				ctx = r.AnnotateCtx(ctx)

@@ -55,7 +55,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddProjection([]uint32{1, 3, 2}, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
+				p.AddProjection([]uint32{1, 3, 2}, execinfrapb.Ordering{})
 			},
 
 			expPost: execinfrapb.PostProcessSpec{
@@ -69,7 +69,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddProjection([]uint32{2}, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
+				p.AddProjection([]uint32{2}, execinfrapb.Ordering{})
 			},
 
 			expPost: execinfrapb.PostProcessSpec{
@@ -88,7 +88,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			resultTypes: "A,B,C,D",
 
 			action: func(p *PhysicalPlan) {
-				p.AddProjection([]uint32{3, 1}, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
+				p.AddProjection([]uint32{3, 1}, execinfrapb.Ordering{})
 			},
 
 			expPost: execinfrapb.PostProcessSpec{
@@ -107,7 +107,7 @@ func TestProjectionAndRendering(t *testing.T) {
 
 			// Every render expression is used.
 			action: func(p *PhysicalPlan) {
-				p.AddProjection([]uint32{2, 0, 1}, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
+				p.AddProjection([]uint32{2, 0, 1}, execinfrapb.Ordering{})
 			},
 
 			expPost: execinfrapb.PostProcessSpec{
@@ -124,7 +124,7 @@ func TestProjectionAndRendering(t *testing.T) {
 			// Some render expressions aren't used which adds another processor
 			// stage.
 			action: func(p *PhysicalPlan) {
-				p.AddProjection([]uint32{2, 0}, execinfrapb.Ordering{}, nil /* finalizeLastStageCb */)
+				p.AddProjection([]uint32{2, 0}, execinfrapb.Ordering{})
 			},
 
 			expPrevPost: &execinfrapb.PostProcessSpec{
@@ -155,7 +155,6 @@ func TestProjectionAndRendering(t *testing.T) {
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]*types.T{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
 					execinfrapb.Ordering{},
-					nil, /* finalizeLastStageCb */
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -182,7 +181,6 @@ func TestProjectionAndRendering(t *testing.T) {
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]*types.T{strToType("B"), strToType("D"), strToType("C")},
 					execinfrapb.Ordering{},
-					nil, /* finalizeLastStageCb */
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -215,7 +213,6 @@ func TestProjectionAndRendering(t *testing.T) {
 					[]int{2, 0, 3, 1},
 					[]*types.T{strToType("C"), strToType("A"), strToType("D")},
 					execinfrapb.Ordering{},
-					nil, /* finalizeLastStageCb */
 				); err != nil {
 					t.Fatal(err)
 				}

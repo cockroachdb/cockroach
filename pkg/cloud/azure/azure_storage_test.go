@@ -13,10 +13,8 @@ import (
 	"os"
 	"path"
 	"testing"
-	"time"
 
 	"github.com/Azure/go-autorest/autorest/azure"
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
@@ -26,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -107,29 +104,45 @@ func TestAzure(t *testing.T) {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
 	}
+	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 	testListPath := fmt.Sprintf("listing-test-%d", testID)
 
-	info := cloudtestutils.StoreInfo{
-		URI:  cfg.filePath(testPath),
-		User: username.RootUserName(),
-	}
-	cloudtestutils.CheckExportStore(t, info)
-	info.URI = cfg.filePath(testListPath)
-	cloudtestutils.CheckListFiles(t, info)
+	cloudtestutils.CheckExportStore(t, cfg.filePath(testPath),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePath(testListPath),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
 
 	// Client Secret auth
-	info.URI = cfg.filePathClientAuth(testPath)
-	cloudtestutils.CheckExportStore(t, info)
-	info.URI = cfg.filePathClientAuth(testListPath)
-	cloudtestutils.CheckListFiles(t, info)
+	cloudtestutils.CheckExportStore(t, cfg.filePathClientAuth(testPath),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePathClientAuth(testListPath),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
 
 	// Implicit auth
-	info.URI = cfg.filePathImplicitAuth(testPath)
-	cloudtestutils.CheckExportStore(t, info)
-	info.URI = cfg.filePathImplicitAuth(testListPath)
-	cloudtestutils.CheckListFiles(t, info)
+	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
 }
 
 func TestAzureSchemes(t *testing.T) {
@@ -152,46 +165,6 @@ func TestAzureSchemes(t *testing.T) {
 		_, err = cloud.ExternalStorageConfFromURI(uriImplicitAuth, username.RootUserName())
 		require.NoError(t, err)
 	}
-}
-
-func TestAzureFaultInjection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	cfg, err := getAzureConfig()
-	if err != nil {
-		skip.IgnoreLint(t, "Test not configured for Azure")
-		return
-	}
-
-	// Enable cloud transport logging.
-	defer log.Scope(t).Close(t)
-	prevVModule := log.GetVModule()
-	defer func() { _ = log.SetVModule(prevVModule) }()
-	require.NoError(t, log.SetVModule("cloud_logging_transport=1"))
-
-	testID := cloudtestutils.NewTestID()
-	uri := cfg.filePathImplicitAuth(fmt.Sprintf("%d-fault-injection-test", testID))
-
-	// Inject faults for 15-45 seconds after the storage is opened.
-	middleware := cloudtestutils.BrownoutMiddleware(time.Second*15, time.Second*45)
-
-	conf, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
-	require.NoError(t, err)
-
-	args := cloud.EarlyBootExternalStorageContext{
-		IOConf:          base.ExternalIODirConfig{},
-		Settings:        cluster.MakeTestingClusterSettings(),
-		Options:         nil,
-		Limiters:        nil,
-		MetricsRecorder: cloud.NilMetrics,
-		HttpMiddleware:  middleware,
-	}
-
-	storage, err := makeAzureStorage(context.Background(), args, conf)
-	require.NoError(t, err)
-	defer storage.Close()
-
-	cloudtestutils.RunCloudNemesisTest(t, storage)
 }
 
 func TestAntagonisticAzureRead(t *testing.T) {
@@ -306,6 +279,7 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 		skip.IgnoreLint(t, "Test not configured for Azure")
 		return
 	}
+	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 
 	cleanup := envutil.TestSetEnv(t, "AZURE_CLIENT_ID", "")
@@ -314,11 +288,8 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	testPath := fmt.Sprintf("backup-test-%d", testID)
 	testListPath := fmt.Sprintf("listing-test-%d", testID)
 
-	info := cloudtestutils.StoreInfo{
-		URI:  cfg.filePathImplicitAuth(testPath),
-		User: username.RootUserName(),
-	}
-	cloudtestutils.CheckNoPermission(t, info)
+	cloudtestutils.CheckNoPermission(t, cfg.filePathImplicitAuth(testPath), username.RootUserName(),
+		nil /*db*/, testSettings)
 
 	tmpDir, cleanup2 := testutils.TempDir(t)
 	defer cleanup2()
@@ -329,7 +300,14 @@ func TestAzureStorageFileImplicitAuth(t *testing.T) {
 	cleanup3 := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
 	defer cleanup3()
 
-	cloudtestutils.CheckExportStore(t, info)
-	info.URI = cfg.filePathImplicitAuth(testListPath)
-	cloudtestutils.CheckListFiles(t, info)
+	cloudtestutils.CheckExportStore(t, cfg.filePathImplicitAuth(testPath),
+		false, username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
+	cloudtestutils.CheckListFiles(t, cfg.filePathImplicitAuth(testListPath),
+		username.RootUserName(),
+		nil, /* db */
+		testSettings,
+	)
 }

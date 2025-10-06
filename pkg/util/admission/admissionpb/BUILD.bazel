@@ -13,13 +13,9 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/util/humanizeutil",
-        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
-        "@com_github_gogo_protobuf//proto",
-        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 

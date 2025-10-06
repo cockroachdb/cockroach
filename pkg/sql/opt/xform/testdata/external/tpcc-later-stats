@@ -53,7 +53,6 @@ project
            ├── scan district
            │    ├── columns: d_id:14!null d_w_id:15!null d_name:16 d_street_1:17 d_street_2:18 d_city:19 d_state:20 d_zip:21 d_tax:22 d_ytd:23 d_next_o_id:24
            │    ├── constraint: /15/14: [/10/5 - /10/5]
-           │    ├── flags: avoid-full-scan
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
            │    └── fd: ()-->(14-24)
@@ -344,7 +343,6 @@ update stock
       │    │    ├── [/0/81680 - /0/81680]
       │    │    ├── [/0/89641 - /0/89641]
       │    │    └── [/0/89905 - /0/89905]
-      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 13]
       │    ├── key: (20)
       │    └── fd: ()-->(21), (20)-->(22-36)
@@ -470,7 +468,6 @@ project
            ├── scan warehouse
            │    ├── columns: w_id:12!null w_name:13 w_street_1:14 w_street_2:15 w_city:16 w_state:17 w_zip:18 w_tax:19 w_ytd:20
            │    ├── constraint: /12: [/10 - /10]
-           │    ├── flags: avoid-full-scan
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
            │    └── fd: ()-->(12-20)
@@ -515,7 +512,6 @@ project
            ├── scan district
            │    ├── columns: d_id:14!null d_w_id:15!null d_name:16 d_street_1:17 d_street_2:18 d_city:19 d_state:20 d_zip:21 d_tax:22 d_ytd:23 d_next_o_id:24
            │    ├── constraint: /15/14: [/10/5 - /10/5]
-           │    ├── flags: avoid-full-scan
            │    ├── cardinality: [0 - 1]
            │    ├── key: ()
            │    └── fd: ()-->(14-24)
@@ -628,7 +624,6 @@ project
  │         ├── scan customer
  │         │    ├── columns: c_id:24!null c_d_id:25!null c_w_id:26!null c_first:27 c_middle:28 c_last:29 c_street_1:30 c_street_2:31 c_city:32 c_state:33 c_zip:34 c_phone:35 c_since:36 c_credit:37 c_credit_lim:38 c_discount:39 c_balance:40 c_ytd_payment:41 c_payment_cnt:42 c_delivery_cnt:43 c_data:44
  │         │    ├── constraint: /26/25/24: [/10/5/1343 - /10/5/1343]
- │         │    ├── flags: avoid-full-scan
  │         │    ├── cardinality: [0 - 1]
  │         │    ├── key: ()
  │         │    └── fd: ()-->(24-44)
@@ -902,7 +897,6 @@ project
            │    │    ├── [/10/8/2167 - /10/8/2167]
            │    │    ├── [/10/9/2167 - /10/9/2167]
            │    │    └── [/10/10/2167 - /10/10/2167]
-           │    ├── flags: avoid-full-scan
            │    ├── cardinality: [0 - 10]
            │    ├── key: (12)
            │    └── fd: ()-->(11,13), (12)-->(14-18)
@@ -964,7 +958,6 @@ update customer
       │    │    ├── [/10/8/2106 - /10/8/2106]
       │    │    ├── [/10/9/1412 - /10/9/1412]
       │    │    └── [/10/10/417 - /10/10/417]
-      │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 10]
       │    ├── key: (24,25)
       │    └── fd: ()-->(26), (24,25)-->(27-44)
@@ -1006,7 +999,6 @@ delete new_order
       │    ├── [/10/8/2167 - /10/8/2167]
       │    ├── [/10/9/2167 - /10/9/2167]
       │    └── [/10/10/2167 - /10/10/2167]
-      ├── flags: avoid-full-scan
       ├── cardinality: [0 - 10]
       ├── key: (7)
       └── fd: ()-->(6,8)
@@ -1051,7 +1043,6 @@ update order_line
       │    │    ├── [/10/8/2167 - /10/8/2167]
       │    │    ├── [/10/9/2167 - /10/9/2167]
       │    │    └── [/10/10/2167 - /10/10/2167]
-      │    ├── flags: avoid-full-scan
       │    ├── key: (14,16)
       │    └── fd: ()-->(13,15), (14,16)-->(17-22)
       └── projections

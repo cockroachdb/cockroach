@@ -166,7 +166,7 @@ func TestSortRandomized(t *testing.T) {
 					matchLen = rng.Intn(nOrderingCols)
 				}
 				name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/topK=%t", nCols, nOrderingCols, matchLen, topK)
-				log.Dev.Infof(context.Background(), "%s", name)
+				log.Infof(context.Background(), "%s", name)
 				tups, expected, ordCols := generateRandomDataForTestSort(rng, nTups, nCols, nOrderingCols, matchLen)
 				if topK {
 					expected = expected[:k]
@@ -412,13 +412,6 @@ func BenchmarkAllSpooler(b *testing.B) {
 					for j := 0; j < coldata.BatchSize(); j++ {
 						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
-				}
-				// Warm up.
-				for n := 0; n < 250; n++ {
-					source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
-					allSpooler := newAllSpooler(testAllocator, source, typs)
-					allSpooler.init(ctx)
-					allSpooler.spool()
 				}
 				b.ResetTimer()
 				for n := 0; n < b.N; n++ {

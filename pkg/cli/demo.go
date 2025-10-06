@@ -213,8 +213,8 @@ func runDemoInternal(
 	demoCtx.WorkloadGenerator = gen
 
 	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
-		log.Dev.Infof,
-		log.Dev.Warningf,
+		log.Infof,
+		log.Warningf,
 		log.Ops.Shoutf,
 		func(ctx context.Context) (*stop.Stopper, error) {
 			// Override the default server store spec.
@@ -224,7 +224,7 @@ func runDemoInternal(
 			serverCfg.Stores.Specs = nil
 			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 		},
-		func(ctx context.Context, ac serverpb.RPCAdminClient) error {
+		func(ctx context.Context, ac serverpb.AdminClient) error {
 			return drainAndShutdown(ctx, ac, "local" /* targetNode */)
 		},
 	)

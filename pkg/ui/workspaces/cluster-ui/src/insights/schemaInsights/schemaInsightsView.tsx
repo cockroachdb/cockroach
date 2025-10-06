@@ -11,10 +11,8 @@ import { useHistory } from "react-router-dom";
 import { Anchor } from "src/anchor";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
-import { insights, usePagination } from "src/util";
+import { insights } from "src/util";
 
-import { useSchemaInsights } from "../../api";
-import { useUserSQLRoles } from "../../api/userApi";
 import { CockroachCloudContext } from "../../contexts";
 import {
   InsightsSortedTable,
@@ -33,13 +31,13 @@ import {
 } from "../../queryFilter";
 import { getSchemaInsightEventFiltersFromURL } from "../../queryFilter/utils";
 import { Search } from "../../search";
-import { SortSetting } from "../../sortedtable";
+import { ISortedTablePagination, SortSetting } from "../../sortedtable";
 import { getTableSortFromURL } from "../../sortedtable/getTableSortFromURL";
 import { TableStatistics } from "../../tableStatistics";
 import { queryByName, syncHistory } from "../../util";
 import { InsightsError } from "../insightsErrorComponent";
-import { SchemaInsightEventFilters } from "../types";
-import { filterSchemaInsights, insightType } from "../utils";
+import { InsightRecommendation, SchemaInsightEventFilters } from "../types";
+import { filterSchemaInsights } from "../utils";
 
 import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
 
@@ -47,50 +45,82 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const insightTableCx = classNames.bind(insightTableStyles);
 
+export type SchemaInsightsViewStateProps = {
+  schemaInsights: InsightRecommendation[];
+  schemaInsightsDatabases: string[];
+  schemaInsightsTypes: string[];
+  schemaInsightsError: Error | null;
+  filters: SchemaInsightEventFilters;
+  sortSetting: SortSetting;
+  hasAdminRole: boolean;
+  csIndexUnusedDuration: string;
+  maxSizeApiReached?: boolean;
+};
+
+export type SchemaInsightsViewDispatchProps = {
+  onFiltersChange: (filters: SchemaInsightEventFilters) => void;
+  onSortChange: (ss: SortSetting) => void;
+  refreshSchemaInsights: (csIndexUnusedDuration: string) => void;
+  refreshUserSQLRoles: () => void;
+};
+
+export type SchemaInsightsViewProps = SchemaInsightsViewStateProps &
+  SchemaInsightsViewDispatchProps;
+
 const SCHEMA_INSIGHT_SEARCH_PARAM = "q";
 
-export const SchemaInsightsView: React.FC = () => {
+export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
+  sortSetting,
+  schemaInsights,
+  schemaInsightsDatabases,
+  schemaInsightsTypes,
+  schemaInsightsError,
+  filters,
+  hasAdminRole,
+  refreshSchemaInsights,
+  refreshUserSQLRoles,
+  onFiltersChange,
+  onSortChange,
+  maxSizeApiReached,
+  csIndexUnusedDuration,
+}: SchemaInsightsViewProps) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
-  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    current: 1,
+    pageSize: 10,
+  });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, SCHEMA_INSIGHT_SEARCH_PARAM),
   );
-  const { data: roles } = useUserSQLRoles();
-  const [hasAdminRole, setHasAdminRole] = useState(false);
-  const [sortSetting, setSortSetting] = useState<SortSetting>(
-    {} as SortSetting,
-  );
-  const [filters, setFilters] = useState<SchemaInsightEventFilters>({});
-  const { data, error: schemaInsightsError, isLoading } = useSchemaInsights();
 
-  const [dbs, setDbs] = useState<string[]>([]);
-  const [types, setTypes] = useState<string[]>([]);
-
-  // Check if the user has the admin role anytime roles updates.
   useEffect(() => {
-    if (roles?.roles?.includes("ADMIN")) {
-      setHasAdminRole(true);
-    }
-  }, [roles]);
+    const refreshSchema = (): void => {
+      refreshSchemaInsights(csIndexUnusedDuration);
+    };
 
-  // Extract unique databases and insight types from the schema insights data.
+    // Refresh every 1 minute.
+    refreshSchema();
+    const interval = setInterval(refreshSchema, 60 * 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshSchemaInsights, csIndexUnusedDuration]);
+
   useEffect(() => {
-    const insightDbs = new Set<string>();
-    const insightTypes = new Set<string>();
-    data?.results.forEach(insight => {
-      insightDbs.add(insight.database);
-      insightTypes.add(insightType(insight.type));
-    });
-    setDbs(Array.from(insightDbs));
-    setTypes(Array.from(insightTypes));
-  }, [data]);
+    // Refresh every 5 minutes.
+    refreshUserSQLRoles();
+    const interval = setInterval(refreshUserSQLRoles, 60 * 5000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [refreshUserSQLRoles]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
-    // with the state. The only time we do this is when the user navigates
+    // with the redux store. The only time we do this is when the user navigates
     // to the page directly via the URL and specifies settings in the query string.
-    // Note that the desired behavior is currently that the user is unable to
+    // Note that the desired behaviour is currently that the user is unable to
     // clear filters via the URL, and must do so with page controls.
     const sortSettingURL = getTableSortFromURL(history.location);
     const filtersFromURL = getSchemaInsightEventFiltersFromURL(
@@ -98,12 +128,12 @@ export const SchemaInsightsView: React.FC = () => {
     );
 
     if (sortSettingURL) {
-      setSortSetting(sortSettingURL);
+      onSortChange(sortSettingURL);
     }
     if (filtersFromURL) {
-      setFilters(filtersFromURL);
+      onFiltersChange(filtersFromURL);
     }
-  }, [history]);
+  }, [history, onFiltersChange, onSortChange]);
 
   useEffect(() => {
     // This effect runs when the filters or sort settings received from
@@ -125,8 +155,22 @@ export const SchemaInsightsView: React.FC = () => {
     search,
   ]);
 
+  const onChangePage = (current: number): void => {
+    setPagination({
+      current: current,
+      pageSize: 10,
+    });
+  };
+
+  const resetPagination = () => {
+    setPagination({
+      current: 1,
+      pageSize: 10,
+    });
+  };
+
   const onChangeSortSetting = (ss: SortSetting): void => {
-    setSortSetting(ss);
+    onSortChange(ss);
     resetPagination();
   };
 
@@ -139,7 +183,7 @@ export const SchemaInsightsView: React.FC = () => {
   const clearSearch = () => onSubmitSearch("");
 
   const onSubmitFilters = (selectedFilters: SchemaInsightEventFilters) => {
-    setFilters(selectedFilters);
+    onFiltersChange(selectedFilters);
     resetPagination();
   };
 
@@ -152,7 +196,7 @@ export const SchemaInsightsView: React.FC = () => {
   const countActiveFilters = calculateActiveFilters(filters);
 
   const filteredSchemaInsights = filterSchemaInsights(
-    data?.results || [],
+    schemaInsights,
     filters,
     search,
   );
@@ -174,8 +218,8 @@ export const SchemaInsightsView: React.FC = () => {
             onSubmitFilters={onSubmitFilters}
             filters={filters}
             hideAppNames={true}
-            dbNames={dbs}
-            schemaInsightTypes={types}
+            dbNames={schemaInsightsDatabases}
+            schemaInsightTypes={schemaInsightsTypes}
             showDB={true}
             showSchemaInsightTypes={true}
           />
@@ -189,7 +233,7 @@ export const SchemaInsightsView: React.FC = () => {
       />
       <div className={cx("table-area")}>
         <Loading
-          loading={isLoading}
+          loading={schemaInsights === null}
           page="schema insights"
           error={schemaInsightsError}
           renderError={() => InsightsError(schemaInsightsError?.message)}
@@ -229,10 +273,9 @@ export const SchemaInsightsView: React.FC = () => {
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredSchemaInsights?.length}
-              onChange={updatePagination}
-              onShowSizeChange={updatePagination}
+              onChange={onChangePage}
             />
-            {data?.maxSizeReached && (
+            {maxSizeApiReached && (
               <InlineAlert
                 intent="info"
                 title={

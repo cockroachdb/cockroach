@@ -100,7 +100,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		// We actually start zero-node clusters in the reference tests. For one-node
 		// clusters, no replication is possible, so we can also skip this step.
 		if wantedReplicas > 1 {
-			log.Dev.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
+			log.Infof(ctx, "waiting for first range to have %d replicas", wantedReplicas)
 
 			testutils.SucceedsSoon(t, func() error {
 				select {
@@ -131,7 +131,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 						t.Fatalf("unable to scan for length of replicas array: %s", err)
 					}
 					if log.V(1) {
-						log.Dev.Infof(ctx, "found %d replicas", foundReplicas)
+						log.Infof(ctx, "found %d replicas", foundReplicas)
 					}
 				} else {
 					return errors.Errorf("no ranges listed")

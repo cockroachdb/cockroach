@@ -18,6 +18,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -49,8 +50,8 @@ go_test(
     ],
     embed = [":liveness"],
     exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
-        "//conditions:default": {"test.Pool": "large"},
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
     }),
     deps = [
         "//pkg/base",

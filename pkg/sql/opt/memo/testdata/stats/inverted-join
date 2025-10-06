@@ -162,20 +162,20 @@ inner-join (lookup json_arr1 [as=t1])
  ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=3.66667]
+ ├── stats: [rows=3.666667]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
  ├── inner-join (inverted json_arr1@a_idx,inverted [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 @> t2.a:10) AND (t1.a:15 @> ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.3333, distinct(13)=32.9462, null(13)=0]
+ │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
  │    ├── key: (8,13)
  │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
  │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.33333, distinct(8)=3.33333, null(8)=0]
+ │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
@@ -192,25 +192,25 @@ ON t1.a @> t2.a AND t1.j @> t2.j AND t2.k > 5
 project
  ├── columns: k:8(int!null)
  ├── immutable
- ├── stats: [rows=33.3333]
+ ├── stats: [rows=33.33333]
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.j:2(jsonb) t1.a:3(string[]) t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=33.3333]
+      ├── stats: [rows=33.33333]
       ├── fd: (8)-->(9,10)
       ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 @> t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.3333, distinct(13)=32.9462, null(13)=0]
+      │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.33333, distinct(8)=3.33333, null(8)=0]
+      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -227,13 +227,13 @@ ON t1.j <@ t2.j
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=3333.33]
+ ├── stats: [rows=3333.333]
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.k:1(int!null) t1.j:2(jsonb) t2.j:9(jsonb)
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=3333.33]
+      ├── stats: [rows=3333.333]
       ├── fd: (1)-->(2)
       ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.j:9(jsonb) t1.k:13(int!null)
@@ -258,20 +258,20 @@ inner-join (lookup json_arr1 [as=t1])
  ├── key columns: [13] = [1]
  ├── lookup columns are key
  ├── immutable
- ├── stats: [rows=370.37]
+ ├── stats: [rows=370.3704]
  ├── key: (1,8)
  ├── fd: (1)-->(2,3), (8)-->(9,10)
  ├── inner-join (inverted json_arr1@a_idx,inverted [as=t1])
  │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
  │    ├── inverted-expr
  │    │    └── (t1.a:15 <@ t2.a:10) AND (t1.a:15 <@ ARRAY['foo']) [type=bool]
- │    ├── stats: [rows=33.3333, distinct(13)=32.9462, null(13)=0]
+ │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
  │    ├── key: (8,13)
  │    ├── fd: (8)-->(9,10)
  │    ├── scan json_arr2 [as=t2]
  │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
  │    │    ├── constraint: /8: [/6 - ]
- │    │    ├── stats: [rows=3.33333, distinct(8)=3.33333, null(8)=0]
+ │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9,10)
  │    └── filters (true)
@@ -288,25 +288,25 @@ ON t1.a <@ t2.a AND t1.j <@ t2.j AND t2.k > 5
 project
  ├── columns: k:8(int!null)
  ├── immutable
- ├── stats: [rows=370.37]
+ ├── stats: [rows=370.3704]
  └── inner-join (lookup json_arr1 [as=t1])
       ├── columns: t1.j:2(jsonb) t1.a:3(string[]) t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       ├── key columns: [13] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=370.37]
+      ├── stats: [rows=370.3704]
       ├── fd: (8)-->(9,10)
       ├── inner-join (inverted json_arr1@j_idx,inverted [as=t1])
       │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[]) t1.k:13(int!null)
       │    ├── inverted-expr
       │    │    └── t1.j:14 <@ t2.j:9 [type=bool]
-      │    ├── stats: [rows=33.3333, distinct(13)=32.9462, null(13)=0]
+      │    ├── stats: [rows=33.33333, distinct(13)=32.9462, null(13)=0]
       │    ├── key: (8,13)
       │    ├── fd: (8)-->(9,10)
       │    ├── scan json_arr2 [as=t2]
       │    │    ├── columns: t2.k:8(int!null) t2.j:9(jsonb) t2.a:10(string[])
       │    │    ├── constraint: /8: [/6 - ]
-      │    │    ├── stats: [rows=3.33333, distinct(8)=3.33333, null(8)=0]
+      │    │    ├── stats: [rows=3.333333, distinct(8)=3.33333, null(8)=0]
       │    │    ├── key: (8)
       │    │    └── fd: (8)-->(9,10)
       │    └── filters (true)
@@ -413,20 +413,20 @@ ON t1.s IN ('foo', 'bar', 'baz') AND i = 10 AND t1.j @> t2.j
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=1]
+ ├── stats: [rows=0.3]
  └── inner-join (lookup json_multi_col [as=t1])
       ├── columns: t1.k:1(int!null) t1.j:2(jsonb) s:3(string!null) i:4(int!null) t2.j:10(jsonb)
       ├── key columns: [16] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=1]
+      ├── stats: [rows=0.3]
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── inner-join (inverted json_multi_col@sij_idx,inverted [as=t1])
       │    ├── columns: t2.j:10(jsonb) t1.k:16(int!null) s:18(string!null) i:19(int!null)
       │    ├── prefix key columns: [14 15] = [18 19]
       │    ├── inverted-expr
       │    │    └── t1.j:17 @> t2.j:10 [type=bool]
-      │    ├── stats: [rows=1, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=0.999517, null(16)=0, distinct(18)=1, null(18)=0, distinct(19)=1, null(19)=0, distinct(18,19)=1, null(18,19)=0]
+      │    ├── stats: [rows=0.3, distinct(14)=0.3, null(14)=0, distinct(15)=0.3, null(15)=0, distinct(16)=0.299957, null(16)=0, distinct(18)=0.3, null(18)=0, distinct(19)=0.3, null(19)=0, distinct(18,19)=0.3, null(18,19)=0]
       │    ├── fd: ()-->(19), (16)-->(18)
       │    ├── project
       │    │    ├── columns: "inverted_join_const_col_@4":15(int!null) t2.j:10(jsonb) "inverted_join_const_col_@3":14(string!null)

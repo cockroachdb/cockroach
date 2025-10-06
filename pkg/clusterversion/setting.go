@@ -111,7 +111,7 @@ func (cv *clusterVersionSetting) activeVersion(
 ) ClusterVersion {
 	ver := cv.activeVersionOrEmpty(ctx, sv)
 	if ver == (ClusterVersion{}) {
-		log.Dev.Fatalf(ctx, "version not initialized")
+		log.Fatalf(ctx, "version not initialized")
 	}
 	return ver
 }
@@ -190,7 +190,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 		// Instead, we crash. Not being able to update our version to what the
 		// rest of the cluster is running is a serious issue.
 		if retErr != nil {
-			log.Dev.Fatalf(ctx, "failed to validate version upgrade: %s", retErr)
+			log.Fatalf(ctx, "failed to validate version upgrade: %s", retErr)
 		}
 	}()
 
@@ -252,23 +252,6 @@ var PreserveDowngradeVersion = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
-// AutoUpgradeEnabled is used to enable and disable automatic upgrade.
-var AutoUpgradeEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"cluster.auto_upgrade.enabled",
-	"disable automatic cluster version upgrade until reset",
-	true,
-	settings.WithReportable(true),
-	settings.WithPublic,
-)
-
-var AutoUpgradeSystemClusterFromMeta1Leaseholder = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"cluster.auto_upgrade.initiate_from_meta1leaseholder.enabled",
-	"only initiate automatic cluster version upgrade from the Meta1 leaseholder (system-cluster only)",
-	true,
-)
-
 var metaPreserveDowngradeLastUpdated = metric.Metadata{
 	Name:        "cluster.preserve-downgrade-option.last-updated",
 	Help:        "Unix timestamp of last updated time for cluster.preserve_downgrade_option",
@@ -308,3 +291,13 @@ func MakeMetricsAndRegisterOnVersionChangeCallback(sv *settings.Values) Metrics 
 		PreserveDowngradeLastUpdated: gauge,
 	}
 }
+
+// AutoUpgradeEnabled is used to enable and disable automatic upgrade.
+var AutoUpgradeEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cluster.auto_upgrade.enabled",
+	"disable automatic cluster version upgrade until reset",
+	true,
+	settings.WithReportable(true),
+	settings.WithPublic,
+)

@@ -28,7 +28,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util",
-        "//pkg/util/debugutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",

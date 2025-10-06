@@ -101,7 +101,7 @@ func RegisterReadOnlyCommand(
 
 func register(method kvpb.Method, command Command) {
 	if !cmds[method].isEmpty() {
-		log.KvExec.Fatalf(context.TODO(), "cannot overwrite previously registered method %v", method)
+		log.Fatalf(context.TODO(), "cannot overwrite previously registered method %v", method)
 	}
 	cmds[method] = command
 }

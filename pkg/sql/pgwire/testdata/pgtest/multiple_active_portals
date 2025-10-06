@@ -8,17 +8,6 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-# This test relies on transactions not being autocommitted.
-send crdb_only
-Query {"String": "SET autocommit_before_ddl = 'false'"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
 subtest select_from_individual_resources
 
 send
@@ -468,7 +457,7 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"DataRow","Values":[{"text":"2"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -515,7 +504,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"f"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -564,7 +553,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"10"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -613,7 +602,7 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -957,7 +946,7 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"DataRow","Values":[{"text":"10"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Detail":"cannot execute a portal while a different one is open","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v24.3"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send
@@ -1335,7 +1324,7 @@ Query {"String": "CREATE TABLE t110486_1 (k1 PRIMARY KEY) AS VALUES (1), (2), (3
 Query {"String": "CREATE TABLE t110486_2 (k2 PRIMARY KEY) AS VALUES (1), (2), (3);"}
 ----
 
-until ignore=NoticeResponse
+until
 ReadyForQuery
 ReadyForQuery
 ----
@@ -1413,219 +1402,6 @@ until crdb_only ignore=NoticeResponse
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"RESET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-subtest end
-
-subtest internal_error_special_stmts
-
-send
-Query {"String": "CREATE TABLE IF NOT EXISTS t (k INT PRIMARY KEY);"}
-Parse {"Name": "q4", "Query": "ALTER TABLE t SCATTER;"}
-Bind {"DestinationPortal": "p4", "PreparedStatement": "q4"}
-Execute {"Portal": "p4", "MaxRows": 1}
-Execute {"Portal": "p4", "MaxRows": 1}
-Sync
-----
-
-until ignore=DataRow
-ReadyForQuery
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"SCATTER 1"}
-{"Type":"CommandComplete","CommandTag":"SCATTER 0"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-subtest end
-
-subtest disallow_call_procedure_with_pausable_portal
-
-send crdb_only
-Query {"String": "SET multiple_active_portals_enabled = 'true';"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send
-Query {"String": "CREATE TABLE IF NOT EXISTS tbl (x timestamp, y int) WITH (schema_locked=false);"}
-Query {"String": "TRUNCATE tbl;"}
-Query {"String": "CREATE OR REPLACE PROCEDURE insert_one() LANGUAGE PLpgSQL AS $$ BEGIN INSERT INTO tbl (x, y) VALUES (now(), 1); END; $$;"}
-----
-
-until ignore=NoticeResponse
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"TRUNCATE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send
-Parse {"Name": "foo1", "Query": "CALL insert_one()"}
-Bind {"DestinationPortal": "foo1", "PreparedStatement": "foo1"}
-Execute {"Portal": "foo1", "MaxRows": 100}
-Sync
-----
-
-# PG allows procedure with pausable portal, but CRDB does not.
-until noncrdb_only
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"CALL"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-until crdb_only keepErrMessage
-ErrorResponse
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-# If calling this procedure without `"MaxRows": 100` (i.e. make it a non-pausable portal),
-# it will work.
-send
-Query {"String": "TRUNCATE tbl;"}
-Bind {"DestinationPortal": "foo1", "PreparedStatement": "foo1"}
-Execute {"Portal": "foo1"}
-Query {"String": "SELECT y FROM tbl"}
-Sync
-----
-
-until ignore=RowDescription
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"TRUNCATE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"CALL"}
-{"Type":"DataRow","Values":[{"text":"1"}]}
-{"Type":"CommandComplete","CommandTag":"SELECT 1"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send crdb_only
-Query {"String": "SET multiple_active_portals_enabled = 'true';"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send
-Query {"String": "CREATE TABLE IF NOT EXISTS sensors (id TEXT NOT NULL, ts TIMESTAMPTZ NOT NULL, val FLOAT8 NULL, CONSTRAINT s_pk PRIMARY KEY (id, ts)) WITH (schema_locked=false);"}
-Query {"String": "TRUNCATE sensors;"}
-Query {"String": "INSERT INTO sensors values ('a', now(), 0.1);"}
-Query {"String": "CREATE TABLE IF NOT EXISTS sensors_summary (id TEXT NOT NULL, val FLOAT8 NULL, CONSTRAINT ss_pk PRIMARY KEY (id)) WITH (schema_locked=false);"}
-Query {"String": "TRUNCATE sensors_summary;"}
-Query {"String": "CREATE TYPE IF NOT EXISTS k AS (x TEXT, y FLOAT8);"}
-----
-
-until ignore=NoticeResponse
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"TRUNCATE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"TRUNCATE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"CommandComplete","CommandTag":"CREATE TYPE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send noncrdb_only
-Query {"String": "CREATE OR REPLACE PROCEDURE fab5() LANGUAGE plpgsql AS $$ DECLARE id_array k[]; BEGIN SELECT array_agg(row(id, avg_val)::k) INTO id_array FROM (SELECT id, avg(val) AS avg_val FROM sensors WHERE now() - INTERVAL '3 days' < ts GROUP BY id) AS sub; INSERT INTO sensors_summary (id, val) SELECT (arr).x, (arr).y FROM unnest(id_array) AS arr; RAISE NOTICE 'Inserted % rows', array_length(id_array, 1); END; $$;"}
-----
-
-send crdb_only
-Query {"String": "CREATE OR REPLACE PROCEDURE fab5() LANGUAGE PLpgSQL AS $$ DECLARE i k := ('', 0.0 ); id_array k[]; BEGIN begin commit; SELECT array_agg((id, avg_val)) FROM (SELECT id, avg(val) as avg_val FROM sensors where now() - INTERVAL '3 days' < ts group by id) INTO id_array; end; commit; INSERT INTO sensors_summary (id, val) select (arr).x, (arr).y from (select unnest(id_array) as arr); RAISE NOTICE 'Inserted % rows', array_length(id_array, 1); END $$;"}
-----
-
-until
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send
-Parse {"Name": "foo", "Query": "CALL fab5()"}
-Bind {"DestinationPortal": "foo", "PreparedStatement": "foo"}
-Bind {"DestinationPortal": "foo2", "PreparedStatement": "foo"}
-Execute {"Portal": "foo", "MaxRows": 100}
-Sync
-----
-
-# PG allows procedure with pausable portal, but CRDB does not.
-until noncrdb_only ignore=RowDescription ignore=NoticeResponse
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"CALL"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-until crdb_only keepErrMessage
-ErrorResponse
-ReadyForQuery
-----
-{"Type":"ParseComplete"}
-{"Type":"BindComplete"}
-{"Type":"BindComplete"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries","Hint":"You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/98911/v25.4"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-# Both PG and CRDB allows procedure with non-pausable portal.
-send
-Query {"String": "TRUNCATE sensors_summary;"}
-Bind {"DestinationPortal": "foo", "PreparedStatement": "foo"}
-Bind {"DestinationPortal": "foo2", "PreparedStatement": "foo"}
-Execute {"Portal": "foo"}
-Query {"String": "SELECT id FROM sensors_summary ORDER BY id"}
-Sync
-----
-
-until ignore=RowDescription ignore=NoticeResponse
-ReadyForQuery
-ReadyForQuery
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"TRUNCATE"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-{"Type":"BindComplete"}
-{"Type":"BindComplete"}
-{"Type":"CommandComplete","CommandTag":"CALL"}
-{"Type":"DataRow","Values":[{"text":"a"}]}
-{"Type":"CommandComplete","CommandTag":"SELECT 1"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end

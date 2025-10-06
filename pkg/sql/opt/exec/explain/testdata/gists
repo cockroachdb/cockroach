@@ -132,15 +132,9 @@ explain(shape):
 • apply join (semi)
 │ pred: column1 = a
 │
-├── • scan
-│     table: abc@abc_pkey
-│     spans: FULL SCAN
-│
-└── • inner loop (unoptimized)
-    │
-    └── • values
-           ├── (a,)
-           └── (b,)
+└── • scan
+      table: abc@abc_pkey
+      spans: FULL SCAN
 explain(gist):
 • apply join (semi)
 │
@@ -716,7 +710,6 @@ explain(shape):
 └── • scan
       table: foo@foo_pkey
       spans: FULL SCAN
-      locking strength: for update
 explain(gist):
 • delete
 │ from: foo
@@ -740,7 +733,6 @@ explain(shape):
 └── • scan
       table: foo@foo_pkey
       spans: 1+ spans
-      locking strength: for update
 explain(gist):
 • delete
 │ from: foo
@@ -928,7 +920,7 @@ explain(shape):
 └── • subquery
     │ id: @S1
     │ original sql: INSERT INTO abc SELECT a, b, c FROM abc RETURNING a
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1
@@ -1055,8 +1047,8 @@ explain(gist):
 gist-explain-roundtrip
 CREATE STATISTICS s1 FROM foo
 ----
-hash: 17953548722684387642
-plan-gist: AjdqAg==
+hash: 590681868797177008
+plan-gist: Ajc=
 explain(shape):
 • create statistics
 explain(gist):

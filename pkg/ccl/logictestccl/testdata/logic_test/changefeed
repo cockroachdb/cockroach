@@ -46,7 +46,7 @@ GRANT SELECT ON TABLE t TO testuser
 
 user testuser
 
-statement error user "testuser" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed
+statement error user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed
 CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
 
 user root

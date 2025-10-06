@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	kvserverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -35,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -97,31 +95,28 @@ func TestKVFeed(t *testing.T) {
 	}
 
 	type testCase struct {
-		name                 string
-		needsInitialScan     bool
-		withDiff             bool
-		withFrontierQuantize time.Duration
-		schemaChangeEvents   changefeedbase.SchemaChangeEventClass
-		schemaChangePolicy   changefeedbase.SchemaChangePolicy
-		initialHighWater     hlc.Timestamp
-		endTime              hlc.Timestamp
-		spans                []roachpb.Span
-		initialSpanTimePairs []kvcoord.SpanTimePair
-		events               []kvpb.RangeFeedEvent
+		name               string
+		needsInitialScan   bool
+		withDiff           bool
+		schemaChangeEvents changefeedbase.SchemaChangeEventClass
+		schemaChangePolicy changefeedbase.SchemaChangePolicy
+		initialHighWater   hlc.Timestamp
+		endTime            hlc.Timestamp
+		spans              []roachpb.Span
+		checkpoint         []roachpb.Span
+		events             []kvpb.RangeFeedEvent
 
 		descs []catalog.TableDescriptor
 
-		expScans        []hlc.Timestamp
-		expScannedSpans []roachpb.Span
-		expEvents       []kvpb.RangeFeedEvent
-		expEventsCount  int
-		expErrRE        string
+		expScans  []hlc.Timestamp
+		expEvents int
+		expErrRE  string
 	}
 	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
 		mm := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-			Name:     mon.MakeName("test"),
+			Name:     "test",
 			Settings: settings,
 		})
 		metrics := kvevent.MakeMetrics(time.Minute)
@@ -146,11 +141,10 @@ func TestKVFeed(t *testing.T) {
 		ref := rawEventFeed(tc.events)
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
-		f := newKVFeed(buf, tc.spans,
+		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
-			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, tc.withFrontierQuantize,
-			0, /* consumerID */
-			tc.initialHighWater, tc.initialSpanTimePairs, tc.endTime,
+			tc.needsInitialScan, tc.withDiff, true, /* withFiltering */
+			tc.initialHighWater, tc.endTime,
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			changefeedbase.Targets{},
@@ -163,17 +157,14 @@ func TestKVFeed(t *testing.T) {
 
 		// Assert that each scanConfig pushed to the channel `scans` by `f.run()`
 		// is what we expected (as specified in the test case).
+		spansToScan := filterCheckpointSpans(tc.spans, tc.checkpoint)
 		testG := ctxgroup.WithContext(ctx)
 		testG.GoCtx(func(ctx context.Context) error {
 			for expScans := tc.expScans; len(expScans) > 0; expScans = expScans[1:] {
 				scan := <-scans
 				assert.Equal(t, expScans[0], scan.Timestamp)
 				assert.Equal(t, tc.withDiff, scan.WithDiff)
-				if len(tc.expScannedSpans) > 0 {
-					assert.Equal(t, tc.expScannedSpans, scan.Spans)
-				} else {
-					assert.Equal(t, tc.spans, scan.Spans)
-				}
+				assert.Equal(t, spansToScan, scan.Spans)
 			}
 			return nil
 		})
@@ -181,12 +172,9 @@ func TestKVFeed(t *testing.T) {
 		// Assert that number of events emitted from the kvfeed matches what we
 		// specified in the testcase.
 		testG.GoCtx(func(ctx context.Context) error {
-			for eventIdx := 0; eventIdx < tc.expEventsCount; eventIdx++ {
-				e, err := buf.Get(ctx)
+			for events := 0; events < tc.expEvents; events++ {
+				_, err := buf.Get(ctx)
 				assert.NoError(t, err)
-				if tc.expEvents != nil {
-					assert.Equal(t, tc.expEvents[eventIdx], *e.Raw())
-				}
 			}
 			return nil
 		})
@@ -234,33 +222,31 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42)},
-			},
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			expEventsCount: 1,
+			expEvents: 1,
 		},
 		{
-			name:               "no events - full checkpoint",
+			name:               "no events -  full checkpoint",
 			schemaChangeEvents: changefeedbase.OptSchemaChangeEventClassDefault,
 			schemaChangePolicy: changefeedbase.OptSchemaChangePolicyBackfill,
-			needsInitialScan:   false,
+			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42), StartAfter: ts(2).Next()},
+			checkpoint: []roachpb.Span{
+				tableSpan(codec, 42),
 			},
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
-			expEventsCount: 1,
+			expScans:  []hlc.Timestamp{},
+			expEvents: 1,
 		},
 		{
 			name:               "no events - partial backfill",
@@ -271,10 +257,8 @@ func TestKVFeed(t *testing.T) {
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
 			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: roachpb.Span{Key: codec.TablePrefix(42), EndKey: mkKey(codec, 42, "a")}},
-				{Span: makeSpan(codec, 42, "a", "q"), StartAfter: ts(2).Next()},
-				{Span: roachpb.Span{Key: mkKey(codec, 42, "q"), EndKey: codec.TablePrefix(42).PrefixEnd()}},
+			checkpoint: []roachpb.Span{
+				makeSpan(codec, 42, "a", "q"),
 			},
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "val", ts(3)),
@@ -283,11 +267,7 @@ func TestKVFeed(t *testing.T) {
 			expScans: []hlc.Timestamp{
 				ts(2),
 			},
-			expScannedSpans: []roachpb.Span{
-				{Key: codec.TablePrefix(42), EndKey: mkKey(codec, 42, "a")},
-				{Key: mkKey(codec, 42, "q"), EndKey: codec.TablePrefix(42).PrefixEnd()},
-			},
-			expEventsCount: 2,
+			expEvents: 2,
 		},
 		{
 			name:               "one table event - backfill",
@@ -297,9 +277,6 @@ func TestKVFeed(t *testing.T) {
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
-			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42)},
 			},
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
@@ -316,7 +293,7 @@ func TestKVFeed(t *testing.T) {
 				makeTableDesc(42, 1, ts(1), 2, 1),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1, 1)),
 			},
-			expEventsCount: 5,
+			expEvents: 5,
 		},
 		{
 			name:               "one table event - skip",
@@ -326,9 +303,6 @@ func TestKVFeed(t *testing.T) {
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
-			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42)},
 			},
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3).Next()),
@@ -343,7 +317,7 @@ func TestKVFeed(t *testing.T) {
 				makeTableDesc(42, 1, ts(1), 2, 1),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(3), 1, 1)),
 			},
-			expEventsCount: 4,
+			expEvents: 4,
 		},
 		{
 			name:               "one table event - stop",
@@ -353,9 +327,6 @@ func TestKVFeed(t *testing.T) {
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
 				tableSpan(codec, 42),
-			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42)},
 			},
 			events: []kvpb.RangeFeedEvent{
 				kvEvent(codec, 42, "a", "b", ts(3)),
@@ -371,62 +342,8 @@ func TestKVFeed(t *testing.T) {
 				makeTableDesc(42, 1, ts(1), 2, 1),
 				addColumnDropBackfillMutation(makeTableDesc(42, 2, ts(4), 1, 1)),
 			},
-			expEventsCount: 2,
-			expErrRE:       "schema change ...",
-		},
-		{
-			name:                 "checkpoint events - with quantize",
-			schemaChangeEvents:   changefeedbase.OptSchemaChangeEventClassDefault,
-			schemaChangePolicy:   changefeedbase.OptSchemaChangePolicyBackfill,
-			needsInitialScan:     false,
-			withFrontierQuantize: time.Duration(10),
-			initialHighWater:     hlc.Timestamp{WallTime: 10},
-			spans: []roachpb.Span{
-				tableSpan(codec, 42),
-			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42), StartAfter: hlc.Timestamp{WallTime: 10}},
-			},
-			events: []kvpb.RangeFeedEvent{
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20, Logical: 1}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 27, Logical: 1}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 43, Logical: 3}),
-			},
-			expEvents: []kvpb.RangeFeedEvent{
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20, Logical: 0}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20, Logical: 0}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 40, Logical: 0}),
-			},
-			expEventsCount: 4,
-		},
-		{
-			name:                 "checkpoint events - without quantize",
-			schemaChangeEvents:   changefeedbase.OptSchemaChangeEventClassDefault,
-			schemaChangePolicy:   changefeedbase.OptSchemaChangePolicyBackfill,
-			needsInitialScan:     false,
-			withFrontierQuantize: time.Duration(0),
-			initialHighWater:     hlc.Timestamp{WallTime: 10},
-			spans: []roachpb.Span{
-				tableSpan(codec, 42),
-			},
-			initialSpanTimePairs: []kvcoord.SpanTimePair{
-				{Span: tableSpan(codec, 42), StartAfter: hlc.Timestamp{WallTime: 10}},
-			},
-			events: []kvpb.RangeFeedEvent{
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20, Logical: 1}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 27, Logical: 1}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 43, Logical: 3}),
-			},
-			expEvents: []kvpb.RangeFeedEvent{
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 20, Logical: 1}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 27, Logical: 1}),
-				checkpointEvent(tableSpan(codec, 42), hlc.Timestamp{WallTime: 43, Logical: 3}),
-			},
-			expEventsCount: 4,
+			expEvents: 2,
+			expErrRE:  "schema change ...",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -726,133 +643,4 @@ func TestCopyFromSourceToDestUntilTableEvent(t *testing.T) {
 			require.Equal(t, tc.expectedFrontier, frontier.Frontier())
 		})
 	}
-}
-
-func makeCheckpointEvent(key []byte, endKey []byte, ts int, logical int32) *kvpb.RangeFeedEvent {
-	return &kvpb.RangeFeedEvent{
-		Checkpoint: &kvpb.RangeFeedCheckpoint{
-			Span:       roachpb.Span{Key: key, EndKey: endKey},
-			ResolvedTS: hlc.Timestamp{WallTime: int64(ts), Logical: logical},
-		},
-	}
-}
-
-// TestFrontierQuantization tests that the frontier quantization works as
-// expected. It should quantize timestamps and merge adjacent spans with same
-// timestamp together.
-func TestFrontierQuantization(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	for name, tc := range map[string]struct {
-		spans                    []roachpb.Span
-		withFrontierQuantization bool
-		events                   []*kvpb.RangeFeedEvent
-		expectedFrontierEntries  int
-		expectedFrontier         hlc.Timestamp
-	}{
-		"overlapping spans with close ts with quantization": {
-			withFrontierQuantization: true,
-			spans:                    []roachpb.Span{{Key: []byte("a"), EndKey: []byte("d")}},
-			events: []*kvpb.RangeFeedEvent{
-				makeCheckpointEvent([]byte("a"), []byte("b"), 12, 2),
-				makeCheckpointEvent([]byte("b"), []byte("c"), 13, 1),
-				makeCheckpointEvent([]byte("c"), []byte("d"), 14, 0),
-			},
-			expectedFrontierEntries: 1,
-			expectedFrontier:        hlc.Timestamp{WallTime: int64(10)},
-		},
-		"overlapping spans with close ts without quantization": {
-			withFrontierQuantization: false,
-			spans:                    []roachpb.Span{{Key: []byte("a"), EndKey: []byte("d")}},
-			events: []*kvpb.RangeFeedEvent{
-				makeCheckpointEvent([]byte("a"), []byte("b"), 12, 0),
-				makeCheckpointEvent([]byte("b"), []byte("c"), 13, 0),
-				makeCheckpointEvent([]byte("c"), []byte("d"), 14, 0),
-			},
-			expectedFrontierEntries: 3,
-			expectedFrontier:        hlc.Timestamp{WallTime: int64(12)},
-		},
-		"non-overlapping spans with close ts with quantization": {
-			withFrontierQuantization: true,
-			spans:                    []roachpb.Span{{Key: []byte("a"), EndKey: []byte("z")}},
-			events: []*kvpb.RangeFeedEvent{
-				makeCheckpointEvent([]byte("a"), []byte("b"), 12, 3),
-				makeCheckpointEvent([]byte("b"), []byte("c"), 13, 2),
-				makeCheckpointEvent([]byte("c"), []byte("d"), 14, 1),
-				makeCheckpointEvent([]byte("k"), []byte("m"), 12, 0),
-			},
-			expectedFrontierEntries: 4,
-			expectedFrontier:        hlc.Timestamp{WallTime: int64(0)},
-		},
-		"non-overlapping spans with close ts without quantization": {
-			withFrontierQuantization: false,
-			spans:                    []roachpb.Span{{Key: []byte("a"), EndKey: []byte("z")}},
-			events: []*kvpb.RangeFeedEvent{
-				makeCheckpointEvent([]byte("a"), []byte("b"), 12, 3),
-				makeCheckpointEvent([]byte("b"), []byte("c"), 13, 2),
-				makeCheckpointEvent([]byte("c"), []byte("d"), 14, 1),
-				makeCheckpointEvent([]byte("k"), []byte("m"), 12, 0),
-			},
-			expectedFrontierEntries: 6,
-			expectedFrontier:        hlc.Timestamp{WallTime: int64(0)},
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			frontier, err := span.MakeFrontier(tc.spans...)
-			require.NoError(t, err)
-			const quantize = time.Duration(10)
-			for _, e := range tc.events {
-				if tc.withFrontierQuantization {
-					e.Checkpoint.ResolvedTS = quantizeTS(e.Checkpoint.ResolvedTS, quantize)
-				}
-				_, err := frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
-				require.NoError(t, err)
-			}
-			for sp, ts := range frontier.Entries() {
-				t.Logf("span: %v, ts: %v\n", sp, ts)
-			}
-			require.Equal(t, tc.expectedFrontierEntries, frontier.Len())
-			require.Equal(t, tc.expectedFrontier, frontier.Frontier())
-		})
-	}
-}
-
-// TestFrontierQuantizationRand makes two frontiers with the same set of spans
-// and one with quantized ts and the other without. The test makes sure that the
-// highwater tracked by the frontier with quantized ts is <= the other, and the
-// number of spans being tracked is >= the other.
-func TestFrontierQuantizationRand(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const numOfSpans = 100
-	events := make([]*kvpb.RangeFeedEvent, numOfSpans)
-	rng, _ := randutil.NewTestRand()
-	for i, s := range kvserverrangefeed.GenerateRandomizedSpans(rng, numOfSpans) {
-		ts := kvserverrangefeed.GenerateRandomizedTs(rng, time.Minute.Nanoseconds())
-		if s.EndKey.Equal(s.Key) {
-			s.EndKey = s.Key.Next()
-		}
-		events[i] = makeCheckpointEvent(s.Key, s.EndKey, int(ts.WallTime), int32(rng.Intn(100)))
-	}
-
-	const quantize = time.Duration(10)
-	quantizedFrontier, err := span.MakeFrontier([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}...)
-	require.NoError(t, err)
-	frontier, err := span.MakeFrontier([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}...)
-	require.NoError(t, err)
-	for _, e := range events {
-		quantizedTs := quantizeTS(e.Checkpoint.ResolvedTS, quantize)
-		_, err := quantizedFrontier.Forward(e.Checkpoint.Span, quantizedTs)
-		require.NoError(t, err)
-		_, err = frontier.Forward(e.Checkpoint.Span, e.Checkpoint.ResolvedTS)
-		require.NoError(t, err)
-	}
-	quantizedEntries := quantizedFrontier.Len()
-	quantizedHW := quantizedFrontier.Frontier()
-	entries := frontier.Len()
-	hw := frontier.Frontier()
-	require.LessOrEqual(t, quantizedEntries, entries)
-	require.True(t, quantizedHW.LessEq(hw))
 }

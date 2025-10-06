@@ -44,7 +44,7 @@ func SetupTestDirectory(
 	stopper.AddCloser(stop.CloserFn(func() {
 		_ = conn.Close() // nolint:grpcconnclose
 	}))
-	client := tenant.NewGRPCDirectoryClientAdapter(conn)
+	client := tenant.NewDirectoryClient(conn)
 	directoryCache, err := tenant.NewDirectoryCache(ctx, stopper, client, opts...)
 	require.NoError(t, err)
 

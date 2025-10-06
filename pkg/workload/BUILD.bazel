@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "connection.go",
         "csv.go",
-        "datadog.go",
         "driver.go",
         "pgx_helpers.go",
         "random.go",
@@ -28,10 +27,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/workload/histogram",
-        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_datadog_datadog_api_client_go_v2//api/datadog",
-        "@com_github_datadog_datadog_api_client_go_v2//api/datadogV1",
         "@com_github_jackc_pgx_v5//:pgx",
         "@com_github_jackc_pgx_v5//pgconn",
         "@com_github_jackc_pgx_v5//pgxpool",
@@ -59,7 +55,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql/memsize",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -72,6 +67,5 @@ go_test(
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
         "//pkg/workload/tpch",
-        "@com_github_stretchr_testify//require",
     ],
 )

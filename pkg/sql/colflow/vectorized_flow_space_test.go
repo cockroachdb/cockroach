@@ -74,7 +74,7 @@ func TestVectorizeInternalMemorySpaceError(t *testing.T) {
 					sources = append(sources, colexecutils.NewFixedNumTuplesNoInputOp(testAllocator, 0 /* numTuples */, nil /* opToInitialize */))
 				}
 				memMon := mon.NewMonitor(mon.Options{
-					Name:     mon.MakeName("MemoryMonitor"),
+					Name:     "MemoryMonitor",
 					Settings: st,
 				})
 				if success {
@@ -124,8 +124,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
-	var closerRegistry colexecargs.CloserRegistry
-	defer closerRegistry.Close(ctx)
 
 	oneInput := []execinfrapb.InputSyncSpec{
 		{ColumnTypes: []*types.T{types.Int}},
@@ -204,7 +202,7 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					sources = append(sources, colexecop.NewRepeatableBatchSource(testAllocator, batch, typs))
 				}
 				memMon := mon.NewMonitor(mon.Options{
-					Name:     mon.MakeName("MemoryMonitor"),
+					Name:     "MemoryMonitor",
 					Settings: st,
 				})
 				flowCtx.Cfg.TestingKnobs = execinfra.TestingKnobs{}
@@ -230,7 +228,6 @@ func TestVectorizeAllocatorSpaceError(t *testing.T) {
 					StreamingMemAccount: &acc,
 					FDSemaphore:         colexecop.NewTestingSemaphore(256),
 					MonitorRegistry:     &monitorRegistry,
-					CloserRegistry:      &closerRegistry,
 				}
 				var (
 					result *colexecargs.NewColOperatorResult

@@ -34,7 +34,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 
 	prev := func(v roachpb.Version) roachpb.Version {
 		t.Helper()
-		if v.Minor < 1 || v.Minor > 4 || v.Patch != 0 || v.Internal != 0 {
+		if v.Minor < 1 || v.Minor > 2 || v.Patch != 0 || v.Internal != 0 {
 			t.Fatalf("invalid version %v", v)
 		}
 		if v.Minor > 1 {

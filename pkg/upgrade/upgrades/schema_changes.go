@@ -75,7 +75,7 @@ func migrateTable(
 		//     the changes are already done in a previous upgrade attempt.
 		//   - Otherwise, perform the schema-change and return.
 
-		log.Dev.Infof(ctx, "performing table migration operation %v", op.name)
+		log.Infof(ctx, "performing table migration operation %v", op.name)
 
 		// Retrieve the table.
 		storedTable, err := readTableDescriptor(ctx, d, storedTableID)
@@ -87,7 +87,7 @@ func migrateTable(
 		// Check legacy schema changer jobs.
 		if mutations := storedTable.GetMutationJobs(); len(mutations) > 0 {
 			for _, mutation := range mutations {
-				log.Dev.Infof(ctx, "waiting for the mutation job %v to complete", mutation.JobID)
+				log.Infof(ctx, "waiting for the mutation job %v to complete", mutation.JobID)
 				if _, err := d.InternalExecutor.Exec(ctx, "migration-mutations-wait",
 					nil, waitForJobStatement, mutation.JobID); err != nil {
 					return err
@@ -97,7 +97,7 @@ func migrateTable(
 		}
 		// Check declarative schema changer jobs.
 		if state := storedTable.GetDeclarativeSchemaChangerState(); state != nil && state.JobID != catpb.InvalidJobID {
-			log.Dev.Infof(ctx, "waiting for the mutation job %v to complete", state.JobID)
+			log.Infof(ctx, "waiting for the mutation job %v to complete", state.JobID)
 			if _, err := d.InternalExecutor.Exec(ctx, "migration-mutations-wait",
 				nil, waitForJobStatement, state.JobID); err != nil {
 				return err
@@ -120,12 +120,12 @@ func migrateTable(
 			exists = hasSchema
 		}
 		if exists {
-			log.Dev.Infof(ctx, "skipping %s operation as the schema change already exists.", op.name)
+			log.Infof(ctx, "skipping %s operation as the schema change already exists.", op.name)
 			return nil
 		}
 
 		// Modify the table.
-		log.Dev.Infof(ctx, "performing operation: %s", op.name)
+		log.Infof(ctx, "performing operation: %s", op.name)
 		if _, err := d.InternalExecutor.ExecEx(
 			ctx,
 			redact.Sprintf("migration-alter-table-%d", storedTableID),

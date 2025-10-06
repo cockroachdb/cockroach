@@ -69,19 +69,8 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     --test_timeout=900 \
     || exit_status=$?
 
-test_filter="^TestCloudBackupRestore"
-# If the TESTS environment variable is set, then it must start with "^TestCloudBackupRestore"
-# or else an error will be raised.
-if [ -n "${TESTS:-}" ]; then
-    if [[ "$TESTS" != ^TestCloudBackupRestore* ]]; then
-        echo "TESTS environment variable must start with '^TestCloudBackupRestore'"
-        exit 1
-    fi
-    test_filter="$TESTS"
-fi
-
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
-    //pkg/backup:backup_test --test_filter="$test_filter" \
+    //pkg/ccl/backupccl:backupccl_test --test_filter='^TestCloudBackupRestore' \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
     || exit_status=$?

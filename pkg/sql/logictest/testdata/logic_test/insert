@@ -397,13 +397,7 @@ INSERT INTO insert_t TABLE select_t ORDER BY v DESC LIMIT 3 RETURNING x, v
 # Check that INSERT supports LIMIT (MySQL extension)
 
 statement ok
-ALTER TABLE insert_t SET (schema_locked=false)
-
-statement ok
 TRUNCATE TABLE insert_t
-
-statement ok
-ALTER TABLE insert_t RESET (schema_locked)
 
 statement ok
 INSERT INTO insert_t SELECT * FROM select_t LIMIT 1
@@ -414,13 +408,7 @@ SELECT * FROM insert_t
 1  9
 
 statement ok
-ALTER TABLE insert_t SET (schema_locked=false)
-
-statement ok
 TRUNCATE TABLE insert_t
-
-statement ok
-ALTER TABLE insert_t RESET (schema_locked)
 
 statement ok
 INSERT INTO insert_t (SELECT * FROM select_t LIMIT 1)
@@ -486,7 +474,6 @@ CREATE TABLE sw (
  FAMILY "primary" (a, b, c, d, e, f, g, ac, bc, cc, dc, ec, fc, rowid)
 )
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE sw]
 ----
@@ -506,29 +493,7 @@ CREATE TABLE public.sw (
   fc STRING(3) COLLATE en NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE sw]
-----
-CREATE TABLE public.sw (
-  a CHAR NULL,
-  b CHAR(3) NULL,
-  c VARCHAR NULL,
-  d VARCHAR(3) NULL,
-  e STRING NULL,
-  f STRING(3) NULL,
-  g "char" NULL,
-  ac CHAR COLLATE en NULL,
-  bc CHAR(3) COLLATE en NULL,
-  cc VARCHAR COLLATE en NULL,
-  dc VARCHAR(3) COLLATE en NULL,
-  ec STRING COLLATE en NULL,
-  fc STRING(3) COLLATE en NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
+)
 
 statement ok
 INSERT INTO sw VALUES (
@@ -626,15 +591,11 @@ INSERT INTO derived(y) VALUES('abcd')
 
 subtest regression_29494
 
-statement disable-cf-mutator ok
-CREATE TABLE t29494(x INT) WITH (schema_locked=false);
-
 statement ok
-INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 # Check that the new column is not visible
@@ -645,7 +606,7 @@ CREATE TABLE public.t29494 (
   x INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING.
 statement error column "y" does not exist
@@ -656,7 +617,6 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 query I
@@ -673,11 +633,10 @@ statement ok
 CREATE TABLE t32759 (
   x INT, y STRING DEFAULT 'b' NOT NULL, z INT,
   FAMILY "primary" (x, z, rowid)
-) WITH (schema_locked=false)
+)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t32759 DROP COLUMN y
 
 # Check that the dropped column is not visible
@@ -689,7 +648,7 @@ CREATE TABLE public.t32759 (
   z INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t32759_pkey PRIMARY KEY (rowid ASC)
-);
+)
 
 # Check that values cannot be inserted into the dropped column.
 statement error column "y" does not exist
@@ -700,7 +659,6 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t32759 DROP COLUMN y
 
 query II colnames
@@ -731,11 +689,10 @@ DROP TABLE xy; DROP TABLE ab
 subtest regression_35611
 
 statement ok
-CREATE TABLE t35611(a INT PRIMARY KEY, CHECK (a > 0)) WITH (schema_locked=false)
+CREATE TABLE t35611(a INT PRIMARY KEY, CHECK (a > 0))
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
 ALTER TABLE t35611 ADD COLUMN b INT
 
 statement ok

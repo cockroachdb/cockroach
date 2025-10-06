@@ -30,8 +30,7 @@ func NewCachedDatabaseRegionsAt(
 	ctx context.Context, _ *kv.DB, lm *lease.Manager, at hlc.Timestamp,
 ) (cdr *CachedDatabaseRegions, err error) {
 	cdr = &CachedDatabaseRegions{}
-	rs := lm.GetReadTimestamp(at)
-	desc, err := lm.Acquire(ctx, rs, keys.SystemDatabaseID)
+	desc, err := lm.Acquire(ctx, at, keys.SystemDatabaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +44,7 @@ func NewCachedDatabaseRegionsAt(
 		return nil, err
 	}
 
-	desc, err = lm.Acquire(ctx, rs, enumID)
+	desc, err = lm.Acquire(ctx, at, enumID)
 	if err != nil {
 		return nil, err
 	}

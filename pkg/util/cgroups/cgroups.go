@@ -709,7 +709,7 @@ func AdjustMaxProcs(ctx context.Context) {
 		if cpuInfo, err := GetCgroupCPU(); err == nil {
 			numCPUToUse := int(math.Ceil(cpuInfo.CPUShares()))
 			if numCPUToUse < system.NumCPU() && numCPUToUse > 0 {
-				log.Dev.Infof(ctx, "running in a container; setting GOMAXPROCS to %d", numCPUToUse)
+				log.Infof(ctx, "running in a container; setting GOMAXPROCS to %d", numCPUToUse)
 				runtime.GOMAXPROCS(numCPUToUse)
 			}
 		}

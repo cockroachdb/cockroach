@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +29,6 @@ import (
 )
 
 type truncateNode struct {
-	zeroInputPlanNode
 	n *tree.Truncate
 }
 
@@ -91,10 +88,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			}
 
 			if n.DropBehavior != tree.DropCascade {
-				// The error code returned here matches PGSQL, even though the CASCADE
-				// operation is supported there with TRUNCATE as well.
-				return errors.WithHintf(pgerror.Newf(pgcode.FeatureNotSupported, "%q is %s table %q", tableDesc.Name, msg, other.Name),
-					"truncate dependent tables at the same time or specify the CASCADE option")
+				return errors.Errorf("%q is %s table %q", tableDesc.Name, msg, other.Name)
 			}
 			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
 				return err
@@ -122,7 +116,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	}
 
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann()), t.n); err != nil {
+		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann())); err != nil {
 			return err
 		}
 
@@ -163,18 +157,11 @@ var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 // so by dropping all existing indexes on the table and creating new ones without
 // backfilling any data into the new indexes. The old indexes are cleaned up
 // asynchronously by the SchemaChangeGCJob.
-func (p *planner) truncateTable(
-	ctx context.Context, id descpb.ID, jobDesc string, truncate *tree.Truncate,
-) error {
+func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc string) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 	if err != nil {
-		return err
-	}
-
-	// Check if this operation is blocked due to schema_locked.
-	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, truncate); err != nil {
 		return err
 	}
 
@@ -427,7 +414,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	nNodes := execCfg.NodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 
-	log.Dev.Infof(ctx, "making %d new truncate split points (%d * %d)", nSplits, preservedSplitsMultiple, nNodes)
+	log.Infof(ctx, "making %d new truncate split points (%d * %d)", nSplits, preservedSplitsMultiple, nNodes)
 
 	// Re-split the new set of indexes along the same split points as the old
 	// indexes.
@@ -516,7 +503,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 		jitter := rand.Int63n(maxJitter*2) - maxJitter
 		expirationTime += jitter
 
-		log.Dev.Infof(ctx, "truncate sending split request for key %s", sp)
+		log.Infof(ctx, "truncate sending split request for key %s", sp)
 		b.AddRawRequest(&kvpb.AdminSplitRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key: sp,

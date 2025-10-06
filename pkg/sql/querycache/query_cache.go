@@ -9,7 +9,6 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -49,15 +48,15 @@ const maxCachedSize = 128 * 1024
 type CachedData struct {
 	SQL  string
 	Memo *memo.Memo
-	// Metadata is set for prepare queries. In this case the memo contains
+	// PrepareMetadata is set for prepare queries. In this case the memo contains
 	// unassigned placeholders. For non-prepared queries, it is nil.
-	Metadata *prep.Metadata
+	PrepareMetadata *PrepareMetadata
 }
 
 func (cd *CachedData) memoryEstimate() int64 {
 	res := int64(len(cd.SQL)) + cd.Memo.MemoryEstimate()
-	if cd.Metadata != nil {
-		res += cd.Metadata.MemoryEstimate()
+	if cd.PrepareMetadata != nil {
+		res += cd.PrepareMetadata.MemoryEstimate()
 	}
 	return res
 }
@@ -127,7 +126,7 @@ func New(memorySize int64) *C {
 // Find returns the entry for the given query, if it is in the cache.
 //
 // If any cached data needs to be updated, it must be done via Add. In
-// particular, Metadata in the returned CachedData must not be modified.
+// particular, PrepareMetadata in the returned CachedData must not be modified.
 func (c *C) Find(session *Session, sql string) (_ CachedData, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -146,7 +145,7 @@ func (c *C) Find(session *Session, sql string) (_ CachedData, ok bool) {
 
 // Add adds an entry to the cache (possibly evicting some other entry). If the
 // cache already has a corresponding entry for d.SQL, it is updated.
-// Note: d.Metadata cannot be modified once this method is called.
+// Note: d.PrepareMetadata cannot be modified once this method is called.
 func (c *C) Add(session *Session, d *CachedData) {
 	if session.highMissRatio() {
 		// If the recent miss ratio in this session is high, we want to avoid the

@@ -62,7 +62,7 @@ func DeleteTableWithPredicate(
 	batchSize int64,
 ) error {
 
-	log.Dev.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
+	log.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(tableID)))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
@@ -121,7 +121,7 @@ func DeleteTableWithPredicate(
 							delRangeRequest)
 
 						if err != nil {
-							log.Dev.Errorf(ctx, "delete range %s - %s failed: %v", span.Key, span.EndKey, err)
+							log.Errorf(ctx, "delete range %s - %s failed: %v", span.Key, span.EndKey, err)
 							return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
 						}
 						span = nil

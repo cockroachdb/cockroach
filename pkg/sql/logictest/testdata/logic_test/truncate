@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
@@ -38,16 +37,8 @@ SELECT * FROM kview
 5 6
 7 8
 
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE kv SET (schema_locked=false)
-
 statement ok
 TRUNCATE TABLE kv
-
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE kv RESET (schema_locked)
 
 query II
 SELECT * FROM kv
@@ -69,16 +60,8 @@ CREATE TABLE selfref (
   Z INT REFERENCES selfref (y)
 )
 
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE selfref SET (schema_locked=false)
-
 statement ok
 TRUNCATE table selfref
-
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE selfref RESET (schema_locked)
 
 statement ok
 INSERT INTO selfref VALUES (1, NULL);
@@ -99,16 +82,8 @@ CREATE TABLE bar (
   FAMILY "primary" (id, description)
 );
 
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE bar SET (schema_locked=false)
-
 statement ok
 TRUNCATE bar
-
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE bar RESET (schema_locked)
 
 statement ok
 DROP TABLE bar;
@@ -142,14 +117,7 @@ SELECT get_min_t0();
 0
 
 statement ok
-ALTER TABLE t0 SET (schema_locked=false)
-
-# Fallback to legacy schema changer due to references.
-statement ok
 TRUNCATE TABLE t0;
-
-statement ok
-ALTER TABLE t0 RESET (schema_locked)
 
 query I
 SELECT * FROM v0 ORDER BY c0;
@@ -218,17 +186,7 @@ CREATE TABLE t (
 COMMENT ON COLUMN t.x IS '''hi''); DROP TABLE t;';
 COMMENT ON COLUMN t.z IS 'comm"en"t2';
 COMMENT ON INDEX t@i2 IS 'comm''ent3';
-
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE t SET (schema_locked=false)
-
-statement ok
 TRUNCATE t
-
-onlyif config local-mixed-25.3
-statement ok
-ALTER TABLE t RESET (schema_locked)
 
 query TT
 SELECT column_name, comment FROM [SHOW COLUMNS FROM t WITH COMMENT] ORDER BY column_name

@@ -44,7 +44,7 @@ func registerBufferedLogging(r registry.Registry) {
 		t.Status("installing FluentBit containers on CRDB nodes")
 		// Create FluentBit container on the node with a TCP input and dev/null output.
 		err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), fmt.Sprintf(
-			"sudo docker run -d -p %d:%d --name=fluentbit us-central1-docker.pkg.dev/cockroach-testeng-infra/roachtest-support/fluent-bit -i tcp -o null",
+			"sudo docker run -d -p %d:%d --name=fluentbit fluent/fluent-bit -i tcp -o null",
 			fluentBitTCPPort,
 			fluentBitTCPPort))
 		if err != nil {
@@ -75,7 +75,7 @@ func registerBufferedLogging(r registry.Registry) {
 			install.CockroachNodeCertsDir, /* certsDir */
 			roachprod.PGURLOptions{
 				External: false,
-				Secure:   install.SimpleSecureOption(true),
+				Secure:   true,
 			})
 		require.NoError(t, err)
 		workloadPGURLs := make([]string, len(secureUrls))
@@ -93,7 +93,7 @@ func registerBufferedLogging(r registry.Registry) {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), initWorkloadCmd)
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			joinedURLs := strings.Join(workloadPGURLs, " ")
 			runWorkloadCmd := fmt.Sprintf("./cockroach workload run kv --concurrency=32 --duration=1h %s", joinedURLs)

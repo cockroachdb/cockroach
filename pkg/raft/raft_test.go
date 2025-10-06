@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +45,7 @@ func nextEnts(r *raft, s *MemoryStorage) (ents []pb.Entry) {
 
 	// Return committed entries.
 	ents = r.raftLog.nextCommittedEnts(true)
-	r.raftLog.appliedTo(r.raftLog.committed)
+	r.raftLog.appliedTo(r.raftLog.committed, 0 /* size */)
 	return ents
 }
 
@@ -347,7 +346,7 @@ func TestLearnerElectionTimeout(t *testing.T) {
 
 	// n2 is learner. Learner should not start election even when times out.
 	setRandomizedElectionTimeout(n2, n2.electionTimeout)
-	for i := int64(0); i < n2.electionTimeout; i++ {
+	for i := 0; i < n2.electionTimeout; i++ {
 		n2.tick()
 	}
 
@@ -357,39 +356,21 @@ func TestLearnerElectionTimeout(t *testing.T) {
 // TestLearnerPromotion verifies that the learner should not election until
 // it is promoted to a normal peer.
 func TestLearnerPromotion(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLearnerPromotion(t, storeLivenessEnabled)
-		})
-}
-
-func testLearnerPromotion(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-	} else {
-		n1 = newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	n1 := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestLearnerRaft(2, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2)
+	nt := newNetwork(n1, n2)
 
 	assert.NotEqual(t, pb.StateLeader, n1.state)
 
 	// n1 should become leader
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
-	for i := int64(0); i < n1.electionTimeout; i++ {
+	for i := 0; i < n1.electionTimeout; i++ {
 		n1.tick()
 	}
 	n1.advanceMessagesAfterAppend()
@@ -403,14 +384,9 @@ func testLearnerPromotion(t *testing.T, storeLivenessEnabled bool) {
 	n2.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
 	assert.False(t, n2.isLearner)
 
-	if storeLivenessEnabled {
-		// We need to withdraw support of 1 to allow 2 to campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	// n2 start election, should become leader
 	setRandomizedElectionTimeout(n2, n2.electionTimeout)
-	for i := int64(0); i < n2.electionTimeout; i++ {
+	for i := 0; i < n2.electionTimeout; i++ {
 		n2.tick()
 	}
 	n2.advanceMessagesAfterAppend()
@@ -437,60 +413,25 @@ func TestLearnerCanVote(t *testing.T) {
 }
 
 func TestLeaderCycle(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderCycle(t, false, storeLivenessEnabled)
-		})
+	testLeaderCycle(t, false)
 }
 
 func TestLeaderCyclePreVote(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderCycle(t, true, storeLivenessEnabled)
-		})
+	testLeaderCycle(t, true)
 }
 
 // testLeaderCycle verifies that each node in a cluster can campaign
 // and be elected in turn. This ensures that elections (including
 // pre-vote) work when not starting from a clean slate (as they do in
 // TestLeaderElection)
-func testLeaderCycle(t *testing.T, preVote bool, storeLivenessEnabled bool) {
-	var cfg func(c *Config) = nil
-
+func testLeaderCycle(t *testing.T, preVote bool) {
+	cfg := fortificationDisabledConfig
 	if preVote {
 		cfg = preVoteConfigWithFortificationDisabled
 	}
-
-	if preVote && storeLivenessEnabled {
-		cfg = preVoteConfig
-	} else if preVote && !storeLivenessEnabled {
-		cfg = preVoteConfigWithFortificationDisabled
-	} else if !preVote && storeLivenessEnabled {
-		// The default configuration satisfies this condition.
-	} else if !preVote && !storeLivenessEnabled {
-		cfg = fortificationDisabledConfig
-	}
-
 	n := newNetworkWithConfig(cfg, nil, nil, nil)
-	n.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	curLeader := pb.PeerID(1)
-
 	for campaignerID := pb.PeerID(1); campaignerID <= 3; campaignerID++ {
-		if storeLivenessEnabled {
-			// We need to withdraw support of the current leader to allow the new peer
-			// to campaign and get elected.
-			n.livenessFabric.WithdrawSupportForPeerFromAllPeers(curLeader)
-		}
-
 		n.send(pb.Message{From: campaignerID, To: campaignerID, Type: pb.MsgHup})
-
-		if storeLivenessEnabled {
-			// Restore the support state.
-			n.livenessFabric.GrantSupportForPeerFromAllPeers(curLeader)
-		}
-
-		// Update the current leader to prep for the next iteration.
-		curLeader = campaignerID
 
 		for _, peer := range n.peers {
 			sm := peer.(*raft)
@@ -627,34 +568,21 @@ func testVoteFromAnyState(t *testing.T, vt pb.MessageType) {
 	}
 }
 
-// TestLogReplication tests that the normal replication flow works.
 func TestLogReplication(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLogReplication(t, storeLivenessEnabled)
-		})
-}
-
-func testLogReplication(t *testing.T, storeLivenessEnabled bool) {
-	var cfg func(c *Config) = nil
-	if !storeLivenessEnabled {
-		cfg = fortificationDisabledConfig
-	}
-
 	tests := []struct {
 		*network
 		msgs       []pb.Message
 		wcommitted uint64
 	}{
 		{
-			newNetworkWithConfig(cfg, nil, nil, nil),
+			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
 			[]pb.Message{
 				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
 			},
 			2,
 		},
 		{
-			newNetworkWithConfig(cfg, nil, nil, nil),
+			newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil),
 			[]pb.Message{
 				{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}},
 				{From: 1, To: 2, Type: pb.MsgHup},
@@ -668,18 +596,7 @@ func testLogReplication(t *testing.T, storeLivenessEnabled bool) {
 		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 		for _, m := range tt.msgs {
-			if m.Type == pb.MsgHup && storeLivenessEnabled {
-				// We need to withdraw support of the current leader to allow the new peer
-				// to campaign and get elected.
-				tt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-			}
-
 			tt.send(m)
-
-			if m.Type == pb.MsgHup && storeLivenessEnabled {
-				// Restore the support state.
-				tt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-			}
 		}
 
 		for j, x := range tt.network.peers {
@@ -719,7 +636,7 @@ func TestLearnerLogReplication(t *testing.T) {
 	n2.becomeFollower(1, None)
 
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
-	for i := int64(0); i < n1.electionTimeout; i++ {
+	for i := 0; i < n1.electionTimeout; i++ {
 		n1.tick()
 	}
 	n1.advanceMessagesAfterAppend()
@@ -792,8 +709,7 @@ func testCannotCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool
 
 	// Elect 2 as the new leader with term 2.
 	if storeLivenessEnabled {
-		// We need to withdraw support of the current leader to allow the new peer
-		// to campaign and get elected.
+		// We need to withdraw support of the current leader.
 		tt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
 	}
 
@@ -817,22 +733,10 @@ func testCannotCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool
 	assert.Equal(t, uint64(5), sm.raftLog.committed)
 }
 
-// TestCommitWithoutNewTermEntry tests the entries could be committed when
-// leader changes, no new proposal comes in.
+// TestCommitWithoutNewTermEntry tests the entries could be committed
+// when leader changes, no new proposal comes in.
 func TestCommitWithoutNewTermEntry(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testCommitWithoutNewTermEntry(t, storeLivenessEnabled)
-		})
-}
-
-func testCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool) {
-	var cfg func(c *Config) = nil
-	if !storeLivenessEnabled {
-		cfg = fortificationDisabledConfig
-	}
-
-	tt := newNetworkWithConfig(cfg, nil, nil, nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil, nil, nil)
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// 0 cannot reach 3,4,5
@@ -852,57 +756,21 @@ func testCommitWithoutNewTermEntry(t *testing.T, storeLivenessEnabled bool) {
 	// elect 2 as the new leader with term 2
 	// after append a ChangeTerm entry from the current term, all entries
 	// should be committed
-
-	if storeLivenessEnabled {
-		// We need to withdraw support of the current leader to allow the new peer
-		// to campaign and get elected.
-		tt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-
-	if storeLivenessEnabled {
-		// Restore the support state.
-		tt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-	}
 
 	assert.Equal(t, uint64(4), sm.raftLog.committed)
 }
 
 func TestDuelingCandidates(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testDuelingCandidates(t, storeLivenessEnabled)
-		})
-}
-
-func testDuelingCandidates(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var a, b, c *raft
-
 	s1 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s2 := newTestMemoryStorage(withPeers(1, 2, 3))
 	s3 := newTestMemoryStorage(withPeers(1, 2, 3))
+	a := newTestRaft(1, 10, 1, s1, withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, s2, withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, s3, withStoreLiveness(raftstoreliveness.Disabled{}))
 
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		a = newTestRaft(1, 10, 1, s1, withStoreLiveness(fabric.GetStoreLiveness(1)))
-		b = newTestRaft(2, 10, 1, s2, withStoreLiveness(fabric.GetStoreLiveness(2)))
-		c = newTestRaft(3, 10, 1, s3, withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		a = newTestRaft(1, 10, 1, s1, withStoreLiveness(raftstoreliveness.Disabled{}))
-		b = newTestRaft(2, 10, 1, s2, withStoreLiveness(raftstoreliveness.Disabled{}))
-		c = newTestRaft(3, 10, 1, s3, withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
-
+	nt := newNetwork(a, b, c)
 	nt.cut(1, 3)
-	if storeLivenessEnabled {
-		// We need to withdraw support for and from 1 and 3 to simulate a partition.
-		nt.livenessFabric.WithdrawSupport(1, 3)
-		nt.livenessFabric.WithdrawSupport(3, 1)
-	}
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
@@ -916,20 +784,10 @@ func testDuelingCandidates(t *testing.T, storeLivenessEnabled bool) {
 	assert.Equal(t, pb.StateCandidate, sm.state)
 
 	nt.recover()
-	if storeLivenessEnabled {
-		// Fix the network at the store liveness layer.
-		nt.livenessFabric.GrantSupport(1, 3)
-		nt.livenessFabric.GrantSupport(3, 1)
-	}
 
 	// candidate 3 now increases its term and tries to vote again
 	// we expect it to disrupt the leader 1 since it has a higher term
 	// 3 will be follower again since both 1 and 2 rejects its vote request since 3 does not have a long enough log
-
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 so 3 can be elected as leader.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 	assert.Equal(t, pb.StateFollower, sm.state)
 
@@ -952,50 +810,22 @@ func testDuelingCandidates(t *testing.T, storeLivenessEnabled bool) {
 }
 
 func TestDuelingPreCandidates(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testDuelingPreCandidates(t, storeLivenessEnabled)
-		})
-}
-
-func testDuelingPreCandidates(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var cfgA, cfgB, cfgC *Config
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		cfgA = newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		cfgB = newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		cfgC = newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		cfgA = newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		cfgB = newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		cfgC = newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
+	cfgA := newTestConfig(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	cfgB := newTestConfig(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	cfgC := newTestConfig(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 	cfgA.PreVote = true
 	cfgB.PreVote = true
 	cfgC.PreVote = true
-
 	a := newRaft(cfgA)
 	b := newRaft(cfgB)
 	c := newRaft(cfgC)
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
+	nt := newNetwork(a, b, c)
 	nt.t = t
-
 	nt.cut(1, 3)
-	if storeLivenessEnabled {
-		// Withdraw the support between 1 and 3 to simulate a network partition.
-		nt.livenessFabric.WithdrawSupport(1, 3)
-		nt.livenessFabric.WithdrawSupport(3, 1)
-	}
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
@@ -1012,12 +842,6 @@ func testDuelingPreCandidates(t *testing.T, storeLivenessEnabled bool) {
 
 	// Candidate 3 now increases its term and tries to vote again.
 	// With PreVote, it does not disrupt the leader.
-
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 so 3 can campaign and not get rejected
-		// because of store liveness support.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	tests := []struct {
@@ -1066,6 +890,7 @@ func TestCandidateConcede(t *testing.T) {
 	assert.Equal(t, uint64(1), a.Term)
 
 	wantLog := ltoa(newLog(&MemoryStorage{ls: LogSlice{
+		term:    1,
 		entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 	}}, nil))
 	for i, p := range tt.peers {
@@ -1095,37 +920,11 @@ func TestSingleNodePreCandidate(t *testing.T) {
 }
 
 func TestOldMessages(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testOldMessages(t, storeLivenessEnabled)
-		})
-}
-
-func testOldMessages(t *testing.T, storeLivenessEnabled bool) {
-	var cfg func(c *Config) = nil
-	if !storeLivenessEnabled {
-		cfg = fortificationDisabledConfig
-	}
-
-	tt := newNetworkWithConfig(cfg, nil, nil, nil)
+	tt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	// make 0 leader @ term 3
 	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-
-	if storeLivenessEnabled {
-		// We need to withdraw support of the current leader to allow the new peer
-		// to campaign and get elected.
-		tt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-		tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-		tt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-
-		tt.livenessFabric.WithdrawSupportForPeerFromAllPeers(2)
-		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-		tt.livenessFabric.GrantSupportForPeerFromAllPeers(2)
-	} else {
-		tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-		tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	}
-
+	tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
+	tt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 	// pretend we're an old leader trying to make progress; this entry is expected to be ignored.
 	tt.send(pb.Message{From: 2, To: 1, Type: pb.MsgApp, Term: 2, Entries: index(3).terms(2)})
 	// commit a new entry
@@ -1133,7 +932,10 @@ func testOldMessages(t *testing.T, storeLivenessEnabled bool) {
 
 	ents := index(1).terms(1, 2, 3, 3)
 	ents[3].Data = []byte("somedata")
-	ilog := newLog(&MemoryStorage{ls: LogSlice{entries: ents}}, nil)
+	ilog := newLog(&MemoryStorage{ls: LogSlice{
+		term:    3,
+		entries: ents,
+	}}, nil)
 	base := ltoa(ilog)
 	for i, p := range tt.peers {
 		if sm, ok := p.(*raft); ok {
@@ -1183,6 +985,7 @@ func TestProposal(t *testing.T) {
 		wantLog := newLog(NewMemoryStorage(), raftlogger.RaftLogger)
 		if tt.success {
 			wantLog = newLog(&MemoryStorage{ls: LogSlice{
+				term:    2,
 				entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 			}}, nil)
 		}
@@ -1214,6 +1017,7 @@ func TestProposalByProxy(t *testing.T) {
 		tt.send(pb.Message{From: 2, To: 2, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
 		wantLog := newLog(&MemoryStorage{ls: LogSlice{
+			term:    1,
 			entries: []pb.Entry{{Index: 1, Term: 1}, {Index: 2, Term: 1, Data: data}},
 		}}, nil)
 		base := ltoa(wantLog)
@@ -1231,118 +1035,73 @@ func TestProposalByProxy(t *testing.T) {
 }
 
 func TestCommit(t *testing.T) {
-	m := func(indices ...uint64) []uint64 { return indices }
-	for _, tt := range []struct {
-		term  uint64     // term before becoming leader
-		log   []pb.Entry // log before becoming leader
-		app   []pb.Entry // appended entries after becoming leader
-		match []uint64   // match indices for all peers
-		want  uint64     // expected commit index
+	tests := []struct {
+		matches []uint64
+		logs    []pb.Entry
+		smTerm  uint64
+		w       uint64
 	}{
-		// single node
-		{term: 0, match: m(0), want: 0},
-		{term: 0, match: m(1), want: 1},
-		{term: 1, log: index(1).terms(1), match: m(1), want: 0},
-		{term: 1, log: index(1).terms(1), match: m(2), want: 2},
-		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(1), want: 0},
-		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(2), want: 2},
-		{term: 1, log: index(1).terms(1), app: index(3).terms(2), match: m(3), want: 3},
+		// single
+		{[]uint64{1}, index(1).terms(1), 1, 1},
+		{[]uint64{1}, index(1).terms(1), 2, 0},
+		{[]uint64{2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{1}, index(1).terms(2), 2, 1},
 
-		// odd number of nodes
-		{term: 1, log: index(1).terms(1), match: m(1, 1, 1), want: 0},
-		{term: 1, log: index(1).terms(1), match: m(2, 1, 1), want: 0},
-		{term: 1, log: index(1).terms(1), match: m(2, 1, 2), want: 2},
-		{term: 1, log: index(1).terms(1), match: m(2, 2, 2), want: 2},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(2, 2, 2), want: 0},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 3, 2), want: 3},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(4, 4, 5), want: 4},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(5, 4, 5), want: 5},
+		// odd
+		{[]uint64{2, 1, 1}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{2, 1, 2}, index(1).terms(1, 1), 2, 0},
 
-		// even number of nodes
-		{term: 1, log: index(1).terms(1), match: m(1, 1), want: 0},
-		{term: 1, log: index(1).terms(1), match: m(2, 1, 1, 1), want: 0},
-		{term: 1, log: index(1).terms(1), match: m(2, 1, 2, 1), want: 0},
-		{term: 1, log: index(1).terms(1), match: m(2, 1, 2, 2), want: 2},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(2, 2, 2, 1), want: 0},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 2, 2, 3), want: 0},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(3, 3, 1, 3), want: 3},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(4, 4, 4, 5), want: 4},
-		{term: 1, log: index(1).terms(1, 1), app: index(4).terms(2, 2), match: m(5, 4, 5, 5), want: 5},
-	} {
-		t.Run("", func(t *testing.T) {
-			storage := newTestMemoryStorage(withPeers(1))
-			require.NoError(t, storage.Append(tt.log))
-			require.NoError(t, storage.SetHardState(pb.HardState{Term: tt.term}))
-			sm := newTestRaft(1, 10, 2, storage)
-			sm.becomeCandidate()
-			sm.becomeLeader()
-			require.Equal(t, tt.term+1, sm.Term)
-			require.True(t, sm.appendEntry(tt.app...))
+		// even
+		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1, 1}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 2), 1, 1},
+		{[]uint64{2, 1, 1, 2}, index(1).terms(1, 1), 2, 0},
+		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 2), 2, 2},
+		{[]uint64{2, 1, 2, 2}, index(1).terms(1, 1), 2, 0},
+	}
 
-			for i, match := range tt.match {
-				id := pb.PeerID(i + 1)
-				if id > 1 {
-					sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
-				}
-				require.LessOrEqual(t, match, sm.raftLog.lastIndex())
-				pr := sm.trk.Progress(id)
-				pr.MaybeUpdate(match)
+	for i, tt := range tests {
+		storage := newTestMemoryStorage(withPeers(1))
+		storage.Append(tt.logs)
+		storage.hardState = pb.HardState{Term: tt.smTerm}
+
+		sm := newTestRaft(1, 10, 2, storage)
+		for j := 0; j < len(tt.matches); j++ {
+			id := pb.PeerID(j + 1)
+			if id > 1 {
+				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
 			}
-			sm.maybeCommit()
-			assert.Equal(t, tt.want, sm.raftLog.committed)
-		})
+			pr := sm.trk.Progress(id)
+			pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
+		}
+		sm.maybeCommit()
+		assert.Equal(t, tt.w, sm.raftLog.committed, "#%d", i)
 	}
 }
 
-// TestAtRandomizedElectionTimeout tests that the followers who call
-// atRandomizedElectionTimeout() will campaign uniformly randomly between the
-// range of [electionTimeout, 2 * electionTimeout - 1].
-func TestAtRandomizedElectionTimeout(t *testing.T) {
+func TestPastElectionTimeout(t *testing.T) {
 	tests := []struct {
-		electionElapsed int64
-		// wprobability is the expected probability of an election at
-		// the given electionElapsed.
+		elapse       int
 		wprobability float64
 		round        bool
 	}{
-		// randomizedElectionTimeout = [10,15) since we are setting the
-		// electionTimeoutJitter field to 5 below.
-		// electionElapsed less than the electionTimeout should never campaign.
-		{0, 0, false},
 		{5, 0, false},
-		{9, 0, false},
-
-		// Since there are 5 possible values for randomizedElectionTimeout, we
-		// expect the probability to be 1/5 for each value.
-		{10, 0.2, true},
-		{11, 0.2, true},
-		{14, 0.2, true},
-		//
-		// No possible value of randomizedElectionTimeout [10,15) would cause an
-		// election at electionElapsed = [15,19].
-		{15, 0, false},
-		{16, 0, false},
-		{17, 0, false},
-		{18, 0, false},
-		{19, 0, false},
-		//
-		// Only one out of ten values of randomizedElectionTimeout (10) leads to
-		// election at electionElapsed = 20.
-		{22, 0.2, true},
-		//
-		// Two out of ten values of randomizedElectionTimeout (10, 11) would lead
-		// to election at electionElapsed = 120.
-		{110, 0.4, true},
+		{10, 0.1, true},
+		{13, 0.4, true},
+		{15, 0.6, true},
+		{18, 0.9, true},
+		{20, 1, false},
 	}
 
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
-		sm.electionElapsed = tt.electionElapsed
-		sm.electionTimeoutJitter = 5
+		sm.electionElapsed = tt.elapse
 		c := 0
 		for j := 0; j < 10000; j++ {
 			sm.resetRandomizedElectionTimeout()
-			if sm.atRandomizedElectionTimeout() {
+			if sm.pastElectionTimeout() {
 				c++
 			}
 		}
@@ -1375,65 +1134,42 @@ func TestStepIgnoreOldTermMsg(t *testing.T) {
 //     delete the existing entry and all that follow it; append any new entries not already in the log.
 //  3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
 func TestHandleMsgApp(t *testing.T) {
-	const term = 2
-	init := index(1).terms(1, 2) // the initial log
-
-	msgApp := func(term uint64, ls LogSlice, commit uint64) pb.Message {
-		return pb.Message{
-			From: 2, To: 1, Type: pb.MsgApp, Term: term,
-			Index: ls.prev.index, LogTerm: ls.prev.term, Entries: ls.Entries(),
-			Commit: commit,
-		}
-	}
-	for _, tt := range []struct {
-		commit  uint64 // the initial commit index
+	tests := []struct {
 		m       pb.Message
 		wIndex  uint64
 		wCommit uint64
 		wReject bool
 	}{
 		// Ensure 1
-		{m: msgApp(3, entryID{index: 2, term: 3}.terms(), 3), wIndex: 2, wReject: true}, // previous log mismatch
-		{m: msgApp(3, entryID{index: 3, term: 3}.terms(), 3), wIndex: 2, wReject: true}, // previous log non-exist
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 2, Commit: 3}, 2, 0, true}, // previous log mismatch
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 3, Index: 3, Commit: 3}, 2, 0, true}, // previous log non-exist
 
 		// Ensure 2
-		{m: msgApp(2, entryID{index: 1, term: 1}.terms(), 1), wIndex: 2, wCommit: 1},
-		{m: msgApp(3, entryID{}.terms(3), 1), wIndex: 1, wCommit: 1},
-		{m: msgApp(2, entryID{index: 2, term: 2}.terms(2, 2), 3), wIndex: 4, wCommit: 3},
-		{m: msgApp(2, entryID{index: 2, term: 2}.terms(2), 3), wIndex: 3, wCommit: 3},
-		{m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 4), wIndex: 2, wCommit: 2},
-
-		// Appends overlapping the commit index.
-		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 2), wIndex: 2, wCommit: 2},
-		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(2, 2, 2), 4), wIndex: 4, wCommit: 4},
-		{commit: 2, m: msgApp(2, entryID{index: 2, term: 2}.terms(2), 3), wIndex: 3, wCommit: 3},
-		// Something is wrong with the appended slice. Entry at index 2 is already
-		// committed with term = 2, but we are receiving an append which says entry
-		// 2 has term 1 and is committed. This must be rejected.
-		{commit: 2, m: msgApp(2, entryID{index: 1, term: 1}.terms(1, 1), 3), wIndex: 2, wCommit: 2, wReject: true},
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 1}, 2, 1, false},
+		{pb.Message{Type: pb.MsgApp, Term: 3, LogTerm: 0, Index: 0, Commit: 1, Entries: []pb.Entry{{Index: 1, Term: 3}}}, 1, 1, false},
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3, Entries: []pb.Entry{{Index: 3, Term: 2}, {Index: 4, Term: 2}}}, 4, 3, false},
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4, Entries: []pb.Entry{{Index: 3, Term: 2}}}, 3, 3, false},
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 4, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false},
 
 		// Ensure 3
-		{m: msgApp(1, entryID{index: 1, term: 1}.terms(), 3), wIndex: 2, wCommit: 1},  // match entry 1, commit up to last new entry 1
-		{m: msgApp(2, entryID{index: 1, term: 1}.terms(2), 3), wIndex: 2, wCommit: 2}, // match entry 1, commit up to last new entry 2
-		{m: msgApp(2, entryID{index: 2, term: 2}.terms(), 3), wIndex: 2, wCommit: 2},  // match entry 2, commit up to last new entry 2
-		{m: msgApp(2, entryID{index: 2, term: 2}.terms(), 4), wIndex: 2, wCommit: 2},  // commit up to log.last()
-	} {
-		t.Run("", func(t *testing.T) {
-			storage := newTestMemoryStorage(withPeers(1, 2))
-			require.NoError(t, storage.Append(init))
-			require.NoError(t, storage.SetHardState(pb.HardState{
-				Term:   term,
-				Commit: tt.commit,
-			}))
-			sm := newTestRaft(1, 10, 1, storage)
+		{pb.Message{Type: pb.MsgApp, Term: 1, LogTerm: 1, Index: 1, Commit: 3}, 2, 1, false},                                           // match entry 1, commit up to last new entry 1
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 1, Index: 1, Commit: 3, Entries: []pb.Entry{{Index: 2, Term: 2}}}, 2, 2, false}, // match entry 1, commit up to last new entry 2
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 3}, 2, 2, false},                                           // match entry 2, commit up to last new entry 2
+		{pb.Message{Type: pb.MsgApp, Term: 2, LogTerm: 2, Index: 2, Commit: 4}, 2, 2, false},                                           // commit up to log.last()
+	}
 
-			sm.handleAppendEntries(tt.m)
-			assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex())
-			assert.Equal(t, tt.wCommit, sm.raftLog.committed)
-			m := sm.readMessages()
-			require.Len(t, m, 1)
-			assert.Equal(t, tt.wReject, m[0].Reject)
-		})
+	for i, tt := range tests {
+		storage := newTestMemoryStorage(withPeers(1))
+		require.NoError(t, storage.Append(index(1).terms(1, 2)))
+		sm := newTestRaft(1, 10, 1, storage)
+		sm.becomeFollower(2, None)
+
+		sm.handleAppendEntries(tt.m)
+		assert.Equal(t, tt.wIndex, sm.raftLog.lastIndex(), "#%d", i)
+		assert.Equal(t, tt.wCommit, sm.raftLog.committed, "#%d", i)
+		m := sm.readMessages()
+		require.Len(t, m, 1, "#%d", i)
+		assert.Equal(t, tt.wReject, m[0].Reject, "#%d", i)
 	}
 }
 
@@ -1667,6 +1403,7 @@ func testRecvMsgVote(t *testing.T, msgType pb.MessageType) {
 		}
 		sm.Vote = tt.voteFor
 		sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
+			term:    2,
 			entries: index(1).terms(2, 2),
 		}}, nil)
 
@@ -1795,44 +1532,25 @@ func TestAllServerStepdown(t *testing.T) {
 }
 
 func TestCandidateResetTermMsgHeartbeat(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testCandidateResetTerm(t, pb.MsgHeartbeat, storeLivenessEnabled)
-		})
+	testCandidateResetTerm(t, pb.MsgHeartbeat)
 }
 
 func TestCandidateResetTermMsgApp(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testCandidateResetTerm(t, pb.MsgApp, storeLivenessEnabled)
-		})
+	testCandidateResetTerm(t, pb.MsgApp)
 }
 
 // testCandidateResetTerm tests when a candidate receives a
 // MsgHeartbeat or MsgApp from leader, "Step" resets the term
 // with leader's and reverts back to follower.
-func testCandidateResetTerm(t *testing.T, mt pb.MessageType, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var a, b, c *raft
+func testCandidateResetTerm(t *testing.T, mt pb.MessageType) {
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
+	nt := newNetwork(a, b, c)
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
@@ -1843,33 +1561,15 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType, storeLivenessEnable
 	// isolate 3 and increase term in rest
 	nt.isolate(3)
 
-	if storeLivenessEnabled {
-		// We need to withdraw from 1 to allow 2 to campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-
-	if storeLivenessEnabled {
-		// We need to grant support to 1, and withdraw it from 2 (the current
-		// leader) to allow 1 to campaign and get elected.
-		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(2)
-	}
-
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateLeader, a.state)
 	assert.Equal(t, pb.StateFollower, b.state)
 
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 to allow 3 to campaign.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	// trigger campaign in isolated c
 	c.resetRandomizedElectionTimeout()
-	for i := int64(0); i < c.randomizedElectionTimeout; i++ {
+	for i := 0; i < c.randomizedElectionTimeout; i++ {
 		c.tick()
 	}
 	c.advanceMessagesAfterAppend()
@@ -1885,6 +1585,7 @@ func testCandidateResetTerm(t *testing.T, mt pb.MessageType, storeLivenessEnable
 	assert.Equal(t, pb.StateFollower, c.state)
 	// follower c term is reset with leader's
 	assert.Equal(t, a.Term, c.Term)
+
 }
 
 // The following three tests exercise the behavior of a (pre-)candidate when its
@@ -1987,7 +1688,7 @@ func TestLeaderStepdownWhenQuorumActive(t *testing.T) {
 	sm.becomeCandidate()
 	sm.becomeLeader()
 
-	for i := int64(0); i < sm.electionTimeout+1; i++ {
+	for i := 0; i < sm.electionTimeout+1; i++ {
 		sm.Step(pb.Message{From: 2, Type: pb.MsgHeartbeatResp, Term: sm.Term})
 		sm.tick()
 	}
@@ -1996,32 +1697,15 @@ func TestLeaderStepdownWhenQuorumActive(t *testing.T) {
 }
 
 func TestLeaderStepdownWhenQuorumLost(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderStepdownWhenQuorumLost(t, storeLivenessEnabled)
-		})
-}
-
-func testLeaderStepdownWhenQuorumLost(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var sm *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		sm = newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-	} else {
-		sm = newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	sm := newTestRaft(1, 5, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	sm.checkQuorum = true
 
 	sm.becomeCandidate()
 	sm.becomeLeader()
-	assert.Equal(t, pb.StateLeader, sm.state)
 
-	for i := int64(0); i < sm.electionTimeout; i++ {
+	for i := 0; i < sm.electionTimeout+1; i++ {
 		sm.tick()
 	}
 
@@ -2029,106 +1713,55 @@ func testLeaderStepdownWhenQuorumLost(t *testing.T, storeLivenessEnabled bool) {
 }
 
 func TestLeaderSupersedingWithCheckQuorum(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderSupersedingWithCheckQuorum(t, storeLivenessEnabled)
-		})
-}
-func testLeaderSupersedingWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
-	n1.checkQuorum = true
-	n2.checkQuorum = true
-	n3.checkQuorum = true
-
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
-	setRandomizedElectionTimeout(n2, n2.electionTimeout+1)
-
-	for i := int64(0); i < n2.electionTimeout; i++ {
-		n2.tick()
-	}
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-
-	assert.Equal(t, pb.StateLeader, n1.state)
-	assert.Equal(t, pb.StateFollower, n3.state)
-
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 so 3 can campaign and not get rejected
-		// because other followers support 1.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-
-	if storeLivenessEnabled {
-		// 2 voted for 3 since its support for 1 was withdrawn.
-		assert.Equal(t, pb.StateLeader, n3.state)
-	} else {
-		// 2 rejected 3's vote request since its electionElapsed had not reached to
-		// electionTimeout.
-		assert.Equal(t, pb.StateCandidate, n3.state)
-	}
-
-	// Letting b's electionElapsed reach to electionTimeout
-	for i := int64(0); i < n2.electionTimeout; i++ {
-		n2.tick()
-	}
-	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-
-	assert.Equal(t, pb.StateLeader, n3.state)
-}
-
-func TestLeaderElectionWithCheckQuorum(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderElectionWithCheckQuorum(t, storeLivenessEnabled)
-		})
-}
-
-func testLeaderElectionWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var a, b, c *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	a.checkQuorum = true
 	b.checkQuorum = true
 	c.checkQuorum = true
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
+	nt := newNetwork(a, b, c)
+	setRandomizedElectionTimeout(b, b.electionTimeout+1)
+
+	for i := 0; i < b.electionTimeout; i++ {
+		b.tick()
+	}
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+
+	assert.Equal(t, pb.StateLeader, a.state)
+	assert.Equal(t, pb.StateFollower, c.state)
+
+	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+
+	// Peer b rejected c's vote since its electionElapsed had not reached to electionTimeout
+	assert.Equal(t, pb.StateCandidate, c.state)
+
+	// Letting b's electionElapsed reach to electionTimeout
+	for i := 0; i < b.electionTimeout; i++ {
+		b.tick()
+	}
+	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+
+	assert.Equal(t, pb.StateLeader, c.state)
+}
+
+func TestLeaderElectionWithCheckQuorum(t *testing.T) {
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+
+	a.checkQuorum = true
+	b.checkQuorum = true
+	c.checkQuorum = true
+
+	nt := newNetwork(a, b, c)
 	setRandomizedElectionTimeout(a, a.electionTimeout+1)
 	setRandomizedElectionTimeout(b, b.electionTimeout+2)
 
@@ -2137,35 +1770,18 @@ func testLeaderElectionWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateLeader, a.state)
-	assert.Equal(t, pb.StateFollower, b.state)
 	assert.Equal(t, pb.StateFollower, c.state)
 
 	// need to reset randomizedElectionTimeout larger than electionTimeout again,
 	// because the value might be reset to electionTimeout since the last state changes
 	setRandomizedElectionTimeout(a, a.electionTimeout+1)
 	setRandomizedElectionTimeout(b, b.electionTimeout+2)
-
-	if storeLivenessEnabled {
-		// We need to withdraw from 1 to allow 3 to campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
-	for i := int64(0); i < a.electionTimeout; i++ {
+	for i := 0; i < a.electionTimeout; i++ {
 		a.tick()
 	}
-
-	// Increment electionElapsed to electionTimeout. This will allow b to vote for
-	// c when it campaigns.
-	if storeLivenessEnabled {
-		// Tick b once. This will allow it to realize that it no longer supports a
-		// leader and will forward its electionElapsed to electionTimeout.
+	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
-	} else {
-		for i := int64(0); i < b.electionTimeout; i++ {
-			b.tick()
-		}
 	}
-
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateFollower, a.state)
@@ -2174,65 +1790,35 @@ func testLeaderElectionWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) 
 
 // TestFreeStuckCandidateWithCheckQuorum ensures that a candidate with a higher term
 // can disrupt the leader even if the leader still "officially" holds the lease, The
-// leader is expected to step down and adopt the candidate's term.
+// leader is expected to step down and adopt the candidate's term
 func TestFreeStuckCandidateWithCheckQuorum(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testFreeStuckCandidateWithCheckQuorum(t, storeLivenessEnabled)
-		})
-}
-
-func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var a, b, c *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		a = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		b = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		c = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	a := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	b := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	c := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	a.checkQuorum = true
 	b.checkQuorum = true
 	c.checkQuorum = true
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, a, b, c)
+	nt := newNetwork(a, b, c)
+	setRandomizedElectionTimeout(b, b.electionTimeout+1)
 
-	// Elect node 1 as leader.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	assert.Equal(t, pb.StateLeader, a.state)
-	if storeLivenessEnabled {
-		assert.Equal(t, hlc.MaxTimestamp, getBasicStatus(a).LeadSupportUntil)
+	for i := 0; i < b.electionTimeout; i++ {
+		b.tick()
 	}
+	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	nt.isolate(1)
-	if storeLivenessEnabled {
-		// For the purposes of this test, we want 3 to campaign and get rejected.
-		// However, if we withdraw the support between 2 and 1, 2 will vote for 3
-		// when it campaigns. Therefore, we only withdraw the support between
-		// 1 and 3.
-		nt.livenessFabric.WithdrawSupport(1, 3)
-		nt.livenessFabric.WithdrawSupport(3, 1)
-	}
-
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateFollower, b.state)
 	assert.Equal(t, pb.StateCandidate, c.state)
 	assert.Equal(t, b.Term+1, c.Term)
 
-	// Vote again for safety.
+	// Vote again for safety
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateFollower, b.state)
@@ -2240,62 +1826,15 @@ func testFreeStuckCandidateWithCheckQuorum(t *testing.T, storeLivenessEnabled bo
 	assert.Equal(t, b.Term+2, c.Term)
 
 	nt.recover()
-	if storeLivenessEnabled {
-		// Recover the store liveness layer as well.
-		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-	}
+	nt.send(pb.Message{From: 1, To: 3, Type: pb.MsgHeartbeat, Term: a.Term})
 
-	// If the stuck candidate were to talk to the follower, it may be ignored,
-	// depending on whether the follower is fortified by the leader.
-	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgAppResp, Term: c.Term})
-	if storeLivenessEnabled {
-		assert.Equal(t, c.Term-2, b.Term)
-	} else {
-		assert.Equal(t, c.Term, b.Term)
-	}
-
-	// Disrupt the leader so that the stuck peer is freed. The leader steps down
-	// immediately, but only changes its term if it was not fortified. If it was,
-	// it waits for defortification.
-	hbType := pb.MsgHeartbeat
-	if storeLivenessEnabled {
-		hbType = pb.MsgFortifyLeader
-	}
-	nt.send(pb.Message{From: 1, To: 3, Type: hbType, Term: a.Term})
-
-	if storeLivenessEnabled {
-		// Expect that we are still the leader since it's still not safe to step
-		// down, however, the step-down intent is recorded.
-		assert.Equal(t, pb.StateLeader, a.state)
-		assert.Equal(t, true, a.fortificationTracker.SteppingDown())
-		assert.Equal(t, c.Term, a.fortificationTracker.SteppingDownTerm())
-
-		// The leader hasn't defortified yet, so 3 can't win an election.
-		nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-		assert.Equal(t, pb.StateCandidate, c.state)
-		assert.Equal(t, pb.StateLeader, a.state)
-		assert.Equal(t, c.Term-3, a.Term)
-		assert.Equal(t, a.id, a.lead)
-
-		// Expire the support, and tick it once. It should step down.
-		nt.livenessFabric.SetSupportExpired(1, true)
-		a.tick()
-	}
+	// Disrupt the leader so that the stuck peer is freed
 	assert.Equal(t, pb.StateFollower, a.state)
+	assert.Equal(t, a.Term, c.Term)
 
-	// Node 1 doesn't remember that it was the leader.
-	assert.Equal(t, None, a.lead)
-
-	if storeLivenessEnabled {
-		// Since node 3 campaigned one extra time above, it will have a term that is
-		// higher than node 1 by one.
-		assert.Equal(t, c.Term-1, a.Term)
-	} else {
-		assert.Equal(t, c.Term, a.Term)
-	}
-
-	// Vote again, should become leader this time.
+	// Vote again, should become leader this time
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
+
 	assert.Equal(t, pb.StateLeader, c.state)
 }
 
@@ -2313,7 +1852,7 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 
 	require.False(t, b.promotable())
 
-	for i := int64(0); i < b.electionTimeout; i++ {
+	for i := 0; i < b.electionTimeout; i++ {
 		b.tick()
 	}
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -2329,32 +1868,12 @@ func TestNonPromotableVoterWithCheckQuorum(t *testing.T) {
 // candiate's response to late leader heartbeat forces the leader
 // to step down.
 func TestDisruptiveFollower(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testDisruptiveFollower(t, storeLivenessEnabled)
-		})
-}
-
-func testDisruptiveFollower(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -2364,7 +1883,7 @@ func testDisruptiveFollower(t *testing.T, storeLivenessEnabled bool) {
 	n2.becomeFollower(1, None)
 	n3.becomeFollower(1, None)
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(n1, n2, n3)
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
@@ -2373,18 +1892,12 @@ func testDisruptiveFollower(t *testing.T, storeLivenessEnabled bool) {
 	require.Equal(t, pb.StateFollower, n2.state)
 	require.Equal(t, pb.StateFollower, n3.state)
 
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 so 3 can campaign and not get rejected
-		// because of store liveness support.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	// etcd server "advanceTicksForElection" on restart;
 	// this is to expedite campaign trigger when given larger
 	// election timeouts (e.g. multi-datacenter deploy)
 	// Or leader messages are being delayed while ticks elapse
 	setRandomizedElectionTimeout(n3, n3.electionTimeout+2)
-	for i := int64(0); i < n3.randomizedElectionTimeout-1; i++ {
+	for i := 0; i < n3.randomizedElectionTimeout-1; i++ {
 		n3.tick()
 	}
 
@@ -2422,21 +1935,12 @@ func testDisruptiveFollower(t *testing.T, storeLivenessEnabled bool) {
 	// check state
 	require.Equal(t, pb.StateFollower, n1.state)
 	require.Equal(t, pb.StateFollower, n2.state)
-	if storeLivenessEnabled {
-		// Since the support for 1 was withdrawn, the inFortifyLease is no longer
-		// valid, and n3 will receive votes and become a leader.
-		require.Equal(t, pb.StateLeader, n3.state)
-		require.Equal(t, uint64(3), n1.Term)
-		require.Equal(t, uint64(3), n2.Term)
-		require.Equal(t, uint64(3), n3.Term)
-	} else {
-		// Since other peers still hold a valid inHeartbeatLease, n3 will not
-		// receive enough votes to become a leader.
-		require.Equal(t, pb.StateCandidate, n3.state)
-		require.Equal(t, uint64(3), n1.Term)
-		require.Equal(t, uint64(2), n2.Term)
-		require.Equal(t, uint64(3), n3.Term)
-	}
+	require.Equal(t, pb.StateCandidate, n3.state)
+
+	// check term
+	require.Equal(t, uint64(3), n1.Term)
+	require.Equal(t, uint64(2), n2.Term)
+	require.Equal(t, uint64(3), n3.Term)
 }
 
 // TestDisruptiveFollowerPreVote tests isolated follower,
@@ -2445,32 +1949,12 @@ func testDisruptiveFollower(t *testing.T, storeLivenessEnabled bool) {
 // Then pre-vote phase prevents this isolated node from forcing
 // current leader to step down, thus less disruptions.
 func TestDisruptiveFollowerPreVote(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testDisruptiveFollowerPreVote(t, storeLivenessEnabled)
-		})
-}
-
-func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.checkQuorum = true
 	n2.checkQuorum = true
@@ -2480,7 +1964,7 @@ func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
 	n2.becomeFollower(1, None)
 	n3.becomeFollower(1, None)
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(n1, n2, n3)
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
@@ -2497,27 +1981,12 @@ func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
 	n2.preVote = true
 	n3.preVote = true
 	nt.recover()
-
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 so 3 can campaign and not get rejected
-		// because of store liveness support.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	// check state
 	require.Equal(t, pb.StateLeader, n1.state)
 	require.Equal(t, pb.StateFollower, n2.state)
-	if storeLivenessEnabled {
-		// Since the peers no longer hold a valid inFortifyLease, 3 will receive
-		// rejection votes and become a follower again.
-		require.Equal(t, pb.StateFollower, n3.state)
-	} else {
-		// Peers will just ignore the MsgVoteRequest due to the inHeartbeatLease and
-		// 3 will remain a preCandidate.
-		require.Equal(t, pb.StatePreCandidate, n3.state)
-	}
+	require.Equal(t, pb.StatePreCandidate, n3.state)
 
 	// check term
 	require.Equal(t, uint64(2), n1.Term)
@@ -2529,158 +1998,64 @@ func testDisruptiveFollowerPreVote(t *testing.T, storeLivenessEnabled bool) {
 	require.Equal(t, pb.StateLeader, n1.state)
 }
 
-// TestPreCandidateIgnoresDefortification tests that a pre-candidate ignores
-// MsgDefortifyLeader and doesn't become a follower again.
-func TestPreCandidateIgnoresDefortification(t *testing.T) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2 *raft
-
-	fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2)
-	n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-		withStoreLiveness(fabric.GetStoreLiveness(1)))
-	n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-		withStoreLiveness(fabric.GetStoreLiveness(2)))
-
-	n1.checkQuorum = true
-	n2.checkQuorum = true
-	n1.preVote = true
-	n2.preVote = true
-
-	n1.becomeFollower(1, None)
-	n2.becomeFollower(1, None)
-
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2)
-
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-
-	// Check raft states.
-	require.Equal(t, pb.StateLeader, n1.state)
-	require.Equal(t, pb.StateFollower, n2.state)
-
-	// The term is 2 for both nodes.
-	require.Equal(t, uint64(2), n1.Term)
-	require.Equal(t, uint64(2), n2.Term)
-
-	// Withdraw 2's support for 1. This allows 2 to pre-campaign since it's not
-	// supporting a fortified leader.
-	nt.livenessFabric.WithdrawSupportFor(2, 1)
-
-	// Isolate 1 so that it doesn't receive the MsgVoteRequest from 2, and
-	// therefore it doesn't vote for it.
-	nt.isolate(1)
-	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
-
-	// 2 is now a pre-candidate.
-	require.Equal(t, pb.StatePreCandidate, n2.state)
-
-	// 2 should remain a PreCandidate even if it receives a MsgDefortifyLeader.
-	nt.send(pb.Message{From: 1, To: 2, Term: 2, Type: pb.MsgDeFortifyLeader})
-	require.Equal(t, pb.StatePreCandidate, n2.state)
-
-	// However, receiving another message from a leader would cause 2 to become
-	// follower again.
-	nt.send(pb.Message{From: 1, To: 2, Term: 2, Type: pb.MsgApp})
-	require.Equal(t, pb.StateFollower, n2.state)
-}
-
 func TestLeaderAppResp(t *testing.T) {
-	// The test creates a leader node at term 2, with raft log [1 1 1 2 2 2].
-	// Initial progress: match = 0, next = 4.
-	for _, tt := range []struct {
+	// initial progress: match = 0; next = 3
+	tests := []struct {
 		index  uint64
 		reject bool
 		// progress
 		wmatch uint64
-		// log index of the next entry to send to this follower
-		wnext uint64
-		// number of messages the leader sends out
-		wmsgNum int
-		// prevLogIndex in MsgApp from leader to followers
-		windex uint64
-		// leader's commit index
+		wnext  uint64
+		// message
+		wmsgNum    int
+		windex     uint64
 		wcommitted uint64
-		// storage access counts for getting term number
-		ctStgTerm int
 	}{
-		// stale resp; no replies
-		{2, true, 0, 4, 0, 0, 0, 1},
-		// stale resp; no replies
-		{6, true, 0, 4, 0, 0, 0, 1},
+		{3, true, 0, 3, 0, 0, 0},  // stale resp; no replies
+		{2, true, 0, 2, 1, 1, 0},  // denied resp; leader does not commit; decrease next and send probing msg
+		{2, false, 2, 4, 2, 2, 2}, // accept resp; leader commits; broadcast with commit index
+		// Follower is StateProbing at 0, it sends MsgAppResp for 0 (which
+		// matches the pr.Match) so it is moved to StateReplicate and as many
+		// entries as possible are sent to it (1, 2, and 3). Correspondingly the
+		// Next is then 4 (an Entry at 4 does not exist, indicating the follower
+		// will be up to date should it process the emitted MsgApp).
+		{0, false, 0, 4, 1, 0, 0},
+	}
 
-		// denied resp; leader does not commit; decrease next and send probing msg
-		// An additional term storage access is involved for an entry
-		// that's already persisted since we are probing backwards.
-		{3, true, 0, 3, 1, 2, 0, 2},
-
-		// Follower 2 responds to leader, indicating log index 2 is replicated.
-		// Leader tries to commit, but commit index doesn't advance since the index
-		// is from a previous term.
-		// We hit maybeCommit() and do term check comparison by using the
-		// last "term flip" entryID stored in the termCache.
-		// There is no storage access for term in the maybeCommit() code path
-		{2, false, 2, 7, 1, 2, 0, 2},
-
-		// Follower 2 responds to leader, indicating log index 3 is replicated.
-		// Leader tries to commit, but commit index doesn't advance since the index
-		// is from a previous term. Same as above.
-		{3, false, 3, 7, 1, 3, 0, 1},
-
-		// NB: For the following tests, we are skipping the MsgAppResp for the first
-		// 3 entries, by directly processing MsgAppResp for later entries.
-		//
-		// Follower 2 is StateProbing at 4, it sends MsgAppResp for 4, and is moved
-		// to StateReplicate and as many entries as possible are sent to it (5, 6).
-		// Correspondingly the Next is then 7 (entry 7 does not exist, indicating
-		// the follower will be up to date should it process the emitted MsgApp).
-		// accept resp; leader commits; respond with commit index.
-		// maybeCommit() is successful.
-		{4, false, 4, 7, 1, 4, 4, 1},
-
-		// Follower 2 says term2, index5 is already replicated.
-		// The leader responds with the updated commit index to follower 2.
-		// maybeCommit() is successful.
-		{5, false, 5, 7, 1, 5, 5, 1},
-		// Follower 2 says term2, index6 is already replicated.
-		// The leader responds with the updated commit index to follower 2.
-		// maybeCommit() is successful.
-		{6, false, 6, 7, 1, 6, 6, 1},
-	} {
+	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			storage := newTestMemoryStorage(withPeers(1, 2, 3))
-			require.NoError(t, storage.Append(index(1).terms(1, 1, 1)))
-			require.NoError(t, storage.SetHardState(pb.HardState{Term: 1}))
-			sm := newTestRaft(1, 10, 1, storage)
+			// sm term is 1 after it becomes the leader.
+			// thus the last log term must be 1 to be committed.
+			sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
+			sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
+				term:    1,
+				entries: index(1).terms(1, 1),
+			}}, nil)
 			sm.becomeCandidate()
-			require.Equal(t, uint64(2), sm.Term)
-			require.Equal(t, uint64(3), sm.raftLog.lastIndex())
 			sm.becomeLeader()
-			require.Equal(t, uint64(4), sm.raftLog.lastIndex()) // appended a dummy
-			sm.appendEntry(index(5).terms(2, 2)...)
-			require.Equal(t, uint64(0), sm.raftLog.committed)
-			sm.bcastAppend()
 			sm.readMessages()
-
-			require.NoError(t, sm.Step(pb.Message{
-				From:       2,
-				Type:       pb.MsgAppResp,
-				Index:      tt.index,
-				Term:       sm.Term,
-				Reject:     tt.reject,
-				RejectHint: tt.index,
-			}))
+			require.NoError(t, sm.Step(
+				pb.Message{
+					From:       2,
+					Type:       pb.MsgAppResp,
+					Index:      tt.index,
+					Term:       sm.Term,
+					Reject:     tt.reject,
+					RejectHint: tt.index,
+				},
+			))
 
 			p := sm.trk.Progress(2)
 			require.Equal(t, tt.wmatch, p.Match)
 			require.Equal(t, tt.wnext, p.Next)
 
 			msgs := sm.readMessages()
+
 			require.Len(t, msgs, tt.wmsgNum)
 			for _, msg := range msgs {
 				require.Equal(t, tt.windex, msg.Index, "%v", DescribeMessage(msg, nil))
 				require.Equal(t, tt.wcommitted, msg.Commit, "%v", DescribeMessage(msg, nil))
 			}
-
-			assert.Equal(t, tt.ctStgTerm, storage.callStats.term)
 		})
 	}
 }
@@ -2779,6 +2154,7 @@ func TestRecvMsgBeat(t *testing.T) {
 	for i, tt := range tests {
 		sm := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)))
 		sm.raftLog = newLog(&MemoryStorage{ls: LogSlice{
+			term:    1,
 			entries: index(1).terms(1, 1),
 		}}, nil)
 		sm.Term = 1
@@ -2869,7 +2245,7 @@ func TestSendAppendForProgressProbeStoreLivenessDisabled(t *testing.T) {
 		}
 
 		// do a heartbeat
-		for j := int64(0); j < r.heartbeatTimeout; j++ {
+		for j := 0; j < r.heartbeatTimeout; j++ {
 			r.tick()
 		}
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
@@ -2927,7 +2303,7 @@ func TestSendAppendForProgressProbeStoreLivenessEnabled(t *testing.T) {
 		}
 
 		// The next heartbeat timeout will allow another message to be sent.
-		for j := int64(0); j < r.heartbeatTimeout; j++ {
+		for j := 0; j < r.heartbeatTimeout; j++ {
 			r.tick()
 		}
 		assert.True(t, r.trk.Progress(2).MsgAppProbesPaused)
@@ -3010,7 +2386,7 @@ func TestRestore(t *testing.T) {
 	assert.Equal(t, s.snap.Metadata.ConfState.Voters, sm.trk.VoterNodes())
 
 	require.False(t, sm.restore(s))
-	for i := int64(0); i < sm.randomizedElectionTimeout; i++ {
+	for i := 0; i < sm.randomizedElectionTimeout; i++ {
 		sm.tick()
 	}
 	assert.Equal(t, pb.StateFollower, sm.state)
@@ -3072,7 +2448,7 @@ func TestRestoreWithVotersOutgoing(t *testing.T) {
 	require.False(t, sm.restore(s))
 
 	// It should not campaign before actually applying data.
-	for i := int64(0); i < sm.randomizedElectionTimeout; i++ {
+	for i := 0; i < sm.randomizedElectionTimeout; i++ {
 		sm.tick()
 	}
 	assert.Equal(t, pb.StateFollower, sm.state)
@@ -3143,12 +2519,12 @@ func TestLearnerReceiveSnapshot(t *testing.T) {
 	n1.restore(s)
 	snap := n1.raftLog.nextUnstableSnapshot()
 	store.ApplySnapshot(*snap)
-	n1.appliedSnap(snap.Metadata.Index)
+	n1.appliedSnap(snap)
 
 	nt := newNetwork(n1, n2)
 
 	setRandomizedElectionTimeout(n1, n1.electionTimeout)
-	for i := int64(0); i < n1.electionTimeout; i++ {
+	for i := 0; i < n1.electionTimeout; i++ {
 		n1.tick()
 	}
 
@@ -3203,7 +2579,7 @@ func TestProvideSnap(t *testing.T) {
 	sm.becomeLeader()
 
 	// force set the next of node 2, so that node 2 needs a snapshot
-	sm.trk.Progress(2).Next = sm.raftLog.compacted() + 1
+	sm.trk.Progress(2).Next = sm.raftLog.firstIndex()
 	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress(2).Next - 1, Reject: true})
 
 	msgs := sm.readMessages()
@@ -3232,7 +2608,7 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 
 	// force set the next of node 2, so that node 2 needs a snapshot
 	// change node 2 to be inactive, expect node 1 ignore sending snapshot to 2
-	sm.trk.Progress(2).Next = sm.raftLog.compacted()
+	sm.trk.Progress(2).Next = sm.raftLog.firstIndex() - 1
 	sm.trk.Progress(2).RecentActive = false
 
 	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
@@ -3381,31 +2757,14 @@ func TestAddLearner(t *testing.T) {
 // TestAddNodeCheckQuorum tests that addNode does not trigger a leader election
 // immediately when checkQuorum is set.
 func TestAddNodeCheckQuorum(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testAddNodeCheckQuorum(t, storeLivenessEnabled)
-		})
-}
-
-func testAddNodeCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var r *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2)
-		r = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-	} else {
-		r = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
+	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 	r.checkQuorum = true
 
 	r.becomeCandidate()
 	r.becomeLeader()
 
-	for i := int64(0); i < r.electionTimeout-1; i++ {
+	for i := 0; i < r.electionTimeout-1; i++ {
 		r.tick()
 	}
 
@@ -3419,7 +2778,7 @@ func testAddNodeCheckQuorum(t *testing.T, storeLivenessEnabled bool) {
 
 	// After another electionTimeout ticks without hearing from node 2,
 	// node 1 should step down.
-	for i := int64(0); i < r.electionTimeout; i++ {
+	for i := 0; i < r.electionTimeout; i++ {
 		r.tick()
 	}
 
@@ -3665,34 +3024,7 @@ func TestLeaderTransferToUpToDateNodeFromFollower(t *testing.T) {
 // transfer target, even before (and regardless of if) the target receives the
 // MsgTimeoutNow and campaigns.
 func TestLeaderTransferLeaderStepsDownImmediately(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderTransferLeaderStepsDownImmediately(t, storeLivenessEnabled)
-		})
-}
-
-func testLeaderTransferLeaderStepsDownImmediately(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// Isolate node 3. It is up-to-date, so the leadership transfer will be
@@ -3709,20 +3041,15 @@ func testLeaderTransferLeaderStepsDownImmediately(t *testing.T, storeLivenessEna
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 
 	require.Equal(t, uint64(1), lead.Term)
-	checkLeaderTransferState(t, lead, pb.StateFollower, None)
+	checkLeaderTransferState(t, lead, pb.StateFollower, 1)
 
-	// With leader leases, the ex-leader would send a MsgDefortifyLeader to
-	// its followers when the support is expired.
-	if storeLivenessEnabled {
-		nt.livenessFabric.SetSupportExpired(1, true)
-		lead.tick()
-		nt.send(lead.readMessages()...)
-		nt.livenessFabric.SetSupportExpired(1, false)
-	}
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	lead.deFortify(lead.lead, lead.Term)
 
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term.
-	for i := int64(0); i < lead.randomizedElectionTimeout; i++ {
+	for i := 0; i < lead.randomizedElectionTimeout; i++ {
 		lead.tick()
 	}
 	nt.send(lead.readMessages()...)
@@ -3735,7 +3062,7 @@ func testLeaderTransferLeaderStepsDownImmediately(t *testing.T, storeLivenessEna
 // even the current leader is still under its leader lease.
 func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 	nt := newNetwork(nil, nil, nil)
-	for i := int64(1); i < 4; i++ {
+	for i := 1; i < 4; i++ {
 		r := nt.peers[pb.PeerID(i)].(*raft)
 		r.checkQuorum = true
 		setRandomizedElectionTimeout(r, r.electionTimeout+i)
@@ -3743,7 +3070,7 @@ func TestLeaderTransferWithCheckQuorum(t *testing.T) {
 
 	// Letting peer 2 electionElapsed reach to timeout so that it can vote for peer 1
 	f := nt.peers[2].(*raft)
-	for i := int64(0); i < f.electionTimeout; i++ {
+	for i := 0; i < f.electionTimeout; i++ {
 		f.tick()
 	}
 
@@ -3799,7 +3126,7 @@ func TestLeaderTransferToCandidate(t *testing.T) {
 
 	// Isolate node 3 so that it decides to become a pre-candidate.
 	nt.isolate(3)
-	for i := int64(0); i < n3.randomizedElectionTimeout; i++ {
+	for i := 0; i < n3.randomizedElectionTimeout; i++ {
 		nt.tick(n3)
 	}
 	require.Equal(t, pb.StatePreCandidate, n3.state)
@@ -3847,7 +3174,7 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	follower := nt.peers[3].(*raft)
 	snap := follower.raftLog.nextUnstableSnapshot()
 	nt.storage[3].ApplySnapshot(*snap)
-	follower.appliedSnap(snap.Metadata.Index)
+	follower.appliedSnap(snap)
 	nt.msgHook = nil
 	nt.send(filtered)
 
@@ -3891,12 +3218,12 @@ func TestLeaderTransferTimeout(t *testing.T) {
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	for i := int64(0); i < lead.heartbeatTimeout; i++ {
+	for i := 0; i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	for i := int64(0); i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
+	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 
@@ -3930,19 +3257,7 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 }
 
 func TestLeaderTransferReceiveHigherTermVote(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderTransferReceiveHigherTermVote(t, storeLivenessEnabled)
-		})
-}
-
-func testLeaderTransferReceiveHigherTermVote(t *testing.T, storeLivenessEnabled bool) {
-	var cfg func(c *Config) = nil
-	if !storeLivenessEnabled {
-		cfg = fortificationDisabledConfig
-	}
-
-	nt := newNetworkWithConfig(cfg, nil, nil, nil)
+	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// Isolate node 3 and propose an entry on 1. This will cause node 3 to fall
@@ -3957,12 +3272,6 @@ func testLeaderTransferReceiveHigherTermVote(t *testing.T, storeLivenessEnabled 
 	// transfer in a pending state as the leader tries to catch up the target.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
-
-	if storeLivenessEnabled {
-		// We need to withdraw support of the current leader to allow the new peer
-		// to campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
 
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup, Index: 1, Term: 2})
 
@@ -4089,13 +3398,13 @@ func TestLeaderTransferSecondTransferToSameNode(t *testing.T) {
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	require.Equal(t, pb.PeerID(3), lead.leadTransferee)
 
-	for i := int64(0); i < lead.heartbeatTimeout; i++ {
+	for i := 0; i < lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 	// Second transfer leadership request to the same node.
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 
-	for i := int64(0); i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
+	for i := 0; i < lead.electionTimeout-lead.heartbeatTimeout; i++ {
 		lead.tick()
 	}
 
@@ -4168,61 +3477,31 @@ func TestLeaderTransferDifferentTerms(t *testing.T) {
 // stale follower (a follower still at an earlier term) will cause the follower
 // to call an election which it can not win.
 func TestLeaderTransferStaleFollower(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testLeaderTransferStaleFollower(t, storeLivenessEnabled)
-		})
-}
-
-func testLeaderTransferStaleFollower(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(nil, nil, nil)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+	n1 := nt.peers[1].(*raft)
+	n2 := nt.peers[2].(*raft)
+	n3 := nt.peers[3].(*raft)
 	nodes := []*raft{n1, n2, n3}
 
 	// Attempt to transfer leadership to node 3. The MsgTimeoutNow is sent
 	// immediately and node 1 steps down as leader, but node 3 does not receive
 	// the message due to a network partition.
 	nt.isolate(3)
-
 	nt.send(pb.Message{From: 3, To: 1, Type: pb.MsgTransferLeader})
 	for _, n := range nodes {
 		require.Equal(t, pb.StateFollower, n.state)
 		require.Equal(t, uint64(1), n.Term)
 	}
 
-	// With leader leases, the ex-leader would send a MsgDefortifyLeader to
-	// its followers when the support is expired.
-	if storeLivenessEnabled {
-		nt.livenessFabric.SetSupportExpired(1, true)
-		n1.tick()
-		nt.send(nt.filter(n1.readMessages())...)
-		nt.livenessFabric.SetSupportExpired(1, false)
-	}
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	n1.deFortify(n1.lead, n1.Term)
 
 	// Eventually, the previous leader gives up on waiting and calls an election
 	// to reestablish leadership at the next term. Node 3 does not hear about this
 	// either.
-	for i := int64(0); i < n1.randomizedElectionTimeout; i++ {
+	for i := 0; i < n1.randomizedElectionTimeout; i++ {
 		n1.tick()
 	}
 	nt.send(nt.filter(n1.readMessages())...)
@@ -4260,32 +3539,12 @@ func testLeaderTransferStaleFollower(t *testing.T, storeLivenessEnabled bool) {
 // Previously the cluster would come to a standstill when run with PreVote
 // enabled.
 func TestNodeWithSmallerTermCanCompleteElection(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testNodeWithSmallerTermCanCompleteElection(t, storeLivenessEnabled)
-		})
-}
-
-func testNodeWithSmallerTermCanCompleteElection(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -4296,13 +3555,9 @@ func testNodeWithSmallerTermCanCompleteElection(t *testing.T, storeLivenessEnabl
 	n3.preVote = true
 
 	// cause a network partition to isolate node 3
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(n1, n2, n3)
 	nt.cut(1, 3)
 	nt.cut(2, 3)
-	if storeLivenessEnabled {
-		// We need to isolate node 3 in the store liveness layer as well.
-		nt.livenessFabric.Isolate(3)
-	}
 
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
@@ -4314,17 +3569,8 @@ func testNodeWithSmallerTermCanCompleteElection(t *testing.T, storeLivenessEnabl
 
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 	sm = nt.peers[3].(*raft)
-	if storeLivenessEnabled {
-		// Since 3 isn't supported by a majority, it won't pre-campaign,
-		assert.Equal(t, pb.StateFollower, sm.state)
-	} else {
-		assert.Equal(t, pb.StatePreCandidate, sm.state)
-	}
+	assert.Equal(t, pb.StatePreCandidate, sm.state)
 
-	if storeLivenessEnabled {
-		// Withdraw support from 1 so 2 can campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
 
 	// check whether the term values are expected
@@ -4341,12 +3587,7 @@ func testNodeWithSmallerTermCanCompleteElection(t *testing.T, storeLivenessEnabl
 	sm = nt.peers[2].(*raft)
 	assert.Equal(t, pb.StateLeader, sm.state)
 	sm = nt.peers[3].(*raft)
-	if storeLivenessEnabled {
-		// Since 3 wasn't supported by a majority, it didn't pre-campaign.
-		assert.Equal(t, pb.StateFollower, sm.state)
-	} else {
-		assert.Equal(t, pb.StatePreCandidate, sm.state)
-	}
+	assert.Equal(t, pb.StatePreCandidate, sm.state)
 
 	sm.logger.Infof("going to bring back peer 3 and kill peer 2")
 	// recover the network then immediately isolate b which is currently
@@ -4354,17 +3595,6 @@ func testNodeWithSmallerTermCanCompleteElection(t *testing.T, storeLivenessEnabl
 	nt.recover()
 	nt.cut(2, 1)
 	nt.cut(2, 3)
-
-	if storeLivenessEnabled {
-		// Un-isolate 3 in store liveness as well.
-		nt.livenessFabric.UnIsolate(3)
-
-		// Re-grant support for 3 from all peers. This will allow 1 to campaign.
-		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-
-		// Isolate node 2 in store liveness as well.
-		nt.livenessFabric.Isolate(2)
-	}
 
 	// call for election
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
@@ -4379,32 +3609,12 @@ func testNodeWithSmallerTermCanCompleteElection(t *testing.T, storeLivenessEnabl
 // TestPreVoteWithSplitVote verifies that after split vote, cluster can complete
 // election in next round.
 func TestPreVoteWithSplitVote(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testPreVoteWithSplitVote(t, storeLivenessEnabled)
-		})
-}
-
-func testPreVoteWithSplitVote(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -4414,16 +3624,11 @@ func testPreVoteWithSplitVote(t *testing.T, storeLivenessEnabled bool) {
 	n2.preVote = true
 	n3.preVote = true
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(n1, n2, n3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
 
 	// simulate leader down. followers start split vote.
 	nt.isolate(1)
-	if storeLivenessEnabled {
-		// We need to isolate 1 in the store liveness layer as well.
-		nt.livenessFabric.Isolate(1)
-	}
-
 	nt.send([]pb.Message{
 		{From: 2, To: 2, Type: pb.MsgHup},
 		{From: 3, To: 3, Type: pb.MsgHup},
@@ -4529,26 +3734,13 @@ func TestLearnerCampaign(t *testing.T) {
 // n1 is leader with term 2
 // n2 is follower with term 2
 // n3 is partitioned, with term 4 and less log, state is candidate
-func newPreVoteMigrationCluster(
-	t *testing.T, storeLivenessEnabled bool, fabric *raftstoreliveness.LivenessFabric,
-) *network {
-	var n1, n2, n3 *raft
-
-	if storeLivenessEnabled {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(fabric.GetStoreLiveness(3)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n3 = newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
+func newPreVoteMigrationCluster(t *testing.T) *network {
+	n1 := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n2 := newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
+	n3 := newTestRaft(3, 10, 1, newTestMemoryStorage(withPeers(1, 2, 3)),
+		withStoreLiveness(raftstoreliveness.Disabled{}))
 
 	n1.becomeFollower(1, None)
 	n2.becomeFollower(1, None)
@@ -4560,22 +3752,12 @@ func newPreVoteMigrationCluster(
 	// to simulate a rolling restart process where it's possible to have a mixed
 	// version cluster with replicas with PreVote enabled, and replicas without.
 
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2, n3)
+	nt := newNetwork(n1, n2, n3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-
-	require.Equal(t, pb.StateLeader, n1.state)
-	require.Equal(t, pb.StateFollower, n2.state)
-	require.Equal(t, pb.StateFollower, n3.state)
 
 	// Cause a network partition to isolate n3.
 	nt.isolate(3)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("some data")}}})
-
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 before 3 can campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
@@ -4589,12 +3771,6 @@ func newPreVoteMigrationCluster(
 	require.Equal(t, uint64(2), n2.Term)
 	require.Equal(t, uint64(4), n3.Term)
 
-	if storeLivenessEnabled {
-		// Restore the liveness support state to return a working cluster with all
-		// nodes having support.
-		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-	}
-
 	// Enable prevote on n3, then recover the network
 	n3.preVote = true
 	nt.recover()
@@ -4603,20 +3779,7 @@ func newPreVoteMigrationCluster(
 }
 
 func TestPreVoteMigrationCanCompleteElection(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testPreVoteMigrationCanCompleteElection(t, storeLivenessEnabled)
-		})
-}
-
-func testPreVoteMigrationCanCompleteElection(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-	}
-
-	nt := newPreVoteMigrationCluster(t, storeLivenessEnabled, fabric)
+	nt := newPreVoteMigrationCluster(t)
 
 	// n1 is leader with term 2
 	// n2 is follower with term 2
@@ -4627,19 +3790,8 @@ func testPreVoteMigrationCanCompleteElection(t *testing.T, storeLivenessEnabled 
 	// simulate leader down
 	nt.isolate(1)
 
-	if storeLivenessEnabled {
-		// We need to withdraw support from 1 so 3 can campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	// Call for elections from both n2 and n3.
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-
-	if storeLivenessEnabled {
-		// We need to withdraw support from 3 so 2 can campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(3)
-	}
-
 	nt.send(pb.Message{From: 2, To: 2, Type: pb.MsgHup})
 
 	// check state
@@ -4654,20 +3806,7 @@ func testPreVoteMigrationCanCompleteElection(t *testing.T, storeLivenessEnabled 
 }
 
 func TestPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testPreVoteMigrationWithFreeStuckPreCandidate(t, storeLivenessEnabled)
-		})
-}
-
-func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEnabled bool) {
-	var fabric *raftstoreliveness.LivenessFabric
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2, 3)
-	}
-
-	nt := newPreVoteMigrationCluster(t, storeLivenessEnabled, fabric)
+	nt := newPreVoteMigrationCluster(t)
 
 	// n1 is leader with term 2
 	// n2 is follower with term 2
@@ -4676,89 +3815,29 @@ func testPreVoteMigrationWithFreeStuckPreCandidate(t *testing.T, storeLivenessEn
 	n2 := nt.peers[2].(*raft)
 	n3 := nt.peers[3].(*raft)
 
-	assert.Equal(t, pb.StateLeader, n1.state)
-	if storeLivenessEnabled {
-		assert.Equal(t, hlc.MaxTimestamp, getBasicStatus(n1).LeadSupportUntil)
-	}
-
-	if storeLivenessEnabled {
-		// 1 needs to withdraw support for 3 before it can become a preCandidate.
-		nt.livenessFabric.WithdrawSupport(1, 3)
-	}
-
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateLeader, n1.state)
 	assert.Equal(t, pb.StateFollower, n2.state)
 	assert.Equal(t, pb.StatePreCandidate, n3.state)
 
-	// Pre-Vote again for safety.
+	// Pre-Vote again for safety
 	nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
 
 	assert.Equal(t, pb.StateLeader, n1.state)
 	assert.Equal(t, pb.StateFollower, n2.state)
 	assert.Equal(t, pb.StatePreCandidate, n3.state)
 
-	// If the stuck candidate were to talk to the follower, it may be ignored,
-	// depending on whether the follower is fortified by the leader.
-	nt.send(pb.Message{From: 3, To: 2, Type: pb.MsgAppResp, Term: n3.Term})
-	if storeLivenessEnabled {
-		assert.Equal(t, n3.Term-2, n2.Term)
-	} else {
-		assert.Equal(t, n3.Term, n2.Term)
-	}
+	nt.send(pb.Message{From: 1, To: 3, Type: pb.MsgHeartbeat, Term: n1.Term})
 
-	// Disrupt the leader so that the stuck peer is freed. The leader steps down
-	// immediately if it's not fortified. However, if it was fortified, it will
-	// only step down when a quorum stops supporting it.
-	hbType := pb.MsgHeartbeat
-	if storeLivenessEnabled {
-		hbType = pb.MsgFortifyLeader
-	}
-	nt.send(pb.Message{From: 1, To: 3, Type: hbType, Term: n1.Term})
-
-	if storeLivenessEnabled {
-		// Expect that we are still the leader since it's still not safe to step
-		// down, however, the step-down intent is recorded.
-		assert.Equal(t, pb.StateLeader, n1.state)
-		assert.Equal(t, true, n1.fortificationTracker.SteppingDown())
-
-		// The leader still hasn't defortified, so the stranded peer still can't
-		// win an election.
-		nt.send(pb.Message{From: 3, To: 3, Type: pb.MsgHup})
-		assert.Equal(t, pb.StatePreCandidate, n3.state)
-		assert.Equal(t, pb.StateLeader, n1.state)
-		assert.Equal(t, n3.Term-2, n1.Term)
-		assert.Equal(t, n1.id, n1.lead)
-
-		// Expire the support, and tick it once. It should step down.
-		nt.livenessFabric.SetSupportExpired(1, true)
-		n1.tick()
-	}
-
+	// Disrupt the leader so that the stuck peer is freed
 	assert.Equal(t, pb.StateFollower, n1.state)
+	assert.Equal(t, n1.Term, n3.Term)
 
-	// Node 1 doesn't remember that it was the leader.
-	assert.Equal(t, None, n1.lead)
-	assert.Equal(t, n3.Term, n1.Term)
-
-	// Return the support back to node 1 so that it can call an election.
-	if storeLivenessEnabled {
-		fabric.SetSupportExpired(1, false)
-	}
-
-	// The ex-leader calls an election, which it wins.
-	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
-	assert.Equal(t, pb.StateLeader, n1.state)
 }
 
-func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool, storeLivenessEnabled bool) {
-	var cfg func(c *Config) = nil
-	if !storeLivenessEnabled {
-		cfg = fortificationDisabledConfig
-	}
-
-	nt := newNetworkWithConfig(cfg, nil, nil, nil)
+func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool) {
+	nt := newNetworkWithConfig(fortificationDisabledConfig, nil, nil, nil)
 	n1 := nt.peers[1].(*raft)
 	n2 := nt.peers[2].(*raft)
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
@@ -4790,14 +3869,8 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool, storeLivenessEnabl
 		},
 	})
 
-	if storeLivenessEnabled {
-		// We need to withdraw support of the current leader to allow the new peer
-		// to campaign and get elected.
-		nt.livenessFabric.WithdrawSupportForPeerFromAllPeers(1)
-	}
-
 	// Trigger campaign in node 2
-	for i := int64(0); i < n2.randomizedElectionTimeout; i++ {
+	for i := 0; i < n2.randomizedElectionTimeout; i++ {
 		n2.tick()
 	}
 	// It's still follower because committed conf change is not applied.
@@ -4811,14 +3884,13 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool, storeLivenessEnabl
 	// conf change is not applied.
 	assert.Equal(t, pb.StateFollower, n2.state)
 
-	if storeLivenessEnabled {
-		// Restore the support state.
-		nt.livenessFabric.GrantSupportForPeerFromAllPeers(1)
-	}
+	// TODO(arul): a leader that steps down will currently never campaign due to
+	// the fortification promise that it made to itself. We'll need to fix this.
+	n1.deFortify(n1.lead, n1.Term)
 
 	// Advance apply on node 1 and re-establish leadership.
 	nextEnts(n1, nt.storage[1])
-	for i := int64(0); i < n1.randomizedElectionTimeout; i++ {
+	for i := 0; i < n1.randomizedElectionTimeout; i++ {
 		n1.tick()
 	}
 	nt.send(n1.readMessages()...)
@@ -4829,7 +3901,6 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool, storeLivenessEnabl
 
 	// Transfer leadership to peer 2 again.
 	nt.send(pb.Message{From: 2, To: 1, Type: pb.MsgTransferLeader})
-
 	// The outgoing leader steps down immediately.
 	assert.Equal(t, pb.StateFollower, n1.state)
 	// The transfer target campaigns immediately now that the committed conf
@@ -4839,18 +3910,12 @@ func testConfChangeCheckBeforeCampaign(t *testing.T, v2 bool, storeLivenessEnabl
 
 // TestConfChangeCheckBeforeCampaign tests if unapplied ConfChange is checked before campaign.
 func TestConfChangeCheckBeforeCampaign(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testConfChangeCheckBeforeCampaign(t, false, storeLivenessEnabled)
-		})
+	testConfChangeCheckBeforeCampaign(t, false)
 }
 
 // TestConfChangeV2CheckBeforeCampaign tests if unapplied ConfChangeV2 is checked before campaign.
 func TestConfChangeV2CheckBeforeCampaign(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testConfChangeCheckBeforeCampaign(t, true, storeLivenessEnabled)
-		})
+	testConfChangeCheckBeforeCampaign(t, true)
 }
 
 func TestFastLogRejection(t *testing.T) {
@@ -5128,77 +4193,6 @@ func TestFortificationMetrics(t *testing.T) {
 	require.Equal(t, int64(1), n1.metrics.SkippedFortificationDueToLackOfSupport.Count())
 }
 
-// TestPeerForgetsLeaderWhenIsolated ensures that peers forget the leader when
-// they are isolated.
-func TestPeerForgetsLeaderWhenIsolated(t *testing.T) {
-	testutils.RunTrueAndFalse(t, "store-liveness-enabled",
-		func(t *testing.T, storeLivenessEnabled bool) {
-			testPeerForgetsLeaderWhenIsolated(t, storeLivenessEnabled)
-		})
-}
-
-func testPeerForgetsLeaderWhenIsolated(t *testing.T, storeLivenessEnabled bool) {
-	var n1, n2 *raft
-	var fabric *raftstoreliveness.LivenessFabric
-
-	if storeLivenessEnabled {
-		fabric = raftstoreliveness.NewLivenessFabricWithPeers(1, 2)
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-			withStoreLiveness(fabric.GetStoreLiveness(1)))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-			withStoreLiveness(fabric.GetStoreLiveness(2)))
-	} else {
-		n1 = newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-		n2 = newTestRaft(2, 10, 1, newTestMemoryStorage(withPeers(1, 2)),
-			withStoreLiveness(raftstoreliveness.Disabled{}))
-	}
-
-	n1.becomeFollower(1, None)
-	n2.becomeFollower(1, None)
-
-	n1.preVote = true
-	n2.preVote = true
-
-	n1.checkQuorum = true
-	n2.checkQuorum = true
-
-	// Randomly select a leader between node 1, and 2.
-	leader := pb.PeerID(rand.Intn(2) + 1)
-	nt := newNetworkWithConfigAndLivenessFabric(nil, fabric, n1, n2)
-	nt.send(pb.Message{From: leader, To: leader, Type: pb.MsgHup})
-
-	// Iterate over all peers and check that they have the same leader.
-	for _, peer := range nt.peers {
-		sm := peer.(*raft)
-		require.Equal(t, leader, sm.lead)
-	}
-
-	// Isolate node one from the quorum.
-	nt.isolate(1)
-	if storeLivenessEnabled {
-		nt.livenessFabric.SetSupportExpired(1, true)
-		nt.livenessFabric.Isolate(1)
-	}
-
-	// Tick node 1 until it attempts to campaign.
-	for i := int64(0); i < 2*n1.randomizedElectionTimeout; i++ {
-		n1.tick()
-	}
-
-	// If storeliveness is enabled, the follower will never become a
-	// pre-candidate since it's not supported by a quorum. However, if
-	// storeliveness is disabled, the follower may become a pre-candidate.
-	if storeLivenessEnabled {
-		require.Equal(t, pb.StateFollower, n1.state)
-	} else {
-		require.True(t, n1.state == pb.StateFollower || n1.state == pb.StatePreCandidate)
-	}
-
-	// Make sure that 1 has forgotten the leader.
-	require.Equal(t, None, n1.lead)
-}
-
 func expectOneMessage(t *testing.T, r *raft) pb.Message {
 	msgs := r.readMessages()
 	require.Len(t, msgs, 1, "expect one message")
@@ -5420,20 +4414,19 @@ func idsBySize(size int) []pb.PeerID {
 // setRandomizedElectionTimeout set up the value by caller instead of choosing
 // by system, in some test scenario we need to fill in some expected value to
 // ensure the certainty
-func setRandomizedElectionTimeout(r *raft, v int64) {
+func setRandomizedElectionTimeout(r *raft, v int) {
 	r.randomizedElectionTimeout = v
 }
 
 // SetRandomizedElectionTimeout is like setRandomizedElectionTimeout, but
 // exported for use by tests that are not in the raft package, using RawNode.
-func SetRandomizedElectionTimeout(r *RawNode, v int64) {
+func SetRandomizedElectionTimeout(r *RawNode, v int) {
 	setRandomizedElectionTimeout(r.raft, v)
 }
 
 // testConfigModifiers allows callers to optionally modify newTestConfig.
 type testConfigModifiers struct {
 	testingStoreLiveness raftstoreliveness.StoreLiveness
-	testingLogger        raftlogger.Logger
 }
 
 // testConfigModifierOpt is the type of an optional parameter to newTestConfig
@@ -5452,15 +4445,8 @@ func withStoreLiveness(storeLiveness raftstoreliveness.StoreLiveness) testConfig
 	}
 }
 
-// withLogger explicitly uses the supplied raft logger.
-func withLogger(logger raftlogger.Logger) testConfigModifierOpt {
-	return func(modifier *testConfigModifiers) {
-		modifier.testingLogger = logger
-	}
-}
-
 func newTestConfig(
-	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
 ) *Config {
 	modifiers := testConfigModifiers{}
 	for _, opt := range opts {
@@ -5472,26 +4458,16 @@ func newTestConfig(
 	} else {
 		storeLiveness = raftstoreliveness.AlwaysLive{}
 	}
-
-	var logger raftlogger.Logger
-	if modifiers.testingLogger != nil {
-		logger = modifiers.testingLogger
-	} else {
-		logger = raftlogger.DefaultRaftLogger
-	}
-
 	return &Config{
-		ID:                 id,
-		ElectionTick:       election,
-		ElectionJitterTick: election,
-		HeartbeatTick:      heartbeat,
-		Storage:            storage,
-		MaxSizePerMsg:      noLimit,
-		MaxInflightMsgs:    256,
-		StoreLiveness:      storeLiveness,
-		Logger:             logger,
-		CRDBVersion:        cluster.MakeTestingClusterSettings().Version,
-		Metrics:            NewMetrics(),
+		ID:              id,
+		ElectionTick:    election,
+		HeartbeatTick:   heartbeat,
+		Storage:         storage,
+		MaxSizePerMsg:   noLimit,
+		MaxInflightMsgs: 256,
+		StoreLiveness:   storeLiveness,
+		CRDBVersion:     cluster.MakeTestingClusterSettings().Version,
+		Metrics:         NewMetrics(),
 	}
 }
 
@@ -5518,13 +4494,13 @@ func newTestMemoryStorage(opts ...testMemoryStorageOptions) *MemoryStorage {
 }
 
 func newTestRaft(
-	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
 ) *raft {
 	return newRaft(newTestConfig(id, election, heartbeat, storage, opts...))
 }
 
 func newTestLearnerRaft(
-	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
+	id pb.PeerID, election, heartbeat int, storage Storage, opts ...testConfigModifierOpt,
 ) *raft {
 	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
 	return newRaft(cfg)
@@ -5532,10 +4508,8 @@ func newTestLearnerRaft(
 
 // newTestRawNode sets up a RawNode with the given peers. The configuration will
 // not be reflected in the Storage.
-func newTestRawNode(
-	id pb.PeerID, election, heartbeat int64, storage Storage, opts ...testConfigModifierOpt,
-) *RawNode {
-	cfg := newTestConfig(id, election, heartbeat, storage, opts...)
+func newTestRawNode(id pb.PeerID, election, heartbeat int, storage Storage) *RawNode {
+	cfg := newTestConfig(id, election, heartbeat, storage)
 	rn, err := NewRawNode(cfg)
 	if err != nil {
 		panic(err)

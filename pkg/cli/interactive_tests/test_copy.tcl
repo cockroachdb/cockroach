@@ -10,7 +10,7 @@ eexpect root@
 send "drop table if exists t;\r"
 eexpect "DROP TABLE"
 eexpect root@
-send "create table t (id INT PRIMARY KEY, t TEXT) WITH (schema_locked=false);\r"
+send "create table t (id INT PRIMARY KEY, t TEXT);\r"
 eexpect "CREATE TABLE"
 eexpect root@
 

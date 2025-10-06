@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
 )
@@ -83,7 +82,7 @@ func newMergeJoiner(
 		return nil, err
 	}
 
-	m.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("mergejoiner-mem"))
+	m.MemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, "mergejoiner-mem")
 
 	var err error
 	m.streamMerger, err = makeStreamMerger(

@@ -15,7 +15,6 @@ import (
 )
 
 type identifySystemNode struct {
-	zeroInputPlanNode
 	optColumnsSlot
 	clusterID string
 	database  string

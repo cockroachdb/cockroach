@@ -47,7 +47,7 @@ func (l *logLogger) WriteFile(basename string, contents string) string {
 func (l *logLogger) Helper() { /* no-op */ }
 
 func (l *logLogger) Logf(format string, args ...interface{}) {
-	log.Dev.InfofDepth(context.Background(), 2, format, args...)
+	log.InfofDepth(context.Background(), 2, format, args...)
 }
 
 func l(ctx context.Context, basename string, format string, args ...interface{}) (optFile string) {
@@ -161,24 +161,15 @@ func RunNemesis(
 
 	failures := Validate(allSteps, kvs, env.Tracker)
 
-	var filteredFailures []error
-	for _, f := range failures {
-		// ConditionFailedErrors are expected and can be ignored.
-		canBeIgnored := exceptConditionFailed(f)
-		if !canBeIgnored {
-			filteredFailures = append(filteredFailures, f)
-		}
-	}
-
 	// Run consistency checks across the data span, primarily to check the
 	// accuracy of evaluated MVCC stats.
-	filteredFailures = append(filteredFailures, env.CheckConsistency(ctx, dataSpan)...)
+	failures = append(failures, env.CheckConsistency(ctx, dataSpan)...)
 
-	if len(filteredFailures) > 0 {
+	if len(failures) > 0 {
 		var failuresFile string
 		{
 			var buf strings.Builder
-			for _, err := range filteredFailures {
+			for _, err := range failures {
 				l(ctx, "", "%s", err)
 				fmt.Fprintf(&buf, "%+v\n", err)
 				fmt.Fprintln(&buf, strings.Repeat("=", 80))
@@ -186,13 +177,7 @@ func RunNemesis(
 			failuresFile = l(ctx, "failures", "%s", &buf)
 		}
 
-		reproFile := l(ctx, "repro.go", `// Seed: %d
-// Calls to Random Source: %d
-// Reproduction steps:
-%s`,
-			config.SeedForLogging,
-			config.RandSourceCounterForLogging.Count(),
-			printRepro(stepsByWorker))
+		reproFile := l(ctx, "repro.go", "// Reproduction steps:\n%s", printRepro(stepsByWorker))
 		rangefeedFile := l(ctx, "kvs-rangefeed.txt", "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
 		kvsFile := "<error>"
 		var scanKVs []kv.KeyValue
@@ -227,7 +212,7 @@ scan KVs: %s`,
 			failuresFile, reproFile, rangefeedFile, kvsFile)
 	}
 
-	return filteredFailures, nil
+	return failures, nil
 }
 
 func printRepro(stepsByWorker [][]Step) string {

@@ -1,7 +1,0 @@
-setup
-CREATE TABLE t1 (id INT PRIMARY KEY, data TEXT, expired_at TIMESTAMPTZ) WITH (ttl_expiration_expression='expired_at');
-----
-
-test
-ALTER TABLE t1 RENAME TO t1_renamed;
-----

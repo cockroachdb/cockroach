@@ -25,17 +25,15 @@ var metricUnitNames = map[string]string{
 type Builder struct {
 	metricMap  MetricMap
 	thresholds *benchmath.Thresholds
+	confidence float64
 }
 
 // NewBuilder creates a new builder.
-func NewBuilder(opts ...BuilderOption) *Builder {
-	builderOptions := newBuilderOptions()
-	for _, opt := range opts {
-		opt(builderOptions)
-	}
+func NewBuilder() *Builder {
 	return &Builder{
 		metricMap:  make(MetricMap),
-		thresholds: builderOptions.thresholds,
+		thresholds: &benchmath.DefaultThresholds,
+		confidence: 0.95,
 	}
 }
 
@@ -74,7 +72,7 @@ func (b *Builder) ComputeMetricMap() MetricMap {
 			for run, values := range benchmarkEntry.Values {
 				samples := benchmath.NewSample(values, b.thresholds)
 				benchmarkEntry.Samples[run] = samples
-				summary := assumption.Summary(samples, 1.0-b.thresholds.CompareAlpha)
+				summary := assumption.Summary(samples, b.confidence)
 				benchmarkEntry.Summaries[run] = &summary
 			}
 
@@ -95,7 +93,7 @@ func (m *Metric) ComputeComparison(benchmarkName, oldID, newID string) *Comparis
 			return nil
 		}
 	}
-	// Compute the comparison, confidence interval and delta.
+	// Compute the comparison and delta.
 	comparison := Comparison{}
 	oldSample, newSample := benchmarkEntry.Samples[oldID], benchmarkEntry.Samples[newID]
 	comparison.Distribution = m.Assumption.Compare(oldSample, newSample)
@@ -106,7 +104,6 @@ func (m *Metric) ComputeComparison(benchmarkName, oldID, newID string) *Comparis
 	} else {
 		comparison.Delta = ((newSummary.Center / oldSummary.Center) - 1.0) * 100
 	}
-	comparison.ConfidenceInterval = calculateConfidenceInterval(newSample.Values, oldSample.Values)
 	return &comparison
 }
 

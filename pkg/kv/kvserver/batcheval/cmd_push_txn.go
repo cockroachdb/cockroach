@@ -244,7 +244,7 @@ func PushTxn(
 		if !pusherWins {
 			s = "failed to push"
 		}
-		log.KvExec.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
+		log.Infof(ctx, "%s %s (push type=%s) %s: %s (pushee last active: %s)",
 			args.PusherTxn.Short(), redact.Safe(s),
 			redact.Safe(pushType),
 			args.PusheeTxn.Short(),
@@ -288,7 +288,7 @@ func PushTxn(
 	// if initiated by a PUSH_TIMESTAMP.
 	if pusheeStaging && pusherWins && pushType == kvpb.PUSH_TIMESTAMP {
 		if !pusheeStagingFailed && !build.IsRelease() {
-			log.KvExec.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
+			log.Fatalf(ctx, "parallel commit must be known to have failed for push to succeed")
 		}
 		pushType = kvpb.PUSH_ABORT
 	}
@@ -305,10 +305,6 @@ func PushTxn(
 	// Determine what to do with the pushee, based on the push type.
 	switch pushType {
 	case kvpb.PUSH_ABORT:
-		if existTxn.Status == roachpb.PREPARED {
-			return result.Result{}, errors.AssertionFailedf(
-				"PUSH_ABORT succeeded against a PREPARED txn: %+v", existTxn)
-		}
 		// If aborting the transaction, set the new status.
 		reply.PusheeTxn.Status = roachpb.ABORTED
 		// Forward the timestamp to accommodate AbortSpan GC. See method comment for

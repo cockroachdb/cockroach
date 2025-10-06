@@ -40,7 +40,7 @@ func TestRelateBoundaryNodeRule(t *testing.T) {
 	}{
 		{leftRect, rightRect, 1, "FF2F11212"},
 		{leftRect, rightRect, 2, "FF2F11212"},
-		{leftRect, rightRect, 3, "FF2F11212"},
+		{leftRect, rightRect, 3, "1F2F002F2"},
 		{leftRect, rightRect, 4, "FF2F11212"},
 	}
 

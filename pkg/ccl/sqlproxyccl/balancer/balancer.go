@@ -223,10 +223,7 @@ func NewBalancer(
 	}
 
 	// Ensure that ctx gets cancelled on stopper's quiescing.
-	//
-	// The balancer shares the same lifetime as the proxy which will shutdown
-	// via the stopper, so we can ignore the cancellation function here.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
 
 	q, err := newRebalancerQueue(ctx, metrics)
 	if err != nil {
@@ -278,7 +275,7 @@ func (b *Balancer) RebalanceTenant(ctx context.Context, tenantID roachpb.TenantI
 
 	tenantPods, err := b.directoryCache.TryLookupTenantPods(ctx, tenantID)
 	if err != nil {
-		log.Dev.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
+		log.Errorf(ctx, "could not rebalance tenant %s: %v", tenantID, err.Error())
 		return
 	}
 
@@ -345,14 +342,14 @@ func (b *Balancer) processQueue(ctx context.Context) {
 	// or false otherwise.
 	processOneReq := func() (canContinue bool) {
 		if err := b.processSem.Acquire(ctx, 1); err != nil {
-			log.Dev.Errorf(ctx, "could not acquire processSem: %v", err.Error())
+			log.Errorf(ctx, "could not acquire processSem: %v", err.Error())
 			return false
 		}
 
 		req, err := b.queue.dequeue(ctx)
 		if err != nil {
 			// Context is cancelled.
-			log.Dev.Errorf(ctx, "could not dequeue from rebalancer queue: %v", err.Error())
+			log.Errorf(ctx, "could not dequeue from rebalancer queue: %v", err.Error())
 			return false
 		}
 
@@ -371,7 +368,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 
 			// Each request is retried up to maxTransferAttempts.
 			for i := 0; i < maxTransferAttempts && ctx.Err() == nil; i++ {
-				err := req.conn.TransferConnection(ctx)
+				err := req.conn.TransferConnection()
 				if err == nil || errors.Is(err, context.Canceled) {
 					break
 				}
@@ -382,7 +379,7 @@ func (b *Balancer) processQueue(ctx context.Context) {
 		}); err != nil {
 			// We should not hit this case, but if we did, log and abandon the
 			// transfer.
-			log.Dev.Errorf(ctx, "could not run async task for processQueue-item: %v", err.Error())
+			log.Errorf(ctx, "could not run async task for processQueue-item: %v", err.Error())
 		}
 		return true
 	}
@@ -401,6 +398,7 @@ func (b *Balancer) rebalanceLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.Ch():
+			timer.MarkRead()
 			b.rebalance(ctx)
 		}
 	}

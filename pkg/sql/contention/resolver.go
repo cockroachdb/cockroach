@@ -7,6 +7,7 @@ package contention
 
 import (
 	"context"
+	"math"
 	"sort"
 	"strconv"
 
@@ -72,18 +73,17 @@ const (
 	//    in-memory data corruption (shouldn't happen in normal circumstances,
 	//    since access to txnID cache is all synchronized). In this case, no
 	//    amount of retries will be able to resolveLocked the txnID.
-	retryBudgetForMissingResult = uint32(2)
+	retryBudgetForMissingResult = uint32(1)
 
 	// retryBudgetForRPCFailure is the number of times the resolverQueue will
 	// retry resolving until giving up. This needs to be a finite number to handle
 	// the case where the node is permanently removed from the cluster.
 	retryBudgetForRPCFailure = uint32(3)
 
-	// retryBudgetForTxnInProgress is the number of times the resolverQueue will
-	// retry resolving until giving up. This is because the retry is due to the
-	// transaction is still in progress. 60 retries at the default value for the
-	// cluster setting txn_id_resolution_interval translates to 30 minutes.
-	retryBudgetForTxnInProgress = uint32(60)
+	// retryBudgetForTxnInProgress is a special value indicating that the resolver should
+	// indefinitely retry the resolution. This is because the retry is due to the
+	// transaction is still in progress.
+	retryBudgetForTxnInProgress = uint32(math.MaxUint32)
 )
 
 // ResolverEndpoint is an alias for the TxnIDResolution RPC endpoint in the

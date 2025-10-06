@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -33,8 +32,6 @@ type schemaChangeWatchDog struct {
 	txnID gosql.NullString
 	// numRetries number of transaction retries observed.
 	numRetries int
-	// workerID is the ID of the worker we are monitoring.
-	workerID int
 }
 
 // newSchemaChangeWatchDog constructs a new watch dog for monitoring
@@ -113,65 +110,15 @@ func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
 			}
 			totalTimeWaited += time.Second
 			if totalTimeWaited > maxTimeOutForDump {
-				w.panicOnHang(ctx)
+				panic(fmt.Sprintf("connection has timed out; sessionID=%s activeQuery=%+v", w.sessionID, w.activeQuery))
 			}
 		}
 	}
-}
-
-// panicOnHang gathers additional information before starting to panic, so that
-// we can more easily diagnose hung queries.
-func (w *schemaChangeWatchDog) panicOnHang(ctx context.Context) {
-	w.logger.logWatchDog("Hung connection detected, collecting cluster information")
-	// Dump out queries into the log file.
-	dumpRowsToLog := func(query string) {
-		queryData := strings.Builder{}
-		rows, err := w.conn.Query(ctx, query)
-		if err != nil {
-			w.logger.logWatchDog(fmt.Sprintf("Failed to execute query %q with: %v", query, err))
-			return
-		}
-		defer rows.Close()
-		queryData.WriteString(fmt.Sprintf("Query: %s\n", query))
-		first := true
-		for rows.Next() {
-			if rows.Err() != nil {
-				w.logger.logWatchDog(fmt.Sprintf("Failed reading rows with: %v", rows.Err()))
-				break
-			}
-			if first {
-				colHeader := strings.Builder{}
-				for idx, col := range rows.FieldDescriptions() {
-					if idx != 0 {
-						colHeader.WriteString(", ")
-					}
-					colHeader.WriteString(col.Name)
-				}
-				queryData.WriteString(fmt.Sprintf("\n%s\n-----------------------\n", colHeader.String()))
-			}
-			values, err := rows.Values()
-			if err != nil {
-				w.logger.logWatchDog(fmt.Sprintf("Failed reading row values with: %v", err))
-				break
-			}
-			queryData.WriteString(fmt.Sprintf("%+v\n", values))
-			first = false
-		}
-		w.logger.logWatchDog(queryData.String())
-	}
-	// Gather cluster-wide information that can help us diagnose any hangs.
-	dumpRowsToLog("SELECT * FROM crdb_internal.cluster_sessions")
-	dumpRowsToLog("SELECT * FROM crdb_internal.cluster_transactions")
-	dumpRowsToLog("SELECT * FROM crdb_internal.cluster_queries")
-	dumpRowsToLog("SELECT * FROM crdb_internal.jobs WHERE status = 'running'")
-	// Finally, panic with connection information.
-	panic(fmt.Sprintf("connection has timed out; workerID=%d sessionID=%s activeQuery=%+v", w.workerID, w.sessionID, w.activeQuery))
-
 }
 
 // Start starts monitoring the given transaction, as a part of this process,
 // any required session information will be collected.
-func (w *schemaChangeWatchDog) Start(ctx context.Context, workerID int, tx pgx.Tx) error {
+func (w *schemaChangeWatchDog) Start(ctx context.Context, tx pgx.Tx) error {
 	sessionInfo := tx.QueryRow(ctx, "SELECT session_id FROM [SHOW session_id]")
 	if sessionInfo == nil {
 		return errors.AssertionFailedf("unable to retrieve session id on connection")
@@ -180,7 +127,6 @@ func (w *schemaChangeWatchDog) Start(ctx context.Context, workerID int, tx pgx.T
 	if err != nil {
 		return err
 	}
-	w.workerID = workerID
 	// Start up the session watch loop.
 	go w.watchLoop(ctx)
 	return nil

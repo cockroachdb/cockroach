@@ -8,11 +8,9 @@ package livenesspb
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -161,61 +159,6 @@ type IsLiveMapEntry struct {
 // IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
 type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
 
-// NodeConnectionHealth represents the minimal interface needed for checking if
-// a node RPC connection is alive.
-type NodeConnectionHealth interface {
-	// ConnHealth returns nil if we have an open connection of the request
-	// class that works successfully. Otherwise, it returns an error.
-	ConnHealth(nodeID roachpb.NodeID, class rpcbase.ConnectionClass) error
-}
-
-// NodeConnectionStatus is a lightweight wrapper around the
-// NodeConnectionHealth, where calculating the connection status is done lazily
-// upon the first call to IsConnected(). This is useful as a member in structs
-// where we sometimes want to calculate the connection status, and sometimes we
-// don't.
-type NodeConnectionStatus struct {
-	nodeConnectionHealth NodeConnectionHealth
-	nodeID               roachpb.NodeID
-	// calculatedConnected specifies whether we did calculate the connected field
-	// or not. If we haven't, we can't rely on the value of connected.
-	calculatedConnected atomic.Bool
-	// connected is an atomic boolean that tracks whether we are connected to the node.
-	connected atomic.Bool
-}
-
-func NewNodeConnectionStatus(
-	nodeID roachpb.NodeID, nodeConnectionHealth NodeConnectionHealth,
-) *NodeConnectionStatus {
-	ncs := &NodeConnectionStatus{
-		nodeConnectionHealth: nodeConnectionHealth,
-		nodeID:               nodeID,
-	}
-	return ncs
-}
-
-// SetIsConnected changes the connection status of the node.
-func (ncs *NodeConnectionStatus) SetIsConnected(connected bool) {
-	ncs.connected.Store(connected)
-	ncs.calculatedConnected.Store(true)
-}
-
-// IsConnected checks if we are connected to the supplied nodeID. It only
-// performs the calculation the first time. Future calls will use the cached
-// version.
-func (ncs *NodeConnectionStatus) IsConnected() bool {
-	if !ncs.calculatedConnected.Load() {
-		// Calculate the connection status if we haven't done that before.
-		// Some tests will set the nodeDialer to nil, so we need to check for that.
-		connected := ncs.nodeConnectionHealth == nil ||
-			ncs.nodeConnectionHealth.ConnHealth(ncs.nodeID, rpcbase.SystemClass) == nil
-		ncs.SetIsConnected(connected)
-		ncs.calculatedConnected.Store(true)
-	}
-
-	return ncs.connected.Load()
-}
-
 // NodeVitality should be used any place other than epoch leases where it is
 // necessary to determine if a node is currently alive and what its health is.
 // Aliveness and deadness are concepts that refer to our best guess of the
@@ -230,9 +173,8 @@ type NodeVitality struct {
 	draining bool
 	// membership is whether the node is active or in a state of decommissioning.
 	membership MembershipStatus
-	// nodeConnectionStatus calculates whether we are currently directly connect
-	// to this node.
-	nodeConnectionStatus *NodeConnectionStatus
+	// connected is whether we are currently directly connect to this node.
+	connected bool
 
 	// When the record is created. Records are not held for long, but they should
 	// always give consistent results when asked.
@@ -274,21 +216,6 @@ const (
 	LossOfQuorum
 	ReplicaGCQueue
 	DistSender
-	// TestingIsAliveAndHasHeartbeated is intended to be used by tests that want
-	// to ensure that a node is alive and has heartbeated its liveness record
-	// already.
-	//
-	// This is intended to be used in place of IsAliveNotification, whose usages
-	// aren't very principled, and sometimes expect that a node has heartbeated
-	// its liveness record (by checking the epoch is != 0). Previously, we could
-	// get away with these unprincipled usages because epoch based leases would
-	// proactively heartbeat liveness records when acquiring leases. However, when
-	// using leader leases, this doesn't happen, which then makes these tests
-	// flaky.
-	//
-	// At some point, we'll want to revisit IsAliveNotification and make sure
-	// returning true when the liveness epoch is 0 is indeed well motivated.
-	TestingIsAliveAndHasHeartbeated
 )
 
 func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
@@ -343,15 +270,13 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 			return nv.isAliveAndConnected()
 		}
 	case NetworkMap:
-		return nv.nodeConnectionStatus.IsConnected()
+		return nv.connected
 	case LossOfQuorum:
 		return nv.isAlive()
 	case ReplicaGCQueue:
 		return nv.isAlive()
 	case DistSender:
 		return nv.isAvailableNotDraining()
-	case TestingIsAliveAndHasHeartbeated:
-		return nv.testingIsAliveAndHasHeartbeated()
 	}
 
 	// TODO(baptist): Should be an assertion that we don't know this uasge.
@@ -373,7 +298,7 @@ func (nv NodeVitality) isAvailableNotDraining() bool {
 }
 
 func (nv NodeVitality) isAliveAndConnected() bool {
-	return nv.isAvailableNotDraining() && nv.nodeConnectionStatus.IsConnected()
+	return nv.isAvailableNotDraining() && nv.connected
 }
 
 // isAliveEpoch is used for epoch leases. It is similar to isAlive, but doesn't
@@ -414,13 +339,6 @@ func (nv NodeVitality) isAlive() bool {
 		return true
 	}
 	return nv.now.Less(nv.livenessExpiration)
-}
-
-// testingIsAliveAndHasHeartbeated is like isAlive except it also ensures that
-// the node has heartbeated its liveness epoch at least once. Also see the
-// comment on TestingIsAliveAndHasHeartbeated.
-func (nv NodeVitality) testingIsAliveAndHasHeartbeated() bool {
-	return nv.isAlive() && nv.livenessEpoch != 0
 }
 
 func (nv NodeVitality) IsDecommissioning() bool {
@@ -593,7 +511,7 @@ func (l Liveness) CreateNodeVitality(
 	now hlc.Timestamp,
 	descUpdateTime hlc.Timestamp,
 	descUnavailableTime hlc.Timestamp,
-	connectionStatus *NodeConnectionStatus,
+	connected bool,
 	timeUntilNodeDead time.Duration,
 	timeAfterNodeSuspect time.Duration,
 ) NodeVitality {
@@ -604,7 +522,7 @@ func (l Liveness) CreateNodeVitality(
 		nodeID:               l.NodeID,
 		draining:             l.Draining,
 		membership:           l.Membership,
-		nodeConnectionStatus: connectionStatus,
+		connected:            connected,
 		now:                  now,
 		descUpdateTime:       descUpdateTime,
 		descUnavailableTime:  descUnavailableTime,

@@ -154,7 +154,7 @@ func NewConstOp(
 			}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported const type %s", t.Name())
+	return nil, errors.Errorf("unsupported const type %s", t.Name())
 }
 
 type constBoolOp struct {
@@ -583,12 +583,12 @@ func (c constDatumOp) Next() coldata.Batch {
 	return batch
 }
 
-// NewConstNullOp creates a new operator that produces a constant NULL value at
-// index outputIdx. The column will be typed according to the passed in 't'.
+// NewConstNullOp creates a new operator that produces a constant (untyped) NULL
+// value at index outputIdx.
 func NewConstNullOp(
-	allocator *colmem.Allocator, t *types.T, input colexecop.Operator, outputIdx int,
+	allocator *colmem.Allocator, input colexecop.Operator, outputIdx int,
 ) colexecop.Operator {
-	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
 	return &constNullOp{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		outputIdx:      outputIdx,

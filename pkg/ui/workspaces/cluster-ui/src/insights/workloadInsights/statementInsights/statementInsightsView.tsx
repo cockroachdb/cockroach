@@ -32,11 +32,14 @@ import {
 import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
 import { Search } from "src/search/search";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { SortSetting } from "src/sortedtable/sortedtable";
+import {
+  ISortedTablePagination,
+  SortSetting,
+} from "src/sortedtable/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import { TableStatistics } from "src/tableStatistics";
-import { insights, usePagination } from "src/util";
+import { insights } from "src/util";
 import { useScheduleFunction } from "src/util/hooks";
 import { queryByName, syncHistory } from "src/util/query";
 
@@ -105,7 +108,10 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   dropDownSelect,
   maxSizeApiReached,
 }: StatementInsightsViewProps) => {
-  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    current: 1,
+    pageSize: 10,
+  });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, INSIGHT_STMT_SEARCH_PARAM),
@@ -170,6 +176,20 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
     sortSetting.columnTitle,
     search,
   ]);
+
+  const onChangePage = (current: number): void => {
+    setPagination({
+      current: current,
+      pageSize: 10,
+    });
+  };
+
+  const resetPagination = () => {
+    setPagination({
+      current: 1,
+      pageSize: 10,
+    });
+  };
 
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
@@ -310,8 +330,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredStatements?.length}
-              onChange={updatePagination}
-              onShowSizeChange={updatePagination}
+              onChange={onChangePage}
             />
             {maxSizeApiReached && (
               <InlineAlert

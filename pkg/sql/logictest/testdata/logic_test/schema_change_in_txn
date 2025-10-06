@@ -1,17 +1,6 @@
-# LogicTest: !local-prepared
 # Skip the rest of the test if a retry occurs. They can happen and are fine
 # but there's no way to encapsulate that in logictests.
 skip_on_retry
-
-# This test file is focused specifically on testing schema changes in
-# transactions, so we disable autocommit behavior.
-statement ok
-SET autocommit_before_ddl = false
-
-# Also disable schema locked by default for these tests, since only
-# declarative can auto unset it.
-statement ok
-SET create_table_with_schema_locked = 'off';
 
 subtest create_and_add_fk_in_same_txn
 
@@ -268,7 +257,7 @@ subtest create_reference_to_create_outside_txn_17949
 statement ok
 BEGIN
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE b (parent_id INT REFERENCES parent(id));
 
 # schema changes are permitted on the table even though it's in the ADD state.
@@ -289,7 +278,7 @@ b  CREATE TABLE public.b (
      CONSTRAINT b_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.parent(id),
      INDEX foo (parent_id ASC),
      UNIQUE INDEX bar (parent_id ASC)
-   );
+   )
 
 # table b is not visible to the transaction #17949
 statement error pgcode 55000 table "b" is being added
@@ -730,10 +719,10 @@ statement ok
 CREATE UNIQUE INDEX n_idx ON customers (n)
 
 # Validate that pending jobs show within a transactions before its committed.
-query TT
-SELECT status, job_type FROM crdb_internal.jobs WHERE status='pending'
+query TTT
+SELECT status, started, job_type FROM crdb_internal.jobs WHERE status='pending'
 ----
-pending    SCHEMA CHANGE
+pending    NULL                                    SCHEMA CHANGE
 
 statement error pgcode XXA00 violates unique constraint
 COMMIT

@@ -207,7 +207,7 @@ PreCommitPhase stage 2 of 2 with 17 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 15).'
+      RunningStatus: PostCommitPhase stage 1 of 15 with 1 MutationType op pending
       Statements:
       - statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k)
         redactedstatement: ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (k)
@@ -305,6 +305,9 @@ PostCommitPhase stage 8 of 15 with 10 MutationType ops
       IndexID: 2
       Name: t_pkey
       TableID: 104
+    *scop.MakeValidatedPrimaryIndexPublic
+      IndexID: 2
+      TableID: 104
     *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         ConstraintID: 5
@@ -323,9 +326,6 @@ PostCommitPhase stage 8 of 15 with 10 MutationType ops
       ColumnID: 2
       IndexID: 5
       Kind: 2
-      TableID: 104
-    *scop.MakeValidatedPrimaryIndexPublic
-      IndexID: 2
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -646,7 +646,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 - from: [ColumnDefaultExpression:{DescID: 104, ColumnID: 3, Expr: unique_rowid()}, ABSENT]
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
-  rule: column type dependents removed right before column type, except if part of a column type alteration 
+  rule: column type dependents removed right before column type
 - from: [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -760,10 +760,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
   rule: index-column added to index before index is backfilled
@@ -779,10 +775,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
   rule: dependents removed before index
-- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
-  to:   [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
-  kind: Precedence
-  rule: ensure index columns are added in increasing order
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
   to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, SourceIndexID: 1}, WRITE_ONLY]
   kind: Precedence
@@ -935,6 +927,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_VALIDATED]
   kind: PreviousTransactionPrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: PUBLIC->TRANSIENT_VALIDATED
+- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
+  kind: Precedence
+  rule: primary index with new columns should exist before temp indexes
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
@@ -975,10 +971,6 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: PreviousTransactionPrecedence
   rule: PrimaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: VALIDATED->PUBLIC
-- from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
-  to:   [TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, DELETE_ONLY]
-  kind: Precedence
-  rule: primary index with new columns should exist before temp indexes
 - from: [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, WRITE_ONLY]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, VALIDATED]
   kind: PreviousTransactionPrecedence

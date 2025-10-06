@@ -5,7 +5,11 @@
 
 package ssmemstorage
 
-import "github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+import (
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+)
 
 type stmtList []stmtKey
 
@@ -16,10 +20,12 @@ func (s stmtList) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s stmtList) Less(i, j int) bool {
-	if s[i].fingerprintID < s[j].fingerprintID {
+	cmp := strings.Compare(s[i].stmtNoConstants, s[j].stmtNoConstants)
+	if cmp == -1 {
 		return true
 	}
-	if s[i].fingerprintID > s[j].fingerprintID {
+
+	if cmp == 1 {
 		return false
 	}
 	return s[i].transactionFingerprintID < s[j].transactionFingerprintID

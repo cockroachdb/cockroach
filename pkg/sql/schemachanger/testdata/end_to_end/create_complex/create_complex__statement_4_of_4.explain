@@ -147,7 +147,7 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
            │    ├── ABSENT → PUBLIC Owner:{DescID: 108 (sq1+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 108 (sq1+), Name: "admin"}
            │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 108 (sq1+), Name: "root"}
-           └── 61 Mutation operations
+           └── 60 Mutation operations
                 ├── CreateDatabaseDescriptor {"DatabaseID":104}
                 ├── CreateSchemaDescriptor {"SchemaID":105}
                 ├── CreateSchemaDescriptor {"SchemaID":106}
@@ -159,7 +159,6 @@ Schema change plan for CREATE SEQUENCE ‹db›.‹sc›.‹sq1› MINVALUE 1 MA
                 ├── CreateSequenceDescriptor {"SequenceID":108}
                 ├── SetNameInDescriptor {"DescriptorID":108,"Name":"sq1"}
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"sq1","SchemaID":106}}
-                ├── UpdateTTLScheduleMetadata {"NewName":"sq1","TableID":108}
                 ├── SetObjectParentID {"ObjParent":{"ChildObjectID":108,"SchemaID":106}}
                 ├── SetSequenceOptions {"Key":"START","SequenceID":108,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":108}}

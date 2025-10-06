@@ -50,7 +50,7 @@ func (r *importRollbackResumer) Resume(ctx context.Context, execCtx interface{})
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		err := r.rollbackTable(ctx, cfg, tableID)
 		if err != nil {
-			log.Dev.Errorf(ctx, "rollback of table %d failed: %s", tableID, err.Error())
+			log.Errorf(ctx, "rollback of table %d failed: %s", tableID, err.Error())
 		} else {
 			return nil
 		}
@@ -72,7 +72,7 @@ func (r *importRollbackResumer) rollbackTable(
 		// if we finish bringing the table online but then can't move
 		// the job to succeeded for some reason.
 		if desc.Public() {
-			log.Dev.Infof(ctx, "table %d already PUBLIC cannot rollback", tableID)
+			log.Infof(ctx, "table %d already PUBLIC cannot rollback", tableID)
 			return nil
 		}
 
@@ -99,7 +99,7 @@ func (r *importRollbackResumer) rollbackTable(
 			return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
 		}
 
-		log.Dev.Infof(ctx, "transitioning table %q (%d) to PUBLIC", desc.GetName(), desc.GetID())
+		log.Infof(ctx, "transitioning table %q (%d) to PUBLIC", desc.GetName(), desc.GetID())
 		desc.SetPublic()
 		desc.FinalizeImport()
 		b := txn.KV().NewBatch()

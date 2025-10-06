@@ -87,7 +87,7 @@ func CollectClusterSchemaForTelemetry(
 		// Add all errors to the snapshot metadata event.
 		for _, err := range redactErrs {
 			err = errors.Wrapf(err, " %s %q (%d)", rd.DescriptorType(), rd.GetName(), rd.GetID())
-			log.Dev.Errorf(ctx, "error during schema telemetry event generation: %v", err)
+			log.Errorf(ctx, "error during schema telemetry event generation: %v", err)
 			meta.Errors = append(meta.Errors, err.Error())
 		}
 		return nil

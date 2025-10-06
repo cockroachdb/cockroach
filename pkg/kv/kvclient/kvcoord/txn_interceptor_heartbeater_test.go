@@ -334,7 +334,7 @@ func TestTxnHeartbeaterLoopStartsBeforeExpiry(t *testing.T) {
 					return nil, kvpb.NewError(errors.New("transaction expired before heartbeat"))
 				}
 
-				log.Dev.Infof(ctx, "received heartbeat request")
+				log.Infof(ctx, "received heartbeat request")
 				count++
 
 				br := ba.CreateReply()

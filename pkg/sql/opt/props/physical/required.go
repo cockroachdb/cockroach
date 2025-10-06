@@ -41,14 +41,6 @@ type Required struct {
 	// is required or provided.
 	Ordering props.OrderingChoice
 
-	// Distribution specifies the physical distribution of result rows. This is
-	// defined as the set of regions that may contain result rows. If
-	// Distribution is not defined, then no particular distribution is required.
-	// Currently, the only operator in a plan tree that has a required
-	// distribution is the root, since data must always be returned to the gateway
-	// region.
-	Distribution Distribution
-
 	// LimitHint specifies a "soft limit" to the number of result rows that may
 	// be required of the expression. If requested, an expression will still need
 	// to return all result rows, but it can be optimized based on the assumption
@@ -58,10 +50,13 @@ type Required struct {
 	// using LimitHintInt64.
 	LimitHint float64
 
-	// RemoteBranch signals that the expression is on the remote side of a
-	// locality-optimized search. If the local branch fulfills the query, the
-	// remote branch is not executed.
-	RemoteBranch bool
+	// Distribution specifies the physical distribution of result rows. This is
+	// defined as the set of regions that may contain result rows. If
+	// Distribution is not defined, then no particular distribution is required.
+	// Currently, the only operator in a plan tree that has a required
+	// distribution is the root, since data must always be returned to the gateway
+	// region.
+	Distribution Distribution
 }
 
 // MinRequired are the default physical properties that require nothing and
@@ -71,8 +66,7 @@ var MinRequired = &Required{}
 // Defined is true if any physical property is defined. If none is defined, then
 // this is an instance of MinRequired.
 func (p *Required) Defined() bool {
-	return !p.Presentation.Any() || !p.Ordering.Any() || !p.Distribution.Any() ||
-		p.LimitHint != 0 || p.RemoteBranch
+	return !p.Presentation.Any() || !p.Ordering.Any() || p.LimitHint != 0 || !p.Distribution.Any()
 }
 
 // ColSet returns the set of columns used by any of the physical properties.
@@ -103,14 +97,11 @@ func (p *Required) String() string {
 	if !p.Ordering.Any() {
 		output("ordering", p.Ordering.Format)
 	}
-	if !p.Distribution.Any() {
-		output("distribution", p.Distribution.format)
-	}
 	if p.LimitHint != 0 {
 		output("limit hint", func(buf *bytes.Buffer) { fmt.Fprintf(buf, "%.2f", p.LimitHint) })
 	}
-	if p.RemoteBranch {
-		output("remote branch", func(buf *bytes.Buffer) { buf.WriteString("true") })
+	if !p.Distribution.Any() {
+		output("distribution", p.Distribution.format)
 	}
 
 	// Handle empty properties case.
@@ -123,8 +114,7 @@ func (p *Required) String() string {
 // Equals returns true if the two physical properties are identical.
 func (p *Required) Equals(rhs *Required) bool {
 	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering) &&
-		p.Distribution.Equals(rhs.Distribution) &&
-		p.LimitHint == rhs.LimitHint && p.RemoteBranch == rhs.RemoteBranch
+		p.LimitHint == rhs.LimitHint && p.Distribution.Equals(rhs.Distribution)
 }
 
 // LimitHintInt64 returns the limit hint converted to an int64.

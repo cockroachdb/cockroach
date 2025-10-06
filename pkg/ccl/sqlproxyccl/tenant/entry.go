@@ -72,7 +72,7 @@ type tenantEntry struct {
 // Initialize fetches metadata about a tenant, such as its cluster name, and
 // stores that in the entry. If the tenant's metadata is stale, they will be
 // refreshed.
-func (e *tenantEntry) Initialize(ctx context.Context, client RPCDirectoryClient) error {
+func (e *tenantEntry) Initialize(ctx context.Context, client DirectoryClient) error {
 	e.calls.Lock()
 	defer e.calls.Unlock()
 
@@ -89,7 +89,7 @@ func (e *tenantEntry) Initialize(ctx context.Context, client RPCDirectoryClient)
 		return initErr
 	}
 
-	log.Dev.Infof(ctx, "refreshing tenant %d metadata", e.TenantID)
+	log.Infof(ctx, "refreshing tenant %d metadata", e.TenantID)
 
 	tenantResp, err := client.GetTenant(ctx, &GetTenantRequest{TenantID: e.TenantID.ToUint64()})
 	if err != nil {
@@ -112,7 +112,7 @@ func (e *tenantEntry) Initialize(ctx context.Context, client RPCDirectoryClient)
 
 // RefreshPods makes a synchronous directory server call to fetch the latest
 // information about the tenant's available pods, such as their IP addresses.
-func (e *tenantEntry) RefreshPods(ctx context.Context, client RPCDirectoryClient) error {
+func (e *tenantEntry) RefreshPods(ctx context.Context, client DirectoryClient) error {
 	// Lock so that only one thread at a time will refresh, since there's no
 	// point in multiple threads doing it within a short span of time - it's
 	// likely nothing has changed.
@@ -124,7 +124,7 @@ func (e *tenantEntry) RefreshPods(ctx context.Context, client RPCDirectoryClient
 		return nil
 	}
 
-	log.Dev.Infof(ctx, "refreshing tenant %d pods", e.TenantID)
+	log.Infof(ctx, "refreshing tenant %d pods", e.TenantID)
 
 	_, err := e.fetchPodsLocked(ctx, client)
 	return err
@@ -181,7 +181,7 @@ func (e *tenantEntry) GetPods() []*Pod {
 // errorIfNoPods is true, then EnsureTenantPod returns an error if there are no
 // pods available rather than blocking.
 func (e *tenantEntry) EnsureTenantPod(
-	ctx context.Context, client RPCDirectoryClient, errorIfNoPods bool,
+	ctx context.Context, client DirectoryClient, errorIfNoPods bool,
 ) (pods []*Pod, err error) {
 	const retryDelay = 100 * time.Millisecond
 
@@ -217,7 +217,7 @@ func (e *tenantEntry) EnsureTenantPod(
 			return nil, err
 		}
 		if hasRunningPod(pods) {
-			log.Dev.Infof(ctx, "resumed tenant %d", e.TenantID)
+			log.Infof(ctx, "resumed tenant %d", e.TenantID)
 			break
 		}
 
@@ -282,7 +282,7 @@ func (e *tenantEntry) ToProto() *Tenant {
 //
 // NOTE: Caller must lock the "calls" mutex before calling fetchPodsLocked.
 func (e *tenantEntry) fetchPodsLocked(
-	ctx context.Context, client RPCDirectoryClient,
+	ctx context.Context, client DirectoryClient,
 ) (tenantPods []*Pod, err error) {
 	// List the pods for the given tenant.
 	//
@@ -301,7 +301,7 @@ func (e *tenantEntry) fetchPodsLocked(
 	e.mu.pods = list.Pods
 
 	if len(e.mu.pods) != 0 {
-		log.Dev.Infof(ctx, "fetched IP addresses: %v", e.mu.pods)
+		log.Infof(ctx, "fetched IP addresses: %v", e.mu.pods)
 	}
 
 	return e.mu.pods, nil

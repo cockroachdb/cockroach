@@ -98,16 +98,6 @@ var includeAggregateMetricsEnabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
-// bugfix149481Enabled is a (temporary) cluster setting that fixes
-// https://github.com/cockroachdb/cockroach/issues/149481. It is true (enabled) by default on master,
-// and false on backports.
-var bugfix149481Enabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel, "server.child_metrics.bugfix_missing_sql_metrics_149481.enabled",
-	"fixes bug where certain SQL metrics are not being reported, see: "+
-		"https://github.com/cockroachdb/cockroach/issues/149481",
-	true,
-	settings.WithVisibility(settings.Reserved))
-
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -325,7 +315,7 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 		// We haven't yet processed initialization information; return an empty
 		// JSON object.
 		if log.V(1) {
-			log.Dev.Warning(context.TODO(), "MetricsRecorder.MarshalJSON() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.MarshalJSON() called before NodeID allocation")
 		}
 		return []byte("{}"), nil
 	}
@@ -346,52 +336,34 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 // ScrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
 // snapshot.
 func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
-	mr.ScrapeIntoPrometheusWithStaticLabels(false)(pm)
-}
-
-func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
-	useStaticLabels bool,
-) func(pm *metric.PrometheusExporter) {
-	return func(pm *metric.PrometheusExporter) {
-		mr.mu.RLock()
-		defer mr.mu.RUnlock()
-
-		includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
-		includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
-		reinitialisableBugFixEnabled := bugfix149481Enabled.Get(&mr.settings.SV)
-		scrapeOptions := []metric.ScrapeOption{
-			metric.WithIncludeChildMetrics(includeChildMetrics),
-			metric.WithIncludeAggregateMetrics(includeAggregateMetrics),
-			metric.WithUseStaticLabels(useStaticLabels),
-			metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled),
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+	if mr.mu.nodeRegistry == nil {
+		// We haven't yet processed initialization information; output nothing.
+		if log.V(1) {
+			log.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
 		}
-		if mr.mu.nodeRegistry == nil {
-			// We haven't yet processed initialization information; output nothing.
-			if log.V(1) {
-				log.Dev.Warning(context.TODO(), "MetricsRecorder asked to scrape metrics before NodeID allocation")
-			}
-		}
-		pm.ScrapeRegistry(mr.mu.nodeRegistry, scrapeOptions...)
-		pm.ScrapeRegistry(mr.mu.appRegistry, scrapeOptions...)
-		pm.ScrapeRegistry(mr.mu.logRegistry, scrapeOptions...)
-		pm.ScrapeRegistry(mr.mu.sysRegistry, scrapeOptions...)
-		for _, reg := range mr.mu.storeRegistries {
-			pm.ScrapeRegistry(reg, scrapeOptions...)
-		}
-		for _, tenantRegistry := range mr.mu.tenantRegistries {
-			pm.ScrapeRegistry(tenantRegistry, scrapeOptions...)
-		}
+	}
+	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
+	includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.appRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.logRegistry, includeChildMetrics, includeAggregateMetrics)
+	pm.ScrapeRegistry(mr.mu.sysRegistry, includeChildMetrics, includeAggregateMetrics)
+	for _, reg := range mr.mu.storeRegistries {
+		pm.ScrapeRegistry(reg, includeChildMetrics, includeAggregateMetrics)
+	}
+	for _, tenantRegistry := range mr.mu.tenantRegistries {
+		pm.ScrapeRegistry(tenantRegistry, includeChildMetrics, includeAggregateMetrics)
 	}
 }
 
 // PrintAsText writes the current metrics values as plain-text to the writer.
 // We write metrics to a temporary buffer which is then copied to the writer.
 // This is to avoid hanging requests from holding the lock.
-func (mr *MetricsRecorder) PrintAsText(
-	w io.Writer, contentType expfmt.Format, useStaticLabels bool,
-) error {
+func (mr *MetricsRecorder) PrintAsText(w io.Writer, contentType expfmt.Format) error {
 	var buf bytes.Buffer
-	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, contentType, mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)); err != nil {
+	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, contentType, mr.ScrapeIntoPrometheus); err != nil {
 		return err
 	}
 	_, err := buf.WriteTo(w)
@@ -420,7 +392,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.GetTimeSeriesData() called before NodeID allocation")
 		}
 		return nil
 	}
@@ -505,7 +477,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
+			log.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
 		}
 		return nil, nil, nil
 	}
@@ -524,49 +496,22 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	mr.mu.logRegistry.WriteMetricsMetadata(srvMetrics)
 	mr.mu.sysRegistry.WriteMetricsMetadata(srvMetrics)
 
-	mr.writeStoreMetricsMetadata(nodeMetrics)
+	// Get a random storeID.
+	var sID roachpb.StoreID
+
+	storeFound := false
+	for storeID := range mr.mu.storeRegistries {
+		sID = storeID
+		storeFound = true
+		break
+	}
+
+	// Get metric metadata from that store because all stores have the same metadata.
+	if storeFound {
+		mr.mu.storeRegistries[sID].WriteMetricsMetadata(nodeMetrics)
+	}
+
 	return nodeMetrics, appMetrics, srvMetrics
-}
-
-// GetRecordedMetricNames takes a map of metric metadata and returns a map
-// of the metadata name to the name the metric is recorded with in tsdb.
-func (mr *MetricsRecorder) GetRecordedMetricNames(
-	allMetadata map[string]metric.Metadata,
-) map[string]string {
-	storeMetricsMap := make(map[string]metric.Metadata)
-	tsDbMetricNames := make(map[string]string, len(allMetadata))
-	mr.writeStoreMetricsMetadata(storeMetricsMap)
-	for metricName, metadata := range allMetadata {
-		prefix := nodeTimeSeriesPrefix
-		if _, ok := storeMetricsMap[metricName]; ok {
-			prefix = storeTimeSeriesPrefix
-		}
-		if metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
-			for _, metricComputer := range metric.HistogramMetricComputers {
-				computedMetricName := metricName + metricComputer.Suffix
-				tsDbMetricNames[computedMetricName] = fmt.Sprintf(prefix, computedMetricName)
-			}
-		} else {
-			tsDbMetricNames[metricName] = fmt.Sprintf(prefix, metricName)
-		}
-
-	}
-	return tsDbMetricNames
-}
-
-// writeStoreMetricsMetadata Gets a store from mr.mu.storeRegistries and writes
-// the metrics metadata to the provided map.
-func (mr *MetricsRecorder) writeStoreMetricsMetadata(metricsMetadata map[string]metric.Metadata) {
-	if len(mr.mu.storeRegistries) == 0 {
-		return
-	}
-
-	// All store registries should have the same metadata, so only the metadata
-	// from the first store is used to write to metricsMetadata.
-	for _, registry := range mr.mu.storeRegistries {
-		registry.WriteMetricsMetadata(metricsMetadata)
-		return
-	}
 }
 
 // getNetworkActivity produces a map of network activity from this node to all
@@ -605,7 +550,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 	if mr.mu.nodeRegistry == nil {
 		// We haven't yet processed initialization information; do nothing.
 		if log.V(1) {
-			log.Dev.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
+			log.Warning(ctx, "attempt to generate status summary before NodeID allocation.")
 		}
 		return nil
 	}
@@ -618,7 +563,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 
 	systemMemory, _, err := GetTotalMemoryWithoutLogging()
 	if err != nil {
-		log.Dev.Errorf(ctx, "could not get total system memory: %v", err)
+		log.Errorf(ctx, "could not get total system memory: %v", err)
 	}
 
 	// Generate a node status with no store data.
@@ -659,7 +604,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		// Gather descriptor from store.
 		descriptor, err := mr.mu.stores[storeID].Descriptor(ctx, false /* useCached */)
 		if err != nil {
-			log.Dev.Errorf(ctx, "could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
+			log.Errorf(ctx, "could not record status summaries: Store %d could not return descriptor, error: %s", storeID, err)
 			continue
 		}
 
@@ -729,9 +674,9 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 	if log.V(2) {
 		statusJSON, err := json.Marshal(&nodeStatus)
 		if err != nil {
-			log.Dev.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
+			log.Errorf(ctx, "error marshaling nodeStatus to json: %s", err)
 		}
-		log.Dev.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
+		log.Infof(ctx, "node %d status: %s", nodeStatus.Desc.NodeID, statusJSON)
 	}
 	return nil
 }
@@ -756,15 +701,18 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 			return errors.Newf(`extractValue called on histogram metric %q that does not implement the
 				CumulativeHistogram interface. All histogram metrics are expected to implement this interface`, name)
 		}
-		cumulativeSnapshot := cumulative.CumulativeSnapshot()
+		count, sum := cumulative.CumulativeSnapshot().Total()
+		fn(name+"-count", float64(count))
+		fn(name+"-sum", sum)
 		// Use windowed stats for avg and quantiles
 		windowedSnapshot := mtr.WindowedSnapshot()
-		for _, c := range metric.HistogramMetricComputers {
-			if c.IsSummaryMetric {
-				fn(name+c.Suffix, c.ComputedMetric(windowedSnapshot))
-			} else {
-				fn(name+c.Suffix, c.ComputedMetric(cumulativeSnapshot))
-			}
+		avg := windowedSnapshot.Mean()
+		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
+			avg = 0
+		}
+		fn(name+"-avg", avg)
+		for _, pt := range metric.RecordHistogramQuantiles {
+			fn(name+pt.Suffix, windowedSnapshot.ValueAtQuantile(pt.Quantile))
 		}
 	case metric.PrometheusExportable:
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
@@ -792,7 +740,7 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
 	reg.Each(func(name string, mtr interface{}) {
 		if err := extractValue(name, mtr, fn); err != nil {
-			log.Dev.Warningf(context.TODO(), "%v", err)
+			log.Warningf(context.TODO(), "%v", err)
 			return
 		}
 	})
@@ -836,7 +784,7 @@ func (rr registryRecorder) recordChild(
 			return
 		}
 		m := prom.ToPrometheusMetric()
-		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
+		m.Label = append(labels, prom.GetLabels()...)
 
 		processChildMetric := func(metric *prometheusgo.Metric) {
 			found := false
@@ -859,7 +807,7 @@ func (rr registryRecorder) recordChild(
 				return
 			}
 			*dest = append(*dest, tspb.TimeSeriesData{
-				Name:   fmt.Sprintf(rr.format, prom.GetName(false /* useStaticLabels */)),
+				Name:   fmt.Sprintf(rr.format, prom.GetName()),
 				Source: rr.source,
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
@@ -881,7 +829,7 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if warning != "" {
-		log.Dev.Infof(ctx, "%s", warning)
+		log.Infof(ctx, "%s", warning)
 	}
 	return memory, nil
 }

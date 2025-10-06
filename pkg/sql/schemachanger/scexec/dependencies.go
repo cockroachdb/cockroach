@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -66,37 +67,20 @@ type Catalog interface {
 	// DeleteDescriptor deletes a descriptor entry.
 	DeleteDescriptor(ctx context.Context, id descpb.ID) error
 
-	// WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
-	// writes to the kv batch.
-	WriteZoneConfigToBatch(ctx context.Context, id descpb.ID, zc catalog.ZoneConfig) error
-
-	// GetZoneConfig gets the zone config for a descriptor ID.
-	GetZoneConfig(ctx context.Context, id descpb.ID) (catalog.ZoneConfig, error)
-
-	// UpdateZoneConfig upserts a zone config for a descriptor ID.
+	// UpdateZoneConfig upserts a zone config for a descriptor.
 	UpdateZoneConfig(ctx context.Context, id descpb.ID, zc *zonepb.ZoneConfig) error
 
-	// UpdateSubzoneConfig upserts a subzone config into the given zone config
-	// for a descriptor ID.
+	// UpdateSubzoneConfig upserts a subzone config into the zone config for a
+	// descriptor.
 	UpdateSubzoneConfig(
 		ctx context.Context,
-		parentZone catalog.ZoneConfig,
-		subzone zonepb.Subzone,
+		tableID descpb.ID,
+		subzones []zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
-		idxRefToDelete int32,
-	) (catalog.ZoneConfig, error)
+	) error
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
-
-	// DeleteSubzoneConfig deletes a subzone config from the zone config for a
-	// table.
-	DeleteSubzoneConfig(
-		ctx context.Context,
-		tableID descpb.ID,
-		subzone zonepb.Subzone,
-		subzoneSpans []zonepb.SubzoneSpan,
-	) error
 
 	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
 	UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error
@@ -119,11 +103,6 @@ type Catalog interface {
 
 	// InitializeSequence initializes the initial value for a sequence.
 	InitializeSequence(id descpb.ID, startVal int64)
-
-	// CheckMaxSchemaObjects checks if the number of schema objects in the
-	// cluster plus the new objects being created would exceed the configured
-	// limit. Returns an error if the limit would be exceeded.
-	CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.
@@ -246,9 +225,8 @@ type Validator interface {
 type IndexSpanSplitter interface {
 
 	// MaybeSplitIndexSpans will attempt to split the backfilled index span, if
-	// the index is in the system tenant or is partitioned. copyIndexSource is an
-	// optional index that can be specified as a potential source for split points.
-	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index, copyIndexSource catalog.Index) error
+	// the index is in the system tenant or is partitioned.
+	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
 
 	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
 	// across hash-sharded index boundaries if applicable.
@@ -375,7 +353,7 @@ type DescriptorMetadataUpdater interface {
 
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
-	UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error
+	UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error
 }
 
 type TemporarySchemaCreator interface {

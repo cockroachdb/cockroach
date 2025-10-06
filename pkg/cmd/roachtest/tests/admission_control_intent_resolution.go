@@ -41,6 +41,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
 		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
+		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -68,9 +69,9 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			roachtestutil.SetAdmissionControl(ctx, t, c, true)
+			setAdmissionControl(ctx, t, c, true)
 			t.Status("running txn")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 				defer db.Close()
@@ -136,7 +137,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 					// We want to use the mean of the last 2m of data to avoid short-lived
 					// spikes causing failures.
 					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-						latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+						latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
 						if latestSampleMeanL0Sublevels > subLevelThreshold {
 							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
 						}

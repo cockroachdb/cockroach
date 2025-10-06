@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -34,7 +34,6 @@ const (
 	defaultBatchSize    = 1000
 	defaultPayloadBytes = 100
 	defaultRanges       = 10
-	defaultTables       = 1
 	maxTransfer         = 999
 )
 
@@ -46,7 +45,6 @@ type bank struct {
 
 	rows, batchSize      int
 	payloadBytes, ranges int
-	tables               int
 }
 
 func init() {
@@ -68,12 +66,8 @@ var bankMeta = workload.Meta{
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
-		g.flags.IntVar(&g.tables, `tables`, defaultTables, `Initial number of bank tables to create.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
-		// Because this workload can create a large number of objects, the import
-		// concurrent may need to be limited.
-		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return g
 	},
 }
@@ -123,20 +117,9 @@ func (b *bank) Hooks() workload.Hooks {
 			if b.batchSize <= 0 {
 				return errors.Errorf(`Value of batch-size must be greater than zero; was %d`, b.batchSize)
 			}
-			if b.tables <= 0 {
-				return errors.Errorf(`Value of tables must be greater than zero; was %d`, b.tables)
-			}
 			return nil
 		},
 	}
-}
-
-// tableName returns the table name with optional schema prefix and table number.
-func (b *bank) tableName(baseName string, tableIdx int) string {
-	if b.tables > 1 {
-		return fmt.Sprintf("%s_%d", baseName, tableIdx)
-	}
-	return baseName
 }
 
 var bankTypes = []*types.T{
@@ -148,51 +131,46 @@ var bankTypes = []*types.T{
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
 	numBatches := (b.rows + b.batchSize - 1) / b.batchSize // ceil(b.rows/b.batchSize)
+	table := workload.Table{
+		Name:   `bank`,
+		Schema: bankSchema,
+		InitialRows: workload.BatchedTuples{
+			NumBatches: numBatches,
+			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+				rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
-	tables := make([]workload.Table, b.tables)
-	for tableIdx := range b.tables {
-		table := workload.Table{
-			Name:   b.tableName(`bank`, tableIdx),
-			Schema: bankSchema,
-			InitialRows: workload.BatchedTuples{
-				NumBatches: numBatches,
-				FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-					rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
+				rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
+				if rowEnd > b.rows {
+					rowEnd = b.rows
+				}
+				cb.Reset(bankTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
+				idCol := cb.ColVec(0).Int64()
+				balanceCol := cb.ColVec(1).Int64()
+				payloadCol := cb.ColVec(2).Bytes()
+				// coldata.Bytes only allows appends so we have to reset it
+				payloadCol.Reset()
+				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+					var payload []byte
+					*a, payload = a.Alloc(b.payloadBytes, 0 /* extraCap */)
+					randStringLetters(rng, payload)
 
-					rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
-					if rowEnd > b.rows {
-						rowEnd = b.rows
-					}
-					cb.Reset(bankTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
-					idCol := cb.ColVec(0).Int64()
-					balanceCol := cb.ColVec(1).Int64()
-					payloadCol := cb.ColVec(2).Bytes()
-					// coldata.Bytes only allows appends so we have to reset it
-					payloadCol.Reset()
-					for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
-						var payload []byte
-						*a, payload = a.Alloc(b.payloadBytes)
-						randStringLetters(rng, payload)
-
-						rowOffset := rowIdx - rowBegin
-						idCol[rowOffset] = int64(rowIdx)
-						balanceCol[rowOffset] = 0
-						payloadCol.Set(rowOffset, payload)
-					}
-				},
+					rowOffset := rowIdx - rowBegin
+					idCol[rowOffset] = int64(rowIdx)
+					balanceCol[rowOffset] = 0
+					payloadCol.Set(rowOffset, payload)
+				}
 			},
-			Splits: workload.Tuples(
-				b.ranges-1,
-				func(splitIdx int) []interface{} {
-					return []interface{}{
-						(splitIdx + 1) * (b.rows / b.ranges),
-					}
-				},
-			),
-		}
-		tables[tableIdx] = table
+		},
+		Splits: workload.Tuples(
+			b.ranges-1,
+			func(splitIdx int) []interface{} {
+				return []interface{}{
+					(splitIdx + 1) * (b.rows / b.ranges),
+				}
+			},
+		),
 	}
-	return tables
+	return []workload.Table{table}
 }
 
 // Ops implements the Opser interface.
@@ -208,17 +186,13 @@ func (b *bank) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	// TODO(dan): Move the various queries in the backup/restore tests here.
-	updateStmts := make([]*gosql.Stmt, b.tables)
-	for tableIdx := range b.tables {
-		updateStmt, err := db.Prepare(fmt.Sprintf(`
-			UPDATE %s
-			SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-			WHERE id IN ($1, $2)
-		`, b.tableName("bank", tableIdx)))
-		if err != nil {
-			return workload.QueryLoad{}, errors.CombineErrors(err, db.Close())
-		}
-		updateStmts[tableIdx] = updateStmt
+	updateStmt, err := db.Prepare(`
+		UPDATE bank
+		SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+		WHERE id IN ($1, $2)
+	`)
+	if err != nil {
+		return workload.QueryLoad{}, errors.CombineErrors(err, db.Close())
 	}
 
 	ql := workload.QueryLoad{
@@ -227,21 +201,15 @@ func (b *bank) Ops(
 		},
 	}
 	for i := 0; i < b.connFlags.Concurrency; i++ {
-		// The PCG is seeded with the worker index to ensure that each worker
-		// gets a unique sequence of random operations.
-		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i)))
+		rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 		hists := reg.GetHandle()
-
 		workerFn := func(ctx context.Context) error {
-			tableIdx := rng.IntN(b.tables)
-			updateStmt := updateStmts[tableIdx]
-
-			from := rng.IntN(b.rows)
-			to := rng.IntN(b.rows - 1)
+			from := rng.Intn(b.rows)
+			to := rng.Intn(b.rows - 1)
 			for from == to && b.rows != 1 {
-				to = rng.IntN(b.rows - 1)
+				to = rng.Intn(b.rows - 1)
 			}
-			amount := rand.IntN(maxTransfer)
+			amount := rand.Intn(maxTransfer)
 			start := timeutil.Now()
 			_, err := updateStmt.Exec(from, to, amount)
 			elapsed := timeutil.Since(start)

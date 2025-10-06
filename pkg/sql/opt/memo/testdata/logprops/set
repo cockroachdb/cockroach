@@ -53,7 +53,7 @@ intersect
  ├── left columns: xy.x:1(int) xy.y:2(int) xy.x:1(int)
  ├── right columns: v:6(int) u:5(int) rowid:7(int)
  ├── key: (12)
- ├── fd: ()-->(11), (12)-->(10,11), (10)==(12), (12)==(10)
+ ├── fd: ()-->(11), (10)==(12), (12)==(10), (12)-->(10,11)
  ├── interesting orderings: (+12)
  ├── project
  │    ├── columns: xy.x:1(int!null) xy.y:2(int)
@@ -369,7 +369,7 @@ distinct-on
  ├── columns: a:11(int!null) b:12(int) c:13(int!null)
  ├── grouping columns: a:11(int!null)
  ├── key: (11)
- ├── fd: (11)-->(12,13), (11)==(13), (13)==(11)
+ ├── fd: (11)==(13), (13)==(11), (11)-->(12,13)
  ├── prune: (12,13)
  ├── union-all
  │    ├── columns: a:11(int!null) b:12(int) c:13(int!null)
@@ -496,7 +496,7 @@ intersect-all
  ├── left columns: a:1(int!null) b:2(int) c:3(int)
  ├── right columns: a:6(int) b:7(int) c:8(int)
  ├── key: (1)
- ├── fd: (1)==(2,3), (2)==(1,3), (3)==(1,2)
+ ├── fd: (1)==(2,3), (3)==(1,2), (2)==(1,3)
  ├── interesting orderings: (+1)
  ├── select
  │    ├── columns: a:1(int!null) b:2(int) c:3(int!null)
@@ -681,7 +681,7 @@ intersect-all
  ├── right columns: column1:6(int) column2:7(int) column3:8(int)
  ├── cardinality: [0 - 1]
  ├── key: ()
- ├── fd: ()-->(9-11), (9)==(10,11), (10)==(9,11), (11)==(9,10)
+ ├── fd: ()-->(9-11), (11)==(9,10), (9)==(10,11), (10)==(9,11)
  ├── interesting orderings: (+(9|10|11))
  ├── project
  │    ├── columns: coalesce:5(int!null) xy.x:1(int!null)
@@ -715,7 +715,7 @@ except-all
  ├── left columns: xy.x:1(int) xy.x:1(int) coalesce:5(int)
  ├── right columns: column1:6(int) column2:7(int) column3:8(int)
  ├── key: (10)
- ├── fd: (9)==(10,11), (10)==(9,11), (11)==(9,10)
+ ├── fd: (11)==(9,10), (9)==(10,11), (10)==(9,11)
  ├── interesting orderings: (+(9|10|11))
  ├── project
  │    ├── columns: coalesce:5(int!null) xy.x:1(int!null)

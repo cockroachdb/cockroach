@@ -8,13 +8,11 @@ package scmutationexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func (i *immediateVisitor) CreateDatabaseDescriptor(
@@ -38,7 +36,6 @@ func (i *immediateVisitor) CreateDatabaseDescriptor(
 func (i *immediateVisitor) AddDatabaseZoneConfig(
 	ctx context.Context, op scop.AddDatabaseZoneConfig,
 ) error {
-	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DatabaseID,
-		protoutil.Clone(&op.ZoneConfig).(*zonepb.ZoneConfig))
+	i.ImmediateMutationStateUpdater.UpdateZoneConfig(op.DatabaseID, op.ZoneConfig)
 	return nil
 }

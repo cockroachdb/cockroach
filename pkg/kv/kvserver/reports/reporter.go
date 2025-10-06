@@ -47,6 +47,7 @@ var ReporterInterval = settings.RegisterDurationSetting(
 	"the frequency for generating the replication_constraint_stats, replication_stats_report and "+
 		"replication_critical_localities reports (set to 0 to disable)",
 	time.Minute,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // Reporter periodically produces a couple of reports on the cluster's data
@@ -151,7 +152,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 					if err := stats.update(
 						ctx, &constraintsSaver, &replStatsSaver, &criticalLocSaver,
 					); err != nil {
-						log.KvDistribution.Errorf(ctx, "failed to generate replication reports: %s", err)
+						log.Errorf(ctx, "failed to generate replication reports: %s", err)
 					}
 				}
 				timer.Reset(interval)
@@ -162,6 +163,7 @@ func (stats *Reporter) Start(ctx context.Context, stopper *stop.Stopper) {
 			// update to the frequency setting.
 			select {
 			case <-timerCh:
+				timer.Read = true
 			case <-changeCh:
 			case <-ctx.Done():
 				return
@@ -230,7 +232,7 @@ func (stats *Reporter) update(
 		&constraintConfVisitor, &localityStatsVisitor, &replicationStatsVisitor,
 	); err != nil {
 		if errors.HasType(err, (*visitorError)(nil)) {
-			log.KvDistribution.Errorf(ctx, "some reports have not been generated: %s", err)
+			log.Errorf(ctx, "some reports have not been generated: %s", err)
 		} else {
 			return errors.Wrap(err, "failed to compute constraint conformance report")
 		}
@@ -270,7 +272,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 		return nil
 	}
 	if err != nil {
-		log.KvDistribution.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
+		log.Fatalf(ctx, "unexpected error when visiting stores: %s", err)
 	}
 	if repl.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 		return store
@@ -707,7 +709,7 @@ func (r *meta2RangeIter) readBatch(ctx context.Context) (retErr error) {
 	defer func() { r.handleErr(ctx, retErr) }()
 
 	if len(r.buffer) > 0 {
-		log.KvDistribution.Fatalf(ctx, "buffer not exhausted: %d keys remaining", len(r.buffer))
+		log.Fatalf(ctx, "buffer not exhausted: %d keys remaining", len(r.buffer))
 	}
 	if r.txn == nil {
 		r.txn = r.db.NewTxn(ctx, "rangeStoreImpl")
@@ -755,7 +757,7 @@ func (r *meta2RangeIter) handleErr(ctx context.Context, err error) {
 		return
 	}
 	if errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
-		log.KvDistribution.Warningf(ctx, "unexpected retryable error from "+
+		log.Warningf(ctx, "unexpected retryable error from "+
 			"read-only transaction with fixed read timestamp: %s", err)
 	}
 	if r.txn != nil {

@@ -9,10 +9,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -185,14 +184,16 @@ func (r *FileRegistry) Load(ctx context.Context) error {
 				// must have crashed while creating it.
 				err := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
 				if err != nil {
-					log.Dev.Errorf(ctx, "unable to remove registry file %s", f)
+					log.Errorf(ctx, "unable to remove registry file %s", f)
 				}
 			}
 			if fileNum < registryFileNum {
 				obsoleteFiles = append(obsoleteFiles, fileNum)
 			}
 		}
-		slices.Sort(obsoleteFiles)
+		sort.Slice(obsoleteFiles, func(i, j int) bool {
+			return obsoleteFiles[i] < obsoleteFiles[j]
+		})
 		r.writeMu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
 		for _, f := range obsoleteFiles {
 			r.writeMu.obsoleteRegistryFiles = append(r.writeMu.obsoleteRegistryFiles, makeRegistryFilename(f))
@@ -305,13 +306,17 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 	// recursively List each directory and walk two lists of sorted
 	// filenames. We should test a store with many files to see how much
 	// the current approach slows node start.
-	filenames := slices.Sorted(maps.Keys(r.writeMu.mu.entries))
+	filenames := make([]string, 0, len(r.writeMu.mu.entries))
+	for filename := range r.writeMu.mu.entries {
+		filenames = append(filenames, filename)
+	}
+	sort.Strings(filenames)
 
 	batch := &enginepb.RegistryUpdateBatch{}
 	for _, filename := range filenames {
 		entry, ok := r.writeMu.mu.entries[filename]
 		if !ok {
-			panic(errors.AssertionFailedf("entry disappeared from map"))
+			panic("entry disappeared from map")
 		}
 
 		// Some entries may be elided. This is used within
@@ -332,7 +337,7 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
-			log.Dev.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
+			log.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
 			batch.DeleteEntry(filename)
 		}
 	}

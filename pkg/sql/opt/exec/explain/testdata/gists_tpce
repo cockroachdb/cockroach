@@ -221,7 +221,7 @@ explain(shape):
 ├── • subquery
 │   │ id: @S1
 │   │ original sql: UPDATE last_trade SET lt_vol = lt_vol + _, lt_price = _::DECIMAL, lt_dts = '_'::TIMESTAMP WHERE lt_s_symb = '_' RETURNING _
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 1 (update_last_trade)
@@ -242,7 +242,7 @@ explain(shape):
 ├── • subquery
 │   │ id: @S2
 │   │ original sql: SELECT tr_t_id, tr_bid_price::FLOAT8, tr_tt_id, tr_qty FROM trade_request WHERE (tr_s_symb = '_') AND ((((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price <= _::DECIMAL))) OR ((tr_tt_id = _::VARCHAR(3)) AND (tr_bid_price >= _::DECIMAL)))
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 2 (request_list)
@@ -259,7 +259,7 @@ explain(shape):
 ├── • subquery
 │   │ id: @S3
 │   │ original sql: DELETE FROM trade_request WHERE tr_t_id IN (SELECT tr_t_id FROM request_list) RETURNING _
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 3 (delete_trade_request)
@@ -282,7 +282,7 @@ explain(shape):
 ├── • subquery
 │   │ id: @S4
 │   │ original sql: INSERT INTO trade_history(th_t_id, th_st_id, th_dts) (SELECT tr_t_id, '_', '_'::TIMESTAMP FROM request_list) RETURNING _
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 5 (insert_trade_history)
@@ -303,7 +303,7 @@ explain(shape):
 ├── • subquery
 │   │ id: @S5
 │   │ original sql: UPDATE trade SET t_st_id = '_', t_dts = '_'::TIMESTAMP WHERE t_id IN (SELECT tr_t_id FROM request_list) RETURNING _
-│   │ exec mode: discard all rows
+│   │ exec mode: all rows
 │   │
 │   └── • buffer
 │       │ label: buffer 7 (update_trade_submitted)

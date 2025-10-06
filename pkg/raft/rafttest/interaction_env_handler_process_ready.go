@@ -49,48 +49,36 @@ func (env *InteractionEnv) ProcessReady(idx int) error {
 	n := &env.Nodes[idx]
 	rd := n.Ready()
 	env.Output.WriteString(raft.DescribeReady(rd, defaultEntryFormatter))
-	// Immediately send the messages that are not contingent on storage sync.
-	env.Messages = append(env.Messages, rd.Messages...)
 
-	if !n.asyncWrites {
-		if err := processAppend(n, rd.StorageAppend); err != nil {
+	if !n.Config.AsyncStorageWrites {
+		if err := processAppend(n, rd.HardState, rd.Entries, rd.Snapshot); err != nil {
 			return err
 		}
-		ack := rd.Ack()
-		for msg := range ack.Send(raftpb.PeerID(idx + 1)) {
-			env.Messages = append(env.Messages, msg)
+		if err := processApply(n, rd.CommittedEntries); err != nil {
+			return err
 		}
-
-		if !rd.Committed.Empty() {
-			ls := n.RawNode.LogSnapshot()
-			apply, err := ls.Slice(rd.Committed, n.Config.MaxCommittedSizePerReady)
-			if err != nil {
-				return err
-			}
-			// TODO(pav-kv): move printing to processApply when the async write path
-			// is refactored to also use LogSnapshot.
-			env.Output.WriteString("Applying:\n")
-			env.Output.WriteString(raft.DescribeEntries(apply, defaultEntryFormatter))
-			if err := processApply(n, apply); err != nil {
-				return err
-			}
-			n.AckApplied(apply)
-		}
-
-		n.AckAppend(ack)
-		return nil
 	}
 
-	if app := rd.StorageAppend; !app.Empty() {
-		n.AppendWork = append(n.AppendWork, app)
-	}
-	if span := rd.Committed; !span.Empty() {
-		if was := n.ApplyWork; span.After > was.Last {
-			n.ApplyWork = span
+	for _, m := range rd.Messages {
+		if raft.IsLocalMsgTarget(m.To) {
+			if !n.Config.AsyncStorageWrites {
+				panic("unexpected local msg target")
+			}
+			switch m.Type {
+			case raftpb.MsgStorageAppend:
+				n.AppendWork = append(n.AppendWork, m)
+			case raftpb.MsgStorageApply:
+				n.ApplyWork = append(n.ApplyWork, m)
+			default:
+				panic(fmt.Sprintf("unexpected message type %s", m.Type))
+			}
 		} else {
-			n.ApplyWork.Last = span.Last
+			env.Messages = append(env.Messages, m)
 		}
-		n.AckApplying(span.Last)
+	}
+
+	if !n.Config.AsyncStorageWrites {
+		n.Advance(rd)
 	}
 	return nil
 }

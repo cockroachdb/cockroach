@@ -161,6 +161,10 @@ export const CircuitBreakerTrippedEventsTooltip: React.ReactNode = (
   </div>
 );
 
+export const PausedFollowersTooltip: React.ReactNode = (
+  <div>The number of nonessential followers that have replication paused.</div>
+);
+
 export const ReceiverSnapshotsQueuedTooltip: React.ReactNode = (
   <div>
     The number of snapshots queued to be applied on a receiver which can only{" "}

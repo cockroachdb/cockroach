@@ -99,9 +99,9 @@ func (c *Cache[K, V]) MaybeWriteBackToCache(
 		// proceed with authentication so that users are not locked out of
 		// the database.
 		log.Ops.Warningf(ctx, "no memory available to cache info: %v", err)
-		return false
+	} else {
+		c.cache[key] = value
 	}
-	c.cache[key] = value
 	return true
 }
 

@@ -5,19 +5,11 @@ go_library(
     srcs = ["unique.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/unique",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/syncutil",
-        "//pkg/util/timeutil",
-    ],
 )
 
 go_test(
     name = "unique_test",
+    size = "small",
     srcs = ["unique_test.go"],
     embed = [":unique"],
-    deps = [
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
-        "@com_github_stretchr_testify//require",
-    ],
 )

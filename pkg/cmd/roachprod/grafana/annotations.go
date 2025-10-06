@@ -7,15 +7,16 @@ package grafana
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"github.com/go-openapi/strfmt"
 	grafana "github.com/grafana/grafana-openapi-client-go/client"
 	"github.com/grafana/grafana-openapi-client-go/models"
+	"google.golang.org/api/idtoken"
 )
 
 // newGrafanaClient is a helper function that creates an HTTP client to
@@ -25,37 +26,30 @@ import (
 func newGrafanaClient(
 	ctx context.Context, host string, secure bool,
 ) (*grafana.GrafanaHTTPAPI, error) {
+	headers := map[string]string{}
 	scheme := "http"
-
-	// Use the default HTTP client for unsecure Grafana calls.
-	grafanaHttpClient := httputil.DefaultClient.Client
 
 	if secure {
 		scheme = "https"
 
-		// Grafana annotations currently use the same service account
-		// and OAuth client ID  as the prometheus helper service.
-		iapTokenSource, err := roachprodutil.NewIAPTokenSource(roachprodutil.IAPTokenSourceOptions{
-			OAuthClientID:       promhelperclient.OAuthClientID,
-			ServiceAccountEmail: promhelperclient.ServiceAccountEmail,
-		})
-		if err != nil {
+		// Read in the service account key and audience, so we can retrieve the identity token.
+		if _, err := roachprodutil.SetServiceAccountCredsEnv(ctx, false); err != nil {
 			return nil, err
 		}
 
-		// Override the default HTTP client with the one
-		// that has the IAP token source.
-		grafanaHttpClient = iapTokenSource.GetHTTPClient()
+		token, err := roachprodutil.GetServiceAccountToken(ctx, idtoken.NewTokenSource)
+		if err != nil {
+			return nil, err
+		}
+		headers["Authorization"] = fmt.Sprintf("Bearer %s", token)
 	}
 
+	headers[httputil.ContentTypeHeader] = httputil.JSONContentType
 	cfg := &grafana.TransportConfig{
-		Host:     host,
-		BasePath: "/api",
-		Schemes:  []string{scheme},
-		HTTPHeaders: map[string]string{
-			httputil.ContentTypeHeader: httputil.JSONContentType,
-		},
-		Client: grafanaHttpClient,
+		Host:        host,
+		BasePath:    "/api",
+		Schemes:     []string{scheme},
+		HTTPHeaders: headers,
 	}
 
 	return grafana.NewHTTPClientWithConfig(strfmt.Default, cfg), nil

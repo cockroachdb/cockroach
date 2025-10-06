@@ -38,6 +38,7 @@ var SettingFlowStreamTimeout = settings.RegisterDurationSetting(
 	"sql.distsql.flow_stream_timeout",
 	"amount of time incoming streams wait for a flow to be set up before erroring out",
 	10*time.Second,
+	settings.NonNegativeDuration,
 	settings.WithName("sql.distsql.flow_stream.timeout"),
 )
 
@@ -312,7 +313,7 @@ func (fr *FlowRegistry) RegisterFlow(
 				// principle, we could ForkSpan() beforehand, but we don't want to
 				// create the extra span every time.
 				timeoutCtx := tracing.ContextWithSpan(ctx, nil)
-				log.Dev.Errorf(
+				log.Errorf(
 					timeoutCtx,
 					"flow id:%s : %d inbound streams timed out after %s; propagated error throughout flow",
 					id,
@@ -541,7 +542,7 @@ func (fr *FlowRegistry) ConnectInboundStream(
 	ctx context.Context,
 	flowID execinfrapb.FlowID,
 	streamID execinfrapb.StreamID,
-	stream execinfrapb.RPCDistSQL_FlowStreamStream,
+	stream execinfrapb.DistSQL_FlowStreamServer,
 	timeout time.Duration,
 ) (_ *FlowBase, _ InboundStreamHandler, cleanup func(), retErr error) {
 	fr.Lock()

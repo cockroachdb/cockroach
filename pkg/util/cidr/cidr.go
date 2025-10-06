@@ -74,7 +74,7 @@ func NewLookup(st *settings.Values) *Lookup {
 	c.changed = make(chan time.Duration, 1)
 
 	cidrMappingUrl.SetOnChange(st, func(ctx context.Context) {
-		log.Dev.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
+		log.Infof(ctx, "url changed to '%s'", cidrMappingUrl.Get(st))
 		// Reset the lastUpdate time so that the URL is always reloaded even if
 		// the new file/URL has an older timestamp.
 		c.lastUpdate.Store(time.Time{})
@@ -88,7 +88,7 @@ func NewLookup(st *settings.Values) *Lookup {
 	// and the setting is changed before we register the callback and the
 	// ticker will not be reset to the new value.
 	cidrRefreshInterval.SetOnChange(c.st, func(ctx context.Context) {
-		log.Dev.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
+		log.Infof(ctx, "refresh interval changed to '%s'", cidrRefreshInterval.Get(c.st))
 		select {
 		case c.changed <- cidrRefreshInterval.Get(c.st):
 		default:
@@ -133,7 +133,7 @@ func (c *Lookup) Start(ctx context.Context, stopper *stop.Stopper) error {
 			}
 		}
 	}); err != nil {
-		log.Dev.Errorf(ctx, "unable to start CIDR lookup refresh task: %v", err)
+		log.Errorf(ctx, "unable to start CIDR lookup refresh task: %v", err)
 		return err
 	}
 	return nil
@@ -158,7 +158,7 @@ func (c *Lookup) refresh(ctx context.Context) {
 	if c.isUpdated(ctx, url) {
 		// Set the URL
 		if err := c.setURL(ctx, url); err != nil {
-			log.Dev.Errorf(ctx, "error setting CIDR URL to '%s': %v", url, err)
+			log.Errorf(ctx, "error setting CIDR URL to '%s': %v", url, err)
 		}
 	}
 }
@@ -174,7 +174,7 @@ func (c *Lookup) isUpdated(ctx context.Context, rawURL string) bool {
 		// Get the file information
 		fileInfo, err := os.Stat(filePath)
 		if err != nil {
-			log.Dev.Warningf(ctx, "error running stat on file '%s', %v", rawURL, err)
+			log.Warningf(ctx, "error running stat on file '%s', %v", rawURL, err)
 			return false
 		}
 
@@ -190,7 +190,7 @@ func (c *Lookup) isUpdated(ctx context.Context, rawURL string) bool {
 		// Send a HEAD request to the URL
 		resp, err := client.Head(rawURL)
 		if err != nil {
-			log.Dev.Warningf(ctx, "error running head on url '%s', %v", rawURL, err)
+			log.Warningf(ctx, "error running head on url '%s', %v", rawURL, err)
 			return false
 		}
 		defer resp.Body.Close()
@@ -198,14 +198,14 @@ func (c *Lookup) isUpdated(ctx context.Context, rawURL string) bool {
 		// Get the Last-Modified header from the response
 		lastModified := resp.Header.Get("Last-Modified")
 		if lastModified == "" {
-			log.Dev.Warningf(ctx, "no last modified header on '%s', %v", rawURL, err)
+			log.Warningf(ctx, "no last modified header on '%s', %v", rawURL, err)
 			return false
 		}
 
 		// Parse the Last-Modified header
 		modTime, err := http.ParseTime(lastModified)
 		if err != nil {
-			log.Dev.Warningf(ctx, "can't parse time %s '%s', %v", modTime, rawURL, err)
+			log.Warningf(ctx, "can't parse time %s '%s', %v", modTime, rawURL, err)
 			return false
 		}
 
@@ -296,7 +296,7 @@ func (c *Lookup) setDestinations(ctx context.Context, contents []byte) error {
 		val := hexString(cidr.IP.Mask(mask))
 		byLength[lenBits][val] = d.Name
 	}
-	log.Dev.Infof(ctx, "CIDR lookup updated with %d destinations", len(destinations))
+	log.Infof(ctx, "CIDR lookup updated with %d destinations", len(destinations))
 	c.byLength.Store(&byLength)
 	c.onChange(ctx)
 	return nil

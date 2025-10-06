@@ -1,0 +1,15 @@
+# LogicTest: local
+
+statement error pgcode XXC01 pq: using PL/pgSQL requires a CCL binary
+CREATE OR REPLACE FUNCTION f() RETURNS RECORD AS $$
+  BEGIN
+    RETURN ROW(0);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement error pgcode XXC01 pq: using PL/pgSQL requires a CCL binary
+CREATE OR REPLACE PROCEDURE p() AS $$
+  BEGIN
+    RAISE NOTICE '1';
+  END
+$$ LANGUAGE PLpgSQL;

@@ -19,13 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -34,8 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	oidc "github.com/coreos/go-oidc"
 	"golang.org/x/oauth2"
 )
 
@@ -133,7 +131,6 @@ type oidcAuthenticationServer struct {
 	// to help us gracefully recover from auth provider downtime without operator intervention.
 	enabled     bool
 	initialized bool
-	execCfg     *sql.ExecutorConfig
 }
 
 type oidcAuthenticationConf struct {
@@ -153,11 +150,7 @@ type oidcAuthenticationConf struct {
 	generateJWTAuthTokenUseToken tokenToUse
 	generateJWTAuthTokenSQLHost  string
 	generateJWTAuthTokenSQLPort  int64
-	providerCustomCA             string
-	httpClient                   *httputil.Client
-	authZEnabled                 bool
-	groupClaim                   string
-	userinfoGroupKey             string
+	clientTimeout                time.Duration
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -193,107 +186,37 @@ type oidcManager struct {
 	oauth2Config *oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	httpClient   *httputil.Client
-	provider     *oidc.Provider
 }
 
-// ExchangeVerifyGetTokenInfo exchanges the auth-code, verifies the ID-token,
-// and extracts claims from both the ID and Access tokens if they are JWTs.
-// Access tokens are only processed if OIDC authorization is enabled for the
-// cluster.
-func (o *oidcManager) ExchangeVerifyGetTokenInfo(
-	ctx context.Context, code, idTokenKey string, authZEnabled bool,
-) (
-	idTokenClaims, accessTokenClaims map[string]json.RawMessage,
-	rawIDToken, rawAccessToken string,
-	err error,
-) {
+func (o *oidcManager) ExchangeVerifyGetClaims(
+	ctx context.Context, code string, idTokenKey string,
+) (map[string]json.RawMessage, error) {
 	credentials, err := o.Exchange(ctx, code)
 	if err != nil {
-		return nil, nil, "", "", errors.Wrap(err, "OIDC: failed to exchange code for token")
+		log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
+		return nil, err
 	}
 
-	// Build the list of tokens we must handle. For the ID token we verify
-	// signature and claims up-front; the access token is copied as-is.
-	// Since we use the OIDC Authorization Code flow (response_type=code),
-	// The token endpoint response must contain both id_token and access_token
-	// (refresh_token is optional). Their presence is therefore guaranteed here.
-	tokensToProcess := []struct {
-		name             string
-		getVerifiedToken func() (string, error)      // fetches the raw token; verifies when needed
-		claims           *map[string]json.RawMessage // destination for parsed claims
-		rawToken         *string                     // destination for the raw token string
-		required         bool
-	}{
-		{
-			name:     idTokenKey,
-			required: true,
-			getVerifiedToken: func() (string, error) {
-				val, _ := credentials.Extra(idTokenKey).(string)
-				if val == "" {
-					log.Ops.Warning(ctx, "OIDC: required id_token missing from credentials")
-					return "", errors.New("OIDC: required id_token missing from credentials")
-				}
-				// The ID token must be verified against the provider.
-				if _, err := o.Verify(ctx, val); err != nil {
-					return "", err
-				}
-				return val, nil
-			},
-			claims:   &idTokenClaims,
-			rawToken: &rawIDToken,
-		},
-		{
-			name:     "access_token",
-			required: authZEnabled,
-			getVerifiedToken: func() (string, error) {
-				val := credentials.AccessToken
-				if val == "" {
-					log.Ops.Warning(ctx, "OIDC: required access_token missing from credentials")
-					return "", errors.New("OIDC: required access_token missing from credentials")
-				}
-				return val, nil
-			},
-			claims:   &accessTokenClaims,
-			rawToken: &rawAccessToken,
-		},
+	rawIDToken, ok := credentials.Extra(idTokenKey).(string)
+	if !ok {
+		err := errors.New("OIDC: failed to extract ID token from the token credentials")
+		log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
+		return nil, err
 	}
 
-	for _, tokenInfo := range tokensToProcess {
-		if !tokenInfo.required {
-			continue
-		}
-		var err error
-		*tokenInfo.rawToken, err = tokenInfo.getVerifiedToken()
-		if err != nil {
-			return nil, nil, "", "", errors.Wrapf(err, "OIDC: failed to verify %s", tokenInfo.name)
-		}
-		// Attempt to parse the token as a JWT to extract its claims.
-		// We keep this at INFO(1) because opaque tokens are normal for many IdPs;
-		// the message is useful for troubleshooting but not an operator-actionable error.
-		parsedToken, err := jwt.ParseInsecure([]byte(*tokenInfo.rawToken))
-		if err != nil {
-			log.Dev.VInfof(ctx, 1, "OIDC: could not parse %s as JWT (this is expected for opaque tokens): %v", tokenInfo.name, err)
-			continue // Not a JWT, so we can't get claims from it.
-		}
-
-		// Convert the jwt.Token into a map to extract all claims.
-		claimsMap, err := parsedToken.AsMap(ctx)
-		if err != nil {
-			return nil, nil, "", "", errors.Wrapf(err, "OIDC: failed to get claims as map from %s", tokenInfo.name)
-		}
-		// The claims map must be marshaled and unmarshaled to convert it to the desired type.
-		jsonBytes, err := json.Marshal(claimsMap)
-		if err != nil {
-			return nil, nil, "", "", errors.Wrapf(err, "OIDC: failed to marshal claims from %s", tokenInfo.name)
-		}
-		var claimsData map[string]json.RawMessage
-		if err := json.Unmarshal(jsonBytes, &claimsData); err != nil {
-			return nil, nil, "", "", errors.Wrapf(err, "OIDC: failed to deserialize claims from %s", tokenInfo.name)
-		}
-		*tokenInfo.claims = claimsData
+	idToken, err := o.Verify(ctx, rawIDToken)
+	if err != nil {
+		log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
+		return nil, err
 	}
 
-	return idTokenClaims, accessTokenClaims, rawIDToken, rawAccessToken, nil
+	var claims map[string]json.RawMessage
+	if err := idToken.Claims(&claims); err != nil {
+		log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
+		return nil, err
+	}
+
+	return claims, nil
 }
 
 func (o *oidcManager) Verify(ctx context.Context, s string) (*oidc.IDToken, error) {
@@ -323,17 +246,11 @@ func (o oidcManager) AuthCodeURL(s string, option ...oauth2.AuthCodeOption) stri
 	return o.oauth2Config.AuthCodeURL(s, option...)
 }
 
-func (o *oidcManager) UserInfo(ctx context.Context, ts oauth2.TokenSource) (*oidc.UserInfo, error) {
-	octx := oidc.ClientContext(ctx, o.httpClient.Client)
-	return o.provider.UserInfo(octx, ts)
-}
-
 type IOIDCManager interface {
 	Verify(context.Context, string) (*oidc.IDToken, error)
 	Exchange(context.Context, string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
-	ExchangeVerifyGetTokenInfo(context.Context, string, string, bool) (idTokenClaims, accessTokenClaims map[string]json.RawMessage, rawIDToken, rawAccessToken string, err error)
-	UserInfo(context.Context, oauth2.TokenSource) (*oidc.UserInfo, error)
+	ExchangeVerifyGetClaims(context.Context, string, string) (map[string]json.RawMessage, error)
 }
 
 var _ IOIDCManager = &oidcManager{}
@@ -351,7 +268,10 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	// go-oidc, verifier instance can be created with VerifierContext
 	// https://github.com/coreos/go-oidc/blob/6d6be43e852de391805e5a5bc14146ba3cdd4195/oidc/verify.go#L125
 	ctx = context.WithoutCancel(ctx)
-	octx := oidc.ClientContext(ctx, conf.httpClient.Client)
+
+	// Set the HTTP client in the context, as required by the `go-oidc` module.
+	httpClient := httputil.NewClientWithTimeout(conf.clientTimeout)
+	octx := oidc.ClientContext(ctx, httpClient.Client)
 
 	provider, err := oidc.NewProvider(octx, conf.providerURL)
 	if err != nil {
@@ -372,8 +292,7 @@ var NewOIDCManager func(context.Context, oidcAuthenticationConf, string, []strin
 	return &oidcManager{
 		verifier:     verifier,
 		oauth2Config: oauth2Config,
-		httpClient:   conf.httpClient,
-		provider:     provider,
+		httpClient:   httpClient,
 	}, nil
 }
 
@@ -394,8 +313,6 @@ func reloadConfigLocked(
 	locality roachpb.Locality,
 	st *cluster.Settings,
 ) {
-	clientTimeout := OIDCAuthClientTimeout.Get(&st.SV)
-
 	conf := oidcAuthenticationConf{
 		clientID:        OIDCClientID.Get(&st.SV),
 		clientSecret:    OIDCClientSecret.Get(&st.SV),
@@ -414,15 +331,7 @@ func reloadConfigLocked(
 		generateJWTAuthTokenUseToken: OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV),
 		generateJWTAuthTokenSQLHost:  OIDCGenerateClusterSSOTokenSQLHost.Get(&st.SV),
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
-		providerCustomCA:             OIDCProviderCustomCA.Get(&st.SV),
-		httpClient: httputil.NewClient(
-			httputil.WithClientTimeout(clientTimeout),
-			httputil.WithDialerTimeout(clientTimeout),
-			httputil.WithCustomCAPEM(OIDCProviderCustomCA.Get(&st.SV)),
-		),
-		authZEnabled:     OIDCAuthZEnabled.Get(&st.SV),
-		groupClaim:       OIDCAuthGroupClaim.Get(&st.SV),
-		userinfoGroupKey: OIDCAuthUserinfoGroupKey.Get(&st.SV),
+		clientTimeout:                OIDCAuthClientTimeout.Get(&st.SV),
 	}
 
 	if !oidcAuthServer.conf.enabled && conf.enabled {
@@ -449,25 +358,25 @@ func reloadConfigLocked(
 
 	redirectURL, err := getRegionSpecificRedirectURL(locality, oidcAuthServer.conf.redirectURLConf)
 	if err != nil {
-		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
-			log.Dev.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
+			log.Infof(ctx, "check redirect URL OIDC cluster setting: "+OIDCRedirectURLSettingName)
 		}
 		return
 	}
 
 	manager, err := NewOIDCManager(ctx, oidcAuthServer.conf, redirectURL, scopesForOauth)
 	if err != nil {
-		log.Dev.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
+		log.Warningf(ctx, "unable to initialize OIDC server, disabling OIDC: %v", err)
 		if log.V(1) {
-			log.Dev.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
+			log.Infof(ctx, "check provider URL OIDC cluster setting: "+OIDCProviderURLSettingName)
 		}
 		return
 	}
 
 	oidcAuthServer.manager = manager
 	oidcAuthServer.initialized = true
-	log.Dev.Infof(ctx, "initialized OIDC server")
+	log.Infof(ctx, "initialized OIDC server")
 }
 
 // getRegionSpecificRedirectURL will query the localities and see if we have
@@ -507,11 +416,8 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
 ) (authserver.OIDC, error) {
-	oidcAuthentication := &oidcAuthenticationServer{
-		execCfg: execCfg,
-	}
+	oidcAuthentication := &oidcAuthenticationServer{}
 
 	// Don't want to use GRPC here since these endpoints require HTTP-Redirect behaviors and the
 	// callback endpoint will be receiving specialized parameters that grpc-gateway will only get
@@ -541,7 +447,7 @@ var ConfigureOIDC = func(
 
 		secretCookie, err := r.Cookie(secretCookieName)
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
+			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -553,12 +459,12 @@ var ConfigureOIDC = func(
 
 		valid, mode, err := kast.validate()
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
+			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 		if !valid {
-			log.Dev.Error(ctx, "OIDC: invalid client cookie and state token pair")
+			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
@@ -572,7 +478,7 @@ var ConfigureOIDC = func(
 				Code:  r.URL.Query().Get(codeKey),
 			})
 			if err != nil {
-				log.Dev.Error(ctx, "OIDC: failed to marshal state and code (can this happen?)")
+				log.Error(ctx, "OIDC: failed to marshal state and code (can this happen?)")
 				http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			}
 
@@ -582,17 +488,14 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		idTokenClaims, _, rawIDToken, rawAccessToken, err := oidcAuthentication.manager.
-			ExchangeVerifyGetTokenInfo(ctx, r.URL.Query().Get(codeKey), idTokenKey, oidcAuthentication.conf.authZEnabled)
-
+		claims, err := oidcAuthentication.manager.ExchangeVerifyGetClaims(ctx, r.URL.Query().Get(codeKey), idTokenKey)
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: failed to get and verify token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		if log.V(1) {
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s and regex %s",
 				oidcAuthentication.conf.claimJSONKey,
@@ -601,23 +504,16 @@ var ConfigureOIDC = func(
 		}
 
 		username, err := extractUsernameFromClaims(
-			ctx, idTokenClaims, oidcAuthentication.conf.claimJSONKey, oidcAuthentication.conf.principalRegex,
+			ctx, claims, oidcAuthentication.conf.claimJSONKey, oidcAuthentication.conf.principalRegex,
 		)
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
-		// OIDC authorization
-		if err := oidcAuthentication.authorize(ctx, rawIDToken, rawAccessToken, username); err != nil {
-			log.Dev.Errorf(ctx, "OIDC authorization failed with error: %v", err)
-			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
-			return
-		}
-
 		cookie, err := userLoginFromSSO(ctx, username)
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
+			log.Errorf(ctx, "OIDC: failed to complete authentication: unable to create session for %s: %v", username, err)
 			http.Error(w, genericCallbackHTTPError, http.StatusForbidden)
 			return
 		}
@@ -663,7 +559,7 @@ var ConfigureOIDC = func(
 
 		secretCookie, err := r.Cookie(secretCookieName)
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
+			log.Errorf(ctx, "OIDC: missing client side cookie: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -676,20 +572,20 @@ var ConfigureOIDC = func(
 		// There's no need to check mode because we're only handling the JWT mode here.
 		valid, _, err := kast.validate()
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
+			log.Errorf(ctx, "OIDC: validating client cookie and state token pair: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 		if !valid {
-			log.Dev.Error(ctx, "OIDC: invalid client cookie and state token pair")
+			log.Error(ctx, "OIDC: invalid client cookie and state token pair")
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
 
 		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey))
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
-			log.Dev.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
+			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
+			log.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -698,7 +594,7 @@ var ConfigureOIDC = func(
 		if oidcAuthentication.conf.generateJWTAuthTokenUseToken == useIdToken {
 			rawIDToken, ok := credentials.Extra(idTokenKey).(string)
 			if !ok {
-				log.Dev.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
+				log.Error(ctx, "OIDC: failed to extract ID token from the token credentials")
 				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 				return
 			}
@@ -707,14 +603,14 @@ var ConfigureOIDC = func(
 
 		token, err := oidcAuthentication.manager.Verify(ctx, rawToken)
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
+			log.Errorf(ctx, "OIDC: unable to verify ID token: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
 
 		var claims map[string]json.RawMessage
 		if err := token.Claims(&claims); err != nil {
-			log.Dev.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
+			log.Errorf(ctx, "OIDC: unable to deserialize token claims: %v", err)
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -722,7 +618,7 @@ var ConfigureOIDC = func(
 		claim := jwtauthccl.JWTAuthClaim.Get(&st.SV)
 
 		if log.V(1) {
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"attempting to extract SQL username from the payload using the claim key %s, issuer %s, and %s",
 				claim,
@@ -755,17 +651,17 @@ var ConfigureOIDC = func(
 
 				targetClaim, ok := claims[claim]
 				if !ok {
-					log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claim)
-					log.Dev.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
+					log.Errorf(ctx, "OIDC: failed to complete authentication: invalid JSON claim key: %s", claim)
+					log.Infof(ctx, "token payload includes the following claims: %s", strings.Join(claimKeys, ", "))
 					http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 					return
 				}
 				if err := json.Unmarshal(targetClaim, &principal); err != nil {
 					if log.V(1) {
-						log.Dev.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
+						log.Infof(ctx, "failed parsing claim as string; attempting to parse as a list")
 					}
 					if err := json.Unmarshal(targetClaim, &tokenPrincipals); err != nil {
-						log.Dev.Errorf(ctx, "OIDC: failed to complete authentication: failed to parse value for the claim %s: %v", claim, err)
+						log.Errorf(ctx, "OIDC: failed to complete authentication: failed to parse value for the claim %s: %v", claim, err)
 						http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 						return
 					}
@@ -795,7 +691,7 @@ var ConfigureOIDC = func(
 			for _, tokenPrincipal := range tokenPrincipals {
 				if usernames, mapFound, err := idMap.Map(token.Issuer, tokenPrincipal); mapFound {
 					if err != nil {
-						log.Dev.Errorf(ctx, "OIDC: failed to map %s, issuer %s, to SQL usernames: %v", tokenPrincipal, token.Issuer, err)
+						log.Errorf(ctx, "OIDC: failed to map %s, issuer %s, to SQL usernames: %v", tokenPrincipal, token.Issuer, err)
 						http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 						return
 					}
@@ -803,16 +699,16 @@ var ConfigureOIDC = func(
 						acceptedUsernames = append(acceptedUsernames, username.Normalized())
 					}
 				} else {
-					log.Dev.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
-					// N.B. err is elided when using secuser.PurposeValidation.
-					username, _ := secuser.MakeSQLUsernameFromUserInput(tokenPrincipal, secuser.PurposeValidation)
-					acceptedUsernames = append(acceptedUsernames, username.Normalized())
+					log.Infof(ctx, "OIDC: no identity map found for issuer %s; using %s without mapping", token.Issuer, tokenPrincipal)
+					if username, err := username.MakeSQLUsernameFromUserInput(tokenPrincipal, username.PurposeValidation); err != nil {
+						acceptedUsernames = append(acceptedUsernames, username.Normalized())
+					}
 				}
 			}
 		}
 
 		if len(acceptedUsernames) == 0 {
-			log.Dev.Errorf(ctx, "OIDC: failed to extract usernames from principals %v; check %s", tokenPrincipals, pgwire.ConnIdentityMapConf.Name())
+			log.Errorf(ctx, "OIDC: failed to extract usernames from principals %v; check %s", tokenPrincipals, pgwire.ConnIdentityMapConf.Name())
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -833,9 +729,8 @@ var ConfigureOIDC = func(
 		}, "", "  ")
 
 		if err != nil {
-			log.Dev.Error(ctx, "OIDC: failed to marshal connection parameters (can this happen?)")
+			log.Error(ctx, "OIDC: failed to marshal connection parameters (can this happen?)")
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
-			return
 		}
 
 		w.Header().Add("Content-Security-Policy", "sandbox")
@@ -870,7 +765,7 @@ var ConfigureOIDC = func(
 
 		kast, err := newKeyAndSignedToken(hmacKeySize, stateTokenSize, mode)
 		if err != nil {
-			log.Dev.Errorf(ctx, "OIDC: unable to generate key and signed message: %v", err)
+			log.Errorf(ctx, "OIDC: unable to generate key and signed message: %v", err)
 			http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
 			return
 		}
@@ -927,15 +822,6 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAuthClientTimeout.SetOnChange(&st.SV, func(ctx context.Context) {
-		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
-	})
-	OIDCAuthZEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
-		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
-	})
-	OIDCAuthGroupClaim.SetOnChange(&st.SV, func(ctx context.Context) {
-		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
-	})
-	OIDCAuthUserinfoGroupKey.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 

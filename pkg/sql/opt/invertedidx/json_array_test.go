@@ -1168,18 +1168,6 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			indexOrd: jsonOrd,
 			ok:       false,
 		},
-		{
-			filters:  `jsonb_path_exists(j, '$.a')`,
-			indexOrd: jsonOrd,
-			ok:       true,
-			tight:    true,
-		},
-		{
-			filters:  `jsonb_path_exists(j, '$.a.b')`,
-			indexOrd: jsonOrd,
-			ok:       true,
-			tight:    true,
-		},
 	}
 
 	for _, tc := range testCases {
@@ -1202,7 +1190,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			func() {}, /* checkCancellation */
 		)
 		if tc.ok != ok {
-			t.Fatalf("[%s]: expected %v, got %v", tc.filters, tc.ok, ok)
+			t.Fatalf("expected %v, got %v", tc.ok, ok)
 		}
 		if !ok {
 			continue

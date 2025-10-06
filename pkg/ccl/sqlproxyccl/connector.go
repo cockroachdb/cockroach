@@ -123,7 +123,7 @@ func (c *connector) OpenTenantConnWithToken(
 		return nil, err
 	}
 	c.CancelInfo.setNewBackend(newBackendKeyData, serverConn.RemoteAddr().(*net.TCPAddr))
-	log.Dev.Infof(ctx, "connected to %s through token-based auth", serverConn.RemoteAddr())
+	log.Infof(ctx, "connected to %s through token-based auth", serverConn.RemoteAddr())
 	return serverConn, nil
 }
 
@@ -164,7 +164,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	if err != nil {
 		return nil, true, err
 	}
-	log.Dev.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())
+	log.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())
 	c.CancelInfo.setNewBackend(crdbBackendKeyData, serverConn.RemoteAddr().(*net.TCPAddr))
 	return serverConn, false, nil
 }

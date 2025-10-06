@@ -179,8 +179,9 @@ func Test_failuresMatchingError(t *testing.T) {
 }
 
 func Test_failureSpecifyOwnerAndAddFailureCombination(t *testing.T) {
-	ti := testImpl{}
-	ti.ReplaceL(nilLogger())
+	ti := testImpl{
+		l: nilLogger(),
+	}
 	ti.addFailure(0, "", vmPreemptionError("my_VM"))
 	errWithOwnership := failuresAsErrorWithOwnership(ti.failures())
 

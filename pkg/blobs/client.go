@@ -12,8 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
@@ -47,11 +47,11 @@ var _ BlobClient = &remoteClient{}
 // remoteClient uses the node dialer and blob service clients
 // to Read or Write bulk files from/to other nodes.
 type remoteClient struct {
-	blobClient blobspb.RPCBlobClient
+	blobClient blobspb.BlobClient
 }
 
 // newRemoteClient instantiates a remote blob service client.
-func newRemoteClient(blobClient blobspb.RPCBlobClient) BlobClient {
+func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
 	return &remoteClient{blobClient: blobClient}
 }
 
@@ -71,7 +71,7 @@ func (c *remoteClient) ReadFile(
 }
 
 type streamWriter struct {
-	s   blobspb.RPCBlob_PutStreamClient
+	s   blobspb.Blob_PutStreamClient
 	buf blobspb.StreamChunk
 }
 
@@ -200,11 +200,11 @@ func NewBlobClientFactory(
 		if localNodeID == dialTarget && allowLocalFastpath {
 			return NewLocalClient(externalIODir)
 		}
-		client, err := blobspb.DialBlobClient(dialer, ctx, dialTarget, rpcbase.DefaultClass)
+		conn, err := dialer.Dial(ctx, dialTarget, rpc.DefaultClass)
 		if err != nil {
 			return nil, errors.Wrapf(err, "connecting to node %d", dialTarget)
 		}
-		return newRemoteClient(client), nil
+		return newRemoteClient(blobspb.NewBlobClient(conn)), nil
 	}
 }
 

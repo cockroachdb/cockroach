@@ -95,15 +95,6 @@ func (b *writeBuffer) writeFromFmtCtx(fmtCtx *tree.FmtCtx) {
 	}
 }
 
-// writeFromFmtCtxWithoutLength is the same as writeFromFmtCtx but without the
-// length prefix.
-func (b *writeBuffer) writeFromFmtCtxWithoutLength(fmtCtx *tree.FmtCtx) {
-	if b.err == nil {
-		// bytes.Buffer.WriteTo resets the Buffer.
-		_, b.err = fmtCtx.Buffer.WriteTo(&b.wrapped)
-	}
-}
-
 // writeLengthPrefixedString writes a length-prefixed string. The
 // length is encoded as an int32.
 func (b *writeBuffer) writeLengthPrefixedString(s string) {

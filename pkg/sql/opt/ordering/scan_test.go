@@ -185,7 +185,7 @@ func TestScan(t *testing.T) {
 					}
 					if ok {
 						scan := f.ConstructScan(&g.p)
-						prov := scanBuildProvided(f.Memo(), scan, &req).String()
+						prov := scanBuildProvided(scan, &req).String()
 						if prov != tc.prov {
 							t.Errorf("expected provided '%s', got '%s'", tc.prov, prov)
 						}

@@ -1,9 +1,0 @@
-setup
-CREATE DATABASE db;
-----
-
-test
-ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
-ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 8;
-ALTER DATABASE db CONFIGURE ZONE DISCARD;
-----

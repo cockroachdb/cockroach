@@ -41,7 +41,7 @@ func TestTransactionString(t *testing.T) {
 		GlobalUncertaintyLimit: hlc.Timestamp{WallTime: 40, Logical: 41},
 	}
 	expStr := `"name" meta={id=d7aa0f5e key="foo" iso=Serializable pri=44.58039917 epo=2 ts=0.000000020,21 min=0.000000010,11 seq=15}` +
-		` lock=true stat=COMMITTED rts=0.000000030,31 gul=0.000000040,41`
+		` lock=true stat=COMMITTED rts=0.000000030,31 wto=false gul=0.000000040,41`
 
 	if str := txn.String(); str != expStr {
 		t.Errorf(
@@ -70,7 +70,7 @@ func TestRangeDescriptorStringRedact(t *testing.T) {
 	}
 
 	require.EqualValues(t,
-		`r1:{‹c›-‹g›} [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
+		`r1:‹{c-g}› [(n1,s1):?, (n2,s2):?, (n3,s3):?, next=0, gen=0]`,
 		redact.Sprint(desc),
 	)
 }

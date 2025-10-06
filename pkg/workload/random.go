@@ -22,10 +22,11 @@ type RandomSeed interface {
 	LogMessage() string
 }
 
-// The following structs implement the same logic for int64 and uint64 seeds,
-// respectively. The distinction exists because currently some workloads use the
-// `math/rand` package, while others use `math/rand/v2`: the former uses int64
-// seeds and the latter uses uint64 seeds.
+// The following structs implement the same logic for int64 and uint64
+// seeds, respectively. The distinction exists because currently some
+// workloads use the `math/rand` package, while others use
+// `golang.org/x/exp/rand`: the former uses int64 seeds and the latter
+// uses uint64 seeds.
 
 type Int64RandomSeed struct {
 	seed int64

@@ -19,14 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -136,7 +136,7 @@ func TestCancelQueryOtherNode(t *testing.T) {
 		return nil
 	})
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := sqlutils.PGUrl(
 		t,
 		proxy.Addr().String(),
 		"TestCancelQueryOtherNode",
@@ -172,7 +172,7 @@ func TestCancelCopyTo(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := sqlutils.PGUrl(
 		t,
 		s.AdvSQLAddr(),
 		"TestCancelCopyTo",

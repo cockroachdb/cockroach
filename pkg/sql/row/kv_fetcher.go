@@ -62,13 +62,10 @@ func newTxnKVFetcher(
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 ) *txnKVFetcher {
-	alloc := new(struct {
-		batchRequestsIssued int64
-		kvPairsRead         int64
-	})
 	var sendFn sendFunc
+	var batchRequestsIssued int64
 	if bsHeader == nil {
-		sendFn = makeSendFunc(txn, ext, &alloc.batchRequestsIssued)
+		sendFn = makeSendFunc(txn, ext, &batchRequestsIssued)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
@@ -94,7 +91,7 @@ func newTxnKVFetcher(
 			if pErr != nil {
 				return nil, pErr.GoError()
 			}
-			alloc.batchRequestsIssued++
+			batchRequestsIssued++
 			return br, nil
 		}
 	}
@@ -110,8 +107,8 @@ func newTxnKVFetcher(
 		deadlockTimeout:            deadlockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
-		kvPairsRead:                &alloc.kvPairsRead,
-		batchRequestsIssued:        &alloc.batchRequestsIssued,
+		kvPairsRead:                new(int64),
+		batchRequestsIssued:        &batchRequestsIssued,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
@@ -185,7 +182,6 @@ func NewKVFetcher(
 // If maintainOrdering is true, then diskBuffer must be non-nil.
 func NewStreamingKVFetcher(
 	distSender *kvcoord.DistSender,
-	metrics *kvstreamer.Metrics,
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	st *cluster.Settings,
@@ -198,7 +194,6 @@ func NewStreamingKVFetcher(
 	maintainOrdering bool,
 	singleRowLookup bool,
 	maxKeysPerRow int,
-	reverse bool,
 	diskBuffer kvstreamer.ResultDiskBuffer,
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
@@ -209,7 +204,6 @@ func NewStreamingKVFetcher(
 	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued)
 	streamer := kvstreamer.NewStreamer(
 		distSender,
-		metrics,
 		stopper,
 		txn,
 		sendFn,
@@ -221,7 +215,6 @@ func NewStreamingKVFetcher(
 		&kvPairsRead,
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
-		reverse,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -236,10 +229,7 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(
-		streamer, lockStrength, lockDurability, kvFetcherMemAcc,
-		&kvPairsRead, &batchRequestsIssued, rawMVCCValues, reverse,
-	))
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, lockDurability, kvFetcherMemAcc, &kvPairsRead, &batchRequestsIssued, rawMVCCValues))
 }
 
 func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
@@ -300,12 +290,9 @@ func (f *KVFetcher) nextKV(
 				// If we've made it to the very last key in the batch, copy out
 				// the key so that the GC can reclaim the large backing slice
 				// before nextKV() is called again.
-				//
-				// Combine two allocations into one.
-				buf := make([]byte, len(key)+len(rawBytes))
-				f.kv.Key = buf[:len(key):len(key)]
+				f.kv.Key = make(roachpb.Key, len(key))
 				copy(f.kv.Key, key)
-				f.kv.Value.RawBytes = buf[len(key):]
+				f.kv.Value.RawBytes = make([]byte, len(rawBytes))
 				copy(f.kv.Value.RawBytes, rawBytes)
 			}
 			return true, f.kv, f.spanID, nil

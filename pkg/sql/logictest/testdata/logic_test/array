@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # pg arrays must preserve control characters when converted to string,
 # but their direct representation as string does not escape the
 # control characters. In order for the test file to remain valid
@@ -121,13 +120,13 @@ SELECT ARRAY(VALUES (1),(2),(1))
 
 # This query works in local config but fails in distributed config since the
 # support for nested arrays is incomplete.
-onlyif config #32252 local
+onlyif config local 32552
 query T
 SELECT ARRAY(VALUES (ARRAY[1]))
 ----
 {"{1}"}
 
-onlyif config #32252 fakedist
+onlyif config fakedist 32552
 query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
 SELECT ARRAY(VALUES (ARRAY[1]))
 
@@ -453,13 +452,13 @@ CREATE TABLE badtable (b INT[][])
 
 # This query works in local config but fails in distributed config since the
 # support for nested arrays is incomplete.
-onlyif config #32252 local
+onlyif config local 32552
 query T
 SELECT ARRAY[ARRAY[1,2,3]]
 ----
 {"{1,2,3}"}
 
-onlyif config #32552 fakedist
+onlyif config fakedist 32552
 query error unimplemented: nested arrays are not fully supported.*\nHINT.*\n.*32552
 SELECT ARRAY[ARRAY[1,2,3]]
 
@@ -478,10 +477,9 @@ query T
 SELECT ARRAY[ROW()] FROM ident
 ----
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE a (b INT ARRAY)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -489,24 +487,14 @@ a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE a
-----
-a  CREATE TABLE public.a (
-     b INT8[] NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+   )
 
 statement ok
 DROP TABLE a
 
 # Int array columns.
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE a (b INT[])
 
 statement ok
@@ -552,7 +540,6 @@ SELECT * FROM a
 ----
 {1,2,3}
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -560,17 +547,7 @@ a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE a
-----
-a  CREATE TABLE public.a (
-     b INT8[] NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+   )
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -632,10 +609,9 @@ DROP TABLE a
 
 # Ensure that additional type info stays when used as an array.
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE a (b SMALLINT[])
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -643,17 +619,7 @@ a  CREATE TABLE public.a (
      b INT2[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE a
-----
-a  CREATE TABLE public.a (
-     b INT2[] NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   ) WITH (schema_locked = true);
+   )
 
 statement error integer out of range for type int2
 INSERT INTO a VALUES (ARRAY[100000])
@@ -1176,7 +1142,7 @@ SELECT array_position(NULL::STRING[], 'abc')
 ----
 NULL
 
-query error initial position must not be null
+query error array_position\(\): initial position must not be null
 SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', null)
 
 query error unknown signature: array_position\(int, string, int\)
@@ -1727,7 +1693,7 @@ statement error duplicate key value violates unique constraint
 CREATE UNIQUE INDEX ON unique_array(b)
 
 # Create an indexes on a bad type.
-statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/v25.4/inverted-indexes.html
+statement error pq: unimplemented: column x is of type geography\[\] and thus is not indexable
 CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
 
 # Test arrays of composite types.

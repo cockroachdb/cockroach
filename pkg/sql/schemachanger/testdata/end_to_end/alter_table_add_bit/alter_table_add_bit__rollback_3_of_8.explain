@@ -7,19 +7,19 @@ EXPLAIN (DDL) rollback at post-commit stage 3 of 8;
 ----
 Schema change plan for rolling back ALTER TABLE defaultdb.public.bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL;
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 15 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY    → DELETE_ONLY Column:{DescID: 104 (bittab), ColumnID: 3 (vb-)}
       │    │    ├── PUBLIC        → ABSENT      ColumnName:{DescID: 104 (bittab), Name: "vb", ColumnID: 3 (vb-)}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 1 (bittab_pkey)}
       │    │    ├── WRITE_ONLY    → ABSENT      ColumnNotNull:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 1 (bittab_pkey)}
-      │    │    ├── BACKFILL_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (bittab_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 2 (bittab_vb_key-)}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 2 (rowid), IndexID: 2 (bittab_vb_key-)}
+      │    │    ├── BACKFILL_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (bittab_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC        → ABSENT      IndexName:{DescID: 104 (bittab), Name: "bittab_vb_key", IndexID: 2 (bittab_vb_key-)}
-      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104 (bittab), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (bittab_pkey)}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 3 (vb-), IndexID: 3}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 2 (rowid), IndexID: 3}
+      │    │    ├── WRITE_ONLY    → DELETE_ONLY TemporaryIndex:{DescID: 104 (bittab), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (bittab_pkey)}
       │    │    ├── WRITE_ONLY    → DELETE_ONLY Column:{DescID: 104 (bittab), ColumnID: 4 (fb-)}
       │    │    ├── PUBLIC        → ABSENT      ColumnName:{DescID: 104 (bittab), Name: "fb", ColumnID: 4 (fb-)}
       │    │    ├── PUBLIC        → ABSENT      IndexColumn:{DescID: 104 (bittab), ColumnID: 4 (fb-), IndexID: 1 (bittab_pkey)}
@@ -28,41 +28,34 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.bittab ADD COLU
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":3,"TableID":104}
       │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"TableID":104}
-      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":1,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
       │         ├── SetColumnName {"ColumnID":4,"Name":"crdb_internal_co...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":1,"Kind":2,"Ordinal":2,"TableID":104}
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"Kind":1,"TableID":104}
       │         ├── RemoveColumnNotNull {"ColumnID":4,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 7 elements transitioning toward ABSENT
-      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (bittab), ColumnID: 3 (vb-)}
-      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (bittab), ColumnFamilyID: 0 (primary), ColumnID: 3 (vb-), TypeName: "VARBIT(25)"}
-      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-)}
-      │    │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (bittab), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (bittab_pkey)}
-      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (bittab), IndexID: 3}
-      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (bittab), ColumnID: 4 (fb-)}
-      │    │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (bittab), ColumnFamilyID: 0 (primary), ColumnID: 4 (fb-), TypeName: "BIT(25)"}
-      │    └── 7 Mutation operations
-      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
-      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
-      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
-      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
-      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward TRANSIENT_PUBLIC
-           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (bittab)}
-           └── 3 Mutation operations
-                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 7 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (bittab), ColumnID: 3 (vb-)}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 104 (bittab), ColumnFamilyID: 0 (primary), ColumnID: 3 (vb-), TypeName: "VARBIT(25)"}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (bittab), IndexID: 2 (bittab_vb_key-)}
+           │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 104 (bittab), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (bittab_pkey)}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (bittab), IndexID: 3}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 104 (bittab), ColumnID: 4 (fb-)}
+           │    └── PUBLIC      → ABSENT ColumnType:{DescID: 104 (bittab), ColumnFamilyID: 0 (primary), ColumnID: 4 (fb-), TypeName: "BIT(25)"}
+           └── 7 Mutation operations
+                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

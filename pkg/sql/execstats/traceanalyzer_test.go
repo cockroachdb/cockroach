@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -78,10 +78,13 @@ func TestTraceAnalyzer(t *testing.T) {
 
 	const gatewayNode = 0
 	srv, s := tc.Server(gatewayNode), tc.ApplicationLayer(gatewayNode)
-	if srv.DeploymentMode().IsExternal() {
-		require.NoError(t, srv.GrantTenantCapabilities(
-			ctx, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"}))
+	if srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
 	}
 	db := s.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -161,7 +164,7 @@ func TestTraceAnalyzer(t *testing.T) {
 			// The stats don't count the actual bytes, but they are a synthetic value
 			// based on the number of tuples. In this test 21 tuples flow over the
 			// network.
-			require.Equal(t, int64(21*8), queryLevelStats.DistSQLNetworkBytesSent)
+			require.Equal(t, int64(21*8), queryLevelStats.NetworkBytesSent)
 
 			// Soft check that MaxMemUsage is set to a non-zero value. The actual
 			// value differs between test runs due to metamorphic randomization.
@@ -176,7 +179,7 @@ func TestTraceAnalyzer(t *testing.T) {
 
 			// For tests, network messages is a synthetic value based on the number of
 			// network tuples. In this test 21 tuples flow over the network.
-			require.Equal(t, int64(21/2), queryLevelStats.DistSQLNetworkMessages)
+			require.Equal(t, int64(21/2), queryLevelStats.NetworkMessages)
 		})
 	}
 }
@@ -233,17 +236,15 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 func TestQueryLevelStatsAccumulate(t *testing.T) {
 	aEvent := kvpb.ContentionEvent{Duration: 7 * time.Second}
 	a := execstats.QueryLevelStats{
-		DistSQLNetworkBytesSent:            1,
+		NetworkBytesSent:                   1,
 		MaxMemUsage:                        2,
 		KVBytesRead:                        3,
 		KVPairsRead:                        4,
 		KVRowsRead:                         4,
 		KVBatchRequestsIssued:              4,
 		KVTime:                             5 * time.Second,
-		DistSQLNetworkMessages:             6,
+		NetworkMessages:                    6,
 		ContentionTime:                     7 * time.Second,
-		LockWaitTime:                       4 * time.Second,
-		LatchWaitTime:                      3 * time.Second,
 		ContentionEvents:                   []kvpb.ContentionEvent{aEvent},
 		MaxDiskUsage:                       8,
 		RUEstimate:                         9,
@@ -269,17 +270,15 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
 	b := execstats.QueryLevelStats{
-		DistSQLNetworkBytesSent:            8,
+		NetworkBytesSent:                   8,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        10,
 		KVPairsRead:                        11,
 		KVRowsRead:                         11,
 		KVBatchRequestsIssued:              11,
 		KVTime:                             12 * time.Second,
-		DistSQLNetworkMessages:             13,
+		NetworkMessages:                    13,
 		ContentionTime:                     14 * time.Second,
-		LockWaitTime:                       10 * time.Second,
-		LatchWaitTime:                      4 * time.Second,
 		ContentionEvents:                   []kvpb.ContentionEvent{bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         16,
@@ -304,17 +303,15 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ClientTime:                         2 * time.Second,
 	}
 	expected := execstats.QueryLevelStats{
-		DistSQLNetworkBytesSent:            9,
+		NetworkBytesSent:                   9,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        13,
 		KVPairsRead:                        15,
 		KVRowsRead:                         15,
 		KVBatchRequestsIssued:              15,
 		KVTime:                             17 * time.Second,
-		DistSQLNetworkMessages:             19,
+		NetworkMessages:                    19,
 		ContentionTime:                     21 * time.Second,
-		LockWaitTime:                       14 * time.Second,
-		LatchWaitTime:                      7 * time.Second,
 		ContentionEvents:                   []kvpb.ContentionEvent{aEvent, bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         25,

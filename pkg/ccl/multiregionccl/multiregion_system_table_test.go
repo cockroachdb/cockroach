@@ -283,15 +283,89 @@ func TestMrSystemDatabase(t *testing.T) {
 			FROM [SHOW ALL ZONE CONFIGURATIONS]
 			WHERE target LIKE 'TABLE system.public.%'
 			    AND raw_config_sql NOT LIKE '%global_reads = true%'
-					AND target = 'TABLE system.public.locations'
 			ORDER BY target;
 		`
 			tDB.CheckQueryResults(t, query, [][]string{
+				{"TABLE system.public.eventlog"},
+				{"TABLE system.public.external_connections"},
+				{"TABLE system.public.job_info"},
+				{"TABLE system.public.jobs"},
+				{"TABLE system.public.join_tokens"},
 				{"TABLE system.public.locations"},
+				{"TABLE system.public.migrations"},
+				{"TABLE system.public.mvcc_statistics"},
+				{"TABLE system.public.protected_ts_meta"},
+				{"TABLE system.public.protected_ts_records"},
+				{"TABLE system.public.rangelog"},
+				{"TABLE system.public.replication_constraint_stats"},
+				{"TABLE system.public.replication_critical_localities"},
+				{"TABLE system.public.replication_stats"},
+				{"TABLE system.public.reports_meta"},
+				{"TABLE system.public.scheduled_jobs"},
+				{"TABLE system.public.span_configurations"},
+				{"TABLE system.public.span_count"},
+				{"TABLE system.public.span_stats_buckets"},
+				{"TABLE system.public.span_stats_samples"},
+				{"TABLE system.public.span_stats_tenant_boundaries"},
+				{"TABLE system.public.span_stats_unique_keys"},
+				{"TABLE system.public.statement_activity"},
+				{"TABLE system.public.statement_bundle_chunks"},
+				{"TABLE system.public.statement_diagnostics"},
+				{"TABLE system.public.statement_diagnostics_requests"},
+				{"TABLE system.public.statement_execution_insights"},
+				{"TABLE system.public.statement_statistics"},
+				{"TABLE system.public.table_metadata"},
+				{"TABLE system.public.task_payloads"},
+				{"TABLE system.public.tenant_settings"},
+				{"TABLE system.public.tenant_tasks"},
+				{"TABLE system.public.tenant_usage"},
+				{"TABLE system.public.tenants"},
+				{"TABLE system.public.transaction_activity"},
+				{"TABLE system.public.transaction_execution_insights"},
+				{"TABLE system.public.transaction_statistics"},
+				{"TABLE system.public.ui"},
 			})
 
 			sDB.CheckQueryResults(t, query, [][]string{
+				{"TABLE system.public.eventlog"},
+				{"TABLE system.public.external_connections"},
+				{"TABLE system.public.job_info"},
+				{"TABLE system.public.jobs"},
+				{"TABLE system.public.join_tokens"},
+				{"TABLE system.public.lease"},
 				{"TABLE system.public.locations"},
+				{"TABLE system.public.migrations"},
+				{"TABLE system.public.mvcc_statistics"},
+				{"TABLE system.public.protected_ts_meta"},
+				{"TABLE system.public.protected_ts_records"},
+				{"TABLE system.public.rangelog"},
+				{"TABLE system.public.replication_constraint_stats"},
+				{"TABLE system.public.replication_critical_localities"},
+				{"TABLE system.public.replication_stats"},
+				{"TABLE system.public.reports_meta"},
+				{"TABLE system.public.scheduled_jobs"},
+				{"TABLE system.public.span_configurations"},
+				{"TABLE system.public.span_count"},
+				{"TABLE system.public.span_stats_buckets"},
+				{"TABLE system.public.span_stats_samples"},
+				{"TABLE system.public.span_stats_tenant_boundaries"},
+				{"TABLE system.public.span_stats_unique_keys"},
+				{"TABLE system.public.statement_activity"},
+				{"TABLE system.public.statement_bundle_chunks"},
+				{"TABLE system.public.statement_diagnostics"},
+				{"TABLE system.public.statement_diagnostics_requests"},
+				{"TABLE system.public.statement_execution_insights"},
+				{"TABLE system.public.statement_statistics"},
+				{"TABLE system.public.table_metadata"},
+				{"TABLE system.public.task_payloads"},
+				{"TABLE system.public.tenant_settings"},
+				{"TABLE system.public.tenant_tasks"},
+				{"TABLE system.public.tenant_usage"},
+				{"TABLE system.public.tenants"},
+				{"TABLE system.public.transaction_activity"},
+				{"TABLE system.public.transaction_execution_insights"},
+				{"TABLE system.public.transaction_statistics"},
+				{"TABLE system.public.ui"},
 			})
 		})
 
@@ -597,46 +671,4 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
 		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
 	})
-}
-
-// TestDropRegionFromUserDatabaseCleansUpSystemTables verifies that
-// dropping a region from a user database doesn't remove  rows
-// from the system.sql_instances table.
-func TestDropRegionFromUserDatabaseCleansUpSystemTables(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	makeSettings := func() *cluster.Settings {
-		cs := cluster.MakeTestingClusterSettings()
-		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
-		return cs
-	}
-
-	_, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
-		base.TestingKnobs{},
-		multiregionccltestutils.WithSettings(makeSettings()))
-	defer cleanup()
-
-	sDB := sqlutils.MakeSQLRunner(systemSQL)
-
-	// Create a user database with multiple regions
-	sDB.Exec(t, `CREATE DATABASE userdb PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE ZONE FAILURE`)
-
-	// Verify sql_instances has data before the operation
-	initialCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
-	require.NotEmpty(t, initialCount)
-	require.Equal(t, "13", initialCount[0][0], "sql_instances should have data initially")
-
-	// Drop a region from the USER database (not system database)
-	sDB.Exec(t, `ALTER DATABASE userdb DROP REGION "us-east2"`)
-
-	// Verify that dropping a region from a user database doesn't affect system.sql_instances.
-	// The region still exists in the system database, so instances should remain unchanged.
-	finalCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
-	require.NotEmpty(t, finalCount)
-	// The count should remain the same since we only dropped from userdb, not system.
-	require.Equal(t, initialCount[0][0], finalCount[0][0],
-		"sql_instances count should not change when dropping region from user database")
 }

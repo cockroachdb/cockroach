@@ -9,18 +9,17 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand/v2"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -166,8 +165,6 @@ type worker struct {
 	permIdx  int
 
 	counters txCounters
-
-	workerSem *quotapool.IntPool
 }
 
 func newWorker(
@@ -177,7 +174,6 @@ func newWorker(
 	hists *histogram.Histograms,
 	counters txCounters,
 	warehouse int,
-	workerSem *quotapool.IntPool,
 ) (*worker, error) {
 	w := &worker{
 		config:    config,
@@ -187,13 +183,9 @@ func newWorker(
 		deckPerm:  append([]int(nil), config.deck...),
 		permIdx:   len(config.deck),
 		counters:  counters,
-		workerSem: workerSem,
 	}
 	for i := range w.txs {
 		var err error
-		if config.txInfos[i].weight == 0 {
-			continue
-		}
 		w.txs[i], err = config.txInfos[i].constructor(ctx, config, mcp)
 		if err != nil {
 			return nil, err
@@ -203,11 +195,6 @@ func newWorker(
 }
 
 func (w *worker) run(ctx context.Context) error {
-	sem, err := w.workerSem.Acquire(ctx, 1)
-	if err != nil {
-		return err
-	}
-	defer sem.Release()
 	// 5.2.4.2: the required mix is achieved by selecting each new transaction
 	// uniformly at random from a deck whose content guarantees the required
 	// transaction mix. Each pass through a deck must be made in a different
@@ -237,6 +224,10 @@ func (w *worker) run(ctx context.Context) error {
 	// but don't account for them in the histogram.
 	start := timeutil.Now()
 	_, onTxnStartDuration, err := tx.run(context.Background(), warehouseID)
+	if err != nil {
+		w.counters[txInfo.name].error.Inc()
+		return errors.Wrapf(err, "error in %s", txInfo.name)
+	}
 	if ctx.Err() == nil {
 		elapsed := timeutil.Since(start)
 		// NB: this histogram *should* be named along the lines of
@@ -244,11 +235,6 @@ func (w *worker) run(ctx context.Context) error {
 		// change them now.
 		w.hists.Get(txInfo.name).Record(elapsed - onTxnStartDuration)
 	}
-	if err != nil {
-		w.counters[txInfo.name].error.Inc()
-		return errors.Wrapf(err, "error printed in %s", txInfo.name)
-	}
-
 	w.counters[txInfo.name].success.Inc()
 
 	// 5.2.5.4: Think time is taken independently from a negative exponential

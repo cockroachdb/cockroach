@@ -382,13 +382,6 @@ type pebbleMVCCScanner struct {
 	parent MVCCIterator
 	// memAccount is used to account for the size of the scan results.
 	memAccount *mon.BoundAccount
-	// unlimitedMemAcc will back the memAccount field above when the scanner is
-	// retrieved from its pool. The account is cleared as the scanner returns to
-	// the pool (see release); it's fine to "leak" the account if the scanner is
-	// not returned to the pool, since it's an unlimited account.
-	// When a custom mem account should be used instead, memAccount should be
-	// overridden.
-	unlimitedMemAcc mon.BoundAccount
 	// lockTable is used to determine whether keys are locked in the in-memory
 	// lock table when scanning with the skipLocked option.
 	lockTable LockTableView
@@ -452,16 +445,15 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curUnsafeKey       MVCCKey
-	curRawKey          []byte
-	curUnsafeValue     MVCCValue
-	curRawValue        pebble.LazyValue
-	curRawValueFetched []byte
-	curRangeKeys       MVCCRangeKeyStack
-	savedRangeKeys     MVCCRangeKeyStack
-	savedRangeKeyVers  MVCCRangeKeyVersion
-	results            results
-	intents            pebble.Batch
+	curUnsafeKey      MVCCKey
+	curRawKey         []byte
+	curUnsafeValue    MVCCValue
+	curRawValue       pebble.LazyValue
+	curRangeKeys      MVCCRangeKeyStack
+	savedRangeKeys    MVCCRangeKeyStack
+	savedRangeKeyVers MVCCRangeKeyVersion
+	results           results
+	intents           pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -527,23 +519,14 @@ const (
 // Pool for allocating pebble MVCC Scanners.
 var pebbleMVCCScannerPool = sync.Pool{
 	New: func() interface{} {
-		mvccScanner := &pebbleMVCCScanner{
-			unlimitedMemAcc: *mon.NewStandaloneUnlimitedAccount(),
-		}
-		mvccScanner.memAccount = &mvccScanner.unlimitedMemAcc
-		return mvccScanner
+		return &pebbleMVCCScanner{}
 	},
 }
 
 func (p *pebbleMVCCScanner) release() {
-	// Release all bytes from the unlimited memory account (but keep
-	// the account intact).
-	p.unlimitedMemAcc.Empty(context.Background())
 	// Discard most memory references before placing in pool.
 	*p = pebbleMVCCScanner{
-		keyBuf:          p.keyBuf,
-		memAccount:      &p.unlimitedMemAcc,
-		unlimitedMemAcc: p.unlimitedMemAcc,
+		keyBuf: p.keyBuf,
 		// NB: This clears p.alloc.pebbleResults too, which should be maintained
 		// to avoid delaying GC of contained byte slices and avoid accidental
 		// misuse.
@@ -833,14 +816,31 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 		}
 
+		// We are eagerly fetching and decoding the value, even though it may be
+		// too recent. With some care, this could be optimized to be lazy.
+		v, valid := p.getFromLazyValue()
+		if !valid {
+			return false, false
+		}
+
+		uncertaintyCheckRequired := p.checkUncertainty && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
+		if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
+			if !p.decodeCurrentValueIgnoringHeader(v) {
+				return false, false
+			}
+		} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
+			return false, false
+		} else if extended {
+			if !p.decodeCurrentValueExtended(v) {
+				return false, false
+			}
+		}
+
 		// ts < read_ts
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
-			if !p.decodeCurrentValue(p.decodeMVCCHeaders) {
-				return false, false
-			}
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, p.curRawValueFetched)
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 		}
 
 		// ts == read_ts
@@ -873,10 +873,7 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 			// 3. There is no intent and our read timestamp is equal to the most
 			// recent version's timestamp.
-			if !p.decodeCurrentValue(p.decodeMVCCHeaders) {
-				return false, false
-			}
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, p.curRawValueFetched)
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
 		}
 
 		// ts > read_ts
@@ -910,9 +907,6 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
-			if !p.decodeCurrentValue(true /* requireHeader */) {
-				return false, false
-			}
 			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
@@ -938,9 +932,10 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 	if len(p.meta.RawBytes) != 0 {
 		// 7. Emit immediately if the value is inline.
 		//
-		// TODO(ssd): We should error if we find an inline value when
-		// ReturnRawMVCCValues is set. Anyone scanning with that option set should
-		// not be scanning keyspace that includes inline values.
+		// TODO(ssd): We error if we find an inline when
+		// ReturnRawMVCCValues is set. Anyone scanning with
+		// that option set should not be encountering inline
+		// values.
 		//
 		// https://github.com/cockroachdb/cockroach/issues/131667
 		return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.meta.RawBytes, p.meta.RawBytes)
@@ -1250,16 +1245,6 @@ func IncludeStartKeyIntoErr(startKey roachpb.Key, err error) error {
 func (p *pebbleMVCCScanner) add(
 	ctx context.Context, key roachpb.Key, rawKey []byte, rawValue []byte, mvccRawBytes []byte,
 ) (ok, added bool) {
-	// TODO(jackson): In some cases, the current code is still too eager with
-	// value retrieval and decoding the value into a MVCCValue:
-	//
-	// - If p.skipLocked, we could check if the key is locked and skip over the
-	//   KV without ever retrieving the value. It's unclear how common this is.
-	// - If p.rawMVCCValues is true, we could skip decoding the value into a
-	//   MVCCValue. If p.tombstones is true, we would still need to use the
-	//   iterator's MVCCValueLenAndIsTombstone() method to determine if the
-	//   value is a tombstone we should skip over.
-
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(rawValue) == 0 && !p.tombstones {
@@ -1393,20 +1378,72 @@ func (p *pebbleMVCCScanner) seekVersion(
 		return true /* ok */, false
 	}
 
-	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
-	originalUserKey := p.keyBuf
-	seekKey := MVCCKey{Key: originalUserKey, Timestamp: seekTS}
-	// NB: We do not use a the p.itersBeforeSeek optimization here, because the
-	// Pebble iterator is already equipped to detect successive SeekGEs to
-	// increasing keys and optimize the seek using its own 'TrySeekUsingNext'
-	// optimization.
+	seekKey := MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], seekKey)
+	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
+	// We will need seekKey below, if the next's don't suffice. Even though the
+	// MVCCIterator will be at a different version of the same key, it is free
+	// to mutate the backing for p.curUnsafeKey.Key in an arbitrary manner. So
+	// assign to this copy, to make it stable.
+	seekKey.Key = origKey
+
+	for i := 0; i < p.itersBeforeSeek; i++ {
+		if !p.iterNext() {
+			p.setAdvanceKeyAtEnd()
+			return true /* ok */, false
+		}
+		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
+			p.incrementItersBeforeSeek()
+			p.setAdvanceKeyAtNewKey(origKey)
+			return true /* ok */, false
+		}
+		if p.curUnsafeKey.Timestamp.LessEq(seekTS) {
+			p.incrementItersBeforeSeek()
+			v, valid := p.getFromLazyValue()
+			if !valid {
+				return false, false
+			}
+			uncertaintyCheckRequired := uncertaintyCheck && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
+			if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
+				if !p.decodeCurrentValueIgnoringHeader(v) {
+					return false, false
+				}
+			} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
+				return false, false
+			} else if extended {
+				if !p.decodeCurrentValueExtended(v) {
+					return false, false
+				}
+			}
+			if !uncertaintyCheckRequired {
+				if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
+					return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
+				}
+				return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
+			}
+			// Iterate through uncertainty interval. Though we found a value in
+			// the interval, it may not be uncertainty. This is because seekTS
+			// is set to the transaction's global uncertainty limit, so we are
+			// seeking based on the worst-case uncertainty, but values with a
+			// time in the range (uncertainty.LocalLimit, uncertainty.GlobalLimit]
+			// are only uncertain if they have an earlier local timestamp that is
+			// before uncertainty.LocalLimit. Meanwhile, any value with a time in
+			// the range (ts, uncertainty.LocalLimit] is uncertain.
+			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
+			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
+				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
+			}
+		}
+	}
+
+	p.decrementItersBeforeSeek()
 	if !p.iterSeek(seekKey) {
 		p.setAdvanceKeyAtEnd()
 		return true /* ok */, false
 	}
 	for {
-		if !bytes.Equal(p.curUnsafeKey.Key, originalUserKey) {
-			p.setAdvanceKeyAtNewKey(originalUserKey)
+		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
+			p.setAdvanceKeyAtNewKey(origKey)
 			return true /* ok */, false
 		}
 		v, valid := p.getFromLazyValue()
@@ -1600,31 +1637,7 @@ func (p *pebbleMVCCScanner) getFromLazyValue() (v []byte, valid bool) {
 	if callerOwned {
 		p.lazyValueBuf = v[:0]
 	}
-	p.curRawValueFetched = v
 	return v, true
-}
-
-func (p *pebbleMVCCScanner) decodeCurrentValue(requireHeader bool) (valid bool) {
-	v, callerOwned, err := p.curRawValue.Value(p.lazyValueBuf)
-	if err != nil {
-		p.err = err
-		return false
-	}
-	if callerOwned {
-		p.lazyValueBuf = v[:0]
-	}
-	p.curRawValueFetched = v
-
-	if !requireHeader {
-		return p.decodeCurrentValueIgnoringHeader(p.curRawValueFetched)
-	}
-	extended, valid := p.tryDecodeCurrentValueSimple(p.curRawValueFetched)
-	if !valid {
-		return false
-	} else if !extended {
-		return true
-	}
-	return p.decodeCurrentValueExtended(p.curRawValueFetched)
 }
 
 func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {

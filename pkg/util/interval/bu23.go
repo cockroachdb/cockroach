@@ -10,6 +10,7 @@
 // This code originated in the github.com/biogo/store/interval package.
 
 //go:build !td234
+// +build !td234
 
 package interval
 

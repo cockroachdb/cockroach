@@ -85,9 +85,12 @@ func TestStartupFailure(t *testing.T) {
 func TestStartupFailureRandomRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test takes 30s+, so we don't want it to run in the "blocking path" of
-	// CI. We also skip race builds as the test uses multiple nodes, which can
-	// cause the test to grind to a halt and flake out.
+	// This test takes 30s and so we don't want it to run in the "blocking path"
+	// of CI at all, and we also don't want to stress it in nightlies as part of
+	// a big package (where it will take a lot of time that could be spent running
+	// "faster" tests). In this package, it is the only test and so it's fine to
+	// run it under nightly (skipping race builds because with many nodes they are
+	// very resource intensive and tend to collapse).
 	skip.UnderRace(t, "6 nodes with replication is too slow for race")
 	if !skip.NightlyStress() {
 		skip.IgnoreLint(t, "test takes 30s to run due to circuit breakers and timeouts")
@@ -143,11 +146,6 @@ func runCircuitBreakerTestForKey(
 	args := base.TestClusterArgs{
 		ServerArgsPerNode:   make(map[int]base.TestServerArgs),
 		ReusableListenerReg: lReg,
-		// TODO(travers): This test is has a lingering issue when run in UA mode
-		// that needs to be addressed before the following can be removed.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
 	}
 	var enableFaults atomic.Bool
 	for i := 0; i < nodes; i++ {
@@ -229,7 +227,6 @@ func runCircuitBreakerTestForKey(
 		return d.StartKey
 	}
 
-	t.Log("segmenting ranges")
 	var rangeSpans []roachpb.Span
 	r, err := c.QueryContext(ctx, "select range_id, start_key, end_key from crdb_internal.ranges_no_leases order by start_key")
 	require.NoError(t, err, "failed to query ranges")
@@ -244,11 +241,9 @@ func runCircuitBreakerTestForKey(
 		})
 	}
 	good, bad := faultyRangeSelector(rangeSpans)
-	t.Logf("prepping %d good ranges", len(good))
 	for _, span := range good {
 		prepRange(span.Key, false)
 	}
-	t.Logf("prepping %d faulty ranges", len(good))
 	var ranges []string
 	for _, span := range bad {
 		prepRange(span.Key, true)
@@ -257,33 +252,27 @@ func runCircuitBreakerTestForKey(
 	rangesList := fmt.Sprintf("[%s]", strings.Join(ranges, ", "))
 
 	// Remove nodes permanently to only leave quorum on planned ranges.
-	t.Log("stopping n3 and n4")
 	tc.StopServer(3)
 	tc.StopServer(4)
 
 	// Stop node with replicas that would leave ranges without quorum.
-	t.Log("stopping n5")
 	tc.StopServer(5)
 
 	// Probe compromised ranges to trigger circuit breakers on them. If we don't
 	// do this, then restart queries will wait for quorum to be reestablished with
 	// restarting node without failing.
-	t.Logf("waiting for %d compromised ranges to trigger CBs", len(bad))
 	var wg sync.WaitGroup
 	wg.Add(len(bad))
 	for _, span := range bad {
 		go func(key roachpb.Key) {
 			defer wg.Done()
-			t.Logf("waiting for compromised range: %s", key)
 			_ = db.Put(context.Background(), keys.RangeProbeKey(roachpb.RKey(key)), "")
-			t.Logf("done waiting for compromised range: %s", key)
 		}(span.Key)
 	}
 	wg.Wait()
 
 	// Restart node and check that it succeeds in reestablishing range quorum
 	// necessary for startup actions.
-	t.Log("starting n5")
 	require.NoError(t, lReg.MustGet(t, 5).Reopen())
 	err = tc.RestartServer(5)
 	require.NoError(t, err, "restarting server with range(s) %s tripping circuit breaker", rangesList)

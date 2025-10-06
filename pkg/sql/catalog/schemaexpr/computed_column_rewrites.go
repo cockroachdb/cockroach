@@ -8,7 +8,7 @@ package schemaexpr
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -30,7 +30,7 @@ func ParseComputedColumnRewrites(val string) (ComputedColumnRewritesMap, error) 
 	if val == "" {
 		return nil, nil
 	}
-	stmt, err := parserutils.ParseOne(fmt.Sprintf("SET ROW (%s)", val))
+	stmt, err := parser.ParseOne(fmt.Sprintf("SET ROW (%s)", val))
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse column rewrites")
 	}

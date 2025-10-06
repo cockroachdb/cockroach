@@ -24,7 +24,6 @@ import (
 // RevokeRoleNode removes entries from the system.role_members table.
 // This is called from REVOKE <ROLE>
 type RevokeRoleNode struct {
-	zeroInputPlanNode
 	roles       []username.SQLUsername
 	members     []username.SQLUsername
 	adminOption bool

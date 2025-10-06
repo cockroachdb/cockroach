@@ -450,7 +450,7 @@ func makeTemporaryObjectCleanerMetrics() *temporaryObjectCleanerMetrics {
 func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	ctx context.Context, closerCh <-chan struct{},
 ) error {
-	defer log.Dev.Infof(ctx, "completed temporary object cleanup job")
+	defer log.Infof(ctx, "completed temporary object cleanup job")
 	// Wrap the retry functionality with the default arguments.
 	retryFunc := func(ctx context.Context, do func() error) error {
 		return retry.WithMaxAttempts(
@@ -465,7 +465,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 			func() error {
 				err := do()
 				if err != nil {
-					log.Dev.Warningf(ctx, "error during schema cleanup, retrying: %v", err)
+					log.Warningf(ctx, "error during schema cleanup, retrying: %v", err)
 				}
 				return err
 			},
@@ -485,7 +485,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		// For the system tenant we will check if the lease is held. For tenants
 		// every single POD will try to execute this clean up logic.
 		if !isLeaseHolder {
-			log.Dev.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
+			log.Infof(ctx, "skipping temporary object cleanup run as it is not the leaseholder")
 			return nil
 		}
 	}
@@ -503,7 +503,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	c.metrics.ActiveCleaners.Inc(1)
 	defer c.metrics.ActiveCleaners.Dec(1)
 
-	log.Dev.Infof(ctx, "running temporary object cleanup background job")
+	log.Infof(ctx, "running temporary object cleanup background job")
 	var sessionIDs map[clusterunique.ID]struct{}
 	if err := c.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		sessionIDs = make(map[clusterunique.ID]struct{})
@@ -542,7 +542,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 				}
 				if isTempSchema, sessionID, err := temporarySchemaSessionID(e.GetName()); err != nil {
 					// This should not cause an error.
-					log.Dev.Warningf(ctx, "could not parse %q as temporary schema name", e.GetName())
+					log.Warningf(ctx, "could not parse %q as temporary schema name", e.GetName())
 				} else if isTempSchema {
 					sessionIDs[sessionID] = struct{}{}
 				}
@@ -553,10 +553,10 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 		return err
 	}
 
-	log.Dev.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
+	log.Infof(ctx, "found %d temporary schemas", len(sessionIDs))
 
 	if len(sessionIDs) == 0 {
-		log.Dev.Infof(ctx, "early exiting temporary schema cleaner as no temporary schemas were found")
+		log.Infof(ctx, "early exiting temporary schema cleaner as no temporary schemas were found")
 		return nil
 	}
 
@@ -600,7 +600,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 				)
 			}); err != nil {
 				// Log error but continue trying to delete the rest.
-				log.Dev.Warningf(ctx, "failed to clean temp objects under session %q: %v", sessionID, err)
+				log.Warningf(ctx, "failed to clean temp objects under session %q: %v", sessionID, err)
 				c.metrics.SchemasDeletionError.Inc(1)
 			} else {
 				c.metrics.SchemasDeletionSuccess.Inc(1)
@@ -627,7 +627,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 			select {
 			case <-nextTickCh:
 				if err := c.doTemporaryObjectCleanup(ctx, stopper.ShouldQuiesce()); err != nil {
-					log.Dev.Warningf(ctx, "failed to clean temp objects: %v", err)
+					log.Warningf(ctx, "failed to clean temp objects: %v", err)
 				}
 			case <-stopper.ShouldQuiesce():
 				return
@@ -638,7 +638,7 @@ func (c *TemporaryObjectCleaner) Start(ctx context.Context, stopper *stop.Stoppe
 				c.testingKnobs.OnTempObjectsCleanupDone()
 			}
 			nextTick = nextTick.Add(TempObjectCleanupInterval.Get(&c.settings.SV))
-			log.Dev.Infof(ctx, "temporary object cleaner next scheduled to run at %s", nextTick)
+			log.Infof(ctx, "temporary object cleaner next scheduled to run at %s", nextTick)
 		}
 	})
 }

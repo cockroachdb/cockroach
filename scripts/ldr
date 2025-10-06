@@ -61,17 +61,17 @@ fi
 case $1 in
   "setup")
     shift
-    $0 create "$@" --nodes=3 
+    $0 create "$@"
     $0 go
     ;;
 
   "go")
     $0 start
-    $0 ycsb init
-    $0 jobs start-ycsb
-    echo "starting ycsb..."
-    $0 ycsb run
-    echo "LDR is setup and running on the ycsb workload!"
+    $0 workload init
+    $0 jobs start
+    echo "starting the workload..."
+    $0 workload run
+    echo "LDR is setup and running!"
     echo
     roachprod adminurl $A:1 --path "/#/metrics/logicalDataReplication/cluster"
     roachprod adminurl $B:1 --path "/#/metrics/logicalDataReplication/cluster"
@@ -80,9 +80,9 @@ case $1 in
   "create")
     shift
     roachprod create $A \
-      --clouds gce --gce-machine-type n2-standard-16 --nodes 5 --username "$USER" --local-ssd=false --gce-pd-volume-size 3000 --lifetime 96h "$@" 
+      --clouds gce --gce-machine-type n2-standard-16 --local-ssd=false --nodes 3 --username "$USER" --lifetime 24h "$@"
     roachprod create $B \
-      --clouds gce --gce-machine-type n2-standard-16 --nodes 5 --username "$USER" --local-ssd=false --gce-pd-volume-size 3000 --lifetime 96h "$@"
+      --clouds gce --gce-machine-type n2-standard-16 --local-ssd=false --nodes 3 --username "$USER" --lifetime 24h "$@"
     $0 stage cockroach
     $0 stage workload
     ;;
@@ -90,23 +90,13 @@ case $1 in
   "jobs")
     shift
     case "${1:-}" in
-    "start-ycsb")
+    "start")
       roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
       roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
       roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database ycsb $B:1)"
       roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database ycsb $A:1)"
       roachprod sql $A:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://b' INTO TABLE ycsb.public.usertable;"
       roachprod sql $B:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLE usertable ON 'external://a' INTO TABLE ycsb.public.usertable;"
-      ;;
-    "start-tpcc-a")
-      roachprod sql $A:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-      roachprod sql $A:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS b AS $(roachprod pgurl --database tpcc $B:1)"
-      roachprod sql $A:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse)  ON 'external://b' INTO TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse) WITH cursor='$(date +%s000000000.0)';"
-      ;;
-    "start-tpcc-b")
-      roachprod sql $B:1 -- -e "SET CLUSTER SETTING kv.rangefeed.enabled = true"
-      roachprod sql $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --database tpcc $A:1)"
-      roachprod sql $B:1 -- -e "CREATE LOGICAL REPLICATION STREAM FROM TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse)  ON 'external://a' INTO TABLES (tpcc.customer, tpcc.district, tpcc.history, tpcc.item, tpcc.new_order, tpcc.order, tpcc.order_line, tpcc.stock, tpcc.warehouse) WITH cursor='$(date +%s000000000.0)';"
       ;;
     "pause")
       roachprod sql $A:1 -- -e "PAUSE JOBS (WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running');"
@@ -135,7 +125,7 @@ case $1 in
     esac
     ;;
 
-  "ycsb")
+  "workload")
     shift
     case "${1:-}" in
       "init")
@@ -163,34 +153,12 @@ case $1 in
         roachprod run $B:1 -- "killall -9 workload || true"
         ;;
       *)
-        echo "unknown command '$1'; useage: $0 ycsb {init|run|stop}"
+        echo "unknown command '$1'; useage: $0 {start|stop}"
         exit 1
         ;;
     esac
     ;;
 
-  "tpcc")
-    shift
-    case "${1:-}" in
-      "init")
-        roachprod sql $A:1 -- -e "RESTORE DATABASE tpcc FROM latest IN 'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k?AUTH=implicit' WITH OPTIONS (detached, unsafe_restore_incompatible_version)"
-        roachprod sql $B:1 -- -e "RESTORE DATABASE tpcc FROM latest IN 'gs://cockroach-fixtures-us-east1/backups/tpc-c/v24.1/db/warehouses=150k?AUTH=implicit' WITH OPTIONS (detached, unsafe_restore_incompatible_version)"
-        echo "monitor the restores via DB console for completion"
-        ;;
-      "run")
-        OUTPUT_FILE_A="a-tpcc-$(date '+%Y-%m-%d-%H:%M:%S').log"
-        shift
-        roachprod run $A:1 "env -i nohup ./workload run tpcc --warehouses=150000 --active-warehouses=5000 --max-rate 1600 --workers=5000 --active-workers=400 --wait=false --repair-order-ids $@ $(roachprod pgurl $A) $(roachprod pgurl $B) > $OUTPUT_FILE_A 2> $OUTPUT_FILE_A &" &
-        ;;
-      "stop")
-        roachprod run $A:1 -- "killall -9 workload || true"
-        ;;
-      *)
-        echo "unknown command '$1'; useage: $0 tpcc {init|run|stop}"
-        exit 1
-        ;;
-    esac
-    ;;
   "settings")
     shift
     case "${1:-}" in

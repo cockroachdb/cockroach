@@ -35,18 +35,16 @@ type mutationTest struct {
 	*sqlutils.SQLRunner
 	kvDB      *kv.DB
 	tableDesc *tabledesc.Mutable
-	codec     keys.SQLCodec
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *kv.DB, db *gosql.DB, codec keys.SQLCodec, tableDesc *tabledesc.Mutable,
+	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *tabledesc.Mutable,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,
 		SQLRunner: sqlutils.MakeSQLRunner(db),
 		kvDB:      kvDB,
 		tableDesc: tableDesc,
-		codec:     codec,
 	}
 }
 
@@ -54,7 +52,7 @@ func makeMutationTest(
 // in the table equals e.
 func (mt mutationTest) checkTableSize(e int) {
 	// Check that there are no hidden values
-	tableStartKey := mt.codec.TablePrefix(uint32(mt.tableDesc.ID))
+	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(mt.tableDesc.ID))
 	tableEndKey := tableStartKey.PrefixEnd()
 	if kvs, err := mt.kvDB.Scan(context.Background(), tableStartKey, tableEndKey, 0); err != nil {
 		mt.Error(err)
@@ -67,7 +65,7 @@ func (mt mutationTest) checkTableSize(e int) {
 // and write the updated table descriptor to the DB.
 func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	// Remove mutation to check real values in DB using SQL
-	if len(mt.tableDesc.Mutations) == 0 {
+	if mt.tableDesc.Mutations == nil || len(mt.tableDesc.Mutations) == 0 {
 		mt.Fatal("No mutations to make active")
 	}
 	for _, m := range mt.tableDesc.Mutations {
@@ -86,7 +84,7 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	}
 	if err := mt.kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(mt.codec, mt.tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
 		mt.tableDesc.DescriptorProto(),
 	); err != nil {
 		mt.Fatal(err)
@@ -146,7 +144,7 @@ func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMut
 	}
 	if err := mt.kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(mt.codec, mt.tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mt.tableDesc.ID),
 		mt.tableDesc.DescriptorProto(),
 	); err != nil {
 		mt.Fatal(err)
@@ -166,7 +164,7 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	// table descriptor but don't do anything, which is what we want.
 
 	// Disable external processing of mutations.
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
@@ -185,9 +183,9 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, server.Codec(), "t", "test")
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, server.Codec(), tableDesc)
+	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 	// Add column "i" as a mutation in delete/write.
 	mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: descpb.DescriptorMutation_WRITE_ONLY})
 
@@ -227,7 +225,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	// Disable external processing of mutations.
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
@@ -245,9 +243,9 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, server.Codec(), "t", "test")
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, server.Codec(), tableDesc)
+	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
 	starQuery := `SELECT * FROM t.test`
 	for _, useUpsert := range []bool{true, false} {
@@ -264,7 +262,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 					// read table descriptor
 					mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-						kvDB, server.Codec(), "t", "test")
+						kvDB, keys.SystemSQLCodec, "t", "test")
 
 					initRows := [][]string{{"a", "z", "q"}}
 					for _, row := range initRows {
@@ -495,7 +493,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// table descriptor but don't do anything, which is what we want.
 
 	// Disable external processing of mutations.
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
@@ -503,13 +501,13 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	defer lease.TestingDisableTableLeases()()
 
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
-	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v)) WITH (schema_locked=false);`)
+	sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, server.Codec(), "t", "test")
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, server.Codec(), tableDesc)
+	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
 	starQuery := `SELECT * FROM t.test`
 	indexQuery := `SELECT v FROM t.test@foo`
@@ -525,10 +523,10 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 				// Init table with some entries.
 				sqlRunner.Exec(t, `TRUNCATE TABLE t.test`)
 				sqlRunner.Exec(t, `DROP TABLE t.test;`)
-				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v)) WITH (schema_locked=false);`)
+				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));`)
 				// read table descriptor
 				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-					kvDB, server.Codec(), "t", "test")
+					kvDB, keys.SystemSQLCodec, "t", "test")
 
 				initRows := [][]string{{"a", "z"}, {"b", "y"}}
 				for _, row := range initRows {
@@ -661,7 +659,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
@@ -680,9 +678,9 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 
 	// read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, server.Codec(), "t", "test")
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, server.Codec(), tableDesc)
+	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
 	starQuery := `SELECT * FROM t.test`
 	indexQuery := `SELECT i FROM t.test@foo`
@@ -705,7 +703,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 				}
 				// Init table to start state.
 				sqlRunner.Exec(t, `DROP TABLE t.test;`)
-				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k),FAMILY (v), FAMILY (i)) WITH (schema_locked=false);`)
+				sqlRunner.Exec(t, `CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k),FAMILY (v), FAMILY (i));`)
 				sqlRunner.Exec(t, `CREATE INDEX allidx ON t.test (k, v);`)
 				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
 					t.Fatal(err)
@@ -713,7 +711,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 
 				// read table descriptor
 				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-					kvDB, server.Codec(), "t", "test")
+					kvDB, keys.SystemSQLCodec, "t", "test")
 
 				initRows := [][]string{{"a", "z", "q"}, {"b", "y", "r"}}
 				for _, row := range initRows {
@@ -877,7 +875,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Disable external processing of mutations.
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SchemaChangeJobNoOp: func() bool {
@@ -898,7 +896,6 @@ SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
@@ -908,9 +905,9 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 
 	// Read table descriptor
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, server.Codec(), "t", "test")
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
-	mt := makeMutationTest(t, kvDB, sqlDB, server.Codec(), tableDesc)
+	mt := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
 	// Test CREATE INDEX in the presence of mutations.
 
@@ -1039,7 +1036,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.Exec(t, `ALTER TABLE t.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, server.Codec(), "t", "test")
+	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make "ufo" live.
 	mt.makeMutationsActive(ctx)
@@ -1066,7 +1063,7 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
 	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, server.Codec(), "t", "test")
+		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// Make column "e" live.
 	mt.makeMutationsActive(ctx)
@@ -1101,7 +1098,7 @@ func TestTableMutationQueue(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// Disable synchronous and asynchronous schema change processing so that
 	// the mutations get queued up.
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SchemaChangeJobNoOp: func() bool {
@@ -1114,7 +1111,6 @@ func TestTableMutationQueue(t *testing.T) {
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
@@ -1150,7 +1146,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 	}
 
 	// read table descriptor
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, server.Codec(), "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 
 	expected := []struct {
 		name  string
@@ -1218,7 +1214,7 @@ func TestAddingFKs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	params, _ := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1233,12 +1229,12 @@ func TestAddingFKs(t *testing.T) {
 
 	// Step the referencing table back to the ADD state.
 	ordersDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, s.Codec(), "t", "orders")
+		kvDB, keys.SystemSQLCodec, "t", "orders")
 	ordersDesc.State = descpb.DescriptorState_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(s.Codec(), ordersDesc.ID),
+		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, ordersDesc.ID),
 		ordersDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)

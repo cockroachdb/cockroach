@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -18,28 +17,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// Disconnector defines an interface for disconnecting a registration. It is
-// returned to node.MuxRangefeed to allow node level stream manager to
-// disconnect a registration.
-type Disconnector interface {
-	// Disconnect disconnects the registration with the provided error. Safe to
-	// run multiple times, but subsequent errors would be discarded.
-	Disconnect(pErr *kvpb.Error)
-	// IsDisconnected returns whether the registration has been disconnected.
-	// Disconnected is a permanent state; once IsDisconnected returns true, it
-	// always returns true
-	IsDisconnected() bool
-}
-
 // registration defines an interface for registration that can be added to a
 // processor registry. Implemented by bufferedRegistration.
 type registration interface {
-	Disconnector
-
 	// publish sends the provided event to the registration. It is up to the
 	// registration implementation to decide how to handle the event and how to
 	// prevent missing events.
 	publish(ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation)
+	// disconnect disconnects the registration with the provided error. Safe to
+	// run multiple times, but subsequent errors would be discarded.
+	disconnect(pErr *kvpb.Error)
 	// runOutputLoop runs the output loop for the registration. The output loop is
 	// meant to be run in a separate goroutine.
 	runOutputLoop(ctx context.Context, forStacks roachpb.RangeID)
@@ -67,36 +54,22 @@ type registration interface {
 	Range() interval.Range
 	// ID returns the id field of the registration as a uintptr.
 	ID() uintptr
-
-	// shouldUnregister returns true if this registration should be unregistered
-	// by unregisterMarkedRegistrations. UnregisterMarkedRegistrations is called
-	// by the rangefeed scheduler when it has been informed of an unregister
-	// request.
-	shouldUnregister() bool
-	// setShouldUnregister sets shouldUnregister to true. Used by the rangefeed
-	// processor in response to an unregister request.
-	setShouldUnregister()
+	// getUnreg returns the unregisterFn call back of the registration. It should
+	// be called when being unregistered from processor.
+	getUnreg() func()
 }
 
 // baseRegistration is a common base for all registration types. It is intended
 // to be embedded in an actual registration struct.
 type baseRegistration struct {
-	streamCtx      context.Context
-	span           roachpb.Span
-	withDiff       bool
-	withFiltering  bool
-	withOmitRemote bool
-	bulkDelivery   int
-	// removeRegFromProcessor is called to remove the registration from its
-	// processor. This is provided by the creator of the registration and called
-	// during disconnect(). Since it is called during disconnect it must be
-	// non-blocking.
-	removeRegFromProcessor func(registration)
-
+	span             roachpb.Span
+	withDiff         bool
+	withFiltering    bool
+	withOmitRemote   bool
+	unreg            func()
 	catchUpTimestamp hlc.Timestamp // exclusive
 	id               int64         // internal
 	keys             interval.Range
-	shouldUnreg      atomic.Bool
 }
 
 // ID implements interval.Interface.
@@ -137,12 +110,8 @@ func (r *baseRegistration) getWithOmitRemote() bool {
 	return r.withOmitRemote
 }
 
-func (r *baseRegistration) shouldUnregister() bool {
-	return r.shouldUnreg.Load()
-}
-
-func (r *baseRegistration) setShouldUnregister() {
-	r.shouldUnreg.Store(true)
+func (r *baseRegistration) getUnreg() func() {
+	return r.unreg
 }
 
 func (r *baseRegistration) getWithDiff() bool {
@@ -154,37 +123,37 @@ func (r *baseRegistration) assertEvent(ctx context.Context, event *kvpb.RangeFee
 	switch t := event.GetValue().(type) {
 	case *kvpb.RangeFeedValue:
 		if t.Key == nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
 		}
 		if t.Value.RawBytes == nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
 		}
 		if t.Value.Timestamp.IsEmpty() {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
 		}
 	case *kvpb.RangeFeedCheckpoint:
 		if t.Span.Key == nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
 		}
 	case *kvpb.RangeFeedSSTable:
 		if len(t.Data) == 0 {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
 		}
 		if len(t.Span.Key) == 0 {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
 		}
 		if t.WriteTS.IsEmpty() {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
 		}
 	case *kvpb.RangeFeedDeleteRange:
 		if len(t.Span.Key) == 0 || len(t.Span.EndKey) == 0 {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
+			log.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
 		}
 		if t.Timestamp.IsEmpty() {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
+			log.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
 		}
 	default:
-		log.KvDistribution.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 }
 
@@ -226,7 +195,7 @@ func (r *baseRegistration) maybeStripEvent(
 			// observed all values up to the checkpoint timestamp over a given
 			// key span if any updates to that span have been filtered out.
 			if !t.Span.Contains(r.span) {
-				log.KvDistribution.Fatalf(ctx, "registration span %v larger than checkpoint span %v", r.span, t.Span)
+				log.Fatalf(ctx, "registration span %v larger than checkpoint span %v", r.span, t.Span)
 			}
 			t = copyOnWrite().(*kvpb.RangeFeedCheckpoint)
 			t.Span = r.span
@@ -241,7 +210,7 @@ func (r *baseRegistration) maybeStripEvent(
 		// SSTs are always sent in their entirety, it is up to the caller to
 		// filter out irrelevant entries.
 	default:
-		log.KvDistribution.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 	return ret
 }
@@ -297,38 +266,14 @@ func (reg *registry) NewFilter() *Filter {
 	return newFilterFromRegistry(reg)
 }
 
-// updateMetricsOnUnregistration updates the metrics when a registration is
-// registered with the processor's registry.
-func (reg *registry) updateMetricsOnRegistration(r registration) {
-	reg.metrics.RangeFeedRegistrations.Inc(1)
-	switch r.(type) {
-	case *bufferedRegistration:
-		reg.metrics.RangeFeedBufferedRegistrations.Inc(1)
-	case *unbufferedRegistration:
-		reg.metrics.RangeFeedUnbufferedRegistrations.Inc(1)
-	}
-}
-
-// updateMetricsOnUnregistration updates the metrics when a registration is
-// unregistered from the processor's registry.
-func (reg *registry) updateMetricsOnUnregistration(r registration) {
-	reg.metrics.RangeFeedRegistrations.Dec(1)
-	switch r.(type) {
-	case *bufferedRegistration:
-		reg.metrics.RangeFeedBufferedRegistrations.Dec(1)
-	case *unbufferedRegistration:
-		reg.metrics.RangeFeedUnbufferedRegistrations.Dec(1)
-	}
-}
-
 // Register adds the provided registration to the registry.
 func (reg *registry) Register(ctx context.Context, r registration) {
-	reg.updateMetricsOnRegistration(r)
+	reg.metrics.RangeFeedRegistrations.Inc(1)
 	r.setID(reg.nextID())
 	r.setSpanAsKeys()
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
 		// TODO(erikgrinaker): these errors should arguably be returned.
-		log.KvDistribution.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -364,7 +309,7 @@ func (reg *registry) PublishToOverlapping(
 		// surprising. Revisit this once RangeFeed has more users.
 		minTS = hlc.MaxTimestamp
 	default:
-		log.KvDistribution.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
@@ -379,6 +324,20 @@ func (reg *registry) PublishToOverlapping(
 	})
 }
 
+// Unregister removes a registration from the registry. It is assumed that the
+// registration has already been disconnected, this is intended only to clean
+// up the registry.
+// We also drain all pending events for the sake of memory accounting. To do
+// that we rely on a fact that caller is not going to post any more events
+// concurrently or after this function is called.
+func (reg *registry) Unregister(ctx context.Context, r registration) {
+	reg.metrics.RangeFeedRegistrations.Dec(1)
+	if err := reg.tree.Delete(r, false /* fast */); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
+	r.drainAllocations(ctx)
+}
+
 // DisconnectAllOnShutdown disconnectes all registrations on processor shutdown.
 // This is different from normal disconnect as registrations won't be able to
 // perform Unregister when processor's work loop is already terminated.
@@ -387,7 +346,14 @@ func (reg *registry) PublishToOverlapping(
 // TODO: this should be revisited as part of
 // https://github.com/cockroachdb/cockroach/issues/110634
 func (reg *registry) DisconnectAllOnShutdown(ctx context.Context, pErr *kvpb.Error) {
+	reg.metrics.RangeFeedRegistrations.Dec(int64(reg.tree.Len()))
 	reg.DisconnectWithErr(ctx, all, pErr)
+}
+
+// Disconnect disconnects all registrations that overlap the specified span with
+// a nil error.
+func (reg *registry) Disconnect(ctx context.Context, span roachpb.Span) {
+	reg.DisconnectWithErr(ctx, span, nil /* pErr */)
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified
@@ -413,7 +379,7 @@ func (reg *registry) forOverlappingRegs(
 		r := i.(registration)
 		dis, pErr := fn(r)
 		if dis {
-			r.Disconnect(pErr)
+			r.disconnect(pErr)
 			toDelete = append(toDelete, i)
 		}
 		return false
@@ -423,48 +389,21 @@ func (reg *registry) forOverlappingRegs(
 	} else {
 		reg.tree.DoMatching(matchFn, span.AsRange())
 	}
-	reg.remove(ctx, toDelete)
-}
 
-func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) {
 	if len(toDelete) == reg.tree.Len() {
-		// Note that toDelete may contain a mix of different types of registrations.
-		for _, i := range toDelete {
-			reg.updateMetricsOnUnregistration(i.(registration))
-		}
 		reg.tree.Clear()
 	} else if len(toDelete) == 1 {
-		reg.updateMetricsOnUnregistration(toDelete[0].(registration))
 		if err := reg.tree.Delete(toDelete[0], false /* fast */); err != nil {
-			log.KvDistribution.Fatalf(ctx, "%v", err)
+			log.Fatalf(ctx, "%v", err)
 		}
 	} else if len(toDelete) > 1 {
 		for _, i := range toDelete {
-			reg.updateMetricsOnUnregistration(i.(registration))
 			if err := reg.tree.Delete(i, true /* fast */); err != nil {
-				log.KvDistribution.Fatalf(ctx, "%v", err)
+				log.Fatalf(ctx, "%v", err)
 			}
 		}
 		reg.tree.AdjustRanges()
 	}
-}
-
-// unregisterMarkedRegistrations iterates the registery and removes any
-// registrations where shouldUnregister() returns true. This is called by the
-// rangefeed processor in response to an async unregistration request.
-//
-// See the comment on (*ScheduledProcessor).unregisterClientAsync for more
-// details.
-func (reg *registry) unregisterMarkedRegistrations(ctx context.Context) {
-	var toDelete []interval.Interface
-	reg.tree.Do(func(i interval.Interface) (done bool) {
-		r := i.(registration)
-		if r.shouldUnregister() {
-			toDelete = append(toDelete, i)
-		}
-		return false
-	})
-	reg.remove(ctx, toDelete)
 }
 
 // waitForCaughtUp waits for all registrations overlapping the given span to

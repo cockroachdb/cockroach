@@ -5,7 +5,7 @@
 - RFC PR: 56932
 - Cockroach Issue: #57433
 
-# Streaming Replication Between Clusters (aka Physical Cluster Replication - PCR)
+# Streaming Replication Between Clusters
 
 ## Summary
 

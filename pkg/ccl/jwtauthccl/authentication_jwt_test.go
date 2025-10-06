@@ -498,14 +498,14 @@ func TestSingleClaim(t *testing.T) {
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 
 	// Validation is successful for a token with a matched principal.
-	retrievedUser, err := verifier.RetrieveIdentity(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	retrievedUser, err := verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
 	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
 
 	// Validation is successful for a token without a username provided, as a single principal is matched.
-	retrievedUser, err = verifier.RetrieveIdentity(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	retrievedUser, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
 	require.NoError(t, err)
 	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
@@ -539,21 +539,21 @@ func TestMultipleClaim(t *testing.T) {
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 
 	// Validation is successful for a token with a matched principal - test1.
-	retrievedUser, err := verifier.RetrieveIdentity(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	retrievedUser, err := verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
 	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username1), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
 
 	// Validation is successful for a token with a matched principal - test2.
-	retrievedUser, err = verifier.RetrieveIdentity(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
+	retrievedUser, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
 	require.NoError(t, err)
 	require.Equal(t, username.MakeSQLUsernameFromPreNormalizedString(username2), retrievedUser)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username2), token, identMap)
 	require.NoError(t, err)
 
 	// Validation fails for a token without a username provided, as multiple principals are matched.
-	_, err = verifier.RetrieveIdentity(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
+	_, err = verifier.RetrieveIdentity(ctx, username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(""), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid principal")
@@ -672,7 +672,7 @@ func TestAudienceCheck(t *testing.T) {
 
 // mockGetHttpResponseWithLocalFileContent is a mock function for getHttpResponse. This is used to intercept the call to
 // getHttpResponse and return the content of a local file instead of making a http call.
-var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
+var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
 	// remove https:// and replace / with _ in the url to get the testdata file name
 	fileName := "testdata/" + strings.ReplaceAll(strings.ReplaceAll(url, "https://", ""), "/", "_")
 	// read content of the file as a byte array
@@ -999,7 +999,7 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 		testServer.Close()
 	}()
 
-	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator, _ ...http.Header) ([]byte, error) {
+	mockGetHttpResponse := func(ctx context.Context, url string, authenticator *jwtAuthenticator) ([]byte, error) {
 		if strings.Contains(url, "/.well-known/openid-configuration") {
 			return mockGetHttpResponseWithLocalFileContent(ctx, url, authenticator)
 		} else if strings.Contains(url, "/oauth2/v3/certs") {
@@ -1165,44 +1165,4 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestVerifyAndExtractIssuer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	// Enable JWT and configure a single issuer.
-	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
-
-	// Create signing material.
-	keySet, key, _ := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
-	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
-
-	// Succeeds with correct issuer & signature.
-	iss, detail, err := verifier.VerifyAndExtractIssuer(ctx, s.ClusterSettings(), token)
-	require.NoError(t, err)
-	require.Empty(t, detail)
-	require.Equal(t, issuer1, iss)
-
-	// Fails on wrong issuer.
-	badIssuerToken := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
-	_, detail, err = verifier.VerifyAndExtractIssuer(ctx, s.ClusterSettings(), badIssuerToken)
-	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
-	require.Contains(t, errors.FlattenDetails(err), "token issued by issuer2")
-	require.Empty(t, detail)
-
-	// Fails on bad signature (different key).
-	_, _, otherKey := createJWKS(t)
-	badSigToken := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), otherKey, jwa.ES384, "", "")
-	_, detail, err = verifier.VerifyAndExtractIssuer(ctx, s.ClusterSettings(), badSigToken)
-	require.ErrorContains(t, err, "JWT authentication: invalid token")
-	require.Empty(t, detail)
 }

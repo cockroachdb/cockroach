@@ -302,7 +302,6 @@ var TenantColumnsNoReplication = ResultColumns{
 // TenantColumnsWithReplication is appended to TenantColumns for SHOW VIRTUAL
 // CLUSTER ... WITH REPLICATION STATUS queries.
 var TenantColumnsWithReplication = ResultColumns{
-	{Name: "ingestion_job_id", Typ: types.Int},
 	{Name: "source_tenant_name", Typ: types.String},
 	{Name: "source_cluster_uri", Typ: types.String},
 	// The protected timestamp on the destination cluster, meaning we cannot
@@ -352,18 +351,16 @@ var Ranges = append(
 	// The following columns are computed by RangesExtraRenders below.
 	ResultColumn{Name: "lease_holder", Typ: types.Int},
 	ResultColumn{Name: "range_size", Typ: types.Int},
-	ResultColumn{Name: "errors", Typ: types.String},
 )
 
 // RangesExtraRenders describes the extra projections in
 // crdb_internal.ranges not included in crdb_internal.ranges_no_leases.
 const RangesExtraRenders = `
-	(crdb_internal.lease_holder_with_errors(start_key)->>'Leaseholder')::INT AS lease_holder,
-	(crdb_internal.range_stats_with_errors(start_key)->'RangeStats'->>'key_bytes')::INT +
-	(crdb_internal.range_stats_with_errors(start_key)->'RangeStats'->>'val_bytes')::INT +
-	coalesce((crdb_internal.range_stats_with_errors(start_key)->'RangeStats'->>'range_key_bytes')::INT, 0) +
-	coalesce((crdb_internal.range_stats_with_errors(start_key)->'RangeStats'->>'range_val_bytes')::INT, 0) AS range_size,
-	concat(crdb_internal.lease_holder_with_errors(start_key)->>'Error', ' ', crdb_internal.range_stats_with_errors(start_key)->>'Error') AS errors
+	crdb_internal.lease_holder(start_key) AS lease_holder,
+	(crdb_internal.range_stats(start_key)->>'key_bytes')::INT +
+	(crdb_internal.range_stats(start_key)->>'val_bytes')::INT +
+	coalesce((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT, 0) +
+	coalesce((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT, 0) AS range_size
 `
 
 // IdentifySystemColumns is the schema for IDENTIFY_SYSTEM.

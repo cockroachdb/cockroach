@@ -24,15 +24,15 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t1]
 ----
 CREATE TABLE public.t1 (
-  k INT8 NOT NULL,
-  v INT8 NULL,
-  i INT8 NULL,
-  CONSTRAINT t1_pkey PRIMARY KEY (k ASC),
-  INDEX idx_v_visible (v ASC),
-  INDEX idx_i_invisible (i ASC) NOT VISIBLE,
-  UNIQUE INDEX idx_v_invisible (v ASC) NOT VISIBLE,
-  FAMILY fam_0_k_v_i (k, v, i)
-) WITH (schema_locked = true);
+   k INT8 NOT NULL,
+   v INT8 NULL,
+   i INT8 NULL,
+   CONSTRAINT t1_pkey PRIMARY KEY (k ASC),
+   INDEX idx_v_visible (v ASC),
+   INDEX idx_i_invisible (i ASC) NOT VISIBLE,
+   UNIQUE INDEX idx_v_invisible (v ASC) NOT VISIBLE,
+   FAMILY fam_0_k_v_i (k, v, i)
+)
 
 # Test SHOW INDEX, SHOW INDEXES, SHOW KEYS FROM TABLE.
 query TTB
@@ -553,117 +553,6 @@ statement ok
 DROP TABLE t2
 
 ##################################################################################
-# Check Invisible Vector Index and Partial Vector Index.
-##################################################################################
-statement ok
-CREATE TABLE t1 (
-  id INT,
-  a INT,
-  v VECTOR(3),
-  VECTOR INDEX idx_vec_visible (v) VISIBLE
-);
-
-# idx_vec_visible is chosen because it is visible.
-query T
-EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
-----
-distribution: local
-vectorized: true
-·
-• top-k
-│ order: +column9
-│ k: 5
-│
-└── • render
-    │
-    └── • lookup join
-        │ table: t1@t1_pkey
-        │ equality: (rowid) = (rowid)
-        │ equality cols are key
-        │
-        └── • vector search
-              table: t1@idx_vec_visible
-              target count: 5
-
-statement ok
-DROP INDEX idx_vec_visible
-
-statement ok
-CREATE INDEX idx_vec_invisible ON t1 USING CSPANN (v) NOT VISIBLE;
-
-# Check invisible vector index: ignored idx_vec_invisible.
-query T
-EXPLAIN SELECT * FROM t1 ORDER BY v <-> '[3,1,2]' LIMIT 5;
-----
-distribution: local
-vectorized: true
-·
-• top-k
-│ order: +column9
-│ k: 5
-│
-└── • render
-    │
-    └── • scan
-          missing stats
-          table: t1@t1_pkey
-          spans: FULL SCAN
-
-# Add partial index.
-statement ok
-CREATE VECTOR INDEX idx_partial_invisible ON t1 (a, v) WHERE a > 10 NOT VISIBLE
-
-# Check invisible vector partial index: ignored idx_partial_invisible.
-query T
-EXPLAIN SELECT * FROM t1 WHERE a IN (10, 20) ORDER BY v <-> '[3,1,2]' LIMIT 5;
-----
-distribution: local
-vectorized: true
-·
-• top-k
-│ order: +column9
-│ k: 5
-│
-└── • render
-    │
-    └── • filter
-        │ filter: a IN (10, 20)
-        │
-        └── • scan
-              missing stats
-              table: t1@t1_pkey
-              spans: FULL SCAN
-
-statement ok
-ALTER INDEX idx_partial_invisible VISIBLE
-
-# Partial index is now visible, so it should be chosen.
-query T
-EXPLAIN SELECT * FROM t1 WHERE a IN (20, 30) ORDER BY v <-> '[3,1,2]' LIMIT 5;
-----
-distribution: local
-vectorized: true
-·
-• top-k
-│ order: +column9
-│ k: 5
-│
-└── • render
-    │
-    └── • lookup join
-        │ table: t1@t1_pkey
-        │ equality: (rowid) = (rowid)
-        │ equality cols are key
-        │
-        └── • vector search
-              table: t1@idx_partial_invisible (partial index)
-              target count: 5
-              prefix spans: [/20 - /20] [/30 - /30]
-
-statement ok
-DROP TABLE t1
-
-##################################################################################
 # Check Invisible Inverted Index and Partial Inverted Index.
 ##################################################################################
 statement ok
@@ -964,7 +853,6 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/2 - /2]
-│             locking strength: for update
 │
 └── • constraint-check
     │
@@ -1006,17 +894,27 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: child@c_idx_invisible
+        └── • hash join
             │ equality: (p) = (p)
+            │ left cols are key
+            │ right cols are key
             │
-            └── • except all
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: p
+                │ order key: p
                 │
-                ├── • scan buffer
-                │     label: buffer 1
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • scan
+                      missing stats
+                      table: child@c_idx_invisible
+                      spans: FULL SCAN
 
 statement ok
 DROP TABLE child
@@ -1145,7 +1043,6 @@ vectorized: true
 │             missing stats
 │             table: parent@parent_pkey
 │             spans: [/2 - /2]
-│             locking strength: for update
 │
 ├── • fk-cascade
 │   │ fk: child_delete_p_fkey
@@ -1157,7 +1054,6 @@ vectorized: true
 │             missing stats
 │             table: child_delete@c_delete_idx_invisible
 │             spans: [/2 - /2]
-│             locking strength: for update
 │
 └── • constraint-check
     │
@@ -1217,12 +1113,22 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: child_update@c_update_idx_invisible
+        └── • hash join
             │ equality: (p) = (p)
+            │ left cols are key
+            │ right cols are key
             │
-            └── • scan buffer
-                  label: buffer 1
+            ├── • scan buffer
+            │     label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: p
+                │ order key: p
+                │
+                └── • scan
+                      missing stats
+                      table: child_update@c_update_idx_invisible
+                      spans: FULL SCAN
 
 # c_delete_idx_invisible is used for constraint check (update on a parent table
 # requires FK check).
@@ -1261,9 +1167,13 @@ vectorized: true
 │       │   └── • buffer
 │       │       │ label: buffer 1
 │       │       │
-│       │       └── • lookup join
-│       │           │ table: child_update@c_update_idx_invisible
+│       │       └── • hash join
 │       │           │ equality: (p) = (p)
+│       │           │
+│       │           ├── • scan
+│       │           │     missing stats
+│       │           │     table: child_update@child_update_pkey
+│       │           │     spans: FULL SCAN
 │       │           │
 │       │           └── • filter
 │       │               │ estimated row count: 33
@@ -1277,10 +1187,14 @@ vectorized: true
 │           │
 │           └── • error if rows
 │               │
-│               └── • lookup join (anti)
-│                   │ table: parent@parent_pkey
-│                   │ equality: (p_new) = (p)
-│                   │ equality cols are key
+│               └── • hash join (right anti)
+│                   │ equality: (p) = (p_new)
+│                   │ left cols are key
+│                   │
+│                   ├── • scan
+│                   │     missing stats
+│                   │     table: parent@parent_pkey
+│                   │     spans: FULL SCAN
 │                   │
 │                   └── • scan buffer
 │                         label: buffer 1
@@ -1289,17 +1203,27 @@ vectorized: true
     │
     └── • error if rows
         │
-        └── • lookup join (semi)
-            │ table: child_delete@c_delete_idx_invisible
+        └── • hash join
             │ equality: (p) = (p)
+            │ left cols are key
+            │ right cols are key
             │
-            └── • except all
+            ├── • except all
+            │   │
+            │   ├── • scan buffer
+            │   │     label: buffer 1
+            │   │
+            │   └── • scan buffer
+            │         label: buffer 1
+            │
+            └── • distinct
+                │ distinct on: p
+                │ order key: p
                 │
-                ├── • scan buffer
-                │     label: buffer 1
-                │
-                └── • scan buffer
-                      label: buffer 1
+                └── • scan
+                      missing stats
+                      table: child_delete@c_delete_idx_invisible
+                      spans: FULL SCAN
 
 statement ok
 DROP TABLE child_delete
@@ -1706,7 +1630,7 @@ t  CREATE TABLE public.t (
      INDEX k_idx (k ASC) VISIBILITY 0.25,
      INDEX v_idx (v ASC) VISIBILITY 0.50,
      FAMILY fam_0_p_k_v (p, k, v)
-   ) WITH (schema_locked = true);
+   )
 
 query TTBITTTBBBF colnames,rowsort
 SELECT * FROM [SHOW INDEX FROM t]

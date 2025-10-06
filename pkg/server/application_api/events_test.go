@@ -13,50 +13,22 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
-	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAdminAPIEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	stickyVFSRegistry := fs.NewStickyRegistry()
-	lisReg := listenerutil.NewListenerRegistry()
-	defer lisReg.Close()
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ReusableListenerReg: lisReg,
-		ServerArgs: base.TestServerArgs{
-			// TODO: time taken by first /events API call is unusually high
-			// (>40s) for external mode.
-			DefaultTestTenant: base.TestSkippedForExternalModeDueToPerformance(142381),
-			// Below parameters are required to make tc.Restart work
-			StoreSpecs: []base.StoreSpec{
-				{
-					InMemory:    true,
-					StickyVFSID: "1",
-				},
-			},
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
-				},
-			},
-		},
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 	})
-	require.NoError(t, tc.Restart())
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
-	db := tc.ServerConn(0)
+	defer s.Stopper().Stop(context.Background())
 
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
@@ -65,7 +37,6 @@ func TestAdminAPIEvents(t *testing.T) {
 		"CREATE TABLE api_test.tbl3 (a INT)",
 		"DROP TABLE api_test.tbl1",
 		"DROP TABLE api_test.tbl2",
-		"DROP DATABASE api_test",
 		"SET CLUSTER SETTING cluster.label = 'somestring';",
 	}
 	for _, q := range setupQueries {
@@ -83,7 +54,9 @@ func TestAdminAPIEvents(t *testing.T) {
 		expCount   int
 	}
 	testcases := []testcase{
-		{"drop_database", false, 0, false, 1},
+		{"node_join", false, 0, false, 1},
+		{"node_restart", false, 0, false, 0},
+		{"drop_database", false, 0, false, 0},
 		{"create_database", false, 0, false, 3},
 		{"drop_table", false, 0, false, 2},
 		{"create_table", false, 0, false, 3},
@@ -95,19 +68,6 @@ func TestAdminAPIEvents(t *testing.T) {
 		{"create_table", true, -1, false, 3},
 		{"create_table", true, 2, false, 2},
 	}
-
-	if s.StartedDefaultTestTenant() {
-		testcases = append(testcases, []testcase{
-			{"node_join", false, 0, false, 0},
-			{"node_restart", false, 0, false, 0},
-		}...)
-	} else {
-		testcases = append(testcases, []testcase{
-			{"node_join", false, 0, false, 1},
-			{"node_restart", false, 0, false, 1},
-		}...)
-	}
-
 	minTotalEvents := 0
 	for _, tc := range testcases {
 		if !tc.hasLimit {

@@ -27,6 +27,7 @@ var consistencyCheckInterval = settings.RegisterDurationSetting(
 	"the time between range consistency checks; set to 0 to disable consistency checking."+
 		" Note that intervals that are too short can negatively impact performance.",
 	24*time.Hour,
+	settings.NonNegativeDuration,
 )
 
 var consistencyCheckRate = settings.RegisterByteSizeSetting(
@@ -103,6 +104,7 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			acceptsUnsplitRanges:                true,
 			successes:                           store.metrics.ConsistencyQueueSuccesses,
 			failures:                            store.metrics.ConsistencyQueueFailures,
+			storeFailures:                       store.metrics.StoreFailures,
 			pending:                             store.metrics.ConsistencyQueuePending,
 			processingNanos:                     store.metrics.ConsistencyQueueProcessingNanos,
 			processTimeoutFunc:                  makeRateLimitedTimeoutFunc(consistencyCheckRate),
@@ -164,7 +166,7 @@ func consistencyQueueShouldQueueImpl(
 
 // process() is called on every range for which this node is a lease holder.
 func (q *consistencyQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (bool, error) {
 	if q.interval() <= 0 {
 		return false, nil
@@ -202,7 +204,7 @@ func (q *consistencyQueue) process(
 			return false, nil
 		}
 		err := pErr.GoError()
-		log.KvDistribution.Errorf(ctx, "%v", err)
+		log.Errorf(ctx, "%v", err)
 		return false, err
 	}
 	if fn := repl.store.cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {

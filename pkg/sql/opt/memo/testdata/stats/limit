@@ -116,7 +116,7 @@ SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=1.26952, distinct(3)=1, null(3)=0]
+ ├── stats: [rows=1.269522, distinct(3)=1, null(3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── limit

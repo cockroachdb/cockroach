@@ -29,7 +29,7 @@ func IsolationLevelCounter(ctx context.Context, level isolation.Level) telemetry
 	case isolation.ReadCommitted:
 		key = prefix + "read_committed"
 	default:
-		log.Dev.Warningf(ctx, "unexpected isolation level: %v", level)
+		log.Warningf(ctx, "unexpected isolation level: %v", level)
 	}
 	return telemetry.GetCounter(key)
 }
@@ -54,7 +54,7 @@ func IsolationLevelUpgradedCounter(
 	case tree.ReadUncommittedIsolation:
 		key = prefix + "read_uncommitted"
 	default:
-		log.Dev.Warningf(ctx, "unexpected isolation level: %v", level)
+		log.Warningf(ctx, "unexpected isolation level: %v", level)
 	}
 	return telemetry.GetCounter(key)
 }

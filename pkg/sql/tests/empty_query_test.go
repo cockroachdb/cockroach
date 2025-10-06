@@ -12,11 +12,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +29,7 @@ func TestEmptyQuery(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: false, UseDatabase: "defaultdb"})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanupFunc := pgurlutils.PGUrl(
+	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ApplicationLayer().AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
 	)
 	defer cleanupFunc()

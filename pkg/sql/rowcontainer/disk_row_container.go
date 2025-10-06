@@ -35,11 +35,8 @@ type DiskRowContainer struct {
 	diskAcc mon.BoundAccount
 	// bufferedRows buffers writes to the diskMap.
 	bufferedRows diskmap.SortedDiskMapBatchWriter
-	// memAcc keeps track of memory usage of scratchKey, scratchVal, and keys
-	// stored in deDupCache if applicable.
-	memAcc     mon.BoundAccount
-	scratchKey []byte
-	scratchVal []byte
+	scratchKey   []byte
+	scratchVal   []byte
 
 	// For computing mean encoded row bytes.
 	totalEncodedRowBytes uint64
@@ -74,9 +71,9 @@ type DiskRowContainer struct {
 	// contains all the key strings that are potentially buffered in bufferedRows.
 	// Since we need to de-duplicate for every insert attempt, we don't want to
 	// keep flushing bufferedRows after every insert.
+	// There is currently no memory-accounting for the deDupCache, just like there
+	// is none for the bufferedRows. Both will be approximately the same size.
 	deDupCache map[string]int
-
-	deDupCacheAccountedFor int64
 
 	diskMonitor *mon.BytesMonitor
 	engine      diskmap.Factory
@@ -90,16 +87,12 @@ var _ DeDupingRowContainer = &DiskRowContainer{}
 // MakeDiskRowContainer creates a DiskRowContainer with the given engine as the
 // underlying store that rows are stored on.
 // Arguments:
-//   - memAcc is used to monitor this DiskRowContainer's memory usage. It must
-//     be bound to an unlimited memory monitor. The container takes ownership of
-//     the account.
 //   - diskMonitor is used to monitor this DiskRowContainer's disk usage.
 //   - types is the schema of rows that will be added to this container.
 //   - ordering is the output ordering; the order in which rows should be sorted.
 //   - e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	ctx context.Context,
-	memAcc mon.BoundAccount,
 	diskMonitor *mon.BytesMonitor,
 	typs []*types.T,
 	ordering colinfo.ColumnOrdering,
@@ -110,7 +103,6 @@ func MakeDiskRowContainer(
 		diskMap:      diskMap,
 		diskAcc:      diskMonitor.MakeBoundAccount(),
 		bufferedRows: diskMap.NewBatchWriter(),
-		memAcc:       memAcc,
 		types:        typs,
 		ordering:     ordering,
 		diskMonitor:  diskMonitor,
@@ -186,30 +178,6 @@ func (d *DiskRowContainer) Len() int {
 	return int(d.rowID)
 }
 
-// Writing extremely large keys to pebble can lead to undefined behavior
-// (overflows and / or OOMs), so we'll prohibit keys larger than 1.5 GiB.
-const maxPebbleKeySize = 1536 << 20 /* 1.5 GiB */
-
-var maxPebbleKeySizeExceededErr = pgerror.Newf(pgcode.OutOfMemory, "temporary storage doesn't support keys larger than 1.5 GiB")
-
-// resetScratch prepares the scratch space for reuse. If the slice is too large
-// to keep, it's lost and the memory account is updated accordingly.
-func (d *DiskRowContainer) resetScratch(ctx context.Context) {
-	// Do not keep very large scratch space across rows (we're trying to
-	// minimize RAM usage after all since we've spilled to disk).
-	const maxKeptSize = 1 << 20 /* 1 MiB */
-	if cap(d.scratchKey) > maxKeptSize {
-		d.memAcc.Shrink(ctx, int64(cap(d.scratchKey)))
-		d.scratchKey = nil
-	}
-	if cap(d.scratchVal) > maxKeptSize {
-		d.memAcc.Shrink(ctx, int64(cap(d.scratchVal)))
-		d.scratchVal = nil
-	}
-	d.scratchKey = d.scratchKey[:0]
-	d.scratchVal = d.scratchVal[:0]
-}
-
 // AddRow is part of the SortableRowContainer interface.
 //
 // It is additionally used in de-duping mode by DiskBackedRowContainer when
@@ -224,13 +192,7 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 	if err := d.encodeRow(ctx, row); err != nil {
 		return err
 	}
-	defer d.resetScratch(ctx)
-	if len(d.scratchKey) > maxPebbleKeySize {
-		return maxPebbleKeySizeExceededErr
-	}
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
-		// TODO(yuzefovich): this error wrapping is redundant - err should be
-		// produced by the disk monitor.
 		return pgerror.Wrapf(err, pgcode.OutOfMemory,
 			"this query requires additional disk space")
 	}
@@ -242,16 +204,14 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 	// calls to AddRowWithDeDup() de-duplicate wrt this cache.
 	if d.deDuplicate {
 		if d.bufferedRows.NumPutsSinceFlush() == 0 {
-			d.clearDeDupCache(ctx)
+			d.clearDeDupCache()
 		} else {
-			if err := d.memAcc.Grow(ctx, int64(len(d.scratchKey))); err != nil {
-				return err
-			}
-			d.deDupCacheAccountedFor += int64(len(d.scratchKey))
 			d.deDupCache[string(d.scratchKey)] = int(d.rowID)
 		}
 	}
 	d.totalEncodedRowBytes += uint64(len(d.scratchKey) + len(d.scratchVal))
+	d.scratchKey = d.scratchKey[:0]
+	d.scratchVal = d.scratchVal[:0]
 	d.rowID++
 	return nil
 }
@@ -263,7 +223,10 @@ func (d *DiskRowContainer) AddRowWithDeDup(
 	if err := d.encodeRow(ctx, row); err != nil {
 		return 0, err
 	}
-	defer d.resetScratch(ctx)
+	defer func() {
+		d.scratchKey = d.scratchKey[:0]
+		d.scratchVal = d.scratchVal[:0]
+	}()
 	// First use the cache to de-dup.
 	entry, ok := d.deDupCache[string(d.scratchKey)]
 	if ok {
@@ -294,12 +257,7 @@ func (d *DiskRowContainer) AddRowWithDeDup(
 		}
 		return int(idx), nil
 	}
-	if len(d.scratchKey) > maxPebbleKeySize {
-		return 0, maxPebbleKeySizeExceededErr
-	}
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
-		// TODO(yuzefovich): this error wrapping is redundant - err should be
-		// produced by the disk monitor.
 		return 0, pgerror.Wrapf(err, pgcode.OutOfMemory,
 			"this query requires additional disk space")
 	}
@@ -307,12 +265,8 @@ func (d *DiskRowContainer) AddRowWithDeDup(
 		return 0, err
 	}
 	if d.bufferedRows.NumPutsSinceFlush() == 0 {
-		d.clearDeDupCache(ctx)
+		d.clearDeDupCache()
 	} else {
-		if err = d.memAcc.Grow(ctx, int64(len(d.scratchKey))); err != nil {
-			return 0, err
-		}
-		d.deDupCacheAccountedFor += int64(len(d.scratchKey))
 		d.deDupCache[string(d.scratchKey)] = int(d.rowID)
 	}
 	d.totalEncodedRowBytes += uint64(len(d.scratchKey) + len(d.scratchVal))
@@ -321,34 +275,23 @@ func (d *DiskRowContainer) AddRowWithDeDup(
 	return idx, nil
 }
 
-func (d *DiskRowContainer) clearDeDupCache(ctx context.Context) {
+func (d *DiskRowContainer) clearDeDupCache() {
 	for k := range d.deDupCache {
 		delete(d.deDupCache, k)
 	}
-	d.memAcc.Shrink(ctx, d.deDupCacheAccountedFor)
-	d.deDupCacheAccountedFor = 0
 }
 
 func (d *DiskRowContainer) testingFlushBuffer(ctx context.Context) {
 	if err := d.bufferedRows.Flush(); err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
-	d.clearDeDupCache(ctx)
+	d.clearDeDupCache()
 }
 
-// encodeRow encodes the given row into scratchKey and scratchVal fields. The
-// memory account is updated according to the new capacity of these slices.
-func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow) (retErr error) {
+func (d *DiskRowContainer) encodeRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	if len(row) != len(d.types) {
-		log.Dev.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
+		log.Fatalf(ctx, "invalid row length %d, expected %d", len(row), len(d.types))
 	}
-	oldScratchMemUse := int64(cap(d.scratchKey) + cap(d.scratchVal))
-	defer func() {
-		if retErr == nil {
-			newScratchMemUse := int64(cap(d.scratchKey) + cap(d.scratchVal))
-			retErr = d.memAcc.Resize(ctx, oldScratchMemUse, newScratchMemUse)
-		}
-	}()
 
 	for i, orderInfo := range d.ordering {
 		col := orderInfo.ColIdx
@@ -397,8 +340,7 @@ func (d *DiskRowContainer) Sort(context.Context) {}
 func (d *DiskRowContainer) Reorder(ctx context.Context, ordering colinfo.ColumnOrdering) error {
 	// We need to create a new DiskRowContainer since its ordering can only be
 	// changed at initialization.
-	memAcc := d.memAcc.Monitor().MakeBoundAccount()
-	newContainer, err := MakeDiskRowContainer(ctx, memAcc, d.diskMonitor, d.types, ordering, d.engine)
+	newContainer, err := MakeDiskRowContainer(ctx, d.diskMonitor, d.types, ordering, d.engine)
 	if err != nil {
 		return err
 	}
@@ -451,10 +393,7 @@ func (d *DiskRowContainer) UnsafeReset(ctx context.Context) error {
 	}
 	d.diskAcc.Clear(ctx)
 	d.bufferedRows = d.diskMap.NewBatchWriter()
-	d.scratchKey = nil
-	d.scratchVal = nil
-	d.clearDeDupCache(ctx)
-	d.memAcc.Clear(ctx)
+	d.clearDeDupCache()
 	d.lastReadKey = nil
 	d.rowID = 0
 	d.totalEncodedRowBytes = 0
@@ -472,7 +411,6 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 		d.diskMap.Close(ctx)
 	}
 	d.diskAcc.Close(ctx) // diskAcc is never nil
-	d.memAcc.Close(ctx)  // memAcc is never nil
 }
 
 // diskRowIterator iterates over the rows in a DiskRowContainer.
@@ -489,7 +427,7 @@ var _ RowIterator = &diskRowIterator{}
 
 func (d *DiskRowContainer) newIterator(ctx context.Context) diskRowIterator {
 	if err := d.bufferedRows.Flush(); err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	return diskRowIterator{
 		rowContainer:          d,
@@ -523,12 +461,8 @@ func (r *diskRowIterator) EncRow() (rowenc.EncDatumRow, error) {
 	// directly into the EncDatum, so we need to make a copy here. We cannot
 	// reuse the same byte slice across EncRow() calls because it would lead to
 	// modification of the EncDatums (which is not allowed).
-	var buf []byte
-	r.rowBuf, buf = r.rowBuf.Alloc(len(k) + len(v))
-	copy(buf, k)
-	k, buf = buf[:len(k):len(k)], buf[len(k):]
-	copy(buf, v)
-	v = buf
+	r.rowBuf, k = r.rowBuf.Copy(k, len(v))
+	r.rowBuf, v = r.rowBuf.Copy(v, 0 /* extraCap */)
 
 	for i, orderInfo := range r.rowContainer.ordering {
 		// Types with composite key encodings are decoded from the value.

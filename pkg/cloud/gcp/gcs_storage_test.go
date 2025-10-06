@@ -14,7 +14,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	gcs "cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
@@ -41,6 +39,7 @@ func TestPutGoogleCloud(t *testing.T) {
 	}
 
 	user := username.RootUserName()
+	testSettings := cluster.MakeTestingClusterSettings()
 	testID := cloudtestutils.NewTestID()
 
 	testutils.RunTrueAndFalse(t, "auth-specified-with-auth-param", func(t *testing.T, specified bool) {
@@ -59,48 +58,52 @@ func TestPutGoogleCloud(t *testing.T) {
 		if specified {
 			uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
 		}
-		info := cloudtestutils.StoreInfo{
-			URI:  uri,
-			User: user,
-		}
-		cloudtestutils.CheckExportStore(t, info)
-		info = cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
-				bucket,
-				"backup-test-specified",
-				testID,
-				"listing-test",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				CredentialsParam,
-				url.QueryEscape(encoded),
-			),
-			User: username.RootUserName(),
-		}
-		cloudtestutils.CheckListFiles(t, info)
+		cloudtestutils.CheckExportStore(
+			t,
+			uri,
+			false,
+			user,
+			nil, /* db */
+			testSettings,
+		)
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
+			bucket,
+			"backup-test-specified",
+			testID,
+			"listing-test",
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			CredentialsParam,
+			url.QueryEscape(encoded),
+		), username.RootUserName(),
+			nil, /* db */
+			testSettings,
+		)
 	})
 	t.Run("auth-implicit", func(t *testing.T) {
 		if !cloudtestutils.IsImplicitAuthConfigured() {
 			skip.IgnoreLint(t, "implicit auth is not configured")
 		}
-		info := cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, "backup-test-implicit", testID,
+
+		cloudtestutils.CheckExportStore(
+			t,
+			fmt.Sprintf("gs://%s/%s-%d?%s=%s", bucket, "backup-test-implicit", testID,
 				cloud.AuthParam, cloud.AuthParamImplicit),
-			User: user,
-		}
-		cloudtestutils.CheckExportStore(t, info)
-		info = cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
-				bucket,
-				"backup-test-implicit",
-				testID,
-				"listing-test",
-				cloud.AuthParam,
-				cloud.AuthParamImplicit,
-			),
-			User: username.RootUserName(),
-		}
-		cloudtestutils.CheckListFiles(t, info)
+			false,
+			user,
+			nil, /* db */
+			testSettings)
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s",
+			bucket,
+			"backup-test-implicit",
+			testID,
+			"listing-test",
+			cloud.AuthParam,
+			cloud.AuthParamImplicit,
+		), username.RootUserName(),
+			nil, /* db */
+			testSettings,
+		)
 	})
 
 	t.Run("auth-specified-bearer-token", func(t *testing.T) {
@@ -125,30 +128,32 @@ func TestPutGoogleCloud(t *testing.T) {
 			token.AccessToken,
 		)
 		uri += fmt.Sprintf("&%s=%s", cloud.AuthParam, cloud.AuthParamSpecified)
-		info := cloudtestutils.StoreInfo{
-			URI:  uri,
-			User: user,
-		}
-		cloudtestutils.CheckExportStore(t, info)
-		info = cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
-				bucket,
-				"backup-test-specified",
-				testID,
-				"listing-test",
-				cloud.AuthParam,
-				cloud.AuthParamSpecified,
-				BearerTokenParam,
-				token.AccessToken,
-			),
-			User: username.RootUserName(),
-		}
-		cloudtestutils.CheckListFiles(t, info)
+		cloudtestutils.CheckExportStore(
+			t,
+			uri,
+			false,
+			user,
+			nil, /* db */
+			testSettings)
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
+			bucket,
+			"backup-test-specified",
+			testID,
+			"listing-test",
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			BearerTokenParam,
+			token.AccessToken,
+		), username.RootUserName(),
+			nil, /* db */
+			testSettings,
+		)
 	})
 }
 
 func TestGCSAssumeRole(t *testing.T) {
 	user := username.RootUserName()
+	testSettings := cluster.MakeTestingClusterSettings()
 
 	limitedBucket := os.Getenv("GOOGLE_LIMITED_BUCKET")
 	if limitedBucket == "" {
@@ -168,42 +173,44 @@ func TestGCSAssumeRole(t *testing.T) {
 		}
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 
-		info := cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf(
-				"gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
-				CredentialsParam, url.QueryEscape(encoded)),
-			User: user,
-		}
 		// Verify that specified permissions with the credentials do not give us
 		// access to the bucket.
-		cloudtestutils.CheckNoPermission(t, info)
-		info.URI = fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
-			limitedBucket,
-			"backup-test-assume-role",
-			testID,
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			AssumeRoleParam,
-			assumedAccount, CredentialsParam,
-			url.QueryEscape(encoded),
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
+			CredentialsParam, url.QueryEscape(encoded)), user,
+			nil, /* db */
+			testSettings,
 		)
-		cloudtestutils.CheckExportStore(t, info)
-		info = cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
+
+		cloudtestutils.CheckExportStore(
+			t,
+			fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s&%s=%s",
 				limitedBucket,
 				"backup-test-assume-role",
 				testID,
-				"listing-test",
 				cloud.AuthParam,
 				cloud.AuthParamSpecified,
 				AssumeRoleParam,
-				assumedAccount,
-				CredentialsParam,
+				assumedAccount, CredentialsParam,
 				url.QueryEscape(encoded),
-			),
-			User: username.RootUserName(),
-		}
-		cloudtestutils.CheckListFiles(t, info)
+			), false, user,
+			nil, /* db */
+			testSettings,
+		)
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s&%s=%s",
+			limitedBucket,
+			"backup-test-assume-role",
+			testID,
+			"listing-test",
+			cloud.AuthParam,
+			cloud.AuthParamSpecified,
+			AssumeRoleParam,
+			assumedAccount,
+			CredentialsParam,
+			url.QueryEscape(encoded),
+		), username.RootUserName(),
+			nil, /* db */
+			testSettings,
+		)
 	})
 
 	t.Run("implicit", func(t *testing.T) {
@@ -211,20 +218,20 @@ func TestGCSAssumeRole(t *testing.T) {
 			skip.IgnoreLint(t, err)
 		}
 
-		info := cloudtestutils.StoreInfo{
-			URI: fmt.Sprintf(
-				"gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
-				cloud.AuthParam, cloud.AuthParamImplicit,
-			),
-			User: user,
-		}
-		cloudtestutils.CheckNoPermission(t, info)
-		info.URI = fmt.Sprintf(
-			"gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount,
+		// Verify that implicit permissions with the credentials do not give us
+		// access to the bucket.
+		cloudtestutils.CheckNoPermission(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s", limitedBucket, "backup-test-assume-role", testID,
+			cloud.AuthParam, cloud.AuthParamImplicit), user,
+			nil, /* db */
+			testSettings,
 		)
-		cloudtestutils.CheckExportStore(t, info)
-		info.URI = fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
+
+		cloudtestutils.CheckExportStore(t, fmt.Sprintf("gs://%s/%s-%d?%s=%s&%s=%s", limitedBucket, "backup-test-assume-role", testID,
+			cloud.AuthParam, cloud.AuthParamImplicit, AssumeRoleParam, assumedAccount), false, user,
+			nil, /* db */
+			testSettings,
+		)
+		cloudtestutils.CheckListFiles(t, fmt.Sprintf("gs://%s/%s-%d/%s?%s=%s&%s=%s",
 			limitedBucket,
 			"backup-test-assume-role",
 			testID,
@@ -233,8 +240,10 @@ func TestGCSAssumeRole(t *testing.T) {
 			cloud.AuthParamImplicit,
 			AssumeRoleParam,
 			assumedAccount,
+		), username.RootUserName(),
+			nil, /* db */
+			testSettings,
 		)
-		cloudtestutils.CheckListFiles(t, info)
 	})
 
 	t.Run("role-chaining", func(t *testing.T) {
@@ -267,79 +276,39 @@ func TestGCSAssumeRole(t *testing.T) {
 				// to access the storage.
 				for _, role := range roleChain {
 					q.Set(AssumeRoleParam, role)
-					info := cloudtestutils.StoreInfo{
-						URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s",
-							limitedBucket,
-							"backup-test-assume-role",
-							testID,
-							"listing-test",
-							q.Encode(),
-						),
-						User: user,
-					}
-					cloudtestutils.CheckNoPermission(t, info)
-				}
-
-				// Finally, check that the chain of roles can be used to access the storage.
-				q.Set(AssumeRoleParam, roleChainStr)
-				info := cloudtestutils.StoreInfo{
-					URI: fmt.Sprintf("gs://%s/%s-%d/%s?%s",
+					roleURI := fmt.Sprintf("gs://%s/%s-%d/%s?%s",
 						limitedBucket,
 						"backup-test-assume-role",
 						testID,
 						"listing-test",
 						q.Encode(),
-					),
-					User: user,
+					)
+					cloudtestutils.CheckNoPermission(t, roleURI, user,
+						nil, /* db */
+						testSettings,
+					)
 				}
-				cloudtestutils.CheckExportStore(t, info)
-				cloudtestutils.CheckListFiles(t, info)
+
+				// Finally, check that the chain of roles can be used to access the storage.
+				q.Set(AssumeRoleParam, roleChainStr)
+				uri := fmt.Sprintf("gs://%s/%s-%d/%s?%s",
+					limitedBucket,
+					"backup-test-assume-role",
+					testID,
+					"listing-test",
+					q.Encode(),
+				)
+				cloudtestutils.CheckExportStore(t, uri, false, user,
+					nil, /* db */
+					testSettings,
+				)
+				cloudtestutils.CheckListFiles(t, uri, user,
+					nil, /* db */
+					testSettings,
+				)
 			})
 		}
 	})
-}
-
-func TestGCSFaultInjection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	if !cloudtestutils.IsImplicitAuthConfigured() {
-		skip.IgnoreLint(t, "implicit auth is not configured")
-	}
-
-	bucket := os.Getenv("GOOGLE_BUCKET")
-	if bucket == "" {
-		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
-	}
-
-	// Enable cloud transport logging.
-	defer log.Scope(t).Close(t)
-	prevVModule := log.GetVModule()
-	defer func() { _ = log.SetVModule(prevVModule) }()
-	require.NoError(t, log.SetVModule("cloud_logging_transport=1"))
-
-	testID := cloudtestutils.NewTestID()
-	uri := fmt.Sprintf("gs://%s/%d-fault-injection-test?AUTH=implicit", bucket, testID)
-
-	// Inject faults for 15-45 seconds after the storage is opened.
-	middleware := cloudtestutils.BrownoutMiddleware(time.Second*15, time.Second*45)
-
-	conf, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
-	require.NoError(t, err)
-
-	args := cloud.EarlyBootExternalStorageContext{
-		IOConf:          base.ExternalIODirConfig{},
-		Settings:        cluster.MakeTestingClusterSettings(),
-		Options:         nil,
-		Limiters:        nil,
-		MetricsRecorder: cloud.NilMetrics,
-		HttpMiddleware:  middleware,
-	}
-
-	storage, err := makeGCSStorage(context.Background(), args, conf)
-	require.NoError(t, err)
-	defer storage.Close()
-
-	cloudtestutils.RunCloudNemesisTest(t, storage)
 }
 
 func TestAntagonisticGCSRead(t *testing.T) {

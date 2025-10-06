@@ -7,7 +7,6 @@ package cli
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"os"
 	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/errors/oserror"
 	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,9 +98,6 @@ func setupZipDir(t *testing.T, inputs zipUploadTestContents) (string, func()) {
 			require.NoError(t, err)
 			require.NoError(t, file.Close())
 		}
-
-		// setup table dumps - copy the test table dumps to the debug directory
-		copyZipFiles(t, "testdata/table_dumps/", debugDir)
 	}
 
 	return debugDir, func() {
@@ -114,8 +108,8 @@ func setupZipDir(t *testing.T, inputs zipUploadTestContents) (string, func()) {
 func TestUploadZipEndToEnd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
-		return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	defer testutils.TestingHook(&newUploadID, func(string) string {
+		return "123"
 	})()
 	defer testutils.TestingHook(&newRandStr, func(l int, n bool) string {
 		if n {
@@ -125,21 +119,9 @@ func TestUploadZipEndToEnd(t *testing.T) {
 	})()
 
 	origConc := debugZipUploadOpts.maxConcurrentUploads
-	debugZipUploadOpts.maxConcurrentUploads = 1
+	debugZipUploadOpts.maxConcurrentUploads = 2
 	defer func() {
 		debugZipUploadOpts.maxConcurrentUploads = origConc
-	}()
-
-	// the test debug dir will only contain two test table dumps. So, keep only
-	// those two in this list to avoid unnecessary errors
-	origTableDumps := clusterWideTableDumps
-	clusterWideTableDumps = map[string]columnParserMap{
-		"system.namespace.txt":            {},
-		"crdb_internal.system_jobs.txt":   origTableDumps["crdb_internal.system_jobs.txt"],
-		"crdb_internal.cluster_locks.txt": origTableDumps["crdb_internal.cluster_locks.txt"],
-	}
-	defer func() {
-		clusterWideTableDumps = origTableDumps
 	}()
 
 	defer testutils.TestingHook(&doUploadReq,
@@ -147,13 +129,10 @@ func TestUploadZipEndToEnd(t *testing.T) {
 			defer req.Body.Close()
 
 			switch req.URL.Path {
-			case "/api/v2/profile":
+			case "/v1/input":
 				return uploadProfileHook(t, req)
 			case "/api/v2/logs/config/archives":
 				return setupDDArchiveHook(t, req)
-			case "/api/v2/logs":
-				return setupDDLogsHook(t, req)
-
 			default:
 				return nil, fmt.Errorf(
 					"unexpected request is being made to datadog: %s", req.URL.Path,
@@ -162,12 +141,7 @@ func TestUploadZipEndToEnd(t *testing.T) {
 		},
 	)()
 
-	defer testutils.TestingHook(&gcsLogUpload, writeLogsToGCSHook)()
-
-	// Mock the interactive prompt to always accept (return nil) for end-to-end tests
-	defer testutils.TestingHook(&promptUserForConfirmation, func(warningMsg string) error {
-		return nil // Always accept in end-to-end tests
-	})()
+	defer testutils.TestingHook(&writeLogsToGCS, writeLogsToGCSHook)()
 
 	datadriven.Walk(t, "testdata/upload", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -177,14 +151,8 @@ func TestUploadZipEndToEnd(t *testing.T) {
 
 			var finaloutput bytes.Buffer
 
-			// interpolate all the {{now}} placeholders with the current time
-			input := bytes.ReplaceAll(
-				[]byte(d.Input), []byte("{{now}}"),
-				[]byte(time.Now().Format("060102 15:04:05.000000")),
-			)
-
 			var testInput zipUploadTestContents
-			require.NoError(t, json.Unmarshal(input, &testInput))
+			require.NoError(t, json.Unmarshal([]byte(d.Input), &testInput))
 
 			var tags string
 			if d.HasArg("tags") {
@@ -211,15 +179,7 @@ func TestUploadZipEndToEnd(t *testing.T) {
 					d.ScanArgs(t, "log-format", &logFormat)
 					includeFlag = fmt.Sprintf("%s --log-format=%s", includeFlag, logFormat)
 				}
-			case "upload-tables":
-				includeFlag = "--include=tables"
-			case "upload-misc":
-				includeFlag = "--include=misc"
 			}
-
-			defer testutils.TestingHook(&getCurrentTime, func() time.Time {
-				return time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
-			})()
 
 			debugDir, cleanup := setupZipDir(t, testInput)
 			defer cleanup()
@@ -290,127 +250,6 @@ func TestAppendUserTags(t *testing.T) {
 	}
 }
 
-func TestValidateRedactionStatus(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	tests := []struct {
-		name          string
-		flagsContent  string
-		fileExists    bool
-		dryRun        bool
-		expectError   bool
-		errorContains string
-		description   string
-	}{
-		{
-			name:         "redacted zip with other flags proceeds silently",
-			flagsContent: " --concurrency=15 --cpu-profile-duration=5s --files-from=2025-06-15 08:45:34 --redact=true --include-range-info=true",
-			fileExists:   true,
-			dryRun:       false,
-			expectError:  false,
-			description:  "When --redact=true is found, no warnings should be shown and upload proceeds",
-		},
-		{
-			name:          "missing file user declines",
-			flagsContent:  "",
-			fileExists:    false,
-			dryRun:        false,
-			expectError:   true,
-			errorContains: "upload aborted",
-			description:   "When file is missing and user declines, should return cancellation error",
-		},
-		{
-			name:          "missing file user accepts",
-			flagsContent:  "",
-			fileExists:    false,
-			dryRun:        false,
-			expectError:   false,
-			errorContains: "user accepts",
-			description:   "When file is missing and user accepts, should proceed without error",
-		},
-		{
-			name:          "unredacted zip user declines",
-			flagsContent:  " --concurrency=1 --redact=false --nodes=1",
-			fileExists:    true,
-			dryRun:        false,
-			expectError:   true,
-			errorContains: "upload aborted",
-			description:   "When --redact=false and user declines, should return cancellation error",
-		},
-		{
-			name:          "unredacted zip user accepts",
-			flagsContent:  " --concurrency=1 --redact=false --nodes=1",
-			fileExists:    true,
-			dryRun:        false,
-			expectError:   false,
-			errorContains: "user accepts",
-			description:   "When --redact=false and user accepts, should proceed without error",
-		},
-		{
-			name:          "unclear redaction status user declines",
-			flagsContent:  " --concurrency=1 --nodes=1",
-			fileExists:    true,
-			dryRun:        false,
-			expectError:   true,
-			errorContains: "upload aborted",
-			description:   "When no --redact flag and user declines, should return cancellation error",
-		},
-		{
-			name:          "unclear redaction status user accepts",
-			flagsContent:  " --concurrency=1 --nodes=1",
-			fileExists:    true,
-			dryRun:        false,
-			expectError:   false,
-			errorContains: "user accepts",
-			description:   "When no --redact flag and user accepts, should proceed without error",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-
-			if test.fileExists {
-				flagsFile := path.Join(tempDir, debugZipCommandFlagsFileName)
-				if err := os.WriteFile(flagsFile, []byte(test.flagsContent), 0644); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			originalDryRun := debugZipUploadOpts.dryRun
-			debugZipUploadOpts.dryRun = test.dryRun
-			defer func() { debugZipUploadOpts.dryRun = originalDryRun }()
-
-			if test.errorContains == "upload aborted" || test.errorContains == "user accepts" {
-				originalPrompt := promptUserForConfirmation
-				switch test.errorContains {
-				case "upload aborted":
-					promptUserForConfirmation = func(warningMsg string) error {
-						require.Contains(t, warningMsg, "WARNING:")
-						return fmt.Errorf("upload aborted")
-					}
-				case "user accepts":
-					promptUserForConfirmation = func(warningMsg string) error {
-						require.Contains(t, warningMsg, "WARNING:")
-						return nil
-					}
-				}
-				defer func() { promptUserForConfirmation = originalPrompt }()
-			}
-
-			// Test validation
-			err := validateRedactionStatus(tempDir)
-
-			if test.expectError {
-				require.Error(t, err, fmt.Sprintf("Test case: %s", test.description))
-				require.Contains(t, err.Error(), test.errorContains, fmt.Sprintf("Test case: %s", test.description))
-			} else {
-				require.NoError(t, err, fmt.Sprintf("Test case: %s", test.description))
-			}
-		})
-	}
-}
-
 func TestZipUploadArtifactTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -476,94 +315,27 @@ func setupDDArchiveHook(t *testing.T, req *http.Request) ([]byte, error) {
 	t.Helper()
 
 	// validate the headers
-	require.Equal(t, "dd-api-key", req.Header.Get(datadogAPIKeyHeader))
-	require.Equal(t, "dd-app-key", req.Header.Get(datadogAppKeyHeader))
+	require.Equal(t, "dd-api-key", req.Header.Get("DD-API-KEY"))
+	require.Equal(t, "dd-app-key", req.Header.Get("DD-APPLICATION-KEY"))
 
 	var body bytes.Buffer
 	_, err := body.ReadFrom(req.Body)
 	require.NoError(t, err)
 
-	// print the request body and the URL so that it gets captured as a part of
+	// print the request bidy so that it gets captured as a part of
 	// RunWithCapture
-	fmt.Println("Create DD Archive:", req.URL)
-	fmt.Println("Create DD Archive:", body.String())
+	fmt.Println(body.String())
 	return []byte("200 OK"), nil
 }
 
-func setupDDLogsHook(t *testing.T, req *http.Request) ([]byte, error) {
-	t.Helper()
-	printLock.Lock()
-	defer printLock.Unlock()
-
-	// validate the headers
-	require.Equal(t, "dd-api-key", req.Header.Get(datadogAPIKeyHeader))
-	require.Equal(t, "", req.Header.Get(datadogAppKeyHeader))
-
-	var body bytes.Buffer
-	gzipReader, err := gzip.NewReader(req.Body)
-	if err != nil {
-		return nil, err
-	}
-	defer gzipReader.Close()
-
-	_, err = body.ReadFrom(gzipReader)
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Println("Logs API Hook:", req.URL)
-
-	// capture body contents for the log upload use case
-	if bytes.Contains(body.Bytes(), []byte("source:cockroachdb")) {
-		// remove timestamp from the logs to make the test deterministic
-		var lines []ddLogsAPIEntry
-		if err := json.Unmarshal(body.Bytes(), &lines); err != nil {
-			return nil, err
-		}
-
-		for _, line := range lines {
-			line.Timestamp = 0
-			raw, err := json.Marshal(line)
-			if err != nil {
-				return nil, err
-			}
-
-			fmt.Println("Logs API Hook:", string(raw))
-		}
-	} else if bytes.Contains(body.Bytes(), []byte("source:debug-zip")) {
-		// capture the body contents for the table dump upload use case
-		var lines []map[string]any
-		require.NoError(t, json.Unmarshal(body.Bytes(), &lines))
-
-		for _, parsedLine := range lines {
-			// sort the keys to make the test deterministic
-			keys := make([]string, 0, len(lines))
-			for k := range parsedLine {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-
-			fmt.Print("Logs API Hook: ")
-			for _, k := range keys {
-				fmt.Printf("%s=%v\t", k, parsedLine[k])
-			}
-			fmt.Println()
-		}
-	} else {
-		fmt.Printf("body: %s\n", body.String())
-	}
-
-	return []byte("200 OK"), nil
-}
-
-func writeLogsToGCSHook(ctx context.Context, sig logUploadSig) (int, error) {
+func writeLogsToGCSHook(ctx context.Context, sig logUploadSig) error {
 	out := strings.Builder{}
 	out.WriteString(fmt.Sprintf("%s:\n", sig.key))
-	out.WriteString(fmt.Sprintf("%s\n", string(bytes.Join(sig.logLines, []byte("\n")))))
+	out.WriteString(fmt.Sprintf("%s\n", string(sig.data)))
 
 	// print the logs so that it gets captured as a part of RunWithCapture
-	fmt.Println("GCS Upload:", out.String())
-	return out.Len(), nil
+	fmt.Println(out.String())
+	return nil
 }
 
 func TestLogEntryToJSON(t *testing.T) {
@@ -581,7 +353,7 @@ func TestLogEntryToJSON(t *testing.T) {
 		Channel:  logpb.Channel_STORAGE,
 		Time:     time.Date(2024, time.August, 2, 0, 0, 0, 0, time.UTC).UnixNano(),
 		Message:  "something happend",
-	}, []string{}, logUploadTypeGCS)
+	}, []string{})
 	require.NoError(t, err)
 
 	t.Log(string(raw))
@@ -591,7 +363,7 @@ func TestLogEntryToJSON(t *testing.T) {
 		Channel:  logpb.Channel_STORAGE,
 		Time:     time.Date(2024, time.August, 2, 0, 0, 0, 0, time.UTC).UnixNano(),
 		Message:  `{"foo": "bar"}`,
-	}, []string{}, logUploadTypeDatadog)
+	}, []string{})
 	require.NoError(t, err)
 
 	t.Log(string(raw))
@@ -615,116 +387,5 @@ func TestHumanReadableSize(t *testing.T) {
 
 	for _, tc := range tt {
 		assert.Equal(t, tc.expected, humanReadableSize(tc.size))
-	}
-}
-
-func TestGetUploadType(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	// this test is just to ensure that we dont have regressions in the future
-	// WRT the upload type selection logic and the threshold. The actual logic is
-	// tested in the end-to-end tests.
-
-	recentTS := time.Now()
-	oldTS := time.Now().Add(time.Hour * -72)
-
-	tt := []struct {
-		name     string
-		ts       time.Time
-		expected logUploadType
-	}{
-		{name: "datadog", ts: recentTS, expected: logUploadTypeDatadog},
-		{name: "gcs", ts: oldTS, expected: logUploadTypeGCS},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.expected, getUploadType(tc.ts))
-		})
-	}
-}
-
-func TestLogUploadSigSplit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	makeSig := func(start, noOfLines int) logUploadSig {
-		var logLines [][]byte
-		for i := start; i < start+noOfLines; i++ {
-			logLines = append(logLines, []byte(fmt.Sprintf("%d", i)))
-		}
-
-		return logUploadSig{logLines: logLines}
-	}
-
-	tt := []struct {
-		name             string
-		input            logUploadSig
-		expectedSigCount int
-	}{
-		{
-			name:             "no lines",
-			input:            makeSig(1, 0),
-			expectedSigCount: 1,
-		},
-		{
-			name:             "within the limit",
-			input:            makeSig(1, 800),
-			expectedSigCount: 1,
-		},
-		{
-			name:             "exceeds the limit once",
-			input:            makeSig(1, 1400),
-			expectedSigCount: 2,
-		},
-		{
-			name:             "exceeds the limit twice",
-			input:            makeSig(1, 2800),
-			expectedSigCount: 3,
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			splits := tc.input.split()
-			require.Len(t, splits, tc.expectedSigCount)
-
-			for i, split := range splits {
-				for j, line := range split.logLines {
-					// The content of the line is the original index when the sig was
-					// created. So, we can use this to validate the consistency of the
-					// split operation. This assertion will account for exectly what is
-					// expected in each line of each split. Nothing more, nothing less.
-					require.Equal(t, strconv.Itoa((i*datadogMaxLogLinesPerReq)+j+1), string(line))
-				}
-			}
-		})
-	}
-}
-
-func copyZipFiles(t *testing.T, src, dest string) {
-	t.Helper()
-
-	paths, err := expandPatterns([]string{
-		path.Join(src, "*.txt"),
-		path.Join(src, "nodes/*/*.txt"),
-		path.Join(src, "*.json"),
-		path.Join(src, "reports/*.json"),
-	})
-	require.NoError(t, err)
-
-	for _, p := range paths {
-		destPath := path.Join(dest, strings.TrimPrefix(p, src))
-
-		if err := os.MkdirAll(path.Dir(destPath), 0744); err != nil && !oserror.IsExist(err) {
-			require.FailNow(t, "failed to create directory:", err)
-		}
-
-		destFile, err := os.Create(destPath)
-		require.NoError(t, err)
-
-		srcFile, err := os.Open(p)
-		require.NoError(t, err)
-
-		_, err = io.Copy(destFile, srcFile)
-		require.NoError(t, err)
 	}
 }

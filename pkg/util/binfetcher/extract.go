@@ -81,7 +81,7 @@ func unzip(r io.Reader, destFile *os.File, binary string) error {
 		if err != nil {
 			return err
 		}
-		defer rc.Close() //nolint:deferloop (this happens at most once).
+		defer rc.Close()
 		if _, err := io.Copy(destFile, rc); err != nil {
 			return err
 		}

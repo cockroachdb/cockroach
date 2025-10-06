@@ -109,7 +109,7 @@ func TestDecommission(t *testing.T) {
 	// off from the five-fold replicated system ranges.
 	requireOnlyAtomicChanges(t, runner, tc.LookupRangeOrFatal(t, k).RangeID, triplicated, ts)
 
-	sqlutils.SetZoneConfig(t, runner, "RANGE default", "num_replicas = 1")
+	sqlutils.SetZoneConfig(t, runner, "RANGE default", "num_replicas: 1")
 
 	const single = 1
 

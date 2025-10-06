@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !windows
+// +build !windows
 
 package cli
 
@@ -64,7 +65,7 @@ func handleSignalDuringShutdown(sig os.Signal) {
 		// run CockroachDB in containers that only support
 		// a subset of all syscalls. If this ever happens, we
 		// still need to quit immediately.
-		log.Dev.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
+		log.Fatalf(context.Background(), "unable to forward signal %v: %v", sig, err)
 	}
 
 	// Block while we wait for the signal to be delivered.

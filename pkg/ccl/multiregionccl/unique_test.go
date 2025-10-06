@@ -100,7 +100,7 @@ CREATE TABLE u (
 		require.Equal(t, 1, len(primaryIndexEntry))
 		secondaryIndexEntry, err := rowenc.EncodeSecondaryIndex(
 			context.Background(), keys.SystemSQLCodec, tableDesc, secondaryIndex,
-			colIDtoRowIndex, values, rowenc.EmptyVectorIndexEncodingHelper, true, /* includeEmpty */
+			colIDtoRowIndex, values, true, /* includeEmpty */
 		)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(secondaryIndexEntry))
@@ -150,10 +150,8 @@ CREATE TABLE u (
 		r.Exec(t, `SELECT crdb_internal.revalidate_unique_constraint('u', 'u_v_key')`)
 
 		// Clean up.
-		r.Exec(t, `ALTER TABLE test.t SET (schema_locked=false)`)
-		r.Exec(t, `TRUNCATE test.t`)
-		r.Exec(t, `ALTER TABLE test.t SET (schema_locked=true)`)
-
+		_, err = db.Exec(`TRUNCATE test.t`)
+		require.NoError(t, err)
 	})
 
 	t.Run("validate_implicitly_partitioned_primary_index", func(t *testing.T) {
@@ -194,9 +192,8 @@ CREATE TABLE u (
 		r.Exec(t, `SELECT crdb_internal.revalidate_unique_constraint('u', 'u_v_key')`)
 
 		// Clean up.
-		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=false)`)
-		r.Exec(t, `TRUNCATE test.u`)
-		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=true)`)
+		_, err = db.Exec(`TRUNCATE test.u`)
+		require.NoError(t, err)
 	})
 
 	t.Run("validate_implicitly_partitioned_secondary_index", func(t *testing.T) {
@@ -237,9 +234,8 @@ CREATE TABLE u (
 		r.Exec(t, `SELECT crdb_internal.revalidate_unique_constraint('u', 'u_pkey')`)
 
 		// Clean up.
-		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=false)`)
-		r.Exec(t, `TRUNCATE test.u`)
-		r.Exec(t, `ALTER TABLE test.u SET (schema_locked=true)`)
+		_, err = db.Exec(`TRUNCATE test.u`)
+		require.NoError(t, err)
 	})
 
 }

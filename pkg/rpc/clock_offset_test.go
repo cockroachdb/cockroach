@@ -8,21 +8,15 @@ package rpc
 import (
 	"context"
 	"math"
-	"sort"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/montanaflynn/stats"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +40,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.Now().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(context.Background(), key, offset1, latency, rpcbase.DefaultClass)
+	monitor.UpdateOffset(context.Background(), key, offset1, latency, DefaultClass)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %d to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -61,7 +55,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 20,
 		MeasuredAt:  monitor.clock.Now().Add(-(monitor.offsetTTL + 1)).UnixNano(),
 	}
-	monitor.UpdateOffset(context.Background(), key, offset2, latency, rpcbase.DefaultClass)
+	monitor.UpdateOffset(context.Background(), key, offset2, latency, DefaultClass)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %d to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -76,7 +70,7 @@ func TestUpdateOffset(t *testing.T) {
 		Uncertainty: 10,
 		MeasuredAt:  offset2.MeasuredAt + 1,
 	}
-	monitor.UpdateOffset(context.Background(), key, offset3, latency, rpcbase.DefaultClass)
+	monitor.UpdateOffset(context.Background(), key, offset3, latency, DefaultClass)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %d to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -86,7 +80,7 @@ func TestUpdateOffset(t *testing.T) {
 	monitor.mu.Unlock()
 
 	// Larger error and offset3 is not stale, so no update.
-	monitor.UpdateOffset(context.Background(), key, offset2, latency, rpcbase.DefaultClass)
+	monitor.UpdateOffset(context.Background(), key, offset2, latency, DefaultClass)
 	monitor.mu.Lock()
 	if o, ok := monitor.mu.offsets[key]; !ok {
 		t.Errorf("expected key %d to be set in %v, but it was not", key, monitor.mu.offsets)
@@ -186,12 +180,6 @@ func TestClockOffsetMetrics(t *testing.T) {
 	if a, e := monitor.Metrics().ClockOffsetStdDevNanos.Value(), int64(7); a != e {
 		t.Errorf("stdDev %d != expected %d", a, e)
 	}
-	if a, e := monitor.Metrics().ClockOffsetMedianNanos.Value(), int64(13); a != e {
-		t.Errorf("median %d != expected %d", a, e)
-	}
-	if a, e := monitor.Metrics().ClockOffsetMedianAbsDevNanos.Value(), int64(7); a != e {
-		t.Errorf("MAD %d != expected %d", a, e)
-	}
 }
 
 // TestLatencies tests the tracking of round-trip latency between nodes.
@@ -207,7 +195,7 @@ func TestLatencies(t *testing.T) {
 	// comment on the WARMUP_SAMPLES const in the ewma package for details.
 	const emptyKey = 1
 	for i := 0; i < 11; i++ {
-		monitor.UpdateOffset(context.Background(), emptyKey, RemoteOffset{}, 0, rpcbase.DefaultClass)
+		monitor.UpdateOffset(context.Background(), emptyKey, RemoteOffset{}, 0, DefaultClass)
 	}
 	if l, ok := monitor.mu.latencyInfos[emptyKey]; ok {
 		t.Errorf("expected no latency measurement for %q, got %v", emptyKey, l.avgNanos.Value())
@@ -231,7 +219,7 @@ func TestLatencies(t *testing.T) {
 		// Start counting from node 1 since a 0 node id is special cased.
 		key := roachpb.NodeID(i + 1)
 		for _, measurement := range tc.measurements {
-			monitor.UpdateOffset(context.Background(), key, RemoteOffset{}, measurement, rpcbase.DefaultClass)
+			monitor.UpdateOffset(context.Background(), key, RemoteOffset{}, measurement, DefaultClass)
 		}
 		if val, ok := monitor.Latency(key); !ok || val != tc.expectedAvg {
 			t.Errorf("%q: expected latency %d, got %d", key, tc.expectedAvg, val)
@@ -265,97 +253,6 @@ func TestResettingMaxTrigger(t *testing.T) {
 	}
 }
 
-// TestStatsFuncs tests our descriptive stats functions against the stats
-// package.
-func TestStatsFuncs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	rng, _ := randutil.NewTestRand()
-	size := rng.Intn(1000) + 1
-	data := make(stats.Float64Data, size)
-	for i := range size {
-		neg := 1
-		if rng.Float64() > 0.5 {
-			neg = -1
-		}
-		data[i] = float64(neg) * float64(rng.Int63())
-	}
-
-	// TODO(ssd): You'll note differences between whether the test compares
-	// operations on the unsorted data or the sorted data. This is to avoid
-	// failures caused by floating point error. I had hoped to always compare the
-	// unsorted data passed to the reference implementation with the sorted data
-	// passed to our implementation. But even the floatWithinReasonableTolerance
-	// function below, with enough operations the non-associativity of floating
-	// point arithmetic really seems to accumulate.
-	sortedData := make(stats.Float64Data, size)
-	copy(sortedData, data)
-	sort.Float64s(sortedData)
-
-	mean, err := sortedData.Mean()
-	require.NoError(t, err)
-
-	floatWithinReasonableTolerance := func(t *testing.T, expected, actual float64) {
-		const tolerance = 0.0001
-		withinTolerance := cmp.Equal(expected, actual, cmpopts.EquateApprox(tolerance, 0))
-		if !withinTolerance {
-			t.Errorf("values outside tolerance\n  %f (expected)\n  %f (actual)\n  %f (tolerance)", expected, actual, tolerance)
-		}
-	}
-
-	t.Run("StandardDeviationPopulationKnownMean", func(t *testing.T) {
-		ourStdDev := StandardDeviationPopulationKnownMean(data, mean)
-		theirStdDev, err := stats.StandardDeviation(data)
-		require.NoError(t, err)
-		floatWithinReasonableTolerance(t, theirStdDev, ourStdDev)
-	})
-
-	t.Run("MedianSortedInput", func(t *testing.T) {
-		ourMedian := MedianSortedInput(sortedData)
-		theirMedian, err := stats.Median(data)
-		require.NoError(t, err)
-		floatWithinReasonableTolerance(t, theirMedian, ourMedian)
-	})
-
-	t.Run("PopulationVarianceKnownMean", func(t *testing.T) {
-		ourVar := PopulationVarianceKnownMean(sortedData, mean)
-		theirVar, err := stats.PopulationVariance(sortedData)
-		require.NoError(t, err)
-		floatWithinReasonableTolerance(t, theirVar, ourVar)
-	})
-
-	t.Run("MedianAbsoluteDeviationPopulationSortedInput", func(t *testing.T) {
-		ourMedAbsDev := MedianAbsoluteDeviationPopulationSortedInput(sortedData)
-		theirMedianAbsDev, err := stats.MedianAbsoluteDeviationPopulation(data)
-		require.NoError(t, err)
-		floatWithinReasonableTolerance(t, theirMedianAbsDev, ourMedAbsDev)
-	})
-}
-
-func BenchmarkVerifyClockOffset(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-
-	clock := timeutil.NewManualTime(timeutil.Unix(0, 123))
-	maxOffset := 50 * time.Nanosecond
-	monitor := newRemoteClockMonitor(clock, maxOffset, time.Hour, 0)
-	rng, _ := randutil.NewTestRand()
-
-	offsetCount := 1000
-	monitor.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
-	for i := range offsetCount {
-		neg := int64(1)
-		if rng.Float64() > 0.5 {
-			neg = -1
-		}
-		offset := neg * int64(rng.Float64()*float64(maxOffset))
-		monitor.mu.offsets[roachpb.NodeID(i)] = RemoteOffset{Offset: offset}
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		require.NoError(b, monitor.VerifyClockOffset(context.Background()))
-	}
-}
-
 // TestRoundTripLatencyClasses tests that UpdateOffset correctly records metrics
 // for different RPC classes. It calls UpdateOffset multiple times with each of
 // the 4 different class types and asserts that the metrics are reporting the
@@ -373,21 +270,21 @@ func TestRoundTripLatencyClasses(t *testing.T) {
 	// Generate test cases for all RPC classes dynamically
 	var testCases []struct {
 		name      string
-		rpcClass  rpcbase.ConnectionClass
+		rpcClass  ConnectionClass
 		metricKey string
 	}
 
-	for i := 0; i < rpcbase.NumConnectionClasses; i++ {
-		rpcClass := rpcbase.ConnectionClass(i)
+	for i := 0; i < NumConnectionClasses; i++ {
+		rpcClass := ConnectionClass(i)
 		var metricKey string
 		switch rpcClass {
-		case rpcbase.DefaultClass:
+		case DefaultClass:
 			metricKey = "round-trip-default-class-latency"
-		case rpcbase.SystemClass:
+		case SystemClass:
 			metricKey = "round-trip-system-class-latency"
-		case rpcbase.RangefeedClass:
+		case RangefeedClass:
 			metricKey = "round-trip-rangefeed-class-latency"
-		case rpcbase.RaftClass:
+		case RaftClass:
 			metricKey = "round-trip-raft-class-latency"
 		default:
 			// Note: if we add more RPC classes, this test will fail to indicate that
@@ -397,7 +294,7 @@ func TestRoundTripLatencyClasses(t *testing.T) {
 
 		testCases = append(testCases, struct {
 			name      string
-			rpcClass  rpcbase.ConnectionClass
+			rpcClass  ConnectionClass
 			metricKey string
 		}{
 			name:      rpcClass.String(),
@@ -421,13 +318,13 @@ func TestRoundTripLatencyClasses(t *testing.T) {
 			// Verify that the class-specific metric was updated
 			var classMetric metric.IHistogram
 			switch tc.rpcClass {
-			case rpcbase.DefaultClass:
+			case DefaultClass:
 				classMetric = monitor.Metrics().RoundTripDefaultClassLatency
-			case rpcbase.SystemClass:
+			case SystemClass:
 				classMetric = monitor.Metrics().RoundTripSystemClassLatency
-			case rpcbase.RangefeedClass:
+			case RangefeedClass:
 				classMetric = monitor.Metrics().RoundTripRangefeedClassLatency
-			case rpcbase.RaftClass:
+			case RaftClass:
 				classMetric = monitor.Metrics().RoundTripRaftClassLatency
 			default:
 				t.Fatalf("unknown RPC class: %v", tc.rpcClass)

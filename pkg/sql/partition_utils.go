@@ -18,13 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// partitionKey is used to group a partition's name and its index ID for
-// indexing into a map.
-type partitionKey struct {
-	indexID descpb.IndexID
-	name    string
-}
-
 // GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
 // zone config spans to subzones for use in the SubzoneSpans field of
 // zonepb.ZoneConfig. SubzoneSpans controls which splits are created, so only
@@ -83,11 +76,10 @@ func GenerateSubzoneSpans(
 	a := &tree.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
-	subzoneIndexByPartition := make(map[partitionKey]int32)
+	subzoneIndexByPartition := make(map[string]int32)
 	for i, subzone := range subzones {
 		if len(subzone.PartitionName) > 0 {
-			partKey := partitionKey{indexID: descpb.IndexID(subzone.IndexID), name: subzone.PartitionName}
-			subzoneIndexByPartition[partKey] = int32(i)
+			subzoneIndexByPartition[subzone.PartitionName] = int32(i)
 		} else {
 			subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)] = int32(i)
 		}
@@ -148,8 +140,7 @@ func GenerateSubzoneSpans(
 		}
 		var ok bool
 		if subzone := payloads[0].(zonepb.Subzone); len(subzone.PartitionName) > 0 {
-			partKey := partitionKey{indexID: descpb.IndexID(subzone.IndexID), name: subzone.PartitionName}
-			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[partKey]
+			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[subzone.PartitionName]
 		} else {
 			subzoneSpan.SubzoneIndex, ok = subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)]
 		}
@@ -174,7 +165,7 @@ func indexCoveringsForPartitioning(
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
 	part catalog.Partitioning,
-	relevantPartitions map[partitionKey]int32,
+	relevantPartitions map[string]int32,
 	prefixDatums []tree.Datum,
 ) ([]covering.Covering, error) {
 	if part.NumColumns() == 0 {
@@ -200,11 +191,10 @@ func indexCoveringsForPartitioning(
 				if err != nil {
 					return err
 				}
-				partKey := partitionKey{indexID: idx.GetID(), name: name}
-				if _, ok := relevantPartitions[partKey]; ok {
+				if _, ok := relevantPartitions[name]; ok {
 					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], covering.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
-						Payload: zonepb.Subzone{IndexID: uint32(idx.GetID()), PartitionName: name},
+						Payload: zonepb.Subzone{PartitionName: name},
 					})
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
@@ -229,8 +219,7 @@ func indexCoveringsForPartitioning(
 
 	if part.NumRanges() > 0 {
 		err := part.ForEachRange(func(name string, from, to []byte) error {
-			partKey := partitionKey{indexID: idx.GetID(), name: name}
-			if _, ok := relevantPartitions[partKey]; !ok {
+			if _, ok := relevantPartitions[name]; !ok {
 				return nil
 			}
 			_, fromKey, err := rowenc.DecodePartitionTuple(
@@ -243,10 +232,10 @@ func indexCoveringsForPartitioning(
 			if err != nil {
 				return err
 			}
-			if _, ok := relevantPartitions[partKey]; ok {
+			if _, ok := relevantPartitions[name]; ok {
 				coverings = append(coverings, covering.Covering{{
 					Start: fromKey, End: toKey,
-					Payload: zonepb.Subzone{IndexID: uint32(idx.GetID()), PartitionName: name},
+					Payload: zonepb.Subzone{PartitionName: name},
 				}})
 			}
 			return nil

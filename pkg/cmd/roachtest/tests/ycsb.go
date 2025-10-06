@@ -75,10 +75,10 @@ func registerYCSB(r registry.Registry) {
 		require.NoError(t, db.Close())
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			var args string
-			args += " --ramp=" + roachtestutil.IfLocal(c, "0s", "2m")
+			args += " --ramp=" + ifLocal(c, "0s", "2m")
 			if opts.readCommitted {
 				args += " --isolation-level=read_committed"
 			}
@@ -86,19 +86,13 @@ func registerYCSB(r registry.Registry) {
 				args += " --request-distribution=uniform"
 			}
 
-			defaultDuration := roachtestutil.IfLocal(c, "10s", "30m")
-			args += roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
-
-			labels := map[string]string{
-				"workload_ycsb_type": wl,
-				"concurrency":        fmt.Sprintf("%d", conc),
-				"cpu":                fmt.Sprintf("%d", cpus),
-			}
-
+			defaultDuration := ifLocal(c, "10s", "30m")
+			args += getEnvWorkloadDurationValueOrDefault(defaultDuration)
 			cmd := fmt.Sprintf(
 				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d %s %s {pgurl%s}", wl, conc, len(c.CRDBNodes()),
-				roachtestutil.GetWorkloadHistogramArgs(t, c, labels), args, c.CRDBNodes())
+					" --splits=%d --histograms="+t.PerfArtifactsDir()+"/stats.json"+args+
+					" {pgurl%s}",
+				wl, conc, len(c.CRDBNodes()), c.CRDBNodes())
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			return nil
 		})

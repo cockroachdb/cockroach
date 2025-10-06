@@ -38,21 +38,6 @@ func TestCastMap(t *testing.T) {
 
 	cast.ForEachCast(func(src, tgt oid.Oid, _ cast.Context, _ cast.ContextOrigin, _ volatility.V) {
 		srcType := types.OidToType[src]
-		if srcType.Oid() == oid.T_record {
-			// We're looking at the types.AnyTuple that is a wildcard that
-			// cannot be used during execution. In order to make it a valid
-			// execution type, we construct an equivalent with the tuple element
-			// resolved to a random type.
-			var emptyLocale = ""
-			srcType = &types.T{
-				InternalType: types.InternalType{
-					Family:        types.TupleFamily,
-					TupleContents: []*types.T{randgen.RandType(rng)},
-					Oid:           oid.T_record,
-					Locale:        &emptyLocale,
-				},
-			}
-		}
 		tgtType := types.OidToType[tgt]
 		srcDatum := randgen.RandDatum(rng, srcType, false /* nullOk */)
 

@@ -23,14 +23,19 @@ go_library(
 go_test(
     name = "systemconfigwatcher_test",
     srcs = [
+        "cache_test.go",
         "main_test.go",
         "system_config_watcher_test.go",
     ],
     deps = [
+        ":systemconfigwatcher",
         "//pkg/base",
         "//pkg/config",
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvtenant",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
@@ -44,6 +49,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",

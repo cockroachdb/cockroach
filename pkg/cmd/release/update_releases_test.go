@@ -39,6 +39,10 @@ func Test_processReleaseData(t *testing.T) {
 			Predecessor: "22.2",
 			Withdrawn:   []string{"23.1.0"},
 		},
+		"23.2": {
+			Latest:      "23.2.0-beta.1",
+			Predecessor: "23.1",
+		},
 	}
 	require.Equal(t, expectedReleaseData, processReleaseData(data))
 }

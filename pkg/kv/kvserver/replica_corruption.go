@@ -41,9 +41,9 @@ func (r *Replica) setCorruptRaftMuLocked(
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	log.KvExec.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
+	log.ErrorfDepth(ctx, 1, "stalling replica due to: %s", cErr.ErrorMsg)
 	cErr.Processed = true
-	r.shMu.destroyStatus.Set(cErr, destroyReasonRemoved)
+	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
 	auxDir := r.store.TODOEngine().GetAuxiliaryDir()
 	_ = r.store.TODOEngine().Env().MkdirAll(auxDir, os.ModePerm)
@@ -60,9 +60,9 @@ A file preventing this node from restarting was placed at:
 `, r, path)
 
 	if err := fs.WriteFile(r.store.TODOEngine().Env(), path, []byte(preventStartupMsg), fs.UnspecifiedWriteCategory); err != nil {
-		log.KvExec.Warningf(ctx, "%v", err)
+		log.Warningf(ctx, "%v", err)
 	}
 
-	log.KvExec.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
+	log.FatalfDepth(ctx, 1, "replica is corrupted: %s", cErr)
 	return kvpb.NewError(cErr)
 }

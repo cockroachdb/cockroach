@@ -1182,9 +1182,8 @@ EXECUTE e
 select
  ├── columns: k:1 str:2
  ├── immutable
- ├── stats: [rows=333.333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1118.85
- ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
@@ -1192,7 +1191,6 @@ select
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1108.82
- │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)
@@ -1631,18 +1629,14 @@ INSERT INTO prep_stmts SELECT 2, name FROM pg_catalog.pg_prepared_statements;
 SELECT IF(nextval('s') <= 3, crdb_internal.force_retry('1 hour'), 0);
 COMMIT
 
-statement ok
-INSERT INTO prep_stmts SELECT 3, name FROM pg_catalog.pg_prepared_statements
-
 # Validate that the transaction was actually tried multiple times.
 query I
 SELECT currval('s')
 ----
 4
 
-# Validate that the LRU list was correct before and after the PREPAREs, and
-# after the COMMIT, even after multiple retries. Notice that evictions only
-# occur once the transaction successfully commits.
+# Validate that the LRU list was correct before and after the PREPAREs, even
+# after multiple retries.
 query IT
 SELECT which, name FROM prep_stmts ORDER BY which, name
 ----
@@ -1652,17 +1646,10 @@ SELECT which, name FROM prep_stmts ORDER BY which, name
 1  pscs16
 1  pscs17
 2  pscs11
-2  pscs14
-2  pscs15
 2  pscs16
 2  pscs17
 2  pscs18
 2  pscs19
-3  pscs11
-3  pscs16
-3  pscs17
-3  pscs18
-3  pscs19
 
 statement ok
 DROP TABLE prep_stmts
@@ -1694,15 +1681,8 @@ statement ok
 PREPARE s_114867 AS INSERT INTO test_114867(colors) VALUES (ARRAY[$1::text]::color[]);
 EXECUTE s_114867('red')
 
-
-statement ok
-ALTER TABLE test_114867 SET (schema_locked=false)
-
 statement ok
 TRUNCATE TABLE test_114867 CASCADE
-
-statement ok
-ALTER TABLE test_114867 RESET (schema_locked)
 
 statement ok
 EXECUTE s_114867('red')

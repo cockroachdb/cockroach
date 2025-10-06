@@ -103,6 +103,6 @@ func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) 
 	record = append(record, fmt.Sprintf("%d", totalBytesRebalanced))
 
 	if err := m.write(record); err != nil {
-		log.KvDistribution.Errorf(ctx, "Error writing cluster metrics %s", err.Error())
+		log.Errorf(ctx, "Error writing cluster metrics %s", err.Error())
 	}
 }

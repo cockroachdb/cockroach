@@ -141,7 +141,7 @@ func (bs *asyncProcessorRouter) maybeFlushAsyncLocked(ctx context.Context) {
 		select {
 		case bs.flushC <- struct{}{}:
 		default:
-			log.Dev.Warning(ctx, "asyncProcessorRouter's flushC full, aborting flush")
+			log.Warning(ctx, "asyncProcessorRouter's flushC full, aborting flush")
 		}
 	}
 
@@ -214,7 +214,7 @@ func (bs *asyncProcessorRouter) routeAndProcess(ctx context.Context, events *lis
 		for _, r := range routes {
 			if err := r.Process(ctx, typed.event); err != nil {
 				// TODO(abarganier): Protect against log spam.
-				log.Dev.Errorf(ctx, "processing structured event: %v", err)
+				log.Errorf(ctx, "processing structured event: %v", err)
 			}
 		}
 	}

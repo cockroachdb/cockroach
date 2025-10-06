@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # test OVERLAPS expression
 query B
 SELECT

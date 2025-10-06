@@ -6,10 +6,6 @@
 package multiregion
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -80,91 +76,4 @@ func MaybeRegionalByRowOnUpdateExpr(evalCtx *eval.Context, enumOid oid.Oid) tree
 		}
 	}
 	return nil
-}
-
-func SynthesizeRegionConfig(
-	regionEnumDesc catalog.RegionEnumTypeDescriptor,
-	dbDesc catalog.DatabaseDescriptor,
-	o SynthesizeRegionConfigOptions,
-) (RegionConfig, error) {
-	var regionNames, transitioningRegionNames, addingRegionNames catpb.RegionNames
-	_ = regionEnumDesc.ForEachRegion(func(name catpb.RegionName, transition descpb.TypeDescriptor_EnumMember_Direction) error {
-		switch transition {
-		case descpb.TypeDescriptor_EnumMember_NONE:
-			regionNames = append(regionNames, name)
-		case descpb.TypeDescriptor_EnumMember_ADD:
-			transitioningRegionNames = append(transitioningRegionNames, name)
-			addingRegionNames = append(addingRegionNames, name)
-		case descpb.TypeDescriptor_EnumMember_REMOVE:
-			transitioningRegionNames = append(transitioningRegionNames, name)
-			if o.ForValidation {
-				// Since the partitions and zone configs are only updated when a transaction
-				// commits, this must ignore all regions being added (since they will not be
-				// reflected in the zone configuration yet), but it must include all region
-				// being dropped (since they will not be dropped from the zone configuration
-				// until they are fully removed from the type descriptor, again, at the end
-				// of the transaction).
-				regionNames = append(regionNames, name)
-			}
-		}
-		return nil
-	})
-	survivalGoal := dbDesc.GetRegionConfig().SurvivalGoal
-	if o.ForceSurvivalGoal != nil {
-		survivalGoal = *o.ForceSurvivalGoal
-	}
-	regionConfig := MakeRegionConfig(
-		regionNames,
-		dbDesc.GetRegionConfig().PrimaryRegion,
-		survivalGoal,
-		regionEnumDesc.GetID(),
-		dbDesc.GetRegionConfig().Placement,
-		regionEnumDesc.TypeDesc().RegionConfig.SuperRegions,
-		regionEnumDesc.TypeDesc().RegionConfig.ZoneConfigExtensions,
-		WithTransitioningRegions(transitioningRegionNames),
-		WithAddingRegions(addingRegionNames),
-		WithSecondaryRegion(dbDesc.GetRegionConfig().SecondaryRegion),
-	)
-
-	if err := ValidateRegionConfig(regionConfig, dbDesc.GetID() == keys.SystemDatabaseID); err != nil {
-		return RegionConfig{}, err
-	}
-
-	return regionConfig, nil
-}
-
-type SynthesizeRegionConfigOptions struct {
-	IncludeOffline    bool
-	ForValidation     bool
-	UseCache          bool
-	ForceSurvivalGoal *descpb.SurvivalGoal
-}
-
-// SynthesizeRegionConfigOption is an option to pass into SynthesizeRegionConfig.
-type SynthesizeRegionConfigOption func(o *SynthesizeRegionConfigOptions)
-
-// SynthesizeRegionConfigOptionIncludeOffline includes offline descriptors for use
-// in RESTORE.
-var SynthesizeRegionConfigOptionIncludeOffline SynthesizeRegionConfigOption = func(o *SynthesizeRegionConfigOptions) {
-	o.IncludeOffline = true
-}
-
-// SynthesizeRegionConfigOptionForValidation includes descriptors which are being dropped
-// as part of the regions field, allowing validation to account for regions in the
-// process of being dropped.
-var SynthesizeRegionConfigOptionForValidation SynthesizeRegionConfigOption = func(o *SynthesizeRegionConfigOptions) {
-	o.ForValidation = true
-}
-
-// SynthesizeRegionConfigOptionUseCache uses a cache for synthesizing the region
-// config.
-var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *SynthesizeRegionConfigOptions) {
-	o.UseCache = true
-}
-
-// SynthesizeRegionConfigOptionForceSurvivalZone forces the zone survival goal
-// instead of inheriting from the system database.
-var SynthesizeRegionConfigOptionForceSurvivalZone SynthesizeRegionConfigOption = func(o *SynthesizeRegionConfigOptions) {
-	z := descpb.SurvivalGoal_ZONE_FAILURE
-	o.ForceSurvivalGoal = &z
 }

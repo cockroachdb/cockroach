@@ -40,14 +40,7 @@ type WaitForEvalConfig struct {
 		waitCategory            WaitForEvalCategory
 		waitCategoryDecreasedCh chan struct{}
 	}
-	// watcherMu is ordered before mu. cbs are executed while holding watcherMu.
-	watcherMu struct {
-		syncutil.Mutex
-		cbs []WatcherCallback
-	}
 }
-
-type WatcherCallback func(wc WaitForEvalCategory)
 
 // NewWaitForEvalConfig constructs WaitForEvalConfig.
 func NewWaitForEvalConfig(st *cluster.Settings) *WaitForEvalConfig {
@@ -66,42 +59,32 @@ func NewWaitForEvalConfig(st *cluster.Settings) *WaitForEvalConfig {
 // notifyChanged is called whenever any of the cluster settings that affect
 // WaitForEval change. It is also called for initialization.
 func (w *WaitForEvalConfig) notifyChanged() {
-	func() {
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		// Call computeCategory while holding w.mu to serialize the computation in
-		// case of concurrent callbacks. This ensures the latest settings are used
-		// to set the current state, and we don't have a situation where a slow
-		// goroutine samples the settings, then after some arbitrary duration
-		// acquires the mutex and sets a stale state.
-		waitCategory := w.computeCategory()
-		if w.mu.waitCategoryDecreasedCh == nil {
-			// Initialization.
-			w.mu.waitCategoryDecreasedCh = make(chan struct{})
-			w.mu.waitCategory = waitCategory
-			return
-		}
-		// Not initialization.
-		if w.mu.waitCategory > waitCategory {
-			close(w.mu.waitCategoryDecreasedCh)
-			w.mu.waitCategoryDecreasedCh = make(chan struct{})
-		}
-		// Else w.mu.waitCategory <= waitCategory. Since the set of requests that
-		// are subject to replication admission/flow control is growing (or staying
-		// the same), we don't need to tell the existing waiting requests to restart
-		// their wait, using the latest value of waitCategory, since they are
-		// unaffected by the change.
-
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	// Call computeCategory while holding w.mu to serialize the computation in
+	// case of concurrent callbacks. This ensures the latest settings are used
+	// to set the current state, and we don't have a situation where a slow
+	// goroutine samples the settings, then after some arbitrary duration
+	// acquires the mutex and sets a stale state.
+	waitCategory := w.computeCategory()
+	if w.mu.waitCategoryDecreasedCh == nil {
+		// Initialization.
+		w.mu.waitCategoryDecreasedCh = make(chan struct{})
 		w.mu.waitCategory = waitCategory
-	}()
-	w.watcherMu.Lock()
-	defer w.watcherMu.Unlock()
-	w.mu.RLock()
-	wc := w.mu.waitCategory
-	w.mu.RUnlock()
-	for _, cb := range w.watcherMu.cbs {
-		cb(wc)
+		return
 	}
+	// Not initialization.
+	if w.mu.waitCategory > waitCategory {
+		close(w.mu.waitCategoryDecreasedCh)
+		w.mu.waitCategoryDecreasedCh = make(chan struct{})
+	}
+	// Else w.mu.waitCategory <= waitCategory. Since the set of requests that
+	// are subject to replication admission/flow control is growing (or staying
+	// the same), we don't need to tell the existing waiting requests to restart
+	// their wait, using the latest value of waitCategory, since they are
+	// unaffected by the change.
+
+	w.mu.waitCategory = waitCategory
 }
 
 // Current returns the current category, and a channel that will be closed if
@@ -126,17 +109,4 @@ func (w *WaitForEvalConfig) computeCategory() WaitForEvalCategory {
 		return AllWorkWaitsForEval
 	}
 	panic(errors.AssertionFailedf("unknown mode %v", mode))
-}
-
-// RegisterWatcher registers a callback that provides the latest state of
-// WaitForEvalCategory. The first call happens within this method, before
-// returning.
-func (w *WaitForEvalConfig) RegisterWatcher(cb WatcherCallback) {
-	w.watcherMu.Lock()
-	defer w.watcherMu.Unlock()
-	w.mu.RLock()
-	wc := w.mu.waitCategory
-	w.mu.RUnlock()
-	cb(wc)
-	w.watcherMu.cbs = append(w.watcherMu.cbs, cb)
 }

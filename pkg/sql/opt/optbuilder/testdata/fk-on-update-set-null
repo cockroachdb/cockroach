@@ -23,8 +23,7 @@ root
  │         ├── select
  │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── scan parent
- │         │    │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    └── filters
  │         │         └── p:4 > 1
  │         └── projections
@@ -41,7 +40,7 @@ root
                 │    ├── columns: c:12!null child.p:13!null p_old:16!null p_new:17!null
                 │    ├── scan child
                 │    │    ├── columns: c:12!null child.p:13!null
-                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    └── flags: disabled not visible index feature
                 │    ├── select
                 │    │    ├── columns: p_old:16!null p_new:17!null
                 │    │    ├── with-scan &1
@@ -94,8 +93,7 @@ root
  │         ├── select
  │         │    ├── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    ├── scan parent_multi
- │         │    │    ├── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    └── filters
  │         │         └── pk:6 > 1
  │         └── projections
@@ -114,7 +112,7 @@ root
                 │    ├── columns: c:18!null child_multi.p:19!null child_multi.q:20!null p_old:23!null p_new:24 q_old:25!null q_new:26
                 │    ├── scan child_multi
                 │    │    ├── columns: c:18!null child_multi.p:19 child_multi.q:20
-                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    └── flags: disabled not visible index feature
                 │    ├── select
                 │    │    ├── columns: p_old:23 p_new:24 q_old:25 q_new:26
                 │    │    ├── with-scan &1
@@ -150,8 +148,7 @@ root
  │         ├── select
  │         │    ├── columns: pk:6!null p:7!null q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    ├── scan parent_multi
- │         │    │    ├── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    └── filters
  │         │         └── p:7 > 1
  │         └── projections
@@ -169,7 +166,7 @@ root
                 │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
                 │    ├── scan child_multi
                 │    │    ├── columns: c:17!null child_multi.p:18 child_multi.q:19
-                │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    └── flags: disabled not visible index feature
                 │    ├── select
                 │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
                 │    │    ├── with-scan &1
@@ -213,8 +210,7 @@ root
  │         ├── select
  │         │    ├── columns: pk:6!null p:7!null q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    ├── scan parent_multi
- │         │    │    ├── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: pk:6!null p:7 q:8 crdb_internal_mvcc_timestamp:9 tableoid:10
  │         │    └── filters
  │         │         └── p:7 > 1
  │         └── projections
@@ -235,7 +231,7 @@ root
       │         │    ├── columns: c:17!null child_multi.p:18!null child_multi.q:19!null p_old:22!null p_new:23!null q_old:24!null q_new:25
       │         │    ├── scan child_multi
       │         │    │    ├── columns: c:17!null child_multi.p:18 child_multi.q:19
-      │         │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    │    └── flags: disabled not visible index feature
       │         │    ├── select
       │         │    │    ├── columns: p_old:22!null p_new:23!null q_old:24 q_new:25
       │         │    │    ├── with-scan &1
@@ -265,7 +261,7 @@ root
                      │    ├── columns: g:32!null grandchild.c:33!null grandchild.q:34!null c_old:37!null c_new:38!null q_old:39!null q_new:40
                      │    ├── scan grandchild
                      │    │    ├── columns: g:32!null grandchild.c:33 grandchild.q:34
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    ├── select
                      │    │    ├── columns: c_old:37!null c_new:38!null q_old:39!null q_new:40
                      │    │    ├── with-scan &2
@@ -320,7 +316,7 @@ root
  │         │    │              └── column3:8
  │         │    ├── scan parent_multi
  │         │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
- │         │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── column1:6 = pk:9
  │         └── projections
@@ -341,7 +337,7 @@ root
       │         │    ├── columns: c:20!null child_multi.p:21!null child_multi.q:22!null p_old:25!null p_new:26!null q_old:27!null q_new:28!null
       │         │    ├── scan child_multi
       │         │    │    ├── columns: c:20!null child_multi.p:21 child_multi.q:22
-      │         │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    │    └── flags: disabled not visible index feature
       │         │    ├── select
       │         │    │    ├── columns: p_old:25 p_new:26!null q_old:27 q_new:28!null
       │         │    │    ├── with-scan &1
@@ -371,7 +367,7 @@ root
                      │    ├── columns: g:35!null grandchild.c:36!null grandchild.q:37!null c_old:40!null c_new:41!null q_old:42!null q_new:43
                      │    ├── scan grandchild
                      │    │    ├── columns: g:35!null grandchild.c:36 grandchild.q:37
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    ├── select
                      │    │    ├── columns: c_old:40!null c_new:41!null q_old:42!null q_new:43
                      │    │    ├── with-scan &2
@@ -430,7 +426,7 @@ root
  │         │    │              └── q_default:8
  │         │    ├── scan parent_multi
  │         │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
- │         │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │         │    │    └── flags: disabled not visible index feature
  │         │    └── filters
  │         │         └── column1:6 = pk:9
  │         └── projections
@@ -452,7 +448,7 @@ root
       │         │    ├── columns: c:21!null child_multi.p:22!null child_multi.q:23!null p_old:26!null p_new:27!null q_old:28!null q_new:29
       │         │    ├── scan child_multi
       │         │    │    ├── columns: c:21!null child_multi.p:22 child_multi.q:23
-      │         │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    │    └── flags: disabled not visible index feature
       │         │    ├── select
       │         │    │    ├── columns: p_old:26 p_new:27!null q_old:28 q_new:29
       │         │    │    ├── with-scan &1
@@ -482,7 +478,7 @@ root
                      │    ├── columns: g:36!null grandchild.c:37!null grandchild.q:38!null c_old:41!null c_new:42!null q_old:43!null q_new:44
                      │    ├── scan grandchild
                      │    │    ├── columns: g:36!null grandchild.c:37 grandchild.q:38
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    ├── select
                      │    │    ├── columns: c_old:41!null c_new:42!null q_old:43!null q_new:44
                      │    │    ├── with-scan &2
@@ -536,7 +532,7 @@ root
  │         │    │    │              └── column1:6
  │         │    │    ├── scan parent_multi
  │         │    │    │    ├── columns: pk:9!null p:10 q:11 crdb_internal_mvcc_timestamp:12 tableoid:13
- │         │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+ │         │    │    │    └── flags: disabled not visible index feature
  │         │    │    └── filters
  │         │    │         ├── column2:7 = p:10
  │         │    │         └── column3:8 = q:11
@@ -562,7 +558,7 @@ root
       │         │    ├── columns: c:23!null child_multi.p:24!null child_multi.q:25!null p_old:28!null p_new:29!null q_old:30!null q_new:31
       │         │    ├── scan child_multi
       │         │    │    ├── columns: c:23!null child_multi.p:24 child_multi.q:25
-      │         │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │         │    │    └── flags: disabled not visible index feature
       │         │    ├── select
       │         │    │    ├── columns: p_old:28 p_new:29!null q_old:30 q_new:31
       │         │    │    ├── with-scan &1
@@ -592,7 +588,7 @@ root
                      │    ├── columns: g:38!null grandchild.c:39!null grandchild.q:40!null c_old:43!null c_new:44!null q_old:45!null q_new:46
                      │    ├── scan grandchild
                      │    │    ├── columns: g:38!null grandchild.c:39 grandchild.q:40
-                     │    │    └── flags: avoid-full-scan disabled not visible index feature
+                     │    │    └── flags: disabled not visible index feature
                      │    ├── select
                      │    │    ├── columns: c_old:43!null c_new:44!null q_old:45!null q_new:46
                      │    │    ├── with-scan &2
@@ -642,8 +638,7 @@ root
  │         ├── select
  │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── scan parent_partial
- │         │    │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    └── filters
  │         │         └── p:4 > 1
  │         └── projections
@@ -669,7 +664,7 @@ root
                 │    │    │    │    │    └── i:15 > 0
                 │    │    │    │    └── child_partial_i_idx: filters
                 │    │    │    │         └── child_partial.p:14 > 0
-                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    └── flags: disabled not visible index feature
                 │    │    ├── select
                 │    │    │    ├── columns: p_old:18!null p_new:19!null
                 │    │    │    ├── with-scan &1
@@ -718,8 +713,7 @@ root
  │         ├── select
  │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    ├── scan parent_virt
- │         │    │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
- │         │    │    └── flags: avoid-full-scan
+ │         │    │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         │    └── filters
  │         │         └── p:4 > 1
  │         └── projections
@@ -742,7 +736,7 @@ root
                 │    │    │    ├── computed column expressions
                 │    │    │    │    └── v:15
                 │    │    │    │         └── child_virt.p:14
-                │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+                │    │    │    └── flags: disabled not visible index feature
                 │    │    └── projections
                 │    │         └── child_virt.p:14 [as=v:15]
                 │    ├── select

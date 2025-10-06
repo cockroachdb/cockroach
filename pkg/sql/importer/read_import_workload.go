@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -53,6 +52,9 @@ func newWorkloadReader(
 	db *kv.DB,
 ) *workloadReader {
 	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism, db: db}
+}
+
+func (w *workloadReader) start(ctx ctxgroup.Group) {
 }
 
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
@@ -118,20 +120,6 @@ func makeDatumFromColOffset(
 			str := *(*string)(unsafe.Pointer(&data))
 			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx, semaCtx)
 		}
-	case types.TimestampFamily, types.TimestampTZFamily:
-		switch hint.Family() {
-		case types.TimestampFamily:
-			// workloads are responsible for rounding their timestamp(s) so skip
-			// MakeDTimestamp here and just directly construct it.
-			return alloc.NewDTimestamp(tree.DTimestamp{Time: col.Timestamp()[rowIdx]}), nil
-
-		case types.TimestampTZFamily:
-			// workloads are responsible for rounding their timestamp(s) so skip
-			// MakeDTimestamp here and just directly construct it.
-			return alloc.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]}), nil
-		}
-	case types.DecimalFamily:
-		return alloc.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]}), nil
 	}
 	return nil, errors.Errorf(
 		`don't know how to interpret %s column as %s`, col.Type(), hint)
@@ -246,12 +234,6 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext,
 ) error {
-	// Workload needs to pace itself explicitly since it manages its own workers
-	// and loops rather than using the "runParallelImport" helper which the other
-	// formats use and which has pacing built-in.
-	pacer := bulk.NewCPUPacer(ctx, w.db, importElasticCPUControlEnabled)
-	defer pacer.Close()
-
 	conv, err := row.NewDatumRowConverter(
 		ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
 		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db,
@@ -275,9 +257,6 @@ func (w *WorkloadKVConverter) Worker(
 		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
-			if err := pacer.Pace(ctx); err != nil {
-				return err
-			}
 			for colIdx, col := range cb.ColVecs() {
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.

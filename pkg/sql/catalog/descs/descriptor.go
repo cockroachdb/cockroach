@@ -215,16 +215,14 @@ func getDescriptorsByID(
 	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
 		return err
 	}
-	// Apply any filters on descriptors before hydrating, since if a descriptor
-	// is offline / dropped, we are doing needless work.
+	// Hydration is skipped if "SkipHydration" flag is true.
+	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
+		return err
+	}
 	for _, desc := range descs {
 		if err := filterDescriptor(desc, flags); err != nil {
 			return err
 		}
-	}
-	// Hydration is skipped if "SkipHydration" flag is true.
-	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
-		return err
 	}
 	return nil
 }
@@ -559,8 +557,8 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if tc.isShadowedName(ni) {
 			return continueLookups, descpb.InvalidID, nil
 		}
-		if tc.cr.IsNameInCache(ni) {
-			if e := tc.cr.Cache().LookupNamespaceEntry(ni); e != nil {
+		if tc.cr.IsNameInCache(&ni) {
+			if e := tc.cr.Cache().LookupNamespaceEntry(&ni); e != nil {
 				return haltLookups, e.GetID(), nil
 			}
 			return haltLookups, descpb.InvalidID, nil
@@ -597,7 +595,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if err != nil {
 			return haltLookups, descpb.InvalidID, err
 		}
-		if e := read.LookupNamespaceEntry(ni); e != nil {
+		if e := read.LookupNamespaceEntry(&ni); e != nil {
 			return haltLookups, e.GetID(), nil
 		}
 		return haltLookups, descpb.InvalidID, nil
@@ -648,11 +646,6 @@ func (tc *Collection) finalizeDescriptors(
 		requiredLevel = validate.MutableRead
 	} else {
 		requiredLevel = validate.ImmutableRead
-		// If we're reading a batch of immutable descriptors, we'll do only
-		// basic validations in only reduce overhead.
-		if len(validationLevels) > 10 {
-			requiredLevel = validate.ImmutableReadBatch
-		}
 	}
 	// Ensure that all descriptors are sufficiently validated.
 	if !tc.validationModeProvider.ValidateDescriptorsOnRead() {

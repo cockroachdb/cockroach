@@ -24,10 +24,10 @@ import (
 )
 
 type benchmarkRangefeedOpts struct {
-	rangefeedTestType rangefeedTestType
-	opType            opType
-	numRegistrations  int
-	budget            int64
+	procType         procType
+	opType           opType
+	numRegistrations int
+	budget           int64
 }
 
 type opType string
@@ -47,10 +47,10 @@ func BenchmarkRangefeed(b *testing.B) {
 				name := fmt.Sprintf("procType=%s/opType=%s/numRegs=%d", procType, opType, numRegistrations)
 				b.Run(name, func(b *testing.B) {
 					runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-						rangefeedTestType: procType,
-						opType:            opType,
-						numRegistrations:  numRegistrations,
-						budget:            math.MaxInt64,
+						procType:         procType,
+						opType:           opType,
+						numRegistrations: numRegistrations,
+						budget:           math.MaxInt64,
 					})
 				})
 			}
@@ -90,7 +90,7 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 	span := roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")}
 
 	p, h, stopper := newTestProcessor(b, withSpan(span), withBudget(budget), withChanCap(b.N),
-		withEventTimeout(time.Hour), withRangefeedTestType(opts.rangefeedTestType))
+		withEventTimeout(time.Hour), withProcType(opts.procType))
 	defer stopper.Stop(ctx)
 
 	// Add registrations.
@@ -103,9 +103,9 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		// extra data.
 		const withFiltering = false
 		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1)}
-		ok, _, _ := p.Register(ctx, span, hlc.MinTimestamp, nil,
-			withDiff, withFiltering, false /* withOmitRemote */, noBulkDelivery,
-			streams[i])
+		ok, _ := p.Register(span, hlc.MinTimestamp, nil,
+			withDiff, withFiltering, false, /* withOmitRemote */
+			streams[i], nil)
 		require.True(b, ok)
 	}
 
@@ -192,6 +192,10 @@ type noopStream struct {
 	done   chan *kvpb.Error
 }
 
+func (s *noopStream) Context() context.Context {
+	return s.ctx
+}
+
 func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 	s.events++
 	return nil
@@ -202,9 +206,9 @@ func (s *noopStream) SendUnbuffered(*kvpb.RangeFeedEvent) error {
 // thread-safety.
 func (s *noopStream) SendUnbufferedIsThreadSafe() {}
 
-// SendError implements the Stream interface. It mocks the disconnect behavior
+// Disconnect implements the Stream interface. It mocks the disconnect behavior
 // by sending the error to the done channel.
-func (s *noopStream) SendError(error *kvpb.Error) {
+func (s *noopStream) Disconnect(error *kvpb.Error) {
 	s.done <- error
 }
 

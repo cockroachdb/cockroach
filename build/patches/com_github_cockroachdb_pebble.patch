@@ -1,77 +1,18 @@
-diff --git a/internal/buildtags/BUILD.bazel b/internal/buildtags/BUILD.bazel
-index b842a31e..d5674712 100644
---- a/internal/buildtags/BUILD.bazel
-+++ b/internal/buildtags/BUILD.bazel
-@@ -5,15 +5,27 @@ go_library(
+diff -urN a/internal/invariants/BUILD.bazel b/internal/invariants/BUILD.bazel
+--- a/internal/invariants/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/internal/invariants/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -5,6 +5,7 @@
      srcs = [
-         "cgo_off.go",
-         "cgo_on.go",
--        "invariants_off.go",
+         "finalizer_off.go",
+         "finalizer_on.go",
++        "off.go",
+         "on.go",
          "race_off.go",
          "race_on.go",
-         "slow_build_off.go",
-         "slow_build_on.go",
-         "tracing_off.go",
--    ],
-+    ] + select({
-+        "@com_github_cockroachdb_cockroach//build/toolchains:crdb_test": [":gen-crdb-test-on"],
-+        "//conditions:default": ["invariants_off.go", "invariants_on.go"],
-+    }),
-     importpath = "github.com/cockroachdb/pebble/internal/buildtags",
-     visibility = ["//:__subpackages__"],
- )
- 
-+REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
-+
-+# In crdb-test mode, we unconditionally enable invariants.
-+genrule(
-+    name = "gen-crdb-test-on",
-+    srcs = ["invariants_on.go"],
-+    outs = ["gen-crdb_test_on.go"],
-+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
-+)
-+
- alias(
-     name = "go_default_library",
-     actual = ":buildtags",
-diff --git a/internal/invariants/BUILD.bazel b/internal/invariants/BUILD.bazel
-index 3dd80d65..36dae2b7 100644
---- a/internal/invariants/BUILD.bazel
-+++ b/internal/invariants/BUILD.bazel
-@@ -4,14 +4,25 @@ go_library(
-     name = "invariants",
-     srcs = [
-         "invariants.go",
--        "off.go",
--        "on.go",
--    ],
-+    ] + select({
-+        "@com_github_cockroachdb_cockroach//build/toolchains:crdb_test": [":gen-crdb-test-on"],
-+        "//conditions:default": ["off.go", "on.go"],
-+    }),
-     importpath = "github.com/cockroachdb/pebble/internal/invariants",
-     visibility = ["//:__subpackages__"],
-     deps = ["//internal/buildtags"],
- )
- 
-+REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
-+
-+# In crdb-test mode, we unconditionally enable invariants.
-+genrule(
-+    name = "gen-crdb-test-on",
-+    srcs = ["on.go"],
-+    outs = ["gen-crdb_test_on.go"],
-+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
-+)
-+
- alias(
-     name = "go_default_library",
-     actual = ":invariants",
-diff --git a/objstorage/objstorageprovider/objiotracing/BUILD.bazel b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
-index 21534041..d73ac30a 100644
---- a/objstorage/objstorageprovider/objiotracing/BUILD.bazel
-+++ b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
-@@ -5,6 +5,7 @@ go_library(
+diff -urN a/objstorage/objstorageprovider/objiotracing/BUILD.bazel b/objstorage/objstorageprovider/objiotracing/BUILD.bazel
+--- a/objstorage/objstorageprovider/objiotracing/BUILD.bazel	1969-12-31 19:00:00.000000000 -0500
++++ b/objstorage/objstorageprovider/objiotracing/BUILD.bazel	2023-03-29 09:59:04.529504100 -0700
+@@ -5,6 +5,7 @@
      srcs = [
          "obj_io_tracing.go",
          "obj_io_tracing_off.go",

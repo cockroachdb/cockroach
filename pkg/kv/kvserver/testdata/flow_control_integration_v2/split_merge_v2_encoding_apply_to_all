@@ -1,24 +1,13 @@
 echo
 ----
 ----
-(Sending 1 MiB put request to pre-split range.)
-
-
-(Sent 1 MiB put request to pre-split range.)
-
-
 -- Flow token metrics from n1 after issuing + admitting the 1MiB 3x
 -- replicated write to the pre-split range. There should be 3MiB of
 -- {regular,elastic} tokens {deducted,returned}.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -48,31 +37,14 @@ ORDER BY
 -- (Splitting range.)
 
 
-(Sending 2 x 1 MiB put request to post-split LHS range.)
-
-
-(Sent 2 x 1 MiB put request to post-split LHS range.)
-
-
-(Sending 3 x 1 MiB put request to post-split RHS range.)
-
-
-(Sent 3 x 1 MiB put request to post-split RHS range.)
-
-
 -- Flow token metrics from n1 after further issuing 2MiB and 3MiB writes to
 -- post-split LHS and RHS ranges respectively. We should see 15MiB extra tokens
 -- {deducted,returned}, which comes from (2MiB+3MiB)*3=15MiB. So we stand at
 -- 3MiB+15MiB=18MiB now.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 18 MiB  
@@ -100,43 +72,27 @@ ORDER BY
 
 
 -- Observe the newly split off replica, with its own three streams.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  count(*) AS streams
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-GROUP BY
-  range_id
-ORDER BY
-  range_id;
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  a        | 3             
-  b        | 3             
+  70       | 3             
+  71       | 3             
 
 
 -- (Merging ranges.)
 
 
-(Sending 4 x 1 MiB put request to post-merge range.)
-
-
-(Sent 4 x 1 MiB put request to post-merge range.)
-
-
 -- Flow token metrics from n1 after issuing 4MiB of replicated writes to
 -- the post-merged range. We should see 12MiB extra tokens {deducted,returned},
 -- which comes from 4MiB*3=12MiB. So we stand at 18MiB+12MiB=30MiB now.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 24 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 30 MiB  
@@ -164,19 +120,14 @@ ORDER BY
 
 
 -- Observe only the merged replica with its own three streams.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  count(*) AS streams
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-GROUP BY
-  range_id
-ORDER BY
-  range_id;
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  a        | 3             
+  70       | 3             
 ----
 ----
 

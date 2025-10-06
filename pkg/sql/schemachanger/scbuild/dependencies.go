@@ -8,7 +8,6 @@ package scbuild
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -57,9 +56,6 @@ type Dependencies interface {
 	// Statements returns the statements behind this schema change.
 	Statements() []string
 
-	// EvalCtx returns the eval.Context for the schema change statement.
-	EvalCtx() *eval.Context
-
 	// SemaCtx returns the tree.SemaContext for the schema change statement.
 	SemaCtx() *tree.SemaContext
 
@@ -79,10 +75,6 @@ type Dependencies interface {
 
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() scdecomp.ZoneConfigGetter
-
-	// GetDefaultZoneConfig is used to get the default zone config inside the
-	// server.
-	GetDefaultZoneConfig() *zonepb.ZoneConfig
 
 	// ClientNoticeSender returns a eval.ClientNoticeSender.
 	ClientNoticeSender() eval.ClientNoticeSender
@@ -199,9 +191,6 @@ type AuthorizationAccessor interface {
 	// HasOwnership returns true iff the role, or any role the role is a member
 	// of, has ownership privilege of the desc.
 	HasOwnership(ctx context.Context, privilegeObject privilege.Object) (bool, error)
-
-	// UserHasOwnership is like HasOwnership but allows you to specify the owner.
-	UserHasOwnership(ctx context.Context, privilegeObject privilege.Object, user username.SQLUsername) (bool, error)
 
 	// CheckPrivilegeForUser verifies that `user` has `privilege` on `descriptor`.
 	CheckPrivilegeForUser(

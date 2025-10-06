@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@io_opentelemetry_go_otel//attribute",
     ],
 )

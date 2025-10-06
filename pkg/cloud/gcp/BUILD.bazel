@@ -60,7 +60,6 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_googleapis_gax_go_v2//apierror",

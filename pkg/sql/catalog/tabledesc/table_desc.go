@@ -352,22 +352,9 @@ func (desc *wrapper) NonDropIndexes() []catalog.Index {
 
 // PartialIndexes returns a slice of all partial indexes in the underlying
 // proto, in their canonical order. This is equivalent to taking the slice
-// produced by DeletableNonPrimaryIndexes and filtering indexes with non-empty
-// expressions.
-//
-// Backfilling indexes are excluded.
+// produced by AllIndexes and filtering indexes with non-empty expressions.
 func (desc *wrapper) PartialIndexes() []catalog.Index {
 	return desc.getExistingOrNewIndexCache().partial
-}
-
-// VectorIndexes returns a slice of all vector indexes in the underlying
-// proto, in their canonical order. This is equivalent to taking the slice
-// produced by DeletableNonPrimaryIndexes and filtering indexes that are not
-// vector indexes.
-//
-// Backfilling indexes are excluded.
-func (desc *wrapper) VectorIndexes() []catalog.Index {
-	return desc.getExistingOrNewIndexCache().vector
 }
 
 // NonPrimaryIndexes returns a slice of all non-primary indexes, in
@@ -651,11 +638,6 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 
 // GetObjectTypeString implements the Object interface.
 func (desc *wrapper) GetObjectTypeString() string {
-	// Special handling for views since GetObjectType does not distinguish between
-	// views and regular tables.
-	if desc.IsView() {
-		return "view"
-	}
 	return string(desc.GetObjectType())
 }
 
@@ -729,14 +711,4 @@ func (desc *wrapper) IsPrimaryKeySwapMutation(m *descpb.DescriptorMutation) bool
 // ExternalRowData implements the TableDescriptor interface.
 func (desc *wrapper) ExternalRowData() *descpb.ExternalRowData {
 	return desc.External
-}
-
-// IsRowLevelSecurityEnabled implements the TableDescriptor interface.
-func (desc *wrapper) IsRowLevelSecurityEnabled() bool {
-	return desc.RowLevelSecurityEnabled
-}
-
-// IsRowLevelSecurityForced implements the TableDescriptor interface.
-func (desc *wrapper) IsRowLevelSecurityForced() bool {
-	return desc.RowLevelSecurityForced
 }

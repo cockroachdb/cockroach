@@ -464,7 +464,7 @@ sinks:
       channels: {INFO: [STORAGE]}
       filter: INFO
     default:
-      channels: {INFO: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      channels: {INFO: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: INFO
   stderr:
     filter: NONE
@@ -491,7 +491,7 @@ sinks:
       channels: {INFO: [HEALTH]}
       filter: INFO
     default:
-      channels: {INFO: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      channels: {INFO: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: INFO
   stderr:
     filter: NONE
@@ -512,7 +512,7 @@ sinks:
 sinks:
   file-groups:
     custom:
-      channels: {WARNING: [DEV], ERROR: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      channels: {WARNING: [DEV], ERROR: [OPS, HEALTH, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: ERROR
   stderr:
     filter: NONE
@@ -565,7 +565,7 @@ sinks:
 sinks:
   file-groups:
     custom1:
-      channels: {ERROR: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      channels: {ERROR: [DEV, OPS, STORAGE, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: ERROR
     custom2:
       channels: {WARNING: [DEV]}
@@ -598,7 +598,7 @@ sinks:
       channels: {INFO: [STORAGE]}
       filter: INFO
     default:
-      channels: {WARNING: [HEALTH], ERROR: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION, CHANGEFEED, KV_EXEC]}
+      channels: {WARNING: [HEALTH], ERROR: [DEV, OPS, SESSIONS, SQL_SCHEMA, USER_ADMIN, PRIVILEGES, SENSITIVE_ACCESS, SQL_EXEC, SQL_PERF, SQL_INTERNAL_PERF, TELEMETRY, KV_DISTRIBUTION]}
       filter: ERROR
   stderr:
     filter: NONE
@@ -880,170 +880,3 @@ file-defaults:
     max-buffer-size: 50MiB
 ----
 ERROR: File-based audit logging cannot coexist with buffering configuration. Disable either the buffering configuration ("buffering") or auditable log ("auditable") configuration.
-
-# Check that missing address in OTLP is reported.
-yaml
-sinks:
-  otlp-servers:
-    custom:
-----
-ERROR: otlp server "custom": address cannot be empty
-
-# Check that invalid compression is rejected.
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: localhost:4317
-      channels: all
-      compression: ''
-----
-ERROR: otlp server "custom": compression must be 'gzip' or 'none'
-
-# Check that invalid mode is rejected.
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: localhost:4317
-      channels: all
-      mode: ''
-----
-ERROR: otlp server "custom": mode must be 'grpc' or 'http'
-
-# Check that address is valid in http mode
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: localhost:4317
-      channels: all
-      mode: http
-----
-ERROR: otlp server "custom": address must start with 'http://' or 'https://'
-
-# Check that invalid content type header is rejected.
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: http://localhost:4317
-      channels: all
-      mode: http
-      headers:
-        Content-Type: "protobuf"
-----
-ERROR: otlp server "custom": header Content-Type is not allowed
-
-# Check that invalid content type header with grpc mode is rejected.
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: localhost:4317
-      channels: all
-      mode: grpc
-      headers:
-        Content-Type: "protobuf"
-----
-ERROR: otlp server "custom": header Content-Type is not allowed
-
-# Check that invalid content encoding header is rejected.
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: http://localhost:4317
-      channels: all
-      mode: http
-      headers:
-        Content-Encoding: "snappy"
-----
-ERROR: otlp server "custom": header Content-Encoding is not allowed
-
-# Basic OTLP sink with HTTP mode
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: https://http-dd-log-intake.com
-      channels: all
-      mode: http
-      compression: none
-      headers:
-        X-DD-API: "xxx"
-        X-DD-MODE: "otlp"
-----
-sinks:
-  file-groups:
-    default:
-      channels: {INFO: all}
-      filter: INFO
-  otlp-servers:
-    custom:
-      channels: {INFO: all}
-      address: https://http-dd-log-intake.com
-      mode: http
-      headers: {X-DD-API: xxx, X-DD-MODE: otlp}
-      compression: none
-      filter: INFO
-      format: json
-      redact: false
-      redactable: true
-      exit-on-error: false
-      auditable: false
-      buffering:
-        max-staleness: 5s
-        flush-trigger-size: 1.0MiB
-        max-buffer-size: 50MiB
-        format: newline
-      sinkname: custom
-  stderr:
-    filter: NONE
-capture-stray-errors:
-  enable: true
-  dir: /default-dir
-  max-group-size: 100MiB
-
-# Basic OTLP sink with gRPC mode
-yaml
-sinks:
-  otlp-servers:
-    custom:
-      address: localhost:4317
-      channels: all
-      mode: grpc
-      compression: gzip
-      headers:
-        dd-api: "xxx"
-----
-sinks:
-  file-groups:
-    default:
-      channels: {INFO: all}
-      filter: INFO
-  otlp-servers:
-    custom:
-      channels: {INFO: all}
-      address: localhost:4317
-      mode: grpc
-      headers: {dd-api: xxx}
-      compression: gzip
-      filter: INFO
-      format: json
-      redact: false
-      redactable: true
-      exit-on-error: false
-      auditable: false
-      buffering:
-        max-staleness: 5s
-        flush-trigger-size: 1.0MiB
-        max-buffer-size: 50MiB
-        format: newline
-      sinkname: custom
-  stderr:
-    filter: NONE
-capture-stray-errors:
-  enable: true
-  dir: /default-dir
-  max-group-size: 100MiB

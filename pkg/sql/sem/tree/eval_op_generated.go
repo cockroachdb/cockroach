@@ -65,18 +65,13 @@ type BinaryOpEvaluator interface {
 	EvalConcatArraysOp(context.Context, *ConcatArraysOp, Datum, Datum) (Datum, error)
 	EvalConcatBytesOp(context.Context, *ConcatBytesOp, Datum, Datum) (Datum, error)
 	EvalConcatJsonbOp(context.Context, *ConcatJsonbOp, Datum, Datum) (Datum, error)
-	EvalConcatLTreeOp(context.Context, *ConcatLTreeOp, Datum, Datum) (Datum, error)
 	EvalConcatOp(context.Context, *ConcatOp, Datum, Datum) (Datum, error)
 	EvalConcatStringOp(context.Context, *ConcatStringOp, Datum, Datum) (Datum, error)
 	EvalConcatVarBitOp(context.Context, *ConcatVarBitOp, Datum, Datum) (Datum, error)
 	EvalContainedByArrayOp(context.Context, *ContainedByArrayOp, Datum, Datum) (Datum, error)
 	EvalContainedByJsonbOp(context.Context, *ContainedByJsonbOp, Datum, Datum) (Datum, error)
-	EvalContainedByLTreeArrayOp(context.Context, *ContainedByLTreeArrayOp, Datum, Datum) (Datum, error)
-	EvalContainedByLTreeOp(context.Context, *ContainedByLTreeOp, Datum, Datum) (Datum, error)
 	EvalContainsArrayOp(context.Context, *ContainsArrayOp, Datum, Datum) (Datum, error)
 	EvalContainsJsonbOp(context.Context, *ContainsJsonbOp, Datum, Datum) (Datum, error)
-	EvalContainsLTreeArrayOp(context.Context, *ContainsLTreeArrayOp, Datum, Datum) (Datum, error)
-	EvalContainsLTreeOp(context.Context, *ContainsLTreeOp, Datum, Datum) (Datum, error)
 	EvalCosDistanceVectorOp(context.Context, *CosDistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDistanceVectorOp(context.Context, *DistanceVectorOp, Datum, Datum) (Datum, error)
 	EvalDivDecimalIntOp(context.Context, *DivDecimalIntOp, Datum, Datum) (Datum, error)
@@ -86,8 +81,6 @@ type BinaryOpEvaluator interface {
 	EvalDivIntOp(context.Context, *DivIntOp, Datum, Datum) (Datum, error)
 	EvalDivIntervalFloatOp(context.Context, *DivIntervalFloatOp, Datum, Datum) (Datum, error)
 	EvalDivIntervalIntOp(context.Context, *DivIntervalIntOp, Datum, Datum) (Datum, error)
-	EvalFirstContainedByLTreeOp(context.Context, *FirstContainedByLTreeOp, Datum, Datum) (Datum, error)
-	EvalFirstContainsLTreeOp(context.Context, *FirstContainsLTreeOp, Datum, Datum) (Datum, error)
 	EvalFloorDivDecimalIntOp(context.Context, *FloorDivDecimalIntOp, Datum, Datum) (Datum, error)
 	EvalFloorDivDecimalOp(context.Context, *FloorDivDecimalOp, Datum, Datum) (Datum, error)
 	EvalFloorDivFloatOp(context.Context, *FloorDivFloatOp, Datum, Datum) (Datum, error)
@@ -329,11 +322,6 @@ func (op *ConcatJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (D
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ConcatLTreeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalConcatLTreeOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
 func (op *ConcatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalConcatOp(ctx, op, a, b)
 }
@@ -359,16 +347,6 @@ func (op *ContainedByJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 }
 
 // Eval is part of the BinaryEvalOp interface.
-func (op *ContainedByLTreeArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalContainedByLTreeArrayOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
-func (op *ContainedByLTreeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalContainedByLTreeOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
 func (op *ContainsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsArrayOp(ctx, op, a, b)
 }
@@ -376,16 +354,6 @@ func (op *ContainsArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) 
 // Eval is part of the BinaryEvalOp interface.
 func (op *ContainsJsonbOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalContainsJsonbOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
-func (op *ContainsLTreeArrayOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalContainsLTreeArrayOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
-func (op *ContainsLTreeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalContainsLTreeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.
@@ -431,16 +399,6 @@ func (op *DivIntervalFloatOp) Eval(ctx context.Context, e OpEvaluator, a, b Datu
 // Eval is part of the BinaryEvalOp interface.
 func (op *DivIntervalIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalDivIntervalIntOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
-func (op *FirstContainedByLTreeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalFirstContainedByLTreeOp(ctx, op, a, b)
-}
-
-// Eval is part of the BinaryEvalOp interface.
-func (op *FirstContainsLTreeOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
-	return e.EvalFirstContainsLTreeOp(ctx, op, a, b)
 }
 
 // Eval is part of the BinaryEvalOp interface.

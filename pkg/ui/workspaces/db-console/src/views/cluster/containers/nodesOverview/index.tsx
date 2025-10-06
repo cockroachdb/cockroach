@@ -253,11 +253,6 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       },
       sorter: (a: NodeStatusRow, b: NodeStatusRow) => {
         if (!isUndefined(a.nodeId) && !isUndefined(b.nodeId)) {
-          // If nodeId is defined but regionId is not, this means that there is only
-          // a single region. In this case, sort the by nodeId.
-          if (isUndefined(a.region) && isUndefined(b.region)) {
-            return a.nodeId - b.nodeId;
-          }
           return 0;
         }
         if (a.region < b.region) {
@@ -278,7 +273,13 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         if (isUndefined(a.nodesCount) || isUndefined(b.nodesCount)) {
           return 0;
         }
-        return a.nodesCount - b.nodesCount;
+        if (a.nodesCount < b.nodesCount) {
+          return -1;
+        }
+        if (a.nodesCount > b.nodesCount) {
+          return 1;
+        }
+        return 0;
       },
       render: (_text: string, record: NodeStatusRow) => record.nodesCount,
       sortDirections: ["ascend", "descend"],
@@ -290,7 +291,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       dataIndex: "uptime",
       render: formatWithPossibleStaleIndicator,
       title: <UptimeTooltip>Uptime</UptimeTooltip>,
-      sorter: false,
+      sorter: true,
       className: "column--align-right",
       width: "10%",
       ellipsis: true,
@@ -300,7 +301,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       dataIndex: "replicas",
       render: formatWithPossibleStaleIndicator,
       title: <ReplicasTooltip>Replicas</ReplicasTooltip>,
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.replicas - b.replicas,
+      sorter: true,
       className: "column--align-right",
       width: "10%",
     },
@@ -339,7 +340,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "numCpus",
       title: <CPUsTooltip>vCPUs</CPUsTooltip>,
       dataIndex: "numCpus",
-      sorter: (a: NodeStatusRow, b: NodeStatusRow) => a.numCpus - b.numCpus,
+      sorter: true,
       className: "column--align-right",
       width: "8%",
     },
@@ -347,7 +348,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "version",
       dataIndex: "version",
       title: <VersionTooltip>Version</VersionTooltip>,
-      sorter: false,
+      sorter: true,
       width: "8%",
       ellipsis: true,
     },

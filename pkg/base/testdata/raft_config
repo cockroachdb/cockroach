@@ -2,14 +2,9 @@ echo
 ----
 (base.RaftConfig) {
  RaftTickInterval: (time.Duration) 500ms,
- RaftTickSmearInterval: (time.Duration) 1ms,
- RaftElectionTimeoutTicks: (int64) 4,
- RaftElectionTimeoutJitterTicks: (int64) 4,
- RaftReproposalTimeoutTicks: (int64) 6,
- RaftHeartbeatIntervalTicks: (int64) 2,
- StoreLivenessHeartbeatInterval: (time.Duration) 1s,
- StoreLivenessSupportDuration: (time.Duration) 3s,
- FortificationGracePeriod: (time.Duration) 3s,
+ RaftElectionTimeoutTicks: (int) 4,
+ RaftReproposalTimeoutTicks: (int) 6,
+ RaftHeartbeatIntervalTicks: (int) 2,
  RangeLeaseDuration: (time.Duration) 6s,
  RangeLeaseRenewalFraction: (float64) 0.5,
  RaftEnableCheckQuorum: (bool) true,
@@ -24,10 +19,9 @@ echo
 }
 RaftHeartbeatInterval: 1s
 RaftElectionTimeout: 2s
-RaftElectionJitter: 2s
 RaftReproposalTimeout: 3s
 RangeLeaseDurations: active=6s renewal=3s
 RangeLeaseAcquireTimeout: 4s
 NodeLivenessDurations: active=6s renewal=3s
-StoreLivenessDurations: active=3s renewal=1s
+StoreLivenessDurations: active=6s renewal=3s
 SentinelGossipTTL: 3s

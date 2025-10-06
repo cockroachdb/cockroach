@@ -299,7 +299,7 @@ func (o *routerOutputOp) closeLocked(ctx context.Context) {
 		// This log message is Info instead of Warning because the flow will also
 		// attempt to clean up the parent directory, so this failure might not have
 		// any effect.
-		log.Dev.Infof(ctx, "error closing vectorized hash router output, files may be left over: %s", err)
+		log.Infof(ctx, "error closing vectorized hash router output, files may be left over: %s", err)
 	}
 }
 

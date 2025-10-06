@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -28,10 +29,10 @@ import (
 
 var pollingInterval = settings.RegisterDurationSetting(
 	settings.SystemVisible,
-	"sql.diagnostics.poll_interval",
-	"rate at which the stmtdiagnostics registries polls for requests, set to zero to disable",
+	"sql.stmt_diagnostics.poll_interval",
+	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second,
-	settings.WithRetiredName("sql.stmt_diagnostics.poll_interval"),
+	settings.NonNegativeDuration,
 )
 
 var bundleChunkSize = settings.RegisterByteSizeSetting(
@@ -109,18 +110,11 @@ type Request struct {
 	minExecutionLatency time.Duration
 	expiresAt           time.Time
 	redacted            bool
-	username            string
 }
 
 // IsRedacted returns whether this diagnostic request is for a redacted bundle.
 func (r *Request) IsRedacted() bool {
 	return r.redacted
-}
-
-// Username returns the normalized username of the user that initiated this
-// request. It can be empty in which case the requester user is unknown.
-func (r *Request) Username() string {
-	return r.username
 }
 
 func (r *Request) isExpired(now time.Time) bool {
@@ -149,30 +143,64 @@ func NewRegistry(db isql.DB, st *cluster.Settings) *Registry {
 	return r
 }
 
-type StmtDiagnostic struct {
-	requestID       RequestID
-	req             Request
-	stmtFingerprint string
-	stmt            string
-	bundle          []byte
-	collectionErr   error
+// Start will start the polling loop for the Registry.
+func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+
+	// Since background statement diagnostics collection is not under user
+	// control, exclude it from cost accounting and control.
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+
+	// NB: The only error that should occur here would be if the server were
+	// shutting down so let's swallow it.
+	_ = stopper.RunAsyncTask(ctx, "stmt-diag-poll", r.poll)
 }
 
-func NewStmtDiagnostic(
-	requestID RequestID,
-	req Request,
-	stmtFingerprint string,
-	stmt string,
-	bundle []byte,
-	collectionErr error,
-) StmtDiagnostic {
-	return StmtDiagnostic{
-		requestID:       requestID,
-		req:             req,
-		stmtFingerprint: stmtFingerprint,
-		stmt:            stmt,
-		bundle:          bundle,
-		collectionErr:   collectionErr,
+func (r *Registry) poll(ctx context.Context) {
+	var (
+		timer               timeutil.Timer
+		lastPoll            time.Time
+		deadline            time.Time
+		pollIntervalChanged = make(chan struct{}, 1)
+		maybeResetTimer     = func() {
+			if interval := pollingInterval.Get(&r.st.SV); interval == 0 {
+				// Setting the interval to zero stops the polling.
+				timer.Stop()
+			} else {
+				newDeadline := lastPoll.Add(interval)
+				if deadline.IsZero() || !deadline.Equal(newDeadline) {
+					deadline = newDeadline
+					timer.Reset(timeutil.Until(deadline))
+				}
+			}
+		}
+		poll = func() {
+			if err := r.pollRequests(ctx); err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				log.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
+			}
+			lastPoll = timeutil.Now()
+		}
+	)
+	pollingInterval.SetOnChange(&r.st.SV, func(ctx context.Context) {
+		select {
+		case pollIntervalChanged <- struct{}{}:
+		default:
+		}
+	})
+	for {
+		maybeResetTimer()
+		select {
+		case <-pollIntervalChanged:
+			continue // go back around and maybe reset the timer
+		case <-timer.C:
+			timer.Read = true
+		case <-ctx.Done():
+			return
+		}
+		poll()
 	}
 }
 
@@ -197,7 +225,6 @@ func (r *Registry) addRequestInternalLocked(
 	minExecutionLatency time.Duration,
 	expiresAt time.Time,
 	redacted bool,
-	username string,
 ) {
 	if r.findRequestLocked(id) {
 		// Request already exists.
@@ -214,7 +241,6 @@ func (r *Registry) addRequestInternalLocked(
 		minExecutionLatency: minExecutionLatency,
 		expiresAt:           expiresAt,
 		redacted:            redacted,
-		username:            username,
 	}
 }
 
@@ -253,11 +279,10 @@ func (r *Registry) InsertRequest(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
-	username string,
 ) error {
 	_, err := r.insertRequestInternal(
 		ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, redacted, username,
+		minExecutionLatency, expiresAfter, redacted,
 	)
 	return err
 }
@@ -271,8 +296,10 @@ func (r *Registry) insertRequestInternal(
 	minExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
-	username string,
 ) (RequestID, error) {
+	if redacted && !r.st.Version.IsActive(ctx, clusterversion.V24_2_StmtDiagRedacted) {
+		return 0, errors.Newf("redacted bundles are only supported after 24.2 version migrations have completed")
+	}
 	if samplingProbability != 0 {
 		if samplingProbability < 0 || samplingProbability > 1 {
 			return 0, errors.Newf(
@@ -315,7 +342,7 @@ func (r *Registry) insertRequestInternal(
 
 		now := timeutil.Now()
 		insertColumns := "statement_fingerprint, requested_at"
-		qargs := make([]interface{}, 2, 9)
+		qargs := make([]interface{}, 2, 8)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
 		if planGist != "" {
@@ -339,10 +366,6 @@ func (r *Registry) insertRequestInternal(
 		if redacted {
 			insertColumns += ", redacted"
 			qargs = append(qargs, redacted) // redacted
-		}
-		if username != "" {
-			insertColumns += ", username"
-			qargs = append(qargs, username) // username
 		}
 		valuesClause := "$1, $2"
 		for i := range qargs[2:] {
@@ -375,10 +398,7 @@ func (r *Registry) insertRequestInternal(
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		r.mu.epoch++
-		r.addRequestInternalLocked(
-			ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-			minExecutionLatency, expiresAt, redacted, username,
-		)
+		r.addRequestInternalLocked(ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted)
 	}()
 
 	return reqID, nil
@@ -519,163 +539,134 @@ func (r *Registry) InsertStatementDiagnostics(
 	var diagID CollectedInstanceID
 	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		txn.KV().SetDebugName("stmt-diag-insert-bundle")
-		id, err := r.innerInsertStatementDiagnostics(ctx, NewStmtDiagnostic(requestID, req, stmtFingerprint, stmt, bundle, collectionErr), txn, CollectedInstanceID(0))
+		if requestID != 0 {
+			row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
+				requestID)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return errors.New("failed to check completed statement diagnostics")
+			}
+			cnt := int(*row[0].(*tree.DInt))
+			if cnt == 0 {
+				// Someone else already marked the request as completed. We've traced for nothing.
+				// This can only happen once per node, per request since we're going to
+				// remove the request from the registry.
+				return nil
+			}
+		}
+
+		// Generate the values that will be inserted.
+		errorVal := tree.DNull
+		if collectionErr != nil {
+			errorVal = tree.NewDString(collectionErr.Error())
+		}
+
+		bundleChunksVal := tree.NewDArray(types.Int)
+		bundleToUpload := bundle
+		for len(bundleToUpload) > 0 {
+			chunkSize := int(bundleChunkSize.Get(&r.st.SV))
+			chunk := bundleToUpload
+			if len(chunk) > chunkSize {
+				chunk = chunk[:chunkSize]
+			}
+			bundleToUpload = bundleToUpload[len(chunk):]
+
+			// Insert the chunk into system.statement_bundle_chunks.
+			row, err := txn.QueryRowEx(
+				ctx, "stmt-bundle-chunks-insert", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
+				"statement diagnostics bundle",
+				tree.NewDBytes(tree.DBytes(chunk)),
+			)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return errors.New("failed to check statement bundle chunk")
+			}
+			chunkID := row[0].(*tree.DInt)
+			if err := bundleChunksVal.Append(chunkID); err != nil {
+				return err
+			}
+		}
+
+		collectionTime := timeutil.Now()
+
+		// Insert the collection metadata into system.statement_diagnostics.
+		row, err := txn.QueryRowEx(
+			ctx, "stmt-diag-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO system.statement_diagnostics "+
+				"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
+				"VALUES ($1, $2, $3, $4, $5) RETURNING id",
+			stmtFingerprint, stmt, collectionTime, bundleChunksVal, errorVal,
+		)
 		if err != nil {
 			return err
 		}
-		diagID = id
-		return nil
-	})
-
-	return diagID, err
-}
-
-func (r *Registry) insertBundleChunks(
-	ctx context.Context, bundle []byte, description string, txn isql.Txn,
-) (*tree.DArray, error) {
-	bundleChunksVal := tree.NewDArray(types.Int)
-	bundleToUpload := bundle
-	for len(bundleToUpload) > 0 {
-		chunkSize := int(bundleChunkSize.Get(&r.st.SV))
-		chunk := bundleToUpload
-		if len(chunk) > chunkSize {
-			chunk = chunk[:chunkSize]
-		}
-		bundleToUpload = bundleToUpload[len(chunk):]
-
-		// Insert the chunk into system.statement_bundle_chunks.
-		row, err := txn.QueryRowEx(
-			ctx, "stmt-bundle-chunks-insert", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
-			description,
-			tree.NewDBytes(tree.DBytes(chunk)),
-		)
-		if err != nil {
-			return nil, err
-		}
 		if row == nil {
-			return nil, errors.New("failed to check statement bundle chunk")
+			return errors.New("failed to insert statement diagnostics")
 		}
-		chunkID := row[0].(*tree.DInt)
-		if err := bundleChunksVal.Append(chunkID); err != nil {
-			return nil, err
-		}
-	}
-	return bundleChunksVal, nil
-}
+		diagID = CollectedInstanceID(*row[0].(*tree.DInt))
 
-func (r *Registry) innerInsertStatementDiagnostics(
-	ctx context.Context, diagnostic StmtDiagnostic, txn isql.Txn, txnDiagnosticId CollectedInstanceID,
-) (CollectedInstanceID, error) {
-	var diagID CollectedInstanceID
-	if diagnostic.requestID != 0 {
-		row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
-			diagnostic.requestID)
-		if err != nil {
-			return diagID, err
-		}
-		if row == nil {
-			return diagID, errors.New("failed to check completed statement diagnostics")
-		}
-		cnt := int(*row[0].(*tree.DInt))
-		if cnt == 0 {
-			// Someone else already marked the request as completed. We've traced for nothing.
-			// This can only happen once per node, per request since we're going to
-			// remove the request from the registry.
-			return diagID, nil
-		}
-	}
-
-	// Generate the values that will be inserted.
-	errorVal := tree.DNull
-	if diagnostic.collectionErr != nil {
-		errorVal = tree.NewDString(diagnostic.collectionErr.Error())
-	}
-
-	bundleChunksVal, err := r.insertBundleChunks(ctx, diagnostic.bundle, "statement diagnostics bundle", txn)
-	if err != nil {
-		return diagID, err
-	}
-
-	collectionTime := timeutil.Now()
-
-	insertCols := "statement_fingerprint, statement, collected_at, bundle_chunks, error"
-	insertVals := "$1, $2, $3, $4, $5"
-	vals := []interface{}{diagnostic.stmtFingerprint, diagnostic.stmt, collectionTime, bundleChunksVal, errorVal}
-	if txnDiagnosticId != 0 {
-		insertCols += ", transaction_diagnostics_id"
-		insertVals += ", $6"
-		vals = append(vals, txnDiagnosticId)
-	}
-	// Insert the collection metadata into system.statement_diagnostics.
-	row, err := txn.QueryRowEx(
-		ctx, "stmt-diag-insert", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		"INSERT INTO system.statement_diagnostics "+
-			"("+insertCols+") "+
-			"VALUES ("+insertVals+") RETURNING id",
-		vals...,
-	)
-	if err != nil {
-		return diagID, err
-	}
-	if row == nil {
-		return diagID, errors.New("failed to insert statement diagnostics")
-	}
-	diagID = CollectedInstanceID(*row[0].(*tree.DInt))
-
-	if diagnostic.requestID != 0 {
-		// Link the request from system.statement_diagnostics_request to the
-		// diagnostic ID we just collected, marking it as completed if we're
-		// able.
-		shouldMarkCompleted := true
-		if collectUntilExpiration.Get(&r.st.SV) {
-			// Two other conditions need to hold true for us to continue
-			// capturing future traces, i.e. not mark this request as
-			// completed.
-			// - Requests need to be of the sampling sort (also implies
-			//   there's a latency threshold) -- a crude measure to prevent
-			//   against unbounded collection;
-			// - Requests need to have an expiration set -- same reason as
-			// above.
-			if diagnostic.req.samplingProbability > 0 && !diagnostic.req.expiresAt.IsZero() {
-				shouldMarkCompleted = false
+		if requestID != 0 {
+			// Link the request from system.statement_diagnostics_request to the
+			// diagnostic ID we just collected, marking it as completed if we're
+			// able.
+			shouldMarkCompleted := true
+			if collectUntilExpiration.Get(&r.st.SV) {
+				// Two other conditions need to hold true for us to continue
+				// capturing future traces, i.e. not mark this request as
+				// completed.
+				// - Requests need to be of the sampling sort (also implies
+				//   there's a latency threshold) -- a crude measure to prevent
+				//   against unbounded collection;
+				// - Requests need to have an expiration set -- same reason as
+				// above.
+				if req.samplingProbability > 0 && !req.expiresAt.IsZero() {
+					shouldMarkCompleted = false
+				}
+			}
+			_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"UPDATE system.statement_diagnostics_requests "+
+					"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
+				shouldMarkCompleted, diagID, requestID)
+			if err != nil {
+				return err
+			}
+		} else {
+			// Insert a completed request into system.statement_diagnostics_request.
+			// This is necessary because the UI uses this table to discover completed
+			// diagnostics.
+			_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				"INSERT INTO system.statement_diagnostics_requests"+
+					" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
+					" VALUES (true, $1, $2, $3)",
+				stmtFingerprint, diagID, collectionTime)
+			if err != nil {
+				return err
 			}
 		}
-		_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"UPDATE system.statement_diagnostics_requests "+
-				"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
-			shouldMarkCompleted, diagID, diagnostic.requestID)
-		if err != nil {
-			return diagID, err
-		}
-	} else {
-		// Insert a completed request into system.statement_diagnostics_request.
-		// This is necessary because the UI uses this table to discover completed
-		// diagnostics.
-		//
-		// This bundle was collected via explicit EXPLAIN ANALYZE (DEBUG).
-		_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			"INSERT INTO system.statement_diagnostics_requests"+
-				" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
-				" VALUES (true, $1, $2, $3)",
-			diagnostic.stmtFingerprint, diagID, collectionTime)
-		if err != nil {
-			return diagID, err
-		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return diagID, nil
 }
 
-// pollStmtRequests reads the pending rows from system.statement_diagnostics_requests and
+// pollRequests reads the pending rows from system.statement_diagnostics_requests and
 // updates r.mu.requests accordingly.
-func (r *Registry) pollStmtRequests(ctx context.Context) error {
+func (r *Registry) pollRequests(ctx context.Context) error {
 	var rows []tree.Datums
+	isRedactedSupported := r.st.Version.IsActive(ctx, clusterversion.V24_2_StmtDiagRedacted)
 
 	// Loop until we run the query without straddling an epoch increment.
 	for {
@@ -683,11 +674,15 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
+		var extraColumns string
+		if isRedactedSupported {
+			extraColumns = ", redacted"
+		}
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username
+			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist%s
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`, extraColumns),
 		)
 		if err != nil {
 			return err
@@ -721,7 +716,7 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		var minExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
-		var planGist, username string
+		var planGist string
 		var antiPlanGist, redacted bool
 
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
@@ -733,7 +728,7 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		if prob, ok := row[4].(*tree.DFloat); ok {
 			samplingProbability = float64(*prob)
 			if samplingProbability < 0 || samplingProbability > 1 {
-				log.Dev.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
+				log.Warningf(ctx, "malformed sampling probability for request %d: %f (expected in range [0, 1]), resetting to 1.0",
 					id, samplingProbability)
 				samplingProbability = 1.0
 			}
@@ -744,14 +739,13 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		if antiGist, ok := row[6].(*tree.DBool); ok {
 			antiPlanGist = bool(*antiGist)
 		}
-		if b, ok := row[7].(*tree.DBool); ok {
-			redacted = bool(*b)
-		}
-		if u, ok := row[8].(*tree.DString); ok {
-			username = string(*u)
+		if isRedactedSupported {
+			if b, ok := row[7].(*tree.DBool); ok {
+				redacted = bool(*b)
+			}
 		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted)
 	}
 
 	// Remove all other requests.
@@ -761,72 +755,4 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// StartPolling starts a background task that polls for new statement and
-// transaction requests and updates the corresponding registries.
-func StartPolling(ctx context.Context, tr *TxnRegistry, sr *Registry, stopper *stop.Stopper) {
-	// The registry has the same lifetime as the server, so the cancellation
-	// function can be ignored and it'll be called by the stopper.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
-
-	// Since background diagnostics collection is not under user
-	// control, exclude it from cost accounting and control.
-	ctx = multitenant.WithTenantCostControlExemption(ctx)
-
-	// NB: The only error that should occur here would be if the server were
-	// shutting down so let's swallow it.
-	_ = stopper.RunAsyncTask(ctx, "stmt-txn-diag-poll", func(ctx context.Context) {
-		var (
-			timer               timeutil.Timer
-			lastPoll            time.Time
-			deadline            time.Time
-			pollIntervalChanged = make(chan struct{}, 1)
-			maybeResetTimer     = func() {
-				if interval := pollingInterval.Get(&sr.st.SV); interval == 0 {
-					// Setting the interval to zero stops the polling.
-					timer.Stop()
-				} else {
-					newDeadline := lastPoll.Add(interval)
-					if deadline.IsZero() || !deadline.Equal(newDeadline) {
-						deadline = newDeadline
-						timer.Reset(timeutil.Until(deadline))
-					}
-				}
-			}
-			poll = func() {
-				if err := tr.pollTxnRequests(ctx); err != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					log.Ops.Warningf(ctx, "error polling for transaction diagnostics requests: %s", err)
-				}
-				if err := sr.pollStmtRequests(ctx); err != nil {
-					if ctx.Err() != nil {
-						return
-					}
-					log.Ops.Warningf(ctx, "error polling for statement diagnostics requests: %s", err)
-				}
-				lastPoll = timeutil.Now()
-			}
-		)
-
-		pollingInterval.SetOnChange(&sr.st.SV, func(ctx context.Context) {
-			select {
-			case pollIntervalChanged <- struct{}{}:
-			default:
-			}
-		})
-		for {
-			maybeResetTimer()
-			select {
-			case <-pollIntervalChanged:
-				continue // go back around and maybe reset the timer
-			case <-timer.C:
-			case <-ctx.Done():
-				return
-			}
-			poll()
-		}
-	})
 }

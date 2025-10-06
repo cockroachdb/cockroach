@@ -303,19 +303,11 @@ vectorized: true
                 │ columns: (x, y, unnest)
                 │ estimated row count: 2,000 (missing stats)
                 │
-                ├── • scan
-                │     columns: (x, y)
-                │     estimated row count: 1,000 (missing stats)
-                │     table: xy@xy_pkey
-                │     spans: FULL SCAN
-                │
-                └── • inner loop (unoptimized)
-                    │ columns: ()
-                    │
-                    └── • values
-                          columns: ()
-                           ├── (xy.x,)
-                           └── (y,)
+                └── • scan
+                      columns: (x, y)
+                      estimated row count: 1,000 (missing stats)
+                      table: xy@xy_pkey
+                      spans: FULL SCAN
 
 # Regression test for #24676.
 statement ok

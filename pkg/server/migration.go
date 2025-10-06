@@ -52,7 +52,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	if targetCV.Less(versionSetting.MinSupportedVersion()) {
 		msg := fmt.Sprintf("target cluster version %s less than binary's min supported version %s",
 			targetCV, versionSetting.MinSupportedVersion())
-		log.Dev.Warningf(ctx, "%s", msg)
+		log.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
@@ -71,7 +71,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	if versionSetting.LatestVersion().Less(targetCV.Version) {
 		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
 			versionSetting.LatestVersion(), targetCV)
-		log.Dev.Warningf(ctx, "%s", msg)
+		log.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
@@ -143,7 +143,7 @@ func bumpClusterVersion(
 	if err := st.Version.SetActiveVersion(ctx, newCV); err != nil {
 		return err
 	}
-	log.Dev.Infof(ctx, "active cluster version setting is now %s (up from %s)",
+	log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
 		newCV.PrettyPrint(), prevCV.PrettyPrint())
 	return nil
 }
@@ -174,7 +174,7 @@ func (m *migrationServer) SyncAllEngines(
 		return nil, err
 	}
 
-	log.Dev.Infof(ctx, "synced %d engines", len(m.server.engines))
+	log.Infof(ctx, "synced %d engines", len(m.server.engines))
 	resp := &serverpb.SyncAllEnginesResponse{}
 	return resp, nil
 }

@@ -69,7 +69,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 				return false, nil
 			})
 		if eventCount > 0 {
-			log.Dev.Infof(
+			log.Infof(
 				ctx, "registered %d loss of quorum replica recovery events for s%d",
 				eventCount, s.Ident.StoreID)
 		}
@@ -77,7 +77,7 @@ func logPendingLossOfQuorumRecoveryEvents(ctx context.Context, stores *kvserver.
 	}); err != nil {
 		// We don't want to abort server if we can't record recovery events
 		// as it is the last thing we need if cluster is already unhealthy.
-		log.Dev.Errorf(ctx, "failed to record loss of quorum recovery events: %v", err)
+		log.Errorf(ctx, "failed to record loss of quorum recovery events: %v", err)
 	}
 }
 
@@ -117,7 +117,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		}); err != nil {
 			// We don't want to abort server if we can't record recovery events
 			// as it is the last thing we need if cluster is already unhealthy.
-			log.Dev.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
+			log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
 		}
 	})
 
@@ -126,7 +126,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	err := stores.VisitStores(func(s *kvserver.Store) error {
 		c, found, err := loqrecovery.ReadCleanupActionsInfo(ctx, s.TODOEngine())
 		if err != nil {
-			log.Dev.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
+			log.Errorf(ctx, "failed to read loss of quorum recovery cleanup actions info from store: %s", err)
 			return nil
 		}
 		if found {
@@ -137,7 +137,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 		return nil
 	})
 	if err := iterutil.Map(err); err != nil {
-		log.Dev.Infof(ctx, "failed to iterate node stores while searching for loq recovery cleanup info: %s", err)
+		log.Infof(ctx, "failed to iterate node stores while searching for loq recovery cleanup info: %s", err)
 		return
 	}
 	if len(cleanup.DecommissionedNodeIDs) == 0 {
@@ -146,7 +146,7 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 	decomCtx, decomCancel := stopper.WithCancelOnQuiesce(ctx)
 	_ = stopper.RunAsyncTask(decomCtx, "maybe-mark-nodes-as-decommissioned", func(ctx context.Context) {
 		defer decomCancel()
-		log.Dev.Infof(ctx, "loss of quorum recovery decommissioning removed nodes %s",
+		log.Infof(ctx, "loss of quorum recovery decommissioning removed nodes %s",
 			strutil.JoinIDs("n", cleanup.DecommissionedNodeIDs))
 		retryOpts := retry.Options{
 			InitialBackoff: 10 * time.Second,
@@ -167,22 +167,22 @@ func maybeRunLossOfQuorumRecoveryCleanup(
 			err := server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING,
 				cleanup.DecommissionedNodeIDs)
 			if err != nil {
-				log.Dev.Infof(ctx,
+				log.Infof(ctx,
 					"loss of quorum recovery cleanup failed to decommissioning dead nodes, this is ok as cluster might not be healed yet: %s", err)
 				continue
 			}
 			err = server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONED,
 				cleanup.DecommissionedNodeIDs)
 			if err != nil {
-				log.Dev.Infof(ctx,
+				log.Infof(ctx,
 					"loss of quorum recovery cleanup failed to decommissioning dead nodes, this is ok as cluster might not be healed yet: %s", err)
 				continue
 			}
 			if err = loqrecovery.RemoveCleanupActionsInfo(ctx, actionsSource); err != nil {
-				log.Dev.Infof(ctx, "failed to remove ")
+				log.Infof(ctx, "failed to remove ")
 			}
 			break
 		}
-		log.Dev.Infof(ctx, "loss of quorum recovery cleanup finished decommissioning removed nodes")
+		log.Infof(ctx, "loss of quorum recovery cleanup finished decommissioning removed nodes")
 	})
 }

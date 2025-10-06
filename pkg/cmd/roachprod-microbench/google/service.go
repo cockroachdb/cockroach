@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/maps"
 	"google.golang.org/api/drive/v3"
@@ -23,8 +22,6 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 )
-
-const dashboardURL = "https://microbench.testeng.crdb.io/dashboard/"
 
 // Service is capable of communicating with the Google Drive API and the Google
 // Sheets API to create new spreadsheets and populate them from benchstat
@@ -163,7 +160,7 @@ func (srv *Service) createRawSheet(
 
 		// Column: Benchmark name.
 		vals = append(vals, strCell("name"))
-		metadata = append(metadata, withSize(600))
+		metadata = append(metadata, withSize(400))
 
 		// Columns: Metric names.
 		for _, run := range runs {
@@ -201,7 +198,7 @@ func (srv *Service) createRawSheet(
 		entry := metric.BenchmarkEntries[name]
 		comparison := comparisons[name]
 		var vals []*sheets.CellData
-		vals = append(vals, strCellWithLink(name, dashboardLink(name)))
+		vals = append(vals, strCell(name))
 		for _, run := range runs {
 			vals = append(vals, numCell(entry.Summaries[run].Center))
 		}
@@ -272,7 +269,7 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 		if len(info.nonZeroVals) == 0 {
 			noChanges := fmt.Sprintf("no change in %s", info.metric.Name)
 			vals = append(vals, strCell(noChanges))
-			metadata = append(metadata, withSize(400))
+			metadata = append(metadata, withSize(200))
 			continue
 		}
 
@@ -311,7 +308,7 @@ func (srv *Service) createOverviewSheet(rawInfos []rawSheetInfo) *sheets.Sheet {
 			},
 		})
 		vals = append(vals, &sheets.CellData{})
-		metadata = append(metadata, withSize(400), withSize(100))
+		metadata = append(metadata, withSize(200), withSize(100))
 
 		deltaCol := int64(len(vals)) - 1
 		cf := condFormatting(props.SheetId, deltaCol, smallerBetter)
@@ -370,29 +367,6 @@ func strCell(s string) *sheets.CellData {
 			StringValue: &s,
 		},
 	}
-}
-
-func strCellWithLink(s string, link string) *sheets.CellData {
-	return &sheets.CellData{
-		UserEnteredValue: &sheets.ExtendedValue{
-			StringValue: &s,
-		},
-		TextFormatRuns: []*sheets.TextFormatRun{
-			{
-				StartIndex: 0,
-				Format: &sheets.TextFormat{
-					Link: &sheets.Link{
-						Uri: link,
-					},
-				},
-			},
-		},
-	}
-}
-
-func dashboardLink(name string) string {
-	parts := strings.Split(name, util.PackageSeparator)
-	return dashboardURL + "?benchmark=" + parts[1] + "&package=" + parts[0]
 }
 
 func numCell(f float64) *sheets.CellData {

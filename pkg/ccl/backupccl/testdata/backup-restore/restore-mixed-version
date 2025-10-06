@@ -1,0 +1,49 @@
+new-cluster name=s1 before-version=previous-release disable-tenant
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foo VALUES (1, 'x'),(2,'y');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
+----
+
+# This is a cluster where the cluster version is behind the binary version. Such
+# a condition only occurs when the user has upgraded the node to a new major
+# version but has not yet finalized the upgrade.
+new-cluster name=s2 before-version=previous-release share-io-dir=s1 disable-tenant
+----
+
+exec-sql expect-error-regex=(pq: cluster restore not supported during major version upgrade: restore started at cluster version .* but binary version is.*)
+RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/'
+----
+regex matches error
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+----
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full_cluster_backup/' WITH new_db_name='d2';
+----
+
+query-sql
+SELECT * FROM d2.foo
+----
+1 x
+2 y
+
+exec-sql
+RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/full_cluster_backup/';
+----
+
+query-sql
+SELECT * FROM d.foo
+----
+1 x
+2 y

@@ -47,30 +47,26 @@ func (env *InteractionEnv) handleProcessApplyThread(t *testing.T, d datadriven.T
 // the node with the given index.
 func (env *InteractionEnv) ProcessApplyThread(idx int) error {
 	n := &env.Nodes[idx]
-	if n.ApplyWork.Empty() {
+	if len(n.ApplyWork) == 0 {
 		env.Output.WriteString("no apply work to perform")
 		return nil
 	}
+	m := n.ApplyWork[0]
+	n.ApplyWork = n.ApplyWork[1:]
 
-	const limit = 1 // TODO(pav-kv): make it configurable.
-	work := n.ApplyWork
-	work.Last = work.After + limit
-
-	ls := n.RawNode.LogSnapshot()
-	apply, err := ls.Slice(work, n.Config.MaxCommittedSizePerReady)
-	if err != nil {
-		return err
-	} else if len(apply) == 0 {
-		return fmt.Errorf("no entries loaded for apply span %v", work)
-	}
-
-	env.Output.WriteString("Applying:\n")
-	env.Output.WriteString(raft.DescribeEntries(apply, defaultEntryFormatter))
-	if err := processApply(n, apply); err != nil {
+	resps := m.Responses
+	m.Responses = nil
+	env.Output.WriteString("Processing:\n")
+	env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
+	if err := processApply(n, m.Entries); err != nil {
 		return err
 	}
-	n.ApplyWork.After = raftpb.Index(apply[len(apply)-1].Index)
-	n.AckApplied(apply)
+
+	env.Output.WriteString("Responses:\n")
+	for _, m := range resps {
+		env.Output.WriteString(raft.DescribeMessage(m, defaultEntryFormatter) + "\n")
+	}
+	env.Messages = append(env.Messages, resps...)
 	return nil
 }
 

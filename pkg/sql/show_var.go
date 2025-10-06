@@ -15,7 +15,6 @@ import (
 // showVarNode represents a SHOW <var> statement.
 // This is reached if <var> contains a period.
 type showVarNode struct {
-	zeroInputPlanNode
 	name  string
 	shown bool
 	val   string

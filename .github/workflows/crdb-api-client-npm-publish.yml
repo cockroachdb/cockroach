@@ -1,0 +1,135 @@
+# This workflow establishes two-step process of building and publishing `crdb-api-client` NPM package
+# when the produced outputs are changed comparing to last published version.
+# 1st step (first CI run) checks that built files contain changes comparing to previous version and
+# if NPM package version incremented:
+# - if yes, it publishes to NPM registry
+# - if no, new PR created (with incremented version in package.json file) which should be merged and
+# then second step is executed (runs workflow again) and publishes package.
+name: Publish crdb-api-client package to NPM registry
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - 'pkg/ui/workspaces/crdb-api-client'
+      - 'pkg/**/*.proto'
+
+jobs:
+  publish_crdb_api_client:
+    if: github.repository == 'cockroachdb/cockroach'
+    environment: ${{ github.ref_name == 'master' && 'master' || null }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Bazel Cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/bazel
+        key: ${{ runner.os }}-bazel-cache
+
+    - uses: pnpm/action-setup@v2
+      with:
+        version: "8.6.10"
+
+    - name: Setup NodeJS
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        registry-url: 'https://registry.npmjs.org'
+        always-auth: true
+        cache: 'pnpm'
+        cache-dependency-path: "${{ github.workspace }}/pkg/ui/pnpm-lock.yaml"
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Build crdb-api-client package
+      id: bazel-build
+      run: |
+        pnpm --dir pkg/ui install
+        bazel build //pkg/ui/workspaces/crdb-api-client:crdb-api-client
+        PACKAGE_PATH=$(bazel info execution_root)/$(bazel cquery //pkg/ui/workspaces/crdb-api-client:crdb-api-client --output=files)
+        echo "package_path=$PACKAGE_PATH" >> $GITHUB_OUTPUT
+
+    - name: Check for changes
+      id: check-changes
+      working-directory: ${{ steps.bazel-build.outputs.package_path }}
+      shell: bash
+      run: |
+        if [[ $(npm diff) ]]; then
+          echo "modified=true" >> $GITHUB_OUTPUT
+        else
+          echo "modified=false" >> $GITHUB_OUTPUT
+        fi
+        PUBLISHED_VERSION=$(npm view @cockroachlabs/crdb-api-client version);
+        PACKAGE_VERSION=$(cat ./package.json | jq -r ".version");
+        echo "package_version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT;
+        if [[ $PUBLISHED_VERSION == $PACKAGE_VERSION ]]; then
+          echo "same_version=true" >> $GITHUB_OUTPUT
+        else
+          echo "same_version=false" >> $GITHUB_OUTPUT
+        fi
+        # Check if PR to increment package version already exists. 
+        prs=$(gh pr list \
+          --repo "${{ github.repository }}" \
+          --head 'crdb-api-client-increment-version' \
+          --base 'master' \
+          --author 'cockroach-teamcity' \
+          --json title \
+          --jq 'length')
+        if ((prs > 0)); then
+          echo "has_pr=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "has_pr=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Increment version
+      if: |
+        steps.check-changes.outputs.modified == 'true' && \
+          steps.check-changes.outputs.same_version == 'true' && \
+          steps.check-changes.outputs.has_pr == 'false'
+      working-directory: pkg/ui/workspaces/crdb-api-client
+      run: npm version patch
+
+    - name: Create PR to increment package version
+      if: |
+        steps.check-changes.outputs.modified == 'true' && \
+          steps.check-changes.outputs.same_version == 'true' && \
+          steps.check-changes.outputs.has_pr == 'false'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        base: master
+        token: ${{ secrets.GH_TOKEN_PR }}
+        push-to-fork: "cockroach-teamcity/cockroach"
+        add-paths: pkg/ui/workspaces/crdb-api-client/package.json
+        branch: "crdb-api-client-increment-version"
+        title: "ui: Increment @cockroachlabs/crdb-api-client version"
+        author: "CRL Release bot <teamcity@cockroachlabs.com>"
+        reviewers: koorosh
+        body: |
+          Update pkg/ui/workspaces/crdb-api-client/package.json file with incremented patch version.
+          
+          Epic: None
+          Release note: None
+          Release justification: non-production code changes
+        commit-message: |
+          ui: Increment crdb-api-client version to ${{ steps.check-changes.outputs.package_version }}
+          
+          Update pkg/ui/workspaces/crdb-api-client/package.json 
+          file with incremented patch version.
+          
+          Epic: None
+          Release note: None
+          Release justification: non-production code changes
+        delete-branch: true
+
+    - name: Publish package
+      if: steps.check-changes.outputs.modified == 'true' && steps.check-changes.outputs.same_version == 'false'
+      working-directory: pkg/ui/workspaces/crdb-api-client
+      run: npm publish --access public --tag latest --ignore-scripts

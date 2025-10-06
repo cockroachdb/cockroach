@@ -58,9 +58,9 @@ func TestTruncateLog(t *testing.T) {
 
 	ctx := context.Background()
 	const (
-		rangeID        = 12
-		term           = 10
-		compactedIndex = 99
+		rangeID    = 12
+		term       = 10
+		firstIndex = 100
 	)
 
 	st := cluster.MakeTestingClusterSettings()
@@ -68,14 +68,14 @@ func TestTruncateLog(t *testing.T) {
 		ClusterSettings: st,
 		Desc:            &roachpb.RangeDescriptor{RangeID: rangeID},
 		Term:            term,
-		CompactedIndex:  compactedIndex,
+		FirstIndex:      firstIndex,
 	}
 
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
 	truncState := kvserverpb.RaftTruncatedState{
-		Index: compactedIndex + 2,
+		Index: firstIndex + 1,
 		Term:  term,
 	}
 
@@ -84,7 +84,7 @@ func TestTruncateLog(t *testing.T) {
 	// Send a truncation request.
 	req := kvpb.TruncateLogRequest{
 		RangeID: rangeID,
-		Index:   compactedIndex + 8,
+		Index:   firstIndex + 7,
 	}
 	cArgs := CommandArgs{
 		EvalCtx: evalCtx.EvalContext(),
@@ -106,6 +106,8 @@ func TestTruncateLog(t *testing.T) {
 	gotTruncatedState := readTruncStates(t, eng, rangeID)
 	assert.Equal(t, truncState, gotTruncatedState)
 
-	assert.NotNil(t, res.Replicated.RaftTruncatedState)
-	assert.Equal(t, expTruncState, *res.Replicated.RaftTruncatedState)
+	assert.NotNil(t, res.Replicated.State)
+	assert.NotNil(t, res.Replicated.State.TruncatedState)
+	assert.Equal(t, expTruncState, *res.Replicated.State.TruncatedState)
+
 }

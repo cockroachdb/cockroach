@@ -27,25 +27,6 @@ func init() {
 				to.TypeFilter(rulesVersionKey, isColumnDependent),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
-				IsNotAlterColumnTypeOp("table-id", "col-id"),
-			}
-		},
-	)
-
-	// This rule is similar to the one above but omits the column name. This is specific
-	// to ALTER COLUMN ... TYPE, which replaces a column with the same name. The column
-	// name is assigned during the swap, as it replaces the old column.
-	registerDepRule(
-		"column existence precedes column dependents during an alter column type",
-		scgraph.Precedence,
-		"column", "dependent",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.Column)(nil)),
-				to.TypeFilter(rulesVersionKey, isColumnDependentExceptColumnName),
-				JoinOnColumnID(from, to, "table-id", "col-id"),
-				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
-				rel.And(IsAlterColumnTypeOp("table-id", "col-id")...),
 			}
 		},
 	)
@@ -68,63 +49,24 @@ func init() {
 // Special cases of the above.
 func init() {
 	registerDepRule(
-		"column type set right after column existence",
-		scgraph.SameStagePrecedence,
-		"column", "column-type",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.Column)(nil)),
-				to.Type((*scpb.ColumnType)(nil)),
-				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
-				JoinOnColumnID(from, to, "table-id", "col-id"),
-			}
-		},
-	)
-
-	// There are two distinct rules for transitioning the column name to public,
-	// depending on whether an ALTER COLUMN TYPE operation is in progress.
-	// This rule applies when an ALTER COLUMN TYPE is *not* occurring and is
-	// identical to the prior rule for ColumnType, except that it applies to ColumnName.
-	registerDepRule(
-		"column name set right after column existence, except for alter column type",
+		"column name and type set right after column existence",
 		scgraph.SameStagePrecedence,
 		"column", "column-name-or-type",
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
-				to.Type((*scpb.ColumnName)(nil)),
+				to.Type(
+					(*scpb.ColumnName)(nil),
+					(*scpb.ColumnType)(nil),
+				),
 				StatusesToPublicOrTransient(from, scpb.Status_DELETE_ONLY, to, scpb.Status_PUBLIC),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
-				IsNotAlterColumnTypeOp("table-id", "col-id"),
-			}
-		},
-	)
-
-	// This rule is similar to the previous one but applies during an ALTER COLUMN TYPE operation.
-	// In this scenario, we are replacing one column with another, both of which share the same name.
-	// To prevent any period where a column with that name is not public, we ensure that the column
-	// names are swapped in the same stage.
-	registerDepRule(
-		"during alter column type, column names for old and new columns are swapped in the same stage",
-		scgraph.SameStagePrecedence,
-		"old-column-name", "new-column-name",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.ColumnName)(nil)),
-				to.Type((*scpb.ColumnName)(nil)),
-				from.TargetStatus(scpb.ToAbsent),
-				from.CurrentStatus(scpb.Status_ABSENT),
-				to.TargetStatus(scpb.ToPublic),
-				to.CurrentStatus(scpb.Status_PUBLIC),
-				JoinOnDescID(from, to, "table-id"),
-				to.El.AttrEqVar(screl.ColumnID, "new-col-id"),
-				rel.And(IsAlterColumnTypeOp("table-id", "new-col-id")...),
 			}
 		},
 	)
 
 	registerDepRule(
-		"DEFAULT or ON UPDATE existence precedes writes to column, except if they are added as part of a alter column type",
+		"DEFAULT or ON UPDATE existence precedes writes to column",
 		scgraph.Precedence,
 		"expr", "column",
 		func(from, to NodeVars) rel.Clauses {
@@ -135,7 +77,6 @@ func init() {
 				),
 				to.Type((*scpb.Column)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
-				IsNotAlterColumnTypeOp("table-id", "col-id"),
 				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_WRITE_ONLY),
 			}
 		},
@@ -164,46 +105,6 @@ func init() {
 		},
 	)
 
-	// A computed expression cannot have a DEFAULT or ON UPDATE expression.
-	// However, if the computed expression is temporary (e.g., for an ALTER COLUMN
-	// TYPE requiring a backfill), these expressions can be added once the
-	// computed expression is dropped.
-	registerDepRule(
-		"DEFAULT or ON UPDATE expressions is public after transient compute expression transitions to absent",
-		scgraph.SameStagePrecedence,
-		"transient-compute-expression", "column-expr",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.ColumnComputeExpression)(nil)),
-				to.Type(
-					(*scpb.ColumnDefaultExpression)(nil),
-					(*scpb.ColumnOnUpdateExpression)(nil),
-				),
-				JoinOnColumnID(from, to, "table-id", "col-id"),
-				ToPublicOrTransient(from, to),
-				from.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
-				to.CurrentStatus(scpb.Status_PUBLIC),
-			}
-		},
-	)
-
-	registerDepRule(
-		"Final compute expression is always added after transient compute expression",
-		scgraph.SameStagePrecedence,
-		"transient-compute-expression", "final-compute-expression",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.Type((*scpb.ColumnComputeExpression)(nil)),
-				to.Type((*scpb.ColumnComputeExpression)(nil)),
-				JoinOnColumnID(from, to, "table-id", "col-id"),
-				from.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
-				to.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_REGULAR),
-				ToPublicOrTransient(from, to),
-				from.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
-				to.CurrentStatus(scpb.Status_PUBLIC),
-			}
-		},
-	)
 }
 
 // This rule ensures that columns depend on each other in increasing order.

@@ -9,6 +9,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/roachpb";
 
 import "storage/enginepb/mvcc.proto";
 import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
 import "roachpb/data.proto";
 
 // SpanStatsRequest is used to request a SpanStatsResponse for the given key

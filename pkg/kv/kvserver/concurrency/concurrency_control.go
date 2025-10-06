@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 )
 
 // Manager is a structure that sequences incoming requests and provides
@@ -254,11 +255,6 @@ type LockManager interface {
 	// acquired a new lock or re-acquired an existing lock that it already held.
 	OnLockAcquired(context.Context, *roachpb.LockAcquisition)
 
-	// OnLockMissing informs the concurrency manager that a lock has been reported
-	// missing to a client via QueryIntent. Such locks cannot later be
-	// materialized via a lock table flush.
-	OnLockMissing(context.Context, *roachpb.LockAcquisition)
-
 	// OnLockUpdated informs the concurrency manager that a transaction has
 	// updated or released a lock or range of locks that it previously held.
 	// The Durability field of the lock update struct is ignored.
@@ -267,10 +263,6 @@ type LockManager interface {
 	// QueryLockTableState gathers detailed metadata on locks tracked in the lock
 	// table that are part of the provided span and key scope, up to provided limits.
 	QueryLockTableState(ctx context.Context, span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
-
-	// ExportUnreplicatedLocks runs exporter on each held, unreplicated lock
-	// in the given span until the exporter returns false.
-	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool)
 }
 
 // TransactionManager is concerned with tracking transactions that have their
@@ -293,31 +285,14 @@ type RangeStateListener interface {
 	// updated.
 	OnRangeDescUpdated(*roachpb.RangeDescriptor)
 
-	// OnRangeLeaseTransferEval informs the concurrency manager that the range is
-	// evaluating a lease transfer. It is called during evalutation of a lease
-	// transfer. The returned LockAcquisition structs represent held locks that we
-	// may want to flush to disk as replicated. Since lease transfers declare
-	// latches that conflict with all requests, the caller knows that nothing is
-	// going to modify the lock table as its evaluating.
-	OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, int64)
-
-	// OnRangeSubsumeEval informs the concurrency manager that the range is
-	// evaluating a merge.
-	OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64)
-
 	// OnRangeLeaseUpdated informs the concurrency manager that its range's
 	// lease has been updated. The argument indicates whether this manager's
 	// replica is the leaseholder going forward.
 	OnRangeLeaseUpdated(_ roachpb.LeaseSequence, isLeaseholder bool)
 
-	// OnRangeSplit informs the concurrency manager that its range
-	// has split off a new range to its RHS. The provided key
-	// should be the new RHS StartKey (LHS EndKey). Note that this
-	// is inclusives so all locks on keys greater or equal to this
-	// key will be cleared. The returned LockAcquistion structs
-	// represent locks that we may want to acquire on the RHS
-	// replica before it is serving requests.
-	OnRangeSplit(roachpb.Key) []roachpb.LockAcquisition
+	// OnRangeSplit informs the concurrency manager that its range has split off
+	// a new range to its RHS.
+	OnRangeSplit()
 
 	// OnRangeMerge informs the concurrency manager that its range has merged
 	// into its LHS neighbor. This is not called on the LHS range being merged
@@ -454,8 +429,9 @@ type Request struct {
 	// not also passed an exiting Guard.
 	LockSpans *lockspanset.LockSpanSet
 
-	// Batch is the batch to which the request belongs.
-	Batch *kvpb.BatchRequest
+	// The SafeFormatter capable of formatting the request. This is used to enrich
+	// logging with request level information when latches conflict.
+	BaFmt redact.SafeFormatter
 
 	// DeadlockTimeout is the amount of time that the request will wait on a lock
 	// before pushing the lock holder's transaction for deadlock detection.
@@ -538,12 +514,7 @@ type latchManager interface {
 	// WaitFor waits for conflicting latches on the specified spans without adding
 	// any latches itself. Fast path for operations that only require flushing out
 	// old operations without blocking any new ones.
-	WaitFor(
-		ctx context.Context,
-		spans *spanset.SpanSet,
-		pp poison.Policy,
-		ba *kvpb.BatchRequest,
-	) *Error
+	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter) *Error
 
 	// Poison a guard's latches, allowing waiters to fail fast.
 	Poison(latchGuard)
@@ -706,11 +677,6 @@ type lockTable interface {
 	// intent has been applied to the replicated state machine.
 	AcquireLock(*roachpb.LockAcquisition) error
 
-	// MarkIneligibleForExport marks any locks held by this transaction on the
-	// same key as ineligible for export from the lock table for replication since
-	// doing so could result in a transaction being erroneously committed.
-	MarkIneligibleForExport(*roachpb.LockAcquisition) error
-
 	// UpdateLocks informs the lockTable that an existing lock or range of locks
 	// was either updated or released.
 	//
@@ -774,14 +740,6 @@ type lockTable interface {
 
 	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
 	QueryLockTableState(span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
-
-	// ExportUnreplicatedLocks runs exporter on each held, unreplicated lock
-	// in the given span until the exporter returns false.
-	//
-	// Note that the caller is responsible for acquiring latches across the span
-	// it is exporting if it needs to be sure that the exported locks won't be
-	// updated in the lock table while it is still referencing them.
-	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool)
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics
@@ -1071,8 +1029,4 @@ type requestQueuer interface {
 	// Clear empties the queue(s) and causes all waiting requests to
 	// return. If disable is true, future requests must not be enqueued.
 	Clear(disable bool)
-
-	// ClearGE empties the queue(s) for any keys greater or equal
-	// to than the given key.
-	ClearGE(roachpb.Key) []roachpb.LockAcquisition
 }

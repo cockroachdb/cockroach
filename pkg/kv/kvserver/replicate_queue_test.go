@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -84,7 +83,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		kvserverbase.LoadBasedRebalancingMode.Override(ctx, &st.SV, kvserverbase.LBRebalancingOff)
+		kvserver.LoadBasedRebalancingMode.Override(ctx, &st.SV, kvserver.LBRebalancingOff)
 	}
 
 	const newRanges = 10
@@ -149,7 +148,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 			if c < minReplicas {
 				err := errors.Errorf(
 					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
-				log.KvDistribution.Infof(ctx, "%v", err)
+				log.Infof(ctx, "%v", err)
 				return err
 			}
 		}
@@ -176,15 +175,10 @@ func TestReplicateQueueRebalance(t *testing.T) {
 // rebalances the replicas and leases.
 func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDuress(t) // eight stores is too much under duress
-	scope := log.Scope(t)
-	defer scope.Close(t)
-
-	// The test exhibited an interesting failure mode that we want
-	// to be able to better investigate should it reoccur.
-	// See: https://github.com/cockroachdb/cockroach/issues/153137
-	// and https://cockroachlabs.slack.com/archives/G01G8LK77DK/p1757330830964639.
-	defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
+	skip.UnderShort(t)
+	skip.UnderDeadlock(t)
 
 	testCases := []struct {
 		name          string
@@ -211,6 +205,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 		spec = func(node int, store int) base.StoreSpec {
 			return base.StoreSpec{
 				Path: filepath.Join(td, fmt.Sprintf("n%ds%d", node, store)),
+				Size: base.SizeSpec{},
 			}
 		}
 		t.Cleanup(func() {
@@ -343,7 +338,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 					if c < minReplicas {
 						err := errors.Errorf(
 							"not balanced (want at least %d replicas on all stores): %d", minReplicas, replicasPerStore)
-						log.KvDistribution.Infof(ctx, "%v", err)
+						log.Infof(ctx, "%v", err)
 						return err
 					}
 				}
@@ -354,7 +349,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 					if c < minLeases {
 						err := errors.Errorf(
 							"not balanced (want at least %d leases on all stores): %d", minLeases, leasesPerStore)
-						log.KvDistribution.Infof(ctx, "%v", err)
+						log.Infof(ctx, "%v", err)
 						return err
 					}
 				}
@@ -619,7 +614,7 @@ func checkReplicaCount(
 ) (bool, error) {
 	err := forceScanOnAllReplicationQueues(tc)
 	if err != nil {
-		log.KvDistribution.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
+		log.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
 		return false, err
 	}
 	*rangeDesc, err = tc.LookupRange(rangeDesc.StartKey.AsRawKey())
@@ -679,7 +674,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -716,7 +711,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			if !ok {
@@ -839,7 +834,7 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1090,7 +1085,6 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
@@ -1124,7 +1118,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1170,7 +1164,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 2 /* nonVoterCount */)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			if !ok {
@@ -1265,7 +1259,7 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 		require.Eventually(t, func() bool {
 			ok, err := checkReplicaCount(ctx, tc, &scratchRange, 1 /* voterCount */, 0 /* nonVoterCount */)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1327,7 +1321,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 			&scratchRange, 3 /* voterCount */, 0, /* nonVoterCount */
 		)
 		if err != nil {
-			log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+			log.Errorf(ctx, "error checking replica count: %s", err)
 			return false
 		}
 		return ok
@@ -1353,7 +1347,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 				ctx, tc.(*testcluster.TestCluster), &scratchRange, 1, 0,
 			)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+				log.Errorf(ctx, "error checking replica count: %s", err)
 				return false
 			}
 			return ok
@@ -1399,7 +1393,7 @@ func TestReplicateQueueMetrics(t *testing.T) {
 			ctx, tc.(*testcluster.TestCluster), &scratchRange, 3, 0,
 		)
 		if err != nil {
-			log.KvDistribution.Errorf(ctx, "error checking replica count: %s", err)
+			log.Errorf(ctx, "error checking replica count: %s", err)
 			return false
 		}
 		return ok
@@ -1448,7 +1442,7 @@ func getAggregateMetricCounts(
 		if storeId, exists := voterMap[s.NodeID()]; exists {
 			store, err := s.GetStores().(*kvserver.Stores).GetStore(storeId)
 			if err != nil {
-				log.KvDistribution.Errorf(ctx, "error finding store: %s", err)
+				log.Errorf(ctx, "error finding store: %s", err)
 				continue
 			}
 			if add {
@@ -1610,7 +1604,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 		// any given point, any change in the configuration of these 5 replicas
 		// _must_ go through atomic non-voter promotions and voter demotions.
 		alterStatement, voterStores, nonVoterStores := synthesizeRandomConstraints()
-		log.KvDistribution.Infof(ctx, "applying: %s", alterStatement)
+		log.Infof(ctx, "applying: %s", alterStatement)
 		_, err := tc.ServerConn(0).Exec(alterStatement)
 		require.NoError(t, err)
 		checkRelocated(t, voterStores, nonVoterStores)
@@ -1665,7 +1659,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	// above.
 	require.Eventually(t, func() bool {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
-			log.KvDistribution.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
+			log.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
 			return false
 		}
 		scratchRange := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -1708,16 +1702,16 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 		)
 		recording := rec()
 		if err != nil {
-			log.KvDistribution.Errorf(ctx, "err: %s", err.Error())
+			log.Errorf(ctx, "err: %s", err.Error())
 			return false
 		}
 		if processErr != nil {
-			log.KvDistribution.Errorf(ctx, "processErr: %s", processErr.Error())
+			log.Errorf(ctx, "processErr: %s", processErr.Error())
 			return false
 		}
 		if matched, err := regexp.Match(matchString,
 			[]byte(recording.String())); !matched {
-			log.KvDistribution.Infof(ctx, "didn't find matching string '%s' in trace %s",
+			log.Infof(ctx, "didn't find matching string '%s' in trace %s",
 				matchString, recording.String())
 			require.NoError(t, err)
 			return false
@@ -1772,7 +1766,7 @@ func filterRangeLog(
 	eventType kvserverpb.RangeLogEventType,
 	reason kvserverpb.RangeLogEventReason,
 ) ([]kvserverpb.RangeLogEvent_Info, error) {
-	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3::STRING, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
+	return queryRangeLog(conn, `SELECT info FROM system.rangelog WHERE "rangeID" = $1 AND "eventType" = $2 AND info LIKE concat('%', $3, '%') ORDER BY timestamp ASC;`, rangeID, eventType.String(), reason)
 }
 
 func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
@@ -1822,7 +1816,6 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
@@ -1947,7 +1940,7 @@ func (h delayingRaftMessageHandler) HandleRaftRequest(
 		time.Sleep(raftDelay)
 		err := h.IncomingRaftMessageHandler.HandleRaftRequest(context.Background(), req, respStream)
 		if err != nil {
-			log.KvDistribution.Infof(ctx, "HandleRaftRequest returned err %s", err)
+			log.Infof(ctx, "HandleRaftRequest returned err %s", err)
 		}
 	}()
 
@@ -1967,19 +1960,19 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 			0: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n1"},
+					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n1"}},
 				}},
 			},
 			1: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n2"},
+					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n2"}},
 				}},
 			},
 			2: {
 				ScanMaxIdleTime: time.Millisecond,
 				StoreSpecs: []base.StoreSpec{{
-					InMemory: true, Attributes: []string{"n3"},
+					InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{"n3"}},
 				}},
 			},
 		},
@@ -2006,7 +1999,7 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	if leaseHolderNodeID == 1 {
 		remoteNodeID = 2
 	}
-	log.KvDistribution.Infof(ctx, "RangeID %d, RemoteNodeID %d, LeaseHolderNodeID %d",
+	log.Infof(ctx, "RangeID %d, RemoteNodeID %d, LeaseHolderNodeID %d",
 		rangeID, remoteNodeID, leaseHolderNodeID)
 	leaseHolderSrv := tc.Servers[leaseHolderNodeID-1]
 	leaseHolderStoreID := leaseHolderSrv.GetFirstStoreID()
@@ -2098,10 +2091,10 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	// By now the lease holder may have changed.
 	testutils.SucceedsSoon(t, func() error {
 		leaseBefore, _ := leaseHolderRepl.GetLease()
-		log.KvDistribution.Infof(ctx, "Lease before transfer %+v\n", leaseBefore)
+		log.Infof(ctx, "Lease before transfer %+v\n", leaseBefore)
 
 		if uint64(leaseBefore.Replica.NodeID) == remoteNodeID {
-			log.KvDistribution.Infof(
+			log.Infof(
 				ctx,
 				"Lease successfully transferred to desired node %d\n",
 				remoteNodeID,
@@ -2155,37 +2148,14 @@ func iterateOverAllStores(
 // the non-voters in Region 2 and Region 3 are promoted to voters.
 func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	scope := log.Scope(t)
-	defer scope.Close(t)
-
-	// Add some debugging helpful for #134383, where the zone config update that
-	// should lead to down-replication is simply "ignored" and it's unclear who
-	// is to blame.
-	// `store=2` unconditionally logs changed spanconfigs in
-	// `spanconfigstore/store.go` and `reconciler=3` logs incoming updates from
-	// the rangefeed on the zone configs table. You'll need to look at the
-	// complete logs (not just the default log) and search for "test setting ZONE
-	// survival configuration" to find the start of the interesting bit. In
-	// passing runs, this shows the AUTO SPAN RECONCILIATION job acting on a new
-	// SQL update, changing the span configs (which should register on all nodes),
-	// and subsequent replication changes. In failing runs, it will be interesting
-	// which prefix of events remains.
-	{
-		old := log.GetVModule()
-		changed := "store=2,reconciler=3"
-		if old != "" {
-			changed = old + "," + changed
-		}
-		require.NoError(t, log.SetVModule(changed))
-		defer func() { _ = log.SetVModule(old) }()
-	}
+	defer log.Scope(t).Close(t)
 
 	// This test is slow under stress/race and can time out when upreplicating /
 	// rebalancing to ensure all stores have the same range count initially, due
 	// to slow heartbeats.
-	skip.UnderDuress(t)
-
-	defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
+	skip.UnderStress(t)
+	skip.UnderDeadlock(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 
@@ -2252,7 +2222,7 @@ SELECT * FROM (
 	_, err := db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
 	require.NoError(t, err)
 
-	log.KvDistribution.Infof(ctx, "test setting ZONE survival configuration")
+	log.Infof(ctx, "test setting ZONE survival configuration")
 	// ZONE survival configuration.
 	setConstraintFn("TABLE t", 5, 3,
 		", constraints = '{\"+region=2\": 1, \"+region=3\": 1}', voter_constraints = '{\"+region=1\": 3}'")
@@ -2297,7 +2267,7 @@ SELECT * FROM (
 	})
 
 	// REGION survival configuration.
-	log.KvDistribution.Infof(ctx, "test setting REGION survival configuration")
+	log.Infof(ctx, "test setting REGION survival configuration")
 	// Clear the rangelog so that we can rest assured to only pick up events
 	// resulting from the zone config change.
 	_, err = tc.Conns[0].ExecContext(ctx, `DELETE FROM system.rangelog WHERE TRUE`)
@@ -2499,58 +2469,12 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		return nil
 	})
 
-	getDecommissioningNudgerMetricValue := func(t *testing.T, tc *testcluster.TestCluster, metricType string,
-	) int64 {
-		var total int64
-
-		for i := 0; i < tc.NumServers(); i++ {
-			store := tc.GetFirstStoreFromServer(t, i)
-			var value int64
-
-			switch metricType {
-			case "decommissioning_ranges":
-				value = store.Metrics().DecommissioningRangeCount.Value()
-			case "enqueue":
-				value = store.Metrics().DecommissioningNudgerEnqueue.Count()
-			case "enqueue_success":
-				value = store.Metrics().DecommissioningNudgerEnqueueSuccess.Count()
-			case "process_success":
-				value = store.Metrics().DecommissioningNudgerProcessSuccess.Count()
-			default:
-				t.Fatalf("unknown metric type: %s", metricType)
-			}
-
-			total += value
-		}
-		return total
-	}
-
-	initialDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
-
 	// Now add a replica to the decommissioning node and then enable the
 	// replicate queue. We expect that the replica will be removed after the
 	// decommissioning replica is noticed via maybeEnqueueProblemRange.
 	scratchKey := tc.ScratchRange(t)
 	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decommissioningSrvIdx))
 	tc.ToggleReplicateQueues(true /* active */)
-
-	// Wait for the enqueue logic to trigger and validate metrics were updated.
-	testutils.SucceedsSoon(t, func() error {
-		// TODO(wenyihu6): is there a race condition here where we might not observe
-		// decommissioning_ranges increasing?
-		afterDecommissioningRanges := getDecommissioningNudgerMetricValue(t, tc, "decommissioning_ranges")
-		afterEnqueued := getDecommissioningNudgerMetricValue(t, tc, "enqueue")
-		if afterDecommissioningRanges <= initialDecommissioningRanges {
-			return errors.New("expected DecommissioningRangeCount to increase")
-		}
-		if afterEnqueued <= 0 {
-			return errors.New("expected DecommissioningNudgerEnqueueEnqueued to be greater than 0")
-		}
-
-		return nil
-	})
-
-	// Verify that the decommissioning node has no replicas left.
 	testutils.SucceedsSoon(t, func() error {
 		var descs []*roachpb.RangeDescriptor
 		tc.GetFirstStoreFromServer(t, decommissioningSrvIdx).VisitReplicas(func(r *kvserver.Replica) bool {
@@ -2559,124 +2483,6 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 		})
 		if len(descs) != 0 {
 			return errors.Errorf("expected no replicas, found %d: %v", len(descs), descs)
-		}
-		return nil
-	})
-	afterEnqueueSuccess := getDecommissioningNudgerMetricValue(t, tc, "enqueue_success")
-	require.Greater(t, afterEnqueueSuccess, int64(0))
-	afterProcessSuccess := getDecommissioningNudgerMetricValue(t, tc, "process_success")
-	require.Greater(t, afterProcessSuccess, int64(0))
-}
-
-// TestPriorityInversionRequeue tests that the replicate queue correctly handles
-// priority inversions by requeuing replicas when the PriorityInversionRequeue
-// setting is enabled.
-//
-// This test specifically targets a race condition where:
-//  1. A replica is enqueued for a high-priority repair action
-//     (FinalizeAtomicReplicationChange or RemoveLearner).
-//  2. By the time the replica is processed, the repair is no longer needed and
-//     only a low-priority rebalance action (ConsiderRebalance) is computed.
-//  3. This creates a priority inversion where a low-priority action blocks
-//     other higher-priority replicas in the queue from being processed.
-//
-// The race occurs during range rebalancing:
-//  1. A leaseholder replica of a range is rebalanced from one store to another.
-//  2. The new leaseholder enqueues the replica for repair (e.g. to finalize
-//     the atomic replication change or remove a learner replica).
-//  3. Before processing, the old leaseholder has left the atomic joint config
-//     state or removed the learner replica. 4. When the new leaseholder processes
-//     the replica, it computes a ConsiderRebalance action, causing priority
-//     inversion.
-//
-// With PriorityInversionRequeue enabled, the queue should detect this condition
-// and requeue the replica at the correct priority. The test validates this
-// behavior through metrics that track priority inversions and requeuing events.
-func TestPriorityInversionRequeue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderDuress(t)
-
-	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	kvserver.PriorityInversionRequeue.Override(ctx, &settings.SV, true)
-
-	var scratchRangeID int64
-	atomic.StoreInt64(&scratchRangeID, -1)
-	require.NoError(t, log.SetVModule("queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5"))
-
-	const newLeaseholderStoreAndNodeID = 4
-	var waitUntilLeavingJoint = func() {}
-
-	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Settings: settings,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
-						// Disable the replicate queue except for the scratch range on the new leaseholder.
-						t.Logf("range %d is added to replicate queue store", rangeID)
-						return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
-					},
-					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
-						// After enqueuing, wait for the old leaseholder to leave the atomic
-						// joint config state or remove the learner replica to force the
-						// priority inversion.
-						t.Logf("waiting for %d to leave joint config", rangeID)
-						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
-							waitUntilLeavingJoint()
-						}
-					},
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	scratchKey := tc.ScratchRange(t)
-
-	// Wait until the old leaseholder has left the atomic joint config state or
-	// removed the learner replica.
-	waitUntilLeavingJoint = func() {
-		testutils.SucceedsSoon(t, func() error {
-			rangeDesc := tc.LookupRangeOrFatal(t, scratchKey)
-			replicas := rangeDesc.Replicas()
-			t.Logf("range %v: waiting to leave joint conf", rangeDesc)
-			if replicas.InAtomicReplicationChange() || len(replicas.LearnerDescriptors()) != 0 {
-				return errors.Newf("in between atomic changes: %v", replicas)
-			}
-			return nil
-		})
-	}
-
-	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-	tc.AddVotersOrFatal(t, scratchRange.StartKey.AsRawKey(), tc.Targets(1, 2)...)
-	atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
-	lh, err := tc.FindRangeLeaseHolder(scratchRange, nil)
-	require.NoError(t, err)
-
-	// Rebalance the leaseholder replica to a new store. This will cause the race
-	// condition where the new leaseholder can enqueue a replica to replicate
-	// queue with high priority but compute a low priority action at processing
-	// time.
-	t.Logf("rebalancing range %d from s%d to s%d", scratchRange, lh.StoreID, newLeaseholderStoreAndNodeID)
-	_, err = tc.RebalanceVoter(
-		ctx,
-		scratchRange.StartKey.AsRawKey(),
-		roachpb.ReplicationTarget{StoreID: lh.StoreID, NodeID: lh.NodeID},                                      /* src */
-		roachpb.ReplicationTarget{StoreID: newLeaseholderStoreAndNodeID, NodeID: newLeaseholderStoreAndNodeID}, /* dest */
-	)
-	require.NoError(t, err)
-
-	// Wait until the priority inversion is detected and the replica is requeued.
-	testutils.SucceedsSoon(t, func() error {
-		store := tc.GetFirstStoreFromServer(t, 3)
-		if c := store.ReplicateQueueMetrics().PriorityInversionTotal.Count(); c == 0 {
-			return errors.New("expected non-zero priority inversion total count but got 0")
-		}
-		if c := store.ReplicateQueueMetrics().RequeueDueToPriorityInversion.Count(); c == 0 {
-			return errors.New("expected to requeue due to priority inversion but got 0")
 		}
 		return nil
 	})

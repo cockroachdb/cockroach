@@ -300,7 +300,7 @@ func (a *apiV2Server) getTableGrants(w http.ResponseWriter, r *http.Request) {
 	pathVars := mux.Vars(r)
 	tableId, err := strconv.Atoi(pathVars[tableIdPathVar])
 	if err != nil {
-		http.Error(w, "invalid table id", http.StatusBadRequest)
+		http.Error(w, "invalid database id", http.StatusBadRequest)
 		return
 	}
 	queryValues := r.URL.Query()

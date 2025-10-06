@@ -56,8 +56,8 @@ func TestRowContainer(t *testing.T) {
 				for i := 0; i < rc.Len(); i++ {
 					row := rc.At(i)
 					for j := range row {
-						dint, ok := row[j].(*tree.DInt)
-						if !ok || int(*dint) != (i+numPops)*numCols+j {
+						dint, ok := tree.AsDInt(row[j])
+						if !ok || int(dint) != (i+numPops)*numCols+j {
 							t.Fatalf("invalid value %+v on row %d, col %d", row[j], i+numPops, j)
 						}
 					}

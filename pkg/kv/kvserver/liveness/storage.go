@@ -100,7 +100,7 @@ func (ls *storageImpl) Update(
 		b := txn.NewBatch()
 		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
 		if err := v.SetProto(&update.newLiveness); err != nil {
-			log.KvExec.Fatalf(ctx, "failed to marshall proto: %s", err)
+			log.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		b.CPut(key, v, update.oldRaw)
 		// Use a trigger on EndTxn to indicate that node liveness should be
@@ -158,7 +158,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 			b := txn.NewBatch()
 			key := keys.NodeLivenessKey(nodeID)
 			if err := v.SetProto(&liveness); err != nil {
-				log.KvExec.Fatalf(ctx, "failed to marshall proto: %s", err)
+				log.Fatalf(ctx, "failed to marshall proto: %s", err)
 			}
 			// Given we're looking to create a new liveness record here, we don't
 			// expect to find anything.
@@ -177,7 +177,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 		if err == nil {
 			// We'll learn about this liveness record through gossip eventually, so we
 			// don't bother updating our in-memory view of node liveness.
-			log.KvExec.Infof(ctx, "created liveness record for n%d", nodeID)
+			log.Infof(ctx, "created liveness record for n%d", nodeID)
 			return nil
 		}
 		if !isErrRetryLiveness(ctx, err) {

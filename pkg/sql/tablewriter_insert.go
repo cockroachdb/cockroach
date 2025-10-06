@@ -21,42 +21,28 @@ type tableInserter struct {
 	ri row.Inserter
 }
 
-// init initializes the tableInserter with a Txn.
+var _ tableWriter = &tableInserter{}
+
+// desc is part of the tableWriter interface.
+func (*tableInserter) desc() string { return "inserter" }
+
+// init is part of the tableWriter interface.
 func (ti *tableInserter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
 	return ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx)
 }
 
-// row performs an insert.
-//
-// The passed Datums is not used after `row` returns.
-//
-// The PartialIndexUpdateHelper is used to determine which partial indexes
-// to avoid updating when performing row modification. This is necessary
-// because not all rows are indexed by partial indexes.
-//
-// The VectorIndexUpdateHelper is used to determine which partitions to update
-// in each vector index and supply the quantized vectors to add to the
-// partitions. This is necessary because these values are not part of the table,
-// and are materialized only for the purpose of updating vector indexes.
-//
-// The traceKV parameter determines whether the individual K/V operations
-// should be logged to the context. We use a separate argument here instead
-// of a Value field on the context because Value access in context.Context
-// is rather expensive.
+// row is part of the tableWriter interface.
 func (ti *tableInserter) row(
-	ctx context.Context,
-	values tree.Datums,
-	pm row.PartialIndexUpdateHelper,
-	vh row.VectorIndexUpdateHelper,
-	oth row.OriginTimestampCPutHelper,
-	traceKV bool,
+	ctx context.Context, values tree.Datums, pm row.PartialIndexUpdateHelper, traceKV bool,
 ) error {
 	ti.currentBatchSize++
-	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, vh, oth, row.CPutOp, traceKV)
+	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, nil, false /* overwrite */, traceKV)
 }
 
-// tableDesc returns the TableDescriptor for the table that the tableInserter
-// will modify.
+// tableDesc is part of the tableWriter interface.
 func (ti *tableInserter) tableDesc() catalog.TableDescriptor {
 	return ti.ri.Helper.TableDesc
 }
+
+// walkExprs is part of the tableWriter interface.
+func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}

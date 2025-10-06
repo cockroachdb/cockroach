@@ -9,9 +9,8 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/util/admission/admissi
 
 import "gogoproto/gogo.proto";
 
-// IOThreshold wraps the raw signals that IO admission control utilizes to
-// determine when to introduce queueing. Disk unhealthiness is not yet used by
-// admission control, but utilized by the allocator.
+// IOThreshold wraps the raw signals that IO admission control utilizes to determine
+// when to introduce queueing.
 message IOThreshold {
   option (gogoproto.goproto_stringer) = false;
 
@@ -21,5 +20,4 @@ message IOThreshold {
   int64 l0_num_files_threshold = 4;
   int64 l0_size = 5;
   int64 l0_minimum_size_per_sub_level = 6;
-  bool disk_unhealthy = 7;
 }

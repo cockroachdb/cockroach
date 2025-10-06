@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
@@ -61,7 +61,7 @@ func TestRunExplainCombinations(t *testing.T) {
 		ExecCtx: &clisqlexec.Context{CliCtx: cliCtx},
 	}
 	c.LoadDefaults(os.Stdout, os.Stderr)
-	pgURL, cleanupFn := pgurlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+	pgURL, cleanupFn := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
 	ctx := context.Background()

@@ -17,7 +17,6 @@ import (
 )
 
 type commentOnConstraintNode struct {
-	zeroInputPlanNode
 	n         *tree.CommentOnConstraint
 	tableDesc catalog.TableDescriptor
 }

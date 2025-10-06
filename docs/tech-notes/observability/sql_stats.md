@@ -79,7 +79,7 @@ cleanup jobs run (see [Data Cleanup](#data-cleanup) below).
 ## Data Aggregation and Cardinality
 When the statement is being recorded in memory, it gets aggregated with other 
 executions of the same fingerprint, and when the flush happens it gets aggregated with 
-all other executions for that fingerprint on the current aggregation timestamp, which is
+all other executions for thar fingerprint on the current aggregation timestamp, which is
 defined by `sql.stats.aggregation.interval` (default 1h). This mean everything executed 
 on hour 1:XX will be stored as hour 1:00.
 

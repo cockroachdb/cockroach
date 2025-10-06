@@ -8,10 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"math/rand"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -22,26 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/logtags"
+	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
 )
-
-var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 
 // TestDataDriven is a data-driven test for the allocation system using the
 // simulator. It gives contributors a way to understand how a cluster reacts to
@@ -51,21 +37,15 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - "gen_load" [rw_ratio=<float>] [rate=<float>] [access_skew=<bool>]
 //     [min_block=<int>] [max_block=<int>] [min_key=<int>] [max_key=<int>]
-//     [replace=<bool>] [cpu_per_access=<int>] [raft_cpu_per_write=<int>]
 //     Initialize the load generator with parameters. On the next call to eval,
 //     the load generator is called to create the workload used in the
-//     simulation. When `replace` is false, this workload doesn't replace
-//     any existing workload specified by the simulation, it instead adds it
-//     on top.The default values are: rw_ratio=0 rate=0 min_block=1
-//     max_block=1 min_key=1 max_key=10_000 access_skew=false replace=false
-//     cpu_per_access=0 raft_cpu_per_write=0
+//     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
+//     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
-//     [store_byte_capacity_gib=<int>] [node_cpu_rate_capacity=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
-//     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity_gib=256, node_cpu_rate_capacity=0.
+//     simulation. The default values are: nodes=3 stores_per_node=1.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -76,20 +56,14 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
 //     number of nodes per region.
 //
-//   - "gen_ranges" [ranges=<int>]
-//     [placement_type=(even|skewed|weighted|replica_placement)]
-//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes_mib=<int>]
-//     [reset=<bool>]
+//   - "gen_ranges" [ranges=<int>] [placement_skew=<bool>] [repl_factor=<int>]
+//     [keyspace=<int>] [range_bytes=<int>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
-//     placement. Unless `reset` is true, the range generator doesn't
-//     replace any existing range generators, it is instead added on-top.
-//     The default values are ranges=1 repl_factor=3 placement_type=even
-//     min_key=0 max_key=10000 reset=false. If replica_placement is used,
-//     an extra line should follow with the replica placement. A example of
-//     the replica placement is: {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1.
+//     placement. The default values are ranges=1 repl_factor=3
+//     placement_skew=false keyspace=10000.
 //
-//   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
+//   - set_liveness node=<int> [delay=<duration>]
 //     status=(dead|decommisssioning|draining|unavailable)
 //     Set the liveness status of the node with ID NodeID. This applies at the
 //     start of the simulation or with some delay after the simulation starts,
@@ -147,17 +121,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     over-replicated(over), unavailable(unavailable) and violating
 //     constraints(violating) at the end of the evaluation.
 //
-//   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
-//     [split_queue_enabled=bool] [rebalance_interval=<duration>]
-//     [rebalance_mode=<int>] [split_qps_threshold=<float>]
+//   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
+//     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
 //     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
-//     [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
-//     replicate_queue_enabled=true lease_queue_enabled=true
-//     split_queue_enabled=true rebalance_interval=1m (1 minute)
-//     rebalance_mode=2 (leases and replicas) split_qps_threshold=2500
-//     rebalance_range_threshold=0.05 gossip_delay=500ms rebalance_objective=0
-//     (QPS) (1=CPU)
+//     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
+//     rebalance_qps_threshold=0.1 split_qps_threshold=2500
+//     rebalance_range_threshold=0.05 gossip_delay=500ms.
 //
 //   - "eval" [duration=<string>] [samples=<int>] [seed=<int>]
 //     Run samples (e.g. samples=5) number of simulations for duration (e.g.
@@ -167,580 +137,335 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     simulation sample. The default values are: duration=30m (30 minutes)
 //     samples=1 seed=random.
 //
-// To run all tests and rewrite the testdata files as well as generate the
-// artifacts in `testdata/generated`, you can use:
-// ./dev test pkg/kv/kvserver/asim/tests --ignore-cache --rewrite -v -f TestDataDriven -- --test_env COCKROACH_RUN_ASIM_TESTS=true --test_env
-// COCKROACH_ALWAYS_KEEP_TEST_LOGS=true */
+//   - "plot" stat=<string> [sample=<int>] [height=<int>] [width=<int>]
+//     Visually renders the stat (e.g. stat=qps) as a series where the x axis
+//     is the simulated time and the y axis is the stat value. A series is
+//     rendered per-store, so if there are 10 stores, 10 series will be
+//     rendered.
+//
+//   - "topology" [sample=<int>]
+//     Print the cluster locality topology of the sample given (default=last).
+//     e.g. for the load_cluster config=single_region
+//     US
+//     ..US_1
+//     ....└── [1 2 3 4 5]
+//     ..US_2
+//     ....└── [6 7 8 9 10]
+//     ..US_3
+//     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
-	skip.UnderDuressWithIssue(t, 149875)
-	leakTestAfter := leaktest.AfterTest(t)
+	ctx := context.Background()
+	dir := datapathutils.TestDataPath(t, "non_rand")
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		const defaultKeyspace = 10000
+		loadGen := gen.BasicLoad{}
+		var clusterGen gen.ClusterGen
+		var rangeGen gen.RangeGen = gen.BasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            1,
+				ReplicationFactor: 1,
+				KeySpace:          defaultKeyspace,
+			},
+		}
+		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
+		eventGen := gen.NewStaticEventsWithNoEvents()
+		assertions := []assertion.SimulationAssertion{}
+		runs := []history.History{}
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "gen_load":
+				var rwRatio, rate = 0.0, 0.0
+				var minBlock, maxBlock = 1, 1
+				var minKey, maxKey = int64(1), int64(defaultKeyspace)
+				var accessSkew bool
 
-	// NB: we must use t.Cleanup instead of deferring this
-	// cleanup in the main test due to the use of t.Parallel
-	// below.
-	// See https://github.com/golang/go/issues/31651.
-	scope := log.Scope(t)
-	t.Cleanup(func() {
-		scope.Close(t)
-		leakTestAfter()
-	})
-	testutils.RunValues(t, "mode", []string{"sma", "mma"}, func(t *testing.T, mode string) {
-		dir := datapathutils.TestDataPath(t, "non_rand", mode)
-		datadriven.Walk(t, dir, func(t *testing.T, path string) {
-			if mode == "mma" && !runAsimTests {
-				t.Logf("skipping %s: mode=mma and COCKROACH_RUN_ASIM_TESTS is not set", path)
-				t.SkipNow()
-			}
-			// The inline comment below is required for TestLint/TestTParallel.
-			// We use t.Cleanup to work around the issue this lint is trying to prevent.
-			t.Parallel() // SAFE FOR TESTING
-			const defaultKeyspace = 10000
-			loadGen := gen.MultiLoad{}
-			var clusterGen gen.ClusterGen
-			var rangeGen gen.MultiRanges
-			settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-			var events []scheduled.ScheduledEvent
-			assertions := []assertion.SimulationAssertion{}
-			// TODO(tbg): make it unnecessary to hold on to a per-file
-			// history of runs by removing commands that reference a specific
-			// runs. Instead, all run-specific data should become a generated
-			// artifact, and testdata output should be independent of the run
-			// (i.e. act like a spec instead of a test output).
-			var runs []modeHistory
-			datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-				defer func() {
-					if !t.Failed() {
-						require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
-					}
-				}()
-				switch d.Cmd {
-				case "skip_under_ci":
-					if !runAsimTests {
-						t.Logf("skipping %s: skip_under_ci and COCKROACH_RUN_ASIM_TESTS is not set", path)
-						t.SkipNow()
-					}
-					return ""
-				case "gen_load":
-					var rwRatio, rate = 0.0, 0.0
-					var minBlock, maxBlock = 1, 1
-					var minKey, maxKey = int64(0), int64(defaultKeyspace)
-					var accessSkew, replace bool
-					var requestCPUPerAccess, raftCPUPerAccess int64
+				scanIfExists(t, d, "rw_ratio", &rwRatio)
+				scanIfExists(t, d, "rate", &rate)
+				scanIfExists(t, d, "access_skew", &accessSkew)
+				scanIfExists(t, d, "min_block", &minBlock)
+				scanIfExists(t, d, "max_block", &maxBlock)
+				scanIfExists(t, d, "min_key", &minKey)
+				scanIfExists(t, d, "max_key", &maxKey)
 
-					scanIfExists(t, d, "rw_ratio", &rwRatio)
-					scanIfExists(t, d, "rate", &rate)
-					scanIfExists(t, d, "access_skew", &accessSkew)
-					scanIfExists(t, d, "min_block", &minBlock)
-					scanIfExists(t, d, "max_block", &maxBlock)
-					scanIfExists(t, d, "min_key", &minKey)
-					scanIfExists(t, d, "max_key", &maxKey)
-					scanIfExists(t, d, "replace", &replace)
-					scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
-					scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
+				loadGen.SkewedAccess = accessSkew
+				loadGen.MinKey = minKey
+				loadGen.MaxKey = maxKey
+				loadGen.RWRatio = rwRatio
+				loadGen.Rate = rate
+				loadGen.MaxBlockSize = maxBlock
+				loadGen.MinBlockSize = minBlock
+				return ""
+			case "gen_ranges":
+				var ranges, replFactor, keyspace = 1, 3, defaultKeyspace
+				var bytes int64 = 0
+				var placementSkew bool
 
-					var buf strings.Builder
+				scanIfExists(t, d, "ranges", &ranges)
+				scanIfExists(t, d, "repl_factor", &replFactor)
+				scanIfExists(t, d, "placement_skew", &placementSkew)
+				scanIfExists(t, d, "keyspace", &keyspace)
+				scanIfExists(t, d, "bytes", &bytes)
 
-					// Catch tests that set unrealistically small or unrealistically large
-					// CPU consumptions. This isn't exact because it doesn't account for
-					// replication, but it's close enough.
-					// NB: writes also consume requestCPUPerAccess.
-					approxVCPUs := (rate * (float64(requestCPUPerAccess) + float64(raftCPUPerAccess)*(1.0-rwRatio))) / 1e9
-					// Ditto for writes. Here too we don't account for replication. Note
-					// that at least under uniform writes, real clusters can have a write
-					// amp that easily surpasses 20, so writing at 40mb/s to a small set
-					// of stores would often constitute an issue in production.
-					approxWriteBytes := float64(maxBlock+minBlock) * rate * (1.0 - rwRatio) / 2
-
-					const tenkb = 10 * 1024
-					neitherWriteNorCPUHeavy := approxWriteBytes < tenkb && approxVCPUs < .5
-
-					// We tolerate abnormally low CPU if there's a sensible amount of
-					// write load. Otherwise, it's likely a mistake.
-					if neitherWriteNorCPUHeavy && approxVCPUs > 0 {
-						_, _ = fmt.Fprintf(&buf, "WARNING: CPU load of ≈%.2f cores is likely accidental\n", approxVCPUs)
-					}
-					// Similarly, tolerate abnormally low write load when there's
-					// significant CPU. Independently, call out high write load.
-					if (neitherWriteNorCPUHeavy && approxWriteBytes > 0) || approxWriteBytes > 40*(1<<20) {
-						_, _ = fmt.Fprintf(&buf, "WARNING: write load of %s is likely accidental\n",
-							humanizeutil.IBytes(int64(approxWriteBytes)))
-					}
-
-					var nextLoadGen gen.BasicLoad
-					nextLoadGen.SkewedAccess = accessSkew
-					nextLoadGen.MinKey = minKey
-					nextLoadGen.MaxKey = maxKey
-					nextLoadGen.RWRatio = rwRatio
-					nextLoadGen.Rate = rate
-					nextLoadGen.MaxBlockSize = maxBlock
-					nextLoadGen.MinBlockSize = minBlock
-					nextLoadGen.RequestCPUPerAccess = requestCPUPerAccess
-					nextLoadGen.RaftCPUPerWrite = raftCPUPerAccess
-					if replace {
-						loadGen = gen.MultiLoad{nextLoadGen}
-					} else {
-						loadGen = append(loadGen, nextLoadGen)
-					}
-					return buf.String()
-				case "gen_ranges":
-					var ranges, replFactor = 1, 3
-					var minKey, maxKey = int64(0), int64(defaultKeyspace)
-					var bytesMiB int64 = 0
-					var replace bool
-					var placementTypeStr = "even"
-					buf := strings.Builder{}
-					scanIfExists(t, d, "ranges", &ranges)
-					scanIfExists(t, d, "repl_factor", &replFactor)
-					scanIfExists(t, d, "placement_type", &placementTypeStr)
-					scanIfExists(t, d, "min_key", &minKey)
-					scanIfExists(t, d, "max_key", &maxKey)
-					scanIfExists(t, d, "bytes_mib", &bytesMiB)
-					scanIfExists(t, d, "replace", &replace)
-
-					placementType := gen.GetRangePlacementType(placementTypeStr)
-					var replicaPlacement state.ReplicaPlacement
-					if placementType == gen.ReplicaPlacement {
-						parsed := state.ParseReplicaPlacement(d.Input)
-						buf.WriteString(fmt.Sprintf("%v", parsed))
-						replicaPlacement = parsed
-					}
-					nextRangeGen := gen.BasicRanges{
-						BaseRanges: gen.BaseRanges{
-							Ranges:            ranges,
-							MinKey:            minKey,
-							MaxKey:            maxKey,
-							ReplicationFactor: replFactor,
-							Bytes:             bytesMiB << 20,
-							ReplicaPlacement:  replicaPlacement,
-						},
-						PlacementType: placementType,
-					}
-					if replace {
-						rangeGen = gen.MultiRanges{nextRangeGen}
-					} else {
-						rangeGen = append(rangeGen, nextRangeGen)
-					}
-					return buf.String()
-				case "gen_cluster":
-					var nodes = 3
-					var storesPerNode = 1
-					var nodeCPURateCapacity = []uint64{config.DefaultNodeCPURateCapacityNanos}
-					var region []string
-					var nodesPerRegion []int
-					var storeByteCapacityGiB int64 = 256
-					scanIfExists(t, d, "nodes", &nodes)
-					scanIfExists(t, d, "stores_per_node", &storesPerNode)
-					scanIfExists(t, d, "store_byte_capacity_gib", &storeByteCapacityGiB)
-					scanIfExists(t, d, "region", &region)
-					scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
-					scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
-
-					var buf strings.Builder
-					require.NotEmpty(t, nodeCPURateCapacity)
-					{
-						n := len(nodeCPURateCapacity)
-						require.True(t, n == 1 || n == nodes, "need to specify node_cpu_rate_capacity for each node")
-
-						for _, cpct := range nodeCPURateCapacity {
-							if cores := float64(cpct) / 1e9; cores < 1 {
-								// TODO(mma): fix up the tests that trigger this warning.
-								// TODO(mma): print a warning whenever the measured CPU utilization
-								// on a node exceeds this capacity, as that's likely not what the test
-								// intended.
-								_, _ = fmt.Fprintf(&buf, "WARNING: node CPU capacity of ≈%.2f cores is likely accidental\n", cores)
-								break
-							}
-						}
-					}
-
-					clusterGen = gen.BasicCluster{
-						Nodes:               nodes,
-						StoresPerNode:       storesPerNode,
-						StoreByteCapacity:   storeByteCapacityGiB << 30,
-						Region:              region,
-						NodesPerRegion:      nodesPerRegion,
-						NodeCPURateCapacity: nodeCPURateCapacity,
-					}
-					return buf.String()
-				case "load_cluster":
-					var cfg string
-					scanMustExist(t, d, "config", &cfg)
-					clusterGen = loadClusterInfo(cfg)
-					return ""
-				case "add_node":
-					var delay time.Duration
-					var numStores = 1
-					var localityString string
-					scanIfExists(t, d, "delay", &delay)
-					scanIfExists(t, d, "stores", &numStores)
-					scanIfExists(t, d, "locality", &localityString)
-					events = append(events,
-						scheduled.ScheduledEvent{
-							At: settingsGen.Settings.StartTime.Add(delay),
-							TargetEvent: event.AddNodeEvent{
-								NumStores:      numStores,
-								LocalityString: localityString,
-							}},
-					)
-					return ""
-				case "set_span_config":
-					var delay time.Duration
-					scanIfExists(t, d, "delay", &delay)
-					for _, line := range strings.Split(d.Input, "\n") {
-						line = strings.TrimSpace(line)
-						if line == "" {
-							continue
-						}
-						tag, data, found := strings.Cut(line, ":")
-						require.True(t, found)
-						tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
-						span := spanconfigtestutils.ParseSpan(t, tag)
-						conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
-						events = append(events, scheduled.ScheduledEvent{
-							At: settingsGen.Settings.StartTime.Add(delay),
-							TargetEvent: event.SetSpanConfigEvent{
-								Span:   span,
-								Config: conf,
-							},
-						})
-					}
-					return ""
-				case "set_liveness":
-					var nodeID int
-					var delay time.Duration
-					livenessStatus := livenesspb.NodeLivenessStatus_LIVE
-					scanMustExist(t, d, "node", &nodeID)
-					scanMustExist(t, d, "liveness", &livenessStatus)
-					scanIfExists(t, d, "delay", &delay)
-					events = append(events, scheduled.ScheduledEvent{
-						At: settingsGen.Settings.StartTime.Add(delay),
-						TargetEvent: event.SetNodeLivenessEvent{
-							NodeId:         state.NodeID(nodeID),
-							LivenessStatus: livenessStatus,
-						},
-					})
-					return ""
-				case "set_locality":
-					var nodeID int
-					var localityString string
-					var delay time.Duration
-					scanMustExist(t, d, "node", &nodeID)
-					scanMustExist(t, d, "locality", &localityString)
-					scanIfExists(t, d, "delay", &delay)
-
-					events = append(events, scheduled.ScheduledEvent{
-						At: settingsGen.Settings.StartTime.Add(delay),
-						TargetEvent: event.SetNodeLocalityEvent{
-							NodeID:         state.NodeID(nodeID),
-							LocalityString: localityString,
-						},
-					})
-					return ""
-				case "set_capacity":
-					var store int
-					var ioThreshold float64 = -1
-					var capacity, available int64 = -1, -1
-					var delay time.Duration
-
-					scanMustExist(t, d, "store", &store)
-					scanIfExists(t, d, "io_threshold", &ioThreshold)
-					scanIfExists(t, d, "capacity", &capacity)
-					scanIfExists(t, d, "available", &available)
-					scanIfExists(t, d, "delay", &delay)
-
-					capacityOverride := state.NewCapacityOverride()
-					capacityOverride.Capacity = capacity
-					capacityOverride.Available = available
-					if ioThreshold != -1 {
-						capacityOverride.IOThresholdMax = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
-					}
-					events = append(events, scheduled.ScheduledEvent{
-						At: settingsGen.Settings.StartTime.Add(delay),
-						TargetEvent: event.SetCapacityOverrideEvent{
-							StoreID:          state.StoreID(store),
-							CapacityOverride: capacityOverride,
-						},
-					})
-
-					return ""
-				case "eval":
-					samples := 1
-					full := false
-					// We use a fixed seed to ensure determinism in the simulated data.
-					// Multiple samples can be used for more coverage.
-					seed := int64(42)
-					duration := 30 * time.Minute
-					name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-					plotDir := datapathutils.TestDataPath(t, "generated", mode, name)
-					var rewrite bool
-					require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
-					var cfgs []string    // configurations to run the simulation with
-					var metrics []string // metrics to summarize
-
-					scanIfExists(t, d, "duration", &duration)
-					scanIfExists(t, d, "samples", &samples)
-					scanIfExists(t, d, "seed", &seed)
-					scanIfExists(t, d, "cfgs", &cfgs)
-					scanIfExists(t, d, "metrics", &metrics)
-					scanIfExists(t, d, "full", &full)
-
-					t.Logf("running eval for %s", name)
-
-					if len(cfgs) == 0 {
-						// TODO(tbg): force each test to specify the configs it wants to run
-						// under.
-						cfgs = []string{"sma-count"}
-					}
-
-					metricsMap := map[string]struct{}{}
-					for _, s := range metrics {
-						metricsMap[s] = struct{}{}
-					}
-
-					require.NotZero(t, rangeGen)
-
-					knownConfigurations := map[string]func(eg *gen.StaticEvents){
-						"sma-count": func(eg *gen.StaticEvents) {
-							eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
-								event.SetSimulationSettingsEvent{
-									IsClusterSetting: true,
-									Key:              "LBRebalancingMode",
-									Value:            int64(kvserverbase.LBRebalancingLeasesAndReplicas),
-								})
-						},
-						// 'mma-only' runs with the multi-metric allocator and turns off the
-						// replicate and lease queues.
-						"mma-only": func(eg *gen.StaticEvents) {
-							eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
-								event.SetSimulationSettingsEvent{
-									IsClusterSetting: true,
-									Key:              "LBRebalancingMode",
-									Value:            int64(kvserverbase.LBRebalancingMultiMetricOnly),
-								})
-						},
-						// Both the replicate/lease queues and the MMA are enabled.
-						"mma-count": func(eg *gen.StaticEvents) {
-							eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
-								event.SetSimulationSettingsEvent{
-									IsClusterSetting: true,
-									Key:              "LBRebalancingMode",
-									Value:            int64(kvserverbase.LBRebalancingMultiMetricAndCount),
-								})
-						},
-					}
-					var buf strings.Builder
-					// stateStrForOnce stores the string representation of the cluster and
-					// workload setup used in this test setup. The event will only include
-					// the first LBRebalancingMode configuration since this string is only
-					// generated for once at the start.
-					var stateStrForOnce string
-					for _, mv := range cfgs {
-						t.Run(mv, func(t *testing.T) {
-							ctx := logtags.AddTag(context.Background(), "name", name+"/"+mv)
-							sampleAssertFailures := make([]string, samples)
-							run := modeHistory{
-								mode: mv,
-							}
-
-							eventGen := gen.NewStaticEventsWithNoEvents()
-							for _, ev := range events {
-								eventGen.ScheduleEvent(ev.At, 0, ev.TargetEvent)
-							}
-
-							set := knownConfigurations[mv]
-							require.NotNil(t, set, "unknown mode value: %s", mv)
-							set(&eventGen)
-
-							// TODO(tbg): need to decide whether multiple evals in a single file
-							// is a feature or an anti-pattern. If it's a feature, we should let
-							// the `name` part below be adjustable (but not the plotDir) via a
-							// parameter to the `eval` command.
-							testName := name + "_" + mv
-
-							seedGen := rand.New(rand.NewSource(seed))
-							for sample := 0; sample < samples; sample++ {
-								tr := makeTraceHelper(rewrite, plotDir, testName, sample+1, duration)
-								settingsGen.Settings.OnRecording = func(storeID int64, atDuration time.Duration, rec tracingpb.Recording) {
-									tr.OnRecording(t, storeID, atDuration, rec)
-								}
-
-								assertionFailures := []string{}
-								var tmpStrB *strings.Builder = nil
-								if stateStrForOnce == "" {
-									tmpStrB = &strings.Builder{}
-								}
-								simulator := gen.GenerateSimulation(
-									duration, clusterGen, rangeGen, loadGen,
-									settingsGen, eventGen, seedGen.Int63(), tmpStrB, "\t",
-								)
-								if stateStrForOnce == "" {
-									stateStrForOnce = tmpStrB.String()
-								}
-								simulator.RunSim(ctx)
-								h := simulator.History()
-								run.hs = append(run.hs, h)
-
-								for _, stmt := range assertions {
-									if holds, reason := stmt.Assert(ctx, h); !holds {
-										assertionFailures = append(assertionFailures, reason)
-									}
-								}
-								sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
-							}
-
-							runs = append(runs, run)
-
-							// Generate artifacts. Hash artifact input data to ensure they are
-							// up to date.
-							hasher := fnv.New64a()
-
-							for sample, h := range run.hs {
-								printStatsAndGenerateJSON(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
-									settingsGen.Settings.TickInterval, metricsMap)
-							}
-							artifactsHash := hasher.Sum64()
-
-							// For each sample that had at least one failing assertion,
-							// report the sample and every failing assertion.
-							_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
-							for sample, failString := range sampleAssertFailures {
-								if failString != "" {
-									_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s\n",
-										sample+1, failString)
-								}
-							}
-							_, _ = fmt.Fprint(&buf, "==========================\n")
-						})
-					}
-					writeStateStrToFile(t, filepath.Join(plotDir, fmt.Sprintf("%s_setup.txt", name)), stateStrForOnce, rewrite)
-					if full {
-						_, _ = fmt.Fprintf(&buf, "%v\n", stateStrForOnce)
-						_, _ = fmt.Fprint(&buf, "==========================\n")
-					}
-					return buf.String()
-				case "assertion":
-					var stat string
-					var typ string
-					var ticks int
-					scanMustExist(t, d, "type", &typ)
-
-					var buf strings.Builder
-					switch typ {
-					case "balance":
-						scanMustExist(t, d, "stat", &stat)
-						scanMustExist(t, d, "ticks", &ticks)
-						threshold := scanThreshold(t, d)
-						assertions = append(assertions, assertion.BalanceAssertion{
-							Ticks:     ticks,
-							Stat:      stat,
-							Threshold: threshold,
-						})
-						_, _ = fmt.Fprintf(&buf, "asserting: max_{stores}(%s)/mean_{stores}(%s) %s %.2f at each of last %d ticks",
-							stat, stat, threshold.ThresholdType, threshold.Value, ticks)
-						// ^-- the max and mean are taken over the stores (with the tick fixed).
-					case "steady":
-						scanMustExist(t, d, "stat", &stat)
-						scanMustExist(t, d, "ticks", &ticks)
-						threshold := scanThreshold(t, d)
-						assertions = append(assertions, assertion.SteadyStateAssertion{
-							Ticks:     ticks,
-							Stat:      stat,
-							Threshold: threshold,
-						})
-						_, _ = fmt.Fprintf(&buf, "asserting: |%s(t)/mean_{T}(%s) - 1| %s %.2f ∀ t∈T and each store ("+
-							"T=last %d ticks)",
-							stat, stat, threshold.ThresholdType, threshold.Value, ticks)
-						// ^-- the mean is taken over the ticks (and the check runs for each store).
-						// These assertions are for "checking that change stops" (vs. balance
-						// assertions, which verify that stores are close together on some metric).
-					case "stat":
-						var stores []int
-						scanMustExist(t, d, "stat", &stat)
-						scanMustExist(t, d, "ticks", &ticks)
-						scanMustExist(t, d, "stores", &stores)
-						assertions = append(assertions, assertion.StoreStatAssertion{
-							Ticks:     ticks,
-							Stat:      stat,
-							Threshold: scanThreshold(t, d),
-							Stores:    stores,
-						})
-					case "conformance":
-						var under, over, unavailable, violating, leaseViolating, leaseLessPref int
-						under = assertion.ConformanceAssertionSentinel
-						over = assertion.ConformanceAssertionSentinel
-						unavailable = assertion.ConformanceAssertionSentinel
-						violating = assertion.ConformanceAssertionSentinel
-						leaseLessPref = assertion.ConformanceAssertionSentinel
-						leaseViolating = assertion.ConformanceAssertionSentinel
-						scanIfExists(t, d, "under", &under)
-						scanIfExists(t, d, "over", &over)
-						scanIfExists(t, d, "unavailable", &unavailable)
-						scanIfExists(t, d, "violating", &violating)
-						scanIfExists(t, d, "lease-violating", &leaseViolating)
-						scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
-						assertions = append(assertions, assertion.ConformanceAssertion{
-							Underreplicated:           under,
-							Overreplicated:            over,
-							ViolatingConstraints:      violating,
-							Unavailable:               unavailable,
-							ViolatingLeasePreferences: leaseViolating,
-							LessPreferredLeases:       leaseLessPref,
-						})
-					default:
-						panic("unknown assertion: " + typ)
-					}
-					return buf.String()
-				case "setting":
-					// NB: delay could be supported for the below settings,
-					// but it hasn't been needed yet.
-					var dns bool // "delay not supported"
-					dns = scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled) || dns
-					dns = scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled) || dns
-					dns = scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled) || dns
-					dns = scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval) || dns
-					dns = scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold) || dns
-					dns = scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold) || dns
-					dns = scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay) || dns
-					dns = scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold) || dns
-					dns = scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective) || dns
-					var snapshotRateMiB int
-					dns = scanIfExists(t, d, "rebalancing_snapshot_rate_mib", &snapshotRateMiB) || dns
-					if snapshotRateMiB != 0 {
-						settingsGen.Settings.RebalancingSnapshotRate = int64(snapshotRateMiB) << 20
-					}
-
-					var delay time.Duration
-					if scanIfExists(t, d, "delay", &delay) {
-						require.False(t, dns, "delay not supported for at least one setting")
-					}
-
-					var rebalanceMode int64
-					if scanIfExists(t, d, "rebalance_mode", &rebalanceMode) {
-						events = append(events, scheduled.ScheduledEvent{
-							At: settingsGen.Settings.StartTime.Add(delay),
-							TargetEvent: event.SetSimulationSettingsEvent{
-								IsClusterSetting: true,
-								Key:              "LBRebalancingMode",
-								Value:            rebalanceMode,
-							}})
-					}
-					return ""
-				default:
-					return fmt.Sprintf("unknown command: %s", d.Cmd)
+				var placementType gen.PlacementType
+				if placementSkew {
+					placementType = gen.Skewed
+				} else {
+					placementType = gen.Even
 				}
-			})
+				rangeGen = gen.BasicRanges{
+					BaseRanges: gen.BaseRanges{
+						Ranges:            ranges,
+						KeySpace:          keyspace,
+						ReplicationFactor: replFactor,
+						Bytes:             bytes,
+					},
+					PlacementType: placementType,
+				}
+				return ""
+			case "topology":
+				var sample = len(runs)
+				scanIfExists(t, d, "sample", &sample)
+				top := runs[sample-1].S.Topology()
+				return (&top).String()
+			case "gen_cluster":
+				var nodes = 3
+				var storesPerNode = 1
+				scanIfExists(t, d, "nodes", &nodes)
+				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				clusterGen = gen.BasicCluster{
+					Nodes:         nodes,
+					StoresPerNode: storesPerNode,
+				}
+				return ""
+			case "load_cluster":
+				var config string
+				scanArg(t, d, "config", &config)
+				clusterGen = loadClusterInfo(config)
+				return ""
+			case "add_node":
+				var delay time.Duration
+				var numStores = 1
+				var localityString string
+				scanIfExists(t, d, "delay", &delay)
+				scanIfExists(t, d, "stores", &numStores)
+				scanIfExists(t, d, "locality", &localityString)
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.AddNodeEvent{
+					NumStores:      numStores,
+					LocalityString: localityString,
+				})
+				return ""
+			case "set_span_config":
+				var delay time.Duration
+				scanIfExists(t, d, "delay", &delay)
+				for _, line := range strings.Split(d.Input, "\n") {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					tag, data, found := strings.Cut(line, ":")
+					require.True(t, found)
+					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
+					span := spanconfigtestutils.ParseSpan(t, tag)
+					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
+					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSpanConfigEvent{
+						Span:   span,
+						Config: conf,
+					})
+				}
+				return ""
+			case "set_liveness":
+				var nodeID int
+				var delay time.Duration
+				livenessStatus := livenesspb.NodeLivenessStatus_LIVE
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "liveness", &livenessStatus)
+				scanIfExists(t, d, "delay", &delay)
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLivenessEvent{
+					NodeId:         state.NodeID(nodeID),
+					LivenessStatus: livenessStatus,
+				})
+				return ""
+			case "set_locality":
+				var nodeID int
+				var localityString string
+				var delay time.Duration
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "locality", &localityString)
+				scanIfExists(t, d, "delay", &delay)
+
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
+					NodeID:         state.NodeID(nodeID),
+					LocalityString: localityString,
+				})
+				return ""
+			case "set_capacity":
+				var store int
+				var ioThreshold float64 = -1
+				var capacity, available int64 = -1, -1
+				var delay time.Duration
+
+				scanArg(t, d, "store", &store)
+				scanIfExists(t, d, "io_threshold", &ioThreshold)
+				scanIfExists(t, d, "capacity", &capacity)
+				scanIfExists(t, d, "available", &available)
+				scanIfExists(t, d, "delay", &delay)
+
+				capacityOverride := state.NewCapacityOverride()
+				capacityOverride.Capacity = capacity
+				capacityOverride.Available = available
+				if ioThreshold != -1 {
+					capacityOverride.IOThresholdMax = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
+				}
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetCapacityOverrideEvent{
+					StoreID:          state.StoreID(store),
+					CapacityOverride: capacityOverride,
+				})
+
+				return ""
+			case "eval":
+				samples := 1
+				seed := rand.Int63()
+				duration := 30 * time.Minute
+				failureExists := false
+
+				scanIfExists(t, d, "duration", &duration)
+				scanIfExists(t, d, "samples", &samples)
+				scanIfExists(t, d, "seed", &seed)
+
+				seedGen := rand.New(rand.NewSource(seed))
+				sampleAssertFailures := make([]string, samples)
+				// TODO(kvoli): Samples are evaluated sequentially (no
+				// concurrency). Add a evaluator component which concurrently
+				// evaluates samples with the option to stop evaluation early
+				// if an assertion fails.
+				for sample := 0; sample < samples; sample++ {
+					assertionFailures := []string{}
+					simulator := gen.GenerateSimulation(
+						duration, clusterGen, rangeGen, loadGen,
+						settingsGen, eventGen, seedGen.Int63(),
+					)
+					simulator.RunSim(ctx)
+					history := simulator.History()
+					runs = append(runs, history)
+					for _, assertion := range assertions {
+						if holds, reason := assertion.Assert(ctx, history); !holds {
+							failureExists = true
+							assertionFailures = append(assertionFailures, reason)
+						}
+					}
+					sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
+				}
+
+				// Every sample passed every assertion.
+				if !failureExists {
+					return "OK"
+				}
+
+				// There exists a sample where some assertion didn't hold. For
+				// each sample that had at least one failing assertion, report
+				// the sample and every failing assertion.
+				buf := strings.Builder{}
+				for sample, failString := range sampleAssertFailures {
+					if failString != "" {
+						fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
+							sample+1, failString)
+					}
+				}
+				return buf.String()
+			case "assertion":
+				var stat string
+				var typ string
+				var ticks int
+				scanArg(t, d, "type", &typ)
+
+				switch typ {
+				case "balance":
+					scanArg(t, d, "stat", &stat)
+					scanArg(t, d, "ticks", &ticks)
+					assertions = append(assertions, assertion.BalanceAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
+					})
+				case "steady":
+					scanArg(t, d, "stat", &stat)
+					scanArg(t, d, "ticks", &ticks)
+					assertions = append(assertions, assertion.SteadyStateAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
+					})
+				case "stat":
+					var stores []int
+					scanArg(t, d, "stat", &stat)
+					scanArg(t, d, "ticks", &ticks)
+					scanArg(t, d, "stores", &stores)
+					assertions = append(assertions, assertion.StoreStatAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
+						Stores:    stores,
+					})
+				case "conformance":
+					var under, over, unavailable, violating, leaseViolating, leaseLessPref int
+					under = assertion.ConformanceAssertionSentinel
+					over = assertion.ConformanceAssertionSentinel
+					unavailable = assertion.ConformanceAssertionSentinel
+					violating = assertion.ConformanceAssertionSentinel
+					leaseLessPref = assertion.ConformanceAssertionSentinel
+					leaseViolating = assertion.ConformanceAssertionSentinel
+					scanIfExists(t, d, "under", &under)
+					scanIfExists(t, d, "over", &over)
+					scanIfExists(t, d, "unavailable", &unavailable)
+					scanIfExists(t, d, "violating", &violating)
+					scanIfExists(t, d, "lease-violating", &leaseViolating)
+					scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
+					assertions = append(assertions, assertion.ConformanceAssertion{
+						Underreplicated:           under,
+						Overreplicated:            over,
+						ViolatingConstraints:      violating,
+						Unavailable:               unavailable,
+						ViolatingLeasePreferences: leaseViolating,
+						LessPreferredLeases:       leaseLessPref,
+					})
+				}
+				return ""
+			case "setting":
+				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
+				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
+				scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)
+				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
+				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
+				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+				return ""
+			case "plot":
+				var stat string
+				var height, width, sample = 15, 80, 1
+				var buf strings.Builder
+
+				scanArg(t, d, "stat", &stat)
+				scanIfExists(t, d, "sample", &sample)
+				scanIfExists(t, d, "height", &height)
+				scanIfExists(t, d, "width", &width)
+
+				require.GreaterOrEqual(t, len(runs), sample)
+
+				history := runs[sample-1]
+				ts := metrics.MakeTS(history.Recorded)
+				statTS := ts[stat]
+				buf.WriteString("\n")
+				buf.WriteString(asciigraph.PlotMany(
+					statTS,
+					asciigraph.Caption(stat),
+					asciigraph.Height(height),
+					asciigraph.Width(width),
+				))
+				buf.WriteString("\n")
+				return buf.String()
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
 		})
 	})
-}
-
-type modeHistory struct {
-	mode string
-	hs   []history.History
-}
-
-// writeStateStrToFile writes the state string to the given file.
-func writeStateStrToFile(t *testing.T, topFile string, stateStr string, rewrite bool) {
-	if rewrite {
-		require.NoError(t, os.WriteFile(topFile, []byte(stateStr), 0644))
-	}
 }

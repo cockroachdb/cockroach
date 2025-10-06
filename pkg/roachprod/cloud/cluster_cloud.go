@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"text/tabwriter"
 	"time"
@@ -263,11 +262,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			// Parse cluster/user from VM name, but only for non-local VMs
 			userName, err := v.UserName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidUserName)
+				v.Errors = append(v.Errors, vm.ErrInvalidName)
 			}
 			clusterName, err := v.ClusterName()
 			if err != nil {
-				v.Errors = append(v.Errors, vm.ErrInvalidClusterName)
+				v.Errors = append(v.Errors, vm.ErrInvalidName)
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct
@@ -322,17 +321,6 @@ type ClusterCreateOpts struct {
 	Nodes                 int
 	CreateOpts            vm.CreateOpts
 	ProviderOptsContainer vm.ProviderOptionsContainer
-}
-
-// Extracts o.CreateOpts.VMProviders from the provided opts.
-func Providers(opts ...*ClusterCreateOpts) []string {
-	providers := []string{}
-	for _, o := range opts {
-		providers = append(providers, o.CreateOpts.VMProviders...)
-	}
-	// Remove dupes, if any.
-	slices.Sort(providers)
-	return slices.Compact(providers)
 }
 
 // CreateCluster TODO(peter): document
@@ -487,38 +475,44 @@ func ShrinkCluster(l *logger.Logger, c *Cluster, numNodes int) error {
 
 func (c *Cluster) DeletePrometheusConfig(ctx context.Context, l *logger.Logger) error {
 
+	cl := promhelperclient.NewPromClient()
+
 	stopSpinner := ui.NewDefaultSpinner(l, "Destroying Prometheus configs").Start()
 	defer stopSpinner()
 
-	// We first iterate on all VMs to determine if any machine of the cluster
-	// was reachable by Prometheus and if we need to delete its config.
-	// This is done this way to avoid authenticating the promhelper client
-	// in case we don't need to delete any config.
-	needDelete := false
 	for _, node := range c.VMs {
 
-		reachability := promhelperclient.ProviderReachability(
-			node.Provider,
-			promhelperclient.CloudEnvironment(node.Project),
-		)
-		if reachability == promhelperclient.None {
+		// only gce is supported for prometheus
+		if !cl.IsSupportedNodeProvider(node.Provider) {
+			continue
+		}
+		if !cl.IsSupportedPromProject(node.Project) {
 			continue
 		}
 
-		needDelete = true
+		err := cl.DeleteClusterConfig(ctx, c.Name, false, false /* insecure */, l)
+		if err != nil {
+
+			if !promhelperclient.IsNotFoundError(err) {
+				return errors.Wrapf(
+					err,
+					"failed to delete the cluster config with cluster as secure",
+				)
+			}
+
+			// TODO(bhaskar): Obtain secure cluster information.
+			// Cluster does not have the information on secure or not.
+			// So, we retry as insecure  if delete fails with cluster as secure.
+			if err = cl.DeleteClusterConfig(ctx, c.Name, false, true /* insecure */, l); err != nil {
+				return errors.Wrapf(
+					err,
+					"failed to delete the cluster config with cluster as insecure and secure",
+				)
+			}
+
+		}
 		break
-	}
 
-	if needDelete {
-		cl, err := promhelperclient.NewPromClient()
-		if err != nil {
-			return err
-		}
-
-		err = cl.DeleteClusterConfig(ctx, c.Name, l)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil

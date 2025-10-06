@@ -62,7 +62,7 @@ func (p *planner) writeSchemaDescChange(
 	if recordExists {
 		// Update it.
 		record.AppendDescription(jobDesc)
-		log.Dev.Infof(ctx, "job %d: updated job's specification for change on schema %d", record.JobID, desc.ID)
+		log.Infof(ctx, "job %d: updated job's specification for change on schema %d", record.JobID, desc.ID)
 	} else {
 		// Or, create a new job.
 		jobRecord := jobs.Record{
@@ -81,7 +81,7 @@ func (p *planner) writeSchemaDescChange(
 			NonCancelable: true,
 		}
 		p.extendedEvalCtx.jobs.uniqueToCreate[desc.ID] = &jobRecord
-		log.Dev.Infof(ctx, "queued new schema change job %d for schema %d", jobRecord.JobID, desc.ID)
+		log.Infof(ctx, "queued new schema change job %d for schema %d", jobRecord.JobID, desc.ID)
 	}
 
 	return p.writeSchemaDesc(ctx, desc)

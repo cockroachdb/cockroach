@@ -633,7 +633,7 @@ func (desc *immutable) GetResolvedFuncDefinition(
 					// We should never get an error during parsing the default
 					// expr.
 					inputParamOrdinal := len(sig.ArgTypes) - (len(sig.DefaultExprs) - j)
-					log.Dev.Errorf(
+					log.Errorf(
 						ctx, "DEFAULT expr for input param %d for routine %s: %v",
 						inputParamOrdinal, name, err,
 					)

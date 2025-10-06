@@ -110,7 +110,7 @@ func TestNodeLocalFileUpload(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			writtenContent, err := os.ReadFile(filepath.Join(c.Server.ExternalIODir(), destination))
+			writtenContent, err := os.ReadFile(filepath.Join(c.Server.ClusterSettings().ExternalIODir, destination))
 			if err != nil {
 				t.Fatal(err)
 			}

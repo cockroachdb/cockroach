@@ -8,7 +8,6 @@ package util
 import (
 	"testing"
 
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,46 +123,6 @@ func TestMap(t *testing.T) {
 	}))
 }
 
-func TestMapErr(t *testing.T) {
-	t.Run("empty slice", func(t *testing.T) {
-		out, err := MapE(nil, func(i int) (int, error) {
-			require.Fail(t, "should not be called")
-			return 0, nil
-		})
-		require.NoError(t, err)
-		require.Equal(t, []int{}, out)
-	})
-
-	t.Run("map to same type", func(t *testing.T) {
-		out, err := MapE([]int{1, 2, 3}, func(i int) (int, error) {
-			return i * 2, nil
-		})
-		require.NoError(t, err)
-		require.Equal(t, []int{2, 4, 6}, out)
-	})
-
-	t.Run("map to different type", func(t *testing.T) {
-		out, err := MapE([]int{1, 2, 3}, func(i int) (string, error) {
-			return string(rune('a' + i - 1)), nil
-		})
-		require.NoError(t, err)
-		require.Equal(t, []string{"a", "b", "c"}, out)
-	})
-
-	t.Run("error case", func(t *testing.T) {
-		out, err := MapE([]int{1, 2, 3}, func(i int) (int, error) {
-			if i == 2 {
-				return 0, errors.New("error on 2")
-			} else if i == 3 {
-				require.Fail(t, "should not be called")
-			}
-			return i * 2, nil
-		})
-		require.Error(t, err)
-		require.Nil(t, out)
-	})
-}
-
 func TestMapFrom(t *testing.T) {
 	require.Equal(t, map[int]bool{}, MapFrom(nil, func(i int) (int, bool) {
 		require.Fail(t, "should not be called")
@@ -182,24 +141,4 @@ func TestMapFrom(t *testing.T) {
 	}, MapFrom([]int{1, 1, 2, 3, 4, 5, 5}, func(i int) (int, int) {
 		return i, i * i
 	}))
-}
-
-func TestReduce(t *testing.T) {
-	t.Run("empty slice", func(t *testing.T) {
-		require.Equal(t, 15, Reduce([]int{}, func(acc, i, _ int) int {
-			return acc + i
-		}, 15))
-	})
-
-	t.Run("reduce to same type", func(t *testing.T) {
-		require.Equal(t, 15, Reduce([]int{1, 2, 3, 4, 5}, func(acc, i, _ int) int {
-			return acc + i
-		}, 0))
-	})
-
-	t.Run("reduce to different type", func(t *testing.T) {
-		require.Equal(t, 11, Reduce([]string{"hello", "world!"}, func(acc int, i string, _ int) int {
-			return acc + len(i)
-		}, 0))
-	})
 }

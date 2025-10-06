@@ -4,15 +4,10 @@ echo
 -- Flow token metrics from n1 after issuing 1 1MiB 5x replicated write
 -- that's not admitted. Since this test is ignoring crashed nodes for token
 -- deduction purposes, we see a deduction of 5MiB tokens.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 35 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 5.0 MiB  
@@ -40,22 +35,16 @@ ORDER BY
 
 
 -- Observe the total tracked tokens per-stream on n1. 1MiB is tracked for n1-n5.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+	   FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 1.0 MiB               
-  a        | 2        | 1.0 MiB               
-  a        | 3        | 1.0 MiB               
-  a        | 4        | 1.0 MiB               
-  a        | 5        | 1.0 MiB               
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+  70       | 4        | 1.0 MiB               
+  70       | 5        | 1.0 MiB               
 
 
 -- (Killing n2 and n3, but preventing their tokens from being returned +
@@ -65,22 +54,16 @@ ORDER BY
 -- Observe the total tracked tokens per-stream on n1. 1MiB is (still) tracked
 -- for n1-n5, because they are not in StateSnapshot yet and have likely been
 -- in StateProbe for less than the close timer.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+	   FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 1.0 MiB               
-  a        | 2        | 1.0 MiB               
-  a        | 3        | 1.0 MiB               
-  a        | 4        | 1.0 MiB               
-  a        | 5        | 1.0 MiB               
+  70       | 1        | 1.0 MiB               
+  70       | 2        | 1.0 MiB               
+  70       | 3        | 1.0 MiB               
+  70       | 4        | 1.0 MiB               
+  70       | 5        | 1.0 MiB               
 
 
 -- (Issuing another 1MiB of 5x replicated writes while n2 and n3 are down and
@@ -89,15 +72,10 @@ ORDER BY
 
 -- Flow token metrics from n1 after issuing 1 1MiB 5x replicated write
 -- that's not admitted. We'll have deducted another 5*1MiB=5MiB worth of tokens.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 30 MiB  
   kvflowcontrol.tokens.eval.elastic.deducted                        | 10 MiB  
@@ -126,22 +104,16 @@ ORDER BY
 
 -- Observe the total tracked tokens per-stream on n1. 2MiB is tracked for n1-n5;
 -- see last comment for an explanation why we're still deducting for n2, n3.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+	   FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 2.0 MiB               
-  a        | 2        | 2.0 MiB               
-  a        | 3        | 2.0 MiB               
-  a        | 4        | 2.0 MiB               
-  a        | 5        | 2.0 MiB               
+  70       | 1        | 2.0 MiB               
+  70       | 2        | 2.0 MiB               
+  70       | 3        | 2.0 MiB               
+  70       | 4        | 2.0 MiB               
+  70       | 5        | 2.0 MiB               
 
 
 -- (Truncating raft log.)
@@ -154,15 +126,10 @@ ORDER BY
 -- 2MiB previously held by those nodes (2MiB each). We're reacting to it's raft
 -- progress state, noting that since we've truncated our log, we need to catch
 -- it up via snapshot. So we release all held tokens.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 34 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 10 MiB   
@@ -191,22 +158,15 @@ ORDER BY
 
 -- Observe the total tracked tokens per-stream on n1. There's nothing tracked
 -- for n2 and n3 anymore.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+   FROM crdb_internal.kv_flow_control_handles_v2
+   WHERE total_tracked_tokens > 0
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 2.0 MiB               
-  a        | 2        | 0 B                   
-  a        | 3        | 0 B                   
-  a        | 4        | 2.0 MiB               
-  a        | 5        | 2.0 MiB               
+  70       | 1        | 2.0 MiB               
+  70       | 4        | 2.0 MiB               
+  70       | 5        | 2.0 MiB               
 
 
 -- (Allow below-raft admission to proceed.)
@@ -214,15 +174,10 @@ ORDER BY
 
 -- Flow token metrics from n1 after work gets admitted. We see the remaining
 -- 6MiB of tokens returned.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 40 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 10 MiB   
@@ -250,22 +205,16 @@ ORDER BY
 
 
 -- Observe the total tracked tokens per-stream on n1; there should be nothing.
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  store_id,
-  crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-ORDER BY
-  range_id, store_id;
+SELECT range_id, store_id, crdb_internal.humanize_bytes(total_tracked_tokens::INT8)
+   FROM crdb_internal.kv_flow_control_handles_v2
 
   range_id | store_id | total_tracked_tokens  
 -----------+----------+-----------------------
-  a        | 1        | 0 B                   
-  a        | 2        | 0 B                   
-  a        | 3        | 0 B                   
-  a        | 4        | 0 B                   
-  a        | 5        | 0 B                   
+  70       | 1        | 0 B                   
+  70       | 2        | 0 B                   
+  70       | 3        | 0 B                   
+  70       | 4        | 0 B                   
+  70       | 5        | 0 B                   
 
 
 -- Another view of tokens, using /inspectz-backed vtables.
@@ -275,7 +224,7 @@ SELECT store_id,
   FROM crdb_internal.kv_flow_controller_v2
  ORDER BY store_id ASC;
 
-  store_id | eval_regular_available | eval_elastic_available  
+  range_id | eval_regular_available | eval_elastic_available  
 -----------+------------------------+-------------------------
   1        | 16 MiB                 | 8.0 MiB                 
   2        | 16 MiB                 | 8.0 MiB                 

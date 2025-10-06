@@ -67,9 +67,5 @@ var SendErrToClient = func(conn net.Conn, err error) {
 	if err == nil || conn == nil {
 		return
 	}
-	buf, err := toPgError(err).Encode(nil)
-	if err != nil {
-		return // void function - eat the error
-	}
-	_, _ = conn.Write(buf)
+	_, _ = conn.Write(toPgError(err).Encode(nil))
 }

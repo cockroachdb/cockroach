@@ -200,8 +200,8 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if job.State() != jobs.StateRunning {
-				return errors.Newf("expected job to have StatusRunning but found %+v", job.State())
+			if job.Status() != jobs.StatusRunning {
+				return errors.Newf("expected job to have StatusRunning but found %+v", job.Status())
 			}
 			return nil
 		})
@@ -213,7 +213,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		require.Equal(t, jobs.StateSucceeded, job.State())
+		require.Equal(t, jobs.StatusSucceeded, job.Status())
 		err = insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err = sql.GetTenantRecordByID(ctx, txn, tenID, srv.ClusterSettings())
 			return err

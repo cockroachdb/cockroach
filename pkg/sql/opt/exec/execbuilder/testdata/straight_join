@@ -53,7 +53,6 @@ vectorized: true
 │ table: t2@t2_pkey
 │ equality: (x) = (x)
 │ equality cols are key
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (x, x, y)
@@ -80,7 +79,6 @@ vectorized: true
 │ table: t2@t2_pkey
 │ equality: (x) = (x)
 │ equality cols are key
-│ parallel
 │
 └── • lookup join (inner)
     │ columns: (x, x, y)

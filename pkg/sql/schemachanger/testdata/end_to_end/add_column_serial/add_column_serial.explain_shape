@@ -1,0 +1,18 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TABLE db.public.tbl (i INT PRIMARY KEY);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE db.public.tbl ADD COLUMN serial_id SERIAL;
+----
+Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹serial_id› INT8;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index tbl_pkey- in relation tbl
+ │    └── into tbl_pkey+ (i; serial_id+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation tbl
+ │    └── from tbl@[3] into tbl_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index tbl_pkey+ in relation tbl
+ ├── validate NOT NULL constraint on column serial_id+ in index tbl_pkey+ in relation tbl
+ └── execute 3 system table mutations transactions

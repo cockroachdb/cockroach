@@ -455,52 +455,6 @@ func EncodeUint64ToBytes(id uint64) []byte {
 	return encoding.EncodeUint64Ascending(result, id)
 }
 
-// EncodeStmtFingerprintIDToString returns the hex string representation of a statement fingerprint ID.
-func EncodeStmtFingerprintIDToString(id appstatspb.StmtFingerprintID) string {
+func encodeStmtFingerprintIDToString(id appstatspb.StmtFingerprintID) string {
 	return hex.EncodeToString(EncodeUint64ToBytes(uint64(id)))
-}
-
-// EncodeTxnFingerprintIDToString returns the hex string representation of a transaction fingerprint ID.
-func EncodeTxnFingerprintIDToString(id appstatspb.TransactionFingerprintID) string {
-	return hex.EncodeToString(EncodeUint64ToBytes(uint64(id)))
-}
-
-func DecodeBytesToUint64(id []byte) (uint64, error) {
-	_, ret, err := encoding.DecodeUint64Ascending(id)
-	if err != nil {
-		return 0, err
-	}
-	return ret, nil
-}
-
-func DecodeBytesToTxnFingerprintID(id []byte) (appstatspb.TransactionFingerprintID, error) {
-	ret, err := DecodeBytesToUint64(id)
-	if err != nil {
-		return appstatspb.InvalidTransactionFingerprintID, err
-	}
-	return appstatspb.TransactionFingerprintID(ret), nil
-}
-
-func DecodeBytesToStmtFingerprintID(id []byte) (appstatspb.StmtFingerprintID, error) {
-	ret, err := DecodeBytesToUint64(id)
-	if err != nil {
-		return appstatspb.StmtFingerprintID(0), err
-	}
-	return appstatspb.StmtFingerprintID(ret), nil
-}
-
-func DecodeStringToStmtFingerprintID(id string) (appstatspb.StmtFingerprintID, error) {
-	hexbytes, err := hex.DecodeString(id)
-	if err != nil {
-		return appstatspb.StmtFingerprintID(0), err
-	}
-	return DecodeBytesToStmtFingerprintID(hexbytes)
-}
-
-func DecodeStringToTxnFingerprintID(id string) (appstatspb.TransactionFingerprintID, error) {
-	hexbytes, err := hex.DecodeString(id)
-	if err != nil {
-		return appstatspb.InvalidTransactionFingerprintID, err
-	}
-	return DecodeBytesToTxnFingerprintID(hexbytes)
 }

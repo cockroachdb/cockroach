@@ -140,8 +140,13 @@ func (e *elasticCPUGranter) setRequester(requester requester) {
 	e.requester = requester
 }
 
+// grantKind implements granter.
+func (e *elasticCPUGranter) grantKind() grantKind {
+	return token
+}
+
 // tryGet implements granter.
-func (e *elasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
+func (e *elasticCPUGranter) tryGet(count int64) (granted bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -177,7 +182,7 @@ func (e *elasticCPUGranter) continueGrantChain(grantChainID) {
 
 // tryGrant is used to attempt to grant to waiting requests.
 func (e *elasticCPUGranter) tryGrant() {
-	for e.hasWaitingRequests() && e.tryGet(canBurst /*arbitrary*/, 1) {
+	for e.requester.hasWaitingRequests() && e.tryGet(1) {
 		tokens := e.requester.granted(noGrantChain)
 		if tokens == 0 {
 			e.returnGrantWithoutGrantingElsewhere(1)
@@ -203,12 +208,12 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 	e.mu.utilizationLimit = utilizationLimit
 	e.mu.tb.UpdateConfig(tokenbucket.TokensPerSecond(rate), tokenbucket.Tokens(rate))
 	if now := timeutil.Now(); now.Sub(e.mu.tbLastReset) > 15*time.Second { // TODO(irfansharif): make this is a cluster setting?
-		// Periodically ensure the tokens are at least 0. This is just
-		// defense-in-depth and at worst, over-admits. We've seen production
-		// clusters where the token bucket was severely in debt and caused wait
-		// queue times of minutes, which can be long enough to fail backups
-		// completely (#102817).
-		e.mu.tb.EnsureLowerBound(0)
+		// Periodically reset the token bucket. This is just defense-in-depth
+		// and at worst, over-admits. We've seen production clusters where the
+		// token bucket was severely in debt and caused wait queue times of
+		// minutes, which can be long enough to fail backups completely
+		// (#102817).
+		e.mu.tb.Reset()
 		e.mu.tbLastReset = now
 	}
 	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Microseconds())
@@ -216,7 +221,7 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 
 	e.metrics.UtilizationLimit.Update(utilizationLimit)
 	if log.V(1) {
-		log.Dev.Infof(e.ctx, "elastic cpu granter refill rate = %0.4f cpu seconds per second (utilization across %d procs = %0.2f%%)",
+		log.Infof(e.ctx, "elastic cpu granter refill rate = %0.4f cpu seconds per second (utilization across %d procs = %0.2f%%)",
 			time.Duration(rate).Seconds(), runtime.GOMAXPROCS(0), utilizationLimit*100)
 	}
 }
@@ -230,8 +235,7 @@ func (e *elasticCPUGranter) getUtilizationLimit() float64 {
 
 // hasWaitingRequests is part of the elasticCPULimiter interface.
 func (e *elasticCPUGranter) hasWaitingRequests() bool {
-	hasWaiting, _ := e.requester.hasWaitingRequests()
-	return hasWaiting
+	return e.requester.hasWaitingRequests()
 }
 
 // computeUtilizationMetric is part of the elasticCPULimiter interface.

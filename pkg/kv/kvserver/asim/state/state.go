@@ -12,11 +12,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -60,11 +58,8 @@ type State interface {
 	// first flag is false, then the capacity is generated from scratch,
 	// otherwise the last calculated capacity values are used for each store.
 	StoreDescriptors(bool, ...StoreID) []roachpb.StoreDescriptor
-	Node(NodeID) Node
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
-	// NodesString returns a string representation of all nodes.
-	NodesStringWithTag(tag string) string
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
 	// cannot fail.
 	RangeFor(Key) Range
@@ -85,7 +80,7 @@ type State interface {
 	LeaseholderStore(RangeID) (Store, bool)
 	// AddNode modifies the state to include one additional node. This cannot
 	// fail. The new Node is returned.
-	AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node
+	AddNode() Node
 	// SetNodeLocality sets the locality of the node with ID NodeID to be the
 	// locality given.
 	SetNodeLocality(NodeID, roachpb.Locality)
@@ -159,7 +154,7 @@ type State interface {
 	Clock() timeutil.TimeSource
 	// UpdateStorePool modifies the state of the StorePool for the Store with
 	// ID StoreID.
-	UpdateStorePool(NodeID, map[roachpb.StoreID]*storepool.StoreDetailMu)
+	UpdateStorePool(StoreID, map[roachpb.StoreID]*storepool.StoreDetail)
 	// NextReplicasFn returns a function, that when called will return the current
 	// replicas that exist on the store.
 	NextReplicasFn(StoreID) func() []Replica
@@ -176,12 +171,12 @@ type State interface {
 	// TODO(kvoli): Find a better home for this method, required by the
 	// storepool.
 	NodeCountFn() storepool.NodeCountFunc
-	// Allocator returns an allocator for the Store with ID StoreID, it
+	// MakeAllocator returns an allocator for the Store with ID StoreID, it
 	// populates the storepool with the current state.
 	// TODO(kvoli): The storepool is part of the state at some tick, however
 	// the allocator and storepool should both be separated out of this
 	// interface, instead using it to populate themselves.
-	Allocator(StoreID) allocatorimpl.Allocator
+	MakeAllocator(StoreID) allocatorimpl.Allocator
 	// StorePool returns the store pool for the given storeID.
 	StorePool(StoreID) storepool.AllocatorStorePool
 	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
@@ -202,15 +197,6 @@ type State interface {
 	// RegisterConfigChangeListener registers a listener which will be called
 	// when a cluster configuration change occurs such as a store being added.
 	RegisterConfigChangeListener(ConfigChangeListener)
-	// SetSimulationSettings sets the simulation settings for the state.
-	SetSimulationSettings(Key string, Value interface{})
-	// SetClusterSetting sets the cluster setting for the state.
-	SetClusterSetting(Key string, Value interface{})
-	// NodeCapacity returns the capacity of the node with ID NodeID.
-	NodeCapacity(NodeID) roachpb.NodeCapacity
-	// SetNodeCPURateCapacity sets the CPU rate capacity for the node with ID
-	// NodeID to be equal to the value given.
-	SetNodeCPURateCapacity(NodeID, int64)
 }
 
 // Node is a container for stores and is part of a cluster.
@@ -221,10 +207,6 @@ type Node interface {
 	Stores() []StoreID
 	// Descriptor returns the descriptor for this node.
 	Descriptor() roachpb.NodeDescriptor
-	// TODO(wenyihu6): use this in mma store rebalancer
-	MMAllocator() mmaprototype.Allocator
-	// AllocatorSync returns the AllocatorSync for this node.
-	AllocatorSync() *mmaintegration.AllocatorSync
 }
 
 // Store is a container for replicas.
@@ -272,8 +254,6 @@ type Range interface {
 type Replica interface {
 	// ReplicaID returns the ID of this replica.
 	ReplicaID() ReplicaID
-	// NodeID returns the ID of the node this replica is on.
-	NodeID() NodeID
 	// StoreID returns the ID of the store this replica is on.
 	StoreID() StoreID
 	// Descriptor returns the descriptor for this replica.
@@ -309,10 +289,6 @@ func (m *ManualSimClock) Set(tsNanos int64) {
 
 func (m *ManualSimClock) Since(t time.Time) time.Duration {
 	return m.Now().Sub(t)
-}
-
-func (m *ManualSimClock) Until(t time.Time) time.Duration {
-	return t.Sub(m.Now())
 }
 
 func (m *ManualSimClock) NewTimer() timeutil.TimerI {

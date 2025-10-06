@@ -3,7 +3,7 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT DEFAULT 54);
 INSERT INTO t(i, j) VALUES (-4, -4), (-2, -2), (-3, -3);
 CREATE INDEX ON t(i) WHERE i<=0;
 CREATE INDEX ON t(j) WHERE j<= 0;
-CREATE INDEX idx ON t(k);
+CREATE INDEX ON t(k);
 ----
 
 # Note: Unlike other tests, we intentionally avoid
@@ -19,13 +19,6 @@ DELETE FROM t WHERE i=$stageKey;
 INSERT INTO t VALUES($stageKey, $stageKey);
 INSERT INTO t VALUES(-4, -4);
 ----
-
-# Each insert will be injected twice per stage, so we should always,
-# see a count of 2.
-stage-query phase=PostCommitPhase stage=:
-SELECT count(*)=($successfulStageCount*2)+3 FROM t@idx;
-----
-true
 
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
@@ -49,13 +42,6 @@ INSERT INTO t VALUES(-4, -4);
 # see a count of 2.
 stage-query phase=PostCommitNonRevertiblePhase stage=:
 SELECT count(*)=($successfulStageCount*2)+3 FROM t;
-----
-true
-
-# Each insert will be injected twice per stage, so we should always,
-# see a count of 2.
-stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(*)=($successfulStageCount*2)+3 FROM t@idx;
 ----
 true
 

@@ -21,7 +21,6 @@ var debugCmd = &cobra.Command{
 func init() {
 	debugCmd.AddCommand(tpccMergeResultsCmd)
 	debugCmd.AddCommand(webhookServerCmd)
-	debugCmd.AddCommand(webhookServerSlowCmd)
 	cli.AddSubCmd(func(userFacing bool) *cobra.Command {
 		return debugCmd
 	})

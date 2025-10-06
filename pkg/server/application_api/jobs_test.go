@@ -39,7 +39,7 @@ import (
 // getSystemJobIDsForNonAutoJobs queries the jobs table for all job IDs that have
 // the given status. Sorted by decreasing creation time.
 func getSystemJobIDsForNonAutoJobs(
-	t testing.TB, db *sqlutils.SQLRunner, status jobs.State,
+	t testing.TB, db *sqlutils.SQLRunner, status jobs.Status,
 ) []int64 {
 	q := safesql.NewQuery()
 	q.Append(`SELECT job_id FROM crdb_internal.jobs WHERE status=$`, status)
@@ -77,6 +77,9 @@ func TestAdminAPIJobs(t *testing.T) {
 	now := timeutil.Now()
 	retentionTime := 336 * time.Hour
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				IntervalOverrides: jobs.TestingIntervalOverrides{
@@ -101,8 +104,8 @@ func TestAdminAPIJobs(t *testing.T) {
 		}
 	})
 
-	existingSucceededIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StateSucceeded)
-	existingRunningIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StateRunning)
+	existingSucceededIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StatusSucceeded)
+	existingRunningIDs := getSystemJobIDsForNonAutoJobs(t, sqlDB, jobs.StatusRunning)
 	existingIDs := append(existingSucceededIDs, existingRunningIDs...)
 
 	runningOnlyIds := []int64{1, 2, 4, 11, 12}
@@ -120,7 +123,7 @@ func TestAdminAPIJobs(t *testing.T) {
 
 	testJobs := []struct {
 		id                int64
-		status            jobs.State
+		status            jobs.Status
 		details           jobspb.Details
 		progress          jobspb.ProgressDetails
 		username          username.SQLUsername
@@ -128,23 +131,24 @@ func TestAdminAPIJobs(t *testing.T) {
 		lastRun           time.Time
 		executionFailures []*jobspb.RetriableExecutionFailure
 	}{
-		{1, jobs.StateRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
-		{2, jobs.StateRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute), nil},
-		{3, jobs.StateSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
-		{4, jobs.StateRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
-		{5, jobs.StateSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, apiconstants.TestingUserNameNoAdmin(), 1, time.Time{}, nil},
-		{6, jobs.StateRunning, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute), nil},
-		{7, jobs.StateReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, time.Time{}, nil},
-		{8, jobs.StateReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute), nil},
-		{9, jobs.StateReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, time.Time{}, nil},
-		{10, jobs.StateReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute), nil},
-		{11, jobs.StateRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, []*jobspb.RetriableExecutionFailure{ef}},
-		{12, jobs.StateRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, []*jobspb.RetriableExecutionFailure{efQuote}},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute), nil},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{5, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}, apiconstants.TestingUserNameNoAdmin(), 1, time.Time{}, nil},
+		{6, jobs.StatusRunning, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute), nil},
+		{7, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{8, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 1, timeutil.Now().Add(10 * time.Minute), nil},
+		{9, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{10, jobs.StatusReverting, jobspb.ImportDetails{}, jobspb.ImportProgress{}, username.RootUserName(), 2, timeutil.Now().Add(10 * time.Minute), nil},
+		{11, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, []*jobspb.RetriableExecutionFailure{ef}},
+		{12, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, []*jobspb.RetriableExecutionFailure{efQuote}},
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{
-			UsernameProto: job.username.EncodeProto(),
-			Details:       jobspb.WrapPayloadDetails(job.details),
+			UsernameProto:                job.username.EncodeProto(),
+			Details:                      jobspb.WrapPayloadDetails(job.details),
+			RetriableExecutionFailureLog: job.executionFailures,
 		}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
@@ -169,8 +173,8 @@ func TestAdminAPIJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, num_runs, last_run, job_type, owner) VALUES ($1, $2, $3, $4, $5, $6)`,
-			job.id, job.status, job.numRuns, job.lastRun, payload.Type().String(), payload.UsernameProto.Decode().Normalized(),
+			`INSERT INTO system.jobs (id, status, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5)`,
+			job.id, job.status, job.numRuns, job.lastRun, payload.Type().String(),
 		)
 		sqlDB.Exec(t,
 			`INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
@@ -246,8 +250,8 @@ func TestAdminAPIJobs(t *testing.T) {
 		},
 	}
 
-	for i, testCase := range testCases {
-		testutils.RunTrueAndFalse(t, fmt.Sprintf("%s-isAdmin", testCase.uri), func(t *testing.T, isAdmin bool) {
+	testutils.RunTrueAndFalse(t, "isAdmin", func(t *testing.T, isAdmin bool) {
+		for i, testCase := range testCases {
 			var res serverpb.JobsResponse
 			if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, testCase.uri, &res, isAdmin); err != nil {
 				t.Fatal(err)
@@ -275,15 +279,19 @@ func TestAdminAPIJobs(t *testing.T) {
 			// We don't use require.Equal() because timestamps don't necessarily
 			// compare == due to only one of them having a monotonic clock reading.
 			require.True(t, now.Add(-retentionTime).Equal(res.EarliestRetainedTime))
-		})
-	}
+		}
+	})
 }
 
 func TestAdminAPIJobsDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+	})
 	defer s.Stopper().Stop(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -295,7 +303,7 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 	}
 	testJobs := []struct {
 		id           int64
-		status       jobs.State
+		status       jobs.Status
 		details      jobspb.Details
 		progress     jobspb.ProgressDetails
 		username     username.SQLUsername
@@ -303,23 +311,23 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 		lastRun      time.Time
 		executionLog []*jobspb.RetriableExecutionFailure
 	}{
-		{1, jobs.StateRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
-		{2, jobs.StateReverting, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
-		{3, jobs.StateRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
-		{4, jobs.StateReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
-		{5, jobs.StateRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, time.Time{}, nil},
-		{6, jobs.StateReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
-		{7, jobs.StateRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), nil},
-		{8, jobs.StateReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), []*jobspb.RetriableExecutionFailure{
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{2, jobs.StatusReverting, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, time.Time{}, nil},
+		{3, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
+		{4, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 1, now.Add(10 * time.Minute), nil},
+		{5, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{6, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, time.Time{}, nil},
+		{7, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), nil},
+		{8, jobs.StatusReverting, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}, username.RootUserName(), 2, now.Add(10 * time.Minute), []*jobspb.RetriableExecutionFailure{
 			{
-				Status:               string(jobs.StateRunning),
+				Status:               string(jobs.StatusRunning),
 				ExecutionStartMicros: now.Add(-time.Minute).UnixMicro(),
 				ExecutionEndMicros:   now.Add(-30 * time.Second).UnixMicro(),
 				InstanceID:           1,
 				Error:                encodedError(errors.New("foo")),
 			},
 			{
-				Status:               string(jobs.StateReverting),
+				Status:               string(jobs.StatusReverting),
 				ExecutionStartMicros: now.Add(-29 * time.Minute).UnixMicro(),
 				ExecutionEndMicros:   now.Add(-time.Second).UnixMicro(),
 				InstanceID:           1,
@@ -329,8 +337,9 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 	}
 	for _, job := range testJobs {
 		payload := jobspb.Payload{
-			UsernameProto: job.username.EncodeProto(),
-			Details:       jobspb.WrapPayloadDetails(job.details),
+			UsernameProto:                job.username.EncodeProto(),
+			Details:                      jobspb.WrapPayloadDetails(job.details),
+			RetriableExecutionFailureLog: job.executionLog,
 		}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
@@ -355,8 +364,8 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, num_runs, last_run, job_type, owner) VALUES ($1, $2, $3, $4, $5, $6)`,
-			job.id, job.status, job.numRuns, job.lastRun, payload.Type().String(), job.username.Normalized(),
+			`INSERT INTO system.jobs (id, status, num_runs, last_run) VALUES ($1, $2, $3, $4)`,
+			job.id, job.status, job.numRuns, job.lastRun,
 		)
 		sqlDB.Exec(t,
 			`INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
@@ -382,6 +391,20 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 
 	for i, job := range resJobs {
 		require.Equal(t, testJobs[i].id, job.ID)
+		require.Equal(t, len(testJobs[i].executionLog), len(job.ExecutionFailures))
+		for j, f := range job.ExecutionFailures {
+			tf := testJobs[i].executionLog[j]
+			require.Equal(t, tf.Status, f.Status)
+			require.Equal(t, tf.ExecutionStartMicros, f.Start.UnixMicro())
+			require.Equal(t, tf.ExecutionEndMicros, f.End.UnixMicro())
+			var expErr string
+			if tf.Error != nil {
+				expErr = errors.DecodeError(context.Background(), *tf.Error).Error()
+			} else {
+				expErr = tf.TruncatedError
+			}
+			require.Equal(t, expErr, f.Error)
+		}
 	}
 }
 
@@ -407,9 +430,16 @@ func TestJobStatusResponse(t *testing.T) {
 			Statements:  []string{"SELECT 1"},
 			Username:    username.RootUserName(),
 			Details: jobspb.ImportDetails{
-				Table: jobspb.ImportDetails_Table{
-					Desc: &descpb.TableDescriptor{
-						ID: 1,
+				Tables: []jobspb.ImportDetails_Table{
+					{
+						Desc: &descpb.TableDescriptor{
+							ID: 1,
+						},
+					},
+					{
+						Desc: &descpb.TableDescriptor{
+							ID: 2,
+						},
 					},
 				},
 				URIs: []string{"a", "b"},

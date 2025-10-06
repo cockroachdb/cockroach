@@ -28,6 +28,7 @@ var gopgBlockList = blocklist{
 	"v10.ExampleDB_Model_postgresArrayStructTag":                      "32552",
 	"v10.TestConversion":                                              "32552",
 	"v10.TestGinkgo":                                                  "41522",
+	"v10.TestGocheck":                                                 "17511",
 	"v10.TestReadColumnValue":                                         "26925",
 	"v10.TestUnixSocket":                                              "31113",
 }
@@ -54,7 +55,4 @@ var gopgIgnoreList = blocklist{
 	`v10.TestColumnReuse`: "unknown",
 	// This test is flaky sometimes due to the use of temp tables.
 	`pg | soft delete with int column nil model ForceDelete | deletes the model`: "unknown",
-	// This test is sometimes flaky due to a small delta in the expected soft
-	// deletion timestamp (i.e. the test allows up to one seconds worth of difference).
-	`pg | soft delete with int column model | ForceDelete deletes the model`: "unknown",
 }

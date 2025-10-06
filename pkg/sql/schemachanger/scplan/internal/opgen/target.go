@@ -25,7 +25,7 @@ type target struct {
 // Target.
 type transition struct {
 	from, to   scpb.Status
-	revertible RevertibleFn
+	revertible bool
 	canFail    bool
 	ops        opsFunc
 	opType     scop.Type
@@ -153,7 +153,7 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 
 type transitionBuildState struct {
 	from         scpb.Status
-	isRevertible RevertibleFn
+	isRevertible bool
 
 	isEquivMapped map[scpb.Status]bool
 	isTo          map[scpb.Status]bool
@@ -163,7 +163,7 @@ type transitionBuildState struct {
 func makeTransitionBuildState(from scpb.Status) transitionBuildState {
 	return transitionBuildState{
 		from:          from,
-		isRevertible:  nil,
+		isRevertible:  true,
 		isEquivMapped: map[scpb.Status]bool{from: true},
 		isTo:          map[scpb.Status]bool{},
 		isFrom:        map[scpb.Status]bool{},
@@ -181,14 +181,7 @@ func (tbs *transitionBuildState) withTransition(s transitionSpec, isFirst bool) 
 		return errors.Errorf("%s was featured as 'from' in a previous equivalence mapping", s.to)
 	}
 
-	if tbs.isRevertible != nil && s.revertible != nil {
-		oldRevertibleFn := tbs.isRevertible
-		tbs.isRevertible = func(e scpb.Element, state *opGenContext) bool {
-			return oldRevertibleFn(e, state) && s.revertible(e, state)
-		}
-	} else if tbs.isRevertible == nil {
-		tbs.isRevertible = s.revertible
-	}
+	tbs.isRevertible = tbs.isRevertible && s.revertible
 	tbs.isEquivMapped[tbs.from] = true
 	tbs.isTo[s.to] = true
 	tbs.isFrom[tbs.from] = true
@@ -209,9 +202,8 @@ func (tbs *transitionBuildState) withEquivTransition(s transitionSpec) error {
 		return errors.Errorf("%s was featured as 'from' in a previous equivalence mapping", s.from)
 	}
 
-	// The transition above is equivalent, so it cannot override the revertibility
-	// in any way.
-	if s.revertible != nil {
+	// Check for absence of phase and revertibility constraints
+	if !s.revertible {
 		return errors.Errorf("must be revertible")
 	}
 

@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -34,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
-	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
@@ -514,10 +511,12 @@ func TestTransactionBumpReadTimestamp(t *testing.T) {
 			var txn Transaction
 			txn.ReadTimestamp = origReadTs
 			txn.WriteTimestamp = origWriteTs
+			txn.WriteTooOld = true
 
 			txn.BumpReadTimestamp(c.bumpTs)
 			require.Equal(t, c.expReadTs, txn.ReadTimestamp)
 			require.Equal(t, c.expWriteTs, txn.WriteTimestamp)
+			require.False(t, txn.WriteTooOld)
 		})
 	}
 }
@@ -602,6 +601,7 @@ var nonZeroTxn = Transaction{
 			Logical:  2,
 		},
 	}},
+	WriteTooOld:        true,
 	LockSpans:          []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:     []SequencedWrite{{Key: []byte("c"), Sequence: 1}},
 	ReadTimestampFixed: true,
@@ -653,6 +653,30 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn4.Sequence = txn.Sequence + 10
 	require.Equal(t, expTxn4, txn4)
 
+	// Test the updates to the WriteTooOld field. The WriteTooOld field is
+	// supposed to be dictated by the transaction with the higher ReadTimestamp,
+	// or it's cumulative when the ReadTimestamps are equal.
+	{
+		txn2 := txn
+		txn2.ReadTimestamp = txn2.ReadTimestamp.Add(-1, 0)
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.True(t, txn2.WriteTooOld)
+	}
+	{
+		txn2 := txn
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.True(t, txn2.WriteTooOld)
+	}
+	{
+		txn2 := txn
+		txn2.ReadTimestamp = txn2.ReadTimestamp.Add(1, 0)
+		txn2.WriteTooOld = false
+		txn2.Update(&txn)
+		require.False(t, txn2.WriteTooOld)
+	}
+
 	// Updating a Transaction at a future epoch ignores all epoch-scoped fields.
 	var txn5 Transaction
 	txn5.ID = txn.ID
@@ -672,6 +696,7 @@ func TestTransactionUpdate(t *testing.T) {
 	expTxn5.LockSpans = nil
 	expTxn5.InFlightWrites = nil
 	expTxn5.IgnoredSeqNums = nil
+	expTxn5.WriteTooOld = false
 	expTxn5.ReadTimestampFixed = false
 	require.Equal(t, expTxn5, txn5)
 
@@ -704,32 +729,6 @@ func TestTransactionUpdateMinTimestamp(t *testing.T) {
 
 	if a, e := txn.MinTimestamp, txn3.MinTimestamp; a != e {
 		t.Errorf("expected min timestamp %s; got %s", e, a)
-	}
-}
-
-func TestTransactionUpdatePrepared(t *testing.T) {
-	txn := nonZeroTxn
-	txn.Status = PENDING
-
-	txn2 := nonZeroTxn
-	txn2.Status = PREPARED
-
-	// In same epoch, PENDING < PREPARED.
-	txn.Update(&txn2)
-	if a, e := txn.Status, PREPARED; a != e {
-		t.Errorf("expected status %s; got %s", e, a)
-	}
-
-	txn2.Status = PENDING
-	txn.Update(&txn2)
-	if a, e := txn.Status, PREPARED; a != e {
-		t.Errorf("expected status %s; got %s", e, a)
-	}
-
-	txn2.Status = COMMITTED
-	txn.Update(&txn2)
-	if a, e := txn.Status, COMMITTED; a != e {
-		t.Errorf("expected status %s; got %s", e, a)
 	}
 }
 
@@ -853,6 +852,7 @@ func TestTransactionRestart(t *testing.T) {
 	expTxn.Sequence = 0
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
 	expTxn.ReadTimestampFixed = false
 	expTxn.LockSpans = nil
 	expTxn.InFlightWrites = nil
@@ -867,6 +867,7 @@ func TestTransactionRefresh(t *testing.T) {
 	expTxn := nonZeroTxn
 	expTxn.WriteTimestamp = makeTS(25, 1)
 	expTxn.ReadTimestamp = makeTS(25, 1)
+	expTxn.WriteTooOld = false
 	require.Equal(t, expTxn, txn)
 }
 
@@ -2064,22 +2065,6 @@ func TestValuePrettyPrint(t *testing.T) {
 	errTagValue.SetInt(7)
 	errTagValue.setTag(ValueType(99))
 
-	var timeTZValue Value
-	timeTZValue.SetTimeTZ(timetz.MakeTimeTZ(timeofday.New(1, 2, 3, 0), 0))
-
-	g, err := geo.ParseGeometry(`{ "type": "Point", "coordinates": [1.0, 1.0] }`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var geoValue Value
-	err = geoValue.SetGeo(g.SpatialObject())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var bbValue Value
-	bbValue.SetBox2D(g.CartesianBoundingBox().BoundingBox)
-
 	tests := []struct {
 		v        Value
 		expected string
@@ -2098,9 +2083,6 @@ func TestValuePrettyPrint(t *testing.T) {
 		{bitArrayValue, "/BITARRAY/B00111010"},
 		{errValue, "/<err: float64 value should be exactly 8 bytes: 1>"},
 		{errTagValue, "/<err: unknown tag: 99>"},
-		{timeTZValue, "/TIMETZ/01:02:03+00:00:00"},
-		{geoValue, `/GEO/type:GeometryType ewkb:"\001\001\000\000\000\000\000\000\000\000\000\360?\000\000\000\000\000\000\360?" shape_type:Point bounding_box:<lo_x:1 hi_x:1 lo_y:1 hi_y:1 > `},
-		{bbValue, "/BOX2D/lo_x:1 hi_x:1 lo_y:1 hi_y:1 "},
 	}
 
 	for i, test := range tests {
@@ -2109,7 +2091,6 @@ func TestValuePrettyPrint(t *testing.T) {
 		}
 	}
 }
-
 func TestUpdateObservedTimestamps(t *testing.T) {
 	f := func(nodeID NodeID, walltime int64) ObservedTimestamp {
 		return ObservedTimestamp{
@@ -2490,9 +2471,9 @@ func TestLockStateInfoSafeFormat(t *testing.T) {
 			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
 		redact.Sprint(lockStateInfo).Redact())
 	require.EqualValues(t,
-		"range_id=35 key=‹×› holder=deadbeef-0000-0000-0000-000000000000 durability=Unreplicated duration=5m0s\n"+
+		"range_id=35 key=‹×› holder=‹×› durability=Unreplicated duration=5m0s\n"+
 			" waiters:\n"+
-			"  waiting_txn:6ba7b810-9dad-11d1-80b4-00c04fd430c8 active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
+			"  waiting_txn:‹×› active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
 			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
 		redact.Sprintf("%+v", lockStateInfo).Redact())
 }

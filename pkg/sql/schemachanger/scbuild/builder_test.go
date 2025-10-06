@@ -44,96 +44,83 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestBuildDataDrivenWithSQLDependencies(t *testing.T) {
+func TestBuildDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer ccl.TestingEnableEnterprise()() // allow usage of partitions and zone configs
 
 	ctx := context.Background()
 
-	skip.UnderRace(t, "expensive and can easily extend past test timeout")
-	skip.UnderDeadlock(t, "expensive and can easily extend past test timeout")
-
-	dependenciesWrapper := func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
-		sctestutils.WithBuilderDependenciesFromTestServer(s, nodeID, fn)
-	}
-
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
-		tt := s.ApplicationLayer()
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			return run(ctx, t, "sql_dependencies", d, tt, s.NodeID(), tdb, dependenciesWrapper)
-		})
-	})
-}
+		for _, depsType := range []struct {
+			name                string
+			dependenciesWrapper func(*testing.T, serverutils.ApplicationLayerInterface, roachpb.NodeID, *sqlutils.SQLRunner, func(scbuild.Dependencies))
+		}{
+			{
+				name: "sql_dependencies",
+				dependenciesWrapper: func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+					sctestutils.WithBuilderDependenciesFromTestServer(s, nodeID, fn)
+				},
+			},
+			{
+				name: "test_dependencies",
+				dependenciesWrapper: func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
+					// Create test dependencies and execute the schema changer.
+					// The schema changer test dependencies do not hold any reference to the
+					// test cluster, here the SQLRunner is only used to populate the mocked
+					// catalog state.
+					descriptorCatalog := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog
 
-func TestBuildDataDrivenWithTestDependencies(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()() // allow usage of partitions and zone configs
+					// Set up a reference provider factory for the purpose of proper
+					// dependency resolution.
+					execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+					refFactory, cleanup := sql.NewReferenceProviderFactoryForTest(
+						ctx, "test" /* opName */, kv.NewTxn(context.Background(), s.DB(), nodeID), username.RootUserName(), &execCfg, "defaultdb",
+					)
+					defer cleanup()
 
-	ctx := context.Background()
-
-	skip.UnderRace(t, "expensive and can easily extend past test timeout")
-	skip.UnderDeadlock(t, "expensive and can easily extend past test timeout")
-
-	dependenciesWrapper := func(t *testing.T, s serverutils.ApplicationLayerInterface, nodeID roachpb.NodeID, tdb *sqlutils.SQLRunner, fn func(scbuild.Dependencies)) {
-		// Create test dependencies and execute the schema changer.
-		// The schema changer test dependencies do not hold any reference to the
-		// test cluster, here the SQLRunner is only used to populate the mocked
-		// catalog state.
-		descriptorCatalog := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog
-
-		// Set up a reference provider factory for the purpose of proper
-		// dependency resolution.
-		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-		refFactory, cleanup := sql.NewReferenceProviderFactoryForTest(
-			ctx, "test" /* opName */, kv.NewTxn(context.Background(), s.DB(), nodeID), username.RootUserName(), &execCfg, "defaultdb",
-		)
-		defer cleanup()
-
-		fn(
-			sctestdeps.NewTestDependencies(
-				sctestdeps.WithDescriptors(descriptorCatalog),
-				sctestdeps.WithSystemDatabaseDescriptor(),
-				sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
-				sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
-				sctestdeps.WithSessionData(
-					sctestdeps.ReadSessionDataFromDB(
-						t,
-						tdb,
-						func(sd *sessiondata.SessionData, localData sessiondatapb.LocalOnlySessionData) {
-							// For setting up a builder inside tests we will ensure that the new schema
-							// changer will allow non-fully implemented operations.
-							sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafeAlways
-							sd.ApplicationName = ""
-							sd.EnableUniqueWithoutIndexConstraints = true
-							sd.SerialNormalizationMode = localData.SerialNormalizationMode
-						},
-					),
-				),
-				sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
-				sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, descriptorCatalog)),
-				// Though we want to mock up data for this test setting, it's hard
-				// to mimic the ID generator and optimizer (resolve all
-				// dependencies in functions and views). So we need these pieces
-				// to be similar as sql dependencies.
-				sctestdeps.WithIDGenerator(s),
-				sctestdeps.WithReferenceProviderFactory(refFactory),
-			),
-		)
-	}
-
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
-		tt := s.ApplicationLayer()
-		tdb := sqlutils.MakeSQLRunner(sqlDB)
-		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			return run(ctx, t, "test_dependencies", d, tt, s.NodeID(), tdb, dependenciesWrapper)
-		})
+					fn(
+						sctestdeps.NewTestDependencies(
+							sctestdeps.WithDescriptors(descriptorCatalog),
+							sctestdeps.WithSystemDatabaseDescriptor(),
+							sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
+							sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
+							sctestdeps.WithSessionData(
+								sctestdeps.ReadSessionDataFromDB(
+									t,
+									tdb,
+									func(sd *sessiondata.SessionData) {
+										// For setting up a builder inside tests we will ensure that the new schema
+										// changer will allow non-fully implemented operations.
+										sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+										sd.ApplicationName = ""
+										sd.EnableUniqueWithoutIndexConstraints = true
+									},
+								),
+							),
+							sctestdeps.WithComments(sctestdeps.ReadCommentsFromDB(t, tdb)),
+							sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, descriptorCatalog)),
+							// Though we want to mock up data for this test setting, it's hard
+							// to mimic the ID generator and optimizer (resolve all
+							// dependencies in functions and views). So we need these pieces
+							// to be similar as sql dependencies.
+							sctestdeps.WithIDGenerator(s),
+							sctestdeps.WithReferenceProviderFactory(refFactory),
+						),
+					)
+				},
+			},
+		} {
+			t.Run(depsType.name, func(t *testing.T) {
+				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+				defer s.Stopper().Stop(ctx)
+				tt := s.ApplicationLayer()
+				tdb := sqlutils.MakeSQLRunner(sqlDB)
+				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+					return run(ctx, t, depsType.name, d, tt, s.NodeID(), tdb, depsType.dependenciesWrapper)
+				})
+			})
+		}
 	})
 }
 
@@ -322,7 +309,7 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	tdb.Exec(t, `use system;`)
 
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-sc-build-mon"),
+		Name:     "test-sc-build-mon",
 		Settings: s.ClusterSettings(),
 	})
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(5*1024*1024 /* 5MiB */))

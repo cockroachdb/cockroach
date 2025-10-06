@@ -365,7 +365,7 @@ func flushAndReset(ctx context.Context, nodeID int64, t InflightTraceZipper) {
 	if nodeTraceCollection != nil {
 		json, err := json.MarshalIndent(*nodeTraceCollection, "" /* prefix */, "\t" /* indent */)
 		if err != nil {
-			log.Dev.Infof(ctx, "error while marshaling jaeger json %v", err)
+			log.Infof(ctx, "error while marshaling jaeger json %v", err)
 			return
 		}
 		z.AddFile(constructFilename(nodeID, "jaeger.json"), string(json))

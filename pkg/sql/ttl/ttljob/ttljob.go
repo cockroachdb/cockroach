@@ -64,11 +64,8 @@ var replanStabilityWindow = settings.RegisterIntSetting(
 // nodes. DistSQL divides work into spans that each ttlProcessor scans in a
 // SELECT/DELETE loop.
 type rowLevelTTLResumer struct {
-	job             *jobs.Job
-	st              *cluster.Settings
-	physicalPlan    *sql.PhysicalPlan
-	planCtx         *sql.PlanningCtx
-	progressTracker progressTracker
+	job *jobs.Job
+	st  *cluster.Settings
 
 	// consecutiveReplanDecisions tracks how many consecutive times replan was deemed necessary.
 	consecutiveReplanDecisions *atomic.Int64
@@ -77,7 +74,7 @@ type rowLevelTTLResumer struct {
 var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
-func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
+func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (retErr error) {
 	defer func() {
 		if retErr == nil {
 			return
@@ -186,37 +183,17 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	}
 
 	distSQLPlanner := jobExecCtx.DistSQLPlanner()
-
-	completedSpans, err := t.setupProgressTracking(ctx, settingsValues, execCfg, entirePKSpan)
-	if err != nil {
-		return err
-	}
-
-	// Calculate remaining spans by subtracting completed spans from the entire table span
-	var remainingSpans []roachpb.Span
-	if len(completedSpans) > 0 {
-		var g roachpb.SpanGroup
-		g.Add(entirePKSpan)
-		g.Sub(completedSpans...)
-		remainingSpans = g.Slice()
-	} else {
-		remainingSpans = []roachpb.Span{entirePKSpan}
-	}
-
-	// Early exit if all spans have been completed
-	if len(remainingSpans) == 0 {
-		return nil
-	}
+	evalCtx := jobExecCtx.ExtendedEvalContext()
 
 	jobSpanCount := 0
 	makePlan := func(ctx context.Context, distSQLPlanner *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		// We don't return the compatible nodes here since PartitionSpans will
 		// filter out incompatible nodes.
-		planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, jobExecCtx.ExtendedEvalContext(), execCfg)
+		planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
 		if err != nil {
 			return nil, nil, err
 		}
-		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, remainingSpans, sql.PartitionSpansBoundDefault)
+		spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, []roachpb.Span{entirePKSpan})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -282,7 +259,6 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 			execinfrapb.PostProcessSpec{},
 			[]*types.T{},
 			execinfrapb.Ordering{},
-			nil, /* finalizeLastStageCb */
 		)
 		physicalPlan.PlanToStreamColMap = []int{}
 
@@ -290,32 +266,35 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return physicalPlan, planCtx, nil
 	}
 
-	t.physicalPlan, t.planCtx, err = makePlan(ctx, distSQLPlanner)
+	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
+
+	physicalPlan, planCtx, err := makePlan(ctx, distSQLPlanner)
 	if err != nil {
 		return err
 	}
 
-	if err := t.progressTracker.initJobProgress(ctx, int64(jobSpanCount)); err != nil {
+	if err := t.job.NoTxn().Update(ctx,
+		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			progress := md.Progress
+			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
+			rowLevelTTL.JobTotalSpanCount = int64(jobSpanCount)
+			rowLevelTTL.JobProcessedSpanCount = 0
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: 0,
+			}
+			ju.UpdateProgress(progress)
+			return nil
+		},
+	); err != nil {
 		return err
 	}
-	defer func() { t.progressTracker.terminateTracker() }()
-
-	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
-		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
-			// In mixed-version clusters (25.3 and earlier), TTL processors fall back to
-			// direct job table updates if any node in the cluster does not support
-			// coordinator-based progress reporting. In that case, no processors will emit
-			// progress metadata, so this callback will never be invoked.
-			return t.progressTracker.handleProgressUpdate(ctx, meta)
-		},
-	)
 
 	// Get a function to be used in a goroutine to monitor whether a replan is
 	// needed due to changes in node membership. This is important because if
 	// there are idle nodes that become available, it's more efficient to restart
 	// the TTL job to utilize those nodes for parallel work.
 	replanChecker, cancelReplanner := sql.PhysicalPlanChangeChecker(
-		ctx, t.physicalPlan, makePlan, jobExecCtx,
+		ctx, physicalPlan, makePlan, jobExecCtx,
 		replanDecider(t.consecutiveReplanDecisions,
 			func() int64 { return replanStabilityWindow.Get(&execCfg.Settings.SV) },
 			func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) },
@@ -339,19 +318,19 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 			execCfg.RangeDescriptorCache,
 			nil, /* txn */
 			nil, /* clockUpdater */
-			jobExecCtx.ExtendedEvalContext().Tracing,
+			evalCtx.Tracing,
 		)
 		defer distSQLReceiver.Release()
 
-		// Copy the eval.Context, as dsp.Run() might change it.
-		evalCtxCopy := jobExecCtx.ExtendedEvalContext().Context.Copy()
+		// Copy the evalCtx, as dsp.Run() might change it.
+		evalCtxCopy := *evalCtx
 		distSQLPlanner.Run(
 			ctx,
-			t.planCtx,
+			planCtx,
 			nil, /* txn */
-			t.physicalPlan,
+			physicalPlan,
 			distSQLReceiver,
-			evalCtxCopy,
+			&evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 
@@ -370,68 +349,21 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		if knobs.ReturnStatsError {
 			return err
 		}
-		log.Dev.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
+		log.Warningf(ctx, "failed to get statistics for table id %d: %v", details.TableID, err)
 	}
 	return nil
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
-func (t *rowLevelTTLResumer) OnFailOrCancel(
+func (t rowLevelTTLResumer) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, _ error,
 ) error {
 	return nil
 }
 
 // CollectProfile implements the jobs.Resumer interface.
-func (t *rowLevelTTLResumer) CollectProfile(_ context.Context, _ interface{}) error {
+func (t rowLevelTTLResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
-}
-
-// setupProgressTracking sets up progress tracking for the TTL job, handling
-// both initial startup and resumption scenarios. This should be called once
-// before job execution starts. Returns the completed spans from any previous
-// job execution for use in planning.
-func (t *rowLevelTTLResumer) setupProgressTracking(
-	ctx context.Context, sv *settings.Values, execCfg *sql.ExecutorConfig, entirePKSpan roachpb.Span,
-) ([]roachpb.Span, error) {
-	var completedSpans []roachpb.Span
-	err := t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		ttlProg := md.Progress.GetRowLevelTTL()
-		if ttlProg == nil {
-			return errors.AssertionFailedf("no TTL job progress")
-		}
-
-		t.progressTracker = t.progressTrackerFactory(ctx, ttlProg, sv, execCfg, entirePKSpan)
-		var err error
-		completedSpans, err = t.progressTracker.initTracker(ctx, ttlProg, sv)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-	return completedSpans, err
-}
-
-// progressTrackerFactory creates and returns an appropriate progress tracker
-// based on the job's UseCheckpointing configuration and testing knobs.
-func (t *rowLevelTTLResumer) progressTrackerFactory(
-	ctx context.Context,
-	prog *jobspb.RowLevelTTLProgress,
-	sv *settings.Values,
-	execCfg *sql.ExecutorConfig,
-	entirePKSpan roachpb.Span,
-) progressTracker {
-	if prog.UseCheckpointing {
-		return newCheckpointProgressTracker(
-			t.job,
-			sv,
-			execCfg.DB,
-			execCfg.DistSQLPlanner,
-			execCfg.InternalDB,
-			entirePKSpan,
-		)
-	}
-	return newLegacyProgressTracker(t.job)
 }
 
 // replanDecider returns a function that determines whether a TTL job should be
@@ -470,7 +402,7 @@ func replanDecider(
 		}
 
 		if shouldReplan || growth > 0.1 || log.V(1) {
-			log.Dev.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, consecutive decisions %d/%d, replan %v",
+			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, consecutive decisions %d/%d, replan %v",
 				changed, growth, threshold, currentDecisions, stabilityWindow, replan)
 		}
 

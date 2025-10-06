@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	pgx "github.com/jackc/pgx/v5"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 

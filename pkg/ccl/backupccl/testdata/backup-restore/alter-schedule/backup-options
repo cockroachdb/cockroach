@@ -1,0 +1,146 @@
+new-cluster name=s1 allow-implicit-access localities=us-east-1
+----
+
+# Create test schedules.
+
+exec-sql
+create schedule datatest for backup into 'nodelocal://1/example-schedule' recurring '@daily' full backup '@weekly';
+----
+
+let $fullID $incID
+with schedules as (show schedules for backup) select id from schedules where label='datatest' order by backup_type asc;
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (detached)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (detached)
+
+# Can't use the same command twice.
+
+exec-sql expect-error-regex=(can specify SET RECURRING at most once)
+alter backup schedule $fullID set recurring '0 0 1 * *', set recurring '@weekly';
+----
+regex matches error
+
+exec-sql expect-error-regex=(can specify SET FULL BACKUP at most once)
+alter backup schedule $fullID set full backup '0 0 1 * *', set recurring '0 0 1 * *', set full backup '@weekly';
+----
+regex matches error
+
+# Set an option
+
+exec-sql
+alter backup schedule $incID set with revision_history = false;
+----
+
+exec-sql
+alter backup schedule $incID set with execution locality = 'region=us-east-1'
+----
+
+exec-sql
+alter backup schedule $incID set with updates_cluster_monitoring_metrics = false;
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = false, detached, execution locality = 'region=us-east-1', updates_cluster_monitoring_metrics = false)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = false, detached, execution locality = 'region=us-east-1', updates_cluster_monitoring_metrics = false)
+
+# Change an option and set another.
+
+exec-sql
+alter backup schedule $incID set with revision_history = true, set with execution locality = '', set with encryption_passphrase = 'abc', set with updates_cluster_monitoring_metrics = true;
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', detached, updates_cluster_monitoring_metrics = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', detached, updates_cluster_monitoring_metrics = true)
+
+# Add an incompatible option
+
+exec-sql expect-error-regex=(cannot have both encryption_passphrase and kms option set)
+alter backup schedule $incID set with kms = ('aws:///key1?region=r1', 'aws:///key2?region=r2'), set with incremental_location = 'inc';
+----
+regex matches error
+
+# Add a list-option
+
+exec-sql
+alter backup schedule $incID set with encryption_passphrase = '';
+alter backup schedule $incID set with kms = ('aws:///key1?region=r1', 'aws:///key2?region=r2'), set with incremental_location = 'inc';
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc', updates_cluster_monitoring_metrics = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, kms = ('aws:///redacted?region=r1', 'aws:///redacted?region=r2'), incremental_location = 'inc', updates_cluster_monitoring_metrics = true)
+
+# Set options to empty (unset).
+
+exec-sql
+alter backup schedule $incID set with kms = '', set with incremental_location = ('');
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, updates_cluster_monitoring_metrics = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, updates_cluster_monitoring_metrics = true)
+
+# Setting DETACHED throws an error.
+
+exec-sql expect-error-regex=(DETACHED is required for scheduled backups and cannot be altered)
+alter backup schedule $incID set with detached = true;
+----
+regex matches error
+
+exec-sql expect-error-regex=(DETACHED is required for scheduled backups and cannot be altered)
+alter backup schedule $incID set with detached = false;
+----
+regex matches error
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, updates_cluster_monitoring_metrics = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, updates_cluster_monitoring_metrics = true)
+
+exec-sql
+alter backup schedule $incID set with include_all_virtual_clusters = true
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='datatest' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, include_all_virtual_clusters = true, updates_cluster_monitoring_metrics = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule' WITH OPTIONS (revision_history = true, detached, include_all_virtual_clusters = true, updates_cluster_monitoring_metrics = true)
+
+exec-sql
+create schedule 'with-secondary' for backup into 'nodelocal://1/example-schedule-with-secondary' WITH include_all_virtual_clusters recurring '@daily' full backup '@weekly';
+----
+
+let $withSecondaryFullID $withSecondaryIncID
+with schedules as (show schedules for backup) select id from schedules where label='with-secondary' order by backup_type asc;
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='with-secondary' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = true)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = true)
+
+exec-sql
+alter backup schedule $withSecondaryIncID set with include_all_virtual_clusters = false
+----
+
+query-sql
+with schedules as (show schedules for backup) select command from schedules where label='with-secondary' order by backup_type asc;
+----
+BACKUP INTO 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = false)
+BACKUP INTO LATEST IN 'nodelocal://1/example-schedule-with-secondary' WITH OPTIONS (detached, include_all_virtual_clusters = false)

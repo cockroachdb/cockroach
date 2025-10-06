@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -38,11 +38,11 @@ import (
 // defRangefeedConnClass is the default rpc.ConnectionClass used for rangefeed
 // traffic. Normally it is RangefeedClass, but can be flipped to DefaultClass if
 // the corresponding env variable is true.
-var defRangefeedConnClass = func() rpcbase.ConnectionClass {
+var defRangefeedConnClass = func() rpc.ConnectionClass {
 	if envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_USE_DEFAULT_CONNECTION_CLASS", false) {
-		return rpcbase.DefaultClass
+		return rpc.DefaultClass
 	}
-	return rpcbase.RangefeedClass
+	return rpc.RangefeedClass
 }()
 
 var catchupStartupRate = settings.RegisterIntSetting(
@@ -68,8 +68,6 @@ type rangeFeedConfig struct {
 	withMetadata          bool
 	withMatchingOriginIDs []uint32
 	rangeObserver         RangeObserver
-	consumerID            int64
-	bulkDelivery          bool
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -119,12 +117,6 @@ func WithFiltering() RangeFeedOption {
 	})
 }
 
-func WithBulkDelivery() RangeFeedOption {
-	return optionFunc(func(c *rangeFeedConfig) {
-		c.bulkDelivery = true
-	})
-}
-
 // WithMatchingOriginIDs opts the rangefeed into emitting events originally written by
 // clusters with the assoicated origin IDs during logical data replication.
 func WithMatchingOriginIDs(originIDs ...uint32) RangeFeedOption {
@@ -147,24 +139,6 @@ func WithMetadata() RangeFeedOption {
 	})
 }
 
-func WithConsumerID(cid int64) RangeFeedOption {
-	return optionFunc(func(c *rangeFeedConfig) {
-		c.consumerID = cid
-	})
-}
-
-// SpanTimePair is a pair of span along with its starting time. The starting
-// time is exclusive, i.e. the first possible emitted event (including catchup
-// scans) will be at startAfter.Next().
-type SpanTimePair struct {
-	Span       roachpb.Span
-	StartAfter hlc.Timestamp // exclusive
-}
-
-func (p SpanTimePair) String() string {
-	return fmt.Sprintf("%s@%s", p.Span, p.StartAfter)
-}
-
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
 // RangeFeed to each of the individual ranges. It streams back results on the
 // provided channel.
@@ -179,6 +153,59 @@ func (p SpanTimePair) String() string {
 // NB: the given startAfter timestamp is exclusive, i.e. the first possible
 // emitted event (including catchup scans) will be at startAfter.Next().
 func (ds *DistSender) RangeFeed(
+	ctx context.Context,
+	spans []roachpb.Span,
+	startAfter hlc.Timestamp, // exclusive
+	eventCh chan<- RangeFeedMessage,
+	opts ...RangeFeedOption,
+) error {
+	timedSpans := make([]SpanTimePair, 0, len(spans))
+	for _, sp := range spans {
+		timedSpans = append(timedSpans, SpanTimePair{
+			Span:       sp,
+			StartAfter: startAfter,
+		})
+	}
+	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
+}
+
+// RangeFeedFromFrontier is similar to RangeFeed but can initialize each
+// rangefeed at the timestamp passed by the span frontier.
+func (ds *DistSender) RangeFeedFromFrontier(
+	ctx context.Context,
+	frontier span.Frontier,
+	eventCh chan<- RangeFeedMessage,
+	opts ...RangeFeedOption,
+) error {
+	timedSpans := make([]SpanTimePair, 0, frontier.Len())
+	frontier.Entries(
+		func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+			timedSpans = append(timedSpans, SpanTimePair{
+				// Clone the span as the rangefeed progress tracker will manipulate the
+				// original frontier.
+				Span:       sp.Clone(),
+				StartAfter: ts,
+			})
+			return false
+		})
+	return ds.RangeFeedSpans(ctx, timedSpans, eventCh, opts...)
+}
+
+// SpanTimePair is a pair of span along with its starting time. The starting
+// time is exclusive, i.e. the first possible emitted event (including catchup
+// scans) will be at startAfter.Next().
+type SpanTimePair struct {
+	Span       roachpb.Span
+	StartAfter hlc.Timestamp // exclusive
+}
+
+func (p SpanTimePair) String() string {
+	return fmt.Sprintf("%s@%s", p.Span, p.StartAfter)
+}
+
+// RangeFeedSpans is similar to RangeFeed but allows specification of different
+// starting time for each span.
+func (ds *DistSender) RangeFeedSpans(
 	ctx context.Context,
 	spans []SpanTimePair,
 	eventCh chan<- RangeFeedMessage,
@@ -565,9 +592,8 @@ func handleRangefeedError(
 			kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
 			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
 			kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
-			// Try again with same descriptor. These are transient errors that should
-			// not show up again, or should be retried on another replica which will
-			// likely not have the same issue.
+			// Try again with same descriptor. These are transient
+			// errors that should not show up again.
 			return rangefeedErrorInfo{}, nil
 		case kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
@@ -639,8 +665,6 @@ func makeRangeFeedRequest(
 	withDiff bool,
 	withFiltering bool,
 	withMatchingOriginIDs []uint32,
-	consumerID int64,
-	withBulkDelivery bool,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -652,11 +676,9 @@ func makeRangeFeedRequest(
 			Timestamp: startAfter,
 			RangeID:   rangeID,
 		},
-		ConsumerID:            consumerID,
 		WithDiff:              withDiff,
 		WithFiltering:         withFiltering,
 		WithMatchingOriginIDs: withMatchingOriginIDs,
-		WithBulkDelivery:      withBulkDelivery,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
@@ -758,13 +780,13 @@ func logSlowCatchupScanAcquisition(loggingMinInterval time.Duration) quotapool.S
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Dev.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
+			log.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
 				timeutil.Since(start))
 		}
 
 		return func() {
 			if shouldLog {
-				log.Dev.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
+				log.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
 			}
 		}
 	}

@@ -79,9 +79,6 @@ message ConnectedStream {
   // before sending, for this connected stream. Only populated on versions >=
   // 24.3.
   int64 total_send_deducted_tokens = 4;
-  // Disconnected is true if the stream has recently disconnected and no longer
-  // actively replicating, i.e. recently left StateReplicate in raft.
-  bool disconnected = 5;
 }
 
 // Stream represents a given kvflowcontrol.Stream and the number of tokens

@@ -135,7 +135,7 @@ func maybeRedactEntry(payload entryPayload, editor redactEditor) (res entryPaylo
 
 func init() {
 	// We consider booleans and numeric values to be always safe for
-	// reporting. A log call can opt out by using encoding.Unsafe() around
+	// reporting. A log call can opt out by using redact.Unsafe() around
 	// a value that would be otherwise considered safe.
 	redact.RegisterSafeType(reflect.TypeOf(true)) // bool
 	redact.RegisterSafeType(reflect.TypeOf(123))  // int

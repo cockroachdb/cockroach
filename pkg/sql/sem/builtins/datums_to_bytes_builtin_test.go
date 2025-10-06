@@ -8,6 +8,7 @@ package builtins_test
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -20,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +51,7 @@ func TestCrdbInternalDatumsToBytes(t *testing.T) {
 		"STRING[]",
 		"INT[]",
 	}
-	rng, _ := randutil.NewTestRand()
+	r := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	createTable := func(t *testing.T, tdb *sqlutils.SQLRunner, typ []string) (columnNames []string) {
 		columnNames = make([]string, len(typ))
 		columnSpecs := make([]string, len(typ))
@@ -88,7 +89,7 @@ func TestCrdbInternalDatumsToBytes(t *testing.T) {
 					d = tree.DNull
 				} else {
 					const nullOk = false
-					d = randgen.RandDatum(rng, col.GetType(), nullOk)
+					d = randgen.RandDatum(r, col.GetType(), nullOk)
 				}
 				row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 			}
@@ -126,10 +127,10 @@ SELECT (SELECT count(DISTINCT (cols)) FROM t) -
 		const numCombinations = 10
 		for i := 0; i < numCombinations; i++ {
 			t.Run("", func(t *testing.T) {
-				numColumns := rng.Intn(len(types)*3) + 1 // arbitrary, at least 1
+				numColumns := r.Intn(len(types)*3) + 1 // arbitrary, at least 1
 				colTypes := make([]string, numColumns)
 				for i := range colTypes {
-					colTypes[i] = types[rng.Intn(len(types))]
+					colTypes[i] = types[r.Intn(len(types))]
 				}
 				testTableWithColumnTypes(t, colTypes...)
 			})

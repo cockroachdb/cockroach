@@ -55,7 +55,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			conn := c.Conn(ctx, t.L(), 1)
 
 			t.Status("running workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
 				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"
@@ -128,13 +128,10 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 				}
 
 				payload := " --payload=64"
-				concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+strconv.Itoa(conc))
-				duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")
-				labels := map[string]string{
-					"concurrency":     fmt.Sprintf("%d", conc),
-					"parallel_writes": fmt.Sprintf("%d", parallelWrites),
-				}
-				runCmd := fmt.Sprintf("./workload run indexes %s %s %s %s {pgurl%s}", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), payload, concurrency, duration, gatewayNodes)
+				concurrency := ifLocal(c, "", " --concurrency="+strconv.Itoa(conc))
+				duration := " --duration=" + ifLocal(c, "10s", "10m")
+				runCmd := fmt.Sprintf("./workload run indexes --histograms="+t.PerfArtifactsDir()+"/stats.json"+
+					payload+concurrency+duration+" {pgurl%s}", gatewayNodes)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), runCmd)
 				return nil
 			})

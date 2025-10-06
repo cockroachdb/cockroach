@@ -9,7 +9,6 @@ import (
 	"context"
 	"reflect"
 	"runtime/pprof"
-	"runtime/trace"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -123,30 +122,19 @@ func (r *Replica) Send(
 func (r *Replica) SendWithWriteBytes(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
-	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+		defer pprof.SetGoroutineLabels(ctx)
+		// Note: the defer statement captured the previous context.
+		ctx = pprof.WithLabels(ctx, pprof.Labels("range_str", r.rangeStr.ID()))
+		pprof.SetGoroutineLabels(ctx)
+	}
+	// Add the range log tag.
+	ctx = r.AnnotateCtx(ctx)
 
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	startCPU := grunning.Time()
-	defer r.MeasureReqCPUNanos(ctx, startCPU)
-
-	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
-		defer pprof.SetGoroutineLabels(ctx)
-		// Note: the defer statement captured the previous context.
-		var lbls pprof.LabelSet
-		if tenantIDOrZero.IsSet() {
-			lbls = pprof.Labels("range_str", r.rangeStr.ID(), "tenant_id", tenantIDOrZero.String())
-		} else {
-			lbls = pprof.Labels("range_str", r.rangeStr.ID())
-		}
-		ctx = pprof.WithLabels(ctx, lbls)
-		pprof.SetGoroutineLabels(ctx)
-	}
-	if trace.IsEnabled() {
-		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()
-	}
-	// Add the range log tag.
-	ctx = r.AnnotateCtx(ctx)
+	defer r.MeasureReqCPUNanos(startCPU)
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {
@@ -156,7 +144,7 @@ func (r *Replica) SendWithWriteBytes(
 	if err := r.maybeBackpressureBatch(ctx, ba); err != nil {
 		return nil, nil, kvpb.NewError(err)
 	}
-	if err := r.maybeRateLimitBatch(ctx, ba, tenantIDOrZero); err != nil {
+	if err := r.maybeRateLimitBatch(ctx, ba); err != nil {
 		return nil, nil, kvpb.NewError(err)
 	}
 	if err := r.maybeCommitWaitBeforeCommitTrigger(ctx, ba); err != nil {
@@ -194,9 +182,9 @@ func (r *Replica) SendWithWriteBytes(
 		// empty batch; shouldn't happen (we could handle it, but it hints
 		// at someone doing weird things, and once we drop the key range
 		// from the header it won't be clear how to route those requests).
-		log.KvExec.Fatalf(ctx, "empty batch")
+		log.Fatalf(ctx, "empty batch")
 	} else {
-		log.KvExec.Fatalf(ctx, "don't know how to handle command %s", ba)
+		log.Fatalf(ctx, "don't know how to handle command %s", ba)
 	}
 	if pErr != nil {
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
@@ -219,9 +207,7 @@ func (r *Replica) SendWithWriteBytes(
 	// Record summary throughput information about the batch request for
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)
-	if writeBytes != nil {
-		r.recordRequestWriteBytes(writeBytes.WriteBytes + writeBytes.IngestedBytes)
-	}
+	r.recordRequestWriteBytes(writeBytes)
 	r.recordImpactOnRateLimiter(ctx, br, isReadOnly)
 	return br, writeBytes, pErr
 }
@@ -477,7 +463,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
-			Batch:           ba,
+			BaFmt:           ba,
 		}, requestEvalKind)
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
@@ -607,7 +593,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			// for those locks and release latches.
 			requestEvalKind = concurrency.PessimisticAfterFailedOptimisticEval
 		default:
-			log.KvExec.Fatalf(ctx, "unexpected concurrency retry error %T", t)
+			log.Fatalf(ctx, "unexpected concurrency retry error %T", t)
 		}
 		// Retry...
 	}
@@ -1003,6 +989,11 @@ func (r *Replica) executeAdminBatch(
 		pErr = kvpb.NewError(err)
 		resp = &reply
 
+	case *kvpb.AdminVerifyProtectedTimestampRequest:
+		reply, err := r.adminVerifyProtectedTimestamp(ctx, *tArgs)
+		pErr = kvpb.NewError(err)
+		resp = &reply
+
 	default:
 		return nil, kvpb.NewErrorf("unrecognized admin command: %T", args)
 	}
@@ -1069,10 +1060,13 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *kvpb.BatchRequest)
 
 // recordRequestWriteBytes records the write bytes from a replica batch
 // request.
-func (r *Replica) recordRequestWriteBytes(writeBytes int64) {
+func (r *Replica) recordRequestWriteBytes(writeBytes *kvadmission.StoreWriteBytes) {
+	if writeBytes == nil {
+		return
+	}
 	// TODO(kvoli): Consider recording the ingested bytes (AddSST) separately
 	// to the write bytes.
-	r.loadStats.RecordWriteBytes(float64(writeBytes))
+	r.loadStats.RecordWriteBytes(float64(writeBytes.WriteBytes + writeBytes.IngestedBytes))
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,

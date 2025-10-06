@@ -71,7 +71,7 @@ func (b *defaultBuiltinFuncOperator) Next() coldata.Batch {
 					res, err = b.funcExpr.ResolvedOverload().
 						Fn.(eval.FnOverload)(b.Ctx, b.evalCtx, b.row)
 					if err != nil {
-						colexecerror.ExpectedError(err)
+						colexecerror.ExpectedError(b.funcExpr.MaybeWrapError(err))
 					}
 				}
 
@@ -133,17 +133,7 @@ func NewBuiltinFunctionOperator(
 			)
 		}
 		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, false, /* withErrors */
-		)
-	case tree.CrdbInternalRangeStatsWithErrors:
-		if len(argumentCols) != 1 {
-			return nil, errors.AssertionFailedf(
-				"expected 1 input column to crdb_internal.range_stats, got %d",
-				len(argumentCols),
-			)
-		}
-		return newRangeStatsOperator(
-			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input, true, /* withErrors */
+			evalCtx.RangeStatsFetcher, allocator, argumentCols[0], outputIdx, input,
 		)
 	default:
 		return &defaultBuiltinFuncOperator{

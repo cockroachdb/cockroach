@@ -32,7 +32,7 @@ func CheckExternalStorageConnection(
 	}
 	defer func() {
 		if err := es.Close(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close External Storage %+v", err)
+			log.Warningf(ctx, "failed to close External Storage %+v", err)
 		}
 	}()
 
@@ -88,7 +88,7 @@ func CheckKMSConnection(ctx context.Context, env externalconn.ExternalConnEnv, u
 	}
 	defer func() {
 		if err := kms.Close(); err != nil {
-			log.Dev.Warningf(ctx, "failed to close KMS %+v", err)
+			log.Warningf(ctx, "failed to close KMS %+v", err)
 		}
 	}()
 

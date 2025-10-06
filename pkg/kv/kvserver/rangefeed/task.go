@@ -60,7 +60,7 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
 		if ctx.Err() == nil { // cancellation probably caused the error
-			log.KvDistribution.Errorf(ctx, "%v", err)
+			log.Errorf(ctx, "%v", err)
 		}
 		s.p.StopWithErr(kvpb.NewError(err))
 	} else {
@@ -249,7 +249,7 @@ func (a *txnPushAttempt) Run(ctx context.Context) {
 	defer a.Cancel()
 	if err := a.pushOldTxns(ctx); err != nil {
 		if ctx.Err() == nil { // cancellation probably caused the error
-			log.KvDistribution.Errorf(ctx, "pushing old intents failed: %v", err)
+			log.Errorf(ctx, "pushing old intents failed: %v", err)
 		}
 	}
 }
@@ -275,7 +275,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	var intentsToCleanup []roachpb.LockUpdate
 	for i, txn := range pushedTxns {
 		switch txn.Status {
-		case roachpb.PENDING, roachpb.PREPARED, roachpb.STAGING:
+		case roachpb.PENDING, roachpb.STAGING:
 			// The transaction is still in progress but its timestamp was moved
 			// forward to the current time. Inform the Processor that it can
 			// forward the txn's timestamp in its unresolvedIntentQueue.

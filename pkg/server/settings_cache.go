@@ -54,7 +54,7 @@ func (s *settingsCacheWriter) SnapshotKVs(ctx context.Context, kvs []roachpb.Key
 		defer s.doneWriting()
 		for toWrite, ok := s.getToWrite(); ok; toWrite, ok = s.getToWrite() {
 			if err := storeCachedSettingsKVs(ctx, s.eng, toWrite); err != nil {
-				log.Dev.Warningf(ctx, "failed to write settings snapshot: %v", err)
+				log.Warningf(ctx, "failed to write settings snapshot: %v", err)
 			}
 		}
 	}); err != nil {
@@ -159,7 +159,7 @@ func initializeCachedSettings(
 		settingKey := settings.InternalKey(settingKeyS)
 		log.VEventf(ctx, 1, "loaded cached setting: %s -> %+v", settingKey, val)
 		if err := updater.Set(ctx, settingKey, val); err != nil {
-			log.Dev.Warningf(ctx, "setting %q to %v failed: %+v", settingKey, val, err)
+			log.Warningf(ctx, "setting %q to %v failed: %+v", settingKey, val, err)
 		}
 	}
 	updater.ResetRemaining(ctx)

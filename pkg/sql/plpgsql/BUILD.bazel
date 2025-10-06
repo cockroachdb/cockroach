@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "plpgsql",
+    srcs = ["plpgsql.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/plpgsql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/sqlerrors",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

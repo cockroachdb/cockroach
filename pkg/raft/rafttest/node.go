@@ -19,7 +19,6 @@ package rafttest
 
 import (
 	"log"
-	"math"
 	"math/rand"
 	"sync"
 	"time"
@@ -51,7 +50,6 @@ func startNode(id raftpb.PeerID, peers []raft.Peer, iface iface) *node {
 	c := &raft.Config{
 		ID:                        id,
 		ElectionTick:              50,
-		ElectionJitterTick:        50,
 		HeartbeatTick:             1,
 		Storage:                   st,
 		MaxSizePerMsg:             1024 * 1024,
@@ -115,40 +113,26 @@ func (n *node) start() {
 		return n.mu.rn.Ready(), true
 	}
 	handleReady := func(rd raft.Ready) {
+		if !raft.IsEmptyHardState(rd.HardState) {
+			_ = n.storage.SetHardState(rd.HardState)
+		}
+		_ = n.storage.Append(rd.Entries)
+		// Simulate disk latency.
+		time.Sleep(time.Millisecond)
 		// Send messages, with a simulated latency.
-		send := func(m raftpb.Message) {
+		for _, m := range rd.Messages {
+			m := m
 			go func() {
 				time.Sleep(time.Duration(rand.Int63n(10)) * time.Millisecond)
 				n.iface.send(m)
 			}()
 		}
-		for _, m := range rd.Messages {
-			send(m)
-		}
-
-		ack := rd.Ack()
-		if !rd.StorageAppend.Empty() {
-			if hs := rd.HardState; !raft.IsEmptyHardState(hs) {
-				_ = n.storage.SetHardState(hs)
-			}
-			_ = n.storage.Append(rd.Entries)
+		func() {
 			n.mu.Lock()
-			n.mu.rn.AckAppend(ack)
-			n.mu.Unlock()
-		}
-		// Simulate disk latency.
-		time.Sleep(time.Millisecond)
-		for m := range ack.Send(n.id) {
-			send(m)
-		}
-
-		if !rd.Committed.Empty() {
-			n.mu.Lock()
-			ls := n.mu.rn.LogSnapshot()
-			entries, _ := ls.Slice(rd.Committed, math.MaxUint64)
-			n.mu.rn.AckApplied(entries)
-			n.mu.Unlock()
-		}
+			defer n.mu.Unlock()
+			n.mu.rn.Advance(rd)
+			maybeSignalLocked()
+		}()
 	}
 
 	// An independently running Ready handling loop.
@@ -227,7 +211,6 @@ func (n *node) restart() {
 	c := &raft.Config{
 		ID:                        n.id,
 		ElectionTick:              10,
-		ElectionJitterTick:        10,
 		HeartbeatTick:             1,
 		Storage:                   n.storage,
 		MaxSizePerMsg:             1024 * 1024,

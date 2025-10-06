@@ -2,21 +2,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "roachprodutil",
-    srcs = [
-        "identity.go",
-        "utils.go",
-    ],
+    srcs = ["identity.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachprod/logger",
-        "//pkg/util/debugutil",
-        "//pkg/util/httputil",
-        "@com_github_binxio_gcloudconfig//:gcloudconfig",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_google_api//impersonate",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//idtoken",
         "@org_golang_google_api//option",
         "@org_golang_x_oauth2//:oauth2",
-        "@org_golang_x_oauth2//google",
     ],
 )

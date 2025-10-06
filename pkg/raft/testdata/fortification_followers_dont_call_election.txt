@@ -1,0 +1,208 @@
+# Test to ensure that a follower will not call an election if it's still
+# supporting a fortified leader.
+
+log-level debug
+----
+ok
+
+add-nodes 3 voters=(1,2,3) index=10
+----
+INFO 1 switched to configuration voters=(1 2 3)
+INFO 1 became follower at term 0
+INFO newRaft 1 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 2 switched to configuration voters=(1 2 3)
+INFO 2 became follower at term 0
+INFO newRaft 2 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+INFO 3 switched to configuration voters=(1 2 3)
+INFO 3 became follower at term 0
+INFO newRaft 3 [peers: [1,2,3], term: 0, commit: 10, applied: 10, lastindex: 10, lastterm: 1]
+
+campaign 1
+----
+INFO 1 is starting a new election at term 0
+INFO 1 became candidate at term 1
+INFO 1 [logterm: 1, index: 10] sent MsgVote request to 2 at term 1
+INFO 1 [logterm: 1, index: 10] sent MsgVote request to 3 at term 1
+
+stabilize
+----
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateCandidate
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  1->2 MsgVote Term:1 Log:1/10
+  1->3 MsgVote Term:1 Log:1/10
+  INFO 1 received MsgVoteResp from 1 at term 1
+  INFO 1 has received 1 MsgVoteResp votes and 0 vote rejections
+> 2 receiving messages
+  1->2 MsgVote Term:1 Log:1/10
+  INFO 2 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 2 became follower at term 1
+  INFO 2 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 3 receiving messages
+  1->3 MsgVote Term:1 Log:1/10
+  INFO 3 [term: 0] received a MsgVote message with higher term from 1 [term: 1]
+  INFO 3 became follower at term 1
+  INFO 3 [logterm: 1, index: 10, vote: 0] cast MsgVote for 1 [logterm: 1, index: 10] at term 1
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  2->1 MsgVoteResp Term:1 Log:0/0
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:0 LeadEpoch:0
+  Messages:
+  3->1 MsgVoteResp Term:1 Log:0/0
+> 1 receiving messages
+  2->1 MsgVoteResp Term:1 Log:0/0
+  INFO 1 received MsgVoteResp from 2 at term 1
+  INFO 1 has received 2 MsgVoteResp votes and 0 vote rejections
+  INFO 1 became leader at term 1
+  3->1 MsgVoteResp Term:1 Log:0/0
+> 1 handling Ready
+  Ready MustSync=true:
+  State:StateLeader
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 2 receiving messages
+  1->2 MsgFortifyLeader Term:1 Log:0/0
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 3 receiving messages
+  1->3 MsgFortifyLeader Term:1 Log:0/0
+  1->3 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:10 Lead:1 LeadEpoch:1
+  Entries:
+  1/11 EntryNormal ""
+  Messages:
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 1 receiving messages
+  2->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  3->1 MsgFortifyLeaderResp Term:1 Log:0/0 LeadEpoch:1
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:10
+> 1 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/11 Commit:11
+> 2 receiving messages
+  1->2 MsgApp Term:1 Log:1/10 Commit:10 Entries:[1/11 EntryNormal ""]
+  1->2 MsgApp Term:1 Log:1/11 Commit:11
+> 3 receiving messages
+  1->3 MsgApp Term:1 Log:1/10 Commit:11 Entries:[1/11 EntryNormal ""]
+  1->3 MsgApp Term:1 Log:1/11 Commit:11
+> 2 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 3 handling Ready
+  Ready MustSync=true:
+  HardState Term:1 Vote:1 Commit:11 Lead:1 LeadEpoch:1
+  CommittedEntries:
+  1/11 EntryNormal ""
+  Messages:
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+> 1 receiving messages
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:10
+  2->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+  3->1 MsgAppResp Term:1 Log:0/11 Commit:11
+
+store-liveness
+----
+  1 2 3
+1 1 1 1
+2 1 1 1
+3 1 1 1
+
+set-randomized-election-timeout 2 timeout=3
+----
+ok
+
+# Campaigning will fail when there is an active leader.
+campaign 2
+----
+DEBUG 2 ignoring MsgHup due to leader fortification
+
+tick-election 2
+----
+ok
+
+# Withdraw support from 2 for 1 and tick 2 once. This should trigger an election
+# (without having to wait out an entire randomized election timeout) because
+# we're smart in recognizing when store liveness support expires.
+# and tick an election. 2 should now be able to
+withdraw-support 2 1
+----
+  1 2 3
+1 1 1 1
+2 x 1 1
+3 1 1 1
+
+tick-heartbeat 2
+----
+DEBUG 2 setting election elapsed to start from 3 ticks after store liveness support expired
+INFO 2 is starting a new election at term 1
+INFO 2 became candidate at term 2
+INFO 2 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
+INFO 2 [logterm: 1, index: 11] sent MsgVote request to 3 at term 2
+
+# Set the randomized timeout for 3 to a value higher than election-timeout. This
+# way, tick-election is guaranteed to not call an election which would reset
+# the electionTimer (which would in-turn prevent 3 from granting 2 its vote).
+
+# Set the randomized timeout for 3 to 4, which is 1 tick more than the
+# election-tick. We then withdraw store liveness support from 3 for 1; 3 should
+# then wait for 1 tick before campaigning. This then shows that we're preserving
+# randomness that's baked into raft elections without waiting out an entire
+# election timeout.
+set-randomized-election-timeout 3 timeout=4
+----
+ok
+
+withdraw-support 3 1
+----
+  1 2 3
+1 1 1 1
+2 x 1 1
+3 x 1 1
+
+tick-heartbeat 3
+----
+DEBUG 3 setting election elapsed to start from 3 ticks after store liveness support expired
+
+tick-heartbeat 3
+----
+INFO 3 is starting a new election at term 1
+INFO 3 became candidate at term 2
+INFO 3 [logterm: 1, index: 11] sent MsgVote request to 1 at term 2
+INFO 3 [logterm: 1, index: 11] sent MsgVote request to 2 at term 2

@@ -1,15 +1,3 @@
-# LogicTest: !local-prepared
-
-# Intentionally set this to true in 25.2, this setting
-# should be ignored.
-onlyif config local-mixed-25.2
-statement ok
-SET create_table_with_schema_locked=true
-
-skipif config local-mixed-25.2
-statement ok
-SET create_table_with_schema_locked=false
-
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
 
@@ -19,7 +7,7 @@ show create table t
 t  CREATE TABLE public.t (
      i INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (i ASC)
-   ) WITH (schema_locked = true);
+   ) WITH (schema_locked = true)
 
 statement ok
 ALTER TABLE t RESET (schema_locked);
@@ -30,7 +18,7 @@ show create table t
 t  CREATE TABLE public.t (
      i INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (i ASC)
-   );
+   )
 
 statement ok
 ALTER TABLE t SET (schema_locked = true);
@@ -41,7 +29,7 @@ show create table t
 t  CREATE TABLE public.t (
      i INT8 NOT NULL,
      CONSTRAINT t_pkey PRIMARY KEY (i ASC)
-   ) WITH (schema_locked = true);
+   ) WITH (schema_locked = true)
 
 statement ok
 ALTER TABLE t RESET (schema_locked)
@@ -68,9 +56,6 @@ ALTER TABLE t SET (schema_locked=f); CREATE TABLE t2 (i INT PRIMARY KEY);
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 
-statement ok
-SET LOCAL autocommit_before_ddl=off;
-
 statement error pq: "schema_locked" can only be set/reset on its own without other parameters in a single-statement implicit transaction.
 ALTER TABLE t SET (schema_locked=f);
 
@@ -95,44 +80,35 @@ CREATE TABLE t (i INT PRIMARY KEY, j INT, UNIQUE INDEX idx (j)) WITH (schema_loc
 statement ok
 INSERT INTO t SELECT i, i+1 FROM generate_series(1,10) AS tmp(i);
 
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
 
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t DROP COLUMN j;
 
-onlyif config local-mixed-25.1
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t RENAME TO t2;
 
-onlyif config local-mixed-25.1
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE t RENAME COLUMN j TO j2;
 
-onlyif config local-mixed-25.1
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER INDEX idx RENAME TO idx2;
 
-onlyif config local-mixed-25.1
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER INDEX idx INVISIBLE;
 
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 DROP INDEX idx;
 
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 CREATE INDEX idx2 ON t(j);
 
 statement ok
 CREATE TABLE ref (a INT PRIMARY KEY, b INT)
 
 # Locked tables cannot be referenced by foreign keys.
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
+statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
 ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
 
 # GRANT statements are allowed on the table, as they only affect the
@@ -146,99 +122,19 @@ statement ok
 COMMENT ON TABLE t IS 't is a table';
 COMMENT ON INDEX t@idx IS 'idx is an index';
 COMMENT ON COLUMN t.i IS 'i is a column';
-subtest end
 
-# Declarative schema change can automatically unset and set schema locked.
-subtest declarative_allows_schema_changes
-
-skipif config local-mixed-25.1 local-legacy-schema-changer
 statement ok
-ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
+ALTER TABLE t RESET (schema_locked)
 
-skipif config local-mixed-25.1 local-legacy-schema-changer
-statement ok
-CREATE INDEX idx2 ON t(j);
-
-skipif config local-mixed-25.1 local-legacy-schema-changer
-statement ok
-DROP INDEX idx2;
-
-skipif config local-mixed-25.1 local-legacy-schema-changer
-statement ok
-ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
-
-skipif config local-mixed-25.1 local-legacy-schema-changer
-statement ok
-ALTER TABLE t DROP COLUMN j CASCADE;
-
-# Confirm that the table definition still has schema_locked
-query I
-SELECT count(create_statement) FROM [SHOW CREATE TABLE t] WHERE create_statement LIKE '%schema_locked = true%'
-----
-1
-
-onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement ok
-ALTER TABLE t SET (schema_locked = false);
-
-# Finally drop the table.
 statement ok
 DROP TABLE t;
-subtest end
 
 subtest zone_config
 
 statement ok
 ALTER TABLE ref SET (schema_locked = true);
 
-# This statement is schema_locked bypassed.
-statement ok
+statement error pgcode 57000 schema changes are disallowed on table "ref" because it is locked
 ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
-
-subtest end
-
-
-# Validate schema_locked can be unset properly in add column txns.
-subtest regression_147993
-
-statement ok
-CREATE TABLE t_147993 (
-  k INT8 NOT NULL,
-  geom1 GEOMETRY(POINT,4326) NULL,
-  geom2 GEOMETRY(POLYGON,4326) NULL,
-  geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-  geom4 GEOMETRY(LINESTRING,4326) NULL,
-  geom5 GEOMETRY(MULTIPOINT,4326) NULL,
-  geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
-  CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
-  FAMILY fam (k, geom1, geom2, geom3, geom6)
-) WITH (schema_locked = true);
-
-
-skipif config local-legacy-schema-changer
-skipif config local-mixed-25.1
-statement ok
-SELECT  AddGeometryColumn ('t_147993','geom7',4326,'POINT',2),
-        AddGeometryColumn ('t_147993','geom8',4326,'POINT',2);
-
-
-
-skipif config local-legacy-schema-changer
-query TT
-show create table t_147993
-----
-t_147993  CREATE TABLE public.t_147993 (
-            k INT8 NOT NULL,
-            geom1 GEOMETRY(POINT,4326) NULL,
-            geom2 GEOMETRY(POLYGON,4326) NULL,
-            geom3 GEOMETRY(MULTIPOLYGON,4326) NULL,
-            geom4 GEOMETRY(LINESTRING,4326) NULL,
-            geom5 GEOMETRY(MULTIPOINT,4326) NULL,
-            geom6 GEOMETRY(MULTILINESTRING,4326) NULL,
-            geom7 GEOMETRY(POINT,4326) NULL,
-            geom8 GEOMETRY(POINT,4326) NULL,
-            CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
-            FAMILY fam (k, geom1, geom2, geom3, geom6, geom4, geom5, geom8, geom7)
-          ) WITH (schema_locked = true);
 
 subtest end

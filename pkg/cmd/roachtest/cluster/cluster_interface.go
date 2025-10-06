@@ -9,13 +9,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"os"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -66,11 +64,7 @@ type Cluster interface {
 	Stop(ctx context.Context, l *logger.Logger, stopOpts option.StopOpts, opts ...option.Option)
 	SignalE(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option) error
 	Signal(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option)
-
-	// NewDeprecatedMonitor is deprecated: See #118214
-	// Instead, use task.Tasker for goroutine management (e.g. test.Go) and test.Monitor
-	// for monitoring unexpected process deaths (e.g. through the test spec Monitor option)
-	NewDeprecatedMonitor(context.Context, ...option.Option) Monitor
+	NewMonitor(context.Context, ...option.Option) Monitor
 
 	// Starting virtual clusters.
 
@@ -163,11 +157,6 @@ type Cluster interface {
 	Install(
 		ctx context.Context, l *logger.Logger, nodes option.NodeListOption, software ...string,
 	) error
-	PopulateEtcHosts(ctx context.Context, l *logger.Logger) error
-
-	// VM management
-
-	Reset(ctx context.Context, l *logger.Logger, nodes option.NodeListOption) error
 
 	// Methods whose inclusion on this interface is purely historical.
 	// These should be removed over time.
@@ -177,7 +166,6 @@ type Cluster interface {
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error
 
-	FetchLogs(ctx context.Context, l *logger.Logger) error
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
 	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string, opts ...option.Option) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
@@ -219,8 +207,4 @@ type Cluster interface {
 
 	// GetPreemptedVMs gets any VMs that were part of the cluster but preempted by cloud vendor.
 	GetPreemptedVMs(ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error)
-
-	RegisterClusterHook(hookName string, hookType option.ClusterHookType, timeout time.Duration, hook func(context.Context) error)
-
-	GetFailer(l *logger.Logger, nodes option.NodeListOption, failureModeName string, disableStateValidation bool, opts ...failures.ClusterOptionFunc) (*failures.Failer, error)
 }

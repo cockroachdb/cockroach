@@ -94,7 +94,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 	b.Scan(span.Key, span.EndKey)
 	err := fit.db.Run(ctx, &b)
 	if err != nil {
-		log.Dev.Errorf(ctx, "error in fake span resolver scan: %s", err)
+		log.Errorf(ctx, "error in fake span resolver scan: %s", err)
 		fit.err = err
 		return
 	}

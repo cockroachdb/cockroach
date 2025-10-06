@@ -6,7 +6,6 @@
 package tick
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -56,7 +55,7 @@ func MaybeTick(m Periodic) {
 // maintain a windowed version to work around limitations of our internal
 // timeseries database.
 type Ticker struct {
-	nextT        atomic.Value
+	nextT        time.Time
 	tickInterval time.Duration
 
 	onTick func()
@@ -66,12 +65,11 @@ var _ Periodic = &Ticker{}
 
 // NewTicker returns a new *Ticker instance.
 func NewTicker(nextT time.Time, tickInterval time.Duration, onTick func()) *Ticker {
-	t := &Ticker{
+	return &Ticker{
+		nextT:        nextT,
 		tickInterval: tickInterval,
 		onTick:       onTick,
 	}
-	t.nextT.Store(nextT)
-	return t
 }
 
 // OnTick calls the onTick function provided at construction.
@@ -87,7 +85,7 @@ func (s *Ticker) OnTick() {
 
 // NextTick returns the timestamp of the next scheduled tick for this Ticker.
 func (s *Ticker) NextTick() time.Time {
-	return s.nextT.Load().(time.Time)
+	return s.nextT
 }
 
 // Tick updates the next tick timestamp to the next tickInterval, and invokes
@@ -96,6 +94,6 @@ func (s *Ticker) NextTick() time.Time {
 // NB: Generally, MaybeTick should be used instead to ensure that we don't tick
 // before nextT. This function is only used when we want to tick regardless
 func (s *Ticker) Tick() {
-	s.nextT.Store(s.nextT.Load().(time.Time).Add(s.tickInterval))
+	s.nextT = s.nextT.Add(s.tickInterval)
 	s.OnTick()
 }

@@ -21,7 +21,7 @@ import (
 
 type statusTrackingExecutor struct {
 	numExec int
-	counts  map[State]int
+	counts  map[Status]int
 }
 
 func (s *statusTrackingExecutor) ExecuteJob(
@@ -39,12 +39,12 @@ func (s *statusTrackingExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobState State,
+	jobStatus Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 ) error {
-	s.counts[jobState]++
+	s.counts[jobStatus]++
 	return nil
 }
 
@@ -61,7 +61,7 @@ func (s *statusTrackingExecutor) GetCreateScheduleStatement(
 var _ ScheduledJobExecutor = &statusTrackingExecutor{}
 
 func newStatusTrackingExecutor() *statusTrackingExecutor {
-	return &statusTrackingExecutor{counts: make(map[State]int)}
+	return &statusTrackingExecutor{counts: make(map[Status]int)}
 }
 
 func TestScheduledJobExecutorRegistration(t *testing.T) {
@@ -94,7 +94,7 @@ func TestJobTerminationNotification(t *testing.T) {
 	require.NoError(t, schedules.Create(ctx, schedule))
 
 	// Pretend it completes multiple runs with terminal statuses.
-	for _, s := range []State{StateCanceled, StateFailed, StateSucceeded} {
+	for _, s := range []Status{StatusCanceled, StatusFailed, StatusSucceeded} {
 		require.NoError(t, h.cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return NotifyJobTermination(
 				ctx, txn, h.env, 123, s, nil, schedule.ScheduleID(),
@@ -103,5 +103,5 @@ func TestJobTerminationNotification(t *testing.T) {
 	}
 
 	// Verify counts.
-	require.Equal(t, map[State]int{StateSucceeded: 1, StateFailed: 1, StateCanceled: 1}, ex.counts)
+	require.Equal(t, map[Status]int{StatusSucceeded: 1, StatusFailed: 1, StatusCanceled: 1}, ex.counts)
 }

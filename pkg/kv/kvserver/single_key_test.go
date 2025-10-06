@@ -117,7 +117,7 @@ func TestSingleKey(t *testing.T) {
 		case <-time.After(1 * time.Second):
 			// Periodically print out progress so that we know the test is still
 			// running.
-			log.KvExec.Infof(ctx, "%d", atomic.LoadInt64(&expected))
+			log.Infof(ctx, "%d", atomic.LoadInt64(&expected))
 		}
 	}
 
@@ -134,5 +134,5 @@ func TestSingleKey(t *testing.T) {
 	for _, r := range results {
 		maxLatency = append(maxLatency, r.maxLatency)
 	}
-	log.KvExec.Infof(ctx, "%d increments: %s", v, maxLatency)
+	log.Infof(ctx, "%d increments: %s", v, maxLatency)
 }

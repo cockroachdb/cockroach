@@ -28,7 +28,7 @@ import (
 // common SQL optimizations*. Its use should be limited in clients to
 // situations where the corresponding performance cost is affordable.
 type ordinalityNode struct {
-	singleInputPlanNode
+	source      planNode
 	columns     colinfo.ResultColumns
 	reqOrdering ReqOrdering
 }
@@ -45,4 +45,4 @@ func (o *ordinalityNode) Values() tree.Datums {
 	panic("ordinalityNode can't be run in local mode")
 }
 
-func (o *ordinalityNode) Close(ctx context.Context) { o.input.Close(ctx) }
+func (o *ordinalityNode) Close(ctx context.Context) { o.source.Close(ctx) }

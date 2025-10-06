@@ -90,13 +90,13 @@ func TestRandRun(t *testing.T) {
 			writeStmt, err := db.Prepare(stmt)
 			require.NoError(t, err)
 
-			table, err := LoadTable(db, tblName)
+			dataType, err := typeForOid(db, typeT.InternalType.Oid, tblName, colName)
 			require.NoError(t, err)
-
+			cols := []col{{name: colName, dataType: dataType}}
 			op := randOp{
 				config:    &random{batchSize: 1},
 				db:        db,
-				table:     &table,
+				cols:      cols,
 				rng:       rng,
 				writeStmt: writeStmt,
 			}

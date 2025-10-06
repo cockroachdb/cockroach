@@ -40,14 +40,14 @@ func Example_statement_diag() {
 	for _, cmd := range commands {
 		_, err := c.RunWithCaptureArgs([]string{"sql", "-e", cmd})
 		if err != nil {
-			log.Dev.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
+			log.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
 		}
 	}
 	c.RunWithArgs([]string{"statement-diag", "list"})
 	c.RunWithArgs([]string{"statement-diag", "download", "13"})
 	tmpfile, err := os.CreateTemp("", "bundle-*.zip")
 	if err != nil {
-		log.Dev.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
+		log.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
 	}
 	bundleFile := tmpfile.Name()
 	_ = tmpfile.Close()
@@ -56,11 +56,11 @@ func Example_statement_diag() {
 	fmt.Printf("statement-diag download 20 tempfile.zip\n")
 	_, err = c.RunWithCaptureArgs([]string{"statement-diag", "download", "20", bundleFile})
 	if err != nil {
-		log.Dev.Fatalf(context.Background(), "Error downloading bundle: %s", err)
+		log.Fatalf(context.Background(), "Error downloading bundle: %s", err)
 	}
 	data, err := os.ReadFile(bundleFile)
 	if err != nil {
-		log.Dev.Fatalf(context.Background(), "Error reading bundle: %s", err)
+		log.Fatalf(context.Background(), "Error reading bundle: %s", err)
 	}
 	fmt.Printf("bundle data: %s\n", data)
 

@@ -41,6 +41,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],

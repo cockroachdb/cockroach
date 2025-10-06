@@ -351,7 +351,9 @@ func testMigrationWithFailures(
 						},
 						UpgradeManager: &upgradebase.TestingKnobs{
 							ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-								return []roachpb.Version{to}
+								return []roachpb.Version{
+									endCV,
+								}
 							},
 							RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 								if cv.Equal(endCV) {
@@ -362,7 +364,7 @@ func testMigrationWithFailures(
 										upgrade.RestoreActionNotRequired("test"),
 									), true
 								}
-								return nil, false
+								panic("unexpected version")
 							}},
 					},
 				},
@@ -479,7 +481,7 @@ func testMigrationWithFailures(
 			// If canceled the job, wait for the job to finish.
 			if test.cancelSchemaJob {
 				t.Log("waiting for the schema job to reach the cancel status")
-				waitUntilState(t, tdb, schemaEvent.orig.ID, jobs.StateCanceled)
+				waitUntilState(t, tdb, schemaEvent.orig.ID, jobs.StatusCanceled)
 			}
 			// Ensure all migrations complete.
 			go func() {
@@ -529,7 +531,7 @@ func cancelJob(
 			ctx, jobID, txn, func(
 				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
-				ju.UpdateState(jobs.StateCancelRequested)
+				ju.UpdateStatus(jobs.StatusCancelRequested)
 				return nil
 			})
 	})
@@ -538,10 +540,10 @@ func cancelJob(
 
 // waitUntilState waits until the specified job reaches to given state.
 func waitUntilState(
-	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.State,
+	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		var status jobs.State
+		var status jobs.Status
 		tdb.QueryRow(t,
 			"SELECT status FROM system.jobs WHERE id = $1", jobID,
 		).Scan(&status)

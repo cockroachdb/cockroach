@@ -17,7 +17,6 @@ import (
 )
 
 type createExtensionNode struct {
-	zeroInputPlanNode
 	CreateExtension tree.CreateExtension
 }
 

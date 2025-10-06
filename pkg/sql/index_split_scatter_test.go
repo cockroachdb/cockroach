@@ -50,6 +50,8 @@ func TestIndexSplitAndScatterWithStats(t *testing.T) {
 		})
 		defer cluster.Stopper().Stop(ctx)
 		runner := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+		// Enable split and scatter with stats
+		runner.Exec(t, "SET CLUSTER SETTING schemachanger.backfiller.split_with_stats.enabled = true")
 		// Disable automatic statistics.
 		runner.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
 		// Create and populate the tables.

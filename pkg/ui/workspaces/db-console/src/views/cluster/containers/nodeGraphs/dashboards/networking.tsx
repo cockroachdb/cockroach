@@ -15,6 +15,68 @@ export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodeDisplayNameByID, tenantSource } = props;
 
   return [
+    <LineGraph title="Network Bytes Received" showMetricsInTooltip={true}>
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.bytes"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packets Received" showMetricsInTooltip={true}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.packets"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Network Packet Errors on Receive"
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.err"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Network Packet Drops on Receive"
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.recv.drop"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="Network Bytes Sent" showMetricsInTooltip={true}>
       <Axis units={AxisUnits.Bytes} label="bytes">
         {nodeIDs.map(nid => (
@@ -29,11 +91,42 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Network Bytes Received" showMetricsInTooltip={true}>
-      <Axis units={AxisUnits.Bytes} label="bytes">
+    <LineGraph title="Network Packets Sent" showMetricsInTooltip={true}>
+      <Axis units={AxisUnits.Count} label="packets">
         {nodeIDs.map(nid => (
           <Metric
-            name="cr.node.sys.host.net.recv.bytes"
+            name="cr.node.sys.host.net.send.packets"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Network Packet Errors on Send"
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.send.err"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            tenantSource={tenantSource}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph title="Network Packet Drops on Send" showMetricsInTooltip={true}>
+      <Axis units={AxisUnits.Count} label="packets">
+        {nodeIDs.map(nid => (
+          <Metric
+            name="cr.node.sys.host.net.send.drop"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
             tenantSource={tenantSource}
@@ -95,69 +188,6 @@ export default function (props: GraphDashboardProps) {
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
             tenantSource={tenantSource}
-          />
-        ))}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Network Packet Errors and Drops"
-      showMetricsInTooltip={true}
-    >
-      <Axis units={AxisUnits.Count} label="packets">
-        {nodeIDs.flatMap(nid => [
-          <Metric
-            key={`${nid}-recv-err`}
-            name="cr.node.sys.host.net.recv.err"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Recv Errors`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-          <Metric
-            key={`${nid}-recv-drop`}
-            name="cr.node.sys.host.net.recv.drop"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Recv Drops`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-          <Metric
-            key={`${nid}-send-err`}
-            name="cr.node.sys.host.net.send.err"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Send Errors`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-          <Metric
-            key={`${nid}-send-drop`}
-            name="cr.node.sys.host.net.send.drop"
-            title={`${nodeDisplayName(nodeDisplayNameByID, nid)} - Send Drops`}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
-          />,
-        ])}
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="TCP Retransmits"
-      tooltip={
-        "The number of TCP segments retransmitted. Some retransmissions are benign, but phase changes can be indicative of network congestion or overloaded peers."
-      }
-      showMetricsInTooltip={true}
-    >
-      <Axis label="segments">
-        {nodeIDs.map(nid => (
-          <Metric
-            key={nid}
-            name="cr.node.sys.host.net.send.tcp.retrans_segs"
-            title={nodeDisplayName(nodeDisplayNameByID, nid)}
-            sources={[nid]}
-            tenantSource={tenantSource}
-            nonNegativeRate
           />
         ))}
       </Axis>

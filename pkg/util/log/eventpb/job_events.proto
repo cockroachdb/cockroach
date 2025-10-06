@@ -67,7 +67,4 @@ message StatusChange {
 
   // An error that occurred that requires the job to be reverted.
   string final_resume_err = 9 [(gogoproto.jsontag) = ",omitempty"];
-
-  // User is the owner of the job.
-  string user = 10 [(gogoproto.jsontag) = ",omitempty"];
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -73,43 +72,4 @@ func TestFingerprintUtility(t *testing.T) {
 
 	_, err = fingerprintutils.FingerprintDatabase(ctx, db, "d1", fingerprintutils.Stripped(), fingerprintutils.RevisionHistory())
 	require.ErrorContains(t, err, "cannot specify stripped and revision history")
-}
-
-// TestFingerprintAllDatabasesWithAOST tests that FingerprintAllDatabases works
-// correctly when using AOST (As Of System Time) even when the target
-// database/tables are deleted after the AOST timestamp.
-func TestFingerprintAllDatabasesWithAOST(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	db := tc.ServerConn(0)
-	sql := sqlutils.MakeSQLRunner(db)
-
-	rng, _ := randutil.NewTestRand()
-
-	sql.Exec(t, `CREATE DATABASE test_aost`)
-	sql.Exec(t, `CREATE TABLE test_aost.table_to_delete (id INT PRIMARY KEY, data STRING)`)
-	sql.Exec(t, `INSERT INTO test_aost.table_to_delete VALUES (1, 'test_data')`)
-
-	aostTimestamp := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-
-	sql.Exec(t, `DROP TABLE test_aost.table_to_delete`)
-	if rng.Intn(2) == 0 {
-		sql.Exec(t, `DROP DATABASE test_aost`)
-	}
-
-	// FingerprintAllDatabases with AOST should still work and find the deleted table
-	fingerprintsAOST, err := fingerprintutils.FingerprintAllDatabases(ctx, db, false,
-		fingerprintutils.AOST(aostTimestamp))
-	require.NoError(t, err)
-
-	testAostFingerprints, exists := fingerprintsAOST["test_aost"]
-	require.True(t, exists, "test_aost database should be found in fingerprints")
-
-	// Verify that the deleted table is found in the AOST fingerprint
-	tableFingerprint, exists := testAostFingerprints["table_to_delete"]
-	require.True(t, exists, "table_to_delete should be found in AOST fingerprints")
-	require.NotZero(t, tableFingerprint, "fingerprint should be non-zero")
 }

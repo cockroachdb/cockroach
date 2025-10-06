@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !local-prepared
+# LogicTest: !3node-tenant-default-configs
 
 subtest check_consistency
 

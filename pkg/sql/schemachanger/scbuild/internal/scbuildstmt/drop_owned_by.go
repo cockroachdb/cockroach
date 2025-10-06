@@ -101,8 +101,6 @@ func DropOwnedBy(b BuildCtx, n *tree.DropOwnedBy) {
 		}
 	})
 
-	// TODO(151425): we should cleanup default privileges for the user too like postgres
-
 	b.IncrementSubWorkID()
 	b.IncrementDropOwnedByCounter()
 

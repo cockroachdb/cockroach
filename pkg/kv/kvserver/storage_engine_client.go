@@ -9,8 +9,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
 )
@@ -29,10 +29,11 @@ func NewStorageEngineClient(nd *nodedialer.Dialer) *StorageEngineClient {
 func (c *StorageEngineClient) CompactEngineSpan(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) error {
-	client, err := DialPerStoreClient(c.nd, ctx, roachpb.NodeID(nodeID), rpcbase.DefaultClass)
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
 	if err != nil {
 		return errors.Wrapf(err, "could not dial node ID %d", nodeID)
 	}
+	client := NewPerStoreClient(conn)
 	req := &CompactEngineSpanRequest{
 		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  roachpb.NodeID(nodeID),
@@ -48,10 +49,12 @@ func (c *StorageEngineClient) CompactEngineSpan(
 func (c *StorageEngineClient) GetTableMetrics(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte,
 ) ([]enginepb.SSTableMetricsInfo, error) {
-	client, err := DialPerStoreClient(c.nd, ctx, roachpb.NodeID(nodeID), rpcbase.DefaultClass)
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
 	if err != nil {
 		return []enginepb.SSTableMetricsInfo{}, errors.Wrapf(err, "could not dial node ID %d", nodeID)
 	}
+
+	client := NewPerStoreClient(conn)
 	req := &GetTableMetricsRequest{
 		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  roachpb.NodeID(nodeID),
@@ -72,10 +75,12 @@ func (c *StorageEngineClient) GetTableMetrics(
 func (c *StorageEngineClient) ScanStorageInternalKeys(
 	ctx context.Context, nodeID, storeID int32, startKey, endKey []byte, megabytesPerSecond int64,
 ) ([]enginepb.StorageInternalKeysMetrics, error) {
-	client, err := DialPerStoreClient(c.nd, ctx, roachpb.NodeID(nodeID), rpcbase.DefaultClass)
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
 	if err != nil {
 		return []enginepb.StorageInternalKeysMetrics{}, errors.Wrapf(err, "could not dial node ID %d", nodeID)
 	}
+
+	client := NewPerStoreClient(conn)
 	req := &ScanStorageInternalKeysRequest{
 		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  roachpb.NodeID(nodeID),
@@ -97,10 +102,11 @@ func (c *StorageEngineClient) ScanStorageInternalKeys(
 func (c *StorageEngineClient) SetCompactionConcurrency(
 	ctx context.Context, nodeID, storeID int32, compactionConcurrency uint64,
 ) error {
-	client, err := DialPerStoreClient(c.nd, ctx, roachpb.NodeID(nodeID), rpcbase.DefaultClass)
+	conn, err := c.nd.Dial(ctx, roachpb.NodeID(nodeID), rpc.DefaultClass)
 	if err != nil {
 		return errors.Wrapf(err, "could not dial node ID %d", nodeID)
 	}
+	client := NewPerStoreClient(conn)
 	req := &CompactionConcurrencyRequest{
 		StoreRequestHeader: StoreRequestHeader{
 			NodeID:  roachpb.NodeID(nodeID),

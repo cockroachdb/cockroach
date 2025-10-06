@@ -178,15 +178,11 @@ type benchOptions struct {
 type engineMaker func(testing.TB, string, int64, fs.RWMode) storage.Engine
 
 func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, rw fs.RWMode) storage.Engine {
-	settings := cluster.MakeTestingClusterSettings()
-	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{
-		RW:      rw,
-		Version: settings.Version,
-	}, nil /* statsCollector */)
+	env, err := fs.InitEnv(context.Background(), vfs.Default, dir, fs.EnvConfig{RW: rw}, nil /* statsCollector */)
 	if err != nil {
 		b.Fatalf("could not initialize fs env at %s: %+v", dir, err)
 	}
-	eng, err := storage.Open(context.Background(), env, settings, storage.LBaseMaxBytes(lBaseMaxBytes))
+	eng, err := storage.Open(context.Background(), env, cluster.MakeTestingClusterSettings(), storage.LBaseMaxBytes(lBaseMaxBytes))
 	if err != nil {
 		env.Close()
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
@@ -221,12 +217,12 @@ func setupData(
 	if opts.rwMode == fs.ReadOnly {
 		readOnlyStr = "_readonly"
 	}
-	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d_v2",
+	name := fmt.Sprintf("refresh_range_bench_data_%s_%s%s_%d_%d_%d",
 		verStr, orderStr, readOnlyStr, opts.numKeys, opts.valueBytes, opts.lBaseMaxBytes)
 
 	dir := testfixtures.ReuseOrGenerate(b, name, func(dir string) {
 		eng := emk(b, dir, opts.lBaseMaxBytes, fs.ReadWrite)
-		log.KvExec.Infof(ctx, "creating refresh range benchmark data: %s", dir)
+		log.Infof(ctx, "creating refresh range benchmark data: %s", dir)
 
 		// Generate the same data every time.
 		rng := rand.New(rand.NewSource(1449168817))
@@ -265,7 +261,7 @@ func setupData(
 			// optimizations which change the data size result in the same number of
 			// sstables.
 			if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
-				log.KvExec.Infof(ctx, "committing (%d/~%d) (%d/%d)", i/scaled, 20, i, len(order))
+				log.Infof(ctx, "committing (%d/~%d) (%d/%d)", i/scaled, 20, i, len(order))
 				if err := batch.Commit(false /* sync */); err != nil {
 					b.Fatal(err)
 				}

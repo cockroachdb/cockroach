@@ -30,7 +30,7 @@ type StateMachine interface {
 	// AckCommittedEntriesBeforeApplication.
 	//
 	// There must only be a single EphemeralBatch *or* Batch open at any given
-	// point in time. The caller must Close the batch to clear resources.
+	// point in time.
 	NewEphemeralBatch() EphemeralBatch
 	// NewBatch creates a new batch that is suitable for accumulating the effects
 	// that a group of Commands will have on the replicated state machine.
@@ -38,7 +38,7 @@ type StateMachine interface {
 	// applied to the StateMachine at once via its ApplyToStateMachine method.
 	//
 	// There must only be a single EphemeralBatch *or* Batch open at any given
-	// point in time. The caller must Close the batch to clear resources.
+	// point in time.
 	NewBatch() Batch
 	// ApplySideEffects applies the in-memory side-effects of a Command to
 	// the replicated state machine. The method will be called in the order

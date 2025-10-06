@@ -8,7 +8,6 @@ package debugutil
 import (
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/elastic/gosigar"
@@ -43,22 +42,4 @@ func init() {
 		}
 		return false
 	}(os.Getppid()))
-}
-
-// SafeStack is an alias for []byte that handles redaction. Use this type
-// instead of []byte when you are sure that the stack trace does not contain
-// sensitive information.
-type SafeStack []byte
-
-func (s SafeStack) SafeValue() {}
-
-// Stack wraps the output of debug.Stack() with redact.Safe() to avoid
-// unnecessary redaction.
-//
-// WARNING: Calling this function grabs system-level locks and could cause high
-// system CPU usage resulting in the Go runtime to lock up if called too
-// frequently, even if called only in error-handling pathways. Use sporadically
-// and only when necessary.
-func Stack() SafeStack {
-	return debug.Stack()
 }

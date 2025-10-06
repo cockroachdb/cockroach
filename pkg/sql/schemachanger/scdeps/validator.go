@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/redact"
 )
 
 // ValidateForwardIndexesFn callback function for validating forward indexes.
@@ -62,7 +61,7 @@ type ValidateConstraintFn func(
 
 // NewFakeSessionDataFn callback function used to create session data
 // for the internal executor.
-type NewFakeSessionDataFn func(ctx context.Context, settings *cluster.Settings, opName redact.SafeString) *sessiondata.SessionData
+type NewFakeSessionDataFn func(ctx context.Context, settings *cluster.Settings, opName string) *sessiondata.SessionData
 
 type validator struct {
 	db                         *kv.DB

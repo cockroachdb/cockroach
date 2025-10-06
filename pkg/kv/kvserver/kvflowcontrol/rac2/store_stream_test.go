@@ -77,7 +77,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	}
 	// 25th stream will also be blocked. The detailed stats will only cover an
 	// arbitrary subset of 20 streams.
-	log.KvDistribution.Infof(ctx, "creating stream id %d", id)
+	log.Infof(ctx, "creating stream id %d", id)
 	createStreamAndExhaustTokens(id, true)
 
 	// Total 104 streams are blocked.
@@ -86,7 +86,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	}
 	// 105th stream will also be blocked. The blocked stream names will only
 	// list 100 streams.
-	log.KvDistribution.Infof(ctx, "creating stream id %d", id)
+	log.Infof(ctx, "creating stream id %d", id)
 	createStreamAndExhaustTokens(id, true)
 
 	log.FlushFiles()

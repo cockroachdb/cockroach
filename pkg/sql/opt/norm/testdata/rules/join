@@ -10,7 +10,7 @@ CREATE TABLE t.b (x INT PRIMARY KEY, y INT)
 ----
 
 exec-ddl
-CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, INDEX (y), UNIQUE (x,z))
+CREATE TABLE c (x INT PRIMARY KEY, y INT NOT NULL REFERENCES a(k), z INT NOT NULL, UNIQUE (x,z))
 ----
 
 exec-ddl
@@ -31,46 +31,6 @@ CREATE TABLE booleans (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
 
 exec-ddl
 CREATE TABLE comp (i INT, c INT AS (i + 10) STORED, v INT AS (abs(i)) VIRTUAL)
-----
-
-exec-ddl
-CREATE TABLE rls (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
-----
-
-exec-ddl
-CREATE INDEX ON rls(y);
-----
-
-exec-ddl
-ALTER TABLE rls ENABLE ROW LEVEL SECURITY;
-----
-
-exec-ddl
-CREATE POLICY select_policy_alice
-ON rls
-FOR SELECT
-TO alice
-USING (alice_has_access);
-----
-
-exec-ddl
-CREATE ROLE alice;
-----
-
-exec-ddl
-CREATE FUNCTION leakproof_fn(x INT) RETURNS BOOL
-LANGUAGE SQL IMMUTABLE LEAKPROOF
-AS $$
-  SELECT x > 0
-$$;
-----
-
-exec-ddl
-CREATE FUNCTION non_leakproof_fn(x INT) RETURNS BOOL
-LANGUAGE SQL IMMUTABLE
-AS $$
-  SELECT x > 0
-$$;
 ----
 
 norm
@@ -307,17 +267,21 @@ inner-join (cross)
 norm expect=DetectJoinContradiction expect-not=SimplifyJoinFilters
 SELECT * FROM a LEFT JOIN b ON k<1 AND k>2
 ----
-project
+left-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: ()-->(8,9), (1)-->(2-5)
+ ├── fd: (1)-->(2-5,8,9)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── projections
-      ├── CAST(NULL AS INT8) [as=x:8]
-      └── CAST(NULL AS INT8) [as=y:9]
+ ├── values
+ │    ├── columns: x:8!null y:9!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(8,9)
+ └── filters (true)
 
 # --------------------------------------------------
 # DetectJoinContradiction
@@ -335,17 +299,21 @@ values
 norm expect=DetectJoinContradiction
 SELECT * FROM a LEFT JOIN b ON (k<1 AND k>2) OR (k<4 AND k>5)
 ----
-project
+left-join (cross)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
- ├── fd: ()-->(8,9), (1)-->(2-5)
+ ├── fd: (1)-->(2-5,8,9)
  ├── scan a
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── projections
-      ├── CAST(NULL AS INT8) [as=x:8]
-      └── CAST(NULL AS INT8) [as=y:9]
+ ├── values
+ │    ├── columns: x:8!null y:9!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(8,9)
+ └── filters (true)
 
 norm expect=DetectJoinContradiction
 SELECT * FROM a INNER JOIN xy ON NULL
@@ -944,7 +912,7 @@ project
       ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9 "?column?":16
       ├── immutable
       ├── key: (8)
-      ├── fd: (1)-->(2-5), (1,8)-->(9,16), (8)-->(16), (1)==(8), (8)==(1)
+      ├── fd: (1)-->(2-5), (1,8)-->(9,16), (1)==(8), (8)==(1), (8)-->(16)
       ├── scan a
       │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
       │    ├── key: (1)
@@ -1370,25 +1338,25 @@ inner-join (hash)
  ├── cardinality: [0 - 1]
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
- ├── fd: ()-->(1-5,8,9,12-14,17-19,22,23), (1)==(8,12,17,22), (8)==(1,12,17,22), (12)==(1,8,17,22), (17)==(1,8,12,22), (22)==(1,8,12,17)
+ ├── fd: ()-->(1-5,8,9,12-14,17-19,22,23), (8)==(1,12,17,22), (17)==(1,8,12,22), (1)==(8,12,17,22), (22)==(1,8,12,17), (12)==(1,8,17,22)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:8!null b.y:9 c.x:12!null c.y:13!null c.z:14!null d.x:17!null d.y:18!null d.z:19!null
  │    ├── cardinality: [0 - 1]
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
- │    ├── fd: ()-->(1-5,8,9,12-14,17-19), (1)==(8,12,17), (8)==(1,12,17), (12)==(1,8,17), (17)==(1,8,12)
+ │    ├── fd: ()-->(1-5,8,9,12-14,17-19), (12)==(1,8,17), (8)==(1,12,17), (17)==(1,8,12), (1)==(8,12,17)
  │    ├── inner-join (hash)
  │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:8!null b.y:9 c.x:12!null c.y:13!null c.z:14!null
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    ├── key: ()
- │    │    ├── fd: ()-->(1-5,8,9,12-14), (1)==(8,12), (8)==(1,12), (12)==(1,8)
+ │    │    ├── fd: ()-->(1-5,8,9,12-14), (1)==(8,12), (12)==(1,8), (8)==(1,12)
  │    │    ├── inner-join (hash)
  │    │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5 b.x:8!null b.y:9
  │    │    │    ├── cardinality: [0 - 1]
  │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1-5,8,9), (1)==(8), (8)==(1)
+ │    │    │    ├── fd: ()-->(1-5,8,9), (8)==(1), (1)==(8)
  │    │    │    ├── select
  │    │    │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
  │    │    │    │    ├── cardinality: [0 - 1]
@@ -1583,7 +1551,7 @@ inner-join (hash)
  ├── columns: b_x:1!null c_x:5!null x:10!null y:11!null z:12!null
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (10)
- ├── fd: (10)-->(11,12), (1)==(5,10), (5)==(1,10), (10)==(1,5)
+ ├── fd: (1)==(5,10), (5)==(1,10), (10)-->(11,12), (10)==(1,5)
  ├── inner-join (hash)
  │    ├── columns: b.x:1!null c.x:5!null
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -1611,7 +1579,7 @@ inner-join (hash)
  ├── columns: x:1!null y:2 x:5!null y:6!null z:7!null x:10!null y:11!null z:12!null
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (10)
- ├── fd: (1)-->(2), (5)-->(6,7), (10)-->(11,12), (1)==(5,10), (5)==(1,10), (10)==(1,5)
+ ├── fd: (1)-->(2), (5)-->(6,7), (10)-->(11,12), (5)==(1,10), (10)==(1,5), (1)==(5,10)
  ├── scan b
  │    ├── columns: b.x:1!null b.y:2
  │    ├── key: (1)
@@ -1674,7 +1642,7 @@ inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:6!null y:7!null z:8!null
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
- ├── fd: (1)-->(3), (6)-->(8), (1)==(2,6,7), (2)==(1,6,7), (6)==(1,2,7), (7)==(1,2,6)
+ ├── fd: (1)-->(3), (1)==(2,6,7), (2)==(1,6,7), (6)-->(8), (6)==(1,2,7), (7)==(1,2,6)
  ├── select
  │    ├── columns: c.x:1!null c.y:2!null c.z:3!null
  │    ├── key: (1)
@@ -1705,7 +1673,7 @@ inner-join (hash)
  ├── columns: x:1!null y:2!null z:3!null x:6!null y:7!null z:8!null
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (6)
- ├── fd: (1)-->(3), (6)-->(8), (1)==(2,6,7), (2)==(1,6,7), (6)==(1,2,7), (7)==(1,2,6)
+ ├── fd: (1)-->(3), (1)==(2,6,7), (2)==(1,6,7), (6)-->(8), (6)==(1,2,7), (7)==(1,2,6)
  ├── select
  │    ├── columns: c.x:1!null c.y:2!null c.z:3!null
  │    ├── key: (1)
@@ -1958,31 +1926,31 @@ inner-join (hash)
 norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2 ON a.f=a2.f
 ----
-project
+inner-join (hash)
  ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12 k:15!null i:16 f:17!null s:18 j:19
+ ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,8)
- ├── fd: (8)-->(9-12), (1)-->(2-5), (3)==(10,17), (10)==(3,17), (17)==(3,10), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
- ├── inner-join (hash)
- │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5 a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
- │    ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
- │    ├── key: (1,8)
- │    ├── fd: (8)-->(9-12), (1)-->(2-5), (3)==(10), (10)==(3)
+ ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(3,17), (17)==(3,10), (11)==(18), (18)==(11), (12)==(19), (19)==(12), (1)-->(2-5), (3)==(10,17)
+ ├── project
+ │    ├── columns: a2.k:15!null a2.i:16 a2.f:17!null a2.s:18 a2.j:19 a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
+ │    ├── key: (8)
+ │    ├── fd: (8)-->(9-12), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (10)==(17), (17)==(10), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
  │    ├── scan a
  │    │    ├── columns: a.k:8!null a.i:9 a.f:10!null a.s:11 a.j:12
  │    │    ├── key: (8)
  │    │    └── fd: (8)-->(9-12)
- │    ├── scan a
- │    │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── filters
- │         └── a.f:3 = a.f:10 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
- └── projections
-      ├── a.k:8 [as=a2.k:15, outer=(8)]
-      ├── a.i:9 [as=a2.i:16, outer=(9)]
-      ├── a.f:10 [as=a2.f:17, outer=(10)]
-      ├── a.s:11 [as=a2.s:18, outer=(11)]
-      └── a.j:12 [as=a2.j:19, outer=(12)]
+ │    └── projections
+ │         ├── a.k:8 [as=a2.k:15, outer=(8)]
+ │         ├── a.i:9 [as=a2.i:16, outer=(9)]
+ │         ├── a.f:10 [as=a2.f:17, outer=(10)]
+ │         ├── a.s:11 [as=a2.s:18, outer=(11)]
+ │         └── a.j:12 [as=a2.j:19, outer=(12)]
+ ├── scan a
+ │    ├── columns: a.k:1!null a.i:2 a.f:3!null a.s:4 a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a.f:3 = a.f:10 [outer=(3,10), constraints=(/3: (/NULL - ]; /10: (/NULL - ]), fd=(3)==(10), (10)==(3)]
 
 # Left joins on a foreign key turn into inner joins.
 norm expect=SimplifyLeftJoin
@@ -2543,71 +2511,6 @@ left-join (hash)
  └── filters
       └── y:2 = k:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
-
-# --------------------------------------------------
-# SimplifyLeftJoinWithZeroRowsRight
-# --------------------------------------------------
-
-norm expect=SimplifyLeftJoinWithZeroRowsRight
-SELECT a.*, b_empty.* FROM a LEFT JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
-----
-project
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── key: (1)
- ├── fd: ()-->(8,9), (1)-->(2-5)
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── projections
-      ├── CAST(NULL AS INT8) [as=x:8]
-      └── CAST(NULL AS INT8) [as=y:9]
-
-norm expect=SimplifyLeftJoinWithZeroRowsRight
-SELECT a.*, vals.* FROM a LEFT JOIN (VALUES (1, 2) LIMIT 0) AS vals(x, y) ON a.k = vals.x
-----
-project
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── key: (1)
- ├── fd: ()-->(8,9), (1)-->(2-5)
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── projections
-      ├── CAST(NULL AS INT8) [as=column1:8]
-      └── CAST(NULL AS INT8) [as=column2:9]
-
-# No-op case because the join is an inner-join.
-norm expect-not=SimplifyLeftJoinWithZeroRowsRight
-SELECT a.*, b_empty.* FROM a INNER JOIN (SELECT * FROM b LIMIT 0) AS b_empty ON a.k = b_empty.x
-----
-values
- ├── columns: k:1!null i:2!null f:3!null s:4!null j:5!null x:8!null y:9!null
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1-5,8,9)
-
-# No-op case because the right input does not have zero rows.
-norm expect-not=SimplifyLeftJoinWithZeroRowsRight
-SELECT a.*, b.* FROM a LEFT JOIN b ON a.k = b.x
-----
-left-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8 y:9
- ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- ├── key: (1)
- ├── fd: (1)-->(2-5,8,9), (8)-->(9)
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- ├── scan b
- │    ├── columns: x:8!null y:9
- │    ├── key: (8)
- │    └── fd: (8)-->(9)
- └── filters
-      └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-
 # --------------------------------------------------
 # EliminateSemiJoin
 # --------------------------------------------------
@@ -2812,219 +2715,6 @@ project
       └── filters
            └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
-# Case with column-remapping projections.
-exprnorm expect=HoistJoinProjectRight
-(Root
-  (InnerJoin
-    (Scan [ (Table "a") (Cols "k") ])
-    (Project
-      (Scan [ (Table "c") (Cols "x") ])
-      [
-        (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
-        (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
-      ]
-      ""
-    )
-    [
-      (Eq (Var "foo") (Const 20 "int"))
-      (Eq (Var "foo") (Var "bar"))
-    ]
-    []
-  )
-  (Presentation "foo,bar")
-  (NoOrdering)
-)
-----
-project
- ├── columns: foo:13!null bar:14!null  [hidden: k:1!null]
- ├── key: (1)
- ├── fd: ()-->(13,14), (13)==(14), (14)==(13)
- ├── inner-join (cross)
- │    ├── columns: k:1!null x:8!null
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(one-or-more)
- │    ├── key: (1)
- │    ├── fd: ()-->(8)
- │    ├── scan a
- │    │    ├── columns: k:1!null
- │    │    └── key: (1)
- │    ├── select
- │    │    ├── columns: x:8!null
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(8)
- │    │    ├── scan c
- │    │    │    ├── columns: x:8!null
- │    │    │    └── key: (8)
- │    │    └── filters
- │    │         └── x:8 = 20 [outer=(8), constraints=(/8: [/20 - /20]; tight), fd=()-->(8)]
- │    └── filters (true)
- └── projections
-      ├── x:8 [as=foo:13, outer=(8)]
-      └── x:8 [as=bar:14, outer=(8)]
-
-# No-opt because the column types aren't identical.
-exprnorm expect-not=HoistJoinProjectRight format=show-types
-(Root
-  (InnerJoin
-    (Scan [ (Table "a") (Cols "k") ])
-    (Project
-      (Scan [ (Table "c") (Cols "x") ])
-      [
-        (ProjectionsItem (Var "x") (NewColumn "foo" "int2"))
-        (ProjectionsItem (Var "x") (NewColumn "bar" "int4"))
-      ]
-      ""
-    )
-    [
-      (Eq (Var "foo") (Const 20 "int"))
-      (Eq (Var "foo") (Var "bar"))
-    ]
-    []
-  )
-  (Presentation "foo,bar")
-  (NoOrdering)
-)
-----
-inner-join (cross)
- ├── columns: foo:13(int2!null) bar:14(int4!null)  [hidden: k:1(int!null)]
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- ├── key: (1)
- ├── fd: ()-->(13,14), (13)==(14), (14)==(13)
- ├── scan a
- │    ├── columns: k:1(int!null)
- │    └── key: (1)
- ├── project
- │    ├── columns: foo:13(int2!null) bar:14(int4!null)
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(13,14), (13)==(14), (14)==(13)
- │    ├── select
- │    │    ├── columns: x:8(int!null)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(8)
- │    │    ├── scan c
- │    │    │    ├── columns: x:8(int!null)
- │    │    │    └── key: (8)
- │    │    └── filters
- │    │         └── x:8 = 20 [type=bool, outer=(8), constraints=(/8: [/20 - /20]; tight), fd=()-->(8)]
- │    └── projections
- │         ├── x:8 [as=foo:13, type=int, outer=(8)]
- │         └── x:8 [as=bar:14, type=int, outer=(8)]
- └── filters (true)
-
-# No-op case because the projection is not a simple column remapping.
-norm expect-not=HoistJoinProjectRight
-SELECT * FROM a INNER JOIN (SELECT x, (x + y * 2) AS foo FROM b) ON foo=k WHERE x=10
-----
-inner-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null foo:12!null
- ├── cardinality: [0 - 1]
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1-5,8,12), (1)==(12), (12)==(1)
- ├── scan a
- │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- ├── project
- │    ├── columns: foo:12 x:8!null
- │    ├── cardinality: [0 - 1]
- │    ├── immutable
- │    ├── key: ()
- │    ├── fd: ()-->(8,12)
- │    ├── select
- │    │    ├── columns: x:8!null y:9
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(8,9)
- │    │    ├── scan b
- │    │    │    ├── columns: x:8!null y:9
- │    │    │    ├── key: (8)
- │    │    │    └── fd: (8)-->(9)
- │    │    └── filters
- │    │         └── x:8 = 10 [outer=(8), constraints=(/8: [/10 - /10]; tight), fd=()-->(8)]
- │    └── projections
- │         └── x:8 + (y:9 * 2) [as=foo:12, outer=(8,9), immutable]
- └── filters
-      └── foo:12 = k:1 [outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
-
-# Regression test for #142251. Move the Project left by join elimination out
-# of the way so that a lookup join can be planned.
-opt expect=HoistJoinProjectRight
-SELECT * FROM b LEFT LOOKUP JOIN (
-  SELECT c.x, a.k FROM c LEFT JOIN a ON c.y = a.k
-) foo ON b.x = foo.k
-----
-project
- ├── columns: x:1!null y:2 x:5 k:10
- ├── key: (1,5)
- ├── fd: (1)-->(2), (5)-->(10)
- ├── left-join (lookup c@c_y_idx)
- │    ├── columns: b.x:1!null b.y:2 c.x:5 c.y:6
- │    ├── flags: force lookup join (into right side)
- │    ├── key columns: [1] = [6]
- │    ├── key: (1,5)
- │    ├── fd: (1)-->(2), (5)-->(6)
- │    ├── scan b
- │    │    ├── columns: b.x:1!null b.y:2
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
- │    └── filters (true)
- └── projections
-      └── c.y:6 [as=k:10, outer=(6)]
-
-# Regression test for #142531 - do not hoist outer-column references from the
-# right input of a left-join.
-exec-ddl
-CREATE TABLE table_142531 (col1_1 INT NOT NULL);
-----
-
-norm expect-not=HoistJoinProjectRight
-SELECT (SELECT t.col1_1 FROM table_142531 WHERE (NOT EXISTS (SELECT (0)))) FROM table_142531 AS t;
-----
-project
- ├── columns: col1_1:13
- ├── ensure-distinct-on
- │    ├── columns: t.rowid:2!null col1_1:12
- │    ├── grouping columns: t.rowid:2!null
- │    ├── error: "more than one row returned by a subquery used as an expression"
- │    ├── key: (2)
- │    ├── fd: (2)-->(12)
- │    ├── left-join-apply
- │    │    ├── columns: t.col1_1:1!null t.rowid:2!null col1_1:12
- │    │    ├── fd: (2)-->(1)
- │    │    ├── scan table_142531 [as=t]
- │    │    │    ├── columns: t.col1_1:1!null t.rowid:2!null
- │    │    │    ├── key: (2)
- │    │    │    └── fd: (2)-->(1)
- │    │    ├── project
- │    │    │    ├── columns: col1_1:12
- │    │    │    ├── outer: (1)
- │    │    │    ├── fd: ()-->(12)
- │    │    │    ├── select
- │    │    │    │    ├── scan table_142531
- │    │    │    │    └── filters
- │    │    │    │         └── not [subquery]
- │    │    │    │              └── coalesce
- │    │    │    │                   ├── subquery
- │    │    │    │                   │    └── values
- │    │    │    │                   │         ├── columns: column11:11!null
- │    │    │    │                   │         ├── cardinality: [1 - 1]
- │    │    │    │                   │         ├── key: ()
- │    │    │    │                   │         ├── fd: ()-->(11)
- │    │    │    │                   │         └── (true,)
- │    │    │    │                   └── false
- │    │    │    └── projections
- │    │    │         └── t.col1_1:1 [as=col1_1:12, outer=(1)]
- │    │    └── filters (true)
- │    └── aggregations
- │         └── const-agg [as=col1_1:12, outer=(12)]
- │              └── col1_1:12
- └── projections
-      └── col1_1:12 [as=col1_1:13, outer=(12)]
-
 # --------------------------------------------------
 # HoistJoinProjectLeft
 # --------------------------------------------------
@@ -3088,692 +2778,6 @@ project
       │    └── fd: (5)-->(6-9)
       └── filters
            └── x:1 = k:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-
-# Case with column-remapping projections.
-exprnorm expect=HoistJoinProjectLeft
-(Root
-  (InnerJoin
-    (Project
-      (Scan [ (Table "c") (Cols "x") ])
-      [
-        (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
-        (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
-      ]
-      ""
-    )
-    (Scan [ (Table "a") (Cols "k") ])
-    [
-      (Eq (Var "foo") (Const 20 "int"))
-      (Eq (Var "foo") (Var "bar"))
-    ]
-    []
-  )
-  (Presentation "foo,bar")
-  (NoOrdering)
-)
-----
-project
- ├── columns: foo:6!null bar:7!null  [hidden: k:8!null]
- ├── key: (8)
- ├── fd: ()-->(6,7), (6)==(7), (7)==(6)
- ├── inner-join (cross)
- │    ├── columns: x:1!null k:8!null
- │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
- │    ├── key: (8)
- │    ├── fd: ()-->(1)
- │    ├── select
- │    │    ├── columns: x:1!null
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1)
- │    │    ├── scan c
- │    │    │    ├── columns: x:1!null
- │    │    │    └── key: (1)
- │    │    └── filters
- │    │         └── x:1 = 20 [outer=(1), constraints=(/1: [/20 - /20]; tight), fd=()-->(1)]
- │    ├── scan a
- │    │    ├── columns: k:8!null
- │    │    └── key: (8)
- │    └── filters (true)
- └── projections
-      ├── x:1 [as=foo:6, outer=(1)]
-      └── x:1 [as=bar:7, outer=(1)]
-
-# No-op case because the projection is not a simple column remapping.
-norm expect-not=HoistJoinProjectLeft
-SELECT * FROM (SELECT x, (x + y * 2) AS foo FROM b) INNER JOIN a ON foo=k WHERE x=10
-----
-inner-join (hash)
- ├── columns: x:1!null foo:5!null k:6!null i:7 f:8!null s:9 j:10
- ├── cardinality: [0 - 1]
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(1,5-10), (5)==(6), (6)==(5)
- ├── project
- │    ├── columns: foo:5 x:1!null
- │    ├── cardinality: [0 - 1]
- │    ├── immutable
- │    ├── key: ()
- │    ├── fd: ()-->(1,5)
- │    ├── select
- │    │    ├── columns: x:1!null y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan b
- │    │    │    ├── columns: x:1!null y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── x:1 = 10 [outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
- │    └── projections
- │         └── x:1 + (y:2 * 2) [as=foo:5, outer=(1,2), immutable]
- ├── scan a
- │    ├── columns: k:6!null i:7 f:8!null s:9 j:10
- │    ├── key: (6)
- │    └── fd: (6)-->(7-10)
- └── filters
-      └── foo:5 = k:6 [outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
-
-# No-op case because the right input of the join references the projected
-# column. This is not an issue for HoistJoinProjectRight because references
-# from the left to the right input of the join are not allowed.
-exprnorm expect-not=HoistJoinProjectLeft disable=TryDecorrelateSelect
-(Root
-  (InnerJoinApply
-    (Project
-      (Scan [ (Table "c") (Cols "x,z") ])
-      [
-        (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
-        (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
-        (ProjectionsItem (Var "z") (NewColumn "baz" "int"))
-      ]
-      ""
-    )
-    (Select (Scan [ (Table "a") (Cols "k") ]) [ (Eq (Var "k") (Var "baz")) ])
-    [
-      (Eq (Var "foo") (Const 20 "int"))
-      (Eq (Var "foo") (Var "bar"))
-    ]
-    []
-  )
-  (Presentation "foo,bar,baz")
-  (NoOrdering)
-)
-----
-inner-join-apply
- ├── columns: foo:6!null bar:7!null baz:8!null  [hidden: k:9!null]
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(6-9), (6)==(7), (7)==(6)
- ├── project
- │    ├── columns: foo:6!null bar:7!null baz:8!null
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(6-8), (6)==(7), (7)==(6)
- │    ├── select
- │    │    ├── columns: x:1!null z:3!null
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,3)
- │    │    ├── scan c
- │    │    │    ├── columns: x:1!null z:3!null
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(3)
- │    │    └── filters
- │    │         └── x:1 = 20 [outer=(1), constraints=(/1: [/20 - /20]; tight), fd=()-->(1)]
- │    └── projections
- │         ├── x:1 [as=foo:6, outer=(1)]
- │         ├── x:1 [as=bar:7, outer=(1)]
- │         └── z:3 [as=baz:8, outer=(3)]
- ├── select
- │    ├── columns: k:9!null
- │    ├── outer: (8)
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(9)
- │    ├── scan a
- │    │    ├── columns: k:9!null
- │    │    └── key: (9)
- │    └── filters
- │         └── k:9 = baz:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
- └── filters (true)
-
-# Test hoisting projections above joins in more cases for #150704.
-
-exec-ddl
-CREATE TABLE t150704 (
-  x INT PRIMARY KEY,
-  y INT
-)
-----
-
-exec-ddl
-CREATE TABLE u150704 (
-  y INT PRIMARY KEY,
-  z INT
-)
-----
-
-# Check that we hoist the projection when no join conditions use p.
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, 4 AS p FROM t150704 WHERE x = 1)
-SELECT *
-FROM w
-JOIN u150704 USING (y)
-----
-project
- ├── columns: y:7!null x:6!null p:8!null z:10
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(6-8,10)
- ├── inner-join (hash)
- │    ├── columns: t150704.x:1!null t150704.y:2!null u150704.y:9!null z:10
- │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- │    ├── key: ()
- │    ├── fd: ()-->(1,2,9,10), (2)==(9), (9)==(2)
- │    ├── select
- │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan t150704
- │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    ├── scan u150704
- │    │    ├── columns: u150704.y:9!null z:10
- │    │    ├── key: (9)
- │    │    └── fd: (9)-->(10)
- │    └── filters
- │         └── t150704.y:2 = u150704.y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
- └── projections
-      ├── t150704.x:1 [as=x:6, outer=(1)]
-      ├── t150704.y:2 [as=y:7, outer=(2)]
-      └── 4 [as=p:8]
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, 4 AS p FROM t150704 WHERE x = 1)
-SELECT *
-FROM w
-LEFT JOIN u150704 USING (y)
-----
-project
- ├── columns: y:7 x:6!null p:8!null z:10
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(6-8,10)
- ├── left-join (hash)
- │    ├── columns: t150704.x:1!null t150704.y:2 u150704.y:9 z:10
- │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- │    ├── key: ()
- │    ├── fd: ()-->(1,2,9,10)
- │    ├── select
- │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan t150704
- │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    ├── scan u150704
- │    │    ├── columns: u150704.y:9!null z:10
- │    │    ├── key: (9)
- │    │    └── fd: (9)-->(10)
- │    └── filters
- │         └── t150704.y:2 = u150704.y:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
- └── projections
-      ├── t150704.x:1 [as=x:6, outer=(1)]
-      ├── t150704.y:2 [as=y:7, outer=(2)]
-      └── 4 [as=p:8]
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, 4 AS p FROM t150704 WHERE x = 1)
-SELECT w.*, (SELECT max(z) FROM u150704 WHERE y = w.y)
-FROM w
-----
-project
- ├── columns: x:6!null y:7 p:8!null max:14
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(6-8,14)
- ├── group-by (streaming)
- │    ├── columns: x:6!null y:7 p:8!null max:13
- │    ├── cardinality: [0 - 1]
- │    ├── key: ()
- │    ├── fd: ()-->(6-8,13)
- │    ├── project
- │    │    ├── columns: x:6!null y:7 p:8!null z:10
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(6-8,10)
- │    │    ├── left-join (hash)
- │    │    │    ├── columns: t150704.x:1!null t150704.y:2 u150704.y:9 z:10
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(1,2,9,10)
- │    │    │    ├── select
- │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,2)
- │    │    │    │    ├── scan t150704
- │    │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    └── fd: (1)-->(2)
- │    │    │    │    └── filters
- │    │    │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    │    │    ├── scan u150704
- │    │    │    │    ├── columns: u150704.y:9!null z:10
- │    │    │    │    ├── key: (9)
- │    │    │    │    └── fd: (9)-->(10)
- │    │    │    └── filters
- │    │    │         └── u150704.y:9 = t150704.y:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
- │    │    └── projections
- │    │         ├── t150704.x:1 [as=x:6, outer=(1)]
- │    │         ├── t150704.y:2 [as=y:7, outer=(2)]
- │    │         └── 4 [as=p:8]
- │    └── aggregations
- │         ├── max [as=max:13, outer=(10)]
- │         │    └── z:10
- │         ├── const-agg [as=x:6, outer=(6)]
- │         │    └── x:6
- │         ├── const-agg [as=y:7, outer=(7)]
- │         │    └── y:7
- │         └── const-agg [as=p:8, outer=(8)]
- │              └── p:8
- └── projections
-      └── max:13 [as=max:14, outer=(13)]
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, 4 AS p FROM t150704 WHERE x = 1)
-SELECT *
-FROM u150704
-RIGHT JOIN w USING (y)
-----
-project
- ├── columns: y:11 z:7 x:10!null p:12!null
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(7,10-12)
- ├── left-join (hash)
- │    ├── columns: t150704.x:1!null t150704.y:2 u150704.y:6 z:7
- │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- │    ├── key: ()
- │    ├── fd: ()-->(1,2,6,7)
- │    ├── select
- │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan t150704
- │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    ├── scan u150704
- │    │    ├── columns: u150704.y:6!null z:7
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── filters
- │         └── u150704.y:6 = t150704.y:2 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
- └── projections
-      ├── t150704.x:1 [as=x:10, outer=(1)]
-      ├── t150704.y:2 [as=y:11, outer=(2)]
-      └── 4 [as=p:12]
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, 4 AS p FROM t150704 WHERE x = 1),
-v AS (SELECT y, z, 5 AS q FROM u150704 WHERE y = 2)
-SELECT *
-FROM w
-JOIN v USING (y)
-----
-project
- ├── columns: y:12!null x:11!null p:13!null z:15 q:16!null
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(11-13,15,16)
- ├── inner-join (hash)
- │    ├── columns: t150704.x:1!null t150704.y:2!null y:14!null z:15 q:16!null
- │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- │    ├── key: ()
- │    ├── fd: ()-->(1,2,14-16), (2)==(14), (14)==(2)
- │    ├── select
- │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan t150704
- │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    ├── project
- │    │    ├── columns: y:14!null z:15 q:16!null
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(14-16)
- │    │    ├── select
- │    │    │    ├── columns: u150704.y:6!null u150704.z:7
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(6,7)
- │    │    │    ├── scan u150704
- │    │    │    │    ├── columns: u150704.y:6!null u150704.z:7
- │    │    │    │    ├── key: (6)
- │    │    │    │    └── fd: (6)-->(7)
- │    │    │    └── filters
- │    │    │         └── u150704.y:6 = 2 [outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
- │    │    └── projections
- │    │         ├── u150704.y:6 [as=y:14, outer=(6)]
- │    │         ├── u150704.z:7 [as=z:15, outer=(7)]
- │    │         └── 5 [as=q:16]
- │    └── filters
- │         └── t150704.y:2 = y:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
- └── projections
-      ├── t150704.x:1 [as=x:11, outer=(1)]
-      ├── t150704.y:2 [as=y:12, outer=(2)]
-      └── 4 [as=p:13]
-
-# Check that we hoist the projection when no join conditions use p and there is
-# also a remapping projection.
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x AS m, y AS n, 4 AS p FROM t150704 WHERE x = 1)
-SELECT *
-FROM w
-JOIN u150704 ON y = n
-----
-project
- ├── columns: m:6!null n:7!null p:8!null y:9!null z:10
- ├── cardinality: [0 - 1]
- ├── key: ()
- ├── fd: ()-->(6-10), (7)==(9), (9)==(7)
- ├── inner-join (hash)
- │    ├── columns: x:1!null t150704.y:2!null u150704.y:9!null z:10
- │    ├── cardinality: [0 - 1]
- │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- │    ├── key: ()
- │    ├── fd: ()-->(1,2,9,10), (2)==(9), (9)==(2)
- │    ├── select
- │    │    ├── columns: x:1!null t150704.y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan t150704
- │    │    │    ├── columns: x:1!null t150704.y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    ├── scan u150704
- │    │    ├── columns: u150704.y:9!null z:10
- │    │    ├── key: (9)
- │    │    └── fd: (9)-->(10)
- │    └── filters
- │         └── u150704.y:9 = t150704.y:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
- └── projections
-      ├── x:1 [as=m:6, outer=(1)]
-      ├── t150704.y:2 [as=n:7, outer=(2)]
-      └── 4 [as=p:8]
-
-# Check that we do not hoist the projection when a join condition uses p.
-
-norm expect-not=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x AS m, y AS n, x + y AS p FROM t150704 WHERE x = 1)
-SELECT *
-FROM w
-JOIN u150704 ON y = p
-----
-inner-join (hash)
- ├── columns: m:6!null n:7 p:8!null y:9!null z:10
- ├── cardinality: [0 - 1]
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(6-10), (8)==(9), (9)==(8)
- ├── project
- │    ├── columns: m:6!null n:7 p:8
- │    ├── cardinality: [0 - 1]
- │    ├── immutable
- │    ├── key: ()
- │    ├── fd: ()-->(6-8)
- │    ├── select
- │    │    ├── columns: x:1!null t150704.y:2
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(1,2)
- │    │    ├── scan t150704
- │    │    │    ├── columns: x:1!null t150704.y:2
- │    │    │    ├── key: (1)
- │    │    │    └── fd: (1)-->(2)
- │    │    └── filters
- │    │         └── x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    └── projections
- │         ├── x:1 [as=m:6, outer=(1)]
- │         ├── t150704.y:2 [as=n:7, outer=(2)]
- │         └── x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
- ├── scan u150704
- │    ├── columns: u150704.y:9!null z:10
- │    ├── key: (9)
- │    └── fd: (9)-->(10)
- └── filters
-      └── u150704.y:9 = p:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
-
-norm expect-not=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, x + y AS p FROM t150704 WHERE x = 1)
-SELECT w.*, (SELECT max(z) FROM u150704 WHERE y = w.p)
-FROM w
-----
-project
- ├── columns: x:6!null y:7 p:8 max:14
- ├── cardinality: [0 - 1]
- ├── immutable
- ├── key: ()
- ├── fd: ()-->(6-8,14)
- ├── group-by (streaming)
- │    ├── columns: x:6!null y:7 p:8 max:13
- │    ├── cardinality: [0 - 1]
- │    ├── immutable
- │    ├── key: ()
- │    ├── fd: ()-->(6-8,13)
- │    ├── left-join (hash)
- │    │    ├── columns: x:6!null y:7 p:8 u150704.y:9 z:10
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
- │    │    ├── immutable
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(6-10)
- │    │    ├── project
- │    │    │    ├── columns: x:6!null y:7 p:8
- │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── immutable
- │    │    │    ├── key: ()
- │    │    │    ├── fd: ()-->(6-8)
- │    │    │    ├── select
- │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    │    ├── cardinality: [0 - 1]
- │    │    │    │    ├── key: ()
- │    │    │    │    ├── fd: ()-->(1,2)
- │    │    │    │    ├── scan t150704
- │    │    │    │    │    ├── columns: t150704.x:1!null t150704.y:2
- │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    └── fd: (1)-->(2)
- │    │    │    │    └── filters
- │    │    │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
- │    │    │    └── projections
- │    │    │         ├── t150704.x:1 [as=x:6, outer=(1)]
- │    │    │         ├── t150704.y:2 [as=y:7, outer=(2)]
- │    │    │         └── t150704.x:1 + t150704.y:2 [as=p:8, outer=(1,2), immutable]
- │    │    ├── scan u150704
- │    │    │    ├── columns: u150704.y:9!null z:10
- │    │    │    ├── key: (9)
- │    │    │    └── fd: (9)-->(10)
- │    │    └── filters
- │    │         └── u150704.y:9 = p:8 [outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
- │    └── aggregations
- │         ├── max [as=max:13, outer=(10)]
- │         │    └── z:10
- │         ├── const-agg [as=x:6, outer=(6)]
- │         │    └── x:6
- │         ├── const-agg [as=y:7, outer=(7)]
- │         │    └── y:7
- │         └── const-agg [as=p:8, outer=(8)]
- │              └── p:8
- └── projections
-      └── max:13 [as=max:14, outer=(13)]
-
-# Check that we do not hoist the projection when an outer join could NULL-extend
-# it.
-
-norm expect-not=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT x, y, 4 AS p FROM t150704 WHERE x = 1)
-SELECT *
-FROM w
-RIGHT JOIN u150704 USING (y)
-----
-project
- ├── columns: y:9!null x:6 p:8 z:10
- ├── key: (9)
- ├── fd: (9)-->(6,8,10)
- └── left-join (hash)
-      ├── columns: x:6 y:7 p:8 u150704.y:9!null z:10
-      ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      ├── key: (9)
-      ├── fd: (9)-->(6-8,10)
-      ├── scan u150704
-      │    ├── columns: u150704.y:9!null z:10
-      │    ├── key: (9)
-      │    └── fd: (9)-->(10)
-      ├── project
-      │    ├── columns: x:6!null y:7 p:8!null
-      │    ├── cardinality: [0 - 1]
-      │    ├── key: ()
-      │    ├── fd: ()-->(6-8)
-      │    ├── select
-      │    │    ├── columns: t150704.x:1!null t150704.y:2
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(1,2)
-      │    │    ├── scan t150704
-      │    │    │    ├── columns: t150704.x:1!null t150704.y:2
-      │    │    │    ├── key: (1)
-      │    │    │    └── fd: (1)-->(2)
-      │    │    └── filters
-      │    │         └── t150704.x:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      │    └── projections
-      │         ├── t150704.x:1 [as=x:6, outer=(1)]
-      │         ├── t150704.y:2 [as=y:7, outer=(2)]
-      │         └── 4 [as=p:8]
-      └── filters
-           └── y:7 = u150704.y:9 [outer=(7,9), constraints=(/7: (/NULL - ]; /9: (/NULL - ]), fd=(7)==(9), (9)==(7)]
-
-# Also test the view example from #150704.
-
-exec-ddl
-CREATE VIEW v150704 AS
-SELECT x, y, z, 4 AS d
-FROM t150704
-LEFT JOIN u150704 USING (y)
-----
-
-norm
-WITH w AS (SELECT unnest(ARRAY[1, 2, 3]) AS x)
-SELECT x, y, z, 4 AS d
-FROM t150704
-LEFT JOIN u150704 USING (y)
-JOIN w USING (x)
-----
-project
- ├── columns: x:2!null y:3 z:7 d:11!null
- ├── cardinality: [0 - 3]
- ├── fd: ()-->(11), (2)-->(3,7)
- ├── inner-join (hash)
- │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7 x:10!null
- │    ├── cardinality: [0 - 3]
- │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- │    ├── fd: (2)-->(3,6,7), (6)-->(7), (2)==(10), (10)==(2)
- │    ├── left-join (hash)
- │    │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    ├── key: (2)
- │    │    ├── fd: (2)-->(3,6,7), (6)-->(7)
- │    │    ├── scan t150704
- │    │    │    ├── columns: t150704.x:2!null t150704.y:3
- │    │    │    ├── key: (2)
- │    │    │    └── fd: (2)-->(3)
- │    │    ├── scan u150704
- │    │    │    ├── columns: u150704.y:6!null z:7
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
- │    │    └── filters
- │    │         └── t150704.y:3 = u150704.y:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
- │    ├── values
- │    │    ├── columns: x:10!null
- │    │    ├── cardinality: [3 - 3]
- │    │    ├── (1,)
- │    │    ├── (2,)
- │    │    └── (3,)
- │    └── filters
- │         └── t150704.x:2 = x:10 [outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
- └── projections
-      └── 4 [as=d:11]
-
-norm expect=HoistJoinProjectLeft set=optimizer_use_improved_hoist_join_project=true
-WITH w AS (SELECT unnest(ARRAY[1, 2, 3]) AS x)
-SELECT x, y, z, d
-FROM v150704
-JOIN w USING (x)
-----
-project
- ├── columns: x:2!null y:3 z:7 d:10!null
- ├── cardinality: [0 - 3]
- ├── fd: ()-->(10), (2)-->(3,7)
- ├── inner-join (hash)
- │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7 x:11!null
- │    ├── cardinality: [0 - 3]
- │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
- │    ├── fd: (2)-->(3,6,7), (6)-->(7), (2)==(11), (11)==(2)
- │    ├── left-join (hash)
- │    │    ├── columns: t150704.x:2!null t150704.y:3 u150704.y:6 z:7
- │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- │    │    ├── key: (2)
- │    │    ├── fd: (2)-->(3,6,7), (6)-->(7)
- │    │    ├── scan t150704
- │    │    │    ├── columns: t150704.x:2!null t150704.y:3
- │    │    │    ├── key: (2)
- │    │    │    └── fd: (2)-->(3)
- │    │    ├── scan u150704
- │    │    │    ├── columns: u150704.y:6!null z:7
- │    │    │    ├── key: (6)
- │    │    │    └── fd: (6)-->(7)
- │    │    └── filters
- │    │         └── t150704.y:3 = u150704.y:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
- │    ├── values
- │    │    ├── columns: x:11!null
- │    │    ├── cardinality: [3 - 3]
- │    │    ├── (1,)
- │    │    ├── (2,)
- │    │    └── (3,)
- │    └── filters
- │         └── t150704.x:2 = x:11 [outer=(2,11), constraints=(/2: (/NULL - ]; /11: (/NULL - ]), fd=(2)==(11), (11)==(2)]
- └── projections
-      └── 4 [as=d:10]
 
 # --------------------------------------------------
 # SimplifyJoinNotNullEquality
@@ -4185,7 +3189,7 @@ project
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
       ├── immutable
       ├── key: (1)
-      ├── fd: (1)-->(2,6,9), (5)-->(6), (5)==(9), (9)==(5)
+      ├── fd: (1)-->(2,9), (5)-->(6), (5)==(9), (9)==(5)
       ├── project
       │    ├── columns: column9:9 x:1!null y:2
       │    ├── immutable
@@ -4580,7 +3584,7 @@ inner-join (hash)
  ├── columns: x:1!null y:2!null k:5!null i:6 f:7!null s:8 j:9 u:12!null v:13
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (12)
- ├── fd: (1)-->(2), (5)-->(6-9), (12)-->(13), (2)==(5), (5)==(2), (1)==(12), (12)==(1)
+ ├── fd: (1)-->(2), (5)-->(6-9), (2)==(5), (5)==(2), (12)-->(13), (1)==(12), (12)==(1)
  ├── inner-join (hash)
  │    ├── columns: x:1!null y:2!null k:5!null i:6 f:7!null s:8 j:9
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -5098,351 +4102,3 @@ sort
       │    └── fd: (1)-->(4)
       └── projections
            └── s:4 [as=column3:10, outer=(4)]
-
-# --------------------------------------------------
-# PushLeakproofJoinIntoPermeableBarrierLeft
-# PushLeakproofJoinIntoPermeableBarrierRight
-# --------------------------------------------------
-
-exec-ddl
-SET ROLE alice;
-----
-
-norm expect-not=(PushLeakproofJoinIntoPermeableBarrierRight,PushLeakproofJoinIntoPermeableBarrierLeft)
-SELECT * FROM a t2 INNER JOIN rls t1 ON t1.y = 20 AND t1.y/0 = 0 AND t2.k > 0;
-----
-project
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9!null alice_has_access:10!null
- ├── immutable
- ├── key: (1,8)
- ├── fd: ()-->(9,10), (1)-->(2-5)
- └── inner-join (cross)
-      ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
-      ├── immutable
-      ├── key: (1,8)
-      ├── fd: ()-->(9,10), (1)-->(2-5), (8)-->(11,12)
-      ├── select
-      │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
-      │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5)
-      │    ├── scan a [as=t2]
-      │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2-5)
-      │    └── filters
-      │         └── k:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
-      ├── select
-      │    ├── columns: x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
-      │    ├── immutable
-      │    ├── key: (8)
-      │    ├── fd: ()-->(9,10), (8)-->(11,12)
-      │    ├── barrier
-      │    │    ├── columns: x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
-      │    │    ├── key: (8)
-      │    │    ├── fd: ()-->(9,10), (8)-->(11,12)
-      │    │    └── select
-      │    │         ├── columns: x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
-      │    │         ├── key: (8)
-      │    │         ├── fd: ()-->(9,10), (8)-->(11,12)
-      │    │         ├── scan rls
-      │    │         │    ├── columns: x:8!null y:9 alice_has_access:10 rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
-      │    │         │    ├── key: (8)
-      │    │         │    └── fd: (8)-->(9-12)
-      │    │         └── filters
-      │    │              ├── alice_has_access:10 [outer=(10), constraints=(/10: [/true - /true]; tight), fd=()-->(10)]
-      │    │              └── y:9 = 20 [outer=(9), constraints=(/9: [/20 - /20]; tight), fd=()-->(9)]
-      │    └── filters
-      │         └── (20 / 0) = 0 [immutable]
-      └── filters (true)
-
-norm expect=PushLeakproofJoinIntoPermeableBarrierRight
-SELECT * FROM rls t1 INNER JOIN rls t2 ON t1.y = 20 AND t1.x = t2.x;
-----
-inner-join (hash)
- ├── columns: x:1!null y:2!null alice_has_access:3!null x:6!null y:7 alice_has_access:8!null
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (6)
- ├── fd: ()-->(2,3,7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
- ├── select
- │    ├── columns: x:1!null y:2!null alice_has_access:3!null
- │    ├── key: (1)
- │    ├── fd: ()-->(2,3)
- │    ├── scan rls
- │    │    ├── columns: x:1!null y:2 alice_has_access:3
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2,3)
- │    └── filters
- │         ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
- │         └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
- ├── select
- │    ├── columns: x:6!null y:7 alice_has_access:8!null
- │    ├── key: (6)
- │    ├── fd: ()-->(8), (6)-->(7)
- │    ├── scan rls
- │    │    ├── columns: x:6!null y:7 alice_has_access:8
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7,8)
- │    └── filters
- │         └── alice_has_access:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
- └── filters
-      └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-
-norm expect=PushLeakproofJoinIntoPermeableBarrierLeft
-SELECT * FROM rls t1 INNER JOIN rls t2 ON t2.y = 20 AND t1.x = t2.x;
-----
-inner-join (hash)
- ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7!null alice_has_access:8!null
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (6)
- ├── fd: ()-->(2,3,7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
- ├── select
- │    ├── columns: x:1!null y:2 alice_has_access:3!null
- │    ├── key: (1)
- │    ├── fd: ()-->(3), (1)-->(2)
- │    ├── scan rls
- │    │    ├── columns: x:1!null y:2 alice_has_access:3
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2,3)
- │    └── filters
- │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
- ├── select
- │    ├── columns: x:6!null y:7!null alice_has_access:8!null
- │    ├── key: (6)
- │    ├── fd: ()-->(7,8)
- │    ├── scan rls
- │    │    ├── columns: x:6!null y:7 alice_has_access:8
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7,8)
- │    └── filters
- │         ├── alice_has_access:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
- │         └── y:7 = 20 [outer=(7), constraints=(/7: [/20 - /20]; tight), fd=()-->(7)]
- └── filters
-      └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-
-
-# Test for PushLeakproofJoinIntoPermeableBarrierLeft using InnerJoinApply.
-norm expect=PushLeakproofJoinIntoPermeableBarrierLeft
-SELECT *
-FROM rls AS outer_rls
-JOIN LATERAL (
-    SELECT y
-    FROM rls AS inner_rls
-    WHERE inner_rls.x = outer_rls.x AND alice_has_access
-) AS filtered_rls
-ON outer_rls.y = filtered_rls.y;
-----
-project
- ├── columns: x:1!null y:2!null alice_has_access:3!null y:7!null
- ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2,7), (2)==(7), (7)==(2)
- └── inner-join (hash)
-      ├── columns: x:1!null y:2!null alice_has_access:3!null x:6!null y:7!null alice_has_access:8!null
-      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
-      ├── key: (6)
-      ├── fd: ()-->(3,8), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
-      ├── select
-      │    ├── columns: x:1!null y:2 alice_has_access:3!null
-      │    ├── key: (1)
-      │    ├── fd: ()-->(3), (1)-->(2)
-      │    ├── scan rls
-      │    │    ├── columns: x:1!null y:2 alice_has_access:3
-      │    │    ├── key: (1)
-      │    │    └── fd: (1)-->(2,3)
-      │    └── filters
-      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
-      ├── select
-      │    ├── columns: x:6!null y:7 alice_has_access:8!null
-      │    ├── key: (6)
-      │    ├── fd: ()-->(8), (6)-->(7)
-      │    ├── scan rls
-      │    │    ├── columns: x:6!null y:7 alice_has_access:8
-      │    │    ├── key: (6)
-      │    │    └── fd: (6)-->(7,8)
-      │    └── filters
-      │         └── alice_has_access:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
-      └── filters
-           ├── x:6 = x:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── y:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-
-# Try a semi-join to ensure barrier bubbles up above the join.
-norm expect=PushLeakproofFiltersIntoPermeableBarrier
-SELECT *
-FROM rls
-WHERE EXISTS (
-    SELECT 1 FROM (VALUES (1,2), (3,4)) AS v(x, y)
-    WHERE v.x = rls.x AND v.y = rls.y
-);
-----
-semi-join (hash)
- ├── columns: x:1!null y:2 alice_has_access:3!null
- ├── cardinality: [0 - 2]
- ├── key: (1)
- ├── fd: ()-->(3), (1)-->(2)
- ├── select
- │    ├── columns: x:1!null y:2 alice_has_access:3!null
- │    ├── key: (1)
- │    ├── fd: ()-->(3), (1)-->(2)
- │    ├── scan rls
- │    │    ├── columns: x:1!null y:2 alice_has_access:3
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2,3)
- │    └── filters
- │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
- ├── values
- │    ├── columns: column1:6!null column2:7!null
- │    ├── cardinality: [2 - 2]
- │    ├── (1, 2)
- │    └── (3, 4)
- └── filters
-      ├── column1:6 = x:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── column2:7 = y:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-
-# Use of leakproof and non-leakproof functions on either side of joins.
-#
-# 1. Right side uses leakproof function.
-norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierLeft
-SELECT * FROM rls, b WHERE rls.x = b.x AND leakproof_fn(b.y);
-----
-inner-join (hash)
- ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (6)
- ├── fd: ()-->(3), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1)
- ├── select
- │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null
- │    ├── key: (1)
- │    ├── fd: ()-->(3), (1)-->(2)
- │    ├── scan rls
- │    │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2,3)
- │    └── filters
- │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
- ├── select
- │    ├── columns: b.x:6!null b.y:7
- │    ├── key: (6)
- │    ├── fd: (6)-->(7)
- │    ├── scan b
- │    │    ├── columns: b.x:6!null b.y:7
- │    │    ├── key: (6)
- │    │    └── fd: (6)-->(7)
- │    └── filters
- │         └── leakproof_fn(b.y:7) [outer=(7), udf]
- └── filters
-      └── rls.x:1 = b.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-
-# 2. Right side uses non-leakproof function. Everything else with the query is the same as 1.
-norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierLeft
-SELECT * FROM rls, b WHERE rls.x = b.x AND non_leakproof_fn(b.y);
-----
-project
- ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7
- ├── immutable
- ├── key: (6)
- ├── fd: ()-->(3), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1)
- └── select
-      ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5 b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
-      ├── immutable
-      ├── key: (6)
-      ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7-9), (1)==(6), (6)==(1)
-      ├── barrier
-      │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5 b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
-      │    ├── key: (6)
-      │    ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7-9), (1)==(6), (6)==(1)
-      │    └── inner-join (hash)
-      │         ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5 b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
-      │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
-      │         ├── key: (6)
-      │         ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7-9), (1)==(6), (6)==(1)
-      │         ├── select
-      │         │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5
-      │         │    ├── key: (1)
-      │         │    ├── fd: ()-->(3), (1)-->(2,4,5)
-      │         │    ├── scan rls
-      │         │    │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3 rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5
-      │         │    │    ├── key: (1)
-      │         │    │    └── fd: (1)-->(2-5)
-      │         │    └── filters
-      │         │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
-      │         ├── scan b
-      │         │    ├── columns: b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
-      │         │    ├── key: (6)
-      │         │    └── fd: (6)-->(7-9)
-      │         └── filters
-      │              └── rls.x:1 = b.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── filters
-           └── non_leakproof_fn(b.y:7) [outer=(7), immutable, udf]
-
-# 3. Left side uses leakproof function.
-norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierRight
-SELECT * FROM b, rls WHERE b.x = rls.x AND leakproof_fn(b.y);
-----
-inner-join (hash)
- ├── columns: x:1!null y:2 x:5!null y:6 alice_has_access:7!null
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
- ├── key: (5)
- ├── fd: ()-->(7), (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
- ├── select
- │    ├── columns: b.x:1!null b.y:2
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    ├── scan b
- │    │    ├── columns: b.x:1!null b.y:2
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2)
- │    └── filters
- │         └── leakproof_fn(b.y:2) [outer=(2), udf]
- ├── select
- │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7!null
- │    ├── key: (5)
- │    ├── fd: ()-->(7), (5)-->(6)
- │    ├── scan rls
- │    │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7
- │    │    ├── key: (5)
- │    │    └── fd: (5)-->(6,7)
- │    └── filters
- │         └── alice_has_access:7 [outer=(7), constraints=(/7: [/true - /true]; tight), fd=()-->(7)]
- └── filters
-      └── b.x:1 = rls.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-
-# 4. Left side uses non-leakproof function. Otherwise the query is the same as 3.
-norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierRight
-SELECT * FROM b, rls WHERE b.x = rls.x AND non_leakproof_fn(b.y);
-----
-project
- ├── columns: x:1!null y:2 x:5!null y:6 alice_has_access:7!null
- ├── immutable
- ├── key: (5)
- ├── fd: ()-->(7), (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
- └── select
-      ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4 rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
-      ├── immutable
-      ├── key: (5)
-      ├── fd: ()-->(7), (1)-->(2-4), (5)-->(6,8,9), (1)==(5), (5)==(1)
-      ├── barrier
-      │    ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4 rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
-      │    ├── key: (5)
-      │    ├── fd: ()-->(7), (1)-->(2-4), (5)-->(6,8,9), (1)==(5), (5)==(1)
-      │    └── inner-join (hash)
-      │         ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4 rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
-      │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
-      │         ├── key: (5)
-      │         ├── fd: ()-->(7), (1)-->(2-4), (5)-->(6,8,9), (1)==(5), (5)==(1)
-      │         ├── scan b
-      │         │    ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4
-      │         │    ├── key: (1)
-      │         │    └── fd: (1)-->(2-4)
-      │         ├── select
-      │         │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
-      │         │    ├── key: (5)
-      │         │    ├── fd: ()-->(7), (5)-->(6,8,9)
-      │         │    ├── scan rls
-      │         │    │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7 rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
-      │         │    │    ├── key: (5)
-      │         │    │    └── fd: (5)-->(6-9)
-      │         │    └── filters
-      │         │         └── alice_has_access:7 [outer=(7), constraints=(/7: [/true - /true]; tight), fd=()-->(7)]
-      │         └── filters
-      │              └── b.x:1 = rls.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── filters
-           └── non_leakproof_fn(b.y:2) [outer=(2), immutable, udf]

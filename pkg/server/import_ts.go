@@ -13,7 +13,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/errors"
@@ -45,7 +43,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	{
 		var defErr error
 		deferError = func(err error) {
-			log.Dev.Infof(ctx, "%v", err)
+			log.Infof(ctx, "%v", err)
 			defErr = errors.CombineErrors(defErr, err)
 		}
 		defer func() {
@@ -109,56 +107,26 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	}
 	defer f.Close()
 
-	// Build store-to-node mapping either from an explicit YAML file or, if
-	// not provided, from embedded metadata inside the tsdump (when present).
+	if knobs.ImportTimeseriesMappingFile == "" {
+		knobs.ImportTimeseriesMappingFile = knobs.ImportTimeseriesFile + ".yaml"
+	}
+
+	mapBytes, err := os.ReadFile(knobs.ImportTimeseriesMappingFile)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			err = errors.Wrapf(err, "need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at "+
+				"a YAML file that maps StoreID to NodeID. To generate from the source cluster, run the following command:\n \n"+
+				"cockroach sql --url \"<(unix/sql) url>\" --format tsv -e \\\n  \"select concat(store_id::string, ': ', node_id::string)"+
+				"from crdb_internal.kv_store_status\" | \\\n  grep -E '[0-9]+: [0-9]+' | tee tsdump.gob.yaml\n \n"+
+				"To create from a debug.zip file, run the following command:\n \n"+
+				"tail -n +2 debug/crdb_internal.kv_store_status.txt | awk '{print $2 \": \" $1}' > tsdump.gob.yaml\n \n"+
+				"Then export the created file: export COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE=tsdump.gob.yaml\n \n")
+		}
+		return err
+	}
 	storeToNode := map[roachpb.StoreID]roachpb.NodeID{}
-
-	// Try to read embedded metadata from the tsdump file itself.
-	dec := gob.NewDecoder(f)
-	if md, err := tsdumpmeta.Read(dec); err == nil && md != nil && len(md.StoreToNodeMap) > 0 {
-		for sID, nID := range md.StoreToNodeMap {
-			si, err1 := strconv.Atoi(strings.TrimSpace(sID))
-			if err1 != nil {
-				return errors.Wrapf(err1, "invalid store id in embedded metadata: %q:%q", sID, nID)
-			}
-
-			ni, err2 := strconv.Atoi(strings.TrimSpace(nID))
-			if err2 != nil {
-				return errors.Wrapf(err2, "invalid node id in embedded metadata: %q:%q", sID, nID)
-			}
-			storeToNode[roachpb.StoreID(si)] = roachpb.NodeID(ni)
-		}
-		log.Dev.Infof(ctx, "Using embedded store-to-node mapping from the tsdump file itself. "+
-			"Skipped check for explicit store-to-node mapping file.")
-	} else {
-		// Reset file to beginning for subsequent decoding.
-		if _, err := f.Seek(0, io.SeekStart); err != nil {
-			return err
-		}
-		dec = gob.NewDecoder(f)
-		log.Dev.Infof(ctx, "Embedded metadata not found in the tsdump file. "+
-			"Reading from the store-to-node mapping file.")
-
-		// Fallback to explicit YAML mapping file.
-		if knobs.ImportTimeseriesMappingFile == "" {
-			knobs.ImportTimeseriesMappingFile = knobs.ImportTimeseriesFile + ".yaml"
-		}
-		mapBytes, err := os.ReadFile(knobs.ImportTimeseriesMappingFile)
-		if err != nil {
-			if oserror.IsNotExist(err) {
-				err = errors.Wrapf(err, "need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at "+
-					"a YAML file that maps StoreID to NodeID. To generate from the source cluster, run the following command:\n \n"+
-					"cockroach sql --url \"<(unix/sql) url>\" --format tsv -e \\\n  \"select concat(store_id::string, ': ', node_id::string)"+
-					"from crdb_internal.kv_store_status\" | \\\n  grep -E '[0-9]+: [0-9]+' | tee tsdump.gob.yaml\n \n"+
-					"To create from a debug.zip file, run the following command:\n \n"+
-					"tail -n +2 debug/crdb_internal.kv_store_status.txt | awk '{print $2 \": \" $1}' > tsdump.gob.yaml\n \n"+
-					"Then export the created file: export COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE=tsdump.gob.yaml\n \n")
-			}
-			return err
-		}
-		if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
-			return err
-		}
+	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
+		return err
 	}
 	batch := &kv.Batch{}
 
@@ -175,7 +143,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 		if err != nil {
 			return err
 		}
-		log.Dev.Infof(ctx, "imported %d ts pairs\n", batchSize)
+		log.Infof(ctx, "imported %d ts pairs\n", batchSize)
 		*batch, batchSize = kv.Batch{}, 0
 		return nil
 	}
@@ -188,6 +156,7 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	nodeMetricIdentifier := "cr.node."
 	storeMetricIdentifier := "cr.store."
 
+	dec := gob.NewDecoder(f)
 	for {
 		var v roachpb.KeyValue
 		err := dec.Decode(&v)

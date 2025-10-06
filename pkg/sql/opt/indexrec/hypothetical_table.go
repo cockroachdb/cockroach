@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -40,11 +39,9 @@ func BuildOptAndHypTableMaps(
 			lastKeyCol := indexCols[len(indexCols)-1]
 			// TODO (Shivam): Index recommendations should not only allow JSON columns
 			// to be part of inverted indexes since they are also forward indexable.
-			indexType := idxtype.FORWARD
-			if !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
-				lastKeyCol.DatumType().Family() == types.JsonFamily {
-				indexType = idxtype.INVERTED
-
+			inverted := !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
+				lastKeyCol.DatumType().Family() == types.JsonFamily
+			if inverted {
 				invertedCol := hypTable.addInvertedCol(lastKeyCol.Column)
 				indexCols[len(indexCols)-1] = cat.IndexColumn{Column: invertedCol}
 			}
@@ -54,7 +51,7 @@ func BuildOptAndHypTableMaps(
 				tree.Name(fmt.Sprintf("_hyp_%d", indexOrd)),
 				indexCols,
 				indexOrd,
-				indexType,
+				inverted,
 				t.Zone(),
 			)
 
@@ -62,7 +59,7 @@ func BuildOptAndHypTableMaps(
 			// index with the same key. Inverted indexes do not have stored columns,
 			// so we should not make a recommendation if the same index already
 			// exists.
-			if indexType != idxtype.INVERTED || hypTable.existingRedundantIndex(&hypIndex) == nil {
+			if !inverted || hypTable.existingRedundantIndex(&hypIndex) == nil {
 				hypIndexes = append(hypIndexes, hypIndex)
 			}
 		}
@@ -162,7 +159,7 @@ func (ht *HypotheticalTable) FullyQualifiedName(ctx context.Context) (cat.DataSo
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
 		existingIndex := ht.Table.Index(i)
-		indexExists := index.hasSameExplicitCols(existingIndex)
+		indexExists := index.hasSameExplicitCols(existingIndex, index.IsInverted())
 		_, isPartialIndex := existingIndex.Predicate()
 		if indexExists && !isPartialIndex && existingIndex.GetInvisibility() == 0.0 {
 			return existingIndex
@@ -186,9 +183,4 @@ func (ht *HypotheticalTable) addInvertedCol(invertedSourceCol *cat.Column) *cat.
 
 	ht.invertedCols = append(ht.invertedCols, &invertedCol)
 	return &invertedCol
-}
-
-// Version is part of the cat.Object interface.
-func (ht *HypotheticalTable) Version() uint64 {
-	return 1
 }

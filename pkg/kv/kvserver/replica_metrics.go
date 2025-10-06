@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -35,14 +34,8 @@ type ReplicaMetrics struct {
 	ViolatingLeasePreferences bool
 	LessPreferredLease        bool
 
-	// LeaderNotFortified indicates whether the leader believes itself to be
-	// fortified or not.
-	LeaderNotFortified bool
-
 	// Quiescent indicates whether the replica believes itself to be quiesced.
 	Quiescent bool
-	// Asleep indicates whether the replica believes itself to be asleep.
-	Asleep bool
 	// Ticking indicates whether the store is ticking the replica. It should be
 	// the opposite of Quiescent.
 	Ticking bool
@@ -63,7 +56,6 @@ type ReplicaMetrics struct {
 	PendingRaftProposalCount int64
 	SlowRaftProposalCount    int64
 	RaftFlowStateCounts      [tracker.StateCount]int64
-	ClosedTimestampPolicy    ctpb.RangeClosedTimestampPolicy
 
 	QuotaPoolPercentUsed int64 // [0,100]
 
@@ -79,9 +71,9 @@ func (r *Replica) Metrics(
 	vitalityMap livenesspb.NodeVitalityMap,
 	clusterNodes int,
 ) ReplicaMetrics {
-	r.store.unquiescedOrAwakeReplicas.Lock()
-	_, ticking := r.store.unquiescedOrAwakeReplicas.m[r.RangeID]
-	r.store.unquiescedOrAwakeReplicas.Unlock()
+	r.store.unquiescedReplicas.Lock()
+	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
+	r.store.unquiescedReplicas.Unlock()
 
 	latchMetrics := r.concMgr.LatchMetrics()
 	lockTableMetrics := r.concMgr.LockTableMetrics()
@@ -106,26 +98,23 @@ func (r *Replica) Metrics(
 		clusterNodes:             clusterNodes,
 		desc:                     r.shMu.state.Desc,
 		raftStatus:               r.raftSparseStatusRLocked(),
-		now:                      now,
 		leaseStatus:              r.leaseStatusAtRLocked(ctx, now),
 		storeID:                  r.store.StoreID(),
 		storeAttrs:               storeAttrs,
 		nodeAttrs:                nodeAttrs,
 		nodeLocality:             nodeLocality,
 		quiescent:                r.mu.quiescent,
-		asleep:                   r.mu.asleep,
 		ticking:                  ticking,
 		latchMetrics:             latchMetrics,
 		lockTableMetrics:         lockTableMetrics,
-		raftLogSize:              r.asLogStorage().shMu.size,
-		raftLogSizeTrusted:       r.asLogStorage().shMu.sizeTrusted,
+		raftLogSize:              r.shMu.raftLogSize,
+		raftLogSizeTrusted:       r.shMu.raftLogSizeTrusted,
 		rangeSize:                r.shMu.state.Stats.Total(),
 		qpUsed:                   qpUsed,
 		qpCapacity:               qpCap,
 		paused:                   r.mu.pausedFollowers,
 		pendingRaftProposalCount: r.numPendingProposalsRLocked(),
 		slowRaftProposalCount:    r.mu.slowProposalCount,
-		closedTimestampPolicy:    *r.cachedClosedTimestampPolicy.Load(),
 	}
 
 	r.mu.RUnlock()
@@ -140,13 +129,11 @@ type calcReplicaMetricsInput struct {
 	clusterNodes             int
 	desc                     *roachpb.RangeDescriptor
 	raftStatus               *raft.SparseStatus
-	now                      hlc.ClockTimestamp
 	leaseStatus              kvserverpb.LeaseStatus
 	storeID                  roachpb.StoreID
 	storeAttrs, nodeAttrs    roachpb.Attributes
 	nodeLocality             roachpb.Locality
 	quiescent                bool
-	asleep                   bool
 	ticking                  bool
 	latchMetrics             concurrency.LatchMetrics
 	lockTableMetrics         concurrency.LockTableMetrics
@@ -157,7 +144,6 @@ type calcReplicaMetricsInput struct {
 	paused                   map[roachpb.ReplicaID]struct{}
 	pendingRaftProposalCount int64
 	slowRaftProposalCount    int64
-	closedTimestampPolicy    ctpb.RangeClosedTimestampPolicy
 }
 
 func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
@@ -193,11 +179,9 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 	// behind.
 	leader := d.raftStatus != nil && d.raftStatus.RaftState == raftpb.StateLeader
 	var leaderBehindCount, leaderPausedFollowerCount int64
-	var leaderNotFortified bool
 	if leader {
 		leaderBehindCount = calcBehindCount(d.raftStatus, d.desc, d.vitalityMap)
 		leaderPausedFollowerCount = int64(len(d.paused))
-		leaderNotFortified = d.raftStatus.LeadSupportUntil.Less(d.now.ToTimestamp())
 	}
 
 	return ReplicaMetrics{
@@ -209,9 +193,7 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		LivenessLease:             livenessLease,
 		ViolatingLeasePreferences: violatingLeasePreferences,
 		LessPreferredLease:        lessPreferredLease,
-		LeaderNotFortified:        leaderNotFortified,
 		Quiescent:                 d.quiescent,
-		Asleep:                    d.asleep,
 		Ticking:                   d.ticking,
 		RangeCounter:              rangeCounter,
 		Unavailable:               unavailable,
@@ -230,7 +212,6 @@ func calcReplicaMetrics(d calcReplicaMetricsInput) ReplicaMetrics {
 		QuotaPoolPercentUsed:     calcQuotaPoolPercentUsed(d.qpUsed, d.qpCapacity),
 		LatchMetrics:             d.latchMetrics,
 		LockTableMetrics:         d.lockTableMetrics,
-		ClosedTimestampPolicy:    d.closedTimestampPolicy,
 	}
 }
 
@@ -383,8 +364,7 @@ func (r *Replica) LoadStats() load.ReplicaLoadStats {
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {
-	exceeded, _ := exceedsMultipleOfSplitSize(1, r.mu.conf.RangeMaxBytes,
-		r.mu.largestPreviousMaxRangeSizeBytes, r.shMu.state.Stats.Total())
+	exceeded, _ := r.exceedsMultipleOfSplitSizeRLocked(1)
 	return exceeded
 }
 
@@ -393,36 +373,34 @@ func (r *Replica) needsMergeBySizeRLocked() bool {
 }
 
 func (r *Replica) needsRaftLogTruncationLocked() bool {
-	// We don't want to check the Raft log for truncation on every write operation
-	// or even every operation which occurs after the Raft log exceeds
-	// RaftLogQueueStaleSize. The logic below queues the replica for possible Raft
-	// log truncation whenever an additional RaftLogQueueStaleSize bytes have been
-	// written to the Raft log. Note that it does not matter if some of the bytes
-	// in lastCheckSize are already part of pending truncations since this
-	// comparison is looking at whether the raft log has grown sufficiently.
-	ls := r.asLogStorage()
-	checkRaftLog := ls.shMu.size-ls.shMu.lastCheckSize >= RaftLogQueueStaleSize
+	// We don't want to check the Raft log for truncation on every write
+	// operation or even every operation which occurs after the Raft log exceeds
+	// RaftLogQueueStaleSize. The logic below queues the replica for possible
+	// Raft log truncation whenever an additional RaftLogQueueStaleSize bytes
+	// have been written to the Raft log. Note that it does not matter if some
+	// of the bytes in raftLogLastCheckSize are already part of pending
+	// truncations since this comparison is looking at whether the raft log has
+	// grown sufficiently.
+	checkRaftLog := r.shMu.raftLogSize-r.shMu.raftLogLastCheckSize >= RaftLogQueueStaleSize
 	if checkRaftLog {
 		r.raftMu.AssertHeld()
-		ls.shMu.lastCheckSize = ls.shMu.size
+		r.shMu.raftLogLastCheckSize = r.shMu.raftLogSize
 	}
 	return checkRaftLog
 }
 
-// exceedsMultipleOfSplitSize returns whether the current size of the
+// exceedsMultipleOfSplitSizeRLocked returns whether the current size of the
 // range exceeds the max size times mult. If so, the bytes overage is also
 // returned. Note that the max size is determined by either the current maximum
 // size as dictated by the span config or a previous max size indicating that
 // the max size has changed relatively recently and thus we should not
 // backpressure for being over.
-func exceedsMultipleOfSplitSize(
-	mult float64, rangeMaxBytes int64, largestPreviousMaxRangeSizeBytes int64, totalRangeSize int64,
-) (exceeded bool, bytesOver int64) {
-	maxBytes := rangeMaxBytes
-	if largestPreviousMaxRangeSizeBytes > maxBytes {
-		maxBytes = largestPreviousMaxRangeSizeBytes
+func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) (exceeded bool, bytesOver int64) {
+	maxBytes := r.mu.conf.RangeMaxBytes
+	if r.mu.largestPreviousMaxRangeSizeBytes > maxBytes {
+		maxBytes = r.mu.largestPreviousMaxRangeSizeBytes
 	}
-	size := totalRangeSize
+	size := r.shMu.state.Stats.Total()
 	maxSize := int64(float64(maxBytes)*mult) + 1
 	if maxBytes <= 0 || size <= maxSize {
 		return false, 0

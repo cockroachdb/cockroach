@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -47,7 +46,7 @@ func registerImportCancellation(r registry.Registry) {
 }
 
 func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) {
-	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
+	startOpts := maybeUseMemoryBudget(t, 50)
 	startOpts.RoachprodOpts.ScheduleBackups = true
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings())
 	t.Status("starting csv servers")
@@ -106,7 +105,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		rootRng: rng,
 		seed:    seed,
 	}
-	m := c.NewDeprecatedMonitor(ctx)
+	m := c.NewMonitor(ctx)
 	t.Status("running imports with seed ", seed)
 	var wg sync.WaitGroup
 	wg.Add(len(tablesToNumFiles))

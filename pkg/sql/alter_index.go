@@ -23,7 +23,6 @@ import (
 )
 
 type alterIndexNode struct {
-	zeroInputPlanNode
 	n         *tree.AlterIndex
 	tableDesc *tabledesc.Mutable
 	index     catalog.Index
@@ -46,7 +45,7 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
 		return nil, err
 	}
 

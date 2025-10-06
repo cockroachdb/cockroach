@@ -40,7 +40,6 @@ go_library(
         "job_id.go",
         "multiregion.go",
         "privilege.go",
-        "redact.go",
         ":gen-privilegedescversion-stringer",  # keep
     ],
     embed = [":catpb_go_proto"],
@@ -49,13 +48,10 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/security/username",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/catid",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -71,8 +67,6 @@ go_test(
         "//pkg/sql/sem/catid",
         "//pkg/testutils",
         "//pkg/util/leaktest",
-        "@com_github_cockroachdb_redact//:redact",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

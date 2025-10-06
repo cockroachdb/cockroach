@@ -35,7 +35,7 @@ Ken,Thompson,ken
 			break
 		}
 		if err != nil {
-			log.Dev.Fatalf(ctx, "%v", err)
+			log.Fatalf(ctx, "%v", err)
 		}
 
 		fmt.Println(record)
@@ -63,7 +63,7 @@ Ken;Thompson;ken
 
 	records, err := r.ReadAll()
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	for _, record := range records {
@@ -87,7 +87,7 @@ Ken,Thompson,ken
 
 	records, err := r.ReadAll()
 	if err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 
 	for _, record := range records {
@@ -113,7 +113,7 @@ func ExampleWriter() {
 
 	for _, record := range records {
 		if err := w.Write(record); err != nil {
-			log.Dev.Fatalf(ctx, "error writing record to csv: %v\n", err)
+			log.Fatalf(ctx, "error writing record to csv: %v\n", err)
 		}
 	}
 
@@ -121,7 +121,7 @@ func ExampleWriter() {
 	w.Flush()
 
 	if err := w.Error(); err != nil {
-		log.Dev.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 	// Output:
 	// first_name,last_name,username
@@ -141,11 +141,11 @@ func ExampleWriter_WriteAll() {
 
 	w := csv.NewWriter(os.Stdout)
 	if err := w.WriteAll(records); err != nil { // calls Flush internally
-		log.Dev.Fatalf(ctx, "error writing csv: %v\n", err)
+		log.Fatalf(ctx, "error writing csv: %v\n", err)
 	}
 
 	if err := w.Error(); err != nil {
-		log.Dev.Fatalf(ctx, "error writing csv: %v\n", err)
+		log.Fatalf(ctx, "error writing csv: %v\n", err)
 	}
 	// Output:
 	// first_name,last_name,username

@@ -87,8 +87,9 @@ func TestCopyAndReplace(t *testing.T) {
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
-	} else if e.Op() != opt.PlaceholderScanOp {
-		t.Errorf("expected optimizer to choose a placeholder scan, not %v", e.Op())
+	} else if e.Op() != opt.ProjectOp || e.Child(0).Op() != opt.LookupJoinOp {
+		t.Errorf("expected optimizer to choose a (project (lookup-join)), not (%v (%v))",
+			e.Op(), e.Child(0).Op())
 	}
 
 	m := o.Factory().DetachMemo()
@@ -101,7 +102,7 @@ func TestCopyAndReplace(t *testing.T) {
 		}
 		return o.Factory().CopyAndReplaceDefault(e, replaceFn)
 	}
-	o.Factory().CopyAndReplace(m, m.RootExpr(), m.RootProps(), replaceFn)
+	o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
@@ -146,7 +147,7 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 			replaceFn = func(e opt.Expr) opt.Expr {
 				return o.Factory().CopyAndReplaceDefault(e, replaceFn)
 			}
-			o.Factory().CopyAndReplace(m, m.RootExpr(), m.RootProps(), replaceFn)
+			o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
 
 			if _, err := o.Optimize(); err != nil {
 				t.Fatal(err)

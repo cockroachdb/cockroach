@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
@@ -68,9 +67,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 				require.NoError(t, err)
 				switch stageIdx {
 				case 0:
-					runningStatus0.Store(job.Progress().StatusMessage)
+					runningStatus0.Store(job.Progress().RunningStatus)
 				case 1:
-					runningStatus1.Store(job.Progress().StatusMessage)
+					runningStatus1.Store(job.Progress().RunningStatus)
 				}
 				return nil
 			},
@@ -83,7 +82,6 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	jr = s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
@@ -91,11 +89,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 
 	require.NotNil(t, runningStatus0.Load())
-	require.Regexp(t, "Pending.*PostCommit", runningStatus0.Load().(string))
-	require.NotRegexp(t, "(‹×›)", runningStatus0.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus0.Load().(string))
 	require.NotNil(t, runningStatus1.Load())
-	require.Regexp(t, "Pending.*PostCommit", runningStatus1.Load().(string))
-	require.NotRegexp(t, "(‹×›)", runningStatus1.Load())
+	require.Regexp(t, "PostCommit.* pending", runningStatus1.Load().(string))
 }
 
 func TestSchemaChangerJobErrorDetails(t *testing.T) {
@@ -118,7 +114,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 				return nil
 			},
 		},
-		EventLog:         &eventlog.EventLogTestingKnobs{SyncWrites: true},
+		EventLog:         &sql.EventLogTestingKnobs{SyncWrites: true},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
@@ -126,13 +122,17 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
 	tdb.ExpectErr(t, `boom`, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 	jobID := jobspb.JobID(atomic.LoadInt64(&jobIDValue))
+
+	// Check that the error is featured in the jobs table.
+	results := tdb.QueryStr(t, `SELECT execution_errors FROM crdb_internal.jobs WHERE job_id = $1`, jobID)
+	require.Len(t, results, 1)
+	require.Regexp(t, `^\{\"reverting execution from .* on 1 failed: boom\"\}$`, results[0][0])
 
 	// Check that the error details are also featured in the jobs table.
 	checkErrWithDetails := func(ee *errorspb.EncodedError) {
@@ -146,7 +146,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 		require.Regexp(t, "^stages graphviz: https.*", ed[1])
 		require.Regexp(t, "^dependencies graphviz: https.*", ed[2])
 	}
-	results := tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
+	results = tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
 	require.Len(t, results, 1)
 	b, err := hex.DecodeString(results[0][0])
 	require.NoError(t, err)
@@ -154,6 +154,8 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	err = protoutil.Unmarshal(b, &p)
 	require.NoError(t, err)
 	checkErrWithDetails(p.FinalResumeError)
+	require.LessOrEqual(t, 1, len(p.RetriableExecutionFailureLog))
+	checkErrWithDetails(p.RetriableExecutionFailureLog[0].Error)
 
 	// Check that the error is featured in the event log.
 	const eventLogCountQuery = `SELECT count(*) FROM system.eventlog WHERE "eventType" = $1`
@@ -227,7 +229,6 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	desc := getTableDescriptor()
@@ -357,7 +358,6 @@ func TestDropJobCancelable(t *testing.T) {
 
 			// Setup.
 			_, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE db;
 CREATE TABLE db.t1 (name VARCHAR(256));
 CREATE TABLE db.t2 (name VARCHAR(256));
@@ -383,7 +383,7 @@ CREATE SEQUENCE db.sq1;
 SELECT job_id FROM [SHOW JOBS]
 WHERE 
 	job_type = 'SCHEMA CHANGE' AND 
-	status = $1`, jobs.StateRunning)
+	status = $1`, jobs.StatusRunning)
 			if err != nil {
 				t.Fatalf("unexpected error querying rows %s", err)
 			}
@@ -458,7 +458,6 @@ func TestSchemaChangeWaitsForConcurrentSchemaChanges(t *testing.T) {
 		defer cancel()
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 
-		tdb.Exec(t, "SET create_table_with_schema_locked=false;")
 		tdb.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);")
 		tdb.Exec(t, "INSERT INTO t SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);")
 
@@ -632,9 +631,6 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	createSchema := func(conn *gosql.DB) error {
 		return testutils.SucceedsSoonError(func() error {
-			if _, err := conn.Exec("SET create_table_with_schema_locked=false"); err != nil {
-				return err
-			}
 			_, err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %v;", dbName))
 			if err != nil {
 				return err
@@ -952,14 +948,13 @@ func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
 	tdb.ExpectErr(t, "descriptor not found", `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 	// Validate the job has hit a terminal state.
-	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%' AND job_type='NEW SCHEMA CHANGE'",
+	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%'",
 		[][]string{{"failed"}})
 }
 
@@ -1062,11 +1057,6 @@ CREATE TABLE t2(n int);
 			defer s.Stopper().Stop(ctx)
 
 			runner := sqlutils.MakeSQLRunner(sqlDB)
-
-			// Ensure we don't commit any DDLs in a transaction.
-			runner.Exec(t, `SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`)
-			runner.Exec(t, "SET autocommit_before_ddl = false")
-
 			firstConn, err := sqlDB.Conn(ctx)
 			require.NoError(t, err)
 			defer func() {
@@ -1157,99 +1147,4 @@ CREATE TABLE other_schema.t1(n int REFERENCES complex_drop_schema.t1(n));
 	require.Error(t,
 		grp.Wait(),
 		`cannot create "complex_drop_schema.sc1" because the target database or schema does not exist`)
-}
-
-// TestApproxMaxSchemaObjects tests that the approximate max schema objects
-// guardrail works correctly with both the legacy and declarative schema changers.
-func TestApproxMaxSchemaObjects(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	// Test with both declarative schema changer modes.
-	for _, useDeclarative := range []bool{false, true} {
-		t.Run(fmt.Sprintf("declarative=%t", useDeclarative), func(t *testing.T) {
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
-
-			tdb := sqlutils.MakeSQLRunner(sqlDB)
-
-			// Configure the declarative schema changer mode.
-			if useDeclarative {
-				tdb.Exec(t, `SET use_declarative_schema_changer = 'on'`)
-			} else {
-				tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
-			}
-
-			// Get the current count of descriptors to set a realistic limit.
-			var currentCount int
-			tdb.QueryRow(t, `SELECT count(*) FROM system.descriptor`).Scan(&currentCount)
-
-			// Set the limit to be slightly more than current count.
-			maxObjects := currentCount + 5
-			tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING sql.schema.approx_max_object_count = %d`, maxObjects))
-
-			// Create a test database and use it.
-			tdb.Exec(t, `CREATE DATABASE testdb`)
-			tdb.Exec(t, `USE testdb`)
-
-			// Test that different object types are subject to the limit.
-			objectTypes := []string{"table", "database", "schema", "type", "function"}
-			for _, objectType := range objectTypes {
-				t.Run(objectType, func(t *testing.T) {
-					// Increase the limit before each subtest to avoid interference.
-					maxObjects += 10
-					tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING sql.schema.approx_max_object_count = %d`, maxObjects))
-
-					// Try to create objects until we hit the limit.
-					// ANALYZE before starting to ensure stats are fresh.
-					tdb.Exec(t, `ANALYZE system.descriptor`)
-
-					objNum := 0
-					for {
-						var createStmt string
-						switch objectType {
-						case "table":
-							createStmt = fmt.Sprintf(`CREATE TABLE t%d (id INT PRIMARY KEY)`, objNum)
-						case "database":
-							createStmt = fmt.Sprintf(`CREATE DATABASE db%d`, objNum)
-						case "schema":
-							createStmt = fmt.Sprintf(`CREATE SCHEMA sc%d`, objNum)
-						case "type":
-							createStmt = fmt.Sprintf(`CREATE TYPE enum%d AS ENUM ('a', 'b', 'c')`, objNum)
-						case "function":
-							createStmt = fmt.Sprintf(`CREATE FUNCTION f%d() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`, objNum)
-						}
-
-						_, err := sqlDB.Exec(createStmt)
-						if err != nil {
-							// Check if we got the expected error.
-							if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-								if string(pqErr.Code) == pgcode.ConfigurationLimitExceeded.String() {
-									// Verify the error message mentions "approximate maximum".
-									testutils.IsError(err, "would exceed approximate maximum")
-									break
-								}
-							}
-							// Some other error occurred.
-							t.Fatal(err)
-						}
-						objNum++
-
-						// Re-analyze periodically to update stats.
-						if objNum%2 == 0 {
-							tdb.Exec(t, `ANALYZE system.descriptor`)
-						}
-
-						// Safety check: if we created way more objects than expected,
-						// something is wrong.
-						if objNum > 30 {
-							t.Fatalf("created %d %ss without hitting limit (max=%d)", objNum, objectType, maxObjects)
-						}
-					}
-				})
-			}
-		})
-	}
 }

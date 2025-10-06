@@ -37,7 +37,6 @@ import (
 )
 
 type setZoneConfigNode struct {
-	zeroInputPlanNode
 	stmt          *tree.SetZoneConfig
 	zoneSpecifier tree.ZoneSpecifier
 	allIndexes    bool
@@ -347,7 +346,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	// Disallow schema changes if it's a table and its schema is locked.
-	if err = params.p.checkSchemaChangeIsAllowed(params.ctx, table, n.stmt); err != nil {
+	if err = checkSchemaChangeIsAllowed(table, n.stmt); err != nil {
 		return err
 	}
 

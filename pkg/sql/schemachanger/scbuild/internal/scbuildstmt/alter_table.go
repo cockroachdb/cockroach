@@ -38,11 +38,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableDropConstraint)(nil)):     {fn: alterTableDropConstraint, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableValidateConstraint)(nil)): {fn: alterTableValidateConstraint, on: true, checks: nil},
 	reflect.TypeOf((*tree.AlterTableSetDefault)(nil)):         {fn: alterTableSetDefault, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: nil},
-	reflect.TypeOf((*tree.AlterTableSetRLSMode)(nil)):         {fn: alterTableSetRLSMode, on: true, checks: isV252Active},
-	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        {fn: alterTableDropNotNull, on: true, checks: isV253Active},
-	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
-	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       {fn: alterTableRenameColumn, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableAlterColumnType)(nil)):    {fn: alterTableAlterColumnType, on: true, checks: isV243Active},
 }
 
 func init() {
@@ -126,7 +122,7 @@ func AlterTable(b BuildCtx, n *tree.AlterTable) {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", n.Table.Object()))
 	}
-	defer checkTableSchemaChangePrerequisites(b, elts, n)()
+	panicIfSchemaChangeIsDisallowed(elts, n)
 	tn.ObjectNamePrefix = b.NamePrefix(tbl)
 	b.SetUnresolvedNameAnnotation(n.Table, &tn)
 	b.IncrementSchemaChangeAlterCounter("table")
@@ -189,42 +185,29 @@ func disallowDroppingPrimaryIndexReferencedInUDFOrView(
 
 // maybeRewriteTempIDsInPrimaryIndexes is part of the post-processing
 // invoked at the end of building each ALTER TABLE statement to replace temporary
-// IDs with real, actual IDs. If any replaced temporary IDs had any subzone
-// configs, we also ensure those references get updated.
+// IDs with real, actual IDs.
 func maybeRewriteTempIDsInPrimaryIndexes(b BuildCtx, tableID catid.DescID) {
 	chain := getPrimaryIndexChain(b, tableID)
-	hasRewrittenPrimaryID := false
 	for i, spec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
 		if i == 0 {
 			continue
 		}
-		hasRewrittenPrimaryID = maybeRewriteIndexAndConstraintID(b, tableID, spec.primary.IndexID, spec.primary.ConstraintID)
+		maybeRewriteIndexAndConstraintID(b, tableID, spec.primary.IndexID, spec.primary.ConstraintID)
 		tempIndexSpec := chain.mustGetIndexSpecByID(spec.primary.TemporaryIndexID)
 		maybeRewriteIndexAndConstraintID(b, tableID, tempIndexSpec.temporary.IndexID, tempIndexSpec.temporary.ConstraintID)
 	}
 	chain.validate()
-	currPrimaryIndexID := getCurrentPrimaryIndexID(b, tableID)
-	if hasRewrittenPrimaryID {
-		if err := configureZoneConfigForNewIndexBackfill(b, tableID, currPrimaryIndexID); err != nil {
-			panic(errors.Wrapf(
-				err,
-				"error while updating zone configs for indexID %d of tableID %d",
-				currPrimaryIndexID,
-				tableID))
-		}
-	}
 }
 
-// maybeRewriteIndexAndConstraintID attempts to replace index which currently
-// has a temporary index ID `indexID` with an actual index ID. It also updates
-// all elements that references this index with the actual index ID. It returns
-// a boolean indicating if any work has been done.
+// maybeRewriteIndexAndConstraintID attempts to replace index which currently has
+// a temporary index ID `indexID` with an actual index ID. It also updates
+// all elements that references this index with the actual index ID.
 func maybeRewriteIndexAndConstraintID(
 	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, constraintID catid.ConstraintID,
-) bool {
+) {
 	if indexID < catid.IndexID(TableTentativeIdsStart) || constraintID < catid.ConstraintID(TableTentativeIdsStart) {
 		// Nothing to do if it's already an actual index ID.
-		return false
+		return
 	}
 
 	actualIndexID := b.NextTableIndexID(tableID)
@@ -244,18 +227,7 @@ func maybeRewriteIndexAndConstraintID(
 			}
 			return nil
 		})
-		// If there are references to the indexID in the subzones,
-		// then we should rewrite.
-		if zoneConfig, ok := e.(*scpb.TableZoneConfig); ok {
-			for subzoneIdx := range zoneConfig.ZoneConfig.Subzones {
-				if zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID == uint32(indexID) {
-					zoneConfig.ZoneConfig.Subzones[subzoneIdx].IndexID = uint32(actualIndexID)
-				}
-			}
-		}
 	})
-
-	return true
 }
 
 // maybeDropRedundantPrimaryIndexes is part of the post-processing invoked at

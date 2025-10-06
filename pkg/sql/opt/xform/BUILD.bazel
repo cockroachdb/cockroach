@@ -48,12 +48,10 @@ go_library(
         "//pkg/sql/opt/props/physical",
         "//pkg/sql/rowinfra",
         "//pkg/sql/sem/eval",
-        "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
-        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
         "//pkg/util/errorutil",
@@ -81,10 +79,6 @@ go_test(
         "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
     embed = [":xform"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/config/zonepb",
         "//pkg/roachpb",

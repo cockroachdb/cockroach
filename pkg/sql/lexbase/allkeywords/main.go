@@ -107,21 +107,18 @@ var KeywordNames = []string{
 {{end -}}
 }
 
-var keywordID = map[string]int32{
-{{range . -}}
-	"{{.Keyword}}": {{.Ident}},
-{{end -}}
-}
-
 // GetKeywordID returns the lex id of the SQL keyword k or IDENT if k is
 // not a keyword.
-//
-//gcassert:inline
 func GetKeywordID(k string) int32 {
-	id, ok := keywordID[k]
-	if !ok {
-		return IDENT
+	// The previous implementation generated a map that did a string ->
+	// id lookup. Various ideas were benchmarked and the implementation below
+	// was the fastest of those, between 3% and 10% faster (at parsing, so the
+	// scanning speedup is even more) than the map implementation.
+	switch k {
+	{{range . -}}
+	case "{{.Keyword}}": return {{.Ident}}
+	{{end -}}
+	default: return IDENT
 	}
-	return id
 }
 `

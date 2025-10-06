@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -207,15 +208,17 @@ func assertRecomputedStats(
 func waitForTombstone(
 	t *testing.T, reader storage.Reader, rangeID roachpb.RangeID,
 ) (tombstone kvserverpb.RangeTombstone) {
-	t.Helper()
-	sl := stateloader.Make(rangeID)
 	testutils.SucceedsSoon(t, func() error {
-		ts, err := sl.LoadRangeTombstone(context.Background(), reader)
-		require.NoError(t, err)
-		if ts.NextReplicaID == 0 {
+		tombstoneKey := keys.RangeTombstoneKey(rangeID)
+		ok, err := storage.MVCCGetProto(
+			context.Background(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		)
+		if err != nil {
+			t.Fatalf("failed to read tombstone: %v", err)
+		}
+		if !ok {
 			return fmt.Errorf("tombstone not found for range %d", rangeID)
 		}
-		tombstone = ts
 		return nil
 	})
 	return tombstone

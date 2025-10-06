@@ -27,7 +27,6 @@ import (
 // GrantRoleNode creates entries in the system.role_members table.
 // This is called from GRANT <ROLE>
 type GrantRoleNode struct {
-	zeroInputPlanNode
 	roles       []username.SQLUsername
 	members     []username.SQLUsername
 	adminOption bool

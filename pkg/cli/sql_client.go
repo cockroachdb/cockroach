@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
 )
 
 // sqlConnTimeout is the default SQL connect timeout. This can also be
@@ -106,7 +106,7 @@ func (c *cliContext) makeTenantSQLClient(
 		// is supported until we actually try to make a connection.
 		if err := conn.EnsureConn(ctx); err != nil && shouldTryWithoutTenantName(tenantName, err) {
 			if err := conn.Close(); err != nil {
-				log.Dev.VInfof(ctx, 2, "close err: %v", err)
+				log.VInfof(ctx, 2, "close err: %v", err)
 			}
 			return c.makeTenantSQLClient(ctx, appName, defaultMode, userDefaultTenant)
 		}
@@ -136,14 +136,8 @@ func makeSQLClientForBaseURL(
 	// If there is no user in the URL already, fill in the default user.
 	sqlCtx.User = username.RootUser
 
-	// Some cli utilities (ex/ debug zip) use an InternalAppNamePrefix so that
-	// they do not affect user facing SQL metrics (and as a result the SQL charts
-	// in the DB Console).
-	if strings.HasPrefix(appName, catconstants.InternalAppNamePrefix) {
-		sqlCtx.ApplicationName = appName
-	} else {
-		sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName
-	}
+	// If there is no application name already, use the provided one.
+	sqlCtx.ApplicationName = catconstants.ReportableAppNamePrefix + appName
 
 	// How we're going to authenticate.
 	usePw, _, _ := baseURL.GetAuthnPassword()
@@ -157,7 +151,7 @@ func makeSQLClientForBaseURL(
 	sqlURL := baseURL.ToPQ().String()
 
 	if log.V(2) {
-		log.Dev.Infof(context.Background(), "connecting with URL: %s", sqlURL)
+		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
 	}
 
 	return sqlCtx.MakeConn(sqlURL)

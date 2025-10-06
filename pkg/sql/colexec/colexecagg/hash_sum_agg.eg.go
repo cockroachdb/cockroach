@@ -63,7 +63,7 @@ func newSumHashAggAlloc(
 			return &sumIntervalHashAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported sum agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported sum agg type %s", t.Name())
 }
 
 type sumInt16HashAgg struct {

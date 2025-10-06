@@ -23,7 +23,6 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
-        "//pkg/util/ltree",
         "//pkg/util/timetz",
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uuid",

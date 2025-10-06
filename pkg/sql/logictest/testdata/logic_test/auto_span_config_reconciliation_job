@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true;
 

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -41,7 +39,6 @@ const (
 	changefeedIOQueueMaxLatency        = 5 * time.Minute
 	admitLatencyMaxValue               = 1 * time.Minute
 	commitLatencyMaxValue              = 10 * time.Minute
-	backpressureMaxValue               = 10 * time.Minute
 	kafkaThrottlingTimeMaxValue        = 5 * time.Minute
 )
 
@@ -70,7 +67,6 @@ type AggMetrics struct {
 	ParallelIOResultQueueNanos  *aggmetric.AggHistogram
 	ParallelIOInFlightKeys      *aggmetric.AggGauge
 	SinkIOInflight              *aggmetric.AggGauge
-	SinkBackpressureNanos       *aggmetric.AggHistogram
 	CommitLatency               *aggmetric.AggHistogram
 	BackfillCount               *aggmetric.AggGauge
 	BackfillPendingRanges       *aggmetric.AggGauge
@@ -89,8 +85,6 @@ type AggMetrics struct {
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
 	SinkErrors                  *aggmetric.AggCounter
 	MaxBehindNanos              *aggmetric.AggGauge
-	SpanProgressSkew            *aggmetric.AggGauge
-	TableProgressSkew           *aggmetric.AggGauge
 
 	Timers *timers.Timers
 
@@ -103,8 +97,6 @@ type AggMetrics struct {
 	// TODO(#130358): This doesn't really belong here, but is easier than
 	// threading the NetMetrics through all the other places.
 	NetMetrics *cidr.NetMetrics
-
-	CheckpointMetrics *checkpoint.AggMetrics
 }
 
 const (
@@ -120,7 +112,7 @@ type metricsRecorder interface {
 	recordMessageSize(int64)
 	recordInternalRetry(int64, bool)
 	recordOneMessage() recordOneMessageCallback
-	recordEmittedBatch(startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
+	recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
 	recordResolvedCallback() func()
 	recordFlushRequestCallback() func()
 	getBackfillCallback() func() func()
@@ -128,7 +120,6 @@ type metricsRecorder interface {
 	recordSizeBasedFlush()
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
-	recordSinkBackpressure(time.Duration)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
 	netMetrics() *cidr.NetMetrics
@@ -159,7 +150,6 @@ type sliMetrics struct {
 	ParallelIOResultQueueNanos  *aggmetric.Histogram
 	ParallelIOInFlightKeys      *aggmetric.Gauge
 	SinkIOInflight              *aggmetric.Gauge
-	SinkBackpressureNanos       *aggmetric.Histogram
 	CommitLatency               *aggmetric.Histogram
 	ErrorRetries                *aggmetric.Counter
 	AdmitLatency                *aggmetric.Histogram
@@ -178,22 +168,16 @@ type sliMetrics struct {
 	KafkaThrottlingNanos        *aggmetric.Histogram
 	SinkErrors                  *aggmetric.Counter
 	MaxBehindNanos              *aggmetric.Gauge
-	SpanProgressSkew            *aggmetric.Gauge
-	TableProgressSkew           *aggmetric.Gauge
 
 	Timers *timers.ScopedTimers
 
 	mu struct {
 		syncutil.Mutex
-		id           int64
-		resolved     map[int64]hlc.Timestamp
-		checkpoint   map[int64]hlc.Timestamp
-		fastestSpan  map[int64]hlc.Timestamp
-		fastestTable map[int64]hlc.Timestamp
+		id         int64
+		resolved   map[int64]hlc.Timestamp
+		checkpoint map[int64]hlc.Timestamp
 	}
 	NetMetrics *cidr.NetMetrics
-
-	CheckpointMetrics *checkpoint.Metrics
 }
 
 // closeId unregisters an id. The id can still be used after its closed, but
@@ -203,8 +187,6 @@ func (m *sliMetrics) closeId(id int64) {
 	defer m.mu.Unlock()
 	delete(m.mu.checkpoint, id)
 	delete(m.mu.resolved, id)
-	delete(m.mu.fastestSpan, id)
-	delete(m.mu.fastestTable, id)
 }
 
 // setResolved writes a resolved timestamp entry for the given id.
@@ -225,18 +207,6 @@ func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
 	}
 }
 
-// setFastestTS saves the fastest span/table timestamps for a given id.
-func (m *sliMetrics) setFastestTS(id int64, spanTS hlc.Timestamp, tableTS hlc.Timestamp) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, ok := m.mu.fastestSpan[id]; ok {
-		m.mu.fastestSpan[id] = spanTS
-	}
-	if _, ok := m.mu.fastestTable[id]; ok {
-		m.mu.fastestTable[id] = tableTS
-	}
-}
-
 // claimId claims a unique ID.
 func (m *sliMetrics) claimId() int64 {
 	m.mu.Lock()
@@ -246,8 +216,6 @@ func (m *sliMetrics) claimId() int64 {
 	// ignored until a nonzero timestamp is written.
 	m.mu.checkpoint[id] = hlc.Timestamp{}
 	m.mu.resolved[id] = hlc.Timestamp{}
-	m.mu.fastestSpan[id] = hlc.Timestamp{}
-	m.mu.fastestTable[id] = hlc.Timestamp{}
 	m.mu.id++
 	return id
 }
@@ -263,7 +231,7 @@ func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 		return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {}
 	}
 
-	start := crtime.NowMono()
+	start := timeutil.Now()
 	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
 		m.MessageSize.RecordValue(int64(bytes))
 		m.recordEmittedBatch(start, 1, mvcc, bytes, compressedBytes)
@@ -297,12 +265,12 @@ func (m *sliMetrics) recordInternalRetry(numMessages int64, reducedBatchSize boo
 }
 
 func (m *sliMetrics) recordEmittedBatch(
-	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	if m == nil {
 		return
 	}
-	emitNanos := startTime.Elapsed().Nanoseconds()
+	emitNanos := timeutil.Since(startTime).Nanoseconds()
 	m.EmittedRowMessages.Inc(int64(numMessages))
 	m.EmittedBytes.Inc(int64(bytes))
 	m.EmittedBatchSizes.RecordValue(int64(numMessages))
@@ -321,9 +289,9 @@ func (m *sliMetrics) recordResolvedCallback() func() {
 		return func() {}
 	}
 
-	start := crtime.NowMono()
+	start := timeutil.Now()
 	return func() {
-		emitNanos := start.Elapsed().Nanoseconds()
+		emitNanos := timeutil.Since(start).Nanoseconds()
 		m.EmittedResolvedMessages.Inc(1)
 		m.BatchHistNanos.RecordValue(emitNanos)
 		m.EmittedBatchSizes.RecordValue(int64(1))
@@ -335,9 +303,9 @@ func (m *sliMetrics) recordFlushRequestCallback() func() {
 		return func() {}
 	}
 
-	start := crtime.NowMono()
+	start := timeutil.Now()
 	return func() {
-		flushNanos := start.Elapsed().Nanoseconds()
+		flushNanos := timeutil.Since(start).Nanoseconds()
 		m.Flushes.Inc(1)
 		m.FlushHistNanos.RecordValue(flushNanos)
 	}
@@ -626,14 +594,6 @@ func (m *sliMetrics) recordSinkIOInflightChange(delta int64) {
 	m.SinkIOInflight.Inc(delta)
 }
 
-func (m *sliMetrics) recordSinkBackpressure(duration time.Duration) {
-	if m == nil {
-		return
-	}
-
-	m.SinkBackpressureNanos.RecordValue(duration.Nanoseconds())
-}
-
 type wrappingCostController struct {
 	ctx      context.Context
 	inner    metricsRecorder
@@ -667,7 +627,7 @@ func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
 }
 
 func (w *wrappingCostController) recordEmittedBatch(
-	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	w.recordExternalIO(bytes, compressedBytes)
 	w.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
@@ -712,10 +672,6 @@ func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 	w.inner.recordSinkIOInflightChange(delta)
 }
 
-func (w *wrappingCostController) recordSinkBackpressure(duration time.Duration) {
-	w.inner.recordSinkBackpressure(duration)
-}
-
 func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 	return w.inner.newParallelIOMetricsRecorder()
 }
@@ -746,18 +702,12 @@ var (
 		Help:        "Total retryable errors encountered by all changefeeds",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric tracks transient changefeed errors. Alert on "too many" errors, such as 50 retries in 15 minutes. For example, during a rolling upgrade this counter will increase because the changefeed jobs will restart following node restarts. There is an exponential backoff, up to 10 minutes. But if there is no rolling upgrade in process or other cluster maintenance, and the error rate is high, investigate the changefeed job.`,
 	}
 	metaChangefeedFailures = metric.Metadata{
 		Name:        "changefeed.failures",
 		Help:        "Total number of changefeed jobs which have failed",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric tracks the permanent changefeed job failures that the jobs system will not try to restart. Any increase in this counter should be investigated. An alert on this metric is recommended.`,
 	}
 
 	metaEventQueueTime = metric.Metadata{
@@ -770,7 +720,7 @@ var (
 	metaChangefeedCheckpointHistNanos = metric.Metadata{
 		Name:        "changefeed.checkpoint_hist_nanos",
 		Help:        "Time spent checkpointing changefeed progress",
-		Measurement: "Nanoseconds",
+		Measurement: "Changefeeds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
@@ -836,9 +786,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Messages emitted by all feeds",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.`,
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
 		Name:        "changefeed.emitted_batch_sizes",
@@ -859,9 +806,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Bytes emitted by all feeds",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the throughput bytes being streamed from the CockroachDB cluster.`,
 	}
 	metaChangefeedFlushedBytes := metric.Metadata{
 		Name:        "changefeed.flushed_bytes",
@@ -901,9 +845,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			"Excludes latency during backfill",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the end-to-end lag between a committed change and that change applied at the destination.`,
 	}
 	metaAdmitLatency := metric.Metadata{
 		Name: "changefeed.admit_latency",
@@ -932,9 +873,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Number of currently running changefeeds, including sinkless",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric tracks the total number of all running changefeeds.`,
 	}
 	metaMessageSize := metric.Metadata{
 		Name:        "changefeed.message_size_hist",
@@ -998,14 +936,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaChangefeedSinkBackpressureNanos := metric.Metadata{
-		Name: "changefeed.sink_backpressure_nanos",
-		Help: "Time spent waiting for quota when emitting to the sink (back-pressure). " +
-			"Only populated for sinks using the batching_sink wrapper. As of writing, " +
-			"this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 	metaAggregatorProgress := metric.Metadata{
 		Name:        "changefeed.aggregator_progress",
 		Help:        "The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for",
@@ -1055,18 +985,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	metaChangefeedMaxBehindNanos := metric.Metadata{
 		Name:        "changefeed.max_behind_nanos",
 		Help:        "The most any changefeed's persisted checkpoint is behind the present",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaChangefeedSpanProgressSkew := metric.Metadata{
-		Name:        "changefeed.progress_skew.span",
-		Help:        "The time difference between the fastest and slowest span's resolved timestamp",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	metaChangefeedTableProgressSkew := metric.Metadata{
-		Name:        "changefeed.progress_skew.table",
-		Help:        "The time difference between the fastest and slowest table's resolved timestamp",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -1131,13 +1049,6 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		}),
 		ParallelIOInFlightKeys: b.Gauge(metaChangefeedParallelIOInFlightKeys),
 		SinkIOInflight:         b.Gauge(metaChangefeedSinkIOInflight),
-		SinkBackpressureNanos: b.Histogram(metric.HistogramOptions{
-			Metadata:     metaChangefeedSinkBackpressureNanos,
-			Duration:     histogramWindow,
-			MaxVal:       backpressureMaxValue.Nanoseconds(),
-			SigFigs:      2,
-			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
-		}),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
@@ -1185,13 +1096,10 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			SigFigs:      2,
 			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
-		SinkErrors:        b.Counter(metaSinkErrors),
-		MaxBehindNanos:    b.FunctionalGauge(metaChangefeedMaxBehindNanos, functionalGaugeMaxFn),
-		SpanProgressSkew:  b.FunctionalGauge(metaChangefeedSpanProgressSkew, functionalGaugeMaxFn),
-		TableProgressSkew: b.FunctionalGauge(metaChangefeedTableProgressSkew, functionalGaugeMaxFn),
-		Timers:            timers.New(histogramWindow),
-		NetMetrics:        lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
-		CheckpointMetrics: checkpoint.NewAggMetrics(b),
+		SinkErrors:     b.Counter(metaSinkErrors),
+		MaxBehindNanos: b.FunctionalGauge(metaChangefeedMaxBehindNanos, functionalGaugeMaxFn),
+		Timers:         timers.New(histogramWindow),
+		NetMetrics:     lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -1246,7 +1154,6 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope),
 		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope),
 		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
-		SinkBackpressureNanos:       a.SinkBackpressureNanos.AddChild(scope),
 		CommitLatency:               a.CommitLatency.AddChild(scope),
 		ErrorRetries:                a.ErrorRetries.AddChild(scope),
 		AdmitLatency:                a.AdmitLatency.AddChild(scope),
@@ -1268,13 +1175,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		// TODO(#130358): Again, this doesn't belong here, but it's the most
 		// convenient way to feed this metric to changefeeds.
 		NetMetrics: a.NetMetrics,
-
-		CheckpointMetrics: a.CheckpointMetrics.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
-	sm.mu.fastestSpan = make(map[int64]hlc.Timestamp)
-	sm.mu.fastestTable = make(map[int64]hlc.Timestamp)
 	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
 
 	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {
@@ -1305,34 +1208,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		}
 	}
 
-	maxTimestampSkewGetter := func(
-		base map[int64]hlc.Timestamp, ahead map[int64]hlc.Timestamp,
-	) func() int64 {
-		return func() int64 {
-			sm.mu.Lock()
-			defer sm.mu.Unlock()
-			var maxSkew int64
-			for id, b := range base {
-				a := ahead[id]
-				if a.IsEmpty() || b.IsEmpty() {
-					continue
-				}
-				skew := a.WallTime - b.WallTime
-				if skew > maxSkew {
-					maxSkew = skew
-				}
-			}
-			return maxSkew
-		}
-	}
-
 	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
 	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
 	sm.MaxBehindNanos = a.MaxBehindNanos.AddFunctionalChild(maxBehindNanosGetter(sm.mu.resolved), scope)
-	sm.SpanProgressSkew = a.SpanProgressSkew.AddFunctionalChild(
-		maxTimestampSkewGetter(sm.mu.checkpoint, sm.mu.fastestSpan), scope)
-	sm.TableProgressSkew = a.TableProgressSkew.AddFunctionalChild(
-		maxTimestampSkewGetter(sm.mu.checkpoint, sm.mu.fastestTable), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil

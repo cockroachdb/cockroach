@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,8 +64,43 @@ func registerKnex(r registry.Registry) {
 		)
 		require.NoError(t, err)
 
-		// Install NodeJS 18.x, update NPM to the latest and install Mocha.
-		err = installNode18(ctx, t, c, node, nodeOpts{withMocha: true})
+		// In case we are running into a state where machines are being reused, we first check to see if we
+		// can use npm to reduce the potential of trying to add another nodesource key
+		// (preventing gpg: dearmoring failed: File exists) errors.
+		err = c.RunE(
+			ctx, option.WithNodes(node), `sudo npm i -g npm`,
+		)
+
+		if err != nil {
+			err = repeatRunE(
+				ctx,
+				t,
+				c,
+				node,
+				"add nodesource key and deb repository",
+				`
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "install nodejs and npm", `sudo apt-get update && sudo apt-get -qq install nodejs`,
+			)
+			require.NoError(t, err)
+
+			err = repeatRunE(
+				ctx, t, c, node, "update npm", `sudo npm i -g npm`,
+			)
+			require.NoError(t, err)
+		}
+
+		err = repeatRunE(
+			ctx, t, c, node, "install mocha", `sudo npm i -g mocha`,
+		)
 		require.NoError(t, err)
 
 		err = repeatRunE(
@@ -130,7 +166,7 @@ func registerKnex(r registry.Registry) {
 		Name:  "knex",
 		Owner: registry.OwnerSQLFoundations,
 		// Requires a pre-built node-oracledb binary for linux arm64.
-		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.OnlyAMD64)),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
 		Leases:           registry.MetamorphicLeases,
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,

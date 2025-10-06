@@ -255,13 +255,6 @@ export function makeSessionsColumns(
       sort: session => session.session.application_name,
     },
     {
-      name: "isolationLevel",
-      title: statisticsTableTitles.isolationLevel(statType),
-      className: cx("cl-table__col-session"),
-      cell: session => session.session.default_isolation_level || "N/A",
-      sort: session => session.session.default_isolation_level,
-    },
-    {
       name: "actions",
       title: statisticsTableTitles.actions(statType),
       className: cx("cl-table__col-session-actions"),

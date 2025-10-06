@@ -14,7 +14,6 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -29,18 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/maps"
 )
 
 // GeneratorConfig contains all the tunable knobs necessary to run a Generator.
 type GeneratorConfig struct {
-	Ops       OperationConfig
-	TxnConfig TxnConfig
-
+	Ops                   OperationConfig
 	NumNodes, NumReplicas int
-
-	SeedForLogging              int64
-	RandSourceCounterForLogging counter
 }
 
 // OperationConfig configures the relative probabilities of producing various
@@ -180,24 +173,6 @@ type ClientOperationConfig struct {
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
 	PutExisting int
-	// PutMustAcquireExclusiveLockMissing is an operation that Puts a key that
-	// definitely doesn't exist, with MustAcquireExclusiveLock set to true.
-	PutMustAcquireExclusiveLockMissing int
-	// PutMustAcquireExclusiveLockExisting is an operation that Puts a key that
-	// likely exists, with MustAcquireExclusiveLock set to true.
-	PutMustAcquireExclusiveLockExisting int
-	// CPutMatchExisting is an operation that CPuts a key with the condition
-	// likely matching the existing key's previous value.
-	CPutMatchExisting int
-	// CPutMatchMissing is an operation that CPuts a key with the condition
-	// likely matching the missing key's nil value.
-	CPutMatchMissing int
-	// CPutNoMatch is an operation that CPuts a key with the condition definitely
-	// not matching the key's previous value.
-	CPutNoMatch int
-	// CPutAllowIfDoesNotExist is an operation that CPuts a key with the condition
-	// allowing to succeed when no value exists.
-	CPutAllowIfDoesNotExist int
 	// Scan is an operation that Scans a key range that may contain values.
 	Scan int
 	// ScanForUpdate is an operation that Scans a key range that may contain
@@ -278,12 +253,6 @@ type ClientOperationConfig struct {
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
 	DeleteExisting int
-	// DeleteMustAcquireExclusiveLockMissing is an operation that Deletes a key
-	// that definitely doesn't exist, with MustAcquireExclusiveLock set to true.
-	DeleteMustAcquireExclusiveLockMissing int
-	// DeleteExisting is an operation that Deletes a key that likely exists, with
-	// MustAcquireExclusiveLock set to true.
-	DeleteMustAcquireExclusiveLockExisting int
 	// DeleteRange is an operation that Deletes a key range that may contain values.
 	DeleteRange int
 	// DeleteRange is an operation that invokes DeleteRangeUsingTombstone.
@@ -292,14 +261,6 @@ type ClientOperationConfig struct {
 	AddSSTable int
 	// Barrier is an operation that waits for in-flight writes to complete.
 	Barrier int
-
-	// FlushLockTable is an operation that moves unreplicated locks in the
-	// in-memory lock table into the
-	FlushLockTable int
-
-	// MutateBatchHeader mutates elements of the batch Header that may influence
-	// batch evaluation. Only relevant for BatchOperations.
-	MutateBatchHeader int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -309,11 +270,6 @@ type ClientOperationConfig struct {
 type BatchOperationConfig struct {
 	Batch int
 	Ops   ClientOperationConfig
-}
-
-type TxnConfig struct {
-	BufferedWritesProb float64
-	RandomUserPriority bool
 }
 
 // SplitConfig configures the relative probability of generating a Split
@@ -417,21 +373,15 @@ func newAllOperationsConfig() GeneratorConfig {
 		GetExistingForUpdateSkipLockedGuaranteedDurability: 1,
 		GetExistingForShareSkipLocked:                      1,
 		GetExistingForShareSkipLockedGuaranteedDurability:  1,
-		PutMissing:                          1,
-		PutExisting:                         1,
-		PutMustAcquireExclusiveLockMissing:  1,
-		PutMustAcquireExclusiveLockExisting: 1,
-		CPutMatchExisting:                   1,
-		CPutMatchMissing:                    1,
-		CPutNoMatch:                         1,
-		CPutAllowIfDoesNotExist:             1,
-		Scan:                                1,
-		ScanForUpdate:                       1,
-		ScanForUpdateGuaranteedDurability:   1,
-		ScanForShare:                        1,
-		ScanForShareGuaranteedDurability:    1,
-		ScanSkipLocked:                      1,
-		ScanForUpdateSkipLocked:             1,
+		PutMissing:                        1,
+		PutExisting:                       1,
+		Scan:                              1,
+		ScanForUpdate:                     1,
+		ScanForUpdateGuaranteedDurability: 1,
+		ScanForShare:                      1,
+		ScanForShareGuaranteedDurability:  1,
+		ScanSkipLocked:                    1,
+		ScanForUpdateSkipLocked:           1,
 		ScanForUpdateSkipLockedGuaranteedDurability: 1,
 		ScanForShareSkipLocked:                      1,
 		ScanForShareSkipLockedGuaranteedDurability:  1,
@@ -447,14 +397,10 @@ func newAllOperationsConfig() GeneratorConfig {
 		ReverseScanForShareSkipLockedGuaranteedDurability:  1,
 		DeleteMissing:                                      1,
 		DeleteExisting:                                     1,
-		DeleteMustAcquireExclusiveLockMissing:              1,
-		DeleteMustAcquireExclusiveLockExisting:             1,
 		DeleteRange:                                        1,
 		DeleteRangeUsingTombstone:                          1,
 		AddSSTable:                                         1,
 		Barrier:                                            1,
-		FlushLockTable:                                     1,
-		MutateBatchHeader:                                  1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -520,14 +466,6 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
-
-	// MutateBatchHeader is only valid in batches.
-	config.Ops.DB.MutateBatchHeader = 0
-	config.Ops.ClosureTxn.TxnClientOps.MutateBatchHeader = 0
-
-	// TODO(#153446): Header mutations with EndTransaction are not currently safe.
-	config.Ops.ClosureTxn.CommitBatchOps.MutateBatchHeader = 0
-
 	// DeleteRangeUsingTombstone does not support transactions.
 	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
@@ -598,11 +536,6 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnClientOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.Barrier = 0
-
-	config.Ops.Batch.Ops.FlushLockTable = 0
-	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
-	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
-	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
 	return config
 }
 
@@ -667,7 +600,7 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 	g.mu.generator = generator{
 		Config:           config,
 		replicasFn:       replicasFn,
-		keys:             make(map[string]string),
+		keys:             make(map[string]struct{}),
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
 	}
@@ -689,9 +622,9 @@ type generator struct {
 
 	seqGen kvnemesisutil.Seq
 
-	// keys is a key-value map of every key that has been written to, including
-	// those deleted or in rolled back transactions.
-	keys map[string]string
+	// keys is the set of every key that has been written to, including those
+	// deleted or in rolled back transactions.
+	keys map[string]struct{}
 
 	// currentSplits is approximately the set of every split that has been made
 	// within DataSpan. The exact accounting is hard because Generator can hand
@@ -823,13 +756,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		c.GetMissingForShareSkipLockedGuaranteedDurability,
 	)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
-	addOpGen(allowed, randPutMustAcquireExclusiveLockMissing, c.PutMustAcquireExclusiveLockMissing)
-	addOpGen(allowed, randCPutMatchMissing, c.CPutMatchMissing)
-	addOpGen(allowed, randCPutNoMatch, c.CPutNoMatch)
-	addOpGen(allowed, randCPutAllowIfDoesNotExist, c.CPutAllowIfDoesNotExist)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
-	addOpGen(allowed, randDelMustAcquireExclusiveLockMissing, c.DeleteMustAcquireExclusiveLockMissing)
-
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
@@ -858,10 +785,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 			c.GetExistingForShareSkipLockedGuaranteedDurability,
 		)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
-		addOpGen(allowed, randPutMustAcquireExclusiveLockExisting, c.PutMustAcquireExclusiveLockExisting)
-		addOpGen(allowed, randCPutMatchExisting, c.CPutMatchExisting)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
-		addOpGen(allowed, randDelMustAcquireExclusiveLockExisting, c.DeleteMustAcquireExclusiveLockExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
@@ -909,8 +833,6 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
 	addOpGen(allowed, randBarrier, c.Barrier)
-	addOpGen(allowed, randFlushLockTable, c.FlushLockTable)
-	addOpGen(allowed, randBatchMutation, c.MutateBatchHeader)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -980,7 +902,7 @@ func randGetMissingForShareSkipLockedGuaranteedDurability(g *generator, rng *ran
 }
 
 func randGetExisting(g *generator, rng *rand.Rand) Operation {
-	key := randSliceKey(rng, maps.Keys(g.keys))
+	key := randMapKey(rng, g.keys)
 	return get(key)
 }
 
@@ -1047,64 +969,14 @@ func randGetExistingForShareSkipLockedGuaranteedDurability(g *generator, rng *ra
 func randPutMissing(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
 	key := randKey(rng)
-	op := put(key, seq)
-	g.keys[key] = op.Put.Value()
-	return op
+	g.keys[key] = struct{}{}
+	return put(key, seq)
 }
 
 func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
-	key := randSliceKey(rng, maps.Keys(g.keys))
-	op := put(key, seq)
-	g.keys[key] = op.Put.Value()
-	return op
-}
-
-func randPutMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
-	seq := g.nextSeq()
-	key := randKey(rng)
-	op := putMustAcquireLock(key, seq)
-	g.keys[key] = op.Put.Value()
-	return op
-}
-
-func randPutMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
-	seq := g.nextSeq()
-	key := randSliceKey(rng, maps.Keys(g.keys))
-	op := putMustAcquireLock(key, seq)
-	g.keys[key] = op.Put.Value()
-	return op
-}
-
-func randCPutMatchExisting(g *generator, rng *rand.Rand) Operation {
-	seq := g.nextSeq()
-	key := randSliceKey(rng, maps.Keys(g.keys))
-	expVal := g.keys[key]
-	// There is no guarantee the expVal will actually match because the key may be
-	// overwritten concurrently.
-	op := cput(key, seq, expVal, false)
-	g.keys[key] = op.CPut.Value()
-	return op
-}
-
-func randCPutMatchMissing(g *generator, rng *rand.Rand) Operation {
-	seq := g.nextSeq()
-	key := randKey(rng)
-	return cput(key, seq, "", false)
-}
-
-func randCPutAllowIfDoesNotExist(g *generator, rng *rand.Rand) Operation {
-	seq := g.nextSeq()
-	key := randKey(rng)
-	op := cput(key, seq, "non-existent value", true)
-	g.keys[key] = op.CPut.Value()
-	return op
-}
-
-func randCPutNoMatch(g *generator, rng *rand.Rand) Operation {
-	seq := g.nextSeq()
-	key := randKey(rng)
-	return cput(key, seq, "non-existent value", false)
+	key := randMapKey(rng, g.keys)
+	return put(key, seq)
 }
 
 func randAddSSTable(g *generator, rng *rand.Rand) Operation {
@@ -1129,8 +1001,8 @@ func randAddSSTable(g *generator, rng *rand.Rand) Operation {
 	// AddSSTable requests cannot span multiple ranges, so we try to fit them
 	// within an existing range. This may race with a concurrent split, in which
 	// case the AddSSTable will fail, but that's ok -- most should still succeed.
-	rangeStart, rangeEnd := randRangeSpan(rng, maps.Keys(g.currentSplits))
-	curKeys := keysBetween(maps.Keys(g.keys), rangeStart, rangeEnd)
+	rangeStart, rangeEnd := randRangeSpan(rng, g.currentSplits)
+	curKeys := keysBetween(g.keys, rangeStart, rangeEnd)
 
 	// Generate keys first, to write them in order and without duplicates. We pick
 	// either existing or new keys depending on probReplace, making sure they're
@@ -1259,24 +1131,11 @@ func randBarrier(g *generator, rng *rand.Rand) Operation {
 		// them within an existing range. This may race with a concurrent split, in
 		// which case the Barrier will fail, but that's ok -- most should still
 		// succeed. These errors are ignored by the validator.
-		key, endKey = randRangeSpan(rng, maps.Keys(g.currentSplits))
+		key, endKey = randRangeSpan(rng, g.currentSplits)
 	} else {
 		key, endKey = randSpan(rng)
 	}
 	return barrier(key, endKey, withLAI)
-}
-
-func randFlushLockTable(g *generator, rng *rand.Rand) Operation {
-	// FlushLockTable can't span multiple ranges. We want to test a combination of
-	// requests that span the entire range and those that span part of a range.
-	key, endKey := randRangeSpan(rng, maps.Keys(g.currentSplits))
-
-	wholeRange := rng.Float64() < 0.5
-	if !wholeRange {
-		key = randKeyBetween(rng, key, endKey)
-	}
-
-	return flushLockTable(key, endKey)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -1410,28 +1269,15 @@ func randReverseScanForShareSkipLockedGuaranteedDurability(g *generator, rng *ra
 
 func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
-	g.keys[key] = ""
+	g.keys[key] = struct{}{}
 	seq := g.nextSeq()
 	return del(key, seq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
-	key := randSliceKey(rng, maps.Keys(g.keys))
+	key := randMapKey(rng, g.keys)
 	seq := g.nextSeq()
 	return del(key, seq)
-}
-
-func randDelMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
-	key := randSliceKey(rng, maps.Keys(g.keys))
-	seq := g.nextSeq()
-	return delMustAcquireLock(key, seq)
-}
-
-func randDelMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
-	key := randKey(rng)
-	g.keys[key] = ""
-	seq := g.nextSeq()
-	return delMustAcquireLock(key, seq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
@@ -1443,11 +1289,11 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 }
 
 func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
-	return randDelRangeUsingTombstoneImpl(maps.Keys(g.currentSplits), maps.Keys(g.keys), g.nextSeq, rng)
+	return randDelRangeUsingTombstoneImpl(g.currentSplits, g.keys, g.nextSeq, rng)
 }
 
 func randDelRangeUsingTombstoneImpl(
-	currentSplits, keys []string, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
+	currentSplits, keys map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
 ) Operation {
 	yn := func(probY float64) bool {
 		return rng.Float64() <= probY
@@ -1482,7 +1328,7 @@ func randDelRangeUsingTombstoneImpl(
 		if yn(0.5) || len(keys) == 0 {
 			k = randKey(rng)
 		} else {
-			k = randSliceKey(rng, keys)
+			k = randMapKey(rng, keys)
 		}
 		ek = tk(fk(k) + 1)
 	} else {
@@ -1506,7 +1352,7 @@ func randSplitNew(g *generator, rng *rand.Rand) Operation {
 }
 
 func randSplitAgain(g *generator, rng *rand.Rand) Operation {
-	key := randSliceKey(rng, maps.Keys(g.historicalSplits))
+	key := randMapKey(rng, g.historicalSplits)
 	g.currentSplits[key] = struct{}{}
 	return split(key)
 }
@@ -1517,24 +1363,11 @@ func randMergeNotSplit(g *generator, rng *rand.Rand) Operation {
 }
 
 func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
-	key := randSliceKey(rng, maps.Keys(g.currentSplits))
+	key := randMapKey(rng, g.currentSplits)
 	// Assume that this split actually got merged, even though we may have handed
 	// out a concurrent split for the same key.
 	delete(g.currentSplits, key)
 	return merge(key)
-}
-
-func randBatchMutation(g *generator, rng *rand.Rand) Operation {
-	op := &MutateBatchHeaderOperation{}
-	// We currently only support two header option mutations, both of which can
-	// lead to early termination. Half the time we choose a value very likely to
-	// lead to early termination.
-	if rng.Float64() > 0.5 {
-		op.MaxSpanRequestKeys = randItem(rng, []int64{1, 100})
-	} else {
-		op.TargetBytes = randItem(rng, []int64{1, 1 << 20 /* 1MiB */})
-	}
-	return Operation{MutateBatchHeader: op}
 }
 
 func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget, voter bool) opGenFunc {
@@ -1632,7 +1465,7 @@ func makeTransferLeaseFn(key string, current []roachpb.ReplicationTarget) opGenF
 }
 
 func setLeaseType(_ *generator, rng *rand.Rand) Operation {
-	leaseTypes := roachpb.TestingAllLeaseTypes()
+	leaseTypes := roachpb.LeaseTypes()
 	leaseType := leaseTypes[rng.Intn(len(leaseTypes))]
 	op := changeSetting(ChangeSettingType_SetLeaseType)
 	op.ChangeSetting.LeaseType = leaseType
@@ -1649,49 +1482,8 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 		g.registerClientOps(&allowed, c)
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
-		var addedForwardScan, addedReverseScan bool
-
-		// TODO(ssd): MutateBatchHeader is disallowed with Puts because of
-		// validation in the txnWriteBuffer that disallows such requests. We could
-		// relax this restriction for many batches if we had information about the
-		// enclosing transaction here.
-		var addedPutOrCPut, addedBatchHeaderMutation bool
-
-		for i := 0; i < numOps; i++ {
+		for i := range ops {
 			ops[i] = g.selectOp(rng, allowed)
-			if ops[i].Scan != nil {
-				if !ops[i].Scan.Reverse {
-					if addedReverseScan {
-						// We cannot include the forward scan into the batch
-						// that already contains the reverse scan.
-						i--
-						continue
-					}
-					addedForwardScan = true
-				} else {
-					if addedForwardScan {
-						// We cannot include the reverse scan into the batch
-						// that already contains the forward scan.
-						i--
-						continue
-					}
-					addedReverseScan = true
-				}
-			} else if ops[i].Put != nil || ops[i].CPut != nil {
-				if addedBatchHeaderMutation {
-					i--
-					continue
-				}
-				addedPutOrCPut = true
-			} else if ops[i].MutateBatchHeader != nil {
-				// In addition to avoiding batch mutations when we have Puts or CPuts,
-				// we also skip adding mutations if one is already added.
-				if addedPutOrCPut || addedBatchHeaderMutation {
-					i--
-					continue
-				}
-				addedBatchHeaderMutation = true
-			}
 		}
 		return batch(ops...)
 	}
@@ -1701,31 +1493,28 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
 	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
+		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
-
+		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
+		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
-
+		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
+		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
 	txnType ClosureTxnType,
 	iso isolation.Level,
-	txnConfig TxnConfig,
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
@@ -1758,10 +1547,6 @@ func makeClosureTxn(
 			maybeUpdateSavepoints(&spIDs, ops[i])
 		}
 		op := closureTxn(txnType, iso, ops...)
-		if txnConfig.RandomUserPriority {
-			op.ClosureTxn.UserPriority = randomUserPriority(rng)
-		}
-		op.ClosureTxn.BufferedWrites = rng.Float64() < txnConfig.BufferedWritesProb
 		if commitInBatch != nil {
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
@@ -1770,16 +1555,6 @@ func makeClosureTxn(
 		}
 		return op
 	}
-}
-
-var userPriorities = [3]roachpb.UserPriority{
-	roachpb.MinUserPriority,
-	roachpb.NormalUserPriority,
-	roachpb.MaxUserPriority,
-}
-
-func randomUserPriority(rng *rand.Rand) roachpb.UserPriority {
-	return userPriorities[rng.Intn(len(userPriorities))]
 }
 
 // registerSavepointOps assumes existingSp is the current stack of savepoints
@@ -1898,19 +1673,15 @@ func tk(n uint64) string {
 
 // keysBetween returns the keys between the given [start,end) span
 // in an undefined order. It takes a map for use with g.keys.
-func keysBetween(keys []string, start, end string) []string {
+func keysBetween(keys map[string]struct{}, start, end string) []string {
 	between := []string{}
 	s, e := fk(start), fk(end)
-	for _, key := range keys {
+	for key := range keys {
 		if nk := fk(key); nk >= s && nk < e {
 			between = append(between, key)
 		}
 	}
 	return between
-}
-
-func randItem[T any](rng *rand.Rand, l []T) T {
-	return l[rng.Intn(len(l))]
 }
 
 func randKey(rng *rand.Rand) string {
@@ -1928,7 +1699,11 @@ func randKey(rng *rand.Rand) string {
 
 // Interprets the provided map as the split points of the key space and returns
 // the boundaries of a random range.
-func randRangeSpan(rng *rand.Rand, keys []string) (string, string) {
+func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string, string) {
+	keys := make([]string, 0, len(curOrHistSplits))
+	for key := range curOrHistSplits {
+		keys = append(keys, key)
+	}
 	sort.Strings(keys)
 	if len(keys) == 0 {
 		// No splits.
@@ -1948,11 +1723,11 @@ func randRangeSpan(rng *rand.Rand, keys []string) (string, string) {
 	return keys[idx-1], keys[idx]
 }
 
-func randSliceKey(rng *rand.Rand, keys []string) string {
-	if len(keys) == 0 {
+func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
+	if len(m) == 0 {
 		return randKey(rng)
 	}
-	k, ek := randRangeSpan(rng, keys)
+	k, ek := randRangeSpan(rng, m)
 	// If there is only one key in the map we will get [0,x) or [x,max)
 	// back and want to return `x` to avoid the endpoints, which are
 	// reserved.
@@ -2059,31 +1834,7 @@ func getForShareSkipLockedGuaranteedDurability(key string) Operation {
 }
 
 func put(key string, seq kvnemesisutil.Seq) Operation {
-	return Operation{Put: &PutOperation{
-		Key: []byte(key),
-		Seq: seq}}
-}
-
-func putMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
-	return Operation{Put: &PutOperation{
-		Key:                      []byte(key),
-		MustAcquireExclusiveLock: true,
-		Seq:                      seq}}
-}
-
-func cput(key string, seq kvnemesisutil.Seq, expVal string, allowIfDoesNotExist bool) Operation {
-	op := Operation{
-		CPut: &CPutOperation{
-			Key:                 []byte(key),
-			Seq:                 seq,
-			ExpVal:              []byte(expVal),
-			AllowIfDoesNotExist: allowIfDoesNotExist,
-		},
-	}
-	if expVal == "" {
-		op.CPut.ExpVal = nil
-	}
-	return op
+	return Operation{Put: &PutOperation{Key: []byte(key), Seq: seq}}
 }
 
 func scan(key, endKey string) Operation {
@@ -2173,14 +1924,6 @@ func del(key string, seq kvnemesisutil.Seq) Operation {
 	}}
 }
 
-func delMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
-	return Operation{Delete: &DeleteOperation{
-		Key:                      []byte(key),
-		Seq:                      seq,
-		MustAcquireExclusiveLock: true,
-	}}
-}
-
 func delRange(key, endKey string, seq kvnemesisutil.Seq) Operation {
 	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
 }
@@ -2233,13 +1976,6 @@ func barrier(key, endKey string, withLAI bool) Operation {
 	}}
 }
 
-func flushLockTable(key, endKey string) Operation {
-	return Operation{FlushLockTable: &FlushLockTableOperation{
-		Key:    []byte(key),
-		EndKey: []byte(endKey),
-	}}
-}
-
 func createSavepoint(id int) Operation {
 	return Operation{SavepointCreate: &SavepointCreateOperation{ID: int32(id)}}
 }
@@ -2250,41 +1986,4 @@ func releaseSavepoint(id int) Operation {
 
 func rollbackSavepoint(id int) Operation {
 	return Operation{SavepointRollback: &SavepointRollbackOperation{ID: int32(id)}}
-}
-
-type countingRandSource struct {
-	count atomic.Uint64
-	inner rand.Source64
-}
-
-type counter interface {
-	Count() uint64
-}
-
-// newCountingSource creates random source that counts how many times it was
-// called for logging purposes.
-func newCountingSource(inner rand.Source64) *countingRandSource {
-	return &countingRandSource{
-		inner: inner,
-	}
-}
-
-func (c *countingRandSource) Count() uint64 {
-	return c.count.Load()
-}
-
-func (c *countingRandSource) Int63() int64 {
-	c.count.Add(1)
-	return c.inner.Int63()
-}
-
-func (c *countingRandSource) Uint64() uint64 {
-	c.count.Add(1)
-	return c.inner.Uint64()
-}
-
-func (c *countingRandSource) Seed(seed int64) {
-	// We assume that seed invalidates the count.
-	c.count.Store(0)
-	c.inner.Seed(seed)
 }

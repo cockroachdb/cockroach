@@ -72,7 +72,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		rangefeedErrChan := make(chan error, 1)
 		ctxToCancel, cancel := context.WithCancel(ctx)
 		go func() {
-			rangefeedErrChan <- ds.RangeFeed(ctxToCancel, []kvcoord.SpanTimePair{{Span: descTableSpan, StartAfter: startTS}}, evChan)
+			rangefeedErrChan <- ds.RangeFeed(ctxToCancel, []roachpb.Span{descTableSpan}, startTS, evChan)
 		}()
 
 		// Note: 42 is a system descriptor.
@@ -136,7 +136,7 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		})
 		evChan := make(chan kvcoord.RangeFeedMessage)
 		require.Regexp(t, `rangefeeds require the kv\.rangefeed.enabled setting`,
-			ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: scratchSpan, StartAfter: startTS}}, evChan))
+			ds.RangeFeed(ctx, []roachpb.Span{scratchSpan}, startTS, evChan))
 	})
 }
 
@@ -188,9 +188,9 @@ func TestMergeOfRangeEventTableWhileRunningRangefeed(t *testing.T) {
 	start := db.Clock().Now()
 	go func() {
 		rangefeedErrChan <- ds.RangeFeed(rangefeedCtx,
-			[]kvcoord.SpanTimePair{{Span: lhsRepl.Desc().RSpan().AsRawSpanWithNoLocals(), StartAfter: start}},
-			eventCh,
-		)
+			[]roachpb.Span{lhsRepl.Desc().RSpan().AsRawSpanWithNoLocals()},
+			start,
+			eventCh)
 	}()
 
 	// Wait for an event on the rangefeed to let us know that we're connected.
@@ -254,7 +254,8 @@ func TestRangefeedIsRoutedToNonVoter(t *testing.T) {
 	go func() {
 		rangefeedErrChan <- ds.RangeFeed(
 			rangefeedCtx,
-			[]kvcoord.SpanTimePair{{Span: desc.RSpan().AsRawSpanWithNoLocals(), StartAfter: startTS}},
+			[]roachpb.Span{desc.RSpan().AsRawSpanWithNoLocals()},
+			startTS,
 			eventCh,
 		)
 	}()
@@ -309,7 +310,7 @@ func TestRangefeedWorksOnLivenessRange(t *testing.T) {
 	eventC := make(chan kvcoord.RangeFeedMessage)
 	errC := make(chan error, 1)
 	go func() {
-		errC <- ds.RangeFeed(ctx, []kvcoord.SpanTimePair{{Span: keys.NodeLivenessSpan, StartAfter: startTS}}, eventC)
+		errC <- ds.RangeFeed(ctx, []roachpb.Span{keys.NodeLivenessSpan}, startTS, eventC)
 	}()
 
 	// Wait for a liveness update.

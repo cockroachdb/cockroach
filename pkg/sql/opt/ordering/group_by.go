@@ -25,8 +25,7 @@ func groupByCanProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice
 	// GroupBy may require a certain ordering of its input, but can also pass
 	// through a stronger ordering on the grouping columns.
 	groupBy := expr.(*memo.GroupByExpr)
-	return required.CanProjectCols(groupBy.GroupingCols) &&
-		required.Intersects(&groupBy.Ordering)
+	return required.CanProjectCols(groupBy.GroupingCols) && required.Intersects(&groupBy.Ordering)
 }
 
 func groupByBuildChildReqOrdering(
@@ -37,9 +36,9 @@ func groupByBuildChildReqOrdering(
 	}
 	groupBy := parent.(*memo.GroupByExpr)
 	result := *required
-	if !result.SubsetOfCols(groupBy.Input.Relational().OutputCols) {
+	if !result.SubsetOfCols(groupBy.GroupingCols) {
 		result = result.Copy()
-		result.ProjectCols(groupBy.Input.Relational().OutputCols)
+		result.ProjectCols(groupBy.GroupingCols)
 	}
 
 	result = result.Intersection(&groupBy.Ordering)

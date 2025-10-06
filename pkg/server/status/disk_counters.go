@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 //go:build !darwin
+// +build !darwin
 
 package status
 

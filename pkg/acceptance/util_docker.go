@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -146,7 +145,7 @@ func testDocker(
 			// Otherwise, the directory removal will cause the cluster nodes
 			// to crash and report abnormal termination, even when the test
 			// succeeds otherwise.
-			log.Dev.Infof(ctx, "cleaning up docker volume")
+			log.Infof(ctx, "cleaning up docker volume")
 			l.Cleanup(ctx, preserveLogs)
 		}()
 
@@ -154,12 +153,12 @@ func testDocker(
 			containerConfig.Env = append(containerConfig.Env, "PGHOST="+l.Hostname(0))
 		}
 
-		log.Dev.Infof(ctx, "starting one-shot container")
+		log.Infof(ctx, "starting one-shot container")
 		err = l.OneShot(
 			ctx, acceptanceImage, types.ImagePullOptions{}, containerConfig, hostConfig,
 			platforms.DefaultSpec(), "docker-"+name,
 		)
-		log.Dev.Infof(ctx, "one-shot container terminated: %v", err)
+		log.Infof(ctx, "one-shot container terminated: %v", err)
 		preserveLogs = err != nil
 	})
 	return err
@@ -171,7 +170,7 @@ func testDocker(
 // so the files can be used inside a docker container. The caller function is responsible for cleaning up.
 // This function doesn't copy the original file permissions and uses 755 for directories and files.
 func copyRunfiles(source, destination string) error {
-	return filepath.WalkDir(source, func(path string, dirEntry fs.DirEntry, walkErr error) error {
+	return filepath.WalkDir(source, func(path string, dirEntry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -233,7 +232,7 @@ func runTestDockerCLI(t *testing.T, testNameSuffix, testFilePath string) {
 	testFile := filepath.Base(testFilePath)
 	testPath := filepath.Join(containerPath, testFile)
 	t.Run(testFile, func(t *testing.T) {
-		log.Dev.Infof(ctx, "-- starting tests from: %s", testFile)
+		log.Infof(ctx, "-- starting tests from: %s", testFile)
 
 		// Symlink the logs directory to /logs, which is visible outside of the
 		// container and preserved if the test fails. (They don't write to /logs

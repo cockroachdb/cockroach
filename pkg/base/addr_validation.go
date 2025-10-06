@@ -10,12 +10,9 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"runtime"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,7 +32,7 @@ import (
 func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// Validate the advertise address.
 	advHost, advPort, err := validateAdvertiseAddr(ctx,
-		cfg.AdvertiseAddr, cfg.Addr, "", cliflags.ListenAddr, cfg.Insecure)
+		cfg.AdvertiseAddr, cfg.Addr, "", cliflags.ListenAddr)
 	if err != nil {
 		return invalidFlagErr(err, cliflags.AdvertiseAddr)
 	}
@@ -51,7 +48,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// Validate the SQL advertise address. Use the provided advertise
 	// addr as default.
 	advSQLHost, advSQLPort, err := validateAdvertiseAddr(ctx,
-		cfg.SQLAdvertiseAddr, cfg.SQLAddr, advHost, cliflags.ListenSQLAddr, cfg.Insecure)
+		cfg.SQLAdvertiseAddr, cfg.SQLAddr, advHost, cliflags.ListenSQLAddr)
 	if err != nil {
 		return invalidFlagErr(err, cliflags.SQLAdvertiseAddr)
 	}
@@ -67,7 +64,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 	// Validate the HTTP advertise address. Use the provided advertise
 	// addr as default.
 	advHTTPHost, advHTTPPort, err := validateAdvertiseAddr(ctx,
-		cfg.HTTPAdvertiseAddr, cfg.HTTPAddr, advHost, cliflags.ListenHTTPAddr, cfg.Insecure)
+		cfg.HTTPAdvertiseAddr, cfg.HTTPAddr, advHost, cliflags.ListenHTTPAddr)
 	if err != nil {
 		return errors.Wrap(err, "cannot compute public HTTP address")
 	}
@@ -89,10 +86,7 @@ func (cfg *Config) ValidateAddrs(ctx context.Context) error {
 // that if the "host" part is empty, it gets filled in with
 // the configured listen address if any, or the canonical host name.
 func validateAdvertiseAddr(
-	ctx context.Context,
-	advAddr, listenAddr, defaultHost string,
-	listenFlag cliflags.FlagInfo,
-	insecure bool,
+	ctx context.Context, advAddr, listenAddr, defaultHost string, listenFlag cliflags.FlagInfo,
 ) (string, string, error) {
 	listenHost, listenPort, err := getListenAddr(listenAddr, defaultHost)
 	if err != nil {
@@ -138,12 +132,7 @@ func validateAdvertiseAddr(
 			// locally but not elsewhere) but at least it prevents typos.
 			_, err = net.DefaultResolver.LookupIPAddr(ctx, advHost)
 			if err != nil {
-				// Host resolution failed. Don't error out when running on Mac with `--insecure`.
-				if runtime.GOOS == "darwin" && insecure {
-					log.Ops.Shoutf(ctx, severity.WARNING, "Unable to resolve `hostname` due to %v\n", err)
-				} else {
-					return "", "", err
-				}
+				return "", "", err
 			}
 		}
 	}

@@ -35,6 +35,7 @@ function isSortOptionOnActivityTable(sort: SqlStatsSortType): boolean {
     case SqlStatsSortOptions.SERVICE_LAT:
     case SqlStatsSortOptions.EXECUTION_COUNT:
     case SqlStatsSortOptions.CPU_TIME:
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
     case SqlStatsSortOptions.CONTENTION_TIME:
     case SqlStatsSortOptions.PCT_RUNTIME:
       return true;
@@ -45,7 +46,10 @@ function isSortOptionOnActivityTable(sort: SqlStatsSortType): boolean {
 
 function isSortOptionForStatementOnly(sort: SqlStatsSortType): boolean {
   switch (sort) {
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
     case SqlStatsSortOptions.PCT_RUNTIME:
+    case SqlStatsSortOptions.LATENCY_INFO_P50:
+    case SqlStatsSortOptions.LATENCY_INFO_P90:
     case SqlStatsSortOptions.LATENCY_INFO_MIN:
     case SqlStatsSortOptions.LATENCY_INFO_MAX:
     case SqlStatsSortOptions.LAST_EXEC:
@@ -66,10 +70,16 @@ export function getSortLabel(
       return "Execution Count";
     case SqlStatsSortOptions.CPU_TIME:
       return "SQL CPU Time";
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
+      return "P99 Latency";
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "Contention Time";
     case SqlStatsSortOptions.PCT_RUNTIME:
       return "% of All Runtime";
+    case SqlStatsSortOptions.LATENCY_INFO_P50:
+      return "P50 Latency";
+    case SqlStatsSortOptions.LATENCY_INFO_P90:
+      return "P90 Latency";
     case SqlStatsSortOptions.LATENCY_INFO_MIN:
       return "Min Latency";
     case SqlStatsSortOptions.LATENCY_INFO_MAX:
@@ -97,10 +107,16 @@ export function getSortColumn(sort: SqlStatsSortType): string {
       return "executionCount";
     case SqlStatsSortOptions.CPU_TIME:
       return "cpu";
+    case SqlStatsSortOptions.P99_STMTS_ONLY:
+      return "latencyP99";
     case SqlStatsSortOptions.CONTENTION_TIME:
       return "contention";
     case SqlStatsSortOptions.PCT_RUNTIME:
       return "workloadPct";
+    case SqlStatsSortOptions.LATENCY_INFO_P50:
+      return "latencyP50";
+    case SqlStatsSortOptions.LATENCY_INFO_P90:
+      return "latencyP90";
     case SqlStatsSortOptions.LATENCY_INFO_MIN:
       return "latencyMin";
     case SqlStatsSortOptions.LATENCY_INFO_MAX:
@@ -128,10 +144,16 @@ export function getReqSortColumn(sort: string): SqlStatsSortType {
       return SqlStatsSortOptions.EXECUTION_COUNT;
     case "cpu":
       return SqlStatsSortOptions.CPU_TIME;
+    case "latencyP99":
+      return SqlStatsSortOptions.P99_STMTS_ONLY;
     case "contention":
       return SqlStatsSortOptions.CONTENTION_TIME;
     case "workloadPct":
       return SqlStatsSortOptions.PCT_RUNTIME;
+    case "latencyP50":
+      return SqlStatsSortOptions.LATENCY_INFO_P50;
+    case "latencyP90":
+      return SqlStatsSortOptions.LATENCY_INFO_P90;
     case "latencyMin":
       return SqlStatsSortOptions.LATENCY_INFO_MIN;
     case "latencyMax":

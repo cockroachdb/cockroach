@@ -7,7 +7,6 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -55,7 +54,7 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 
 	// Resolve the trigger function and check its privileges.
 	funcExpr := tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: ct.FuncName}}
-	typedExpr := inScope.resolveType(&funcExpr, types.AnyElement)
+	typedExpr := inScope.resolveType(&funcExpr, types.Any)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(errors.AssertionFailedf("%s is not a function", funcExpr.Func.String()))
@@ -176,19 +175,10 @@ func (b *Builder) buildFunctionForTrigger(
 		panic(errors.AssertionFailedf("SQL language not supported for triggers"))
 	}
 	// The trigger always references the trigger function.
-	b.schemaFunctionDeps.Add(int(funcdesc.UserDefinedFunctionOIDToID(o.Oid)))
+	b.schemaFunctionDeps.Add(int(o.Oid))
 
 	// The trigger function can reference the NEW and OLD transition relations,
 	// aliased in the trigger definition.
-	if len(ct.Transitions) > 0 {
-		// Save the existing CTEs in the builder and restore them after the function
-		// body is built.
-		prevCTEs := b.ctes
-		b.ctes = nil
-		defer func() {
-			b.ctes = prevCTEs
-		}()
-	}
 	for _, transition := range ct.Transitions {
 		// Build a fake relational expression with a column corresponding to each
 		// column from the table.
@@ -213,24 +203,25 @@ func (b *Builder) buildFunctionForTrigger(
 		funcScope.ctes[string(transition.Name)] = cte
 		b.addCTE(cte)
 	}
+	if len(ct.Transitions) > 0 {
+		defer func() {
+			// Reset the CTEs in the builder after the function body is built.
+			b.ctes = nil
+		}()
+	}
 
 	// The trigger function takes a set of implicitly-defined parameters, two of
 	// which are determined by the table's record type. Add them to the trigger
 	// function scope.
-	triggerFuncParams := make([]routineParam, 0, len(triggerFuncStaticParams)+2)
+	numStaticParams := len(triggerFuncStaticParams)
+	triggerFuncParams := make([]routineParam, numStaticParams, numStaticParams+2)
+	copy(triggerFuncParams, triggerFuncStaticParams)
 	triggerFuncParams = append(triggerFuncParams, routineParam{name: triggerColNew, typ: tableTyp})
 	triggerFuncParams = append(triggerFuncParams, routineParam{name: triggerColOld, typ: tableTyp})
-	triggerFuncParams = append(triggerFuncParams, triggerFuncStaticParams...)
 	for i, param := range triggerFuncParams {
 		paramColName := funcParamColName(param.name, i)
 		col := b.synthesizeColumn(funcScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
 		col.setParamOrd(i)
-		if i == triggerArgvColIdx {
-			// Due to #135311, we disallow references to the TG_ARGV param for now.
-			if !b.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
-				col.resolveErr = unimplementedArgvErr
-			}
-		}
 	}
 
 	// Now that the transition relations and table type are known, fully build and
@@ -245,8 +236,8 @@ func (b *Builder) buildFunctionForTrigger(
 	}
 	b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 		plBuilder := newPLpgSQLBuilder(
-			b, basePLOptions().WithIsTriggerFn(), ct.FuncName.String(), stmt.AST.Label,
-			nil /* colRefs */, triggerFuncParams, tableTyp, nil /* outScope */, 0, /* resultBufferID */
+			b, ct.FuncName.String(), stmt.AST.Label, nil /* colRefs */, triggerFuncParams, tableTyp,
+			false /* isProcedure */, true /* buildSQL */, nil, /* outScope */
 		)
 		funcScope = plBuilder.buildRootBlock(stmt.AST, funcScope, triggerFuncParams)
 	})
@@ -336,10 +327,6 @@ var triggerFuncStaticParams = []routineParam{
 	{name: "tg_argv", typ: types.StringArray, class: tree.RoutineParamIn},
 }
 
-// The trigger function parameters consist of OLD and NEW, followed by the
-// static parameters. The TG_ARGV parameter is last.
-var triggerArgvColIdx = len(triggerFuncStaticParams) + 1
-
 const triggerColNew = "new"
 const triggerColOld = "old"
 
@@ -379,6 +366,4 @@ var (
 		"column lists are not yet supported for triggers")
 	unimplementedViewTriggerErr = unimplemented.NewWithIssue(135658,
 		"triggers on views are not yet supported")
-	unimplementedArgvErr = unimplemented.NewWithIssue(135311,
-		"referencing the TG_ARGV trigger function parameter is not yet supported")
 )

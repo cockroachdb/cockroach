@@ -64,7 +64,7 @@ func refreshTables(
 	}
 
 	if expired || haveAnyMissing {
-		persistProgress(ctx, execCfg, job, progress, sql.StatusWaitingGC)
+		persistProgress(ctx, execCfg, job, progress, sql.RunningStatusWaitingGC)
 	}
 
 	return expired, earliestDeadline
@@ -106,7 +106,7 @@ func updateStatusForGCElements(
 		}
 		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, config.ObjectID(tableID))
 		if err != nil {
-			log.Dev.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
+			log.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
 			return nil
 		}
 		tableTTL := getTableTTL(defTTL, zoneCfg)
@@ -135,14 +135,14 @@ func updateStatusForGCElements(
 		return nil
 	}); err != nil {
 		if isMissingDescriptorError(err) {
-			log.Dev.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
+			log.Warningf(ctx, "table %d not found, marking as GC'd", tableID)
 			markTableGCed(ctx, tableID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 			for indexID := range indexDropTimes {
 				markIndexGCed(ctx, indexID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 			}
 			return false, true, maxDeadline
 		}
-		log.Dev.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
+		log.Warningf(ctx, "error while calculating GC time for table %d, err: %+v", tableID, err)
 		return false, false, maxDeadline
 	}
 
@@ -181,7 +181,7 @@ func updateTableStatus(
 			sp,
 		)
 		if err != nil {
-			log.Dev.Errorf(ctx, "error checking protection status %v", err)
+			log.Errorf(ctx, "error checking protection status %v", err)
 			// We don't want to make GC decisions if we can't validate the protection
 			// status of a table. We don't change the status of the table to DELETING
 			// and simply return a high deadline value; The GC job will be retried
@@ -189,19 +189,19 @@ func updateTableStatus(
 			return maxDeadline
 		}
 		if isProtected {
-			log.Dev.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)
+			log.Infof(ctx, "a timestamp protection delayed GC of table %d", t.ID)
 			return maxDeadline
 		}
 
 		lifetime := timeutil.Until(deadline)
 		if lifetime < 0 {
 			if log.V(2) {
-				log.Dev.Infof(ctx, "detected expired table %d", t.ID)
+				log.Infof(ctx, "detected expired table %d", t.ID)
 			}
 			droppedTable.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		} else {
 			if log.V(2) {
-				log.Dev.Infof(ctx, "table %d still has %+v until GC", t.ID, lifetime)
+				log.Infof(ctx, "table %d still has %+v until GC", t.ID, lifetime)
 			}
 		}
 		break
@@ -249,23 +249,23 @@ func updateIndexesStatus(
 			sp,
 		)
 		if err != nil {
-			log.Dev.Errorf(ctx, "error checking protection status %v", err)
+			log.Errorf(ctx, "error checking protection status %v", err)
 			continue
 		}
 		if isProtected {
-			log.Dev.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
+			log.Infof(ctx, "a timestamp protection delayed GC of index %d from table %d", idxProgress.IndexID, table.GetID())
 			continue
 		}
 		lifetime := time.Until(deadline)
 		if lifetime > 0 {
 			if log.V(2) {
-				log.Dev.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.GetID(), lifetime)
+				log.Infof(ctx, "index %d from table %d still has %+v until GC", idxProgress.IndexID, table.GetID(), lifetime)
 			}
 		}
 		if lifetime < 0 {
 			expired = true
 			if log.V(2) {
-				log.Dev.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
+				log.Infof(ctx, "detected expired index %d from table %d", idxProgress.IndexID, table.GetID())
 			}
 			idxProgress.Status = jobspb.SchemaChangeGCProgress_CLEARING
 		} else if deadline.Before(soonestDeadline) {
@@ -464,7 +464,7 @@ func refreshTenant(
 	if err == nil {
 		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
 	} else {
-		log.Dev.Errorf(ctx, "zone config for tenants range: err = %+v", err)
+		log.Errorf(ctx, "zone config for tenants range: err = %+v", err)
 	}
 
 	deadlineNanos := dropTime + int64(tenantTTLSeconds)*time.Second.Nanoseconds()
@@ -479,7 +479,7 @@ func refreshTenant(
 		}
 
 		if isProtected {
-			log.Dev.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
+			log.Infof(ctx, "GC TTL for dropped tenant %d has expired, but protected timestamp "+
 				"record(s) on the tenant keyspace are preventing GC", tenID)
 			return false, deadlineUnix, nil
 		}

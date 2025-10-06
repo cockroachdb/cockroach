@@ -14,7 +14,6 @@ import (
 )
 
 type alterTenantServiceNode struct {
-	zeroInputPlanNode
 	tenantSpec tenantSpec
 	newMode    mtinfopb.TenantServiceMode
 }

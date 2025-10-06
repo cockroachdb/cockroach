@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
@@ -30,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -58,15 +56,12 @@ type scanRequestScanner struct {
 var _ kvScanner = (*scanRequestScanner)(nil)
 
 func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg scanConfig) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.scanner.scan")
-	defer sp.Finish()
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if log.V(2) {
 		var sp roachpb.Spans = cfg.Spans
-		log.Changefeed.Infof(ctx, "performing scan on %s at %v withDiff %v",
+		log.Infof(ctx, "performing scan on %s at %v withDiff %v",
 			sp, cfg.Timestamp, cfg.WithDiff)
 	}
 
@@ -120,7 +115,7 @@ func (p *scanRequestScanner) Scan(ctx context.Context, sink kvevent.Writer, cfg 
 				backfillDec()
 			}
 			if log.V(2) {
-				log.Changefeed.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
+				log.Infof(ctx, `exported %d of %d: %v`, finished, len(spans), err)
 			}
 			return err
 		})
@@ -157,7 +152,7 @@ func (p *scanRequestScanner) tryAcquireMemory(
 		// Sink implements memory allocator interface, so acquire
 		// memory needed to hold scan reply.
 		if logMemAcquireEvery.ShouldLog() {
-			log.Changefeed.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
+			log.Errorf(ctx, "Failed to acquire memory for export span: %s (attempt %d)",
 				err, attempt.CurrentAttempt()+1)
 		}
 		alloc, err = allocator.AcquireMemory(ctx, changefeedbase.ScanRequestSize.Get(&p.settings.SV))
@@ -178,17 +173,14 @@ func (p *scanRequestScanner) exportSpan(
 	sink kvevent.Writer,
 	knobs TestingKnobs,
 ) error {
-	ctx, sp := tracing.ChildSpan(ctx, "changefeed.kvfeed.scanner.export_span")
-	defer sp.Finish()
-
 	txn := p.db.NewTxn(ctx, "changefeed backfill")
 	if log.V(2) {
-		log.Changefeed.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
+		log.Infof(ctx, `sending ScanRequest %s at %s`, span, ts)
 	}
 	if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
 		return err
 	}
-	stopwatchStart := crtime.NowMono()
+	stopwatchStart := timeutil.Now()
 	var scanDuration, bufferDuration time.Duration
 	targetBytesPerScan := changefeedbase.ScanRequestSize.Get(&p.settings.SV)
 	for remaining := &span; remaining != nil; {
@@ -197,7 +189,7 @@ func (p *scanRequestScanner) exportSpan(
 		r := kvpb.NewScan(remaining.Key, remaining.EndKey).(*kvpb.ScanRequest)
 		r.ScanFormat = kvpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
-		b.Header.ConnectionClass = rpcbase.RangefeedClass
+		b.Header.ConnectionClass = rpc.RangefeedClass
 		b.AdmissionHeader = kvpb.AdmissionHeader{
 			// TODO(irfansharif): Make this configurable if we want system table
 			// scanners or support "high priority" changefeeds to run at higher
@@ -224,14 +216,14 @@ func (p *scanRequestScanner) exportSpan(
 		if err := txn.Run(ctx, b); err != nil {
 			return errors.Wrapf(err, `fetching changes for %s`, span)
 		}
-		afterScan := crtime.NowMono()
-		scanDuration += afterScan.Sub(crtime.MonoFromTime(start))
-
+		afterScan := timeutil.Now()
 		res := b.RawResponse().Responses[0].GetScan()
 		if err := slurpScanResponse(ctx, sink, res, ts, withDiff, *remaining); err != nil {
 			return err
 		}
-		bufferDuration += afterScan.Elapsed()
+		afterBuffer := timeutil.Now()
+		scanDuration += afterScan.Sub(start)
+		bufferDuration += afterBuffer.Sub(afterScan)
 		if res.ResumeSpan != nil {
 			consumed := roachpb.Span{Key: remaining.Key, EndKey: res.ResumeSpan.Key}
 			if err := sink.Add(
@@ -249,8 +241,8 @@ func (p *scanRequestScanner) exportSpan(
 		return err
 	}
 	if log.V(2) {
-		log.Changefeed.Infof(ctx, `finished Scan of %s at %s took %s`,
-			span, ts.AsOfSystemTime(), stopwatchStart.Elapsed())
+		log.Infof(ctx, `finished Scan of %s at %s took %s`,
+			span, ts.AsOfSystemTime(), timeutil.Since(stopwatchStart))
 	}
 	return nil
 }
@@ -320,7 +312,7 @@ func slurpScanResponse(
 				return errors.Wrapf(err, `decoding changes for %s`, span)
 			}
 			if log.V(3) {
-				log.Changefeed.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
+				log.Infof(ctx, "scanResponse: %s@%s", keys.PrettyPrint(nil, keyBytes), ts)
 			}
 			if err = sink.Add(ctx, kvevent.NewBackfillKVEvent(keyBytes, ts, valBytes, withDiff, backfillTS)); err != nil {
 				return errors.Wrapf(err, `buffering changes for %s`, span)

@@ -95,7 +95,7 @@ func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *Flows
 // given traces and flow metadata.
 // NOTE: When adding fields to this struct, be sure to update Accumulate.
 type QueryLevelStats struct {
-	DistSQLNetworkBytesSent            int64
+	NetworkBytesSent                   int64
 	MaxMemUsage                        int64
 	MaxDiskUsage                       int64
 	KVBytesRead                        int64
@@ -116,10 +116,8 @@ type QueryLevelStats struct {
 	MvccRangeKeyCount                  int64
 	MvccRangeKeyContainedPoints        int64
 	MvccRangeKeySkippedPoints          int64
-	DistSQLNetworkMessages             int64
+	NetworkMessages                    int64
 	ContentionTime                     time.Duration
-	LockWaitTime                       time.Duration
-	LatchWaitTime                      time.Duration
 	ContentionEvents                   []kvpb.ContentionEvent
 	RUEstimate                         float64
 	CPUTime                            time.Duration
@@ -156,7 +154,7 @@ func MakeQueryLevelStatsWithErr(stats QueryLevelStats, err error) QueryLevelStat
 
 // Accumulate accumulates other's stats into the receiver.
 func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
-	s.DistSQLNetworkBytesSent += other.DistSQLNetworkBytesSent
+	s.NetworkBytesSent += other.NetworkBytesSent
 	if other.MaxMemUsage > s.MaxMemUsage {
 		s.MaxMemUsage = other.MaxMemUsage
 	}
@@ -181,10 +179,8 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.MvccRangeKeyCount += other.MvccRangeKeyCount
 	s.MvccRangeKeyContainedPoints += other.MvccRangeKeyContainedPoints
 	s.MvccRangeKeySkippedPoints += other.MvccRangeKeySkippedPoints
-	s.DistSQLNetworkMessages += other.DistSQLNetworkMessages
+	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
-	s.LockWaitTime += other.LockWaitTime
-	s.LatchWaitTime += other.LatchWaitTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 	s.RUEstimate += other.RUEstimate
 	s.CPUTime += other.CPUTime
@@ -284,8 +280,6 @@ func (a *TraceAnalyzer) ProcessStats() {
 		s.MvccRangeKeyContainedPoints += int64(stats.KV.RangeKeyContainedPoints.Value())
 		s.MvccRangeKeySkippedPoints += int64(stats.KV.RangeKeySkippedPoints.Value())
 		s.ContentionTime += stats.KV.ContentionTime.Value()
-		s.LockWaitTime += stats.KV.LockWaitTime.Value()
-		s.LatchWaitTime += stats.KV.LatchWaitTime.Value()
 		s.RUEstimate += float64(stats.Exec.ConsumedRU.Value())
 		s.CPUTime += stats.Exec.CPUTime.Value()
 	}
@@ -295,8 +289,8 @@ func (a *TraceAnalyzer) ProcessStats() {
 		if stats.stats == nil {
 			continue
 		}
-		s.DistSQLNetworkBytesSent += getNetworkBytesFromComponentStats(stats.stats)
-		s.DistSQLNetworkMessages += getNumDistSQLNetworkMessagesFromComponentsStats(stats.stats)
+		s.NetworkBytesSent += getNetworkBytesFromComponentStats(stats.stats)
+		s.NetworkMessages += getNumNetworkMessagesFromComponentsStats(stats.stats)
 	}
 
 	// Process flowStats.
@@ -350,7 +344,7 @@ func getNetworkBytesFromComponentStats(v *execinfrapb.ComponentStats) int64 {
 	return 0
 }
 
-func getNumDistSQLNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) int64 {
+func getNumNetworkMessagesFromComponentsStats(v *execinfrapb.ComponentStats) int64 {
 	// We expect exactly one of MessagesReceived and MessagesSent to be set. It
 	// may seem like we are double-counting everything (from both the send and
 	// the receive side) but in practice only one side of each stream presents

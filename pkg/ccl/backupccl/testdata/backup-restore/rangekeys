@@ -1,0 +1,92 @@
+# Tests that Backups without Revisions History and Restore properly handle
+# range keys
+
+# disabled to run within tenants because the kv request cmd only works on system tenants
+
+reset test-nodelocal
+----
+
+new-cluster name=s1 disable-tenant
+----
+
+exec-sql
+CREATE DATABASE orig;
+USE orig;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foo VALUES (1, 'x'),(2,'y');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (11, 'xx'),(22,'yy');
+----
+
+# Ensure a full backup properly captures range keys
+# - with foo, delete then insert, and ensure no original data surfaces in restore
+# - with baz: chill for now
+
+kv request=DeleteRange target=foo
+----
+
+exec-sql
+INSERT INTO foo VALUES (3,'z');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test-root/';
+----
+
+exec-sql
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
+----
+
+
+query-sql
+SELECT count(*) from orig1.foo;
+----
+1
+
+query-sql
+SELECT count(*) from orig1.baz;
+----
+2
+
+exec-sql
+DROP DATABASE orig1 CASCADE
+----
+
+# Ensure incremental backup without revision history
+# handles range tombstones:
+# - with foo, insert and ensure latest data from previous backup surfaces in RESTORE
+# - with baz, delete then insert, and ensure no data from previous backup surfaces in RESTORE
+
+exec-sql
+INSERT INTO foo VALUES (4,'a'),(5,'b');
+----
+
+kv request=DeleteRange target=baz
+----
+
+exec-sql
+INSERT INTO baz VALUES (33,'zz');
+----
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/test-root/';
+----
+
+exec-sql
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
+----
+
+exec-sql expect-error-regex=(failed to ingest into remote files: online restore of range keys not supported)
+RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig2', experimental deferred copy;
+----
+regex matches error
+
+query-sql
+SELECT count(*) from orig1.foo
+----
+3
+
+query-sql
+SELECT count(*) from orig1.baz
+----
+1

@@ -30,18 +30,12 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	mem *memo.Memo,
-	e memo.RelExpr,
-	required *physical.Required,
+	ctx context.Context, evalCtx *eval.Context, e memo.RelExpr, required *physical.Required,
 ) bool {
 	// All operators can provide the Presentation and LimitHint properties, so no
 	// need to check for that.
-	canProvideOrdering := e.Op() == opt.SortOp ||
-		ordering.CanProvide(ctx, evalCtx, mem, e, &required.Ordering)
-	canProvideDistribution := e.Op() == opt.DistributeOp ||
-		distribution.CanProvide(ctx, evalCtx, mem, e, &required.Distribution)
+	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
+	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
 	return canProvideOrdering && canProvideDistribution
 }
 
@@ -87,9 +81,8 @@ func BuildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.ExportExpr).Props.Presentation
 	}
 
-	childProps.Ordering = ordering.BuildChildRequired(mem, parent, &parentProps.Ordering, nth)
+	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
-	childProps.RemoteBranch = parentProps.RemoteBranch
 
 	switch parent.Op() {
 	case opt.LimitOp:
@@ -115,16 +108,10 @@ func BuildChildPhysicalProps(
 		childProps.LimitHint = parentProps.LimitHint
 
 	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
-		opt.UnionOp, opt.UnionAllOp:
+		opt.UnionOp, opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
 		// TODO(celine): Set operation limits need further thought; for example,
 		// the right child of an ExceptOp should not be limited.
 		childProps.LimitHint = parentProps.LimitHint
-
-	case opt.LocalityOptimizedSearchOp:
-		childProps.LimitHint = parentProps.LimitHint
-		if nth == 1 {
-			childProps.RemoteBranch = true
-		}
 
 	case opt.DistinctOnOp:
 		distinctCount := parent.Relational().Statistics().RowCount
@@ -315,20 +302,20 @@ func init() {
 		lookupJoin *memo.LookupJoinExpr,
 		required *physical.Required,
 		optimizer interface{},
-	) physical.Distribution {
+	) (physicalDistribution physical.Distribution) {
 		if optimizer == nil {
-			return physical.Distribution{}
+			return physicalDistribution
 		}
 		o, ok := optimizer.(*Optimizer)
-		if !ok || o.mem == nil || !o.mem.IsOptimized() {
-			return physical.Distribution{}
+		if !ok {
+			return physicalDistribution
 		}
 		if o.evalCtx == nil {
-			return physical.Distribution{}
+			return physicalDistribution
 		}
-		_, d := distribution.BuildLookupJoinLookupTableDistribution(
-			o.ctx, o.evalCtx, o.mem, lookupJoin, required, o.MaybeGetBestCostRelation,
+		_, physicalDistribution = distribution.BuildLookupJoinLookupTableDistribution(
+			o.ctx, o.evalCtx, lookupJoin, required, o.MaybeGetBestCostRelation,
 		)
-		return d
+		return physicalDistribution
 	}
 }

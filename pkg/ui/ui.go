@@ -25,27 +25,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	_ "github.com/cockroachdb/cockroach/pkg/ui/settings" // Import the settings package to register UI-related settings for doc generation.
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
-	cspHeader = "default-src 'self'; " +
-		"style-src 'self' 'unsafe-inline'; " +
-		"font-src 'self' data:; " +
-		"img-src 'self' data:; " +
-		"connect-src 'self' https://register.cockroachdb.com;"
+	utc int64 = iota
+	americaNewYork
 )
 
-// TODO(davidh): This setting can be removed after 24.3 since it only
-// affects legacy DB page.
-var DatabaseLocalityMetadataEnabled = settings.RegisterBoolSetting(
+var _ = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
-	"ui.database_locality_metadata.enabled",
-	"if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute",
-	true,
+	"ui.display_timezone",
+	"the timezone used to format timestamps in the ui",
+	"Etc/UTC",
+	map[int64]string{
+		utc:            "Etc/UTC",
+		americaNewYork: "America/New_York",
+		// Adding new timezones?
+		// Add them to the allowlist of included timezones!
+		// See pkg/ui/workspaces/cluster-ui/webpack.config.js
+		// and pkg/ui/workspaces/db-console/webpack.config.js.
+	},
 	settings.WithPublic)
 
 // Assets is used for embedded JS assets required for UI.
@@ -56,9 +58,10 @@ var Assets fs.FS
 // HaveUI tells whether the admin UI has been linked into the binary.
 var HaveUI = false
 
-// indexHTML contains HTML which includes the UI JavaScript bundles for
-// DB console. It contains a template variable for the nonce attribute to
-// provide with the "Content-Security-Policy" header.
+// indexTemplate takes arguments about the current session and returns HTML
+// which includes the UI JavaScript bundles, plus a script tag which sets the
+// currently logged in user so that the UI JavaScript can decide whether to show
+// a login page.
 var indexHTML = []byte(`<!DOCTYPE html>
 <html>
 	<head>
@@ -139,11 +142,12 @@ func Handler(cfg Config) http.Handler {
 	// etags is used to provide a unique per-file checksum for each served file,
 	// which enables client-side caching using Cache-Control and ETag headers.
 	etags := make(map[string]string)
+
 	if HaveUI && Assets != nil {
 		// Only compute hashes for UI-enabled builds
 		err := httputil.ComputeEtags(Assets, etags)
 		if err != nil {
-			log.Dev.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
+			log.Errorf(context.Background(), "Unable to compute asset hashes: %+v", err)
 		}
 	}
 
@@ -158,7 +162,7 @@ func Handler(cfg Config) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		licenseType, err := base.LicenseType(cfg.Settings)
 		if err != nil {
-			log.Dev.Errorf(context.Background(), "unable to get license type: %+v", err)
+			log.Errorf(context.Background(), "unable to get license type: %+v", err)
 		}
 		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
@@ -187,13 +191,13 @@ func Handler(cfg Config) http.Handler {
 		if uiConfigPath.MatchString(r.URL.Path) {
 			argBytes, err := json.Marshal(args)
 			if err != nil {
-				log.Dev.Errorf(r.Context(), "unable to deserialize ui config args: %v", err)
+				log.Errorf(r.Context(), "unable to deserialize ui config args: %v", err)
 				http.Error(w, err.Error(), 500)
 				return
 			}
 			_, err = w.Write(argBytes)
 			if err != nil {
-				log.Dev.Errorf(r.Context(), "unable to write ui config args: %v", err)
+				log.Errorf(r.Context(), "unable to write ui config args: %v", err)
 				http.Error(w, err.Error(), 500)
 				return
 			}
@@ -201,7 +205,6 @@ func Handler(cfg Config) http.Handler {
 		}
 
 		if r.Header.Get("Crdb-Development") != "" {
-			w.Header().Set("Content-Security-Policy", cspHeader)
 			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(indexHTML))
 			return
 		}
@@ -216,7 +219,6 @@ func Handler(cfg Config) http.Handler {
 			return
 		}
 
-		w.Header().Set("Content-Security-Policy", cspHeader)
 		http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(indexHTML))
 	})
 }

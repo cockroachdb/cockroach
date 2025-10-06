@@ -143,9 +143,8 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 		{cv(20, 1, 0, 4), "20.1-upgrading-to-20.2-step-004"},
 		{cv(20, 2, 0, 7), "20.2-upgrading-to-21.1-step-007(fence)"},
 		{cv(20, 2, 0, 4), "20.2-upgrading-to-21.1-step-004"},
-		{cv(22, 2, 1, 5), "22.2-upgrading-to-23.1-step-005(fence)"}, {cv(22, 2, 1, 4), "22.2-upgrading-to-23.1-step-004"},
-		{cv(24, 2, 0, 0), "24.2"},
-		{cv(24, 2, 0, 0).FenceVersion(), "24.2-upgrading-final-step(fence)"},
+		{cv(22, 2, 1, 5), "22.2-upgrading-to-23.1-step-005(fence)"},
+		{cv(22, 2, 1, 4), "22.2-upgrading-to-23.1-step-004"},
 	}
 	for _, test := range tests {
 		if actual := test.cv.PrettyPrint().StripMarkers(); actual != test.exp {

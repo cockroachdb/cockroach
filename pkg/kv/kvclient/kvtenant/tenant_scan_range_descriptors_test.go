@@ -31,12 +31,12 @@ func setup(
 		},
 	})
 
-	ten3ID := roachpb.MustMakeTenantID(3)
-	tenant3, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
-		TenantID: ten3ID,
+	ten2ID := roachpb.MustMakeTenantID(2)
+	tenant2, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
+		TenantID: ten2ID,
 	})
 	require.NoError(t, err)
-	return tc, tenant3, tenant3.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
+	return tc, tenant2, tenant2.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
 }
 
 // TestScanRangeDescriptors is an integration test to ensure that tenants can
@@ -46,20 +46,20 @@ func TestScanRangeDescriptors(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, tenant3, iteratorFactory := setup(t, ctx)
+	tc, tenant2, iteratorFactory := setup(t, ctx)
 	defer tc.Stopper().Stop(ctx)
 
 	// Split some ranges within tenant2 that we'll scan over.
-	ten3Codec := tenant3.Codec()
-	ten3Split1 := append(ten3Codec.TenantPrefix(), 'a')
-	ten3Split2 := append(ten3Codec.TenantPrefix(), 'b')
+	ten2Codec := tenant2.Codec()
+	ten2Split1 := append(ten2Codec.TenantPrefix(), 'a')
+	ten2Split2 := append(ten2Codec.TenantPrefix(), 'b')
 	{
-		tc.SplitRangeOrFatal(t, ten3Split1)
-		tc.SplitRangeOrFatal(t, ten3Split2)
-		tc.SplitRangeOrFatal(t, ten3Codec.TenantEndKey()) // Last range
+		tc.SplitRangeOrFatal(t, ten2Split1)
+		tc.SplitRangeOrFatal(t, ten2Split2)
+		tc.SplitRangeOrFatal(t, ten2Codec.TenantEndKey()) // Last range
 	}
 
-	iter, err := iteratorFactory.NewIterator(ctx, ten3Codec.TenantSpan())
+	iter, err := iteratorFactory.NewIterator(ctx, ten2Codec.TenantSpan())
 	require.NoError(t, err)
 
 	var rangeDescs []roachpb.RangeDescriptor
@@ -71,17 +71,17 @@ func TestScanRangeDescriptors(t *testing.T) {
 	require.Len(t, rangeDescs, 3)
 	require.Equal(
 		t,
-		keys.MustAddr(ten3Codec.TenantPrefix()),
+		keys.MustAddr(ten2Codec.TenantPrefix()),
 		rangeDescs[0].StartKey,
 	)
 	require.Equal(
 		t,
-		keys.MustAddr(ten3Split1),
+		keys.MustAddr(ten2Split1),
 		rangeDescs[1].StartKey,
 	)
 	require.Equal(
 		t,
-		keys.MustAddr(ten3Split2),
+		keys.MustAddr(ten2Split2),
 		rangeDescs[2].StartKey,
 	)
 
@@ -110,7 +110,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	// Last range we created above.
 	require.Equal(
 		t,
-		keys.MustAddr(ten3Codec.TenantEndKey()),
+		keys.MustAddr(ten2Codec.TenantEndKey()),
 		rangeDescs[numRanges-1].StartKey,
 	)
 }
@@ -124,5 +124,5 @@ func TestScanRangeDescriptorsOutsideTenantKeyspace(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	_, err := iteratorFactory.NewIterator(ctx, keys.EverythingSpan)
-	require.ErrorContains(t, err, "requested key span /M{in-ax} not fully contained in tenant keyspace /Tenant/{3-4}")
+	require.ErrorContains(t, err, "requested key span /M{in-ax} not fully contained in tenant keyspace /Tenant/{2-3}")
 }

@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 # SELECT with no table.
 
 query I
@@ -785,7 +783,7 @@ SET disallow_full_table_scans = true;
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of partial indexes are allowed.
@@ -825,7 +823,7 @@ ALTER TABLE t_disallow_scans INJECT STATISTICS '[
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold to at least 4
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of virtual tables are still allowed with this setting (#123783).
@@ -833,11 +831,11 @@ statement ok
 SELECT * FROM pg_class
 
 statement ok
-SELECT * FROM crdb_internal.node_build_info
+SELECT * FROM crdb_internal.jobs
 
 # Tests for 'large_full_scan_rows'.
 statement ok
-SET large_full_scan_rows = 4
+SET large_full_scan_rows = 1000
 
 # These queries succeed because the full table/index scans aren't considered
 # "large".
@@ -853,13 +851,7 @@ SET large_full_scan_rows = 2
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold to at least 4
-SELECT * FROM t_disallow_scans@b_idx
-
-statement ok
-SET large_full_scan_rows = 3
-
-statement error pq: query `.*` contains a full table\/index scan which is explicitly disallowed\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold
+statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
 SELECT * FROM t_disallow_scans@b_idx
 
 # Cleanup
@@ -976,34 +968,3 @@ query I
 SELECT c FROM t102864 WHERE c IN (0, 862827606027206657::INT8);
 ----
 0
-
-# Regression test for ignoring the reverse direction of the scan in the batch
-# with Gets (#146637).
-statement ok
-CREATE TABLE t146637 (
-    a INT NOT NULL,
-    b TEXT NOT NULL,
-    c TEXT NOT NULL,
-    PRIMARY KEY (a, b),
-    FAMILY (a, b, c)
-);
-
-statement ok
-INSERT INTO t146637 VALUES
-    (0, 'foo', 'bar'),
-    (0, 'foo2', 'bar2'),
-    (0, 'foo3', 'bar3'),
-    (100, 'foo', 'bar'),
-    (100, 'foo2', 'bar2'),
-    (100, 'foo3', 'bar3'),
-    (2, 'foo4', 'bar4'),
-    (2, 'foo5', 'bar5');
-
-retry
-statement ok
-ALTER TABLE t146637 SPLIT AT VALUES (1), (2), (3);
-
-query ITT
-SELECT * FROM t146637 WHERE (a = 0 OR a = 100) AND b = 'foo' ORDER BY a DESC LIMIT 1;
-----
-100  foo  bar

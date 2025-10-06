@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE ab (
   a INT PRIMARY KEY,
@@ -107,9 +106,9 @@ CREATE FUNCTION public.f(a public.notmyworkday)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT a FROM public.t;
-  SELECT b FROM public.t@t_idx_b;
-  SELECT c FROM public.t@t_idx_c;
+  SELECT a FROM test.public.t;
+  SELECT b FROM test.public.t@t_idx_b;
+  SELECT c FROM test.public.t@t_idx_c;
   SELECT nextval('public.sq1'::REGCLASS);
 $$
 
@@ -854,8 +853,6 @@ SELECT * FROM f();
 
 statement ok
 DROP FUNCTION f;
-
-statement ok
 CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
 
 query T
@@ -1008,28 +1005,11 @@ PREPARE p AS SELECT f($1::REGCLASS::INT)
 statement ok
 EXECUTE p(10)
 
-subtest end
-
-subtest regression_142886
-
-# Regression test for #142886 - we should not be able to create an overload that
-# differs only in the type width of the input type.
-statement ok
-CREATE FUNCTION f142886(p VARCHAR(10)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
-
-statement error pgcode 42723 function "f142886" already exists with same argument types
-CREATE FUNCTION f142886(p VARCHAR(100)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
-
-statement ok
-DROP FUNCTION f142886;
-
-subtest end
-
 # Regression test for #142615.
 subtest regression_142615
 
 statement ok
-create function app_to_db_id(app_id INT8) RETURNS INT8 LANGUAGE plpgsql AS $$ BEGIN RETURN app_id * 2; END; $$;
+create function app_to_db_id(app_id INT8) RETURNS INT8 LANGUAGE SQL AS $$ SELECT app_id * 2; $$;
 
 statement ok
 create sequence seq1;
@@ -1043,152 +1023,7 @@ select * from pg_catalog.pg_attrdef;
 1508958170  132  2  unique_rowid()                                         unique_rowid()
 1202826234  151  1  gen_random_uuid()                                      gen_random_uuid()
 1202826232  151  3  now()                                                  now()
-3466299042  175  1  public.app_to_db_id(nextval('public.seq1'::REGCLASS))  public.app_to_db_id(nextval('public.seq1'::REGCLASS))
-3466299041  175  2  unique_rowid()                                         unique_rowid()
-
-subtest end
-
-subtest view
-
-statement ok
-CREATE TABLE xy (x INT, y INT);
-INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
-
-statement ok
-CREATE FUNCTION f_scalar() RETURNS INT LANGUAGE SQL AS $$ SELECT count(*) FROM xy $$;
-
-statement ok
-CREATE FUNCTION f_setof() RETURNS SETOF xy LANGUAGE SQL AS $$ SELECT * FROM xy $$;
-
-statement ok
-CREATE VIEW v AS SELECT x, y, f_scalar() FROM f_setof();
-
-statement ok
-CREATE MATERIALIZED VIEW mv AS SELECT x, y, f_scalar() FROM f_setof();
-
-query III
-SELECT * FROM v ORDER BY x, y;
-----
-1  2  3
-3  4  3
-5  6  3
-
-query III
-SELECT * FROM mv ORDER BY x, y;
-----
-1  2  3
-3  4  3
-5  6  3
-
-statement ok
-REFRESH MATERIALIZED VIEW mv;
-
-query III
-SELECT * FROM mv ORDER BY x, y;
-----
-1  2  3
-3  4  3
-5  6  3
-
-statement ok
-INSERT INTO xy VALUES (7, 8);
-
-query III
-SELECT * FROM v ORDER BY x, y;
-----
-1  2  4
-3  4  4
-5  6  4
-7  8  4
-
-query III
-SELECT * FROM mv ORDER BY x, y;
-----
-1  2  3
-3  4  3
-5  6  3
-
-statement ok
-REFRESH MATERIALIZED VIEW mv;
-
-query III
-SELECT * FROM mv ORDER BY x, y;
-----
-1  2  4
-3  4  4
-5  6  4
-7  8  4
-
-statement ok
-CREATE ROLE bob;
-
-statement ok
-GRANT ALL ON SCHEMA public TO bob;
-
-statement ok
-GRANT ALL ON v TO bob;
-
-statement ok
-GRANT ALL ON mv TO bob;
-
-statement ok
-REVOKE EXECUTE ON FUNCTION f_scalar() FROM PUBLIC;
-
-statement ok
-REVOKE EXECUTE ON FUNCTION f_scalar() FROM bob;
-
-statement ok
-SET ROLE bob;
-
-statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
-SELECT f_scalar();
-
-statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
-SELECT * FROM v;
-
-statement ok
-SELECT * FROM mv;
-
-statement ok
-SET ROLE root;
-
-statement error pgcode 0A000 cannot rename function "f_scalar" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
-ALTER FUNCTION f_scalar RENAME TO f_scalar_renamed;
-
-statement error pgcode 0A000 cannot rename function "f_setof" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
-ALTER FUNCTION f_setof RENAME TO f_setof_renamed;
-
-statement error pgcode 2BP01 pq: cannot drop function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
-DROP FUNCTION f_scalar;
-
-statement error pgcode 2BP01 pq: cannot drop function "f_setof" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
-DROP FUNCTION f_setof;
-
-statement ok
-DROP VIEW v;
-
-statement ok
-DROP MATERIALIZED VIEW mv;
-
-statement ok
-DROP FUNCTION f_scalar;
-
-statement ok
-DROP FUNCTION f_setof;
-
-# Test a view referencing a builtin function.
-statement ok
-CREATE VIEW v_builtin AS SELECT * FROM generate_series(1, 4);
-
-query I
-SELECT * FROM v_builtin ORDER BY 1;
-----
-1
-2
-3
-4
-
-statement ok
-DROP VIEW v_builtin;
+2121222035  174  1  public.app_to_db_id(nextval('public.seq1'::REGCLASS))  public.app_to_db_id(nextval('public.seq1'::REGCLASS))
+2121222032  174  2  unique_rowid()                                         unique_rowid()
 
 subtest end

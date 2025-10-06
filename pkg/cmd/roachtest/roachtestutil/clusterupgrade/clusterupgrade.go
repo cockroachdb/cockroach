@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 )
 
 var (
@@ -54,15 +54,15 @@ type Version struct {
 // tested, we print the branch name being tested if the test is
 // running on TeamCity, to make it clearer (instead of "<current>").
 func (v *Version) String() string {
-	suffix := ""
 	if v.IsCurrent() {
 		if currentBranch != "" {
-			suffix = fmt.Sprintf(" (%s)", currentBranch)
-		} else {
-			suffix = fmt.Sprintf(" (%s)", CurrentVersionString)
+			return currentBranch
 		}
+
+		return CurrentVersionString
 	}
-	return v.Version.String() + suffix
+
+	return v.Version.String()
 }
 
 // IsCurrent returns whether this version corresponds to the current
@@ -74,19 +74,19 @@ func (v *Version) IsCurrent() bool {
 // Equal compares the two versions, returning whether they represent
 // the same version.
 func (v *Version) Equal(other *Version) bool {
-	return v.Version.Compare(other.Version) == 0
+	return v.Version.Compare(&other.Version) == 0
 }
 
 // AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
 // allowing two `Version` objects to be compared directly.
 func (v *Version) AtLeast(other *Version) bool {
-	return v.Version.AtLeast(other.Version)
+	return v.Version.AtLeast(&other.Version)
 }
 
 // LessThan returns true if the version is strictly
 // older than the other version. `v < other`
 func (v *Version) LessThan(other *Version) bool {
-	return !v.Version.AtLeast(other.Version)
+	return !v.Version.AtLeast(&other.Version)
 }
 
 // Series returns the release series this version is a part of.
@@ -101,7 +101,7 @@ func CurrentVersion() *Version {
 		return &Version{*TestBuildVersion} // test-only
 	}
 
-	return &Version{version.MustParse(build.BinaryVersion())}
+	return &Version{*version.MustParse(build.BinaryVersion())}
 }
 
 // MustParseVersion parses the version string given (with or without
@@ -135,7 +135,7 @@ func ParseVersion(v string) (*Version, error) {
 		return nil, err
 	}
 
-	return &Version{parsedVersion}, nil
+	return &Version{*parsedVersion}, nil
 }
 
 // LatestPatchRelease returns the latest patch release version for a given
@@ -228,6 +228,7 @@ func UploadWorkload(
 	default:
 		minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
 	}
+
 	// If we are uploading the `current` version, skip version checking,
 	// as the binary used is the one passed via command line flags.
 	if !v.IsCurrent() && !v.AtLeast(minWorkloadBinaryVersion) {
@@ -238,15 +239,9 @@ func UploadWorkload(
 	return path, err == nil, err
 }
 
-// uploadBinaryVersion attempts to upload the specified binary associated with
-// the given version to the given nodes. If the destination binary path already
-// exists, assume the binary has already been uploaded previously. Returns the
-// path of the uploaded binaries on the nodes.
-//
-// If cockroach is the target binary and if --versions-binary-override option
-// is set and if version v is contained in the override map, use that version's
-// value, which is a local binary path as the source binary to upload instead
-// of using roachprod to stage.
+// uploadBinaryVersion uploads the specified binary associated with
+// the given version to the given nodes. It returns the path of the
+// uploaded binaries on the nodes.
 func uploadBinaryVersion(
 	ctx context.Context,
 	t test.Test,
@@ -261,8 +256,6 @@ func uploadBinaryVersion(
 	var isOverridden bool
 	switch binary {
 	case "cockroach":
-		// If the --versions-binary-override option is set and version v is in the
-		// argument map, then use that version's value as the path to the binary
 		defaultBinary, isOverridden = t.VersionsBinaryOverride()[v.String()]
 		if isOverridden {
 			l.Printf("using cockroach binary override for version %s: %s", v, defaultBinary)
@@ -305,13 +298,14 @@ func uploadBinaryVersion(
 			// a build for a specific release. Instead, we stage the binary
 			// for the corresponding release branch, which is good enough in
 			// most cases.
-			stageVersion = v.Format("release-%X.%Y")
+			stageVersion = fmt.Sprintf("release-%d.%d", v.Major(), v.Minor())
 		}
 
 		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
 			return "", err
 		}
 	}
+
 	return dstBinary, nil
 }
 
@@ -329,7 +323,7 @@ func InstallFixtures(
 	// The fixtures use cluster version (major.minor) but the input might be
 	// a patch release.
 	name := CheckpointName(
-		roachpb.Version{Major: int32(v.Major().Year), Minor: int32(v.Major().Ordinal)}.String(),
+		roachpb.Version{Major: int32(v.Major()), Minor: int32(v.Minor())}.String(),
 	)
 	for n := 1; n <= len(nodes); n++ {
 		if err := c.PutE(ctx, l,

@@ -18,13 +18,11 @@ GIT_GREP="git $CONFIGS grep"
 EXISTING_GO_GENERATE_COMMENTS="
 pkg/config/field.go://go:generate stringer --type=Field --linecomment
 pkg/rpc/context.go://go:generate mockgen -destination=mocks_generated_test.go --package=. Dialbacker
-pkg/rpc/stream_pool.go://go:generate mockgen -destination=mocks_generated_test.go --package=. BatchStreamClient
 pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
 pkg/roachprod/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mocks_generated_test.go . Cluster
 pkg/cmd/roachtest/clusterstats/collector.go://go:generate mockgen -package=clusterstats -destination mocks_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
 pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination drt_generated_test.go github.com/cockroachdb/cockroach/pkg/roachprod/prometheus Client
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
-pkg/kv/kvclient/kvcoord/txn_interceptor_write_buffer.go://go:generate ../../../util/interval/generic/gen.sh *bufferedWrite kvcoord
 pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecachemock -destination=rangecachemock/mocks_generated.go . RangeDescriptorDB
 pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -destination=mocks_generated_test.go --package=rangefeed . DB
 pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *keyLocks concurrency

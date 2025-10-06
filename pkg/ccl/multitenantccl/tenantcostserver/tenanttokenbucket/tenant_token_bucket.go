@@ -83,7 +83,7 @@ func (s *State) Request(
 		res.FallbackRate += s.TokenCurrent / fallbackRateTimeFrame.Seconds()
 	}
 	if log.V(1) {
-		log.Dev.Infof(ctx, "token bucket request (tenant=%d requested=%g current=%g, avg=%g)",
+		log.Infof(ctx, "token bucket request (tenant=%d requested=%g current=%g, avg=%g)",
 			req.TenantID, req.RequestedTokens, s.TokenCurrent, s.TokenCurrentAvg)
 	}
 
@@ -101,7 +101,7 @@ func (s *State) Request(
 		s.TokenCurrent -= needed
 		res.GrantedTokens = needed
 		if log.V(1) {
-			log.Dev.Infof(ctx, "request granted (tenant=%d remaining=%g)", req.TenantID, s.TokenCurrent)
+			log.Infof(ctx, "request granted (tenant=%d remaining=%g)", req.TenantID, s.TokenCurrent)
 		}
 		return res
 	}
@@ -161,7 +161,7 @@ func (s *State) Request(
 	res.GrantedTokens = granted
 	res.TrickleDuration = req.TargetRequestPeriod
 	if log.V(1) {
-		log.Dev.Infof(ctx, "request granted over time (tenant=%d granted=%g trickle=%s)",
+		log.Infof(ctx, "request granted over time (tenant=%d granted=%g trickle=%s)",
 			req.TenantID, res.GrantedTokens, res.TrickleDuration)
 	}
 	return res
@@ -195,9 +195,9 @@ func (s *State) Reconfigure(
 	s.TokenRefillRate = refillRate
 	s.TokenBurstLimit = maxBurstTokens
 	s.clampToLimit()
-	log.Dev.Infof(
+	log.Infof(
 		ctx, "token bucket for tenant %s reconfigured: available=%g refill-rate=%g burst-limit=%g",
-		tenantID, s.TokenCurrent, s.TokenRefillRate, s.TokenBurstLimit,
+		tenantID.String(), s.TokenCurrent, s.TokenRefillRate, s.TokenBurstLimit,
 	)
 }
 

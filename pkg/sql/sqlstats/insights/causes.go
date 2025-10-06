@@ -5,10 +5,7 @@
 
 package insights
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
-)
+import "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 
 type causes struct {
 	st *cluster.Settings
@@ -16,20 +13,18 @@ type causes struct {
 
 // examine will append all causes of the statement's problems to buf and
 // return the result. Buf allows the slice to be pooled.
-func (c *causes) examine(
-	buf []insightspb.Cause, stmt *insightspb.Statement,
-) (result []insightspb.Cause) {
+func (c *causes) examine(buf []Cause, stmt *Statement) (result []Cause) {
 	result = buf
 	if len(stmt.IndexRecommendations) > 0 {
-		result = append(result, insightspb.Cause_SuboptimalPlan)
+		result = append(result, Cause_SuboptimalPlan)
 	}
 
 	if stmt.Contention != nil && *stmt.Contention >= LatencyThreshold.Get(&c.st.SV) {
-		result = append(result, insightspb.Cause_HighContention)
+		result = append(result, Cause_HighContention)
 	}
 
 	if stmt.Retries >= HighRetryCountThreshold.Get(&c.st.SV) {
-		result = append(result, insightspb.Cause_HighRetryCount)
+		result = append(result, Cause_HighRetryCount)
 	}
 
 	return result

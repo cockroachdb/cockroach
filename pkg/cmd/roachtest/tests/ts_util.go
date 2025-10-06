@@ -91,7 +91,7 @@ func sumCounterIncreases(dataPoints []tspb.TimeSeriesDatapoint) (sum float64) {
 			sum += dataPoints[i].Value
 			continue
 		}
-		sum += dataPoints[i].Value - dataPoints[i-1].Value
+		sum += dataPoints[i].Value - dataPoints[0].Value
 	}
 	return sum
 }
@@ -142,7 +142,7 @@ func getMetricsWithSamplePeriod(
 	}
 	var response tspb.TimeSeriesQueryResponse
 	client := roachtestutil.DefaultHTTPClient(
-		c, t.L(), roachtestutil.HTTPTimeout(5*time.Second),
+		c, t.L(), roachtestutil.HTTPTimeout(500*time.Millisecond),
 		roachtestutil.VirtualCluster(virtualCluster),
 	)
 	err := client.PostProtobuf(ctx, url, &request, &response)

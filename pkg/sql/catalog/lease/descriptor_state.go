@@ -7,16 +7,17 @@ package lease
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -24,6 +25,11 @@ type descriptorState struct {
 	m       *Manager
 	id      descpb.ID
 	stopper *stop.Stopper
+
+	// renewalInProgress is an atomic indicator for when a renewal for a
+	// lease has begun. This is atomic to prevent multiple routines from
+	// entering renewal initialization.
+	renewalInProgress int32
 
 	mu struct {
 		syncutil.Mutex
@@ -82,7 +88,7 @@ type descriptorState struct {
 // It returns true if the descriptor returned is the known latest version
 // of the descriptor.
 func (t *descriptorState) findForTimestamp(
-	ctx context.Context, timestamp ReadTimestamp,
+	ctx context.Context, timestamp hlc.Timestamp,
 ) (*descriptorVersionState, bool, error) {
 	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	t.mu.Lock()
@@ -95,12 +101,10 @@ func (t *descriptorState) findForTimestamp(
 
 	// Walk back the versions to find one that is valid for the timestamp.
 	for i := len(t.mu.active.data) - 1; i >= 0; i-- {
-		// Check to see if the ModificationTime is valid. If only the initial version
-		// of the descriptor is known, then read it at the base timestamp.
-		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp.GetTimestamp()) ||
-			(len(t.mu.active.data) == 1 && desc.GetModificationTime().LessEq(timestamp.GetBaseTimestamp())) {
+		// Check to see if the ModificationTime is valid.
+		if desc := t.mu.active.data[i]; desc.GetModificationTime().LessEq(timestamp) {
 			latest := i+1 == len(t.mu.active.data)
-			if !desc.hasExpired(ctx, timestamp.GetBaseTimestamp()) {
+			if !desc.hasExpired(ctx, timestamp) {
 				// Existing valid descriptor version.
 				desc.incRefCount(ctx, expensiveLogEnabled)
 				return desc, latest, nil
@@ -125,47 +129,65 @@ func (t *descriptorState) findForTimestamp(
 func (t *descriptorState) upsertLeaseLocked(
 	ctx context.Context,
 	desc catalog.Descriptor,
+	expiration hlc.Timestamp,
 	session sqlliveness.Session,
 	regionEnumPrefix []byte,
-) error {
+) (createdDescriptorVersionState *descriptorVersionState, toRelease *storedLease, _ error) {
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
 	}
 	s := t.mu.active.find(desc.GetVersion())
 	if s == nil {
 		if t.mu.active.findNewest() != nil {
-			log.Dev.Infof(ctx, "new lease: %s", desc)
+			log.Infof(ctx, "new lease: %s", desc)
 		}
-		descState := newDescriptorVersionState(t, desc, hlc.Timestamp{}, session, regionEnumPrefix, true /* isLease */)
-		if err := t.m.boundAccount.Grow(ctx, descState.getByteSize()); err != nil {
-			// If we don't have sufficient memory, then release the lease so
-			// that the system.lease table doesn't have a reference.
-			t.m.storage.release(ctx, t.m.stopper, descState.mu.lease)
-			return wrapMemoryError(err)
-		}
+		descState := newDescriptorVersionState(t, desc, expiration, session, regionEnumPrefix, true /* isLease */)
 		t.mu.active.insert(descState)
-		t.m.names.insert(ctx, descState)
-		return nil
-	}
-	// If the version already exists and the session ID matches nothing
-	// needs to be done.
-	if s.getSessionID() == session.ID() {
-		return nil
+		return descState, nil, nil
 	}
 
-	// Otherwise, we need to update the existing lease to fix the session ID. The
-	// previously stored lease also needs to be deleted.
-	var existingLease storedLease
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		existingLease = *s.mu.lease
-		s.session.Store(&session)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// The desc is replacing an existing one at the same version.
+	if !s.mu.expiration.Less(expiration) {
+		// This is a violation of an invariant and can actually not
+		// happen. We return an error here to aid in further investigations.
+		return nil, nil, errors.AssertionFailedf("lease expiration monotonicity violation, (%s) vs (%s)", s, desc)
+	}
+
+	// subsume the refcount of the older lease. This is permitted because
+	// the new lease has a greater expiration than the older lease and
+	// any transaction using the older lease can safely use a deadline set
+	// to the older lease's expiration even though the older lease is
+	// released! This is because the new lease is valid at the same desc
+	// version at a greater expiration.
+	s.mu.expiration = expiration
+	s.mu.session = session
+	toRelease = s.mu.lease
+	s.mu.lease = &storedLease{
+		prefix:     regionEnumPrefix,
+		id:         desc.GetID(),
+		version:    int(desc.GetVersion()),
+		expiration: storedLeaseExpiration(expiration),
+	}
+	if session != nil {
 		s.mu.lease.sessionID = session.ID().UnsafeBytes()
-	}()
-	// Delete the existing lease on behalf of the caller.
-	t.m.storage.release(ctx, t.m.stopper, &existingLease)
-	return nil
+		// When using session based leasing, if we end up acquiring the same lease again
+		// nothing needs to be cleaned up or updated. This is because the system.lease
+		// table does not store any expiry inside the table.
+		toRelease.sessionID = nil
+	}
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "replaced lease: %s with %s", toRelease, s.mu.lease)
+	}
+	// For session based leases there is no expiry, so when the lease
+	// is subsumed we have nothing to delete. In dual-write mode clearing
+	// this guarantees only the old expiry based lease is cleaned up. In
+	// Session only clearing this means the release is a no-op.
+	if toRelease != nil {
+		toRelease.sessionID = nil
+	}
+	return nil, toRelease, nil
 }
 
 var _ redact.SafeFormatter = (*descriptorVersionState)(nil)
@@ -182,47 +204,40 @@ func newDescriptorVersionState(
 		t:          t,
 		Descriptor: desc,
 	}
+	descState.mu.expiration = expiration
 	if isLease {
 		descState.mu.lease = &storedLease{
-			id:      desc.GetID(),
-			prefix:  prefix,
-			version: int(desc.GetVersion()),
+			id:         desc.GetID(),
+			prefix:     prefix,
+			version:    int(desc.GetVersion()),
+			expiration: storedLeaseExpiration(expiration),
 		}
-		descState.mu.lease.sessionID = session.ID().UnsafeBytes()
-		if buildutil.CrdbTestBuild && !expiration.IsEmpty() {
-			panic(errors.AssertionFailedf("expiration should always be empty for "+
-				"session based leases (got: %s on Desc: %s(%d))", expiration.String(), desc.GetName(), desc.GetID()))
+		if session != nil {
+			descState.mu.lease.sessionID = session.ID().UnsafeBytes()
+			descState.mu.session = session
 		}
 	}
-	descState.session.Store(&session)
-	if !expiration.IsEmpty() {
-		descState.expiration.Store(&expiration)
-	}
-
 	return descState
 }
 
 // removeInactiveVersions removes inactive versions in t.mu.active.data with
 // refcount 0. t.mu must be locked. It returns leases that need to be released.
-func (t *descriptorState) removeInactiveVersions(ctx context.Context) []*storedLease {
+func (t *descriptorState) removeInactiveVersions() []*storedLease {
 	var leases []*storedLease
 	// A copy of t.mu.active.data must be made since t.mu.active.data will be changed
 	// within the loop.
 	for _, desc := range append([]*descriptorVersionState(nil), t.mu.active.data...) {
-		if desc.refcount.Load() == 0 {
-			t.mu.active.remove(desc)
-			func() {
-				desc.mu.Lock()
-				defer desc.mu.Unlock()
-				// Ensure we have a lock to allow us to clean up the usage
-				// by the stored lease.
-				t.m.boundAccount.Shrink(ctx, desc.getByteSize())
+		func() {
+			desc.mu.Lock()
+			defer desc.mu.Unlock()
+			if desc.mu.refcount == 0 {
+				t.mu.active.remove(desc)
 				if l := desc.mu.lease; l != nil {
 					desc.mu.lease = nil
 					leases = append(leases, l)
 				}
-			}()
-		}
+			}
+		}()
 	}
 	return leases
 }
@@ -235,11 +250,13 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 	// from the store.
 	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	decRefCount := func(s *descriptorVersionState) (shouldRemove bool) {
-		currCount := s.refcount.Add(-1)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.refcount--
 		if expensiveLoggingEnabled {
-			log.Dev.Infof(ctx, "release: %s", s.redactedString())
+			log.Infof(ctx, "release: %s", s.stringLocked())
 		}
-		return currCount == 0
+		return s.mu.refcount == 0
 	}
 	maybeMarkRemoveStoredLease := func(s *descriptorVersionState) *storedLease {
 		// Figure out if we'd like to remove the lease from the store asap (i.e.
@@ -257,15 +274,12 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 		if !removeOnceDereferenced {
 			return nil
 		}
-		// Note: Because the descriptorState is locked, no one can acquire
-		// this descriptorVersionState right now. So, this atomic is sufficient
-		// for detecting that the usage can be removed.
-		if s.refcount.Load() < 0 {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.mu.refcount < 0 {
 			panic(errors.AssertionFailedf("negative ref count: %s", s))
 		}
-		if s.refcount.Load() == 0 && s.mu.lease != nil && removeOnceDereferenced {
-			s.mu.Lock()
-			defer s.mu.Unlock()
+		if s.mu.refcount == 0 && s.mu.lease != nil && removeOnceDereferenced {
 			l := s.mu.lease
 			s.mu.lease = nil
 			return l
@@ -282,15 +296,14 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 			leaseReleased := true
 			// For testing, we will synchronously release leases, but that
 			// exposes us to the danger of the context getting cancelled. To
-			// eliminate this risk, we are going to first remove the lease from
-			// storage and then delete it from memory.
+			// eliminate this risk, we are going first remove the lease from
+			// storage and then delete if from mqemory.
 			if t.m.storage.testingKnobs.RemoveOnceDereferenced {
 				leaseReleased = releaseLease(ctx, l, t.m)
 				l = nil
 			}
 			if leaseReleased {
 				t.mu.active.remove(s)
-				s.t.m.boundAccount.Shrink(ctx, s.getByteSize())
 			}
 			return l
 		}
@@ -299,6 +312,47 @@ func (t *descriptorState) release(ctx context.Context, s *descriptorVersionState
 	if l := maybeRemoveLease(); l != nil {
 		releaseLease(ctx, l, t.m)
 	}
+}
+
+// maybeQueueLeaseRenewal queues a lease renewal if there is not already a lease
+// renewal in progress.
+func (t *descriptorState) maybeQueueLeaseRenewal(
+	ctx context.Context, m *Manager, id descpb.ID, name string,
+) error {
+	if !atomic.CompareAndSwapInt32(&t.renewalInProgress, 0, 1) {
+		return nil
+	}
+
+	// Start the renewal. When it finishes, it will reset t.renewalInProgress.
+	newCtx := m.ambientCtx.AnnotateCtx(context.Background())
+	// AddTags and not WithTags, so that we combine the tags with those
+	// filled by AnnotateCtx.
+	newCtx = logtags.AddTags(newCtx, logtags.FromContext(ctx))
+	return t.stopper.RunAsyncTask(newCtx,
+		"lease renewal", func(ctx context.Context) {
+			t.startLeaseRenewal(ctx, m, id, name)
+		})
+}
+
+// startLeaseRenewal starts a singleflight.Group to acquire a lease.
+// This function blocks until lease acquisition completes.
+// t.renewalInProgress must be set to 1 before calling.
+func (t *descriptorState) startLeaseRenewal(
+	ctx context.Context, m *Manager, id descpb.ID, name string,
+) {
+	log.VEventf(ctx, 1,
+		"background lease renewal beginning for id=%d name=%q",
+		id, name)
+	if _, err := acquireNodeLease(ctx, m, id, AcquireBackground); err != nil {
+		log.Errorf(ctx,
+			"background lease renewal for id=%d name=%q failed: %s",
+			id, name, err)
+	} else {
+		log.VEventf(ctx, 1,
+			"background lease renewal finished for id=%d name=%q",
+			id, name)
+	}
+	atomic.StoreInt32(&t.renewalInProgress, 0)
 }
 
 // markAcquisitionStart increments the acquisitionsInProgress counter.

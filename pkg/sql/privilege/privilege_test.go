@@ -7,7 +7,6 @@ package privilege_test
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -85,35 +84,5 @@ func TestByDisplayNameHasAllPrivileges(t *testing.T) {
 		resolvedKind, ok = privilege.ByDisplayName[privilege.KindDisplayName(kind.InternalKey())]
 		require.True(t, ok)
 		require.Equal(t, kind, resolvedKind)
-	}
-}
-
-// TestModifyPrivHasCorrespondingViewPriv checks that each MODIFY privilege has
-// a corresponding VIEW privilege.
-func TestModifyPrivHasCorrespondingViewPriv(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// If you are adding a new MODIFY privilege that does not need a corresponding
-	// VIEW privilege, you must add it to the exceptions below. Verify the
-	// exception with the SQL Foundations or Product Security teams.
-	modifyExceptions := map[privilege.Kind]struct{}{
-		privilege.MODIFYSQLCLUSTERSETTING: {}, // covered by VIEWCLUSTERSETTING
-	}
-
-	for _, modifyPriv := range privilege.AllPrivileges {
-		if !strings.HasPrefix(string(modifyPriv.DisplayName()), "MODIFY") {
-			continue
-		}
-		if _, ok := modifyExceptions[modifyPriv]; ok {
-			continue
-		}
-		suffix := strings.TrimPrefix(string(modifyPriv.DisplayName()), "MODIFY")
-		foundCorrespondingViewPriv := false
-		for _, relatedPriv := range privilege.AllPrivileges {
-			if string(relatedPriv.DisplayName()) == ("VIEW" + suffix) {
-				foundCorrespondingViewPriv = true
-			}
-		}
-		require.True(t, foundCorrespondingViewPriv, "missing VIEW privilege for %s", modifyPriv.DisplayName())
 	}
 }

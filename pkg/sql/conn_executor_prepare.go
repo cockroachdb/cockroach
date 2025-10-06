@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
-	"github.com/cockroachdb/cockroach/pkg/sql/prep"
+	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -55,12 +56,12 @@ func (ex *connExecutor) execPrepare(
 		return ev, payload
 	}
 
-	ctx, sp := tracing.ChildSpan(ctx, "prepare stmt")
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
 	defer sp.Finish()
 
 	// The anonymous statement can be overwritten.
 	if parseCmd.Name != "" {
-		if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(parseCmd.Name) {
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
 			err := pgerror.Newf(
 				pgcode.DuplicatePreparedStatement,
 				"prepared statement %q already exists", parseCmd.Name,
@@ -73,14 +74,14 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID(),
-		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())))
+		tree.FmtFlags(queryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())))
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
 		stmt,
 		parseCmd.TypeHints,
 		parseCmd.RawTypeHints,
-		prep.StatementOriginWire,
+		PreparedStatementOriginWire,
 	)
 	if err != nil {
 		return retErr(err)
@@ -89,7 +90,7 @@ func (ex *connExecutor) execPrepare(
 	return nil, nil
 }
 
-// addPreparedStmt creates a new prep.Statement with the provided name using
+// addPreparedStmt creates a new PreparedStatement with the provided name using
 // the given query. The new prepared statement is added to the connExecutor and
 // also returned. It is illegal to call this when a statement with that name
 // already exists (even for anonymous prepared statements).
@@ -103,9 +104,9 @@ func (ex *connExecutor) addPreparedStmt(
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	rawTypeHints []oid.Oid,
-	origin prep.StatementOrigin,
-) (*prep.Statement, error) {
-	if ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(name) {
+	origin PreparedStatementOrigin,
+) (*PreparedStatement, error) {
+	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
 		return nil, pgerror.Newf(
 			pgcode.DuplicatePreparedStatement,
 			"prepared statement %q already exists", name,
@@ -119,17 +120,36 @@ func (ex *connExecutor) addPreparedStmt(
 	}
 
 	if len(prepared.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
-		prepared.MemAcc().Close(ctx)
+		prepared.memAcc.Close(ctx)
 		return nil, pgwirebase.NewProtocolViolationErrorf(
 			"more than %d arguments to prepared statement: %d",
 			pgwirebase.MaxPreparedStatementArgs, len(prepared.TypeHints))
 	}
 
-	if err := prepared.MemAcc().Grow(ctx, int64(len(name))); err != nil {
-		prepared.MemAcc().Close(ctx)
+	if err := prepared.memAcc.Grow(ctx, int64(len(name))); err != nil {
+		prepared.memAcc.Close(ctx)
 		return nil, err
 	}
-	ex.extraTxnState.prepStmtsNamespace.prepStmts.Add(name, prepared, prepared.MemAcc().Allocated())
+	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
+	ex.extraTxnState.prepStmtsNamespace.addLRUEntry(name, prepared.memAcc.Allocated())
+
+	// Check if we're over prepared_statements_cache_size.
+	cacheSize := ex.sessionData().PreparedStatementsCacheSize
+	if cacheSize != 0 {
+		lru := ex.extraTxnState.prepStmtsNamespace.prepStmtsLRU
+		// While we're over the cache size, deallocate the LRU prepared statement.
+		for tail := lru[prepStmtsLRUTail]; tail.prev != prepStmtsLRUHead && tail.prev != name; tail = lru[prepStmtsLRUTail] {
+			if ex.extraTxnState.prepStmtsNamespace.prepStmtsLRUAlloc <= cacheSize {
+				break
+			}
+			log.VEventf(
+				ctx, 1,
+				"prepared statements are using more than prepared_statements_cache_size (%s), "+
+					"automatically deallocating %s", string(humanizeutil.IBytes(cacheSize)), tail.prev,
+			)
+			ex.deletePreparedStmt(ctx, tail.prev)
+		}
+	}
 
 	// Remember the inferred placeholder types so they can be reported on
 	// Describe. First, try to preserve the hints sent by the client.
@@ -157,14 +177,20 @@ func (ex *connExecutor) prepare(
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
 	rawTypeHints []oid.Oid,
-	origin prep.StatementOrigin,
-) (_ *prep.Statement, retErr error) {
+	origin PreparedStatementOrigin,
+) (_ *PreparedStatement, retErr error) {
 
-	prepared := prep.NewStatement(origin, ex.sessionPreparedMon.MakeBoundAccount())
+	prepared := &PreparedStatement{
+		memAcc:   ex.sessionPreparedMon.MakeBoundAccount(),
+		refCount: 1,
+
+		createdAt: timeutil.Now(),
+		origin:    origin,
+	}
 	defer func() {
 		// Make sure to close the memory account if an error is returned.
 		if retErr != nil {
-			prepared.MemAcc().Close(ctx)
+			prepared.memAcc.Close(ctx)
 		}
 	}()
 
@@ -189,7 +215,7 @@ func (ex *connExecutor) prepare(
 	var flags planFlags
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		p := &ex.planner
-		if origin == prep.StatementOriginWire {
+		if origin == PreparedStatementOriginWire {
 			// If the PREPARE command was issued as a SQL statement or through
 			// deserialize_session, then we have already reset the planner at the very
 			// beginning of the execution (in execStmtInOpenState). We might have also
@@ -199,7 +225,7 @@ func (ex *connExecutor) prepare(
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
 
-		if err := ex.maybeAdjustTxnForDDL(ctx, stmt); err != nil {
+		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
 			return err
 		}
 
@@ -224,7 +250,7 @@ func (ex *connExecutor) prepare(
 			}
 		}
 
-		prepared.Metadata = prep.Metadata{
+		prepared.PrepareMetadata = querycache.PrepareMetadata{
 			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
 				TypeHints: placeholderHints,
 				Types:     placeholderHints,
@@ -256,18 +282,18 @@ func (ex *connExecutor) prepare(
 
 	// Use the existing transaction.
 	if err := prepare(ctx, ex.state.mu.txn); err != nil {
-		if origin != prep.StatementOriginSessionMigration {
+		if origin != PreparedStatementOriginSessionMigration {
 			return nil, err
 		} else {
-			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction | tree.FmtSimple)
+			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtSimple)
 			f.FormatNode(stmt.AST)
-			redactableStmt := redact.RedactableString(f.CloseAndGetString())
-			log.Dev.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
+			redactableStmt := redact.SafeString(f.CloseAndGetString())
+			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
 
 	// Account for the memory used by this prepared statement.
-	if err := prepared.MemAcc().Grow(ctx, prepared.MemoryEstimate()); err != nil {
+	if err := prepared.memAcc.Grow(ctx, prepared.MemoryEstimate()); err != nil {
 		return nil, err
 	}
 	ex.updateOptCounters(flags)
@@ -281,7 +307,7 @@ func (ex *connExecutor) populatePrepared(
 	txn *kv.Txn,
 	placeholderHints tree.PlaceholderTypes,
 	p *planner,
-	origin prep.StatementOrigin,
+	origin PreparedStatementOrigin,
 ) (planFlags, error) {
 	if before := ex.server.cfg.TestingKnobs.BeforePrepare; before != nil {
 		if err := before(ctx, ex.planner.stmt.String(), txn); err != nil {
@@ -297,7 +323,7 @@ func (ex *connExecutor) populatePrepared(
 	// there is no way for the statement being prepared to be executed in this
 	// transaction, so there's no need to fix the timestamp, unlike how we must
 	// for pgwire- or SQL-level prepared statements.
-	if origin != prep.StatementOriginSessionMigration {
+	if origin != PreparedStatementOriginSessionMigration {
 		if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
 			return 0, err
 		}
@@ -323,7 +349,7 @@ func (ex *connExecutor) populatePrepared(
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
 ) (fsm.Event, fsm.EventPayload) {
-	var ps *prep.Statement
+	var ps *PreparedStatement
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		if bindCmd.PreparedStatementName != "" {
 			err = errors.WithDetailf(err, "statement name %q", bindCmd.PreparedStatementName)
@@ -334,14 +360,16 @@ func (ex *connExecutor) execBind(
 		if ps != nil && ps.StatementSummary != "" {
 			err = errors.WithDetailf(err, "statement summary %q", ps.StatementSummary)
 		}
-		return eventNonRetryableErr{IsCommit: fsm.False}, eventNonRetryableErrPayload{err: err}
+		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
 
 	var ok bool
-	ps, ok = ex.extraTxnState.prepStmtsNamespace.prepStmts.Get(bindCmd.PreparedStatementName)
+	ps, ok = ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
 		return retErr(newPreparedStmtDNEError(ex.sessionData(), bindCmd.PreparedStatementName))
 	}
+
+	ex.extraTxnState.prepStmtsNamespace.touchLRUEntry(bindCmd.PreparedStatementName)
 
 	// We need to make sure type resolution happens within a transaction.
 	// Otherwise, for user-defined types we won't take the correct leases and
@@ -497,7 +525,7 @@ func (ex *connExecutor) execBind(
 			numCols, len(bindCmd.OutFormats))
 		// A user is hitting this error unexpectedly and rarely, dump extra info,
 		// should be okay since this should be a very rare error.
-		log.Dev.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
+		log.Infof(ctx, "%s outformats: %v, AST: %T, prepared statements: %s", err.Error(),
 			bindCmd.OutFormats, ps.AST, ex.extraTxnState.prepStmtsNamespace.String())
 		return retErr(err)
 	}
@@ -517,7 +545,7 @@ func (ex *connExecutor) execBind(
 	}
 
 	if log.V(2) {
-		log.Dev.Infof(ctx, "portal: %q for %q, args %q, formats %q",
+		log.Infof(ctx, "portal: %q for %q, args %q, formats %q",
 			portalName, ps.Statement, qargs, columnFormatCodes)
 	}
 
@@ -531,7 +559,7 @@ func (ex *connExecutor) execBind(
 func (ex *connExecutor) addPortal(
 	ctx context.Context,
 	portalName string,
-	stmt *prep.Statement,
+	stmt *PreparedStatement,
 	qargs tree.QueryArguments,
 	outFormats []pgwirebase.FormatCode,
 ) error {
@@ -563,7 +591,14 @@ func (ex *connExecutor) exhaustPortal(portalName string) {
 }
 
 func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
-	ex.getPrepStmtsAccessor().Delete(ctx, name)
+	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
+	if !ok {
+		return
+	}
+	alloc := ps.memAcc.Allocated()
+	ps.decRef(ctx)
+	delete(ex.extraTxnState.prepStmtsNamespace.prepStmts, name)
+	ex.extraTxnState.prepStmtsNamespace.delLRUEntry(name, alloc)
 }
 
 func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
@@ -580,7 +615,8 @@ func (ex *connExecutor) execDelPrepStmt(
 ) (fsm.Event, fsm.EventPayload) {
 	switch delCmd.Type {
 	case pgwirebase.PrepareStatement:
-		if !ex.extraTxnState.prepStmtsNamespace.prepStmts.Has(delCmd.Name) {
+		_, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[delCmd.Name]
+		if !ok {
 			// The spec says "It is not an error to issue Close against a nonexistent
 			// statement or portal name". See
 			// https://www.postgresql.org/docs/current/static/protocol-flow.html.
@@ -605,24 +641,25 @@ func (ex *connExecutor) execDescribe(
 ) (fsm.Event, fsm.EventPayload) {
 
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
-		return eventNonRetryableErr{IsCommit: fsm.False}, eventNonRetryableErrPayload{err: err}
+		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
 	}
 	_, isAbortedTxn := ex.machine.CurState().(stateAborted)
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
-		prepStmts := ex.extraTxnState.prepStmtsNamespace.prepStmts
-		ps, ok := prepStmts.Get(string(descCmd.Name))
+		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(descCmd.Name)]
 		if !ok {
 			return retErr(newPreparedStmtDNEError(ex.sessionData(), string(descCmd.Name)))
 		}
+		// Not currently counting this as an LRU touch on prepStmtsLRU for
+		// prepared_statements_cache_size (but maybe we should?).
 
 		ast := ps.AST
 		if execute, ok := ast.(*tree.Execute); ok {
 			// If we're describing an EXECUTE, we need to look up the statement type
 			// of the prepared statement that the EXECUTE refers to, or else we'll
 			// return the wrong information for describe.
-			innerPs, found := prepStmts.Get(string(execute.Name))
+			innerPs, found := ex.extraTxnState.prepStmtsNamespace.prepStmts[string(execute.Name)]
 			if !found {
 				return retErr(newPreparedStmtDNEError(ex.sessionData(), string(execute.Name)))
 			}
@@ -632,7 +669,7 @@ func (ex *connExecutor) execDescribe(
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
 		res.SetInferredTypes(ps.InferredTypes)
-		if stmtHasNoData(ast, ps.Columns) {
+		if stmtHasNoData(ast) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPrepStmtOutput(ctx, ps.Columns)
@@ -661,7 +698,7 @@ func (ex *connExecutor) execDescribe(
 		if isAbortedTxn && !ex.isAllowedInAbortedTxn(ast) {
 			return retErr(sqlerrors.NewTransactionAbortedError("" /* customMsg */))
 		}
-		if stmtHasNoData(ast, portal.Stmt.Columns) {
+		if stmtHasNoData(ast) {
 			res.SetNoDataRowDescription()
 		} else {
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
@@ -679,8 +716,7 @@ func (ex *connExecutor) execDescribe(
 // prepared and executed inside of an aborted transaction.
 func (ex *connExecutor) isAllowedInAbortedTxn(ast tree.Statement) bool {
 	switch s := ast.(type) {
-	case *tree.CommitTransaction, *tree.PrepareTransaction,
-		*tree.RollbackTransaction, *tree.RollbackToSavepoint:
+	case *tree.CommitTransaction, *tree.RollbackTransaction, *tree.RollbackToSavepoint:
 		return true
 	case *tree.Savepoint:
 		if ex.isCommitOnReleaseSavepoint(s.Name) {

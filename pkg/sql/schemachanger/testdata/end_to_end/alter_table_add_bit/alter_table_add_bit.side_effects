@@ -31,7 +31,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.bittab
-## StatementPhase stage 1 of 1 with 16 MutationType ops
+## StatementPhase stage 1 of 1 with 15 MutationType ops
 upsert descriptor #104
   ...
        - 1
@@ -56,6 +56,7 @@ upsert descriptor #104
   +      type:
   +        family: BitFamily
   +        oid: 1562
+  +        visibleType: 10
   +        width: 25
   +    direction: ADD
   +    mutationId: 1
@@ -82,7 +83,6 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -108,7 +108,6 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -143,11 +142,9 @@ upsert descriptor #104
   +    - vb
   +    - fb
        unique: true
-       vecConfig: {}
+       version: 4
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -156,7 +153,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 20 MutationType ops
+## PreCommitPhase stage 2 of 2 with 19 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -215,6 +212,7 @@ upsert descriptor #104
   +      type:
   +        family: BitFamily
   +        oid: 1562
+  +        visibleType: 10
   +        width: 25
   +    direction: ADD
   +    mutationId: 1
@@ -241,7 +239,6 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnNames: []
   +      unique: true
-  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: BACKFILLING
@@ -267,7 +264,6 @@ upsert descriptor #104
   +      storeColumnNames: []
   +      unique: true
   +      useDeletePreservingEncoding: true
-  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
@@ -302,11 +298,9 @@ upsert descriptor #104
   +    - vb
   +    - fb
        unique: true
-       vecConfig: {}
+       version: 4
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -397,7 +391,7 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 2 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 2 of 8 with 1 BackfillType op pending"
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 8 with 1 BackfillType op
@@ -490,7 +484,7 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 5 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 5 of 8 with 1 MutationType op pending"
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 8 with 3 MutationType ops
@@ -508,7 +502,7 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 6 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 6 of 8 with 1 BackfillType op pending"
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 8 with 1 BackfillType op
@@ -539,14 +533,14 @@ upsert descriptor #104
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 8 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 8 of 8 with 1 ValidationType op pending"
 commit transaction #9
 begin transaction #10
 ## PostCommitPhase stage 8 of 8 with 1 ValidationType op
 validate forward indexes [2] in table #104
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 1 of 2 with 12 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -556,6 +550,7 @@ upsert descriptor #104
   +    type:
   +      family: BitFamily
   +      oid: 1562
+  +      visibleType: 10
   +      width: 25
   +  - id: 4
   +    name: fb
@@ -563,134 +558,6 @@ upsert descriptor #104
   +      family: BitFamily
   +      oid: 1560
   +      width: 25
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  ...
-           statement: ALTER TABLE bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL
-           statementTag: ALTER TABLE
-  -    revertible: true
-       targetRanks: <redacted>
-       targets: <redacted>
-  ...
-     formatVersion: 3
-     id: 104
-  +  indexes:
-  +  - constraintId: 2
-  +    createdAtNanos: "1640998800000000000"
-  +    createdExplicitly: true
-  +    foreignKey: {}
-  +    geoConfig: {}
-  +    id: 2
-  +    interleave: {}
-  +    keyColumnDirections:
-  +    - ASC
-  +    keyColumnIds:
-  +    - 3
-  +    keyColumnNames:
-  +    - vb
-  +    keySuffixColumnIds:
-  +    - 2
-  +    name: bittab_vb_key
-  +    partitioning: {}
-  +    sharded: {}
-  +    storeColumnNames: []
-  +    unique: true
-  +    vecConfig: {}
-  +    version: 4
-     modificationTime: {}
-  -  mutations:
-  -  - column:
-  -      id: 3
-  -      name: vb
-  -      type:
-  -        family: BitFamily
-  -        oid: 1562
-  -        width: 25
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: ADD
-  -    index:
-  -      constraintId: 2
-  -      createdAtNanos: "1640998800000000000"
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 2
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 3
-  -      keyColumnNames:
-  -      - vb
-  -      keySuffixColumnIds:
-  -      - 2
-  -      name: bittab_vb_key
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      vecConfig: {}
-  -      version: 4
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  -  - direction: DROP
-  -    index:
-  -      constraintId: 3
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 3
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 3
-  -      keyColumnNames:
-  -      - vb
-  -      keySuffixColumnIds:
-  -      - 2
-  -      name: crdb_internal_index_3_name_placeholder
-  -      partitioning: {}
-  -      sharded: {}
-  -      storeColumnNames: []
-  -      unique: true
-  -      useDeletePreservingEncoding: true
-  -      vecConfig: {}
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - column:
-  -      id: 4
-  -      name: fb
-  -      type:
-  -        family: BitFamily
-  -        oid: 1560
-  -        width: 25
-  -    direction: ADD
-  -    mutationId: 1
-  -    state: WRITE_ONLY
-  +  mutations: []
-     name: bittab
-     nextColumnId: 5
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "6"
-  +  version: "7"
-persist all catalog changes to storage
-adding table for stats refresh: 104
-create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL"
-  descriptor IDs: [104]
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 2 of 2)."
-set schema change job #1 to non-cancellable
-commit transaction #11
-notified job registry to adopt jobs: [2]
-begin transaction #12
-## PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops
-upsert descriptor #104
-  ...
      createAsOfTime:
        wallTime: "1640995200000000000"
   -  declarativeSchemaChangerState:
@@ -720,23 +587,127 @@ upsert descriptor #104
   -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹bittab› ADD COLUMN ‹vb› VARBIT(25) NOT NULL UNIQUE, ADD COLUMN ‹fb› BIT(25) NOT NULL
   -        statement: ALTER TABLE bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL
   -        statementTag: ALTER TABLE
+  -    revertible: true
   -    targetRanks: <redacted>
   -    targets: <redacted>
      families:
      - columnIds:
   ...
-     replacementOf:
+     formatVersion: 3
+     id: 104
+  +  indexes:
+  +  - constraintId: 2
+  +    createdAtNanos: "1640998800000000000"
+  +    createdExplicitly: true
+  +    foreignKey: {}
+  +    geoConfig: {}
+  +    id: 2
+  +    interleave: {}
+  +    keyColumnDirections:
+  +    - ASC
+  +    keyColumnIds:
+  +    - 3
+  +    keyColumnNames:
+  +    - vb
+  +    keySuffixColumnIds:
+  +    - 2
+  +    name: bittab_vb_key
+  +    partitioning: {}
+  +    sharded: {}
+  +    storeColumnNames: []
+  +    unique: true
+  +    version: 4
+     modificationTime: {}
+  -  mutations:
+  -  - column:
+  -      id: 3
+  -      name: vb
+  -      type:
+  -        family: BitFamily
+  -        oid: 1562
+  -        visibleType: 10
+  -        width: 25
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 2
+  -      createdAtNanos: "1640998800000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - vb
+  -      keySuffixColumnIds:
+  -      - 2
+  -      name: bittab_vb_key
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 3
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - vb
+  -      keySuffixColumnIds:
+  -      - 2
+  -      name: crdb_internal_index_3_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnNames: []
+  -      unique: true
+  -      useDeletePreservingEncoding: true
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      id: 4
+  -      name: fb
+  -      type:
+  -        family: BitFamily
+  -        oid: 1560
+  -        width: 25
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: bittab
+     nextColumnId: 5
+  ...
        time: {}
-  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "6"
+  +  version: "7"
 persist all catalog changes to storage
+adding table for stats refresh: 104
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.bittab ADD COLUMN vb VARBIT(25) NOT NULL UNIQUE, ADD COLUMN fb BIT(25) NOT NULL"
+  descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #12
+commit transaction #11
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

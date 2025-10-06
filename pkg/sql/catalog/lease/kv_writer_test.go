@@ -7,6 +7,7 @@ package lease
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"testing"
@@ -42,6 +43,21 @@ var MoveTablePrimaryIndexIDtoTarget func(
 	context.Context, *testing.T, serverutils.ApplicationLayerInterface, descpb.ID, descpb.IndexID,
 )
 
+type dummySessionModeReader struct {
+	mode SessionBasedLeasingMode
+}
+
+func (d *dummySessionModeReader) sessionBasedLeasingModeAtLeast(
+	_ context.Context, minimumMode SessionBasedLeasingMode,
+) bool {
+	return d.mode >= minimumMode
+}
+func (d *dummySessionModeReader) getSessionBasedLeasingMode(
+	_ context.Context,
+) SessionBasedLeasingMode {
+	return d.mode
+}
+
 // TestKVWriterMatchesIEWriter is a rather involved test to exercise the
 // kvWriter and ieWriter and confirm that they write exactly the same thing
 // to the underlying key-value store. It does this by teeing operations to
@@ -53,71 +69,84 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	serverArgs := base.TestServerArgs{}
-	serverArgs.Settings = cluster.MakeClusterSettings()
-	srv, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
-	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
+	for _, mode := range []SessionBasedLeasingMode{SessionBasedLeasingOff, SessionBasedOnly} {
+		t.Run(fmt.Sprintf("mode=%s", mode.String()), func(t *testing.T) {
+			ctx := context.Background()
+			serverArgs := base.TestServerArgs{}
+			serverArgs.Settings = cluster.MakeClusterSettings()
+			srv, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
+			LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, mode)
 
-	// Otherwise, we wouldn't get complete SSTs in our export under stress.
-	sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
-		t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false",
-	)
+			// Otherwise, we wouldn't get complete SSTs in our export under stress.
+			sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
+				t, "SET CLUSTER SETTING admission.elastic_cpu.enabled = false",
+			)
 
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	schema := strings.Replace(systemschema.LeaseTableSchema,
-		"exclude_data_from_backup = true",
-		"exclude_data_from_backup = false",
-		1)
+			tdb := sqlutils.MakeSQLRunner(sqlDB)
+			schema := systemschema.LeaseTableSchema
+			if mode == SessionBasedOnly {
+				schema = strings.Replace(systemschema.LeaseTableSchema_V24_1,
+					"exclude_data_from_backup = true",
+					"exclude_data_from_backup = false",
+					1)
 
-	makeTable := func(name string) (id descpb.ID) {
-		// Rewrite the schema and drop the exclude_data_from_backup from flag,
-		// since this will prevent export from working later on in the test.
-		tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
-		tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
-		// Modifies the primary index IDs to line up with the session based
-		// or multi-region expiry based formats of the table.
-		MoveTablePrimaryIndexIDtoTarget(ctx, t, s, id, 3)
-		return id
-	}
-	lease1ID := makeTable("lease1")
-	lease2ID := makeTable("lease2")
-	ie := s.InternalDB().(isql.DB).Executor()
-	codec := s.Codec()
-	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
-	w := teeWriter{
-		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),
-		b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher),
-	}
-	start := kvDB.Clock().Now()
-	groups := generateWriteOps(2<<10, 1<<10)
-	for {
-		ops, ok := groups()
-		if !ok {
-			break
-		}
-		do := func(i int, txn *kv.Txn) error {
-			return ops[i].f(w, ctx, txn, ops[i].leaseFields)
-		}
-		if len(ops) == 1 {
-			require.NoError(t, do(0, nil /* txn */))
-		} else {
-			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				for i := range ops {
-					if err := do(i, txn); err != nil {
-						return err
-					}
+			}
+			makeTable := func(name string) (id descpb.ID) {
+				// Rewrite the schema and drop the exclude_data_from_backup from flag,
+				// since this will prevent export from working later on in the test.
+				tdb.Exec(t, strings.Replace(schema, "system.lease", name, 1))
+				tdb.QueryRow(t, "SELECT id FROM system.namespace WHERE name = $1", name).Scan(&id)
+				// Modifies the primary index IDs to line up with the session based
+				// or multi-region expiry based formats of the table.
+				if mode == SessionBasedOnly {
+					MoveTablePrimaryIndexIDtoTarget(ctx, t, s, id, 3)
+				} else {
+					MoveTablePrimaryIndexIDtoTarget(ctx, t, s, id, 2)
 				}
-				return nil
-			}))
-		}
+				return id
+			}
+			lease1ID := makeTable("lease1")
+			lease2ID := makeTable("lease2")
+			ie := s.InternalDB().(isql.DB).Executor()
+			codec := s.Codec()
+			settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
+			modeReader := &dummySessionModeReader{mode: mode}
+			w := teeWriter{
+				a: newInternalExecutorWriter(ie, "defaultdb.public.lease1", mode),
+				b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher, modeReader),
+			}
+			start := kvDB.Clock().Now()
+			groups := generateWriteOps(2<<10, 1<<10)
+			for {
+				ops, ok := groups()
+				if !ok {
+					break
+				}
+				do := func(i int, txn *kv.Txn) error {
+					return ops[i].f(w, ctx, txn, ops[i].leaseFields)
+				}
+				if len(ops) == 1 {
+					require.NoError(t, do(0, nil /* txn */))
+				} else {
+					require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+						for i := range ops {
+							if err := do(i, txn); err != nil {
+								return err
+							}
+						}
+						return nil
+					}))
+				}
+			}
+			require.Equal(
+				t,
+				getRawHistoryKVs(ctx, t, kvDB, lease1ID, start, codec),
+				getRawHistoryKVs(ctx, t, kvDB, lease2ID, start, codec),
+			)
+		})
 	}
-	require.Equal(
-		t,
-		getRawHistoryKVs(ctx, t, kvDB, lease1ID, start, codec),
-		getRawHistoryKVs(ctx, t, kvDB, lease2ID, start, codec),
-	)
 }
 
 // getRawHistoryKVs will pull the complete revision history of the table since

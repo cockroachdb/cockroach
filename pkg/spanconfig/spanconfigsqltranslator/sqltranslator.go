@@ -661,7 +661,7 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 	ctx context.Context, ids descpb.IDs,
 ) (spanconfig.Record, error) {
-	if !s.knobs.ConfigureScratchRange {
+	if !s.knobs.ConfigureScratchRange || !s.codec.ForSystemTenant() {
 		return spanconfig.Record{}, nil // nothing to do
 	}
 
@@ -677,12 +677,10 @@ func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 			return spanconfig.Record{}, err
 		}
 
-		scratchKey := append(s.codec.TenantPrefix(), keys.ScratchRangeMin...)
-		scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
 		record, err := spanconfig.MakeRecord(
 			spanconfig.MakeTargetFromSpan(roachpb.Span{
-				Key:    scratchKey,
-				EndKey: scratchKey.PrefixEnd(),
+				Key:    keys.ScratchRangeMin,
+				EndKey: keys.ScratchRangeMax,
 			}), zone.AsSpanConfig())
 		if err != nil {
 			return spanconfig.Record{}, err

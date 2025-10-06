@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -41,7 +42,7 @@ func StartEventf(
 	// Use depth=1 since we want to log as the caller of StartEventf.
 	const depth = 1
 	if log.VDepth(level, depth) {
-		log.Dev.InfofDepth(ctx, depth, "%s", msg)
+		log.InfofDepth(ctx, depth, "%s", msg)
 	}
 	return EventLogger{
 		msg:   msg,
@@ -74,7 +75,7 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 	switch {
 	case *err == nil:
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Dev.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
+			log.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
 		}
 	case HasNotImplemented(*err):
 		log.VEventfDepth(ctx, depth, 1, "declarative schema changer does not support %s: %v", el.msg, *err)
@@ -82,17 +83,18 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 		*err = errors.Wrapf(*err, "%s", el.msg)
 		fallthrough
 	default:
-		log.Dev.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
+		log.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
 	}
 }
 
 type notImplementedError struct {
 	n      tree.NodeFormatter
-	detail redact.RedactableString
+	detail string
 }
 
+// TODO(ajwerner): Deal with redaction.
+
 var _ error = (*notImplementedError)(nil)
-var _ errors.SafeFormatter = (*notImplementedError)(nil)
 
 // HasNotImplemented returns true if the error indicates that the builder does
 // not support the provided statement.
@@ -101,21 +103,12 @@ func HasNotImplemented(err error) bool {
 }
 
 func (e *notImplementedError) Error() string {
-	return redact.Sprint(e).StripMarkers()
-}
-
-// SafeFormatError implements the errors.SafeFormatter interface.
-func (e *notImplementedError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("%T not implemented in the new schema changer", e.n)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "%T not implemented in the new schema changer", e.n)
 	if e.detail != "" {
-		p.Printf(": %s", e.detail)
+		fmt.Fprintf(&buf, ": %s", e.detail)
 	}
-	return nil
-}
-
-// Format implements fmt.Formatter.
-func (e *notImplementedError) Format(s fmt.State, verb rune) {
-	errors.FormatError(e, s, verb)
+	return buf.String()
 }
 
 // NotImplementedError returns an error for which HasNotImplemented would
@@ -126,11 +119,8 @@ func NotImplementedError(n tree.NodeFormatter) error {
 
 // NotImplementedErrorf returns an error for which HasNotImplemented would
 // return true.
-func NotImplementedErrorf(n tree.NodeFormatter, detail redact.RedactableString) error {
-	return &notImplementedError{
-		n:      n,
-		detail: detail,
-	}
+func NotImplementedErrorf(n tree.NodeFormatter, fmtstr string, args ...interface{}) error {
+	return &notImplementedError{n: n, detail: fmt.Sprintf(fmtstr, args...)}
 }
 
 // concurrentSchemaChangeError indicates that building the schema change plan

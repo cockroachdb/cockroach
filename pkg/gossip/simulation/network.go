@@ -54,7 +54,7 @@ type Network struct {
 // NewNetwork creates nodeCount gossip nodes.
 func NewNetwork(stopper *stop.Stopper, nodeCount int, createAddresses bool) *Network {
 	ctx := context.TODO()
-	log.Dev.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
+	log.Infof(ctx, "simulating gossip network with %d nodes", nodeCount)
 
 	n := &Network{
 		Nodes:   []*Node{},
@@ -72,7 +72,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createAddresses bool) *Net
 	var err error
 	n.tlsConfig, err = n.RPCContext.GetServerTLSConfig()
 	if err != nil {
-		log.Dev.Fatalf(context.TODO(), "%v", err)
+		log.Fatalf(context.TODO(), "%v", err)
 	}
 
 	// Ensure that tests using this test context and restart/shut down
@@ -83,7 +83,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createAddresses bool) *Net
 	for i := 0; i < nodeCount; i++ {
 		node, err := n.CreateNode()
 		if err != nil {
-			log.Dev.Fatalf(context.TODO(), "%v", err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		if createAddresses {
 			node.Addresses = []util.UnresolvedAddr{
@@ -172,14 +172,14 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 			time.Hour,
 		); err != nil {
-			log.Dev.Fatalf(context.TODO(), "%v", err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		if err := nodes[0].Gossip.AddInfo(
 			gossip.KeyClusterID,
 			encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 			0*time.Second,
 		); err != nil {
-			log.Dev.Fatalf(context.TODO(), "%v", err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 		// Every node gossips every cycle.
 		for _, node := range nodes {
@@ -188,7 +188,7 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 				encoding.EncodeUint64Ascending(nil, uint64(cycle)),
 				time.Hour,
 			); err != nil {
-				log.Dev.Fatalf(context.TODO(), "%v", err)
+				log.Fatalf(context.TODO(), "%v", err)
 			}
 			node.Gossip.SimulationCycle()
 		}
@@ -202,7 +202,7 @@ func (n *Network) SimulateNetwork(simCallback func(cycle int, network *Network) 
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	log.Dev.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
+	log.Infof(context.TODO(), "gossip network simulation: total infos sent=%d, received=%d", n.infosSent(), n.infosReceived())
 }
 
 // Start starts all gossip nodes.
@@ -215,7 +215,7 @@ func (n *Network) Start() {
 	n.started = true
 	for _, node := range n.Nodes {
 		if err := n.StartNode(node); err != nil {
-			log.Dev.Fatalf(context.TODO(), "%v", err)
+			log.Fatalf(context.TODO(), "%v", err)
 		}
 	}
 }

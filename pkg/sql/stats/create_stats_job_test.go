@@ -557,7 +557,7 @@ func TestDeleteFailedJob(t *testing.T) {
 	// Note: if this test fails, it will likely show up by using stressrace.
 	if res := sqlDB.QueryStr(t,
 		`SELECT job_id, status, error FROM [SHOW AUTOMATIC JOBS] WHERE status = $1`,
-		jobs.StateFailed,
+		jobs.StatusFailed,
 	); len(res) != 0 {
 		t.Fatalf("job should have been deleted but found: %v", res)
 	}

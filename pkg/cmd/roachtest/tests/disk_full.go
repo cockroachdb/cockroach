@@ -35,8 +35,7 @@ func registerDiskFull(r registry.Registry) {
 				t.Skip("you probably don't want to fill your local disk")
 			}
 
-			startOpts := option.NewStartOpts(option.NoBackupSchedule)
-			c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
+			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 			// Node 1 will soon be killed, when the ballast file fills up its disk. To
 			// ensure that the ranges containing system tables are available on other
@@ -50,12 +49,11 @@ func registerDiskFull(r registry.Registry) {
 			_ = db.Close()
 
 			t.Status("running workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			m := c.NewMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf(
 					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
-						" --min-block-bytes=512 --max-block-bytes=512"+
-						" --concurrency=10 --duration=10m {pgurl:2-%d}",
+						" --concurrency=10 --duration=4m {pgurl:2-%d}",
 					len(c.CRDBNodes()))
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
@@ -102,7 +100,7 @@ func registerDiskFull(r registry.Registry) {
 					// monitor detects the death, expect it.
 					m.ExpectDeath()
 
-					err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n))
+					err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n))
 					t.L().Printf("starting n%d: error %v", n, err)
 					if err == nil {
 						t.Fatal("node successfully started unexpectedly")
@@ -136,7 +134,7 @@ func registerDiskFull(r registry.Registry) {
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
 				m.ExpectDeath()
 				c.Run(ctx, option.WithNodes(c.Node(n)), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
-				if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n)); err != nil {
+				if err := c.StartE(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
 				m.ResetDeaths()

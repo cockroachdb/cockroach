@@ -1,9 +1,0 @@
-/* setup */
-CREATE TABLE t (i INT PRIMARY KEY, j INT UNIQUE);
-INSERT INTO t VALUES (1, 1), (2, 2);
-
-/* test */
-EXPLAIN (DDL, SHAPE) TRUNCATE TABLE t;
-----
-Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
- └── execute 3 system table mutations transactions

@@ -187,7 +187,7 @@ func (b *buffer) flush(
 		if i != 0 {
 			prevEv := bufferedEvents[i-1]
 			if !prevEv.Timestamp().LessEq(ev.Timestamp()) {
-				log.Dev.Fatalf(ctx, "expected events to be sorted by timestamp but found %+v after %+v",
+				log.Fatalf(ctx, "expected events to be sorted by timestamp but found %+v after %+v",
 					ev, prevEv)
 			}
 		}

@@ -35,12 +35,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER CHANGEFEED ??`, `ALTER CHANGEFEED`},
 		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
 		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
-		{`ALTER EXTERNAL CONNECTION ??`, `ALTER EXTERNAL CONNECTION`},
-		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
 
-		{`ALTER JOB ??`, `ALTER JOB`},
-		{`ALTER JOB 123 OWNER ??`, `ALTER JOB`},
-		{`ALTER JOB 123 OWNER TO ??`, `ALTER JOB`},
+		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
 
 		{`ALTER TABLE IF ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ??`, `ALTER TABLE`},
@@ -162,8 +158,6 @@ func TestContextualHelp(t *testing.T) {
 		{`CANCEL SESSIONS IF EXISTS ??`, `CANCEL SESSIONS`},
 		{`CANCEL ALL ??`, `CANCEL ALL JOBS`},
 
-		{`COMMIT PREPARED 'foo' ??`, `COMMIT PREPARED`},
-
 		{`CREATE UNIQUE ??`, `CREATE`},
 		{`CREATE UNIQUE INDEX ??`, `CREATE INDEX`},
 		{`CREATE INDEX IF NOT ??`, `CREATE INDEX`},
@@ -214,9 +208,6 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE SCHEMA IF ??`, `CREATE SCHEMA`},
 		{`CREATE SCHEMA IF NOT ??`, `CREATE SCHEMA`},
 		{`CREATE SCHEMA bli ??`, `CREATE SCHEMA`},
-
-		{`CHECK ??`, `CHECK`},
-		{`CHECK EXTERNAL CONNECTION ??`, `CHECK EXTERNAL CONNECTION`},
 
 		{`DELETE FROM ??`, `DELETE`},
 		{`DELETE FROM blah ??`, `DELETE`},
@@ -283,8 +274,6 @@ func TestContextualHelp(t *testing.T) {
 		{`PREPARE foo AS DELETE FROM xx ??`, `DELETE`},
 		{`PREPARE foo AS UPDATE xx SET x = y ??`, `UPDATE`},
 
-		{`PREPARE TRANSACTION 'foo' ??`, `PREPARE TRANSACTION`},
-
 		{`EXECUTE foo ??`, `EXECUTE`},
 		{`EXECUTE foo (??`, `EXECUTE`},
 
@@ -296,8 +285,6 @@ func TestContextualHelp(t *testing.T) {
 		{`DECLARE foo ??`, `DECLARE`},
 		{`DECLARE foo BINARY ??`, `DECLARE`},
 		{`DECLARE foo BINARY CURSOR ??`, `DECLARE`},
-
-		{`DO ??`, `DO`},
 
 		{`CLOSE ??`, `CLOSE`},
 
@@ -352,8 +339,6 @@ func TestContextualHelp(t *testing.T) {
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM bar ??`, `REVOKE`},
-
-		{`ROLLBACK PREPARED 'foo' ??`, `ROLLBACK PREPARED`},
 
 		{`SELECT * FROM ??`, `<SOURCE>`},
 		{`SELECT * FROM (??`, `<SOURCE>`}, // not <selectclause>! joins are allowed.
@@ -584,14 +569,14 @@ func TestContextualHelp(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE ??`, `SCRUB TABLE`},
 		{`EXPERIMENTAL SCRUB DATABASE ??`, `SCRUB DATABASE`},
 
-		{`BACKUP foo INTO 'bar' ??`, `BACKUP`},
+		{`BACKUP foo TO 'bar' ??`, `BACKUP`},
 		{`BACKUP DATABASE ??`, `BACKUP`},
-		{`BACKUP foo INTO 'bar' AS OF SYSTEM ??`, `BACKUP`},
+		{`BACKUP foo TO 'bar' AS OF SYSTEM ??`, `BACKUP`},
 
-		{`RESTORE foo FROM LATEST IN '/bar' ??`, `RESTORE`},
+		{`RESTORE foo FROM 'bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
-		{`IMPORT INTO ??`, `IMPORT`},
+		{`IMPORT TABLE ??`, `IMPORT`},
 
 		{`EXPORT ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},
@@ -616,19 +601,6 @@ func TestContextualHelp(t *testing.T) {
 		{`CREATE TRIGGER foo ??`, `CREATE TRIGGER`},
 		{`CREATE TRIGGER foo AFTER INSERT ON bar ??`, `CREATE TRIGGER`},
 		{`DROP TRIGGER ??`, `DROP TRIGGER`},
-
-		{`CREATE POLICY ??`, `CREATE POLICY`},
-		{`CREATE POLICY p1 on ??`, `CREATE POLICY`},
-		{`ALTER POLICY ??`, `ALTER POLICY`},
-		{`ALTER POLICY p1 on t1 RENAME ??`, `ALTER POLICY`},
-		{`DROP POLICY ??`, `DROP POLICY`},
-		{`SHOW POLICIES ??`, `SHOW POLICIES`},
-
-		{`INSPECT ??`, `INSPECT`},
-		{`INSPECT TABLE ??`, `INSPECT TABLE`},
-		{`INSPECT DATABASE ??`, `INSPECT DATABASE`},
-
-		{`SHOW INSPECT ERRORS ??`, `SHOW INSPECT ERRORS`},
 	}
 
 	// The following checks that the test definition above exercises all

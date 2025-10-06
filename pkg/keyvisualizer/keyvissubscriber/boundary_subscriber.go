@@ -124,7 +124,7 @@ func Start(
 		func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 			tID, update, err := decodeRow(ctx, kv)
 			if err != nil {
-				log.Dev.Warningf(ctx,
+				log.Warningf(ctx,
 					"tenant boundary decoding failed with error: %v", err)
 				return
 			}
@@ -136,7 +136,7 @@ func Start(
 			if *tID == roachpb.SystemTenantID {
 				handleBoundaryUpdate(update)
 			} else {
-				log.Dev.Warningf(ctx,
+				log.Warningf(ctx,
 					"can not update boundaries for secondary tenants")
 			}
 		},

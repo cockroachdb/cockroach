@@ -118,7 +118,7 @@ func TestIsNullProjOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Dev.Infof(ctx, "%s", c.desc)
+		log.Infof(ctx, "%s", c.desc)
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input[0], []*types.T{types.Int},
@@ -225,7 +225,7 @@ func TestIsNullSelOp(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Dev.Infof(ctx, "%s", c.desc)
+		log.Infof(ctx, "%s", c.desc)
 		opConstructor := func(sources []colexecop.Operator) (colexecop.Operator, error) {
 			typs := []*types.T{types.Int}
 			spec := &execinfrapb.ProcessorSpec{

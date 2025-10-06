@@ -22,7 +22,7 @@ SHOW TABLES FROM "E"
 # When non-quoted, table names are normalized during creation.
 
 statement ok
-CREATE TABLE A(x INT) WITH (schema_locked=false)
+CREATE TABLE A(x INT)
 
 statement error pgcode 42P01 relation "A" does not exist
 SHOW COLUMNS FROM "A"
@@ -94,7 +94,7 @@ DROP TABLE a
 # must be thus quoted during use.
 
 statement ok
-CREATE TABLE "B"(x INT) WITH (schema_locked=false)
+CREATE TABLE "B"(x INT)
 
 statement error pgcode 42P01 relation "b" does not exist
 SHOW COLUMNS FROM B
@@ -201,7 +201,7 @@ SHOW CREATE VIEW xv
 xv  CREATE VIEW public.xv (
       x,
       "Y"
-    ) AS SELECT x, "Y" FROM test.public.foo;
+    ) AS SELECT x, "Y" FROM test.public.foo
 
 query error pgcode 42P01 relation "XV" does not exist
 SHOW CREATE VIEW "XV"
@@ -215,7 +215,7 @@ SHOW CREATE VIEW "YV"
 "YV"  CREATE VIEW public."YV" (
         x,
         "Y"
-      ) AS SELECT x, "Y" FROM test.public.foo;
+      ) AS SELECT x, "Y" FROM test.public.foo
 
 query error pgcode 42P01 relation "yv" does not exist
 SHOW CREATE VIEW YV

@@ -84,8 +84,6 @@ var TxnCleanupThreshold = settings.RegisterDurationSetting(
 	"the threshold after which a transaction is considered abandoned and "+
 		"fit for removal, as measured by the maximum of its last heartbeat and timestamp",
 	time.Hour,
-	// TODO(arul): consider increasing the floor.
-	settings.PositiveDuration,
 )
 
 // MaxLocksPerCleanupBatch is the maximum number of locks that GC will send
@@ -224,7 +222,6 @@ type Info struct {
 	// potentially necessary intent resolutions did not fail).
 	TransactionSpanGCAborted, TransactionSpanGCCommitted int
 	TransactionSpanGCStaging, TransactionSpanGCPending   int
-	TransactionSpanGCPrepared                            int
 	// AbortSpanTotal is the total number of transactions present in the AbortSpan.
 	AbortSpanTotal int
 	// AbortSpanConsidered is the number of AbortSpan entries old enough to be
@@ -379,7 +376,7 @@ func Run(
 		if errors.Is(err, ctx.Err()) {
 			return Info{}, err
 		}
-		log.KvExec.Warningf(ctx, "while gc'ing local key range: %s", err)
+		log.Warningf(ctx, "while gc'ing local key range: %s", err)
 	}
 
 	// Clean up the AbortSpan.
@@ -388,7 +385,7 @@ func Run(
 		if errors.Is(err, ctx.Err()) {
 			return Info{}, err
 		}
-		log.KvExec.Warningf(ctx, "while gc'ing abort span: %s", err)
+		log.Warningf(ctx, "while gc'ing abort span: %s", err)
 	}
 
 	log.Eventf(ctx, "GC'ed keys; stats %+v", info)
@@ -445,7 +442,7 @@ func processReplicatedKeyRange(
 				excludeUserKeySpan = true
 				info.ClearRangeSpanOperations++
 			} else {
-				log.KvExec.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s",
+				log.Warningf(ctx, "failed to perform GC clear range operation on range %s: %s",
 					desc.String(), err)
 				info.ClearRangeSpanFailures++
 			}
@@ -580,7 +577,7 @@ func processReplicatedLocks(
 					if errors.Is(err, ctx.Err()) {
 						return err
 					}
-					log.KvExec.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+					log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 				}
 			}
 		}
@@ -590,10 +587,8 @@ func processReplicatedLocks(
 	// We want to find/resolve replicated locks over both local and global
 	// keys. That's what the call to Select below will give us.
 	ltSpans := rditer.Select(desc.RangeID, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			RSpan:     desc.RSpan(),
-			LockTable: true,
-		},
+		ReplicatedBySpan:      desc.RSpan(),
+		ReplicatedSpansFilter: rditer.ReplicatedSpansLocksOnly,
 	})
 	for _, sp := range ltSpans {
 		if err := process(sp.Key, sp.EndKey); err != nil {
@@ -606,7 +601,7 @@ func processReplicatedLocks(
 		if errors.Is(err, ctx.Err()) {
 			return err
 		}
-		log.KvExec.Warningf(ctx, "failed to cleanup intents batch: %v", err)
+		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
 	return nil
 }
@@ -809,7 +804,7 @@ func (b *gcKeyBatcher) foundGarbage(
 		// Whenever new key is started or new batch is started with the same key in
 		// it, record key value using batches' allocator.
 		if b.prevWasNewest || len(b.pointsBatches[i].batchGCKeys) == 0 {
-			b.pointsBatches[i].alloc, key = b.pointsBatches[i].alloc.Copy(cur.key.Key)
+			b.pointsBatches[i].alloc, key = b.pointsBatches[i].alloc.Copy(cur.key.Key, 0)
 			b.pointsBatches[i].batchGCKeys = append(b.pointsBatches[i].batchGCKeys,
 				kvpb.GCRequest_GCKey{Key: key, Timestamp: cur.key.Timestamp})
 			keyMemUsed := len(key) + hlcTimestampSize
@@ -934,7 +929,7 @@ func (b *gcKeyBatcher) maybeFlushPendingBatches(ctx context.Context) (err error)
 			// safe to continue because we bumped the GC
 			// thresholds. We may leave some inconsistent history
 			// behind, but nobody can read it.
-			log.KvExec.Warningf(ctx, "failed to GC keys with clear range: %v", err)
+			log.Warningf(ctx, "failed to GC keys with clear range: %v", err)
 			b.info.ClearRangeSpanFailures++
 		}
 		b.clearRangeCounters.updateGcInfo(b.info)
@@ -981,7 +976,7 @@ func (b *gcKeyBatcher) flushPointsBatch(ctx context.Context, batch *pointsBatch)
 		// safe to continue because we bumped the GC
 		// thresholds. We may leave some inconsistent history
 		// behind, but nobody can read it.
-		log.KvExec.Warningf(ctx, "failed to GC a batch of keys: %v", err)
+		log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
 	}
 	batch.gcBatchCounters.updateGcInfo(b.info)
 	b.totalMemUsed -= batch.gcBatchCounters.memUsed
@@ -1065,7 +1060,7 @@ func (b *intentBatcher) addAndMaybeFlushIntents(
 	// We need to register passed intent regardless of flushing operation result
 	// so that batcher is left in consistent state and don't miss any keys if
 	// caller resumes batching.
-	b.alloc, key = b.alloc.Copy(key)
+	b.alloc, key = b.alloc.Copy(key, 0)
 	b.pendingLocks = append(b.pendingLocks, roachpb.MakeLock(meta.Txn, key, str))
 	b.collectedIntentBytes += int64(len(key))
 	b.pendingTxns[txnID] = true
@@ -1194,7 +1189,7 @@ func processLocalKeyRange(
 	gcer PureGCer,
 ) error {
 	b := makeBatchingInlineGCer(gcer, func(err error) {
-		log.KvExec.Warningf(ctx, "failed to GC from local key range: %s", err)
+		log.Warningf(ctx, "failed to GC from local key range: %s", err)
 	})
 	defer b.Flush(ctx)
 
@@ -1222,8 +1217,6 @@ func processLocalKeyRange(
 		switch txn.Status {
 		case roachpb.PENDING:
 			info.TransactionSpanGCPending++
-		case roachpb.PREPARED:
-			info.TransactionSpanGCPrepared++
 		case roachpb.STAGING:
 			info.TransactionSpanGCStaging++
 		case roachpb.ABORTED:
@@ -1286,7 +1279,7 @@ func processAbortSpan(
 	gcer PureGCer,
 ) error {
 	b := makeBatchingInlineGCer(gcer, func(err error) {
-		log.KvExec.Warningf(ctx, "unable to GC from abort span: %s", err)
+		log.Warningf(ctx, "unable to GC from abort span: %s", err)
 	})
 	defer b.Flush(ctx)
 	abortSpan := abortspan.New(rangeID)

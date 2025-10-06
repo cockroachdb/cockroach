@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -57,11 +57,7 @@ func TestTenantStatusAPI(t *testing.T) {
 	ctx := context.Background()
 
 	var knobs base.TestingKnobs
-
-	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
-	sqlStatsKnobs.SynchronousSQLStats = true
-
-	knobs.SQLStatsKnobs = sqlStatsKnobs
+	knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	knobs.SpanConfig = &spanconfig.TestingKnobs{
 		// Some of these subtests expect multiple (uncoalesced) tenant ranges.
 		StoreDisableCoalesceAdjacent: true,
@@ -76,10 +72,6 @@ func TestTenantStatusAPI(t *testing.T) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10 ms'")
-	// If we happen to enable buffered writes metamorphically, we must have the
-	// split lock reliability enabled (which can be tweaked metamorphically too,
-	// #146387).
-	tdb.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		skip.UnderDeadlockWithIssue(t, 99559)
@@ -402,16 +394,12 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	skip.UnderStressWithIssue(t, 113984)
 
 	ctx := context.Background()
-	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
-	sqlStatsKnobs.SynchronousSQLStats = true
 	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				SQLStatsKnobs: sqlStatsKnobs,
 				SpanConfig: &spanconfig.TestingKnobs{
 					ManagerDisableJobCreation: true, // TODO(irfansharif): #74919.
-				},
-			},
+				}},
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	})
@@ -422,11 +410,10 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	tenant, sqlDB := serverutils.StartTenant(t, server, base.TestTenantArgs{
 		TenantID: roachpb.MustMakeTenantID(10 /* id */),
 		TestingKnobs: base.TestingKnobs{
-			SQLStatsKnobs: sqlStatsKnobs,
+			SQLStatsKnobs: sqlstats.CreateTestingKnobs(),
 		},
 	})
 
-	appName := "test-app"
 	systemLayer := testCluster.Server(1 /* idx */).SystemLayer()
 
 	tenantStatusServer := tenant.StatusServer().(serverpb.SQLStatusServer)
@@ -447,18 +434,12 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 		{stmt: `SELECT * FROM posts_t`},
 	}
 
-	_, err := sqlDB.Exec(`SET application_name = $1`, appName)
-	require.NoError(t, err)
 	for _, stmt := range testCaseTenant {
 		_, err := sqlDB.Exec(stmt.stmt)
 		require.NoError(t, err)
 	}
 
-	conn := sqlutils.MakeSQLRunner(tenant.SQLConn(t))
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(testCaseTenant),
-		sqlstatstestutil.StatementFilter{App: appName})
-
-	err = sqlDB.Close()
+	err := sqlDB.Close()
 	require.NoError(t, err)
 
 	testCaseNonTenant := []testCase{
@@ -474,18 +455,10 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 	sqlDB = systemLayer.SQLConn(t)
 
-	_, err = sqlDB.Exec(`SET application_name = $1`, appName)
-	require.NoError(t, err)
 	for _, stmt := range testCaseNonTenant {
 		_, err = sqlDB.Exec(stmt.stmt)
 		require.NoError(t, err)
 	}
-
-	conn = sqlutils.MakeSQLRunner(systemLayer.SQLConn(t))
-	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(testCaseNonTenant), sqlstatstestutil.StatementFilter{
-		App: appName,
-	})
-
 	err = sqlDB.Close()
 	require.NoError(t, err)
 
@@ -528,7 +501,14 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 
 		var actualStatements []string
 		for _, respStatement := range actual.Statements {
-			if respStatement.Key.KeyData.App != appName {
+			if respStatement.Stats.FailureCount > 0 {
+				// We ignore failed statements here as the INSERT statement can fail and
+				// be automatically retried, confusing the test success check.
+				continue
+			}
+			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
+				// We ignore internal queries, these are not relevant for the
+				// validity of this test.
 				continue
 			}
 			actualStatements = append(actualStatements, respStatement.Key.KeyData.Query)
@@ -595,24 +575,9 @@ func testResetSQLStatsRPCForTenant(
 
 	}()
 
-	getObsConn := func(tenant serverccl.TestTenant) (*sqlutils.SQLRunner, func()) {
-		pgUrl, cleanupPgUrl := tenant.GetTenant().PGUrl(t)
-		obsConn, cleanupObsConn := sqlstatstestutil.MakeObserverConnection(t, pgUrl)
-		cleanup := func() {
-			cleanupPgUrl()
-			cleanupObsConn()
-		}
-		return obsConn, cleanup
-	}
-
-	testTenantObs, cleanup1 := getObsConn(testCluster.Tenant(serverccl.RandomServer))
-	defer cleanup1()
-	controlTenantObsConn, cleanup2 := getObsConn(controlCluster.Tenant(serverccl.RandomServer))
-	defer cleanup2()
 	for _, flushed := range []bool{false, true} {
 		testTenant := testCluster.Tenant(serverccl.RandomServer)
 		testTenantConn := testTenant.GetTenantConn()
-
 		t.Run(fmt.Sprintf("flushed=%t", flushed), func(t *testing.T) {
 			// Clears the SQL Stats at the end of each test via builtin.
 			defer func() {
@@ -625,20 +590,9 @@ func testResetSQLStatsRPCForTenant(
 				controlCluster.TenantConn(serverccl.RandomServer).Exec(t, stmt)
 			}
 
-			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, testTenantObs, len(stmts))
-			sqlstatstestutil.WaitForStatementEntriesAtLeast(t, controlTenantObsConn, len(stmts))
-
 			if flushed {
-				testTenantServer := testTenant.TenantSQLServer()
-				testTenantServer.GetSQLStatsProvider().MaybeFlush(
-					ctx,
-					testTenant.GetTenant().AppStopper(),
-				)
-				randomTenantServer := controlCluster.TenantSQLServer(serverccl.RandomServer)
-				randomTenantServer.GetSQLStatsProvider().MaybeFlush(
-					ctx,
-					controlCluster.Tenant(0).GetTenant().AppStopper(),
-				)
+				testTenant.TenantSQLStats().MaybeFlush(ctx, testTenant.GetTenant().AppStopper())
+				controlCluster.TenantSQLStats(serverccl.RandomServer).MaybeFlush(ctx, controlCluster.Tenant(0).GetTenant().AppStopper())
 			}
 
 			status := testTenant.TenantStatusSrv()
@@ -921,6 +875,7 @@ WHERE tablename = 'test' AND indexname = $1`
 		requireAfter(t, &resp.Statistics[0].Statistics.Stats.LastRead, &timePreRead)
 		indexName := resp.Statistics[0].IndexName
 		createStmt := cluster.TenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		print(createStmt)
 		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
 		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
 	})

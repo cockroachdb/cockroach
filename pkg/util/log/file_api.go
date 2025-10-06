@@ -429,13 +429,6 @@ func readAllEntriesFromFile(
 			if err == io.EOF {
 				break
 			}
-
-			// skip the malformed log entry. This is primarily observed in the
-			// panic which is unstructured.
-			// See: https://github.com/cockroachdb/cockroach/issues/151493
-			if errors.Is(err, ErrMalformedLogEntry) {
-				continue
-			}
 			return nil, false, err
 		}
 		var match bool

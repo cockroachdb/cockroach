@@ -293,11 +293,8 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
               disabled={!expires}
               value={expiresAfter}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                const expires = parseInt(e.target.value);
-                if (!isNaN(expires) && expires > -1) {
-                  setExpiresAfter(expires);
-                } else {
-                  setExpiresAfter(0);
+                if (parseInt(e.target.value) > 0) {
+                  setExpiresAfter(parseInt(e.target.value));
                 }
               }}
               rootClassName={cx("compact")}

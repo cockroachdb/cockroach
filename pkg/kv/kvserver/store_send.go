@@ -247,7 +247,7 @@ func (s *Store) SendWithWriteBytes(
 			}); err != nil {
 				// Errors here should not be possible, but if there is one, it is ignored
 				// as attaching RangeInfo is optional.
-				log.KvExec.Warningf(ctx, "unexpected error visiting replicas: %s", err)
+				log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
 				ris = nil // just to be safe
 			}
 
@@ -340,7 +340,7 @@ func (s *Store) maybeThrottleBatch(
 		s.metrics.AddSSTableProposalTotalDelay.Inc(waited.Nanoseconds())
 		s.metrics.AddSSTableProposalEngineDelay.Inc(waitedEngine.Nanoseconds())
 		if waited > time.Second {
-			log.KvExec.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
+			log.Infof(ctx, "SST ingestion was delayed by %v (%v for storage engine back-pressure)",
 				waited, waitedEngine)
 		}
 		return res, nil
@@ -403,7 +403,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchRequest, *kvpb.Error) {
 	if ba.BoundedStaleness == nil {
-		log.KvExec.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
+		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
 	cfg := ba.BoundedStaleness
 	if cfg.MinTimestampBound.IsEmpty() {

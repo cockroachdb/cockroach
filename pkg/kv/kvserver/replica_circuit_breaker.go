@@ -135,7 +135,7 @@ func newReplicaCircuitBreaker(
 			ambientCtx: ambientCtx,
 			EventHandler: &circuit.EventLogger{
 				Log: func(buf redact.StringBuilder) {
-					log.KvExec.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+					log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 				},
 			},
 			onTrip:  onTrip,
@@ -157,10 +157,10 @@ func (r replicaCircuitBreakerLogger) OnTrip(b *circuit.Breaker, prev, cur error)
 	if prev == nil {
 		r.onTrip()
 	}
-	// Log directly from this method via log.KvExec.Errorf.
+	// Log directly from this method via log.Errorf.
 	var buf redact.StringBuilder
 	circuit.EventFormatter{}.OnTrip(b, prev, cur, &buf)
-	log.KvExec.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+	log.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 }
 
 func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker, prev error) {
@@ -268,25 +268,11 @@ func replicaUnavailableError(
 	return kvpb.NewReplicaUnavailableError(errors.Wrapf(err, "%s", buf), desc, replDesc)
 }
 
-// replicaUnavailableError returns a new ReplicaUnavailableError that wraps the
-// provided error.
 func (r *Replica) replicaUnavailableError(err error) error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	return r.replicaUnavailableErrorRLocked(err)
-}
-
-// replicaUnavailableLocked is like replicaUnavailableError, except it requires
-// r.mu to be RLocked.
-func (r *Replica) replicaUnavailableErrorRLocked(err error) error {
-	desc := r.shMu.state.Desc
+	desc := r.Desc()
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
 	isLiveMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	ct := r.getCurrentClosedTimestamp(context.Background(), hlc.Timestamp{}, /* sufficient */
-		r.shMu.state.LeaseAppliedIndex, r.shMu.state.Lease.Replica.NodeID,
-		r.shMu.state.RaftClosedTimestamp)
-
-	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.raftStatusRLocked(), ct)
+	ct := r.GetCurrentClosedTimestamp(context.Background())
+	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
 }

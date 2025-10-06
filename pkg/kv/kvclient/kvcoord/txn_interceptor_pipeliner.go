@@ -18,11 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	gbtree "github.com/google/btree"
+	"github.com/google/btree"
 )
 
 // The degree of the inFlightWrites btree.
@@ -226,14 +225,9 @@ var rejectTxnMaxCount = settings.RegisterIntSetting(
 // attached to any end transaction request that is passed through the pipeliner
 // to ensure that they the locks within them are released.
 type txnPipeliner struct {
-	st      *cluster.Settings
-	riGen   rangeIteratorFactory // used to condense lock spans, if provided
-	wrapped lockedSender
-	// disabledExplicitly tracks whether the user called txn.DisablePipelining().
-	// This is separate from disabled so that the txnWriteBuffer can enable
-	// pipelining if it has flushed its buffer iff pipelining wasn't previously
-	// explicitly disabled.
-	disabledExplicitly       bool
+	st                       *cluster.Settings
+	riGen                    rangeIteratorFactory // used to condense lock spans, if provided
+	wrapped                  lockedSender
 	disabled                 bool
 	txnMetrics               *TxnMetrics
 	condensedIntentsEveryN   *log.EveryN
@@ -490,10 +484,10 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 
 	if log.V(3) {
 		for _, intent := range et.LockSpans {
-			log.KvExec.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
 		}
 		for _, write := range et.InFlightWrites {
-			log.KvExec.Infof(ctx, "in-flight: %d:%s (%s)", write.Sequence, write.Key, write.Strength)
+			log.Infof(ctx, "in-flight: %d:%s (%s)", write.Sequence, write.Key, write.Strength)
 		}
 	}
 	return ba, nil
@@ -590,12 +584,6 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 		}
 	}
 	return true
-}
-
-// enableImplicitPipelining enables pipelining unless pipelining was explicitly
-// disabled previously.
-func (tp *txnPipeliner) enableImplicitPipelining() {
-	tp.disabled = tp.disabledExplicitly
 }
 
 // chainToInFlightWrites ensures that we "chain" on to any in-flight writes that
@@ -736,7 +724,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// fine for now, but we add some observability to be aware of this happening.
 	if tp.ifWrites.byteSize() > maxBytes {
 		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.KvExec.Warningf(ctx, "a transaction's in-flight writes and locking reads have "+
+			log.Warningf(ctx, "a transaction's in-flight writes and locking reads have "+
 				"exceeded the intent tracking limit (kv.transaction.max_intents_bytes). "+
 				"in-flight writes and locking reads size: %d bytes, txn: %s, ba: %s",
 				tp.ifWrites.byteSize(), ba.Txn, ba.Summary())
@@ -748,7 +736,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	// number of ranged locking reads before sending the request.
 	if rejectTxnMaxCount > 0 && tp.writeCount > rejectTxnMaxCount {
 		if tp.inflightOverBudgetEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.KvExec.Warningf(ctx, "a transaction has exceeded the maximum number of writes "+
+			log.Warningf(ctx, "a transaction has exceeded the maximum number of writes "+
 				"allowed by kv.transaction.max_intents_and_locks: "+
 				"count: %d, txn: %s, ba: %s", tp.writeCount, ba.Txn, ba.Summary())
 		}
@@ -782,7 +770,7 @@ func (tp *txnPipeliner) updateLockTracking(
 	condensed := tp.lockFootprint.maybeCondense(ctx, tp.riGen, locksBudget)
 	if condensed && !alreadyCondensed {
 		if tp.condensedIntentsEveryN.ShouldLog() || log.ExpensiveLogEnabled(ctx, 2) {
-			log.KvExec.Warningf(ctx,
+			log.Warningf(ctx,
 				"a transaction has hit the intent tracking limit (kv.transaction.max_intents_bytes); "+
 					"is it a bulk operation? Intent cleanup will be slower. txn: %s ba: %s",
 				ba.Txn, ba.Summary())
@@ -860,8 +848,12 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 			// for the requests that were not evaluated (see fillSkippedResponses).
 			// For these requests, we neither proved nor disproved the existence of
 			// their intent, so we ignore the response.
+			//
+			// TODO(nvanbenschoten): we only need to check FoundIntent, but this field
+			// was not set before v23.2, so for now, we check both fields. Remove this
+			// in the future.
 			qiResp := resp.(*kvpb.QueryIntentResponse)
-			if qiResp.FoundIntent {
+			if qiResp.FoundIntent || qiResp.FoundUnpushedIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence, qiReq.Strength)
 				// Move to lock footprint.
 				tp.lockFootprint.insert(roachpb.Span{Key: qiReq.Key})
@@ -878,7 +870,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 					// Record any writes that were performed asynchronously. We'll
 					// need to prove that these succeeded sometime before we commit.
 					if span.EndKey != nil {
-						log.KvExec.Fatalf(ctx, "unexpected multi-key intent pipelined")
+						log.Fatalf(ctx, "unexpected multi-key intent pipelined")
 					}
 					tp.ifWrites.insert(span.Key, seq, str)
 				} else {
@@ -959,29 +951,11 @@ func (tp *txnPipeliner) setWrapped(wrapped lockedSender) {
 }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (tp *txnPipeliner) populateLeafInputState(
-	tis *roachpb.LeafTxnInputState, readsTree interval.Tree,
-) {
-	if tp.ifWrites.len() == 0 {
-		return
-	}
-	if readsTree == nil {
-		tis.InFlightWrites = tp.ifWrites.asSlice()
-		return
-	}
-	var sp roachpb.Span
-	tp.ifWrites.ascend(func(w *inFlightWrite) {
-		sp.Key = w.Key
-		sp.EndKey = w.Key.Next()
-		if overlaps := readsTree.DoMatching(
-			func(interval.Interface) (done bool) { return true }, sp.AsRange(),
-		); overlaps {
-			tis.InFlightWrites = append(tis.InFlightWrites, w.SequencedWrite)
-		}
-	})
+func (tp *txnPipeliner) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+	tis.InFlightWrites = tp.ifWrites.asSlice()
 }
 
-// initializeLeaf is part of the txnInterceptor interface.
+// initializeLeaf loads the in-flight writes for a leaf transaction.
 func (tp *txnPipeliner) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	// Copy all in-flight writes into the inFlightWrite tree.
 	for _, w := range tis.InFlightWrites {
@@ -1013,9 +987,6 @@ func (tp *txnPipeliner) epochBumpedLocked() {
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) createSavepointLocked(context.Context, *savepoint) {}
-
-// releaseSavepointLocked is part of the txnInterceptor interface.
-func (tp *txnPipeliner) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (tp *txnPipeliner) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
@@ -1077,12 +1048,13 @@ func makeInFlightWrite(key roachpb.Key, seq enginepb.TxnSeq, str lock.Strength) 
 	}}
 }
 
-// less is the ordering function used by the B tree.
+// Less implements the btree.Item interface.
 //
 // inFlightWrites are ordered by Key, then by Sequence, then by Strength. Two
 // inFlightWrites with the same Key but different Sequences and/or Strengths are
 // not considered equal and are maintained separately in the inFlightWritesSet.
-func (a *inFlightWrite) less(b *inFlightWrite) bool {
+func (a *inFlightWrite) Less(bItem btree.Item) bool {
+	b := bItem.(*inFlightWrite)
 	kCmp := a.Key.Compare(b.Key)
 	if kCmp != 0 {
 		// Different Keys.
@@ -1105,7 +1077,7 @@ func (a *inFlightWrite) less(b *inFlightWrite) bool {
 // writes, O(log n) removal of existing in-flight writes, and O(m + log n)
 // retrieval over m in-flight writes that overlap with a given key.
 type inFlightWriteSet struct {
-	t     *gbtree.BTreeG[*inFlightWrite]
+	t     *btree.BTree
 	bytes int64
 
 	// Avoids allocs.
@@ -1118,15 +1090,15 @@ type inFlightWriteSet struct {
 func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq, str lock.Strength) {
 	if s.t == nil {
 		// Lazily initialize btree.
-		s.t = gbtree.NewG[*inFlightWrite](txnPipelinerBtreeDegree, (*inFlightWrite).less)
+		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
 	w := s.alloc.alloc(key, seq, str)
-	delItem, _ := s.t.ReplaceOrInsert(w)
+	delItem := s.t.ReplaceOrInsert(w)
 	if delItem != nil {
 		// An in-flight write with the same key and sequence already existed in the
 		// set. We replaced it with an identical in-flight write.
-		*delItem = inFlightWrite{} // for GC
+		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	} else {
 		s.bytes += keySize(key)
 	}
@@ -1142,12 +1114,12 @@ func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq, str lock
 
 	// Delete the write from the in-flight writes set.
 	s.tmp1 = makeInFlightWrite(key, seq, str)
-	delItem, _ := s.t.Delete(&s.tmp1)
+	delItem := s.t.Delete(&s.tmp1)
 	if delItem == nil {
 		// The write was already proven or the txn epoch was incremented.
 		return
 	}
-	*delItem = inFlightWrite{} // for GC
+	*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	s.bytes -= keySize(key)
 
 	// Assert that the byte accounting is believable.
@@ -1164,8 +1136,8 @@ func (s *inFlightWriteSet) ascend(f func(w *inFlightWrite)) {
 		// Set is empty.
 		return
 	}
-	s.t.Ascend(func(i *inFlightWrite) bool {
-		f(i)
+	s.t.Ascend(func(i btree.Item) bool {
+		f(i.(*inFlightWrite))
 		return true
 	})
 }
@@ -1185,8 +1157,8 @@ func (s *inFlightWriteSet) ascendRange(start, end roachpb.Key, f func(w *inFligh
 		// Range lookup.
 		s.tmp2 = makeInFlightWrite(end, 0, 0)
 	}
-	s.t.AscendRange(&s.tmp1, &s.tmp2, func(i *inFlightWrite) bool {
-		f(i)
+	s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
+		f(i.(*inFlightWrite))
 		return true
 	})
 }

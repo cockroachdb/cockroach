@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -74,16 +75,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
@@ -99,22 +97,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilegecache"
 	tablemetadatacache_util "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -127,7 +124,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/collector"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	io_prometheus_client "github.com/prometheus/client_model/go"
@@ -146,18 +142,6 @@ func init() {
 		ie := evalCtx.JobExecContext.(JobExecContext).ExecCfg().InternalDB.Executor()
 		return ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	}
-	DoParserInjection()
-}
-
-// DoParserInjection performs all the necessary sql/parser injections within the
-// sql directory.
-func DoParserInjection() {
-	parserutils.Parse = parser.Parse
-	parserutils.ParseExpr = parser.ParseExpr
-	parserutils.ParseExprs = parser.ParseExprs
-	parserutils.ParseOne = parser.ParseOne
-	parserutils.ParseQualifiedTableName = parser.ParseQualifiedTableName
-	parserutils.PLpgSQLParse = plpgsqlparser.Parse
 }
 
 // ClusterOrganization is the organization name.
@@ -273,47 +257,23 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
-// TraceTxnThreshold logs SQL transactions exceeding a duration, captured via
-// probabilistic tracing. For example, with `sql.trace.txn.percent` set to 0.5,
-// 50% of transactions are traced, and those exceeding this threshold are
-// logged.
-var TraceTxnThreshold = settings.RegisterDurationSetting(
+// traceTxnThreshold can be used to log SQL transactions that take
+// longer than duration to complete. For example, traceTxnThreshold=1s
+// will log the trace for any transaction that takes 1s or longer. To
+// log traces for all transactions use traceTxnThreshold=1ns. Note
+// that any positive duration will enable tracing and will slow down
+// all execution because traces are gathered for all transactions even
+// if they are not output.
+var traceTxnThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.trace.txn.enable_threshold",
-	"enables transaction traces for transactions exceeding this duration, used "+
-		"with `sql.trace.txn.sample_rate`",
-	0,
+	"enables tracing on all transactions; transactions open for longer than "+
+		"this duration will have their trace logged (set to 0 to disable); "+
+		"note that enabling this may have a negative performance impact; "+
+		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
+		"because it applies to all statements within a transaction as well as "+
+		"client communication (e.g. retries)", 0,
 	settings.WithPublic)
-
-// TraceTxnSampleRate Enables probabilistic transaction tracing.
-var TraceTxnSampleRate = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"sql.trace.txn.sample_rate",
-	"enables probabilistic transaction tracing. It should be used in conjunction "+
-		"with `sql.trace.txn.enable_threshold`. A percentage of transactions between 0 and 1.0 "+
-		"will have tracing enabled, and only those which exceed the configured "+
-		"threshold will be logged.",
-	1.0,
-	settings.NonNegativeFloatWithMaximum(1.0),
-	settings.WithPublic)
-
-// TraceTxnOutputJaegerJSON sets the output format of transaction trace logs.
-var TraceTxnOutputJaegerJSON = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.trace.txn.jaeger_json_output.enabled",
-	"enables Jaeger JSON output for transaction traces in logs",
-	false,
-	settings.WithPublic)
-
-// TraceTxnIncludeInternal when enabled will also subject internal queries to trace capture.
-var TraceTxnIncludeInternal = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.trace.txn.include_internal.enabled",
-	"enables tracing internal transactions as well as external workload using "+
-		"sample rate and threshold settings",
-	true,
-	settings.WithPublic,
-)
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
 // individual statements in a transaction. The motivation for this setting is
@@ -497,6 +457,7 @@ var clusterStatementTimeout = settings.RegisterDurationSetting(
 		"duration a query is permitted to run before it is canceled; if set to 0, "+
 		"there is no timeout",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var clusterLockTimeout = settings.RegisterDurationSetting(
@@ -508,6 +469,7 @@ var clusterLockTimeout = settings.RegisterDurationSetting(
 		"a lock on a key or while blocking on an existing lock in order to "+
 		"perform a non-locking read on a key; if set to 0, there is no timeout",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
@@ -518,6 +480,7 @@ var clusterIdleInSessionTimeout = settings.RegisterDurationSetting(
 		"duration a session is permitted to idle before the session is terminated; "+
 		"if set to 0, there is no timeout",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
@@ -527,6 +490,7 @@ var clusterIdleInTransactionSessionTimeout = settings.RegisterDurationSetting(
 		"duration a session is permitted to idle in a transaction before the "+
 		"session is terminated; if set to 0, there is no timeout",
 	0,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // TODO(rytaft): remove this once unique without index constraints are fully
@@ -776,37 +740,6 @@ var overrideAlterPrimaryRegionInSuperRegion = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
-var planCacheClusterMode = settings.RegisterEnumSetting(
-	settings.ApplicationLevel,
-	"sql.defaults.plan_cache_mode",
-	"default value for plan_cache_mode session setting",
-	"auto",
-	map[sessiondatapb.PlanCacheMode]string{
-		sessiondatapb.PlanCacheModeForceCustom:  "force_custom_plan",
-		sessiondatapb.PlanCacheModeForceGeneric: "force_generic_plan",
-		sessiondatapb.PlanCacheModeAuto:         "auto",
-	})
-
-var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.defaults.create_table_with_schema_locked",
-	"default value for create_table_with_schema_locked; "+
-		"default value for the create_table_with_schema_locked session setting; controls "+
-		"if new created tables will have schema_locked set",
-	true)
-
-// createTableWithSchemaLockedDefault override for the schema_locked
-var createTableWithSchemaLockedDefault = true
-
-// TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
-// in entire packages.
-func TestForceDisableCreateTableWithSchemaLocked() {
-	if !buildutil.CrdbTestBuild && !buildutil.CrdbBenchBuild {
-		panic("Testing override for schema_locked used in non-test binary.")
-	}
-	createTableWithSchemaLockedDefault = false
-}
-
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
 
@@ -821,45 +754,17 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	MetaSQLExecLatencyConsistent = metric.Metadata{
-		Name:        "sql.exec.latency.consistent",
-		Help:        "Latency of SQL statement execution of non-historical queries",
-		Measurement: "Latency",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLExecLatencyHistorical = metric.Metadata{
-		Name:        "sql.exec.latency.historical",
-		Help:        "Latency of SQL statement execution of historical queries",
-		Measurement: "Latency",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLExecLatencyDetail = metric.Metadata{
-		Name:        "sql.exec.latency.detail",
-		Help:        "Latency of SQL statement execution, by statement fingerprint",
-		Measurement: "Latency",
-		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
-		Unit:        metric.Unit_NANOSECONDS,
-	}
 	MetaSQLServiceLatency = metric.Metadata{
 		Name:        "sql.service.latency",
 		Help:        "Latency of SQL request execution",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "These high-level metrics reflect workload performance. Monitor these metrics to understand latency over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. The Statements page has P90 Latency and P99 latency columns to enable correlation with this metric.",
 	}
-	MetaSQLServiceLatencyConsistent = metric.Metadata{
-		Name:        "sql.service.latency.consistent",
-		Help:        "Latency of SQL request execution of non-historical queries",
-		Measurement: "Latency",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaSQLServiceLatencyHistorical = metric.Metadata{
-		Name:        "sql.service.latency.historical",
-		Help:        "Latency of SQL request execution of historical queries",
-		Measurement: "Latency",
-		Unit:        metric.Unit_NANOSECONDS,
+	MetaSQLOptFallback = metric.Metadata{
+		Name:        "sql.optimizer.fallback.count",
+		Help:        "Number of statements which the cost-based optimizer was unable to plan",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaSQLOptPlanCacheHits = metric.Metadata{
 		Name:        "sql.optimizer.plan_cache.hits",
@@ -875,13 +780,7 @@ var (
 	}
 	MetaDistSQLSelect = metric.Metadata{
 		Name:        "sql.distsql.select.count",
-		Help:        "Number of SELECT statements planned to be distributed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaDistSQLSelectDistributed = metric.Metadata{
-		Name:        "sql.distsql.select.distributed_exec.count",
-		Help:        "Number of SELECT statements that were distributed",
+		Help:        "Number of DistSQL SELECT statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -889,39 +788,25 @@ var (
 		Name:        "sql.distsql.exec.latency",
 		Help:        "Latency of DistSQL statement execution",
 		Measurement: "Latency",
-		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 	MetaDistSQLServiceLatency = metric.Metadata{
 		Name:        "sql.distsql.service.latency",
 		Help:        "Latency of DistSQL request execution",
 		Measurement: "Latency",
-		MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
 		Unit:        metric.Unit_NANOSECONDS,
-	}
-	MetaUniqueStatementCount = metric.Metadata{
-		Name:        "sql.query.unique.count",
-		Help:        "Cardinality estimate of the set of statement fingerprints",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
 	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This high-level metric reflects workload performance. A persistently high number of SQL transaction abort errors may negatively impact the workload performance and needs to be investigated.`,
 	}
 	MetaFailure = metric.Metadata{
 		Name:        "sql.failure.count",
 		Help:        "Number of statements resulting in a planning or runtime error",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This metric is a high-level indicator of workload and application degradation with query failures. Use the Insights page to find failed executions with their error code to troubleshoot or use application-level logs, if instrumented, to determine the cause of error.`,
 	}
 	MetaStatementTimeout = metric.Metadata{
 		Name:        "sql.statement_timeout.count",
@@ -940,36 +825,24 @@ var (
 		Help:        "Latency of SQL transactions",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.`,
 	}
 	MetaSQLTxnsOpen = metric.Metadata{
 		Name:        "sql.txns.open",
 		Help:        "Number of currently open user SQL transactions",
 		Measurement: "Open SQL Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This metric should roughly correspond to the number of cores * 4. If this metric is consistently larger, scale out the cluster.`,
 	}
 	MetaSQLActiveQueries = metric.Metadata{
 		Name:        "sql.statements.active",
 		Help:        "Number of currently active user SQL statements",
 		Measurement: "Active Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This high-level metric reflects workload volume.`,
 	}
 	MetaFullTableOrIndexScan = metric.Metadata{
 		Name:        "sql.full.scan.count",
 		Help:        "Number of full table or index scans",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    `This metric is a high-level indicator of potentially suboptimal query plans in the workload that may require index tuning and maintenance. To identify the statements with a full table scan, use SHOW FULL TABLE SCAN or the SQL Activity Statements page with the corresponding metric time frame. The Statements page also includes explain plans and index recommendations. Not all full scans are necessarily bad especially over smaller tables.`,
 	}
 
 	// Below are the metadata for the statement started counters.
@@ -997,63 +870,35 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaTxnPrepareStarted = metric.Metadata{
-		Name:        "sql.txn.prepare.started.count",
-		Help:        "Number of SQL PREPARE TRANSACTION statements started",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnCommitPreparedStarted = metric.Metadata{
-		Name:        "sql.txn.commit_prepared.started.count",
-		Help:        "Number of SQL COMMIT PREPARED statements started",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRollbackPreparedStarted = metric.Metadata{
-		Name:        "sql.txn.rollback_prepared.started.count",
-		Help:        "Number of SQL ROLLBACK PREPARED statements started",
-		Measurement: "SQL Statements",
+	MetaSQLTxnContended = metric.Metadata{
+		Name:        "sql.txn.contended.count",
+		Help:        "Number of SQL transactions experienced contention",
+		Measurement: "Contention",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaSelectStarted = metric.Metadata{
-		Name:         "sql.select.started.count",
-		Help:         "Number of SQL SELECT statements started",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.started.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "select"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.select.started.count",
+		Help:        "Number of SQL SELECT statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaUpdateStarted = metric.Metadata{
-		Name:         "sql.update.started.count",
-		Help:         "Number of SQL UPDATE statements started",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.started.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "update"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.update.started.count",
+		Help:        "Number of SQL UPDATE statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaInsertStarted = metric.Metadata{
-		Name:         "sql.insert.started.count",
-		Help:         "Number of SQL INSERT statements started",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.started.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "insert"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.insert.started.count",
+		Help:        "Number of SQL INSERT statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaDeleteStarted = metric.Metadata{
-		Name:         "sql.delete.started.count",
-		Help:         "Number of SQL DELETE statements started",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.started.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "delete"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.delete.started.count",
+		Help:        "Number of SQL DELETE statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaCRUDStarted = metric.Metadata{
 		Name:        "sql.crud_query.started.count",
@@ -1115,57 +960,11 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaCallStoredProcStarted = metric.Metadata{
-		Name:        "sql.call_stored_proc.started.count",
-		Help:        "Number of invocation of stored procedures via CALL statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 	MetaMiscStarted = metric.Metadata{
 		Name:        "sql.misc.started.count",
 		Help:        "Number of other SQL statements started",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-	}
-	MetaRoutineSelectStarted = metric.Metadata{
-		Name:         "sql.routine.select.started.count",
-		Help:         "Number of SQL SELECT statements started within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-select"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineUpdateStarted = metric.Metadata{
-		Name:         "sql.routine.update.started.count",
-		Help:         "Number of SQL UPDATE statements started within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-update"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineInsertStarted = metric.Metadata{
-		Name:         "sql.routine.insert.started.count",
-		Help:         "Number of SQL INSERT statements started within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-insert"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineDeleteStarted = metric.Metadata{
-		Name:         "sql.routine.delete.started.count",
-		Help:         "Number of SQL DELETE statements started within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-started-delete"),
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
 
 	// Below are the metadata for the statement executed counters.
@@ -1180,89 +979,48 @@ var (
 		Help:        "Number of SQL transaction BEGIN statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric reflects workload volume by counting explicit transactions. Use this metric to determine whether explicit transactions can be refactored as implicit transactions (individual statements).",
 	}
 	MetaTxnCommitExecuted = metric.Metadata{
 		Name:        "sql.txn.commit.count",
 		Help:        "Number of SQL transaction COMMIT statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric shows the number of transactions that completed successfully. This metric can be used as a proxy to measure the number of successful explicit transactions.",
 	}
 	MetaTxnRollbackExecuted = metric.Metadata{
 		Name:        "sql.txn.rollback.count",
 		Help:        "Number of SQL transaction ROLLBACK statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric shows the number of orderly transaction rollbacks. A persistently high number of rollbacks may negatively impact the workload performance and needs to be investigated.",
 	}
-	MetaTxnPrepareExecuted = metric.Metadata{
-		Name:        "sql.txn.prepare.count",
-		Help:        "Number of SQL PREPARE TRANSACTION statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnCommitPreparedExecuted = metric.Metadata{
-		Name:        "sql.txn.commit_prepared.count",
-		Help:        "Number of SQL COMMIT PREPARED statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRollbackPreparedExecuted = metric.Metadata{
-		Name:        "sql.txn.rollback_prepared.count",
-		Help:        "Number of SQL ROLLBACK PREPARED statements successfully executed",
+	MetaTxnUpgradedFromWeakIsolation = metric.Metadata{
+		Name:        "sql.txn.upgraded_iso_level.count",
+		Help:        "Number of times a weak isolation level was automatically upgraded to a stronger one",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaSelectExecuted = metric.Metadata{
-		Name:         "sql.select.count",
-		Help:         "Number of SQL SELECT statements successfully executed",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "select"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.select.count",
+		Help:        "Number of SQL SELECT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaUpdateExecuted = metric.Metadata{
-		Name:         "sql.update.count",
-		Help:         "Number of SQL UPDATE statements successfully executed",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "update"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.update.count",
+		Help:        "Number of SQL UPDATE statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaInsertExecuted = metric.Metadata{
-		Name:         "sql.insert.count",
-		Help:         "Number of SQL INSERT statements successfully executed",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "insert"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.insert.count",
+		Help:        "Number of SQL INSERT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaDeleteExecuted = metric.Metadata{
-		Name:         "sql.delete.count",
-		Help:         "Number of SQL DELETE statements successfully executed",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "delete"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
+		Name:        "sql.delete.count",
+		Help:        "Number of SQL DELETE statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaCRUDExecuted = metric.Metadata{
 		Name:        "sql.crud_query.count",
@@ -1311,9 +1069,6 @@ var (
 		Help:        "Number of SQL DDL statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
 	}
 	MetaCopyExecuted = metric.Metadata{
 		Name:        "sql.copy.count",
@@ -1327,73 +1082,9 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
-	MetaCallStoredProcExecuted = metric.Metadata{
-		Name:        "sql.call_stored_proc.count",
-		Help:        "Number of successfully executed stored procedure calls",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 	MetaMiscExecuted = metric.Metadata{
 		Name:        "sql.misc.count",
 		Help:        "Number of other SQL statements successfully executed",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaRoutineSelectExecuted = metric.Metadata{
-		Name:         "sql.routine.select.count",
-		Help:         "Number of SQL SELECT statements successfully executed within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-select"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineUpdateExecuted = metric.Metadata{
-		Name:         "sql.routine.update.count",
-		Help:         "Number of SQL UPDATE statements successfully executed within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-update"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineInsertExecuted = metric.Metadata{
-		Name:         "sql.routine.insert.count",
-		Help:         "Number of SQL INSERT statements successfully executed within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-insert"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-	MetaRoutineDeleteExecuted = metric.Metadata{
-		Name:         "sql.routine.delete.count",
-		Help:         "Number of SQL DELETE statements successfully executed within routine invocation",
-		Measurement:  "SQL Statements",
-		Unit:         metric.Unit_COUNT,
-		LabeledName:  "sql.count",
-		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "routine-delete"),
-		Essential:    true,
-		Category:     metric.Metadata_SQL,
-		HowToUse:     "This high-level metric reflects workload volume. Monitor this metric to identify abnormal application behavior or patterns over time. If abnormal patterns emerge, apply the metric's time range to the SQL Activity pages to investigate interesting outliers or patterns. For example, on the Transactions page and the Statements page, sort on the Execution Count column. To find problematic sessions, on the Sessions page, sort on the Transaction Count column. Find the sessions with high transaction counts and trace back to a user or application.",
-	}
-
-	// Miscellaneous metrics.
-	MetaSQLTxnContended = metric.Metadata{
-		Name:        "sql.txn.contended.count",
-		Help:        "Number of SQL transactions experienced contention",
-		Measurement: "Contention",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnUpgradedFromWeakIsolation = metric.Metadata{
-		Name:        "sql.txn.upgraded_iso_level.count",
-		Help:        "Number of times a weak isolation level was automatically upgraded to a stronger one",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -1520,11 +1211,6 @@ func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
 		meta.Name += ".internal"
 		meta.Help += " (internal queries)"
 		meta.Measurement = "SQL Internal Statements"
-		meta.Essential = false
-		meta.HowToUse = ""
-		if meta.LabeledName != "" {
-			meta.StaticLabels = append(meta.StaticLabels, metric.MakeLabelPairs(metric.LabelQueryInternal, "true")...)
-		}
 	}
 	return meta
 }
@@ -1629,7 +1315,6 @@ type ExecutorConfig struct {
 	TableStatsCache    *stats.TableStatisticsCache
 	StatsRefresher     *stats.Refresher
 	QueryCache         *querycache.C
-	VecIndexManager    *vecindex.Manager
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -1647,7 +1332,6 @@ type ExecutorConfig struct {
 	EvalContextTestingKnobs              eval.TestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
 	TTLTestingKnobs                      *TTLTestingKnobs
-	InspectTestingKnobs                  *InspectTestingKnobs
 	SchemaTelemetryTestingKnobs          *SchemaTelemetryTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
 	StreamingTestingKnobs                *StreamingTestingKnobs
@@ -1657,7 +1341,8 @@ type ExecutorConfig struct {
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
 	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
-	EventLogTestingKnobs                 *eventlog.EventLogTestingKnobs
+	EventLogTestingKnobs                 *EventLogTestingKnobs
+	InsightsTestingKnobs                 *insights.TestingKnobs
 	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
@@ -1668,7 +1353,7 @@ type ExecutorConfig struct {
 	RangeDescriptorCache *rangecache.RangeCache
 
 	// Role membership cache.
-	RoleMemberCache *rolemembershipcache.MembershipCache
+	RoleMemberCache *MembershipCache
 
 	// Node-level sequence cache
 	SequenceCacheNode *sessiondatapb.SequenceCacheNode
@@ -1686,9 +1371,6 @@ type ExecutorConfig struct {
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry
-
-	// TxnDiagnosticsRecorder deals with recording transaction diagnostics.
-	TxnDiagnosticsRecorder *stmtdiagnostics.TxnRegistry
 
 	ExternalIODirConfig base.ExternalIODirConfig
 
@@ -1814,9 +1496,6 @@ type ExecutorConfig struct {
 	NodeDescs kvclient.NodeDescStore
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
-
-	// TenantReadOnly indicates if this tenant is read-only (PCR reader tenant).
-	TenantReadOnly bool
 
 	// VirtualClusterName contains the name of the virtual cluster
 	// (tenant).
@@ -2001,7 +1680,7 @@ type ExecutorTestingKnobs struct {
 
 	// OnRecordTxnFinish, if set, will be called as we record a transaction
 	// finishing.
-	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, txnStats *sqlstats.RecordedTxnStats)
+	OnRecordTxnFinish func(isInternal bool, phaseTimes *sessionphase.Times, stmt string, txnStats sqlstats.RecordedTxnStats)
 
 	// UseTransactionDescIDGenerator is used to force descriptor ID generation
 	// to use a transaction, and, in doing so, more deterministically allocate
@@ -2033,7 +1712,7 @@ type ExecutorTestingKnobs struct {
 
 	// AfterArbiterRead, if set, will be called after each row read from an arbiter index
 	// for an UPSERT or INSERT.
-	AfterArbiterRead func(query string)
+	AfterArbiterRead func()
 
 	// BeforeIndexSplitAndScatter is invoked with the split and scatter of an index
 	// occurs.
@@ -2112,21 +1791,6 @@ type TTLTestingKnobs struct {
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TTLTestingKnobs) ModuleTestingKnobs() {}
 
-// InspectTestingKnobs contains testing knobs for the INSPECT command.
-type InspectTestingKnobs struct {
-	// OnInspectJobStart is called just before the inspect job begins execution.
-	// If it returns an error, the job fails immediately.
-	OnInspectJobStart func() error
-	// OnInspectAfterProtectedTimestamp is called after the protected timestamp
-	// has been created (if applicable). If it returns an error, the job fails.
-	OnInspectAfterProtectedTimestamp func() error
-	// InspectIssueLogger is an override to the default issue logger.
-	InspectIssueLogger interface{}
-}
-
-// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
-func (*InspectTestingKnobs) ModuleTestingKnobs() {}
-
 // SchemaTelemetryTestingKnobs contains testing knobs for schema telemetry.
 type SchemaTelemetryTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
@@ -2136,6 +1800,66 @@ type SchemaTelemetryTestingKnobs struct {
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*SchemaTelemetryTestingKnobs) ModuleTestingKnobs() {}
+
+// BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
+//
+// TODO (msbutler): move these to backupccl
+type BackupRestoreTestingKnobs struct {
+	// AfterBackupChunk is called after each chunk of a backup is completed.
+	AfterBackupChunk func()
+
+	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
+	// is written.
+	AfterBackupCheckpoint func()
+
+	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
+	// resolved during backup planning, and will eventually be backed up during
+	// execution.
+	CaptureResolvedTableDescSpans func([]roachpb.Span)
+
+	// RunAfterSplitAndScatteringEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been split and scattered.
+	RunAfterSplitAndScatteringEntry func(ctx context.Context)
+
+	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
+	RunAfterProcessingRestoreSpanEntry func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) error
+
+	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
+	// span has been exported.
+	RunAfterExportingSpanEntry func(ctx context.Context, response *kvpb.ExportResponse)
+
+	// InjectErrorsInBackupRowDataStorage, if non-nil and returning true, causes
+	// errors to be injected when backup processors attempts to write row data to
+	// the external storage.
+	InjectErrorsInBackupRowDataStorage func() bool
+
+	// BackupMonitor is used to overwrite the monitor used by backup during
+	// testing. This is typically the bulk mem monitor if not
+	// specified here.
+	BackupMemMonitor *mon.BytesMonitor
+
+	RestoreDistSQLRetryPolicy *retry.Options
+
+	RunBeforeRestoreFlow func() error
+
+	RunAfterRestoreFlow func() error
+
+	BackupDistSQLRetryPolicy *retry.Options
+
+	RunBeforeBackupFlow func() error
+
+	RunAfterBackupFlow func() error
+
+	RunAfterRetryIteration func(err error) error
+
+	RunAfterRestoreProcDrains func()
+}
+
+var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}
 
 // StreamingTestingKnobs contains knobs for streaming behavior.
 type StreamingTestingKnobs struct {
@@ -2176,8 +1900,6 @@ type StreamingTestingKnobs struct {
 	// for whether the job record is updated on a progress update.
 	CutoverProgressShouldUpdate func() bool
 
-	ExternalConnectionPollingInterval *time.Duration
-
 	DistSQLRetryPolicy *retry.Options
 
 	AfterRetryIteration func(err error)
@@ -2191,8 +1913,6 @@ type StreamingTestingKnobs struct {
 	SkipSpanConfigReplication bool
 
 	SpanConfigRangefeedCacheKnobs *rangefeedcache.TestingKnobs
-
-	OnGetSQLInstanceInfo func(cluster *roachpb.NodeDescriptor) *roachpb.NodeDescriptor
 
 	FailureRate uint32
 }
@@ -2234,8 +1954,12 @@ func shouldDistributeGivenRecAndMode(
 // remote node to the gateway.
 // TODO(yuzefovich): this will be easy to solve once the DistSQL spec factory is
 // completed but is quite annoying to do at the moment.
-func (p *planner) getPlanDistribution(
-	ctx context.Context, plan planMaybePhysical,
+func getPlanDistribution(
+	ctx context.Context,
+	txnHasUncommittedTypes bool,
+	distSQLMode sessiondatapb.DistSQLExecMode,
+	plan planMaybePhysical,
+	distSQLVisitor *distSQLExprCheckVisitor,
 ) (_ physicalplan.PlanDistribution, distSQLProhibitedErr error) {
 	if plan.isPhysicalPlan() {
 		// TODO(#47473): store the distSQLProhibitedErr for DistSQL spec factory
@@ -2246,12 +1970,11 @@ func (p *planner) getPlanDistribution(
 	// If this transaction has modified or created any types, it is not safe to
 	// distribute due to limitations around leasing descriptors modified in the
 	// current transaction.
-	if p.Descriptors().HasUncommittedDescriptors() {
+	if txnHasUncommittedTypes {
 		return physicalplan.LocalPlan, nil
 	}
 
-	sd := p.SessionData()
-	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
+	if distSQLMode == sessiondatapb.DistSQLOff {
 		return physicalplan.LocalPlan, nil
 	}
 
@@ -2260,27 +1983,14 @@ func (p *planner) getPlanDistribution(
 		return physicalplan.LocalPlan, nil
 	}
 
-	// Determine whether the txn has buffered some writes.
-	txnHasBufferedWrites := p.txn.HasBufferedWrites()
-	if sd.BufferedWritesEnabled && p.curPlan.main == plan {
-		// Given that we're checking the plan distribution for the main query
-		// _before_ executing any of the subqueries, it's possible that some
-		// writes will have been buffered by one of the subqueries. In such a
-		// case, we'll assume that if the query as a whole has any mutations AND
-		// it has at least one subquery, then that subquery will perform some
-		// writes that will be buffered.
-		if p.curPlan.flags.IsSet(planFlagContainsMutation) && len(p.curPlan.subqueryPlans) > 0 {
-			txnHasBufferedWrites = true
-		}
-	}
-	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd, txnHasBufferedWrites)
+	rec, err := checkSupportForPlanNode(plan.planNode, distSQLVisitor)
 	if err != nil {
 		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		return physicalplan.LocalPlan, err
 	}
 
-	if shouldDistributeGivenRecAndMode(rec, sd.DistSQLMode) {
+	if shouldDistributeGivenRecAndMode(rec, distSQLMode) {
 		return physicalplan.FullyDistributedPlan, nil
 	}
 	return physicalplan.LocalPlan, nil
@@ -2324,8 +2034,6 @@ func golangFillQueryArguments(args ...interface{}) (tree.Datums, error) {
 			d = dd
 		case username.SQLUsername:
 			d = tree.NewDString(t.Normalized())
-		case uuid.UUID:
-			d = tree.NewDUuid(tree.DUuid{UUID: t})
 		}
 		if d == nil {
 			// Handle all types which have an underlying type that can be stored in the
@@ -2404,7 +2112,6 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	case types.TSVectorFamily:
 	case types.IntervalFamily:
 	case types.JsonFamily:
-	case types.JsonpathFamily:
 	case types.UuidFamily:
 	case types.INetFamily:
 	case types.OidFamily:
@@ -2414,7 +2121,6 @@ func checkResultType(typ *types.T, fmtCode pgwirebase.FormatCode) error {
 	case types.TupleFamily:
 	case types.EnumFamily:
 	case types.VoidFamily:
-	case types.LTreeFamily:
 	case types.ArrayFamily:
 		if fmtCode == pgwirebase.FormatBinary && typ.ArrayContents().Family() == types.ArrayFamily {
 			return unimplemented.NewWithIssueDetail(32552,
@@ -2457,7 +2163,6 @@ func (p *planner) EvalAsOfTimestamp(
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
 func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSystemTime, error) {
 	var asOf tree.AsOfClause
-	var forBackfill bool
 	switch s := stmt.(type) {
 	case *tree.Select:
 		selStmt := s.Select
@@ -2490,39 +2195,6 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 		asOf = s.Options.AsOf
 	case *tree.Explain:
 		return p.isAsOf(ctx, s.Statement)
-	case *tree.CreateTable:
-		if !s.As() {
-			return nil, nil
-		}
-		ts, err := p.isAsOf(ctx, s.AsSource)
-		if err != nil {
-			return nil, err
-		}
-		if ts != nil {
-			ts.ForBackfill = true
-		}
-		return ts, nil
-	case *tree.CreateView:
-		if !s.Materialized {
-			return nil, nil
-		}
-		// N.B.: If the AS OF SYSTEM TIME value here is older than the most recent
-		// schema change to any of the tables that the view depends on, we should
-		// reject this update.
-		ts, err := p.isAsOf(ctx, s.AsSource)
-		if err != nil {
-			return nil, err
-		}
-		if ts != nil {
-			ts.ForBackfill = true
-		}
-		return ts, nil
-	case *tree.RefreshMaterializedView:
-		if s.AsOf.Expr == nil {
-			return nil, nil
-		}
-		asOf = s.AsOf
-		forBackfill = true
 	default:
 		return nil, nil
 	}
@@ -2530,7 +2202,6 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 	if err != nil {
 		return nil, err
 	}
-	asOfRet.ForBackfill = forBackfill
 	return &asOfRet, err
 }
 
@@ -2564,7 +2235,7 @@ type queryMeta struct {
 	txnID uuid.UUID
 
 	// The timestamp when this query began execution.
-	start crtime.Mono
+	start time.Time
 
 	// The SQL statement being executed.
 	stmt statements.Statement[tree.Statement]
@@ -2780,9 +2451,11 @@ func truncateStatementStringForTelemetry(stmt string) string {
 // hideNonVirtualTableNameFunc returns a function that can be used with
 // FmtCtx.SetReformatTableNames. It hides all table names that are not virtual
 // tables.
-func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *tree.TableName) {
+func hideNonVirtualTableNameFunc(
+	vt VirtualTabler, ns eval.ClientNoticeSender,
+) func(ctx *tree.FmtCtx, name *tree.TableName) {
 	reformatFn := func(ctx *tree.FmtCtx, tn *tree.TableName) {
-		virtual, err := vt.getVirtualTableEntry(tn)
+		virtual, err := vt.getVirtualTableEntry(tn, ns)
 
 		if err != nil || virtual == nil {
 			// Current table is non-virtual and therefore needs to be scrubbed (for statement stats) or redacted (for logs).
@@ -2826,20 +2499,33 @@ func hideNonVirtualTableNameFunc(vt VirtualTabler) func(ctx *tree.FmtCtx, name *
 	return reformatFn
 }
 
-func anonymizeStmtAndConstants(stmt tree.Statement, vt VirtualTabler) string {
+func anonymizeStmtAndConstants(
+	stmt tree.Statement, vt VirtualTabler, ns eval.ClientNoticeSender,
+) string {
 	// Re-format to remove most names.
 	fmtFlags := tree.FmtAnonymize | tree.FmtHideConstants
 	var f *tree.FmtCtx
 	if vt != nil {
 		f = tree.NewFmtCtx(
 			fmtFlags,
-			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)),
+			tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)),
 		)
 	} else {
 		f = tree.NewFmtCtx(fmtFlags)
 	}
 	f.FormatNode(stmt)
 	return f.CloseAndGetString()
+}
+
+// WithAnonymizedStatement attaches the anonymized form of a statement
+// to an error object.
+func WithAnonymizedStatement(
+	err error, stmt tree.Statement, vt VirtualTabler, ns eval.ClientNoticeSender,
+) error {
+	anonStmtStr := anonymizeStmtAndConstants(stmt, vt, ns)
+	anonStmtStr = truncateStatementStringForTelemetry(anonStmtStr)
+	return errors.WithSafeDetails(err,
+		"while executing: %s", errors.Safe(anonStmtStr))
 }
 
 // SessionTracing holds the state used by SET TRACING statements in the context
@@ -2963,6 +2649,9 @@ func (st *SessionTracing) StartTracing(
 	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
 		txnCtx := st.ex.state.Ctx
 		sp := tracing.SpanFromContext(txnCtx)
+		if sp == nil {
+			return errors.Errorf("no txn span for SessionTracing")
+		}
 		// We're hijacking this span and we're never going to un-hijack it, so it's
 		// up to us to finish it.
 		sp.Finish()
@@ -3019,7 +2708,6 @@ func (st *SessionTracing) Enabled() bool {
 // logical planning starts.
 func (st *SessionTracing) TracePlanStart(ctx context.Context, stmtTag string) {
 	if st.enabled {
-		stmtTag := stmtTag // alloc only if taken
 		log.VEventf(ctx, 2, "planning starts: %s", stmtTag)
 	}
 }
@@ -3050,21 +2738,14 @@ func (st *SessionTracing) TracePlanCheckEnd(ctx context.Context, err error, dist
 }
 
 // TraceRetryInformation conditionally emits a trace message for retry information.
-func (st *SessionTracing) TraceRetryInformation(
-	ctx context.Context, retryScope string, retries int, err error,
-) {
-	log.VEventfDepth(
-		ctx, 2, 1, "executing after %d %s retries, last retry reason: %v", retries, retryScope, err,
-	)
+func (st *SessionTracing) TraceRetryInformation(ctx context.Context, retries int, err error) {
+	log.VEventfDepth(ctx, 2, 1, "executing after %d retries, last retry reason: %v", retries, err)
 }
 
 // TraceExecStart conditionally emits a trace message at the moment
 // plan execution starts.
 func (st *SessionTracing) TraceExecStart(ctx context.Context, engine redact.SafeString) {
-	if log.ExpensiveLogEnabledVDepth(ctx, 2, 1) {
-		engine := engine // heap alloc only if needed
-		log.VEventfDepth(ctx, 2, 1, "execution starts: %s engine", engine)
-	}
+	log.VEventfDepth(ctx, 2, 1, "execution starts: %s engine", engine)
 }
 
 // TraceExecConsume creates a context for TraceExecRowsResult below.
@@ -3431,10 +3112,6 @@ type sessionDataMutatorCallbacks struct {
 	// setCurTxnReadOnly is called when we execute SET transaction_read_only = ...
 	// It can be nil, in which case nothing triggers on execution.
 	setCurTxnReadOnly func(readOnly bool) error
-	// setBufferedWritesEnabled is called when we execute SET kv_transaction_buffered_writes_enabled = ...
-	// It can be nil, in which case nothing triggers on execution (apart from
-	// modification of the session data).
-	setBufferedWritesEnabled func(enabled bool)
 	// upgradedIsolationLevel is called whenever the transaction isolation
 	// session variable is configured and the isolation level is automatically
 	// upgraded to a stronger one. It's also used when the isolation level is
@@ -3660,30 +3337,6 @@ func (m *sessionDataMutator) SetPartiallyDistributedPlansDisabled(val bool) {
 	m.data.PartiallyDistributedPlansDisabled = val
 }
 
-func (m *sessionDataMutator) SetDistributeGroupByRowCountThreshold(val uint64) {
-	m.data.DistributeGroupByRowCountThreshold = val
-}
-
-func (m *sessionDataMutator) SetDistributeSortRowCountThreshold(val uint64) {
-	m.data.DistributeSortRowCountThreshold = val
-}
-
-func (m *sessionDataMutator) SetDistributeScanRowCountThreshold(val uint64) {
-	m.data.DistributeScanRowCountThreshold = val
-}
-
-func (m *sessionDataMutator) SetAlwaysDistributeFullScans(val bool) {
-	m.data.AlwaysDistributeFullScans = val
-}
-
-func (m *sessionDataMutator) SetUseSoftLimitForDistributeScan(val bool) {
-	m.data.UseSoftLimitForDistributeScan = val
-}
-
-func (m *sessionDataMutator) SetDistributeJoinRowCountThreshold(val uint64) {
-	m.data.DistributeJoinRowCountThreshold = val
-}
-
 func (m *sessionDataMutator) SetDisableVecUnionEagerCancellation(val bool) {
 	m.data.DisableVecUnionEagerCancellation = val
 }
@@ -3863,16 +3516,8 @@ func (m *sessionDataMutator) SetDisallowFullTableScans(val bool) {
 	m.data.DisallowFullTableScans = val
 }
 
-func (m *sessionDataMutator) SetAvoidFullTableScansInMutations(val bool) {
-	m.data.AvoidFullTableScansInMutations = val
-}
-
 func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
-}
-
-func (m *sessionDataMutator) SetAllowViewWithSecurityInvokerClause(val bool) {
-	m.data.AllowViewWithSecurityInvokerClause = val
 }
 
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
@@ -4022,22 +3667,6 @@ func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) 
 	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
 }
 
-func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsAvgLookupRatio(val float64) {
-	m.data.ParallelizeMultiKeyLookupJoinsAvgLookupRatio = val
-}
-
-func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsMaxLookupRatio(val float64) {
-	m.data.ParallelizeMultiKeyLookupJoinsMaxLookupRatio = val
-}
-
-func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsAvgLookupRowSize(val int64) {
-	m.data.ParallelizeMultiKeyLookupJoinsAvgLookupRowSize = val
-}
-
-func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsOnlyOnMRMutations(val bool) {
-	m.data.ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations = val
-}
-
 // TODO(harding): Remove this when costing scans based on average column size
 // is fully supported.
 func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {
@@ -4070,10 +3699,6 @@ func (m *sessionDataMutator) SetTestingOptimizerCostPerturbation(val float64) {
 
 func (m *sessionDataMutator) SetTestingOptimizerDisableRuleProbability(val float64) {
 	m.data.TestingOptimizerDisableRuleProbability = val
-}
-
-func (m *sessionDataMutator) SetDisableOptimizerRules(val []string) {
-	m.data.DisableOptimizerRules = val
 }
 
 func (m *sessionDataMutator) SetTrigramSimilarityThreshold(val float64) {
@@ -4138,6 +3763,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedSplitDisjunctionForJoins(val
 
 func (m *sessionDataMutator) SetInjectRetryErrorsOnCommitEnabled(val bool) {
 	m.data.InjectRetryErrorsOnCommitEnabled = val
+}
+
+func (m *sessionDataMutator) SetEnforceHomeRegionFollowerReadsEnabled(val bool) {
+	m.data.EnforceHomeRegionFollowerReadsEnabled = val
 }
 
 func (m *sessionDataMutator) SetOptimizerAlwaysUseHistograms(val bool) {
@@ -4312,10 +3941,6 @@ func (m *sessionDataMutator) SetLegacyVarcharTyping(val bool) {
 	m.data.LegacyVarcharTyping = val
 }
 
-func (m *sessionDataMutator) SetCatalogDigestStalenessCheckEnabled(b bool) {
-	m.data.CatalogDigestStalenessCheckEnabled = b
-}
-
 func (m *sessionDataMutator) SetOptimizerPreferBoundedCardinality(b bool) {
 	m.data.OptimizerPreferBoundedCardinality = b
 }
@@ -4324,63 +3949,8 @@ func (m *sessionDataMutator) SetOptimizerMinRowCount(val float64) {
 	m.data.OptimizerMinRowCount = val
 }
 
-func (m *sessionDataMutator) SetBufferedWritesEnabled(b bool) {
-	m.data.BufferedWritesEnabled = b
-	if m.setBufferedWritesEnabled != nil {
-		m.setBufferedWritesEnabled(b)
-	}
-}
-
 func (m *sessionDataMutator) SetOptimizerCheckInputMinRowCount(val float64) {
 	m.data.OptimizerCheckInputMinRowCount = val
-}
-
-func (m *sessionDataMutator) SetOptimizerPlanLookupJoinsWithReverseScans(val bool) {
-	m.data.OptimizerPlanLookupJoinsWithReverseScans = val
-}
-
-func (m *sessionDataMutator) SetRegisterLatchWaitContentionEvents(val bool) {
-	m.data.RegisterLatchWaitContentionEvents = val
-}
-
-func (m *sessionDataMutator) SetUseCPutsOnNonUniqueIndexes(val bool) {
-	m.data.UseCPutsOnNonUniqueIndexes = val
-}
-
-func (m *sessionDataMutator) SetBufferedWritesUseLockingOnNonUniqueIndexes(val bool) {
-	m.data.BufferedWritesUseLockingOnNonUniqueIndexes = val
-}
-
-func (m *sessionDataMutator) SetOptimizerUseLockElisionMultipleFamilies(val bool) {
-	m.data.OptimizerUseLockElisionMultipleFamilies = val
-}
-
-func (m *sessionDataMutator) SetOptimizerEnableLockElision(val bool) {
-	m.data.OptimizerEnableLockElision = val
-}
-
-func (m *sessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
-	m.data.OptimizerUseDeleteRangeFastPath = val
-}
-
-func (m *sessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
-	m.data.AllowCreateTriggerFunctionWithArgvReferences = val
-}
-
-func (m *sessionDataMutator) SetCreateTableWithSchemaLocked(val bool) {
-	m.data.CreateTableWithSchemaLocked = val
-}
-
-func (m *sessionDataMutator) SetUsePre_25_2VariadicBuiltins(val bool) {
-	m.data.UsePre_25_2VariadicBuiltins = val
-}
-
-func (m *sessionDataMutator) SetVectorSearchBeamSize(val int32) {
-	m.data.VectorSearchBeamSize = val
-}
-
-func (m *sessionDataMutator) SetVectorSearchRerankMultiplier(val int32) {
-	m.data.VectorSearchRerankMultiplier = val
 }
 
 func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val bool) {
@@ -4391,40 +3961,8 @@ func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
 }
 
-func (m *sessionDataMutator) SetEnableScrubJob(val bool) {
-	m.data.EnableScrubJob = val
-}
-
-func (m *sessionDataMutator) SetEnableInspectCommand(val bool) {
-	m.data.EnableInspectCommand = val
-}
-
 func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.data.InitialRetryBackoffForReadCommitted = val
-}
-
-func (m *sessionDataMutator) SetUseImprovedRoutineDependencyTracking(val bool) {
-	m.data.UseImprovedRoutineDependencyTracking = val
-}
-
-func (m *sessionDataMutator) SetOptimizerDisableCrossRegionCascadeFastPathForRBRTables(val bool) {
-	m.data.OptimizerDisableCrossRegionCascadeFastPathForRBRTables = val
-}
-
-func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
-	m.data.DistSQLUseReducedLeafWriteSets = val
-}
-
-func (m *sessionDataMutator) SetUseProcTxnControlExtendedProtocolFix(val bool) {
-	m.data.UseProcTxnControlExtendedProtocolFix = val
-}
-
-func (m *sessionDataMutator) SetAllowUnsafeInternals(val bool) {
-	m.data.AllowUnsafeInternals = val
-}
-
-func (m *sessionDataMutator) SetOptimizerUseImprovedHoistJoinProject(val bool) {
-	m.data.OptimizerUseImprovedHoistJoinProject = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.
@@ -4454,7 +3992,7 @@ func quantizeCounts(d *appstatspb.StatementStatistics) {
 	d.FirstAttemptCount = int64((float64(d.FirstAttemptCount) / float64(oldCount)) * float64(newCount))
 }
 
-func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
+func scrubStmtStatKey(vt VirtualTabler, key string, ns eval.ClientNoticeSender) (string, bool) {
 	// Re-parse the statement to obtain its AST.
 	stmt, err := parser.ParseOne(key)
 	if err != nil {
@@ -4464,17 +4002,44 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 	// Re-format to remove most names.
 	f := tree.NewFmtCtx(
 		tree.FmtAnonymize,
-		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)),
+		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt, ns)),
 	)
 	f.FormatNode(stmt.AST)
 	return f.CloseAndGetString(), true
 }
 
+var redactNamesInSQLStatementLog = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.log.redact_names.enabled",
+	"if set, schema object identifers are redacted in SQL statements that appear in event logs",
+	false,
+	settings.WithPublic,
+)
+
 // FormatAstAsRedactableString implements scbuild.AstFormatter
 func (p *planner) FormatAstAsRedactableString(
 	statement tree.Statement, annotations *tree.Annotations,
 ) redact.RedactableString {
-	return tree.FormatAstAsRedactableString(statement, annotations, &p.extendedEvalCtx.Settings.SV)
+	fs := tree.FmtSimple | tree.FmtAlwaysQualifyTableNames | tree.FmtMarkRedactionNode
+	if !redactNamesInSQLStatementLog.Get(&p.extendedEvalCtx.Settings.SV) {
+		fs = fs | tree.FmtOmitNameRedaction
+	}
+	return formatStmtKeyAsRedactableString(statement, annotations, fs)
+}
+
+// formatStmtKeyAsRedactableString given an AST node this function will fully
+// qualify names using annotations to format it out into a redactable string.
+// Object names are not redacted, but constants and datums are.
+func formatStmtKeyAsRedactableString(
+	rootAST tree.Statement, ann *tree.Annotations, fs tree.FmtFlags,
+) redact.RedactableString {
+	f := tree.NewFmtCtx(
+		fs,
+		tree.FmtAnnotations(ann),
+	)
+	f.FormatNode(rootAST)
+	formattedRedactableStatementString := f.CloseAndGetString()
+	return redact.RedactableString(formattedRedactableStatementString)
 }
 
 // FailedHashedValue is used as a default return value for when HashForReporting
@@ -4538,6 +4103,17 @@ func DescsTxn(
 	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		return f(ctx, txn, txn.Descriptors())
 	})
+}
+
+// TestingDescsTxn is a convenience function for running a transaction on
+// descriptors when you have a serverutils.ApplicationLayerInterface.
+func TestingDescsTxn(
+	ctx context.Context,
+	s serverutils.ApplicationLayerInterface,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
+) error {
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+	return DescsTxn(ctx, &execCfg, f)
 }
 
 // NewRowMetrics creates a rowinfra.Metrics struct for either internal or user

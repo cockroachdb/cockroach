@@ -6,6 +6,7 @@
 package batcheval
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/objstorage"
 )
 
 // SSTTargetSizeSetting is the cluster setting name for the
@@ -108,7 +108,7 @@ func evalExport(
 		return result.Result{}, err
 	}
 	if excludeFromBackup {
-		log.KvExec.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
+		log.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
 		return result.Result{}, nil
 	}
 
@@ -180,7 +180,7 @@ func evalExport(
 
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
-		var destFile objstorage.MemObj
+		var destFile bytes.Buffer
 		opts := storage.MVCCExportOptions{
 			StartKey:                storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
 			EndKey:                  args.EndKey,
@@ -234,7 +234,7 @@ func evalExport(
 			// part of the ExportResponse. This frees up the memory used by the empty
 			// SST file.
 			if !hasRangeKeys {
-				destFile = objstorage.MemObj{}
+				destFile = bytes.Buffer{}
 			}
 		} else {
 			summary, resumeInfo, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
@@ -252,7 +252,7 @@ func evalExport(
 		default:
 		}
 
-		data := destFile.Data()
+		data := destFile.Bytes()
 
 		// NB: This should only happen in two cases:
 		//
@@ -292,7 +292,7 @@ func evalExport(
 							return result.Result{}, errors.AssertionFailedf("ExportRequest exited without " +
 								"exporting any data for an unknown reason; programming error")
 						} else {
-							log.KvExec.Warningf(ctx, "unexpected resume span from ExportRequest without exporting any data for an unknown reason: %v", resumeInfo)
+							log.Warningf(ctx, "unexpected resume span from ExportRequest without exporting any data for an unknown reason: %v", resumeInfo)
 						}
 					}
 					start = resumeInfo.ResumeKey.Key

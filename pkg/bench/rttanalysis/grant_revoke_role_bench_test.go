@@ -5,11 +5,7 @@
 
 package rttanalysis
 
-import (
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-)
+import "testing"
 
 func BenchmarkGrantRole(b *testing.B) { reg.Run(b) }
 func init() {
@@ -32,11 +28,7 @@ CREATE ROLE c;`,
 	})
 }
 
-func BenchmarkShowGrants(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-	reg.Run(b)
-}
-
+func BenchmarkShowGrants(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("ShowGrants", []RoundTripBenchTestCase{
 		{

@@ -27,8 +27,7 @@ import (
 // The recursive query tree is regenerated each time using a callback
 // (implemented by the execbuilder).
 type recursiveCTENode struct {
-	// The input plan node is for the initial query.
-	singleInputPlanNode
+	initial planNode
 
 	genIterationFn exec.RecursiveCTEIterationFn
 	// iterationCount tracks the number of invocations of genIterationFn.
@@ -63,7 +62,7 @@ type recursiveCTERun struct {
 }
 
 func (n *recursiveCTENode) startExec(params runParams) error {
-	n.typs = planTypes(n.input)
+	n.typs = planTypes(n.initial)
 	n.workingRows.Init(params.ctx, n.typs, params.extendedEvalCtx, "cte" /* opName */)
 	if n.deduplicate {
 		n.allRows.InitWithDedup(params.ctx, n.typs, params.extendedEvalCtx, "cte-all" /* opName */)
@@ -81,14 +80,14 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		// at a time and returned them in the same fashion, but that would require
 		// special-case behavior).
 		for {
-			ok, err := n.input.Next(params)
+			ok, err := n.initial.Next(params)
 			if err != nil {
 				return false, err
 			}
 			if !ok {
 				break
 			}
-			if err := n.AddRow(params.ctx, n.input.Values()); err != nil {
+			if err := n.AddRow(params.ctx, n.initial.Values()); err != nil {
 				return false, err
 			}
 		}
@@ -130,26 +129,22 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	buf := &bufferNode{
 		// The plan here is only useful for planColumns, so it's ok to always use
 		// the initial plan.
-		singleInputPlanNode: singleInputPlanNode{n.input},
-		typs:                n.typs,
-		rows:                lastWorkingRows,
-		label:               n.label,
+		plan:  n.initial,
+		typs:  n.typs,
+		rows:  lastWorkingRows,
+		label: n.label,
 	}
-
-	// Create a separate tracing span that will be used when planning and
-	// running this iteration. Note that we'll still use the "outer" params.ctx
-	// when accessing rows in the container.
-	n.iterationCount++
-	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
-	planAndRunCtx, sp := tracing.ChildSpan(params.ctx, opName)
-	defer sp.Finish()
-
-	newPlan, err := n.genIterationFn(planAndRunCtx, newExecFactory(planAndRunCtx, params.p), buf)
+	newPlan, err := n.genIterationFn(newExecFactory(params.ctx, params.p), buf)
 	if err != nil {
 		return false, err
 	}
+
+	n.iterationCount++
+	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
+	ctx, sp := tracing.ChildSpan(params.ctx, opName)
+	defer sp.Finish()
 	if err := runPlanInsidePlan(
-		planAndRunCtx, params, newPlan.(*planComponents), rowResultWriter(n),
+		ctx, params, newPlan.(*planComponents), rowResultWriter(n),
 		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
 	); err != nil {
 		return false, err
@@ -168,7 +163,7 @@ func (n *recursiveCTENode) Values() tree.Datums {
 }
 
 func (n *recursiveCTENode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.initial.Close(ctx)
 	if n.deduplicate {
 		n.allRows.Close(ctx)
 	}

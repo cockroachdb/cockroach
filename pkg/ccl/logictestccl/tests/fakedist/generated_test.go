@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 6
+const configIdx = 5
 
 var cclLogicTestDir string
 
@@ -73,13 +73,6 @@ func TestLogic_tmp(t *testing.T) {
 	var glob string
 	glob = filepath.Join(cclLogicTestDir, "_*")
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
-}
-
-func TestCCLLogic_buffered_writes_lock_loss(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "buffered_writes_lock_loss")
 }
 
 func TestCCLLogic_fips_ready(
@@ -159,13 +152,6 @@ func TestCCLLogic_plpgsql_call(
 	runCCLLogicTest(t, "plpgsql_call")
 }
 
-func TestCCLLogic_plpgsql_cte(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "plpgsql_cte")
-}
-
 func TestCCLLogic_plpgsql_cursor(
 	t *testing.T,
 ) {
@@ -185,13 +171,6 @@ func TestCCLLogic_plpgsql_record(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "plpgsql_record")
-}
-
-func TestCCLLogic_plpgsql_srf(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "plpgsql_srf")
 }
 
 func TestCCLLogic_plpgsql_txn(
@@ -220,13 +199,6 @@ func TestCCLLogic_procedure_plpgsql(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_plpgsql")
-}
-
-func TestCCLLogic_provisioning(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "provisioning")
 }
 
 func TestCCLLogic_read_committed(
@@ -283,13 +255,6 @@ func TestCCLLogic_triggers(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "triggers")
-}
-
-func TestCCLLogic_txn_retry(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "txn_retry")
 }
 
 func TestCCLLogic_udf_params(

@@ -1,5 +1,5 @@
 # LogicTest: 3node-tenant-multiregion
-skip under duress #118627
+skip under duress 118627
 
 user host-cluster-root
 
@@ -14,8 +14,7 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, FAMILY (k, v))
 
 # Upreplicate the table's range. We need a retry to guarantee that the
 # capability has been picked up.
-retry
-statement ok
+statement ok retry
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 0)
 
 # Split the ranges in the table.

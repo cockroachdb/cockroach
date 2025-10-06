@@ -56,8 +56,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/lex",
-        "//pkg/sql/oidext",
-        "//pkg/sql/parserutils",
+        "//pkg/sql/parser",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -81,14 +80,11 @@ go_library(
         "//pkg/util",
         "//pkg/util/arith",
         "//pkg/util/bitarray",
-        "//pkg/util/buildutil",
         "//pkg/util/cidr",
         "//pkg/util/duration",
         "//pkg/util/encoding",
-        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/json",
-        "//pkg/util/ltree",
         "//pkg/util/mon",
         "//pkg/util/randutil",
         "//pkg/util/rangedesc",
@@ -107,7 +103,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
-        "@org_golang_x_text//unicode/norm",
     ],
 )
 
@@ -170,6 +165,5 @@ disallowed_imports_test(
     src = "eval",
     disallowed_list = [
         "//pkg/sql/catalog",
-        "//pkg/sql/parser",
     ],
 )

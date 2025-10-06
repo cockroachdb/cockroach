@@ -73,7 +73,7 @@ func (cq catalogQuery) query(
 				err = cq.processCommentsResultRow(row, out)
 				// Any errors processing comments can be ignored these are not fatal.
 				if err != nil {
-					log.Dev.VInfof(ctx, 2, "unable to process a comment : %v", err)
+					log.VInfof(ctx, 2, "unable to process a comment : %v", err)
 					err = nil
 					continue
 				}

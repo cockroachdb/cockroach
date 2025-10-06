@@ -175,7 +175,7 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 		c.StartServiceForVirtualCluster(
 			ctx, t.L(),
-			option.StartVirtualClusterOpts(name, node, option.NoBackupSchedule),
+			option.StartVirtualClusterOpts(name, node),
 			install.MakeClusterSettings(),
 		)
 
@@ -206,8 +206,12 @@ func runMultiTenantFairness(
 		c.Run(ctx, option.WithNodes(node), initKV)
 	}
 
+	t.L().Printf("setting up prometheus/grafana (<%s)", 2*time.Minute)
+	_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
+	defer cleanupFunc()
+
 	t.L().Printf("loading per-tenant data (<%s)", 10*time.Minute)
-	m1 := c.NewDeprecatedMonitor(ctx, c.All())
+	m1 := c.NewMonitor(ctx, c.All())
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		name := name
@@ -249,7 +253,7 @@ func runMultiTenantFairness(
 	time.Sleep(waitDur)
 
 	t.L().Printf("running virtual cluster workloads (<%s)", s.duration+time.Minute)
-	m2 := c.NewDeprecatedMonitor(ctx, crdbNode)
+	m2 := c.NewMonitor(ctx, crdbNode)
 	var n int
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
@@ -295,6 +299,7 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 
 		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name))
+		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")
 		// Retry once, since this can fail sometimes due the cluster running hot.
@@ -325,8 +330,8 @@ func runMultiTenantFairness(
 		} else {
 			t.Fatal("no query results")
 		}
+
 		require.NoError(t, rows.Err())
-		vcdb.Close()
 	}
 
 	failThreshold := .3

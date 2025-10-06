@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Note that the odd '0000-01-01 hh:mi:ss +0000 +0000' result format is an
 # artifact of how pq displays TIMETZs.
 #

@@ -20,6 +20,10 @@ type VirtualTablePrivilege struct {
 	TableName  string `priv:"TableName"`
 }
 
+// VirtualTablePrivilegeType represents the object type for
+// VirtualTablePrivilege.
+const VirtualTablePrivilegeType = "VirtualTable"
+
 var _ Object = &VirtualTablePrivilege{}
 
 // VirtualTablePathPrefix is the prefix used for virtual table privileges in system.privileges.

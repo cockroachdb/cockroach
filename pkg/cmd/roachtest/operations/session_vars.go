@@ -76,32 +76,6 @@ func registerSessionVariables(r registry.Registry) {
 			),
 			Owner: registry.OwnerSQLFoundations,
 		},
-		// Sets plan_cache_mode to "auto" or "force_custom_plan" for any
-		// database. "force_generic_plan" is not used because it can produce
-		// very inefficient query plans in some cases, e.g., full-table scans.
-		// 1-hour cycle.
-		{
-			Name:      "plan_cache_mode",
-			DBPattern: "",
-			Generator: timeBasedValues(
-				timeutil.Now,
-				[]string{"auto", "force_custom_plan"},
-				1*time.Hour,
-			),
-			Owner: registry.OwnerSQLQueries,
-		},
-		// Toggles prefer_lookup_joins_for_fks for any database.
-		// 1-hour cycle.
-		{
-			Name:      "prefer_lookup_joins_for_fks",
-			DBPattern: "",
-			Generator: timeBasedValues(
-				timeutil.Now,
-				[]string{"true", "false"},
-				1*time.Hour,
-			),
-			Owner: registry.OwnerSQLQueries,
-		},
 	}
 	for _, op := range ops {
 		r.AddOperation(registry.OperationSpec{

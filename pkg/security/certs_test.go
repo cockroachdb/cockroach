@@ -659,17 +659,8 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 	params := base.TestServerArgs{
 		SSLCertsDir:       certsDir,
 		InsecureWebAccess: true,
+
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109498),
-		// Disable DRPC for this test because it exposes a certificate
-		// validation issue: The test removes ca-client.crt and ca-ui.crt to
-		// test fallback to ca.crt, but the client certificates
-		// (client.node.crt, client.root.crt) were signed by the removed
-		// ca-client.crt. When DRPC tries to establish connections during
-		// startup for internal APIs, it fails with "tls: unknown certificate
-		// authority". This is a test infrastructure issue, not a production
-		// concern, as production deployments don't remove CA certificates after
-		// generating client certificates. See issue #153507.
-		DefaultDRPCOption: base.TestDRPCDisabled,
 	}
 	srv, _, db := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())

@@ -190,7 +190,7 @@ func setupHTTPClient(baseURL *url.URL, s *schemaRegistryParams) (*httputil.Clien
 	httpClient.Timeout = s.timeout
 
 	if baseURL.Scheme == "http" {
-		log.Changefeed.Warningf(context.Background(), "TLS configuration provided but schema registry %s uses HTTP", baseURL)
+		log.Warningf(context.Background(), "TLS configuration provided but schema registry %s uses HTTP", baseURL)
 	}
 	return httpClient, nil
 }
@@ -228,7 +228,7 @@ func (r *confluentSchemaRegistry) RegisterSchemaForSubject(
 ) (int32, error) {
 	u := r.urlForPath(fmt.Sprintf("subjects/%s/versions", subject))
 	if log.V(1) {
-		log.Changefeed.Infof(ctx, "registering avro schema %s %s", u, schema)
+		log.Infof(ctx, "registering avro schema %s %s", u, schema)
 	}
 
 	req := confluentSchemaVersionRequest{Schema: schema}
@@ -285,7 +285,7 @@ func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() err
 		if r.sliMetrics != nil {
 			r.sliMetrics.SchemaRegistryRetries.Inc(1)
 		}
-		log.Changefeed.VInfof(ctx, 1, "retrying schema registry operation: %s", err.Error())
+		log.VInfof(ctx, 1, "retrying schema registry operation: %s", err.Error())
 	}
 	return changefeedbase.MarkRetryableError(err)
 }
@@ -302,7 +302,7 @@ func gracefulClose(ctx context.Context, toClose io.ReadCloser) {
 	const respExtraReadLimit = 4096
 	_, _ = io.CopyN(io.Discard, toClose, respExtraReadLimit)
 	if err := toClose.Close(); err != nil {
-		log.Changefeed.VInfof(ctx, 2, "failure to close schema registry connection", err)
+		log.VInfof(ctx, 2, "failure to close schema registry connection", err)
 	}
 }
 

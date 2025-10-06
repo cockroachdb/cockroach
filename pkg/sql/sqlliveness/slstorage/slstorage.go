@@ -43,6 +43,7 @@ var GCInterval = settings.RegisterDurationSetting(
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
 	time.Hour,
+	settings.NonNegativeDuration,
 )
 
 // GCJitter specifies the jitter fraction on the interval between attempts to
@@ -212,12 +213,11 @@ func (s *Storage) isAlive(
 		if !s.mu.started {
 			return false, false, singleflight.Future{}, sqlliveness.NotStartedError
 		}
-		sidKey := any(sid)
-		if _, ok := s.mu.deadSessions.Get(sidKey); ok {
+		if _, ok := s.mu.deadSessions.Get(sid); ok {
 			s.metrics.IsAliveCacheHits.Inc(1)
 			return false, false, singleflight.Future{}, nil
 		}
-		if expiration, ok := s.mu.liveSessions.Get(sidKey); ok {
+		if expiration, ok := s.mu.liveSessions.Get(sid); ok {
 			expiration := expiration.(hlc.Timestamp)
 			// The record exists and is valid.
 			if s.clock.Now().Less(expiration) {
@@ -387,7 +387,7 @@ func (s *Storage) deleteOrFetchSession(
 	}
 	if deleted {
 		s.metrics.SessionsDeleted.Inc(1)
-		log.Dev.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
+		log.Infof(ctx, "deleted session %s which expired at %s", sid, prevExpiration)
 	}
 	return alive, expiration, nil
 }
@@ -403,6 +403,7 @@ func (s *Storage) deleteSessionsLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.Ch():
+			t.MarkRead()
 			s.deleteExpiredSessions(ctx)
 			t.Reset(s.gcInterval())
 		}
@@ -420,7 +421,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	toCheck, err := s.fetchExpiredSessionIDs(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Dev.Errorf(ctx, "could not delete expired sessions: %v", err)
+			log.Errorf(ctx, "could not delete expired sessions: %v", err)
 		}
 		return
 	}
@@ -439,7 +440,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 	}
 	for _, id := range toCheck {
 		if err := checkSession(id); err != nil {
-			log.Dev.Warningf(ctx, "failed to check on expired session %v: %v", id, err)
+			log.Warningf(ctx, "failed to check on expired session %v: %v", id, err)
 		}
 	}
 	s.metrics.SessionDeletionsRuns.Inc(1)
@@ -465,13 +466,13 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 			for i := range rows {
 				exp, err := decodeValue(rows[i])
 				if err != nil {
-					log.Dev.Warningf(ctx, "failed to decode row %s expiration: %v", rows[i].Key.String(), err)
+					log.Warningf(ctx, "failed to decode row %s expiration: %v", rows[i].Key.String(), err)
 					continue
 				}
 				if exp.Less(now) {
 					id, err := keyCodec.decode(rows[i].Key)
 					if err != nil {
-						log.Dev.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
+						log.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
 					}
 					toCheck = append(toCheck, id)
 				}
@@ -528,14 +529,14 @@ func (s *Storage) Insert(
 
 		}
 		v := encodeValue(expiration)
-		batch.CPut(k, &v, nil /* expValue */)
+		batch.InitPut(k, &v, true)
 
 		return txn.CommitInBatch(ctx, batch)
 	}); err != nil {
 		s.metrics.WriteFailures.Inc(1)
 		return errors.Wrapf(err, "could not insert session %s", sid)
 	}
-	log.Dev.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
+	log.Infof(ctx, "inserted sqlliveness session %s with expiry %s", sid, expiration)
 	s.metrics.WriteSuccesses.Inc(1)
 	return nil
 }

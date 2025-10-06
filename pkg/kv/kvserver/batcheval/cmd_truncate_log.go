@@ -51,7 +51,7 @@ func TruncateLog(
 	// the range specified in the request body.
 	rangeID := cArgs.EvalCtx.GetRangeID()
 	if rangeID != args.RangeID {
-		log.KvExec.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
+		log.Infof(ctx, "attempting to truncate raft logs for another range: r%d. Normally this is due to a merge and can be ignored.",
 			args.RangeID)
 		return result.Result{}, nil
 	}
@@ -64,12 +64,10 @@ func TruncateLog(
 	//
 	// TODO(tbg): think about synthesizing a valid term. Can we use the next
 	// existing entry's term?
-	// TODO(pav-kv): some day, make args.Index an inclusive compaction index, and
-	// eliminate the remaining +-1 arithmetics.
-	firstIndex := cArgs.EvalCtx.GetCompactedIndex() + 1
+	firstIndex := cArgs.EvalCtx.GetFirstIndex()
 	if firstIndex >= args.Index {
 		if log.V(3) {
-			log.KvExec.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
+			log.Infof(ctx, "attempting to truncate previously truncated raft log. FirstIndex:%d, TruncateFrom:%d",
 				firstIndex, args.Index)
 		}
 		return result.Result{}, nil
@@ -124,11 +122,15 @@ func TruncateLog(
 	}
 	ms.SysBytes = -ms.SysBytes // simulate the deletion
 
-	var pd result.Result
-	pd.Replicated.SetRaftTruncatedState(&kvserverpb.RaftTruncatedState{
+	tState := &kvserverpb.RaftTruncatedState{
 		Index: args.Index - 1,
 		Term:  term,
-	})
+	}
+
+	var pd result.Result
+	pd.Replicated.State = &kvserverpb.ReplicaState{
+		TruncatedState: tState,
+	}
 	pd.Replicated.RaftLogDelta = ms.SysBytes
 	pd.Replicated.RaftExpectedFirstIndex = firstIndex
 	return pd, nil

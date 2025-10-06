@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -90,7 +89,7 @@ func TestExecBackfiller(t *testing.T) {
 			KeyColumnDirections:         dirs,
 			KeyColumnIDs:                columnIDs,
 			KeySuffixColumnIDs:          keySuffixColumnIDs,
-			Type:                        idxtype.FORWARD,
+			Type:                        descpb.IndexDescriptor_FORWARD,
 			CreatedExplicitly:           true,
 			EncodingType:                catenumpb.SecondaryIndexEncoding,
 			UseDeletePreservingEncoding: isTempIndex,

@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -97,6 +96,7 @@ func TestBatchSplit(t *testing.T) {
 		{[]Request{spl, spl, get, spl}, []int{1, 1, 1, 1}, true},
 		{[]Request{scan, get, scan, get}, []int{4}, true},
 		{[]Request{rv, get, rv, get}, []int{4}, true},
+		{[]Request{scan, get, rv, get}, []int{2, 2}, true},
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 1, 1}, true},
 		// Same one again, but this time don't allow EndTxn to be split.
 		{[]Request{get, scan, get, dr, rv, put, et}, []int{3, 1, 1, 2}, false},
@@ -206,9 +206,9 @@ func TestBatchRequestSummary(t *testing.T) {
 		},
 		{
 			reqs: []Request{
-				&CheckConsistencyRequest{}, &TruncateLogRequest{},
+				&CheckConsistencyRequest{}, &InitPutRequest{}, &TruncateLogRequest{},
 			},
-			expected: "1 TruncLog, 1 ChkConsistency",
+			expected: "1 TruncLog, 1 ChkConsistency, 1 InitPut",
 		},
 	}
 	for i, tc := range testCases {
@@ -380,6 +380,12 @@ func TestLockSpanIterate(t *testing.T) {
 			expSpans: []roachpb.Span{spanA},
 		},
 		{
+			name:     "initput",
+			req:      &InitPutRequest{RequestHeader: pointHeader},
+			resp:     &InitPutResponse{},
+			expSpans: []roachpb.Span{spanA},
+		},
+		{
 			name:     "increment",
 			req:      &IncrementRequest{RequestHeader: pointHeader},
 			resp:     &IncrementResponse{},
@@ -455,6 +461,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}{
 		{&ConditionalPutRequest{}, &ConditionalPutResponse{}, sp("a", ""), roachpb.Span{}},
 		{&PutRequest{}, &PutResponse{}, sp("a-put", ""), roachpb.Span{}},
+		{&InitPutRequest{}, &InitPutResponse{}, sp("a-initput", ""), roachpb.Span{}},
 		{&IncrementRequest{}, &IncrementResponse{}, sp("a-inc", ""), roachpb.Span{}},
 		{&ScanRequest{}, &ScanResponse{}, sp("a", "c"), sp("b", "c")},
 		{&GetRequest{}, &GetResponse{}, sp("b", ""), roachpb.Span{}},
@@ -477,7 +484,7 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}
 	require.NoError(t, ba.RefreshSpanIterate(&br, fn))
 	// The conditional put and init put are not considered read spans.
-	expReadSpans := []roachpb.Span{testCases[3].span, testCases[4].span, testCases[5].span, testCases[6].span}
+	expReadSpans := []roachpb.Span{testCases[4].span, testCases[5].span, testCases[6].span, testCases[7].span}
 	require.Equal(t, expReadSpans, readSpans)
 
 	// Batch responses with ResumeSpans.
@@ -547,7 +554,6 @@ func TestRefreshSpanIterateSkipLocked(t *testing.T) {
 }
 
 func TestResponseKeyIterate(t *testing.T) {
-	skip.UnderNonTestBuild(t) // some assertions that are checked are only returned in test builds
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
 
@@ -665,6 +671,12 @@ func TestResponseKeyIterate(t *testing.T) {
 			expErr: "cannot iterate over response keys of ConditionalPut request",
 		},
 		{
+			name:   "initput",
+			req:    &InitPutRequest{},
+			resp:   &InitPutResponse{},
+			expErr: "cannot iterate over response keys of InitPut request",
+		},
+		{
 			name:   "increment",
 			req:    &IncrementRequest{},
 			resp:   &IncrementResponse{},
@@ -682,7 +694,7 @@ func TestResponseKeyIterate(t *testing.T) {
 			var keys []roachpb.Key
 			err := ResponseKeyIterate(tc.req, tc.resp, func(key roachpb.Key) {
 				keys = append(keys, key)
-			}, false /* includeLockedNonExisting */)
+			})
 			if tc.expErr == "" {
 				require.Equal(t, tc.expKeys, keys)
 				require.NoError(t, err)

@@ -45,8 +45,8 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -277,25 +277,6 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 								t.Fatalf("unknown value for jwt_cluster_setting jwks_auto_fetch.enabled: %s", a.Vals[0])
 							}
 							jwtauthccl.JWKSAutoFetchEnabled.Override(ctx, sv, v)
-						case "authorization.enabled":
-							if len(a.Vals) != 1 {
-								t.Fatalf("wrong number of arguments to jwt_cluster_setting authorization.enabled")
-							}
-							v, err := strconv.ParseBool(a.Vals[0])
-							if err != nil {
-								t.Fatalf("unknown value for jwt_cluster_setting authorization.enabled: %s", a.Vals[0])
-							}
-							jwtauthccl.JWTAuthZEnabled.Override(ctx, sv, v)
-						case "group_claim":
-							if len(a.Vals) != 1 {
-								t.Fatalf("wrong number of arguments to jwt_cluster_setting group_claim")
-							}
-							jwtauthccl.JWTAuthGroupClaim.Override(ctx, sv, a.Vals[0])
-						case "userinfo_group_key":
-							if len(a.Vals) != 1 {
-								t.Fatalf("wrong number of arguments to jwt_cluster_setting userinfo_group_key")
-							}
-							jwtauthccl.JWTAuthUserinfoGroupKey.Override(ctx, sv, a.Vals[0])
 						default:
 							t.Fatalf("unknown jwt_cluster_setting: %s", a.Key)
 						}
@@ -425,14 +406,6 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 						defer func() { _ = dbSQL.Close(ctx) }()
 					}
 					if err != nil {
-						// If the error is a PgError, return that directly instead of the
-						// wrapped error. The wrapped error includes additional contextual
-						// information that complicates checking for the expected error
-						// string in tests.
-						pgErr := new(pgconn.PgError)
-						if errors.As(err, &pgErr) {
-							return "", pgErr
-						}
 						return "", err
 					}
 					row := dbSQL.QueryRow(ctx, "SELECT current_catalog")

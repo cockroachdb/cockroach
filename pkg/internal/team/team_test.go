@@ -18,8 +18,14 @@ sql:
   aliases:
     sql-alias: other
     sql-roachtest: roachtest
+  email: otan@cockroachlabs.com
+  slack: otan
+  triage_column_id: 1
   silence_mentions: true
 test-infra-team:
+  email: jlinder@cockroachlabs.com
+  slack: jlinder
+  triage_column_id: 2
 `)
 	ret, err := LoadTeams(bytes.NewReader(yamlFile))
 	require.NoError(t, err)
@@ -29,6 +35,9 @@ test-infra-team:
 			"sql-alias":     PurposeOther,
 			"sql-roachtest": PurposeRoachtest,
 		},
+		Email:           "otan@cockroachlabs.com",
+		Slack:           "otan",
+		TriageColumnID:  1,
 		SilenceMentions: true,
 	}
 	require.Equal(t, sqlTeam.TeamName, sqlTeam.Name())
@@ -60,7 +69,10 @@ test-infra-team:
 			"sql-alias":     sqlTeam,
 			"sql-roachtest": sqlTeam,
 			"test-infra-team": {
-				TeamName: "test-infra-team",
+				TeamName:       "test-infra-team",
+				Email:          "jlinder@cockroachlabs.com",
+				Slack:          "jlinder",
+				TriageColumnID: 2,
 			},
 		},
 		ret,

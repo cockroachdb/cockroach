@@ -1,0 +1,277 @@
+# Test backing up and restoring a database with user defined functions.
+new-cluster name=s
+----
+
+exec-sql
+CREATE DATABASE db1;
+----
+
+exec-sql
+USE db1;
+----
+
+exec-sql
+CREATE SCHEMA sc1;
+----
+
+exec-sql
+CREATE FUNCTION sc1.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+
+exec-sql
+CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT DEFAULT sc1.f1());
+----
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> db1 database false
+db1 <nil> public schema false
+db1 <nil> sc1 schema false
+db1 sc1 f1 function false
+db1 sc1 t1 table false
+
+exec-sql
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
+----
+
+# Make sure function ids in DEFAULT are rewritten.
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE sc1.t1]
+----
+CREATE TABLE sc1.t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL DEFAULT sc1.f1(),
+	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
+)
+
+# Make sure that the DEFAULT expression still works.
+query-sql
+INSERT INTO sc1.t1 VALUES (1), (2);
+----
+
+query-sql
+SELECT * FROM sc1.t1 ORDER BY a;
+----
+1 1
+2 1
+
+# Make sure that depenency IDs are rewritten by checking DROP FUNCTION errors.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+query-sql
+DROP FUNCTION sc1.f1;
+----
+pq: cannot drop function "f1" because other objects ([db1_new.sc1.t1]) still depend on it
+
+# Test backing up and restoring a full cluster with user defined function.
+new-cluster name=s1
+----
+
+exec-sql cluster=s1
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s1
+USE db1;
+----
+
+exec-sql cluster=s1
+CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s1
+CREATE FUNCTION sc1.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+
+exec-sql cluster=s1
+CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT DEFAULT sc1.f1());
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT
+  database_name, parent_schema_name, object_name, object_type, is_full_cluster
+FROM
+  descs
+WHERE
+  database_name = 'db1'
+----
+db1 <nil> public schema true
+db1 <nil> sc1 schema true
+db1 sc1 f1 function true
+db1 sc1 t1 table true
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s2
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
+----
+
+exec-sql
+USE db1
+----
+
+# Make sure function ids in DEFAULT are rewritten.
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE sc1.t1]
+----
+CREATE TABLE sc1.t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL DEFAULT sc1.f1(),
+	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
+)
+
+# Make sure that the DEFAULT expression still works.
+query-sql
+INSERT INTO sc1.t1 VALUES (1), (2);
+----
+
+query-sql
+SELECT * FROM sc1.t1 ORDER BY a;
+----
+1 1
+2 1
+
+# Make sure that depenency IDs are rewritten by checking DROP FUNCTION errors.
+# Note that technically this only tests forward-reference IDs in depended-on
+# objects are rewritten. But since we have cross-references validation, so this
+# also means back-references in UDF descriptor are good.
+query-sql
+DROP FUNCTION sc1.f1;
+----
+pq: cannot drop function "f1" because other objects ([db1.sc1.t1]) still depend on it
+
+# Make sure that backup and restore individual tables referencing UDFs able to
+# drop DEFAULT.
+new-cluster name=s3
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db1;
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db2;
+----
+
+exec-sql cluster=s3
+CREATE DATABASE db3;
+----
+
+exec-sql cluster=s3
+USE db1;
+----
+
+exec-sql cluster=s3
+CREATE SCHEMA sc1;
+----
+
+exec-sql cluster=s3
+CREATE FUNCTION sc1.f1() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
+----
+
+exec-sql cluster=s3
+CREATE TABLE sc1.t1(a INT PRIMARY KEY, b INT DEFAULT sc1.f1());
+----
+
+exec-sql
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> db1 database false
+db1 <nil> public schema false
+db1 <nil> sc1 schema false
+db1 sc1 f1 function false
+db1 sc1 t1 table false
+
+exec-sql expect-error-regex=(cannot restore table "t1" without referenced function [0-9]+ \(or "skip_missing_udfs" option\))
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2';
+----
+regex matches error
+
+exec-sql
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db2', skip_missing_udfs;
+----
+
+exec-sql
+USE db2
+----
+
+# Make sure DEFAULT is dropped.
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE sc1.t1]
+----
+CREATE TABLE sc1.t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
+)
+
+exec-sql
+USE db1
+----
+
+exec-sql
+BACKUP TABLE sc1.t1 INTO 'nodelocal://1/test/'
+----
+
+query-sql
+WITH descs AS (
+  SHOW BACKUP LATEST IN 'nodelocal://1/test/'
+)
+SELECT database_name, parent_schema_name, object_name, object_type, is_full_cluster FROM descs
+----
+<nil> <nil> db1 database false
+db1 <nil> sc1 schema false
+db1 sc1 t1 table false
+
+exec-sql expect-error-regex=(cannot restore table "t1" without referenced function [0-9]+ \(or "skip_missing_udfs" option\))
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db3';
+----
+regex matches error
+
+exec-sql
+RESTORE TABLE sc1.t1 FROM LATEST IN 'nodelocal://1/test/' WITH into_db = 'db3', skip_missing_udfs;
+----
+
+exec-sql
+USE db3
+----
+
+# Make sure DEFAULT is dropped.
+query-sql
+SELECT create_statement FROM [SHOW CREATE TABLE sc1.t1]
+----
+CREATE TABLE sc1.t1 (
+	a INT8 NOT NULL,
+	b INT8 NULL,
+	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
+)

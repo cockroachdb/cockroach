@@ -21,14 +21,7 @@ go_library(
 
 go_test(
     name = "metamorphic_test",
-    srcs = [
-        "constants_test.go",
-        "main_test.go",
-    ],
+    srcs = ["constants_test.go"],
     embed = [":metamorphic"],
-    deps = [
-        "//pkg/util/log",
-        "//pkg/util/randutil",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = ["@com_github_stretchr_testify//require"],
 )

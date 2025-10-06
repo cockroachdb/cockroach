@@ -10,15 +10,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
 
 // DeriveRestrictedInterestingOrderings calculates and returns the entry of the
 // Relational.Rule.RestrictedInterestingOrderings property of a relational
 // operator that corresponds to the given columns.
-func DeriveRestrictedInterestingOrderings(
-	mem *memo.Memo, e memo.RelExpr, cols opt.ColSet,
-) props.OrderingSet {
+func DeriveRestrictedInterestingOrderings(e memo.RelExpr, cols opt.ColSet) props.OrderingSet {
 	l := e.Relational()
 	fds := &l.FuncDeps
 	// We follow the convention of checking if the property is available, even
@@ -35,7 +32,7 @@ func DeriveRestrictedInterestingOrderings(
 	l.SetAvailable(props.RestrictedInterestingOrderings)
 
 	// Derive the interesting orderings and restrict them to the given columns.
-	orders := DeriveInterestingOrderings(mem, e).Copy()
+	orders := DeriveInterestingOrderings(e).Copy()
 	orders.RestrictToCols(cols, fds)
 
 	l.Rule.RestrictedInterestingOrderings = append(l.Rule.RestrictedInterestingOrderings,
@@ -48,7 +45,7 @@ func DeriveRestrictedInterestingOrderings(
 
 // DeriveInterestingOrderings calculates and returns the
 // Relational.Rule.InterestingOrderings property of a relational operator.
-func DeriveInterestingOrderings(mem *memo.Memo, e memo.RelExpr) props.OrderingSet {
+func DeriveInterestingOrderings(e memo.RelExpr) props.OrderingSet {
 	l := e.Relational()
 	if l.IsAvailable(props.InterestingOrderings) {
 		return l.Rule.InterestingOrderings
@@ -62,28 +59,28 @@ func DeriveInterestingOrderings(mem *memo.Memo, e memo.RelExpr) props.OrderingSe
 	var res props.OrderingSet
 	switch e.Op() {
 	case opt.ScanOp:
-		res = interestingOrderingsForScan(mem, e.(*memo.ScanExpr))
+		res = interestingOrderingsForScan(e.(*memo.ScanExpr))
 
 	case opt.SelectOp, opt.IndexJoinOp, opt.LookupJoinOp:
-		res = interestingOrderingsForExpr(mem, e)
+		res = interestingOrderingsForExpr(e)
 
 	case opt.ProjectOp:
-		res = interestingOrderingsForProject(mem, e.(*memo.ProjectExpr))
+		res = interestingOrderingsForProject(e.(*memo.ProjectExpr))
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		res = interestingOrderingsForGroupBy(mem, e)
+		res = interestingOrderingsForGroupBy(e)
 
 	case opt.LimitOp, opt.OffsetOp:
-		res = interestingOrderingsForLimit(mem, e)
+		res = interestingOrderingsForLimit(e)
 
 	default:
 		if opt.IsJoinOp(e) {
-			res = interestingOrderingsForJoin(mem, e)
+			res = interestingOrderingsForJoin(e)
 			break
 		}
 
 		if opt.IsSetOp(e) {
-			res = interestingOrderingsForSetOp(mem, e)
+			res = interestingOrderingsForSetOp(e)
 			break
 		}
 
@@ -101,15 +98,14 @@ func DeriveInterestingOrderings(mem *memo.Memo, e memo.RelExpr) props.OrderingSe
 // an interesting ordering for all values in the column. This is required in
 // order to consider partial indexes for certain optimization rules, such as
 // GenerateMergeJoins.
-func interestingOrderingsForScan(mem *memo.Memo, scan *memo.ScanExpr) props.OrderingSet {
-	md := mem.Metadata()
+func interestingOrderingsForScan(scan *memo.ScanExpr) props.OrderingSet {
+	md := scan.Memo().Metadata()
 	tab := md.Table(scan.Table)
 	var ord props.OrderingSet
 
 	addIndexOrdering := func(indexOrd cat.IndexOrdinal, fds *props.FuncDepSet, exactPrefix int) {
 		index := tab.Index(indexOrd)
-		if index.Type() != idxtype.FORWARD {
-			// Do not consider inverted or vector indexes.
+		if index.IsInverted() {
 			return
 		}
 		numIndexCols := index.KeyColumnCount()
@@ -151,14 +147,14 @@ func interestingOrderingsForScan(mem *memo.Memo, scan *memo.ScanExpr) props.Orde
 	return ord
 }
 
-func interestingOrderingsForExpr(mem *memo.Memo, e memo.RelExpr) props.OrderingSet {
-	res := DeriveInterestingOrderings(mem, e.Child(0).(memo.RelExpr)).Copy()
+func interestingOrderingsForExpr(e memo.RelExpr) props.OrderingSet {
+	res := DeriveInterestingOrderings(e.Child(0).(memo.RelExpr)).Copy()
 	res.Simplify(&e.Relational().FuncDeps)
 	return res
 }
 
-func interestingOrderingsForProject(mem *memo.Memo, prj *memo.ProjectExpr) props.OrderingSet {
-	inOrd := DeriveInterestingOrderings(mem, prj.Input)
+func interestingOrderingsForProject(prj *memo.ProjectExpr) props.OrderingSet {
+	inOrd := DeriveInterestingOrderings(prj.Input)
 	res := inOrd.Copy()
 	outCols := prj.Relational().OutputCols
 	fds := prj.InternalFDs()
@@ -166,14 +162,14 @@ func interestingOrderingsForProject(mem *memo.Memo, prj *memo.ProjectExpr) props
 	return res
 }
 
-func interestingOrderingsForGroupBy(mem *memo.Memo, rel memo.RelExpr) props.OrderingSet {
+func interestingOrderingsForGroupBy(rel memo.RelExpr) props.OrderingSet {
 	private := rel.Private().(*memo.GroupingPrivate)
 	if private.GroupingCols.Empty() {
 		// This is a scalar group-by, returning a single row.
 		return nil
 	}
 
-	res := DeriveInterestingOrderings(mem, rel.Child(0).(memo.RelExpr)).Copy()
+	res := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr)).Copy()
 	if !private.Ordering.Any() {
 		ordering := &private.Ordering
 		res.RestrictToImplies(ordering)
@@ -187,8 +183,8 @@ func interestingOrderingsForGroupBy(mem *memo.Memo, rel memo.RelExpr) props.Orde
 	return res
 }
 
-func interestingOrderingsForLimit(mem *memo.Memo, rel memo.RelExpr) props.OrderingSet {
-	res := DeriveInterestingOrderings(mem, rel.Child(0).(memo.RelExpr))
+func interestingOrderingsForLimit(rel memo.RelExpr) props.OrderingSet {
+	res := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
 	ord := rel.Private().(*props.OrderingChoice)
 	if ord.Any() {
 		return res
@@ -201,33 +197,33 @@ func interestingOrderingsForLimit(mem *memo.Memo, rel memo.RelExpr) props.Orderi
 	return res
 }
 
-func interestingOrderingsForJoin(mem *memo.Memo, rel memo.RelExpr) props.OrderingSet {
+func interestingOrderingsForJoin(rel memo.RelExpr) props.OrderingSet {
 	if rel.Op() == opt.SemiJoinOp || rel.Op() == opt.AntiJoinOp {
 		// TODO(radu): perhaps take into account right-side interesting orderings on
 		// equality columns.
-		return DeriveInterestingOrderings(mem, rel.Child(0).(memo.RelExpr))
+		return DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
 	}
 	// For a join, we could conceivably preserve the order of one side (even with
 	// hash-join, depending on which side we store).
 	// TODO(drewk): add logic for orderings on columns from both sides, since both
 	//  lookup and merge joins can provide them.
-	ordLeft := DeriveInterestingOrderings(mem, rel.Child(0).(memo.RelExpr))
-	ordRight := DeriveInterestingOrderings(mem, rel.Child(1).(memo.RelExpr))
+	ordLeft := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
+	ordRight := DeriveInterestingOrderings(rel.Child(1).(memo.RelExpr))
 	ord := make(props.OrderingSet, 0, len(ordLeft)+len(ordRight))
 	ord = append(ord, ordLeft...)
 	ord = append(ord, ordRight...)
 	return ord
 }
 
-func interestingOrderingsForSetOp(mem *memo.Memo, rel memo.RelExpr) props.OrderingSet {
+func interestingOrderingsForSetOp(rel memo.RelExpr) props.OrderingSet {
 	if rel.Op() == opt.LocalityOptimizedSearchOp {
 		// LocalityOptimizedSearchOp does not support passing through orderings.
 		return nil
 	}
 	leftChild := rel.Child(0).(memo.RelExpr)
 	rightChild := rel.Child(1).(memo.RelExpr)
-	ordLeft := DeriveInterestingOrderings(mem, leftChild)
-	ordRight := DeriveInterestingOrderings(mem, rightChild)
+	ordLeft := DeriveInterestingOrderings(leftChild)
+	ordRight := DeriveInterestingOrderings(rightChild)
 	private := rel.Private().(*memo.SetPrivate)
 
 	// We can only keep orderings on output columns.

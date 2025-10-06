@@ -15,7 +15,7 @@ import (
 // errorIfRowsNode wraps another planNode and returns an error if the wrapped
 // node produces any rows.
 type errorIfRowsNode struct {
-	singleInputPlanNode
+	plan planNode
 
 	// mkErr creates the error message, given the values of the first row
 	// produced.
@@ -34,12 +34,12 @@ func (n *errorIfRowsNode) Next(params runParams) (bool, error) {
 	}
 	n.nexted = true
 
-	ok, err := n.input.Next(params)
+	ok, err := n.plan.Next(params)
 	if err != nil {
 		return false, err
 	}
 	if ok {
-		return false, n.mkErr(n.input.Values())
+		return false, n.mkErr(n.plan.Values())
 	}
 	return false, nil
 }
@@ -49,5 +49,5 @@ func (n *errorIfRowsNode) Values() tree.Datums {
 }
 
 func (n *errorIfRowsNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.plan.Close(ctx)
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionprotectedts"
@@ -37,7 +36,6 @@ import (
 )
 
 type showFingerprintsNode struct {
-	zeroInputPlanNode
 	columns colinfo.ResultColumns
 
 	tableDesc catalog.TableDescriptor
@@ -212,7 +210,7 @@ func protectTenantSpanWithSession(
 		tsToProtect,
 		ptpb.MakeTenantsTarget([]roachpb.TenantID{tenantID}),
 	)
-	log.Dev.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
+	log.Infof(ctx, "protecting timestamp: %#+v", ptsRecord)
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 		return pts.Protect(ctx, ptsRecord)
@@ -225,7 +223,7 @@ func protectTenantSpanWithSession(
 			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 			return pts.Release(ctx, ptsRecordID)
 		}); err != nil {
-			log.Dev.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
+			log.Warningf(ctx, "failed to release protected timestamp %s: %v", ptsRecordID, err)
 		}
 	}
 	return releasePTS, nil
@@ -314,14 +312,6 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		return false, nil
 	}
 	index := n.indexes[n.run.rowIdx]
-
-	// Skip inverted indexes. Experimental fingerprint uses a query that forces
-	// the use of an index and that is incompatible with inverted indexes.
-	if index.GetType() == idxtype.INVERTED {
-		n.run.rowIdx++
-		return n.Next(params)
-	}
-
 	excludedColumns := []string{}
 	if n.options != nil && len(n.options.excludedUserColumns) > 0 {
 		excludedColumns = append(excludedColumns, n.options.excludedUserColumns...)

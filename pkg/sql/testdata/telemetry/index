@@ -12,10 +12,6 @@ sql.schema.partial_index
 sql.schema.partial_inverted_index
 sql.schema.partitioned_inverted_index
 sql.schema.expression_index
-sql.schema.vector_index
-sql.schema.multi_column_vector_index
-sql.schema.partial_vector_index
-sql.schema.partitioned_vector_index
 ----
 
 #### CREATE TABLE tests.
@@ -82,13 +78,6 @@ CREATE TABLE e2 (i INT, j JSON, INDEX ((i + 10)), INVERTED INDEX ((j->'a')))
 ----
 sql.schema.expression_index  2
 sql.schema.inverted_index    1
-
-feature-usage
-CREATE TABLE f (i INT, v VECTOR(3), VECTOR INDEX (v) WHERE i > 0)
-----
-sql.schema.partial_index
-sql.schema.partial_vector_index
-sql.schema.vector_index
 
 #### CREATE INDEX tests.
 
@@ -160,25 +149,6 @@ CREATE INDEX ON trigrams USING GIN(u gin_trgm_ops)
 ----
 sql.schema.inverted_index
 sql.schema.trigram_inverted_index
-
-#### CREATE VECTOR INDEX tests.
-
-exec
-CREATE TABLE v1 (i INT, v VECTOR(3))
-----
-
-feature-usage
-CREATE VECTOR INDEX i ON v1 (v) WHERE i > 0
-----
-sql.schema.partial_index
-sql.schema.partial_vector_index
-sql.schema.vector_index
-
-feature-usage
-CREATE VECTOR INDEX i2 ON v1 (i, v)
-----
-sql.schema.multi_column_vector_index
-sql.schema.vector_index
 
 #### ALTER TABLE tests.
 

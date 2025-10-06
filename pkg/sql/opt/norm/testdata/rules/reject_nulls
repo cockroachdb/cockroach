@@ -767,7 +767,7 @@ inner-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 x:7!null y:8!null u:11!null v:12
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── key: (7)
- ├── fd: (1)-->(2-4), (7)-->(8), (11)-->(12), (1)==(7), (7)==(1), (8)==(11), (11)==(8)
+ ├── fd: (1)-->(2-4), (7)-->(8), (1)==(7), (7)==(1), (11)-->(12), (8)==(11), (11)==(8)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 f:3 s:4 x:7!null y:8!null
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -849,7 +849,7 @@ inner-join (hash)
  ├── columns: k:1!null i:2 f:3 s:4 x:7!null y:8!null u:11!null v:12
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── key: (7)
- ├── fd: (1)-->(2-4), (7)-->(8), (11)-->(12), (1)==(7), (7)==(1), (8)==(11), (11)==(8)
+ ├── fd: (1)-->(2-4), (7)-->(8), (1)==(7), (7)==(1), (11)-->(12), (8)==(11), (11)==(8)
  ├── inner-join (hash)
  │    ├── columns: k:1!null i:2 f:3 s:4 x:7!null y:8
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
@@ -974,7 +974,7 @@ inner-join-apply
  │    ├── cardinality: [0 - 1]
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
- │    ├── fd: ()-->(5-9), (5)==(6), (6)==(5)
+ │    ├── fd: ()-->(5-9), (6)==(5), (5)==(6)
  │    ├── values
  │    │    ├── columns: column1:5
  │    │    ├── outer: (2)
@@ -1136,7 +1136,7 @@ left-join-apply
  │    ├── cardinality: [0 - 1]
  │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  │    ├── key: ()
- │    ├── fd: ()-->(5-7), (5)==(6), (6)==(5)
+ │    ├── fd: ()-->(5-7), (6)==(5), (5)==(6)
  │    ├── values
  │    │    ├── columns: column1:5
  │    │    ├── outer: (1)

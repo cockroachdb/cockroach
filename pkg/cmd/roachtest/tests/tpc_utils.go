@@ -38,7 +38,7 @@ func loadTPCHDataset(
 	disableMergeQueue bool,
 ) (retErr error) {
 	_, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
-	if err != nil {
+	if retErr != nil {
 		return err
 	}
 	defer func() {
@@ -102,7 +102,7 @@ func loadTPCHDataset(
 	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
 		return err
 	}
-	query := fmt.Sprintf(`RESTORE tpch.* FROM '/' IN '%s' WITH into_db = 'tpch', unsafe_restore_incompatible_version;`, tpchURL)
+	query := fmt.Sprintf(`RESTORE tpch.* FROM '%s' WITH into_db = 'tpch', unsafe_restore_incompatible_version;`, tpchURL)
 	_, err = db.ExecContext(ctx, query)
 	return err
 }

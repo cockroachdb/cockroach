@@ -42,9 +42,6 @@ func formatSafeTableProperties(w *redact.StringBuilder, desc catalog.TableDescri
 	if desc.IsVirtualTable() {
 		w.Printf(", Virtual: true")
 	}
-	if desc.IsSchemaLocked() {
-		w.Printf(", SchemaLocked: true")
-	}
 	formatSafeTableColumns(w, desc)
 	formatSafeTableColumnFamilies(w, desc)
 	formatSafeTableMutationJobs(w, desc)

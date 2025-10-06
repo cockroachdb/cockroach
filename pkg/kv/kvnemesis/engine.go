@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -56,7 +55,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 		// this low-level iterator, so we don't have to implement it manually
 		// a second time.
 		RangeKeyMasking: pebble.RangeKeyMasking{
-			Suffix: mvccencoding.EncodeMVCCTimestampSuffix(ts),
+			Suffix: storage.EncodeMVCCTimestampSuffix(ts),
 		},
 	}
 	iter, err := e.kvs.NewIter(&opts)
@@ -93,7 +92,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	if err != nil {
 		panic(err)
 	}
-	e.b, valCopy = e.b.Copy(v)
+	e.b, valCopy = e.b.Copy(v, 0 /* extraCap */)
 	mvccVal, err := storage.DecodeMVCCValue(valCopy)
 	if err != nil {
 		panic(err)
@@ -115,7 +114,7 @@ func (e *Engine) Put(key storage.MVCCKey, value []byte) {
 }
 
 func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp, val []byte) {
-	suffix := mvccencoding.EncodeMVCCTimestampSuffix(ts)
+	suffix := storage.EncodeMVCCTimestampSuffix(ts)
 	err := e.kvs.RangeKeySet(
 		storage.EngineKey{Key: from}.Encode(), storage.EngineKey{Key: to}.Encode(), suffix, val, nil)
 	if err != nil {
@@ -137,12 +136,12 @@ func (e *Engine) Iterate(
 	for iter.First(); iter.Valid(); iter.Next() {
 		hasPoint, _ := iter.HasPointAndRange()
 		var keyCopy, valCopy []byte
-		e.b, keyCopy = e.b.Copy(iter.Key())
+		e.b, keyCopy = e.b.Copy(iter.Key(), 0 /* extraCap */)
 		v, err := iter.ValueAndErr()
 		if err != nil {
 			fn(nil, nil, hlc.Timestamp{}, nil, err)
 		}
-		e.b, valCopy = e.b.Copy(v)
+		e.b, valCopy = e.b.Copy(v, 0 /* extraCap */)
 		if hasPoint {
 			key, err := storage.DecodeMVCCKey(keyCopy)
 			if err != nil {
@@ -153,10 +152,10 @@ func (e *Engine) Iterate(
 		}
 		if iter.RangeKeyChanged() {
 			keyCopy, endKeyCopy := iter.RangeBounds()
-			e.b, keyCopy = e.b.Copy(keyCopy)
-			e.b, endKeyCopy = e.b.Copy(endKeyCopy)
+			e.b, keyCopy = e.b.Copy(keyCopy, 0 /* extraCap */)
+			e.b, endKeyCopy = e.b.Copy(endKeyCopy, 0 /* extraCap */)
 			for _, rk := range iter.RangeKeys() {
-				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
+				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					fn(nil, nil, hlc.Timestamp{}, nil, err)
 					continue
@@ -170,7 +169,7 @@ func (e *Engine) Iterate(
 					fn(nil, nil, hlc.Timestamp{}, nil, errors.Errorf("invalid key %q", endKeyCopy))
 				}
 
-				e.b, rk.Value = e.b.Copy(rk.Value)
+				e.b, rk.Value = e.b.Copy(rk.Value, 0)
 
 				fn(engineKey.Key, engineEndKey.Key, ts, rk.Value, nil)
 			}

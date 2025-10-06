@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -168,10 +167,12 @@ const (
 	// This flag *overrides* `FmtMarkRedactionNode` above.
 	FmtOmitNameRedaction
 
+	// FmtTagDollarQuotes instructs tags to be kept intact in tagged dollar
+	// quotes. It also applies tags when formatting UDFs.
+	FmtTagDollarQuotes
+
 	// FmtShortenConstants shortens long lists in tuples, VALUES and array
 	// expressions. FmtHideConstants takes precedence over it.
-	//
-	// It also affects printing the tuple type when FmtShowTypes is set.
 	FmtShortenConstants
 
 	// FmtCollapseLists instructs the pretty-printer to shorten lists
@@ -194,13 +195,6 @@ const (
 	// FmtShowFullURIs instructs the pretty-printer to not sanitize URIs. If not
 	// set, URIs are sanitized to prevent leaking secrets.
 	FmtShowFullURIs
-
-	// FmtSkipAsOfSystemTimeClauses prevents the formatter from printing AS OF
-	// SYSTEM TIME clauses.
-	FmtSkipAsOfSystemTimeClauses
-
-	// FmtHideHints skips over any hints.
-	FmtHideHints
 )
 
 const genericArityIndicator = "__more__"
@@ -292,23 +286,6 @@ const (
 
 const flagsRequiringAnnotations = FmtAlwaysQualifyTableNames
 
-// Bitmask for enabling various query fingerprint formatting styles.
-// We don't publish this setting because most users should not need
-// to tweak the fingerprint generation.
-var QueryFormattingForFingerprintsMask = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.stats.statement_fingerprint.format_mask",
-	"enables setting additional fmt flags for statement fingerprint formatting. "+
-		"Flags set here will be applied in addition to FmtHideConstants",
-	int64(FmtCollapseLists|FmtConstantsAsUnderscores),
-	settings.WithValidateInt(func(i int64) error {
-		if i == 0 || int64(FmtCollapseLists|FmtConstantsAsUnderscores)&i == i {
-			return nil
-		}
-		return errors.Newf("invalid value %d", i)
-	}),
-)
-
 // FmtCtx is suitable for passing to Format() methods.
 // It also exposes the underlying bytes.Buffer interface for
 // convenience.
@@ -323,8 +300,7 @@ type FmtCtx struct {
 	location             *time.Location
 
 	// NOTE: if you add more flags to this structure, make sure to add
-	// corresponding cleanup code in FmtCtx.Close(), as well as handling in
-	// FmtCtx.Clone().
+	// corresponding cleanup code in FmtCtx.Close().
 
 	// The flags to use for pretty-printing.
 	flags FmtFlags
@@ -419,21 +395,6 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 	return ctx
 }
 
-// Clone returns a new FmtCtx with all the same flags and options as the
-// original.
-func (ctx *FmtCtx) Clone() *FmtCtx {
-	newCtx := fmtCtxPool.Get().(*FmtCtx)
-	newCtx.flags = ctx.flags
-	newCtx.ann = ctx.ann
-	newCtx.indexedVarFormat = ctx.indexedVarFormat
-	newCtx.placeholderFormat = ctx.placeholderFormat
-	newCtx.tableNameFormatter = ctx.tableNameFormatter
-	newCtx.indexedTypeFormatter = ctx.indexedTypeFormatter
-	newCtx.dataConversionConfig = ctx.dataConversionConfig
-	newCtx.location = ctx.location
-	return newCtx
-}
-
 // SetDataConversionConfig sets the DataConversionConfig on ctx and returns the
 // old one.
 func (ctx *FmtCtx) SetDataConversionConfig(
@@ -451,7 +412,7 @@ func (ctx *FmtCtx) SetLocation(loc *time.Location) *time.Location {
 	return old
 }
 
-// WithReformatTableNames modifies FmtCtx to substitute the printing of table
+// WithReformatTableNames modifies FmtCtx to to substitute the printing of table
 // names using the provided function, calls fn, then restores the original table
 // formatting.
 func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName), fn func()) {
@@ -471,29 +432,6 @@ func (ctx *FmtCtx) WithFlags(flags FmtFlags, fn func()) {
 	oldFlags := ctx.flags
 	ctx.flags = flags
 	defer func() { ctx.flags = oldFlags }()
-
-	fn()
-}
-
-// WithoutConstantRedaction modifies FmtCtx to ensure that constants are
-// displayed rather than being replaced by '_', calls fn, then restores the
-// original flags.
-func (ctx *FmtCtx) WithoutConstantRedaction(fn func()) {
-	oldFlags := ctx.flags
-	ctx.flags &= ^FmtHideConstants
-	ctx.flags &= ^FmtAnonymize
-	defer func() { ctx.flags = oldFlags }()
-
-	fn()
-}
-
-// WithAnnotations modifies FmtCtx to use the provided Annotations, calls fn,
-// then restores the original ones.
-func (ctx *FmtCtx) WithAnnotations(ann *Annotations, fn func()) {
-	defer func(oldAnn *Annotations) {
-		ctx.ann = oldAnn
-	}(ctx.ann)
-	ctx.ann = ann
 
 	fn()
 }
@@ -553,30 +491,6 @@ func (ctx *FmtCtx) FormatStringConstant(s string) {
 	ctx.WriteString("'")
 }
 
-// FormatStringDollarQuotes formats a string constant with dollar quotes.
-func (ctx *FmtCtx) FormatStringDollarQuotes(s string) {
-	// Find a delimiter that will not collide with any part of the string. This is
-	// very similar to what Postgres does.
-	delimiter := ""
-	if strings.Contains(s, "$$") {
-		delimiter = "funcbody"
-		for strings.Contains(s, "$"+delimiter+"$") {
-			delimiter = delimiter + "x"
-		}
-	}
-	ctx.WriteByte('$')
-	ctx.WriteString(delimiter)
-	ctx.WriteByte('$')
-	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
-		ctx.WriteString("_")
-	} else {
-		ctx.WriteString(s)
-	}
-	ctx.WriteByte('$')
-	ctx.WriteString(delimiter)
-	ctx.WriteByte('$')
-}
-
 // FormatURIs formats a list of string literals or placeholders containing URIs.
 func (ctx *FmtCtx) FormatURIs(uris []Expr) {
 	if len(uris) > 1 {
@@ -633,8 +547,6 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
-	// TODO(yuzefovich): consider adding a panic-catcher here and propagating
-	// the caught panics as return parameters.
 	f := ctx.flags
 	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {
@@ -654,32 +566,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 				// further.
 				ctx.Printf("??? %v", te)
 			} else {
-				if len(rt.TupleContents()) > numElementsForShortenedList && f.HasFlags(FmtShortenConstants) {
-					// If we have a tuple with more than 3 elements, and we are
-					// requested to shorten the constants, we'll also shorten
-					// the tuple type description in the same fashion (showing
-					// the first two and the last element types).
-					//
-					// Note that for simplicity we'll omit tuple labels that are
-					// printed in types.T.String() when present.
-					contents := rt.TupleContents()
-					var buf bytes.Buffer
-					buf.WriteString("tuple")
-					if len(contents) != 0 && !types.IsWildcardTupleType(rt) {
-						buf.WriteByte('{')
-						for _, element := range contents[:numElementsForShortenedList-1] {
-							buf.WriteString(element.String())
-							buf.WriteString(", ")
-						}
-						buf.WriteString(arityString(len(contents) - numElementsForShortenedList))
-						buf.WriteString(", ")
-						buf.WriteString(contents[len(contents)-1].String())
-						buf.WriteByte('}')
-					}
-					ctx.WriteString(buf.String())
-				} else {
-					ctx.WriteString(rt.String())
-				}
+				ctx.WriteString(rt.String())
 			}
 			ctx.WriteByte(']')
 			return
@@ -736,7 +623,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 // number of characters to be printed.
 func (ctx *FmtCtx) formatLimitLength(n NodeFormatter, maxLength int) {
 	temp := NewFmtCtx(ctx.flags)
-	temp.formatNodeSummary(n)
+	temp.FormatNodeSummary(n)
 	s := temp.CloseAndGetString()
 	if len(s) > maxLength {
 		truncated := s[:maxLength] + "..."
@@ -792,7 +679,7 @@ func (ctx *FmtCtx) formatSummaryInsert(node *Insert) {
 	expr := rows.Select
 	if _, ok := expr.(*SelectClause); ok {
 		ctx.WriteByte(' ')
-		ctx.formatNodeSummary(rows)
+		ctx.FormatNodeSummary(rows)
 	} else if node.Columns != nil {
 		ctx.WriteByte('(')
 		ctx.formatLimitLength(&node.Columns, ColumnLimit)
@@ -815,8 +702,8 @@ func (ctx *FmtCtx) formatSummaryUpdate(node *Update) {
 	}
 }
 
-// formatNodeSummary recurses into a node for pretty-printing a summarized version.
-func (ctx *FmtCtx) formatNodeSummary(n NodeFormatter) {
+// FormatNodeSummary recurses into a node for pretty-printing a summarized version.
+func (ctx *FmtCtx) FormatNodeSummary(n NodeFormatter) {
 	switch node := n.(type) {
 	case *Insert:
 		ctx.formatSummaryInsert(node)
@@ -836,7 +723,7 @@ func (ctx *FmtCtx) formatNodeSummary(n NodeFormatter) {
 func AsStringWithFlags(n NodeFormatter, fl FmtFlags, opts ...FmtCtxOption) string {
 	ctx := NewFmtCtx(fl, opts...)
 	if fl.HasFlags(FmtSummary) {
-		ctx.formatNodeSummary(n)
+		ctx.FormatNodeSummary(n)
 	} else {
 		ctx.FormatNode(n)
 	}

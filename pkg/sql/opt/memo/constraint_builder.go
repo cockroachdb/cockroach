@@ -223,7 +223,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 
 	case opt.ContainsOp:
 		if arr, ok := datum.(*tree.DArray); ok {
-			if arr.HasNulls() {
+			if arr.HasNulls {
 				return contradiction, true
 			}
 		}

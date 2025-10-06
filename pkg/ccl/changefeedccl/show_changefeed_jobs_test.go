@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"sort"
@@ -24,13 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,102 +55,6 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 
-func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
-		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 'initial')`)
-
-		tcf := feed(t, f, `CREATE CHANGEFEED FOR d.foo, d.bar`)
-		defer closeFeed(t, tcf)
-		assertPayloads(t, tcf, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
-			`bar: [1]->{"after": {"a": 1, "b": "initial"}}`,
-		})
-		waitForJobState(sqlDB, t, tcf.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
-
-		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
-		defer closeFeed(t, dbcf)
-		assertPayloads(t, dbcf, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
-			`bar: [1]->{"after": {"a": 1, "b": "initial"}}`,
-		})
-		waitForJobState(sqlDB, t, dbcf.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
-
-		t.Run("without watched tables", func(t *testing.T) {
-			var numRows int
-			sqlDB.QueryRow(t, `select count(*) from [SHOW CHANGEFEED JOBS]`).Scan(&numRows)
-			require.Equal(t, 2, numRows)
-			rowResults := sqlDB.Query(t, `select job_id, full_table_names, database_name from [SHOW CHANGEFEED JOBS]`)
-			for rowResults.Next() {
-				err := rowResults.Err()
-				if err != nil {
-					t.Fatal(err)
-				}
-				var jobID jobspb.JobID
-				var fullTableNames []uint8
-				var databaseName gosql.NullString
-				err = rowResults.Scan(&jobID, &fullTableNames, &databaseName)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if jobID == dbcf.(cdctest.EnterpriseTestFeed).JobID() {
-					require.Equal(t, "{}", string(fullTableNames))
-					require.True(t, databaseName.Valid)
-					require.Equal(t, "d", databaseName.String)
-				} else if jobID == tcf.(cdctest.EnterpriseTestFeed).JobID() {
-					if string(fullTableNames) != "{d.public.foo,d.public.bar}" && string(fullTableNames) != "{d.public.bar,d.public.foo}" {
-						t.Fatalf("Unexpected full table names: %s", string(fullTableNames))
-					}
-					require.False(t, databaseName.Valid)
-				} else {
-					t.Fatalf("Unexpected job ID: %d", jobID)
-				}
-			}
-		})
-
-		t.Run("with watched tables", func(t *testing.T) {
-			var numRows int
-			sqlDB.QueryRow(t, `select count(*) from [SHOW CHANGEFEED JOBS WITH WATCHED_TABLES]`).Scan(&numRows)
-			require.Equal(t, 2, numRows)
-			rowResults := sqlDB.Query(t, `select job_id, full_table_names, database_name from [SHOW CHANGEFEED JOBS WITH WATCHED_TABLES]`)
-			for rowResults.Next() {
-				err := rowResults.Err()
-				if err != nil {
-					t.Fatal(err)
-				}
-				var jobID jobspb.JobID
-				var fullTableNames []uint8
-				var databaseName gosql.NullString
-				err = rowResults.Scan(&jobID, &fullTableNames, &databaseName)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if jobID == dbcf.(cdctest.EnterpriseTestFeed).JobID() || jobID == tcf.(cdctest.EnterpriseTestFeed).JobID() {
-					if string(fullTableNames) != "{d.public.foo,d.public.bar}" && string(fullTableNames) != "{d.public.bar,d.public.foo}" {
-						t.Fatalf("Unexpected full table names: %s", string(fullTableNames))
-					}
-				} else {
-					t.Fatalf("Unexpected job ID: %d", jobID)
-				}
-				if jobID == dbcf.(cdctest.EnterpriseTestFeed).JobID() {
-					require.True(t, databaseName.Valid)
-					require.Equal(t, "d", databaseName.String)
-				} else if jobID == tcf.(cdctest.EnterpriseTestFeed).JobID() {
-					require.False(t, databaseName.Valid)
-				} else {
-					t.Fatalf("Unexpected job ID: %d", jobID)
-				}
-			}
-		})
-	}
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
-}
 func TestShowChangefeedJobsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -214,46 +116,6 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 	cdcTest(t, testFn, feedTestOmitSinks("webhook", "sinkless"), feedTestNoExternalConnection)
 }
 
-// TestShowChangefeedJobsShowsHighWaterTimestamp verifies that SHOW CHANGEFEED
-// JOBS includes a readable_high_water_timestamp which is a readable timestamp
-// but otherwise corresponds to the HLC time in high_water_timestamp.
-func TestShowChangefeedJobsShowsHighWaterTimestamp(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved, min_checkpoint_frequency='1s'`)
-
-		defer closeFeed(t, foo)
-
-		var highWaterHLC gosql.NullFloat64
-		var readableHighWater gosql.NullTime
-
-		// Wait for the high water timestamp to be non-null.
-		testutils.SucceedsSoon(t, func() error {
-			stmt := `SELECT high_water_timestamp, readable_high_water_timestamptz from [SHOW CHANGEFEED JOBS]`
-			sqlDB.QueryRow(t, stmt).Scan(&highWaterHLC, &readableHighWater)
-
-			if !highWaterHLC.Valid {
-				return errors.Errorf("high water timestamp not populated: %v", highWaterHLC)
-			}
-
-			return nil
-		})
-
-		highWaterTimestamp := time.Unix(0, int64(highWaterHLC.Float64)).UTC()
-		// Timestamps in CockroachDB have microsecond precision by default.
-		roundedHighWaterTimestamp := highWaterTimestamp.Round(time.Microsecond)
-
-		differenceDuration := roundedHighWaterTimestamp.Sub(readableHighWater.Time).Abs()
-		require.True(t, differenceDuration < 5*time.Microsecond)
-	}
-
-	cdcTest(t, testFn, feedTestOmitSinks("sinkless"))
-}
-
 // TestShowChangefeedJobsRedacted verifies that SHOW CHANGEFEED JOB, SHOW
 // CHANGEFEED JOBS, and SHOW JOBS redact sensitive information (including keys
 // and secrets) for its output. Regression for #113503.
@@ -261,63 +123,69 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	s, stopServer := makeServer(t)
+	defer stopServer()
 
-		const apiSecret = "bar"
-		const certSecret = "Zm9v"
-		for _, tc := range []struct {
-			name                string
-			uri                 string
-			expectedSinkURI     string
-			expectedDescription string
-		}{
-			{
-				name: "api_secret",
-				uri:  fmt.Sprintf("confluent-cloud://nope?api_key=fee&api_secret=%s", apiSecret),
-			},
-			{
-				name: "sasl_password",
-				uri:  fmt.Sprintf("kafka://nope/?sasl_enabled=true&sasl_handshake=false&sasl_password=%s&sasl_user=aa", apiSecret),
-			},
-			{
-				name: "ca_cert",
-				uri:  fmt.Sprintf("kafka://nope?ca_cert=%s&tls_enabled=true", certSecret),
-			},
-			{
-				name: "shared_access_key",
-				uri:  fmt.Sprintf("azure-event-hub://nope?shared_access_key=%s&shared_access_key_name=plain", apiSecret),
-			},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri),
-					optOutOfMetamorphicEnrichedEnvelope{reason: "compares text of changefeed statement"})
-				defer closeFeed(t, foo)
-
-				efoo, ok := foo.(cdctest.EnterpriseTestFeed)
-				require.True(t, ok)
-				jobID := efoo.JobID()
-
-				var sinkURI, description string
-				sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
-				replacer := strings.NewReplacer(apiSecret, "redacted", certSecret, "redacted")
-				expectedSinkURI := replacer.Replace(tc.uri)
-				expectedDescription := replacer.Replace(fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri))
-				require.Equal(t, expectedSinkURI, sinkURI)
-				require.Equal(t, expectedDescription, description)
-			})
+	knobs := s.TestingKnobs.
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+	knobs.WrapSink = func(s Sink, _ jobspb.JobID) Sink {
+		if _, ok := s.(*externalConnectionKafkaSink); ok {
+			return s
 		}
-		t.Run("jobs", func(t *testing.T) {
-			queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
-			require.NotContains(t, queryStr, apiSecret)
-			require.NotContains(t, queryStr, certSecret)
-			queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
-			require.NotContains(t, queryStr, apiSecret)
-			require.NotContains(t, queryStr, certSecret)
+		return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+	const apiSecret = "bar"
+	const certSecret = "Zm9v"
+	for _, tc := range []struct {
+		name                string
+		uri                 string
+		expectedSinkURI     string
+		expectedDescription string
+	}{
+		{
+			name: "api_secret",
+			uri:  fmt.Sprintf("confluent-cloud://nope?api_key=fee&api_secret=%s", apiSecret),
+		},
+		{
+			name: "sasl_password",
+			uri:  fmt.Sprintf("kafka://nope/?sasl_enabled=true&sasl_handshake=false&sasl_password=%s&sasl_user=aa", apiSecret),
+		},
+		{
+			name: "ca_cert",
+			uri:  fmt.Sprintf("kafka://nope?ca_cert=%s&tls_enabled=true", certSecret),
+		},
+		{
+			name: "shared_access_key",
+			uri:  fmt.Sprintf("azure-event-hub://nope?shared_access_key=%s&shared_access_key_name=plain", apiSecret),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri)
+			var jobID jobspb.JobID
+			sqlDB.QueryRow(t, createStmt).Scan(&jobID)
+			var sinkURI, description string
+			sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+			replacer := strings.NewReplacer(apiSecret, "redacted", certSecret, "redacted")
+			expectedSinkURI := replacer.Replace(tc.uri)
+			expectedDescription := replacer.Replace(createStmt)
+			require.Equal(t, expectedSinkURI, sinkURI)
+			require.Equal(t, expectedDescription, description)
 		})
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
+
+	t.Run("jobs", func(t *testing.T) {
+		queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
+		require.NotContains(t, queryStr, apiSecret)
+		require.NotContains(t, queryStr, certSecret)
+		queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
+		require.NotContains(t, queryStr, apiSecret)
+		require.NotContains(t, queryStr, certSecret)
+	})
 }
 
 func TestShowChangefeedJobs(t *testing.T) {
@@ -484,17 +352,17 @@ func TestShowChangefeedJobsStatusChange(t *testing.T) {
 		'experimental-http://fake-bucket-name/fake/path?AWS_ACCESS_KEY_ID=123&AWS_SECRET_ACCESS_KEY=456'`
 	sqlDB.QueryRow(t, query).Scan(&changefeedID)
 
-	waitForJobState(sqlDB, t, changefeedID, "running")
+	waitForJobStatus(sqlDB, t, changefeedID, "running")
 
 	query = `PAUSE JOB $1`
 	sqlDB.Exec(t, query, changefeedID)
 
-	waitForJobState(sqlDB, t, changefeedID, "paused")
+	waitForJobStatus(sqlDB, t, changefeedID, "paused")
 
 	query = `RESUME JOB $1`
 	sqlDB.Exec(t, query, changefeedID)
 
-	waitForJobState(sqlDB, t, changefeedID, "running")
+	waitForJobStatus(sqlDB, t, changefeedID, "running")
 }
 
 func TestShowChangefeedJobsNoResults(t *testing.T) {
@@ -554,7 +422,7 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfMetamorphicEnrichedEnvelope{reason: "compares text of changefeed statement"})
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		defer closeFeed(t, foo)
 
 		feed, ok := foo.(cdctest.EnterpriseTestFeed)
@@ -600,7 +468,7 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 		}
 
 		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
-		waitForJobState(sqlDB, t, jobID, `paused`)
+		waitForJobStatus(sqlDB, t, jobID, `paused`)
 
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, jobID))
 
@@ -657,6 +525,7 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 			require.NoError(t, err)
 			jobID = successfulFeed.(cdctest.EnterpriseTestFeed).JobID()
 		}
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
 
 		// Create a changefeed and assert who can see it.
 		asUser(t, f, `feedCreator`, func(userDB *sqlutils.SQLRunner) {
@@ -667,12 +536,22 @@ func TestShowChangefeedJobsAuthorization(t *testing.T) {
 			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
 		})
 		asUser(t, f, `userWithAllGrants`, func(userDB *sqlutils.SQLRunner) {
-			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{})
+			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{})
 		})
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
+			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
+		})
+		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
+			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{})
+		})
+
+		// Assert behavior when one of the tables is dropped.
+		rootDB.Exec(t, "DROP TABLE table_b")
+		// Having CHANGEFEED on only table_a is now sufficient.
+		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.CheckQueryResults(t, `SELECT job_id FROM [SHOW CHANGEFEED JOBS]`, [][]string{{expectedJobIDStr}})
 		})
 		asUser(t, f, `regularUser`, func(userDB *sqlutils.SQLRunner) {
@@ -707,7 +586,7 @@ func TestShowChangefeedJobsDefaultFilter(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		waitForJobState(sqlDB, t, foo.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
+		waitForJobStatus(sqlDB, t, foo.(cdctest.EnterpriseTestFeed).JobID(), jobs.StatusRunning)
 		require.Equal(t, 1, countChangefeedJobs())
 
 		// The job is not visible after closed (and its finished time is older than 12 hours).

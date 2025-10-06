@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -493,7 +491,7 @@ func (b *Builder) buildScalar(
 		panic(unimplemented.Newf(fmt.Sprintf("optbuilder.%T", scalar), "not yet implemented: scalar expression: %T", scalar))
 	}
 
-	return b.finishBuildScalar(scalar, out, outScope, outCol)
+	return b.finishBuildScalar(scalar, out, inScope, outScope, outCol)
 }
 
 func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
@@ -548,11 +546,6 @@ func (b *Builder) buildFunction(
 	overload := f.ResolvedOverload()
 	if overload.HasSQLBody() {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
-	}
-	if b.isUnsafeBuiltin(overload, def) {
-		if err := unsafesql.CheckInternalsAccess(b.ctx, b.evalCtx.SessionData(), b.stmt, b.evalCtx.Annotations, &b.evalCtx.Settings.SV); err != nil {
-			panic(err)
-		}
 	}
 	b.factory.Metadata().AddBuiltin(f.Func.ReferenceByName)
 
@@ -617,7 +610,7 @@ func (b *Builder) buildFunction(
 		}
 	}
 
-	return b.finishBuildScalar(f, out, outScope, outCol)
+	return b.finishBuildScalar(f, out, inScope, outScope, outCol)
 }
 
 // getColumnDefinitionListTypes returns a composite type representing the column
@@ -863,10 +856,6 @@ func (b *Builder) constructBinary(
 		return b.factory.ConstructVectorCosDistance(left, right)
 	case treebin.NegInnerProduct:
 		return b.factory.ConstructVectorNegInnerProduct(left, right)
-	case treebin.FirstContains:
-		return b.factory.ConstructFirstContains(left, right)
-	case treebin.FirstContainedBy:
-		return b.factory.ConstructFirstContainedBy(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled binary operator: %s", redact.Safe(bin)))
 }
@@ -887,26 +876,6 @@ func (b *Builder) constructUnary(
 		return b.factory.ConstructUnaryCbrt(input)
 	}
 	panic(errors.AssertionFailedf("unhandled unary operator: %s", redact.Safe(un)))
-}
-
-// isUnsafeBuiltin returns true if the given function definition
-// is a CRDB internal builtin function.
-func (b *Builder) isUnsafeBuiltin(
-	overload *tree.Overload, def *tree.ResolvedFunctionDefinition,
-) bool {
-	if b.skipUnsafeInternalsCheck {
-		return false
-
-	}
-	if overload.Type != tree.BuiltinRoutine {
-		return false
-	}
-	for _, o := range def.Overloads {
-		if o.Schema == catconstants.CRDBInternalSchemaName {
-			return true
-		}
-	}
-	return false
 }
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create
@@ -974,7 +943,7 @@ func (sb *ScalarBuilder) Build(expr tree.Expr) (_ opt.ScalarExpr, err error) {
 		}
 	}()
 
-	typedExpr := sb.scope.resolveType(expr, types.AnyElement)
+	typedExpr := sb.scope.resolveType(expr, types.Any)
 	scalar := sb.buildScalar(typedExpr, &sb.scope, nil, nil, nil)
 	return scalar, nil
 }

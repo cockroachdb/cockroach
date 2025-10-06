@@ -51,7 +51,7 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 			return errors.Wrapf(err, "applying dep rule %s", dr.name)
 		}
 		if stats != nil {
-			log.Dev.Infof(
+			log.Infof(
 				ctx, "applying dep rule %q, %d results found that took %v",
 				dr.name, stats.ResultsFound, timeutil.Since(stats.StartTime),
 			)
@@ -65,7 +65,7 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 				if err != nil {
 					return errors.Wrapf(err, "failed to marshal clause %d", stats.FirstUnsatisfiedClause)
 				}
-				log.Dev.Infof(ctx, "dep rule %q did not apply. The first unsatisfied clause is: %s",
+				log.Infof(ctx, "dep rule %q did not apply. The first unsatisfied clause is: %s",
 					dr.name, clauseStr)
 			}
 		}

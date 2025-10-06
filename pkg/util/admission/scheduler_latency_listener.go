@@ -109,7 +109,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 			(params.adjustmentDelta * params.multiplicativeFactorOnDecrease)
 		newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
 		if log.V(1) {
-			log.Dev.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%%",
+			log.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%%",
 				100*oldUtilizationLimit, 100*params.adjustmentDelta*params.multiplicativeFactorOnDecrease,
 				100*newUtilizationLimit)
 		}
@@ -118,7 +118,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 			newUtilizationLimit = oldUtilizationLimit + params.adjustmentDelta
 			newUtilizationLimit = clamp(params.minUtilization, params.maxUtilization, newUtilizationLimit)
 			if log.V(1) {
-				log.Dev.Infof(e.ctx, "clamp(%0.2f%% + %0.2f%%) => %0.2f%%",
+				log.Infof(e.ctx, "clamp(%0.2f%% + %0.2f%%) => %0.2f%%",
 					100*oldUtilizationLimit, 100*params.adjustmentDelta,
 					100*newUtilizationLimit)
 			}
@@ -130,7 +130,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 					(params.adjustmentDelta * params.multiplicativeFactorOnInactiveDecrease)
 				newUtilizationLimit = clamp(inactiveUtilizationLimit, params.maxUtilization, newUtilizationLimit)
 				if log.V(1) {
-					log.Dev.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%% (inactive)",
+					log.Infof(e.ctx, "clamp(%0.2f%% - %0.2f%%) => %0.2f%% (inactive)",
 						100*oldUtilizationLimit, 100*params.adjustmentDelta*params.multiplicativeFactorOnInactiveDecrease,
 						100*newUtilizationLimit)
 				}
@@ -168,7 +168,7 @@ func (e *schedulerLatencyListener) getParams(period time.Duration) schedulerLate
 	if minUtilization > maxUtilization { // user error
 		defaultMinUtilization := elasticCPUMinUtilization.Default()
 		defaultMaxUtilization := elasticCPUMaxUtilization.Default()
-		log.Dev.Errorf(e.ctx, "min utilization (%0.2f%%) > max utilization (%0.2f%%); resetting to defaults [%0.2f%%, %0.2f%%]",
+		log.Errorf(e.ctx, "min utilization (%0.2f%%) > max utilization (%0.2f%%); resetting to defaults [%0.2f%%, %0.2f%%]",
 			minUtilization*100, maxUtilization*100, defaultMinUtilization*100, defaultMaxUtilization*100,
 		)
 		minUtilization, maxUtilization = defaultMinUtilization, defaultMaxUtilization
@@ -283,7 +283,7 @@ func (k *schedulerLatencyListenerMetrics) MetricStruct() {}
 
 func clamp(min, max, val float64) float64 {
 	if buildutil.CrdbTestBuild && min > max {
-		log.Dev.Fatalf(context.Background(), "min (%f) > max (%f)", min, max)
+		log.Fatalf(context.Background(), "min (%f) > max (%f)", min, max)
 	}
 	if val < min {
 		val = min // floor

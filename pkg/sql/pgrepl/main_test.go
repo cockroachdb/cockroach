@@ -19,13 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +43,7 @@ func TestDataDriven(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "pgrepl_datadriven_test", url.User(username.RootUser))
+	pgURL, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "pgrepl_datadriven_test", url.User(username.RootUser))
 	defer cleanup()
 
 	cfg, err := pgx.ParseConfig(pgURL.String())
@@ -71,7 +70,7 @@ func TestDataDriven(t *testing.T) {
 
 			switch d.Cmd {
 			case "simple_query":
-				rows, err := conn.Query(ctx, d.Input, pgx.QueryExecModeSimpleProtocol)
+				rows, err := conn.Query(ctx, d.Input, pgx.QuerySimpleProtocol(true))
 				if expectError {
 					require.Error(t, err)
 					return err.Error()
@@ -82,7 +81,7 @@ func TestDataDriven(t *testing.T) {
 				return out
 			case "identify_system":
 				// IDENTIFY_SYSTEM needs some redaction to be deterministic.
-				rows, err := conn.Query(ctx, "IDENTIFY_SYSTEM", pgx.QueryExecModeSimpleProtocol)
+				rows, err := conn.Query(ctx, "IDENTIFY_SYSTEM", pgx.QuerySimpleProtocol(true))
 				require.NoError(t, err)
 				var sb strings.Builder
 				for rows.Next() {
@@ -92,13 +91,13 @@ func TestDataDriven(t *testing.T) {
 						if i > 0 {
 							sb.WriteRune('\n')
 						}
-						switch rows.FieldDescriptions()[i].Name {
+						switch string(rows.FieldDescriptions()[i].Name) {
 						case "systemid":
 							val = "some_cluster_id"
 						case "xlogpos":
 							val = "some_lsn"
 						}
-						sb.WriteString(rows.FieldDescriptions()[i].Name)
+						sb.Write(rows.FieldDescriptions()[i].Name)
 						sb.WriteString(": ")
 						sb.WriteString(fmt.Sprintf("%v", val))
 					}

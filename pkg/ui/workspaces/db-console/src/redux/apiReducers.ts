@@ -12,7 +12,6 @@ import {
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
 import map from "lodash/map";
-import sortby from "lodash/sortBy";
 import Long from "long";
 import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router";
@@ -78,15 +77,7 @@ function rollupStoreMetrics(
 
 export const nodesReducerObj = new CachedDataReducer(
   (req: api.NodesRequestMessage, timeout?: moment.Duration) =>
-    api
-      .getNodesUI(req, timeout)
-      .then(rollupStoreMetrics)
-      .then(nodeStatuses => {
-        nodeStatuses.forEach(ns => {
-          ns.store_statuses = sortby(ns.store_statuses, ss => ss.desc.store_id);
-        });
-        return nodeStatuses;
-      }),
+    api.getNodesUI(req, timeout).then(rollupStoreMetrics),
   "nodes",
   moment.duration(10, "s"),
 );
@@ -117,6 +108,33 @@ const databasesReducerObj = new CachedDataReducer(
 );
 export const refreshDatabases = databasesReducerObj.refresh;
 
+export const databaseRequestPayloadToID = (
+  params: clusterUiApi.DatabaseDetailsReqParams,
+): string => params.database;
+
+const databaseDetailsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getDatabaseDetails,
+  "databaseDetails",
+  databaseRequestPayloadToID,
+  null,
+  moment.duration(10, "m"),
+);
+
+export const spanStatsRequestPayloadToID = (
+  params: clusterUiApi.DatabaseDetailsSpanStatsReqParams,
+): string => params.database;
+
+const databaseDetailsSpanStatsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getDatabaseDetailsSpanStats,
+  "databaseDetailsSpanStats",
+  spanStatsRequestPayloadToID,
+  null,
+  moment.duration(10, "m"),
+);
+
+export const refreshDatabaseDetailsSpanStats =
+  databaseDetailsSpanStatsReducerObj.refresh;
+
 const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
   req.page_token;
 
@@ -129,12 +147,25 @@ export const hotRangesReducerObj = new PaginatedCachedDataReducer(
   moment.duration(30, "minutes"),
 );
 
+export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
+
 export const refreshHotRanges = hotRangesReducerObj.refresh;
 
-export const clearHotRanges = hotRangesReducerObj.clearData;
+export const tableRequestToID = (
+  req:
+    | api.TableStatsRequestMessage
+    | api.IndexStatsRequestMessage
+    | clusterUiApi.TableDetailsReqParams,
+): string => generateTableID(req.database, req.table);
 
-export const tableRequestToID = (req: api.IndexStatsRequestMessage): string =>
-  generateTableID(req.database, req.table);
+const tableDetailsReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getTableDetails,
+  "tableDetails",
+  tableRequestToID,
+  null,
+  moment.duration(10, "m"),
+);
+export const refreshTableDetails = tableDetailsReducerObj.refresh;
 
 const indexStatsReducerObj = new KeyedCachedDataReducer(
   api.getIndexStats,
@@ -468,6 +499,20 @@ const schemaInsightsReducerObj = new CachedDataReducer(
 );
 export const refreshSchemaInsights = schemaInsightsReducerObj.refresh;
 
+export const schedulesKey = (req: { status: string; limit: number }) =>
+  `${encodeURIComponent(req.status)}/${encodeURIComponent(
+    req.limit?.toString(),
+  )}`;
+
+const schedulesReducerObj = new KeyedCachedDataReducer(
+  clusterUiApi.getSchedules,
+  "schedules",
+  schedulesKey,
+  moment.duration(10, "s"),
+  moment.duration(1, "minute"),
+);
+export const refreshSchedules = schedulesReducerObj.refresh;
+
 export const scheduleKey = (scheduleID: Long): string => scheduleID.toString();
 
 const scheduleReducerObj = new KeyedCachedDataReducer(
@@ -538,6 +583,15 @@ export interface APIReducersState {
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
+  databaseDetails: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsResponse>
+  >;
+  databaseDetailsSpanStats: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.DatabaseDetailsSpanStatsResponse>
+  >;
+  tableDetails: KeyedCachedDataReducerState<
+    clusterUiApi.SqlApiResponse<clusterUiApi.TableDetailsResponse>
+  >;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
@@ -580,6 +634,7 @@ export interface APIReducersState {
   statementFingerprintInsights: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
+  schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
   snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponse>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponse>;
@@ -597,6 +652,11 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
   [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
+  [databaseDetailsReducerObj.actionNamespace]:
+    databaseDetailsReducerObj.reducer,
+  [databaseDetailsSpanStatsReducerObj.actionNamespace]:
+    databaseDetailsSpanStatsReducerObj.reducer,
+  [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
@@ -631,6 +691,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     txnInsightDetailsReducerObj.reducer,
   [stmtInsightsReducerObj.actionNamespace]: stmtInsightsReducerObj.reducer,
   [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,
+  [schedulesReducerObj.actionNamespace]: schedulesReducerObj.reducer,
   [scheduleReducerObj.actionNamespace]: scheduleReducerObj.reducer,
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,

@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Regression test for incorrectly handling projection on top of the EXPORT
 # (#101733).
 statement ok
@@ -27,21 +26,3 @@ CREATE TABLE t115290 (
 
 statement ok
 EXPORT INTO PARQUET 'nodelocal://1/export1/' FROM SELECT b FROM t115290 ORDER BY a;
-
-# Regression test for panicking when we're inserting data produced by the EXPORT
-# (#153292). Previously, this was problematic since we couldn't fuse the export
-# processor with the processor corresponding to the mutation.
-statement ok
-CREATE TABLE records (format STRING, filename STRING, rows INT, bytes INT);
-
-statement ok
-WITH cte(filename, rows, bytes) AS (
-  EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM t
-)
-INSERT INTO records (format, filename, rows, bytes) SELECT 'CSV', * FROM cte;
-
-statement ok
-WITH cte(filename, rows, bytes) AS (
-  EXPORT INTO PARQUET 'nodelocal://1/export1/' FROM SELECT * FROM t
-)
-INSERT INTO records (format, filename, rows, bytes) SELECT 'PARQUET', * FROM cte;

@@ -111,7 +111,7 @@ func UserFromIncomingRPCContext(ctx context.Context) (res username.SQLUsername, 
 		return username.RootUserName(), nil
 	}
 	if len(usernames) != 1 {
-		log.Dev.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
+		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
 		return res, fmt.Errorf(
 			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
 	}

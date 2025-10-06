@@ -83,8 +83,6 @@ type kv struct {
 	sequential                           bool
 	zipfian                              bool
 	sfuDelay                             time.Duration
-	longRunningTxn                       bool
-	longRunningTxnNumWrites              int
 	splits                               int
 	scatter                              bool
 	secondaryIndex                       bool
@@ -94,7 +92,6 @@ type kv struct {
 	keySize                              int
 	insertCount                          int
 	txnQoS                               string
-	prepareReadOnly                      bool
 	writesUseSelect1                     bool
 }
 
@@ -121,20 +118,17 @@ var kvMeta = workload.Meta{
 		g := &kv{}
 		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`batch`:                       {RuntimeOnly: true},
-			`sfu-wait-delay`:              {RuntimeOnly: true},
-			`sfu-writes`:                  {RuntimeOnly: true},
-			`long-running-txn`:            {RuntimeOnly: true},
-			`long-running-txn-num-writes`: {RuntimeOnly: true},
-			`read-percent`:                {RuntimeOnly: true},
-			`span-percent`:                {RuntimeOnly: true},
-			`span-limit`:                  {RuntimeOnly: true},
-			`del-percent`:                 {RuntimeOnly: true},
-			`splits`:                      {RuntimeOnly: true},
-			`scatter`:                     {RuntimeOnly: true},
-			`timeout`:                     {RuntimeOnly: true},
-			`prepare-read-only`:           {RuntimeOnly: true},
-			`sel1-writes`:                 {RuntimeOnly: true},
+			`batch`:          {RuntimeOnly: true},
+			`sfu-wait-delay`: {RuntimeOnly: true},
+			`sfu-writes`:     {RuntimeOnly: true},
+			`read-percent`:   {RuntimeOnly: true},
+			`span-percent`:   {RuntimeOnly: true},
+			`span-limit`:     {RuntimeOnly: true},
+			`del-percent`:    {RuntimeOnly: true},
+			`splits`:         {RuntimeOnly: true},
+			`scatter`:        {RuntimeOnly: true},
+			`timeout`:        {RuntimeOnly: true},
+			`sel1-writes`:    {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.batchSize, `batch`, 1,
 			`Number of blocks to read/insert in a single SQL statement.`)
@@ -188,16 +182,8 @@ var kvMeta = workload.Meta{
 		g.flags.StringVar(&g.txnQoS, `txn-qos`, `regular`,
 			`Set default_transaction_quality_of_service session variable, accepted`+
 				`values are 'background', 'regular' and 'critical'.`)
-		g.flags.BoolVar(&g.prepareReadOnly, `prepare-read-only`, false, `Prepare and perform only read statements.`)
 		g.flags.BoolVar(&g.writesUseSelect1, `sel1-writes`, false,
 			`Use SELECT 1 as the first statement of transactional writes with a sleep after SELECT 1.`)
-		g.flags.BoolVar(&g.longRunningTxn, `long-running-txn`, false,
-			`Use a long-running transaction for running lock contention scenarios. If run with `+
-				`--sfu-writes or --sel1-writes, it will use those writes in the long-running transaction; `+
-				`otherwise, it will use regular writes. Each long-running write transaction counts for a`+
-				`single write, as measured by --read-percent.`)
-		g.flags.IntVar(&g.longRunningTxnNumWrites, `long-running-txn-num-writes`, 10,
-			`Number of writes in the long-running transaction when using --long-running-txn.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -261,9 +247,6 @@ func (w *kv) validateConfig() (err error) {
 	if w.readPercent+w.spanPercent+w.delPercent > 100 {
 		return errors.New("'read-percent', 'span-percent' and 'del-precent' combined exceed 100%")
 	}
-	if w.prepareReadOnly && w.readPercent < 100 {
-		return errors.New("'prepare-read-only' can only be used with 'read-percent' set to 100")
-	}
 	if w.targetCompressionRatio < 1.0 || math.IsNaN(w.targetCompressionRatio) {
 		return errors.New("'target-compression-ratio' must be a number >= 1.0")
 	}
@@ -302,18 +285,18 @@ func (w *kv) validateConfig() (err error) {
 	}
 	// We create generator and discard it to have a single piece of code that
 	// handles generator type which affects target key range.
-	kg := w.createKeyGenerator()
-	if kg.kr.totalKeys() < uint64(w.insertCount) {
+	_, _, _, kr := w.createKeyGenerator()
+	if kr.totalKeys() < uint64(w.insertCount) {
 		return errors.Errorf(
 			"`--insert-count` (%d) is greater than the number of unique keys that could be possibly generated [%d,%d)",
-			w.insertCount, kg.kr.min, kg.kr.max)
+			w.insertCount, kr.min, kr.max)
 	}
 	return nil
 }
 
 // Note that sequence is only exposed for testing purposes and is used by
 // returned keyGenerators.
-func (w *kv) createKeyGenerator() keyGeneratorConfig {
+func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransformer, keyRange) {
 	var writeSeq atomic.Int64
 	if w.writeSeq != "" {
 		writeSeqVal, err := strconv.Atoi(w.writeSeq[1:])
@@ -323,57 +306,46 @@ func (w *kv) createKeyGenerator() keyGeneratorConfig {
 		writeSeq.Store(int64(writeSeqVal))
 	}
 
-	var kg keyGeneratorConfig
-	kg.seq = &sequence{max: w.cycleLength, val: &writeSeq}
+	// Sequence is shared between all generators.
+	seq := &sequence{max: w.cycleLength, val: &writeSeq}
 
+	var gen func() keyGenerator
+	var kr keyRange
 	switch {
 	case w.zipfian:
-		kg.seqPrefix = 'Z'
-		kg.newState = func() *keyGeneratorState {
-			return &keyGeneratorState{
-				rand:   rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-				mapKey: &zipfKeyMapper{zipf: newZipf(1.1, 1, uint64(math.MaxInt64))},
-			}
+		gen = func() keyGenerator {
+			return newZipfianGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 		}
-		kg.kr = keyRange{
+		kr = keyRange{
 			min: 0,
 			max: math.MaxInt64,
 		}
 	case w.sequential:
-		kg.seqPrefix = 'S'
-		kg.newState = func() *keyGeneratorState {
-			return &keyGeneratorState{
-				rand:   rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-				mapKey: sequentialKeyMapper{},
-			}
+		gen = func() keyGenerator {
+			return newSequentialGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 		}
-		kg.kr = keyRange{
+		kr = keyRange{
 			min: 0,
 			max: w.cycleLength,
 		}
 	default:
-		kg.seqPrefix = 'R'
-		kg.newState = func() *keyGeneratorState {
-			return &keyGeneratorState{
-				rand:   rand.New(rand.NewSource(timeutil.Now().UnixNano())),
-				mapKey: &hashKeyMapper{hasher: sha1.New()},
-			}
+		gen = func() keyGenerator {
+			return newHashGenerator(seq, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 		}
-		kg.kr = keyRange{
+		kr = keyRange{
 			min: math.MinInt64,
 			max: math.MaxInt64,
 		}
 	}
 
 	if w.keySize == 0 {
-		kg.transformer = intKeyTransformer{}
-	} else {
-		kg.transformer = stringKeyTransformer{
-			startOffset: kg.kr.min,
-			fillerSize:  w.keySize - minStringKeyDigits,
-		}
+		return gen, seq, intKeyTransformer{}, kr
 	}
-	return kg
+
+	return gen, seq, stringKeyTransformer{
+		startOffset: kr.min,
+		fillerSize:  w.keySize - minStringKeyDigits,
+	}, kr
 }
 
 func splitFinder(i, splits int, r keyRange, k keyTransformer) interface{} {
@@ -400,13 +372,13 @@ func (w *kv) Tables() []workload.Table {
 	// Tables should only run on initialized workload, safe to call create without
 	// having a panic. We don't need to defer this to the actual table callbacks
 	// like Splits or InitialRows.
-	kg := w.createKeyGenerator()
+	_, _, kt, kr := w.createKeyGenerator()
 
 	table := workload.Table{Name: `kv`}
 	table.Splits = workload.Tuples(
 		w.splits,
 		func(splitIdx int) []interface{} {
-			return []interface{}{splitFinder(splitIdx, w.splits, kg.kr, kg.transformer)}
+			return []interface{}{splitFinder(splitIdx, w.splits, kr, kt)}
 		},
 	)
 
@@ -415,26 +387,19 @@ func (w *kv) Tables() []workload.Table {
 		if w.secondaryIndex {
 			schema = shardedKvSchemaWithIndex
 		}
-		table.Schema = fmt.Sprintf(schema, kg.transformer.keySQLType(), w.shards)
+		table.Schema = fmt.Sprintf(schema, kt.keySQLType(), w.shards)
 	} else {
 		schema := kvSchema
 		if w.secondaryIndex {
 			schema = kvSchemaWithIndex
 		}
-		table.Schema = fmt.Sprintf(schema, kg.transformer.keySQLType())
+		table.Schema = fmt.Sprintf(schema, kt.keySQLType())
 	}
 
 	if w.insertCount > 0 {
 		const batchSize = 1000
 		table.InitialRows = workload.BatchedTuples{
 			NumBatches: (w.insertCount + batchSize - 1) / batchSize,
-			// If the key sequence is not sequential, duplicates are possible.
-			// The zipfian distribution produces duplicates by design, and the
-			// hash key mapper can also produce duplicates at larger insert
-			// counts (it's at least inevitable at ~1b rows). Marking that the
-			// keys may contain duplicates will cause the data loader to use
-			// INSERT ... ON CONFLICT DO NOTHING statements.
-			MayContainDuplicates: !w.sequential,
 			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
 				rowBegin, rowEnd := batchIdx*batchSize, (batchIdx+1)*batchSize
 				if rowEnd > w.insertCount {
@@ -442,7 +407,7 @@ func (w *kv) Tables() []workload.Table {
 				}
 
 				var kvtableTypes = []*types.T{
-					kg.transformer.getColumnType(),
+					kt.getColumnType(),
 					types.Bytes,
 				}
 
@@ -450,10 +415,10 @@ func (w *kv) Tables() []workload.Table {
 
 				{
 					seq := rowBegin
-					kg.transformer.fillColumnBatch(cb, a, func() (s int64, ok bool) {
+					kt.fillColumnBatch(cb, a, func() (s int64, ok bool) {
 						if seq < rowEnd {
 							seq++
-							return insertCountKey(int64(seq-1), int64(w.insertCount), kg.kr), true
+							return insertCountKey(int64(seq-1), int64(w.insertCount), kr), true
 						}
 						return 0, false
 					})
@@ -468,7 +433,7 @@ func (w *kv) Tables() []workload.Table {
 					rowOffset := rowIdx - rowBegin
 					var payload []byte
 					blockSize, uniqueSize := w.randBlockSize(rndBlock)
-					*a, payload = a.Alloc(blockSize)
+					*a, payload = a.Alloc(blockSize, 0 /* extraCap */)
 					w.randFillBlock(rndBlock, payload, uniqueSize)
 					valCol.Set(rowOffset, payload)
 				}
@@ -566,7 +531,7 @@ func (w *kv) Ops(
 	buf.WriteString(`)`)
 	delStmtStr := buf.String()
 
-	kg := w.createKeyGenerator()
+	gen, _, kt, _ := w.createKeyGenerator()
 	ql := workload.QueryLoad{}
 	var numEmptyResults atomic.Int64
 	for i := 0; i < w.connFlags.Concurrency; i++ {
@@ -577,10 +542,8 @@ func (w *kv) Ops(
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
 		op.followerReadStmt = op.sr.Define(followerReadStmtStr)
-		if !op.config.prepareReadOnly {
-			op.writeStmt = op.sr.Define(writeStmtStr)
-		}
-		if len(sfuStmtStr) > 0 && !op.config.prepareReadOnly {
+		op.writeStmt = op.sr.Define(writeStmtStr)
+		if len(sfuStmtStr) > 0 {
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.sel1Stmt = op.sr.Define("SELECT 1")
@@ -590,15 +553,13 @@ func (w *kv) Ops(
 				" SET default_transaction_quality_of_service = %s", w.txnQoS))
 			op.qosStmt = &stmt
 		}
-		if !op.config.prepareReadOnly {
-			op.delStmt = op.sr.Define(delStmtStr)
-		}
+		op.delStmt = op.sr.Define(delStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp); err != nil {
 			return workload.QueryLoad{}, err
 		}
 		op.mcp = mcp
-		op.kg = kg
-		op.ks = kg.newState()
+		op.g = gen()
+		op.t = kt
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 		ql.Close = op.close
 	}
@@ -618,8 +579,8 @@ type kvOp struct {
 	sfuStmt          workload.StmtHandle
 	sel1Stmt         workload.StmtHandle
 	delStmt          workload.StmtHandle
-	kg               keyGeneratorConfig
-	ks               *keyGeneratorState
+	g                keyGenerator
+	t                keyTransformer
 	numEmptyResults  *atomic.Int64
 }
 
@@ -636,17 +597,17 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 			return err
 		}
 	}
-	statementProbability := o.ks.rand.Intn(100) // Determines what statement is executed.
+	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
 	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.kg.transformer.getKey(o.kg.readKey(o.ks))
+			args[i] = o.t.getKey(o.g.readKey())
 		}
 		start := timeutil.Now()
 		readStmt := o.readStmt
 		opName := `read`
 
-		if o.ks.rand.Intn(100) < o.config.followerReadPercent {
+		if o.g.rand().Intn(100) < o.config.followerReadPercent {
 			readStmt = o.followerReadStmt
 			opName = `follower-read`
 		}
@@ -672,7 +633,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		start := timeutil.Now()
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
-			args[i] = o.kg.readKey(o.ks)
+			args[i] = o.g.readKey()
 		}
 		_, err := o.delStmt.Exec(ctx, args...)
 		if err != nil {
@@ -687,7 +648,7 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		start := timeutil.Now()
 		var err error
 		if o.config.spanLimit > 0 {
-			arg := o.kg.readKey(o.ks)
+			arg := o.g.readKey()
 			_, err = o.spanStmt.Exec(ctx, arg)
 		} else {
 			_, err = o.spanStmt.Exec(ctx)
@@ -699,26 +660,23 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		o.hists.Get(`span`).Record(elapsed)
 		return err
 	}
-	makeWriteBatchArgs := func() ([]interface{}, []interface{}) {
-		const argCount = 2
-		writeArgs := make([]interface{}, argCount*o.config.batchSize)
-		var sfuArgs []interface{}
-		if o.config.writesUseSelectForUpdate {
-			sfuArgs = make([]interface{}, o.config.batchSize)
+	const argCount = 2
+	writeArgs := make([]interface{}, argCount*o.config.batchSize)
+	var sfuArgs []interface{}
+	if o.config.writesUseSelectForUpdate {
+		sfuArgs = make([]interface{}, o.config.batchSize)
+	}
+	for i := 0; i < o.config.batchSize; i++ {
+		j := i * argCount
+		writeArgs[j+0] = o.t.getKey(o.g.writeKey())
+		if sfuArgs != nil {
+			sfuArgs[i] = writeArgs[j]
 		}
-		for i := 0; i < o.config.batchSize; i++ {
-			j := i * argCount
-			writeArgs[j+0] = o.kg.transformer.getKey(o.kg.writeKey(o.ks))
-			if sfuArgs != nil {
-				sfuArgs[i] = writeArgs[j]
-			}
-			writeArgs[j+1] = o.config.randBlock(o.ks.rand)
-		}
-		return writeArgs, sfuArgs
+		writeArgs[j+1] = o.config.randBlock(o.g.rand())
 	}
 	start := timeutil.Now()
 	var err error
-	if o.config.writesUseSelect1 || o.config.writesUseSelectForUpdate || o.config.longRunningTxn {
+	if o.config.writesUseSelect1 || o.config.writesUseSelectForUpdate {
 		// We could use crdb.ExecuteTx, but we avoid retries in this workload so
 		// that each run call makes 1 attempt, so that rate limiting in workerRun
 		// behaves as expected.
@@ -727,52 +685,44 @@ func (o *kvOp) run(ctx context.Context) (retErr error) {
 		if err != nil {
 			return err
 		}
+
 		defer func() {
 			rollbackErr := tx.Rollback(ctx)
 			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
 				retErr = errors.CombineErrors(retErr, rollbackErr)
 			}
 		}()
-		iterations := 1
-		if o.config.longRunningTxn {
-			iterations = o.config.longRunningTxnNumWrites
+		if o.config.writesUseSelect1 {
+			rows, err := o.sel1Stmt.QueryTx(ctx, tx)
+			if err != nil {
+				return err
+			}
+			rows.Close()
+			if err = rows.Err(); err != nil {
+				return err
+			}
 		}
-		for i := 0; i < iterations; i++ {
-			writeArgs, sfuArgs := makeWriteBatchArgs()
-			if o.config.writesUseSelect1 {
-				rows, err := o.sel1Stmt.QueryTx(ctx, tx)
-				if err != nil {
-					return err
-				}
-				rows.Close()
-				if err = rows.Err(); err != nil {
-					return err
-				}
+		if o.config.writesUseSelectForUpdate {
+			rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
+			if err != nil {
+				return err
 			}
-			if o.config.writesUseSelectForUpdate {
-				rows, err := o.sfuStmt.QueryTx(ctx, tx, sfuArgs...)
-				if err != nil {
-					return err
-				}
-				rows.Close()
-				if err = rows.Err(); err != nil {
-					// The transaction may have experienced an error in the meantime.
-					return o.tryHandleWriteErr("write-write-err", start, err)
-				}
+			rows.Close()
+			if err = rows.Err(); err != nil {
+				return err
 			}
-			// Simulate a transaction that does other work between the sel1 / SFU and write.
-			time.Sleep(o.config.sfuDelay)
-			if _, err = o.writeStmt.ExecTx(ctx, tx, writeArgs...); err != nil {
-				// Multiple write transactions can contend and encounter
-				// a serialization failure. We swallow such an error.
-				return o.tryHandleWriteErr("write-write-err", start, err)
-			}
+		}
+		// Simulate a transaction that does other work between the sel1 / SFU and write.
+		time.Sleep(o.config.sfuDelay)
+		if _, err = o.writeStmt.ExecTx(ctx, tx, writeArgs...); err != nil {
+			// Multiple write transactions can contend and encounter
+			// a serialization failure. We swallow such an error.
+			return o.tryHandleWriteErr("write-write-err", start, err)
 		}
 		if err = tx.Commit(ctx); err != nil {
 			return o.tryHandleWriteErr("write-commit-err", start, err)
 		}
 	} else {
-		writeArgs, _ := makeWriteBatchArgs()
 		_, err = o.writeStmt.Exec(ctx, writeArgs...)
 	}
 	if err != nil {
@@ -804,7 +754,7 @@ func (o *kvOp) close(context.Context) error {
 		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
 	}
 	fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
-		o.kg.cursor())
+		o.g.state())
 	return nil
 }
 
@@ -915,73 +865,133 @@ func (e stringKeyTransformer) fillColumnBatch(
 	}
 }
 
-// keyGeneratorConfig holds the key generation configuration necessary for
-// generating read and write keys. All the fields of a keyGeneratorConfig may be
-// accessed concurrently, but each *keyGeneratorState constructed by newState
-// must be accessed sequentially (eg, one state per worker).
-//
-// Read keys may not yet exist and write keys may already exist.
-type keyGeneratorConfig struct {
-	kr          keyRange
-	seq         *sequence
-	seqPrefix   rune
-	newState    func() *keyGeneratorState
-	transformer keyTransformer
+// keyGenerator generates read and write keys. Read keys may not yet exist and
+// write keys may already exist.
+type keyGenerator interface {
+	writeKey() int64
+	readKey() int64
+	rand() *rand.Rand
+	state() string
 }
 
-// keyGeneratorState holds state for a key generator. Any given state must not
-// be accessed concurrently. Every worker may be given its own state to avoid
-// synchronization.
-type keyGeneratorState struct {
-	rand   *rand.Rand
-	mapKey keyMapper
-}
-
-func (g *keyGeneratorConfig) cursor() string {
-	return fmt.Sprintf("%s%d", string(g.seqPrefix), g.seq.read())
-}
-
-func (g *keyGeneratorConfig) writeKey(state *keyGeneratorState) int64 {
-	return state.mapKey.mapKey(g.seq.write())
-}
-
-func (g *keyGeneratorConfig) readKey(state *keyGeneratorState) int64 {
-	v := g.seq.read()
-	if v == 0 {
-		return 0
-	}
-	return state.mapKey.mapKey(state.rand.Int63n(v))
-}
-
-type keyMapper interface {
-	mapKey(v int64) int64
-}
-
-type hashKeyMapper struct {
+type hashGenerator struct {
+	seq    *sequence
+	random *rand.Rand
 	hasher hash.Hash
 	buf    [sha1.Size]byte
 }
 
-func (h *hashKeyMapper) mapKey(v int64) int64 {
-	binary.BigEndian.PutUint64(h.buf[:8], uint64(v))
-	binary.BigEndian.PutUint64(h.buf[8:16], uint64(RandomSeed.Seed()))
-	h.hasher.Reset()
-	_, _ = h.hasher.Write(h.buf[:16])
-	h.hasher.Sum(h.buf[:0])
-	return int64(binary.BigEndian.Uint64(h.buf[:8]))
+func newHashGenerator(seq *sequence, rng *rand.Rand) *hashGenerator {
+	return &hashGenerator{
+		seq:    seq,
+		random: rng,
+		hasher: sha1.New(),
+	}
 }
 
-type sequentialKeyMapper struct{}
-
-func (sequentialKeyMapper) mapKey(v int64) int64 { return v }
-
-type zipfKeyMapper struct {
-	zipf *zipf
+func (g *hashGenerator) hash(v int64) int64 {
+	binary.BigEndian.PutUint64(g.buf[:8], uint64(v))
+	binary.BigEndian.PutUint64(g.buf[8:16], uint64(RandomSeed.Seed()))
+	g.hasher.Reset()
+	_, _ = g.hasher.Write(g.buf[:16])
+	g.hasher.Sum(g.buf[:0])
+	return int64(binary.BigEndian.Uint64(g.buf[:8]))
 }
 
-func (g *zipfKeyMapper) mapKey(seed int64) int64 {
+func (g *hashGenerator) writeKey() int64 {
+	return g.hash(g.seq.write())
+}
+
+func (g *hashGenerator) readKey() int64 {
+	v := g.seq.read()
+	if v == 0 {
+		return 0
+	}
+	return g.hash(g.random.Int63n(v))
+}
+
+func (g *hashGenerator) rand() *rand.Rand {
+	return g.random
+}
+
+func (g *hashGenerator) state() string {
+	return fmt.Sprintf("R%d", g.seq.read())
+}
+
+type sequentialGenerator struct {
+	seq    *sequence
+	random *rand.Rand
+}
+
+func newSequentialGenerator(seq *sequence, rng *rand.Rand) *sequentialGenerator {
+	return &sequentialGenerator{
+		seq:    seq,
+		random: rng,
+	}
+}
+
+func (g *sequentialGenerator) writeKey() int64 {
+	return g.seq.write()
+}
+
+func (g *sequentialGenerator) readKey() int64 {
+	v := g.seq.read()
+	if v == 0 {
+		return 0
+	}
+	return g.random.Int63n(v)
+}
+
+func (g *sequentialGenerator) rand() *rand.Rand {
+	return g.random
+}
+
+func (g *sequentialGenerator) state() string {
+	return fmt.Sprintf("S%d", g.seq.read())
+}
+
+type zipfGenerator struct {
+	seq    *sequence
+	random *rand.Rand
+	zipf   *zipf
+}
+
+// Creates a new zipfian generator.
+func newZipfianGenerator(seq *sequence, rng *rand.Rand) *zipfGenerator {
+	return &zipfGenerator{
+		seq:    seq,
+		random: rng,
+		zipf:   newZipf(1.1, 1, uint64(math.MaxInt64)),
+	}
+}
+
+// Get a random number seeded by v that follows the
+// zipfian distribution.
+func (g *zipfGenerator) zipfian(seed int64) int64 {
 	randomWithSeed := rand.New(rand.NewSource(seed))
 	return int64(g.zipf.Uint64(randomWithSeed))
+}
+
+// Get a zipf write key appropriately.
+func (g *zipfGenerator) writeKey() int64 {
+	return g.zipfian(g.seq.write())
+}
+
+// Get a zipf read key appropriately.
+func (g *zipfGenerator) readKey() int64 {
+	v := g.seq.read()
+	if v == 0 {
+		return 0
+	}
+	return g.zipfian(g.random.Int63n(v))
+}
+
+func (g *zipfGenerator) rand() *rand.Rand {
+	return g.random
+}
+
+func (g *zipfGenerator) state() string {
+	return fmt.Sprintf("Z%d", g.seq.read())
 }
 
 // randBlock returns a sequence of random bytes according to the kv

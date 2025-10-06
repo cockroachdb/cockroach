@@ -68,6 +68,16 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 			updateJobBatchSizeSetting.Get(&execCtx.ExecCfg().Settings.SV),
 			testKnobs)
 	}
+	// We must reset the job's num runs to 0 so that it doesn't get
+	// delayed by the job system's exponential backoff strategy.
+	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if md.RunStats != nil && md.RunStats.NumRuns > 0 {
+			ju.UpdateRunStats(0, md.RunStats.LastRun)
+		}
+		return nil
+	}); err != nil {
+		log.Errorf(ctx, "%s", err.Error())
+	}
 
 	// Channel used to signal the job should run.
 	signalCh := execCtx.ExecCfg().SQLStatusServer.GetUpdateTableMetadataCacheSignal()
@@ -98,13 +108,14 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		}
 		select {
 		case <-scheduleSettingsCh:
-			log.Dev.Info(ctx, "table metadata job settings updated, stopping timer.")
+			log.Info(ctx, "table metadata job settings updated, stopping timer.")
 			timer.Stop()
 			continue
 		case <-timer.C:
-			log.Dev.Info(ctx, "running table metadata update job after data cache expiration")
+			timer.Read = true
+			log.Info(ctx, "running table metadata update job after data cache expiration")
 		case <-signalCh:
-			log.Dev.Info(ctx, "running table metadata update job via grpc signal")
+			log.Info(ctx, "running table metadata update job via grpc signal")
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -116,7 +127,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		j.markAsRunning(ctx)
 		err := updater.RunUpdater(ctx)
 		if err != nil {
-			log.Dev.Errorf(ctx, "error running table metadata update job: %s", err)
+			log.Errorf(ctx, "error running table metadata update job: %s", err)
 			j.metrics.Errors.Inc(1)
 		}
 		j.markAsCompleted(ctx)
@@ -128,7 +139,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 
 func (j *tableMetadataUpdateJobResumer) updateProgress(ctx context.Context, progress float32) {
 	if err := j.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
-		log.Dev.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
+		log.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
 	}
 }
 
@@ -139,7 +150,7 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
 		now := timeutil.Now()
-		progress.StatusMessage = fmt.Sprintf("Job started at %s", now)
+		progress.RunningStatus = fmt.Sprintf("Job started at %s", now)
 		details.LastStartTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_RUNNING
 		progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -148,7 +159,7 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
-		log.Dev.Errorf(ctx, "%s", err.Error())
+		log.Errorf(ctx, "%s", err.Error())
 	}
 }
 
@@ -159,7 +170,7 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
 		now := timeutil.Now()
-		progress.StatusMessage = fmt.Sprintf("Job completed at %s", now)
+		progress.RunningStatus = fmt.Sprintf("Job completed at %s", now)
 		details.LastCompletedTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_NOT_RUNNING
 		progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -168,7 +179,7 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
-		log.Dev.Errorf(ctx, "%s", err.Error())
+		log.Errorf(ctx, "%s", err.Error())
 	}
 }
 
@@ -180,7 +191,7 @@ func (j *tableMetadataUpdateJobResumer) OnFailOrCancel(
 		err := errors.NewAssertionErrorWithWrappedErrf(
 			jobErr, "update table metadata cache job is not cancelable",
 		)
-		log.Dev.Errorf(ctx, "%v", err)
+		log.Errorf(ctx, "%v", err)
 	}
 	return nil
 }

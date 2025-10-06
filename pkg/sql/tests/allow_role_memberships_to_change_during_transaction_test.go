@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -19,8 +20,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAllowRoleMembershipsToChangeDuringTransaction ensures user operations
-// are not blocked by transactions with the corresponding session variable set.
+// TestAllowRoleMembershipsToChangeDuringTransaction ensures that when the
+// corresponding session variable is set for all sessions using cached
+// role memberships, performing new grants do not need to wait for open
+// transactions to complete.
 func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -37,7 +40,7 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 		}
 	}
 
-	// Create four users: foo, bar, biz, and baz.
+	// Create three users: foo, bar, and baz.
 	// Use one of these users to hold open a transaction which uses a lease
 	// on the role_memberships table. Ensure that initially granting does
 	// wait on that transaction. Then set the session variable and ensure
@@ -45,7 +48,6 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, "CREATE USER foo PASSWORD 'foo'")
 	tdb.Exec(t, "CREATE USER bar")
-	tdb.Exec(t, "CREATE USER biz")
 	tdb.Exec(t, "CREATE USER baz")
 	tdb.Exec(t, "GRANT admin TO foo")
 	tdb.Exec(t, "CREATE DATABASE db2")
@@ -54,27 +56,20 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 	fooDB, cleanupFoo := openUser("foo", "db2")
 	defer cleanupFoo()
 
-	// Ensure that the outer transaction blocks the user admin operations until
-	// it is committed and its lease on the initial versions of the tables are
-	// released.
+	// In this first test, we want to make sure that the query cannot proceed
+	// until the outer transaction commits. We launch the grant while the
+	// transaction is open, wait a tad, make sure it hasn't made progress,
+	// then we commit the relevant transaction and ensure that it does finish.
 	t.Run("normal path waits", func(t *testing.T) {
-		outerTx, err := fooDB.BeginTx(ctx, nil)
+		fooTx, err := fooDB.BeginTx(ctx, nil)
 		require.NoError(t, err)
-		defer func() { _ = outerTx.Rollback() }()
-
 		var count int
 		require.NoError(t,
-			outerTx.QueryRow("SELECT count(*) FROM t").Scan(&count))
+			fooTx.QueryRow("SELECT count(*) FROM t").Scan(&count))
 		require.Equal(t, 0, count)
-
-		// the first user operation shouldn't block
-		_, err = sqlDB.Exec("GRANT biz TO bar;")
-		require.NoError(t, err)
-
-		// the outer tx still has a lease on the initial table version so this should block
 		errCh := make(chan error, 1)
 		go func() {
-			_, err = sqlDB.Exec("GRANT baz TO bar;")
+			_, err := sqlDB.Exec("GRANT bar TO baz;")
 			errCh <- err
 		}()
 		select {
@@ -84,38 +79,74 @@ func TestAllowRoleMembershipsToChangeDuringTransaction(t *testing.T) {
 		case err := <-errCh:
 			t.Fatalf("expected transaction to block, got err: %v", err)
 		}
-		require.NoError(t, outerTx.Commit())
+		require.NoError(t, fooTx.Commit())
 		require.NoError(t, <-errCh)
 	})
 
-	// When the session variable is set, the outer transaction should not block
-	// the user admin operations as it releases the leases after every
-	// statement.
-	t.Run("session variable prevents blocking", func(t *testing.T) {
+	// In this test we ensure that we can perform role grant and revoke
+	// operations while the transaction which uses the relevant roles
+	// remains open. We ensure that the transaction still succeeds and
+	// that the operations occur in a timely manner.
+	t.Run("session variable prevents waiting during GRANT and REVOKE", func(t *testing.T) {
 		fooConn, err := fooDB.Conn(ctx)
 		require.NoError(t, err)
 		defer func() { _ = fooConn.Close() }()
-
-		outerTx, err := fooConn.BeginTx(ctx, nil)
+		_, err = fooConn.ExecContext(ctx, "SET allow_role_memberships_to_change_during_transaction = true;")
 		require.NoError(t, err)
-		defer func() { _ = outerTx.Rollback() }()
-
-		_, err = outerTx.ExecContext(ctx, "SET allow_role_memberships_to_change_during_transaction = true;")
+		fooTx, err := fooConn.BeginTx(ctx, nil)
 		require.NoError(t, err)
-
 		var count int
 		require.NoError(t,
-			outerTx.QueryRow("SELECT count(*) FROM t").Scan(&count))
+			fooTx.QueryRow("SELECT count(*) FROM t").Scan(&count))
 		require.Equal(t, 0, count)
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		defer func() { _ = conn.Close() }()
+		// Set a timeout on the SQL operations to ensure that they both
+		// happen in a timely manner.
+		grantRevokeTimeout, cancel := context.WithTimeout(
+			ctx, testutils.DefaultSucceedsSoonDuration,
+		)
+		defer cancel()
 
-		// the first user operation shouldn't block
-		_, err = sqlDB.Exec("GRANT biz TO bar;")
+		_, err = conn.ExecContext(grantRevokeTimeout, "GRANT foo TO baz;")
+		require.NoError(t, err)
+		_, err = conn.ExecContext(grantRevokeTimeout, "REVOKE bar FROM baz;")
 		require.NoError(t, err)
 
-		// nor should the second
-		_, err = sqlDB.Exec("GRANT baz TO bar;")
-		require.NoError(t, err)
-
-		require.NoError(t, outerTx.Commit())
+		// Ensure the transaction we held open commits without issue.
+		require.NoError(t, fooTx.Commit())
 	})
+
+	t.Run("session variable prevents waiting during CREATE and DROP role", func(t *testing.T) {
+		fooConn, err := fooDB.Conn(ctx)
+		require.NoError(t, err)
+		defer func() { _ = fooConn.Close() }()
+		_, err = fooConn.ExecContext(ctx, "SET allow_role_memberships_to_change_during_transaction = true;")
+		require.NoError(t, err)
+		fooTx, err := fooConn.BeginTx(ctx, nil)
+		require.NoError(t, err)
+		// We need to use show roles because that access the system.users table.
+		_, err = fooTx.Exec("SHOW ROLES")
+		require.NoError(t, err)
+
+		conn, err := sqlDB.Conn(ctx)
+		require.NoError(t, err)
+		defer func() { _ = conn.Close() }()
+		// Set a timeout on the SQL operations to ensure that they both
+		// happen in a timely manner.
+		grantRevokeTimeout, cancel := context.WithTimeout(
+			ctx, testutils.DefaultSucceedsSoonDuration,
+		)
+		defer cancel()
+
+		_, err = conn.ExecContext(grantRevokeTimeout, "CREATE ROLE new_role;")
+		require.NoError(t, err)
+		_, err = conn.ExecContext(grantRevokeTimeout, "DROP ROLE new_role;")
+		require.NoError(t, err)
+
+		// Ensure the transaction we held open commits without issue.
+		require.NoError(t, fooTx.Commit())
+	})
+
 }

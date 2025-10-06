@@ -360,8 +360,6 @@ func assumeRole(roleArn, roleSessionName, region string) (*types.Credentials, er
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to assume role %s", roleArn)
-	} else if tmpCredentials == nil {
-		return nil, errors.Errorf("failed to assume role %s, received nil credentials", roleArn)
 	}
 
 	return tmpCredentials.Credentials, nil
@@ -382,8 +380,6 @@ func stsCredentials(roleArn, roleSessionName, region string) (func(), error) {
 	tmpCredentials, err := assumeRole(roleArn, roleSessionName, region)
 	if err != nil {
 		return unset, err
-	} else if tmpCredentials == nil {
-		return unset, errors.Errorf("failed to assume role %s, received nil temperory credentials", roleArn)
 	}
 
 	_ = os.Setenv(amazon.AWSAccessKeyParam, *tmpCredentials.AccessKeyId)

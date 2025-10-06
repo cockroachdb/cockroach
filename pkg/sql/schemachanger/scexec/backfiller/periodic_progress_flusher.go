@@ -72,8 +72,9 @@ func (p *periodicProgressFlusher) StartPeriodicUpdates(
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-timer.Ch():
+				timer.MarkRead()
 				if err := write(ctx); err != nil {
-					log.Dev.Warningf(ctx, "could not flush progress: %v", err)
+					log.Warningf(ctx, "could not flush progress: %v", err)
 				}
 			}
 		}
@@ -94,7 +95,7 @@ func (p *periodicProgressFlusher) StartPeriodicUpdates(
 			toClose = nil
 		}
 		if err := g.Wait(); err != nil {
-			log.Dev.Warningf(ctx, "waiting for progress flushing goroutines: %v", err)
+			log.Warningf(ctx, "waiting for progress flushing goroutines: %v", err)
 		}
 	}
 }

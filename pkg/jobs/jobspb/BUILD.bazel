@@ -14,16 +14,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
-        "//pkg/util/hlc",
-        "//pkg/util/iterutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//jsonpb",
     ],
 )
@@ -43,14 +38,12 @@ proto_library(
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/catalog/descpb:descpb_proto",
-        "//pkg/sql/catalog/externalcatalog/externalpb:externalpb_proto",
         "//pkg/sql/sessiondatapb:sessiondatapb_proto",
         "//pkg/util/hlc:hlc_proto",
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
         "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:any_proto",
-        "@com_google_protobuf//:empty_proto",
         "@com_google_protobuf//:timestamp_proto",
     ],
 )
@@ -69,7 +62,6 @@ go_proto_library(
         "//pkg/security/username",  # keep
         "//pkg/sql/catalog/catpb",  # keep
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/catalog/externalcatalog/externalpb",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/sessiondatapb",
         "//pkg/util/hlc",
@@ -82,15 +74,9 @@ go_proto_library(
 
 go_test(
     name = "jobspb_test",
-    srcs = [
-        "jobs_test.go",
-        "wrap_test.go",
-    ],
+    srcs = ["wrap_test.go"],
     deps = [
         ":jobspb",
-        "//pkg/roachpb",
-        "//pkg/util/hlc",
         "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
     ],
 )

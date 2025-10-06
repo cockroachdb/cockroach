@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -58,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -69,9 +67,9 @@ import (
 )
 
 type createTableNode struct {
-	n      *tree.CreateTable
-	dbDesc catalog.DatabaseDescriptor
-	input  planNode
+	n          *tree.CreateTable
+	dbDesc     catalog.DatabaseDescriptor
+	sourcePlan planNode
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -368,14 +366,12 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	var desc *tabledesc.Mutable
 	var affected map[descpb.ID]*tabledesc.Mutable
-	// creationTime is usually initialized to a zero value and populated at read
-	// time. See the comment in desc.MaybeIncrementVersion. However, for CREATE
-	// TABLE AS ... AS OF SYSTEM TIME, we need to set the creation time to the
-	// specified timestamp.
+	// creationTime is initialized to a zero value and populated at read time.
+	// See the comment in desc.MaybeIncrementVersion.
+	//
+	// TODO(ajwerner): remove the timestamp from newTableDesc and its friends,
+	// it's	currently relied on in import and restore code and tests.
 	var creationTime hlc.Timestamp
-	if asOf := params.p.extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill {
-		creationTime = asOf.Timestamp
-	}
 	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
 		n.dbDesc.GetDefaultPrivilegeDescriptor(),
 		schema.GetDefaultPrivilegeDescriptor(),
@@ -387,14 +383,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		return err
 	}
 	if n.n.As() {
-		params.p.BufferClientNotice(
-			params.ctx,
-			pgnotice.Newf("CREATE TABLE ... AS does not copy over "+
-				"indexes, default expressions, or constraints; the new table "+
-				"has a hidden rowid primary key column"),
-		)
-
-		asCols := planColumns(n.input)
+		asCols := planColumns(n.sourcePlan)
 		if !n.n.AsHasUserSpecifiedPrimaryKey() {
 			// rowID column is already present in the input as the last column
 			// if the user did not specify a PRIMARY KEY. So ignore it for the
@@ -555,31 +544,36 @@ func (n *createTableNode) startExec(params runParams) error {
 
 			// Instantiate a row inserter and table writer. It has a 1-1
 			// mapping to the definitions in the descriptor.
+			internal := params.p.SessionData().Internal
 			ri, err := row.MakeInserter(
+				params.ctx,
+				params.p.txn,
 				params.ExecCfg().Codec,
 				desc.ImmutableCopy().(catalog.TableDescriptor),
 				nil, /* uniqueWithTombstoneIndexes */
 				desc.PublicColumns(),
-				params.p.SessionData(),
+				&tree.DatumAlloc{},
 				&params.ExecCfg().Settings.SV,
-				params.ExecCfg().GetRowMetrics(params.p.SessionData().Internal),
+				internal,
+				params.ExecCfg().GetRowMetrics(internal),
 			)
 			if err != nil {
 				return err
 			}
 			ti := tableInserterPool.Get().(*tableInserter)
 			*ti = tableInserter{ri: ri}
+			tw := tableWriter(ti)
 			defer func() {
-				ti.close(params.ctx)
+				tw.close(params.ctx)
 				*ti = tableInserter{}
 				tableInserterPool.Put(ti)
 			}()
-			if err := ti.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
+			if err := tw.init(params.ctx, params.p.txn, params.p.EvalContext()); err != nil {
 				return err
 			}
 
 			// Prepare the buffer for row values. At this point, one more column has
-			// been added by ensurePrimaryKey() to the list of columns in input, if
+			// been added by ensurePrimaryKey() to the list of columns in sourcePlan, if
 			// a PRIMARY KEY is not specified by the user.
 			rowBuffer := make(tree.Datums, len(desc.Columns))
 
@@ -587,11 +581,11 @@ func (n *createTableNode) startExec(params runParams) error {
 				if err := params.p.cancelChecker.Check(); err != nil {
 					return err
 				}
-				if next, err := n.input.Next(params); !next {
+				if next, err := n.sourcePlan.Next(params); !next {
 					if err != nil {
 						return err
 					}
-					if err := ti.finalize(params.ctx); err != nil {
+					if err := tw.finalize(params.ctx); err != nil {
 						return err
 					}
 					break
@@ -601,21 +595,19 @@ func (n *createTableNode) startExec(params runParams) error {
 				// raft commands.
 				if ti.currentBatchSize >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
-					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {
+					if err := tw.flushAndStartNewBatch(params.ctx); err != nil {
 						return err
 					}
 				}
 
 				// Populate the buffer.
-				copy(rowBuffer, n.input.Values())
+				copy(rowBuffer, n.sourcePlan.Values())
 
-				// CREATE TABLE AS does not copy indexes from the input table. Empty
-				// partial and vector index helpers are used here because there are no
-				// indexes, partial, vector, or otherwise, to update.
+				// CREATE TABLE AS does not copy indexes from the input table.
+				// An empty row.PartialIndexUpdateHelper is used here because
+				// there are no indexes, partial or otherwise, to update.
 				var pm row.PartialIndexUpdateHelper
-				var vh row.VectorIndexUpdateHelper
-				var oth row.OriginTimestampCPutHelper
-				if err := ti.row(params.ctx, rowBuffer, pm, vh, oth, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
+				if err := tw.row(params.ctx, rowBuffer, pm, params.extendedEvalCtx.Tracing.KVTracingEnabled()); err != nil {
 					return err
 				}
 			}
@@ -633,32 +625,10 @@ func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*createTableNode) Values() tree.Datums          { return tree.Datums{} }
 
 func (n *createTableNode) Close(ctx context.Context) {
-	if n.input != nil {
-		n.input.Close(ctx)
-		n.input = nil
+	if n.sourcePlan != nil {
+		n.sourcePlan.Close(ctx)
+		n.sourcePlan = nil
 	}
-}
-
-func (n *createTableNode) InputCount() int {
-	if n.n.As() {
-		return 1
-	}
-	return 0
-}
-
-func (n *createTableNode) Input(i int) (planNode, error) {
-	if i == 0 && n.n.As() {
-		return n.input, nil
-	}
-	return nil, errors.AssertionFailedf("input index %d is out of range", i)
-}
-
-func (n *createTableNode) SetInput(i int, p planNode) error {
-	if i == 0 && n.n.As() {
-		n.input = p
-		return nil
-	}
-	return errors.AssertionFailedf("input index %d is out of range", i)
 }
 
 func qualifyFKColErrorWithDB(
@@ -1421,7 +1391,8 @@ func NewTableDesc(
 	desc := tabledesc.InitTableDescriptor(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
-	setter := tablestorageparam.NewSetter(&desc, true /* isNewObject */)
+
+	setter := tablestorageparam.NewSetter(&desc)
 	if err := storageparam.Set(
 		ctx,
 		semaCtx,
@@ -1879,21 +1850,6 @@ func NewTableDesc(
 				}
 				col.ColumnDesc().ComputeExpr = &serializedExpr
 			}
-
-			// Validate storage parameters for
-			// CREATE TABLE ... (x INT PRIMARY KEY USING HASH WITH (...));
-			if d.PrimaryKey.IsPrimaryKey {
-				if err := storageparam.Set(
-					ctx,
-					semaCtx,
-					evalCtx,
-					d.PrimaryKey.StorageParams,
-					&indexstorageparam.Setter{
-						IndexDesc: &descpb.IndexDescriptor{},
-					}); err != nil {
-					return nil, err
-				}
-			}
 		}
 	}
 
@@ -1918,21 +1874,20 @@ func NewTableDesc(
 			// virtual columns. If the txn ends up retrying, then this change is not
 			// syntactically valid, since the virtual column is only added in the descriptor
 			// and not in the AST.
-			//nolint:deferloop
 			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
 				&n.Table,
 				d.Columns,
-				d.Type,
+				d.Inverted,
 				true, /* isNewTable */
 				semaCtx,
 				version,
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Type, version); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
@@ -1941,7 +1896,9 @@ func NewTableDesc(
 				Version:          indexEncodingVersion,
 				NotVisible:       d.Invisibility.Value != 0.0,
 				Invisibility:     d.Invisibility.Value,
-				Type:             d.Type,
+			}
+			if d.Inverted {
+				idx.Type = descpb.IndexDescriptor_INVERTED
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -1954,32 +1911,13 @@ func NewTableDesc(
 			if err := idx.FillColumns(columns); err != nil {
 				return nil, err
 			}
-			if d.Type == idxtype.INVERTED {
+			if d.Inverted {
 				column, err := catalog.MustFindColumnByName(&desc, idx.InvertedColumnName())
 				if err != nil {
 					return nil, err
 				}
 				if err := populateInvertedIndexDescriptor(
 					ctx, evalCtx.Settings, column, &idx, columns[len(columns)-1]); err != nil {
-					return nil, err
-				}
-			}
-			if d.Type == idxtype.VECTOR {
-				if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_2.Version()) {
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2")
-				}
-				// Disable vector indexes by default in 25.2.
-				// TODO(andyk): Remove this check after 25.2.
-				if err := vecindex.CheckEnabled(&st.SV); err != nil {
-					return nil, err
-				}
-				column, err := catalog.MustFindColumnByName(&desc, idx.VectorColumnName())
-				if err != nil {
-					return nil, err
-				}
-				opClass := columns[len(columns)-1].OpClass
-				idx.VecConfig, err = vecindex.MakeVecConfig(ctx, evalCtx, column.GetType(), opClass)
-				if err != nil {
 					return nil, err
 				}
 			}
@@ -2056,21 +1994,20 @@ func NewTableDesc(
 			// virtual columns. If the txn ends up retrying, then this change is not
 			// syntactically valid, since the virtual descriptor is only added in the descriptor
 			// and not in the AST.
-			//nolint:deferloop
 			defer copyIndexElemListAndRestore(&d.Columns)()
 			if err := replaceExpressionElemsWithVirtualCols(
 				ctx,
 				&desc,
 				&n.Table,
 				d.Columns,
-				d.Type,
-				true, /* isNewTable */
+				false, /* isInverted */
+				true,  /* isNewTable */
 				semaCtx,
 				version,
 			); err != nil {
 				return nil, err
 			}
-			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Type, version); err != nil {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
 			idx := descpb.IndexDescriptor{
@@ -2160,18 +2097,6 @@ func NewTableDesc(
 				if err := desc.AddSecondaryIndex(idx); err != nil {
 					return nil, err
 				}
-			}
-
-			// Validate storage parameters for
-			// CREATE TABLE ... (x INT, PRIMARY KEY (x) USING HASH WITH (...));
-			if err := storageparam.Set(
-				ctx,
-				semaCtx,
-				evalCtx,
-				d.StorageParams,
-				&indexstorageparam.Setter{IndexDesc: &idx},
-			); err != nil {
-				return nil, err
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
@@ -2404,7 +2329,7 @@ func NewTableDesc(
 		if idx.IsSharded() {
 			telemetry.Inc(sqltelemetry.HashShardedIndexCounter)
 		}
-		if idx.GetType() == idxtype.INVERTED {
+		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
 			telemetry.Inc(sqltelemetry.InvertedIndexCounter)
 			geoConfig := idx.GetGeoConfig()
 			if !geoConfig.IsEmpty() {
@@ -2427,43 +2352,12 @@ func NewTableDesc(
 				telemetry.Inc(sqltelemetry.PartitionedInvertedIndexCounter)
 			}
 		}
-		if idx.GetType() == idxtype.VECTOR {
-			telemetry.Inc(sqltelemetry.VectorIndexCounter)
-			if idx.IsPartial() {
-				telemetry.Inc(sqltelemetry.PartialVectorIndexCounter)
-			}
-			if idx.NumKeyColumns() > 1 {
-				telemetry.Inc(sqltelemetry.MultiColumnVectorIndexCounter)
-			}
-			if idx.PartitioningColumnCount() != 0 {
-				telemetry.Inc(sqltelemetry.PartitionedVectorIndexCounter)
-			}
-		}
 		if idx.IsPartial() {
 			telemetry.Inc(sqltelemetry.PartialIndexCounter)
 		}
 		return nil
 	}); err != nil {
 		return nil, err
-	}
-
-	// Check for a constraint used to look up values for the region column of a
-	// REGIONAL BY ROW table.
-	if n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow {
-		constraintID, ok, err := maybeGetRBRTableUsingConstraint(
-			ctx, semaCtx, evalCtx, &desc, n.StorageParams, n.Locality.RegionalByRowColumn,
-		)
-		if err != nil {
-			return nil, err
-		} else if ok {
-			desc.RBRUsingConstraint = constraintID
-		}
-	} else if n.StorageParams.GetVal(catpb.RBRUsingConstraintTableSettingName) != nil {
-		return nil, pgerror.Newf(
-			pgcode.InvalidParameterValue,
-			`storage parameter "%s" can only be set on REGIONAL BY ROW tables`,
-			catpb.RBRUsingConstraintTableSettingName,
-		)
 	}
 
 	if regionConfig != nil || n.Locality != nil {
@@ -2598,17 +2492,6 @@ func newTableDesc(
 		}
 		ttl.ScheduleID = j.ScheduleID()
 	}
-
-	// For tables set schema_locked by default if it hasn't been set, and we
-	// aren't running under an internal executor.
-	if !ret.IsView() && !ret.IsSequence() && !ret.IsTemporary() &&
-		n.StorageParams.GetVal("schema_locked") == nil &&
-		!params.p.SessionData().Internal &&
-		params.p.SessionData().CreateTableWithSchemaLocked &&
-		params.p.IsActive(params.ctx, clusterversion.V25_2) {
-		ret.SchemaLocked = true
-	}
-
 	return ret, nil
 }
 
@@ -2626,14 +2509,14 @@ func newRowLevelTTLScheduledJob(
 	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
 	sj.SetOwner(owner)
 	sj.SetScheduleDetails(jobspb.ScheduleDetails{
-		Wait: jobspb.ScheduleDetails_SKIP,
+		Wait: jobspb.ScheduleDetails_WAIT,
 		// If a job fails, try again at the allocated cron time.
 		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
 		ClusterID:              clusterID,
 		CreationClusterVersion: clusterVersion,
 	})
 
-	if err := sj.SetScheduleAndNextRun(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
+	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
@@ -2847,7 +2730,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 				}
 				indexDef := tree.IndexTableDef{
 					Name:         tree.Name(idx.GetName()),
-					Type:         idx.GetType(),
+					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
 					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},
@@ -2868,9 +2751,6 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 						Column:    tree.Name(name),
 						Direction: tree.Ascending,
 					}
-					if !indexDef.Type.HasScannablePrefix() {
-						elem.Direction = tree.DefaultDirection
-					}
 					col, err := catalog.MustFindColumnByID(td, idx.GetKeyColumnID(j))
 					if err != nil {
 						return nil, err
@@ -2887,9 +2767,9 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					}
 					indexDef.Columns = append(indexDef.Columns, elem)
 				}
-				// The last column of an inverted or vector index cannot have an
-				// explicit direction, because it does not have a linear ordering.
-				if !indexDef.Type.HasLinearOrdering() {
+				// The last column of an inverted index cannot have an explicit
+				// direction.
+				if indexDef.Inverted {
 					indexDef.Columns[len(indexDef.Columns)-1].Direction = tree.DefaultDirection
 				}
 				for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {

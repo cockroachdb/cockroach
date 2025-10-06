@@ -229,20 +229,6 @@ var LeaseIOOverloadThresholdEnforcement = settings.RegisterEnumSetting(
 	},
 )
 
-// DiskUnhealthyIOOverloadScore is the IO overload score assigned to a store
-// when its disk is considered unhealthy. The value set here will be used in
-// the context of {LeaseIOOverloadThreshold, LeaseIOOverloadShedThreshold,
-// LeaseIOOverloadThresholdEnforcement} to shed leases, and in the context of
-// {ReplicaIOOverloadThreshold, ReplicaIOOverloadThresholdEnforcement}, when
-// transferring replicas.
-//
-// TODO(sumeer): change to DefaultLeaseIOOverloadShedThreshold after discussion.
-var DiskUnhealthyIOOverloadScore = settings.RegisterFloatSetting(
-	settings.SystemOnly,
-	"kv.allocator.disk_unhealthy_io_overload_score",
-	"the IO overload score to assign to a store when its disk is unhealthy",
-	0)
-
 // maxDiskUtilizationThreshold controls the point at which the store cedes
 // having room for new replicas. If the fraction used of a store descriptor
 // capacity is greater than this value, it will never be used as a rebalance or
@@ -306,15 +292,6 @@ type ScorerOptions interface {
 	// the store represented by `sc` classifies as underfull, aroundTheMean, or
 	// overfull relative to all the stores in `sl`.
 	balanceScore(sl storepool.StoreList, sc roachpb.StoreCapacity) balanceStatus
-	// adjustRangeCountForScoring returns the adjusted range count for scoring.
-	// Scorer options (IOOverloadOnlyScorerOptions) that do not score based on
-	// range count convergence returns 0. Otherwise, the returned range count here
-	// should usually be the same as the range count passed in
-	// (RangeCountScorerOptions, LoadScorerOptions, ScatterScorerOptions). This
-	// will later be used to calculate the relative difference when comparing the
-	// range count of the candidate stores. Lower range count means a better
-	// candidate to move the replica to.
-	adjustRangeCountForScoring(rangeCount int) int
 	// rebalanceFromConvergenceScore assigns a convergence score to the store
 	// referred to by `eqClass.existing` based on whether moving a replica away
 	// from this store would converge its stats towards the mean (relative to the
@@ -365,6 +342,10 @@ type ScatterScorerOptions struct {
 
 var _ ScorerOptions = &ScatterScorerOptions{}
 
+func (o *ScatterScorerOptions) getIOOverloadOptions() IOOverloadOptions {
+	return o.RangeCountScorerOptions.IOOverloadOptions
+}
+
 func (o *ScatterScorerOptions) maybeJitterStoreStats(
 	sl storepool.StoreList, allocRand allocatorRand,
 ) (perturbedSL storepool.StoreList) {
@@ -379,115 +360,36 @@ func (o *ScatterScorerOptions) maybeJitterStoreStats(
 	return storepool.MakeStoreList(perturbedStoreDescs)
 }
 
-// BaseScorerOptions is the base scorer options that is embedded in
-// every scorer option.
-type BaseScorerOptions struct {
-	IOOverload    IOOverloadOptions
-	DiskCapacity  DiskCapacityOptions
-	Deterministic bool
-}
-
-func (bo BaseScorerOptions) getIOOverloadOptions() IOOverloadOptions {
-	return bo.IOOverload
-}
-
-func (bo BaseScorerOptions) getDiskOptions() DiskCapacityOptions {
-	return bo.DiskCapacity
-}
-
-func (bo BaseScorerOptions) deterministicForTesting() bool {
-	return bo.Deterministic
-}
-
-// maybeJitterStoreStats returns the provided store list since that is the
-// default behavior. ScatterScorerOptions is the only scorer option that jitters
-// store stats to rebalance replicas across stores randomly.
-func (bo BaseScorerOptions) maybeJitterStoreStats(
-	sl storepool.StoreList, _ allocatorRand,
-) storepool.StoreList {
-	return sl
-}
-
-// adjustRangeCountForScoring returns the provided range count since that is the
-// default behavior. BaseScorerOptionsNoConvergence is the only scorer option
-// that does not want to consider range count in its scoring, so it returns 0.
-func (bo BaseScorerOptions) adjustRangeCountForScoring(rangeCount int) int {
-	return rangeCount
-}
-
-// BaseScorerOptionsNoConvergence is the base scorer options that does not
-// involve any heuristics or convergence scoring.
-//
-// It assigns the same score to all stores, effectively treating candidates
-// within the same equivalence class the same and disabling range-count based
-// convergence rebalancing.
-//
-// Note that this new scorer option is applied used in
-// ReplicaPlanner.considerRebalance and ReplicaPlanner.ShouldPlanChange. As a
-// result, range-count based rebalancing is disabled during rebalancing, but
-// range count is still considered when allocator adds new replicas (such as
-// AllocateVoter), choosing a rebalance target in the old store rebalancer
-// (StoreRebalancer.applyRangeRebalance), and when removing replicas
-// (Allocator.RemoveVoter).
-type BaseScorerOptionsNoConvergence struct {
-	BaseScorerOptions
-}
-
-var _ ScorerOptions = BaseScorerOptionsNoConvergence{}
-
-// adjustRangeCountForScoring returns 0 since BaseScorerOptionsNoConvergence
-// does not want to consider range count in its scoring.
-func (bnc BaseScorerOptionsNoConvergence) adjustRangeCountForScoring(_ int) int {
-	return 0
-}
-
-// shouldRebalanceBasedOnThresholds returns false since
-// BaseScorerOptionsNoConvergence does not involve any heuristics that evaluate
-// stores within an equivalence class. If no rebalancing is needed based on
-// other attributes (e.g. valid, disk fullness, constraints, diversity score),
-// no rebalancing is done.
-func (bnc BaseScorerOptionsNoConvergence) shouldRebalanceBasedOnThresholds(
-	_ context.Context, _ equivalenceClass, _ AllocatorMetrics,
-) bool {
-	return false
-}
-
-// balanceScore returns aroundTheMean for every store so that
-// BaseScorerOptionsNoConvergence does not take range count into account.
-func (bnc BaseScorerOptionsNoConvergence) balanceScore(
-	_ storepool.StoreList, _ roachpb.StoreCapacity,
-) balanceStatus {
-	return aroundTheMean
-}
-
-// Note that the following three methods all return 0 for every store so that
-// BaseScorerOptionsNoConvergence does not take convergence score into account.
-// Important to keep them the same value since betterRebalanceTarget may compare
-// convergence score the difference between rebalanceFrom and rebalanceTo stores.
-func (bnc BaseScorerOptionsNoConvergence) rebalanceFromConvergesScore(_ equivalenceClass) int {
-	return 0
-}
-func (bnc BaseScorerOptionsNoConvergence) rebalanceToConvergesScore(
-	_ equivalenceClass, _ roachpb.StoreDescriptor,
-) int {
-	return 0
-}
-func (bnc BaseScorerOptionsNoConvergence) removalMaximallyConvergesScore(
-	_ storepool.StoreList, _ roachpb.StoreDescriptor,
-) int {
-	return 0
-}
-
 // RangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on range counts.
 // This means that the resulting rebalancing decisions will further the goal of
 // converging range counts across stores in the cluster.
 type RangeCountScorerOptions struct {
-	BaseScorerOptions
+	IOOverloadOptions
+	DiskCapacityOptions
+	deterministic           bool
 	rangeRebalanceThreshold float64
 }
 
 var _ ScorerOptions = &RangeCountScorerOptions{}
+
+func (o *RangeCountScorerOptions) getIOOverloadOptions() IOOverloadOptions {
+	return o.IOOverloadOptions
+}
+
+func (o *RangeCountScorerOptions) getDiskOptions() DiskCapacityOptions {
+	return o.DiskCapacityOptions
+}
+
+func (o *RangeCountScorerOptions) maybeJitterStoreStats(
+	sl storepool.StoreList, _ allocatorRand,
+) (perturbedSL storepool.StoreList) {
+	return sl
+}
+
+func (o *RangeCountScorerOptions) deterministicForTesting() bool {
+	return o.deterministic
+}
 
 func (o RangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
 	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
@@ -589,8 +491,10 @@ func (o *RangeCountScorerOptions) removalMaximallyConvergesScore(
 // queries-per-second. This means that the resulting rebalancing decisions will
 // further the goal of converging QPS across stores in the cluster.
 type LoadScorerOptions struct {
-	BaseScorerOptions
-	LoadDims []load.Dimension
+	IOOverloadOptions IOOverloadOptions
+	DiskOptions       DiskCapacityOptions
+	Deterministic     bool
+	LoadDims          []load.Dimension
 
 	// LoadThreshold and MinLoadThreshold track the threshold beyond which a
 	// store should be considered under/overfull and the minimum absolute
@@ -624,7 +528,23 @@ type LoadScorerOptions struct {
 	RebalanceImpact load.Load
 }
 
-var _ ScorerOptions = &LoadScorerOptions{}
+func (o *LoadScorerOptions) getIOOverloadOptions() IOOverloadOptions {
+	return o.IOOverloadOptions
+}
+
+func (o *LoadScorerOptions) getDiskOptions() DiskCapacityOptions {
+	return o.DiskOptions
+}
+
+func (o *LoadScorerOptions) maybeJitterStoreStats(
+	sl storepool.StoreList, _ allocatorRand,
+) storepool.StoreList {
+	return sl
+}
+
+func (o *LoadScorerOptions) deterministicForTesting() bool {
+	return o.Deterministic
+}
 
 // shouldRebalanceBasedOnThresholds tries to determine if, within the given
 // equivalenceClass `eqClass`, rebalancing a replica from one of the existing
@@ -1239,7 +1159,7 @@ func rankedCandidateListForAllocation(
 			continue
 		}
 
-		diversityScore := diversityAllocateScore(s.Locality(), existingStoreLocalities)
+		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(validStoreList, s.Capacity)
 		var hasNonVoter bool
 		if targetType == VoterTarget {
@@ -1248,7 +1168,6 @@ func rankedCandidateListForAllocation(
 			}
 			hasNonVoter = StoreHasReplica(s.StoreID, nonVoterReplTargets)
 		}
-		rangeCountScore := options.adjustRangeCountForScoring(int(s.Capacity.RangeCount))
 		candidates = append(candidates, candidate{
 			store:          s,
 			necessary:      necessary,
@@ -1256,7 +1175,7 @@ func rankedCandidateListForAllocation(
 			diversityScore: diversityScore,
 			balanceScore:   balanceScore,
 			hasNonVoter:    hasNonVoter,
-			rangeCount:     rangeCountScore,
+			rangeCount:     int(s.Capacity.RangeCount),
 		})
 	}
 	if options.deterministicForTesting() {
@@ -1364,7 +1283,7 @@ func candidateListForRemoval(
 		candidates[i].balanceScore = options.balanceScore(
 			removalCandidateStoreList, candidates[i].store.Capacity,
 		)
-		candidates[i].rangeCount = options.adjustRangeCountForScoring(int(candidates[i].store.Capacity.RangeCount))
+		candidates[i].rangeCount = int(candidates[i].store.Capacity.RangeCount)
 	}
 	// Re-sort to account for the ordering changes resulting from the addition of
 	// convergesScore, balanceScore, etc.
@@ -1737,10 +1656,9 @@ func rankedCandidateListForRebalancing(
 			// this stage, in additon to hard checks and validation.
 			// TODO(kvoli,ayushshah15): Refactor this to make it harder to
 			// inadvertently break the invariant above,
-			locality := store.Locality()
 			constraintsOK, necessary, voterNecessary := rebalanceConstraintsChecker(store, existing.store)
 			diversityScore := diversityRebalanceFromScore(
-				locality, existing.store.StoreID, existingStoreLocalities)
+				store, existing.store.StoreID, existingStoreLocalities)
 			cand := candidate{
 				store:          store,
 				valid:          constraintsOK,
@@ -1758,7 +1676,7 @@ func rankedCandidateListForRebalancing(
 						"s%d: should-rebalance(necessary/diversity=s%d): oldNecessary:%t, newNecessary:%t, "+
 							"oldDiversity:%f, newDiversity:%f, locality:%q",
 						existing.store.StoreID, store.StoreID, existing.necessary, cand.necessary,
-						existing.diversityScore, cand.diversityScore, locality)
+						existing.diversityScore, cand.diversityScore, store.Locality())
 				}
 			}
 		}
@@ -1829,7 +1747,7 @@ func rankedCandidateListForRebalancing(
 			balanceScore := options.balanceScore(comparable.candidateSL, existing.store.Capacity)
 			existing.convergesScore = convergesScore
 			existing.balanceScore = balanceScore
-			existing.rangeCount = options.adjustRangeCountForScoring(int(existing.store.Capacity.RangeCount))
+			existing.rangeCount = int(existing.store.Capacity.RangeCount)
 		}
 
 		var candidates candidateList
@@ -1855,7 +1773,7 @@ func rankedCandidateListForRebalancing(
 			)
 			cand.balanceScore = options.balanceScore(comparable.candidateSL, s.Capacity)
 			cand.convergesScore = options.rebalanceToConvergesScore(comparable, s)
-			cand.rangeCount = options.adjustRangeCountForScoring(int(s.Capacity.RangeCount))
+			cand.rangeCount = int(s.Capacity.RangeCount)
 			candidates = append(candidates, cand)
 		}
 
@@ -2318,7 +2236,7 @@ func RangeDiversityScore(existingStoreLocalities map[roachpb.StoreID]roachpb.Loc
 // desirable it would be to add a replica to store. A higher score means the
 // store is a better fit.
 func diversityAllocateScore(
-	storeLocality roachpb.Locality, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
+	store roachpb.StoreDescriptor, existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
 	var sumScore float64
 	var numSamples int
@@ -2327,7 +2245,7 @@ func diversityAllocateScore(
 	// consider adding the pairwise average diversity of the existing replicas
 	// is the same.
 	for _, locality := range existingStoreLocalities {
-		newScore := storeLocality.DiversityScore(locality)
+		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
 	}
@@ -2378,9 +2296,8 @@ func diversityRebalanceScore(
 	var maxScore float64
 	// For every existing node, calculate what the diversity score would be if we
 	// remove that node's replica to replace it with one on the provided store.
-	storeLocality := store.Locality()
 	for removedStoreID := range existingStoreLocalities {
-		score := diversityRebalanceFromScore(storeLocality, removedStoreID, existingStoreLocalities)
+		score := diversityRebalanceFromScore(store, removedStoreID, existingStoreLocalities)
 		if score > maxScore {
 			maxScore = score
 		}
@@ -2395,7 +2312,7 @@ func diversityRebalanceScore(
 // A higher score indicates that the provided store is a better fit for the
 // range.
 func diversityRebalanceFromScore(
-	storeLocality roachpb.Locality,
+	store roachpb.StoreDescriptor,
 	fromStoreID roachpb.StoreID,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 ) float64 {
@@ -2407,7 +2324,7 @@ func diversityRebalanceFromScore(
 		if storeID == fromStoreID {
 			continue
 		}
-		newScore := storeLocality.DiversityScore(locality)
+		newScore := store.Locality().DiversityScore(locality)
 		sumScore += newScore
 		numSamples++
 		for otherStoreID, otherLocality := range existingStoreLocalities {
@@ -2480,55 +2397,42 @@ type IOOverloadOptions struct {
 	ReplicaIOOverloadThreshold   float64
 	LeaseIOOverloadThreshold     float64
 	LeaseIOOverloadShedThreshold float64
-
-	DiskUnhealthyScore float64
 }
 
 func ioOverloadCheck(
-	overloadScore, overloadAvg, diskUnhealthyScore, absThreshold, meanThreshold float64,
+	score, avg, absThreshold, meanThreshold float64,
 	enforcement IOOverloadEnforcementLevel,
 	disallowed ...IOOverloadEnforcementLevel,
 ) (ok bool, reason string) {
-	absCheck := overloadScore < absThreshold
-	meanCheck := overloadScore < overloadAvg*meanThreshold
-	// We do not bother with the mean for the disk unhealthy score, because disk
-	// unhealthiness is rare, and also because this code was bolted on later
-	// (and was simpler to ignore the mean).
-	//
-	// TODO(sumeer): revisit this if this turns out to be useful, and do a
-	// cleaner version for MMA.
-	diskCheck := diskUnhealthyScore < epsilon || diskUnhealthyScore < absThreshold
+	absCheck := score < absThreshold
+	meanCheck := score < avg*meanThreshold
 
 	// The score needs to be no less than both the average threshold and the
 	// absolute threshold in order to be considered IO overloaded.
-	if (absCheck || meanCheck) && diskCheck {
+	if absCheck || meanCheck {
 		return true, ""
 	}
 
 	for _, disallowedEnforcement := range disallowed {
 		if enforcement == disallowedEnforcement {
 			return false, fmt.Sprintf(
-				"io overload %.2f (disk %.2f) exceeds threshold %.2f, above average: %.2f, enforcement %d",
-				overloadScore, diskUnhealthyScore, absThreshold, overloadAvg, enforcement)
+				"io overload %.2f exceeds threshold %.2f, above average: %.2f, enforcement %d",
+				score, absThreshold, avg, enforcement)
 		}
 	}
 
 	return true, ""
 }
 
-func (o IOOverloadOptions) storeScore(
-	store roachpb.StoreDescriptor,
-) (overloadScore float64, diskUnhealthyScore float64) {
+func (o IOOverloadOptions) storeScore(store roachpb.StoreDescriptor) float64 {
+	var score float64
 	if o.UseIOThresholdMax {
-		overloadScore, _ = store.Capacity.IOThresholdMax.Score()
+		score, _ = store.Capacity.IOThresholdMax.Score()
 	} else {
-		overloadScore, _ = store.Capacity.IOThreshold.Score()
+		score, _ = store.Capacity.IOThreshold.Score()
 	}
-	diskUnhealthyScore = 0
-	if store.Capacity.IOThreshold.DiskUnhealthy {
-		diskUnhealthyScore = o.DiskUnhealthyScore
-	}
-	return overloadScore, diskUnhealthyScore
+
+	return score
 }
 
 func (o IOOverloadOptions) storeListAvgScore(storeList storepool.StoreList) float64 {
@@ -2544,10 +2448,10 @@ func (o IOOverloadOptions) storeListAvgScore(storeList storepool.StoreList) floa
 func (o IOOverloadOptions) allocateReplicaToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, diskUnhealthyScore := o.storeScore(store)
+	score := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
+	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
 		o.ReplicaEnforcementLevel,
 		IOOverloadThresholdBlockAll,
@@ -2565,10 +2469,10 @@ func (o IOOverloadOptions) allocateReplicaToCheck(
 func (o IOOverloadOptions) rebalanceReplicaToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, diskUnhealthyScore := o.storeScore(store)
+	score := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
+	if ok, reason := ioOverloadCheck(score, avg,
 		o.ReplicaIOOverloadThreshold, IOOverloadMeanThreshold,
 		o.ReplicaEnforcementLevel,
 		IOOverloadThresholdBlockTransfers, IOOverloadThresholdBlockAll,
@@ -2585,10 +2489,10 @@ func (o IOOverloadOptions) rebalanceReplicaToCheck(
 func (o IOOverloadOptions) transferLeaseToCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, diskUnhealthyScore := o.storeScore(store)
+	score := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
+	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadThreshold, IOOverloadMeanThreshold,
 		o.LeaseEnforcementLevel,
 		IOOverloadThresholdBlockTransfers, IOOverloadThresholdShed,
@@ -2606,10 +2510,10 @@ func (o IOOverloadOptions) transferLeaseToCheck(
 func (o IOOverloadOptions) ExistingLeaseCheck(
 	ctx context.Context, store roachpb.StoreDescriptor, storeList storepool.StoreList,
 ) bool {
-	score, diskUnhealthyScore := o.storeScore(store)
+	score := o.storeScore(store)
 	avg := o.storeListAvgScore(storeList)
 
-	if ok, reason := ioOverloadCheck(score, avg, diskUnhealthyScore,
+	if ok, reason := ioOverloadCheck(score, avg,
 		o.LeaseIOOverloadShedThreshold, IOOverloadMeanShedThreshold,
 		o.LeaseEnforcementLevel,
 		IOOverloadThresholdShed,

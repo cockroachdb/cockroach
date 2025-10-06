@@ -20,12 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/idtoken"
 	"gopkg.in/yaml.v2"
 )
 
@@ -35,62 +34,15 @@ const (
 
 	// ErrorMessage is the generic error message used to return an error
 	// when a requests to the prometheus helper service yields a non 200 status.
-	ErrorMessage = `request failed with status %d on url %s and error %s`
-
-	// OauthClientID is the client ID for the OAuth client.
-	OAuthClientID = "1063333028845-p47csl1ukrgnpnnjc7lrtrto6uqs9t37.apps.googleusercontent.com"
-	// ServiceAccountEmail is the service account email to impersonate to access
-	// the Identity-Aware Proxy protected backend.
-	ServiceAccountEmail = "prom-helper-service@cockroach-testeng-infra.iam.gserviceaccount.com"
+	ErrorMessage       = ErrorMessagePrefix + ` on url %s and error %s`
+	ErrorMessagePrefix = "request failed with status %d"
 )
 
-// CloudEnvironment is the environment of Cloud provider.
-// In GCE, this would be the project, in AWS, this would be the account ID,
-// and in Azure, this would be the subscription ID.
-type CloudEnvironment string
-
-const (
-	Default CloudEnvironment = "default"
-)
-
-// Reachability is the reachability of the node provider.
-type Reachability int
-
-const (
-	// None indicates that the node is unreachable with this provider.
-	None Reachability = iota
-	// Private indicates that the node is reachable via private network.
-	Private
-	// Public indicates that the node is only reachable via public network.
-	Public
-)
-
-var (
-	// The URL for the Prometheus registration service. An empty string means
-	// that the Prometheus integration is disabled. Should be accessed through
-	// getPrometheusRegistrationUrl().
-	promRegistrationUrl = config.EnvOrDefaultString(
-		"ROACHPROD_PROM_HOST_URL",
-		"https://grafana.testeng.crdb.io/promhelpers",
-	)
-	// supportedPromProviders are the providers supported for prometheus target
-	// and their reachability.
-	supportedPromProviders = map[string]map[CloudEnvironment]Reachability{
-		gce.ProviderName: {
-			Default:               Public,
-			"cockroach-ephemeral": Private,
-		},
-		aws.ProviderName: {
-			Default: Public,
-		},
-		azure.ProviderName: {
-			Default: Public,
-		},
-		ibm.ProviderName: {
-			Default: Public,
-		},
-	}
-)
+// The URL for the Prometheus registration service. An empty string means that the
+// Prometheus integration is disabled. Should be accessed through
+// getPrometheusRegistrationUrl().
+var promRegistrationUrl = config.EnvOrDefaultString("ROACHPROD_PROM_HOST_URL",
+	"https://grafana.testeng.crdb.io/promhelpers")
 
 // PromClient is used to communicate with the prometheus helper service
 // keeping the functions as a variable enables us to override the value for unit testing
@@ -98,187 +50,45 @@ type PromClient struct {
 	promUrl  string
 	disabled bool
 
-	// client is the http client
-	httpClient *http.Client
+	// httpPut is used for http PUT operation.
+	httpPut func(
+		ctx context.Context, url string, h *http.Header, body io.Reader,
+	) (resp *http.Response, err error)
+	// httpDelete is used for http DELETE operation.
+	httpDelete func(ctx context.Context, url string, h *http.Header) (
+		resp *http.Response, err error)
+	// newTokenSource is the token generator source.
+	newTokenSource func(ctx context.Context, audience string, opts ...idtoken.ClientOption) (
+		oauth2.TokenSource, error)
+
+	// supportedPromProviders are the providers supported for prometheus target
+	supportedPromProviders map[string]struct{}
+
+	// supportedPromProjects are the projects supported for prometheus target
+	supportedPromProjects map[string]struct{}
+}
+
+// IsNotFoundError returns true if the error is a 404 error.
+func IsNotFoundError(err error) bool {
+	return strings.Contains(err.Error(), fmt.Sprintf(ErrorMessagePrefix, http.StatusNotFound))
 }
 
 // NewPromClient returns a new instance of PromClient
-func NewPromClient(options ...Option) (*PromClient, error) {
-	c := &PromClient{
-		promUrl:  promRegistrationUrl,
-		disabled: promRegistrationUrl == "",
+func NewPromClient() *PromClient {
+	return &PromClient{
+		promUrl:                promRegistrationUrl,
+		disabled:               promRegistrationUrl == "",
+		httpPut:                httputil.Put,
+		httpDelete:             httputil.Delete,
+		newTokenSource:         idtoken.NewTokenSource,
+		supportedPromProviders: map[string]struct{}{gce.ProviderName: {}},
+		supportedPromProjects:  map[string]struct{}{gce.DefaultProject(): {}},
 	}
-
-	for _, option := range options {
-		option.apply(c)
-	}
-
-	// If the client is not set and not disabled, create a new client
-	if c.httpClient == nil && !c.disabled {
-		iapTokenSource, err := roachprodutil.NewIAPTokenSource(roachprodutil.IAPTokenSourceOptions{
-			OAuthClientID:       OAuthClientID,
-			ServiceAccountEmail: ServiceAccountEmail,
-		})
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to create IAP token source")
-		}
-		c.httpClient = iapTokenSource.GetHTTPClient()
-	}
-
-	return c, nil
 }
 
-// UpdatePrometheusTargets updates the cluster config in the promUrl
-func (c *PromClient) UpdatePrometheusTargets(
-	ctx context.Context, clusterName string, nodeTargets NodeTargets, l *logger.Logger,
-) error {
-	if c.disabled {
-		l.Printf("Prometheus registration is disabled")
-		return nil
-	}
-
-	request, err := c.buildCreateRequest(ctx, clusterName, nodeTargets)
-	if err != nil {
-		return err
-	}
-
-	l.Printf("invoking PUT for URL: %s", request.URL)
-
-	err = c.makeRequest(request)
-	if err != nil {
-		return errors.Wrapf(err, "UpdatePrometheusTargets: failed on url: %s", request.URL)
-	}
-	return nil
-}
-
-// DeleteClusterConfig deletes the cluster config in the promUrl
-func (c *PromClient) DeleteClusterConfig(
-	ctx context.Context, clusterName string, l *logger.Logger,
-) error {
-
-	if c.disabled {
-		return nil
-	}
-
-	request, err := c.buildDeleteRequest(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	err = c.makeRequest(request)
-	if err != nil {
-		return errors.Wrapf(err, "DeleteClusterConfig: failed on url: %s", request.URL)
-	}
-	return nil
-}
-
-// ProviderReachability returns the reachability of the provider
-func ProviderReachability(provider string, cloudEnvironment CloudEnvironment) Reachability {
-
-	// If the provider is not supported, return None.
-	providerReachability, ok := supportedPromProviders[provider]
-	if !ok {
-		return None
-	}
-
-	// If the cloudEnvironment is supported and has a specific reachability
-	// defined for the specified CloudEnvironment, return this reachability.
-	if reachability, ok := providerReachability[cloudEnvironment]; ok {
-		return reachability
-	}
-
-	// Return the default reachability for the provider.
-	return providerReachability[Default]
-}
-
-// getUrl returns the URL for the prometheus helper service for a given cluster
-func (c *PromClient) getUrl(clusterName string) string {
-	return fmt.Sprintf("%s/%s/%s/%s", c.promUrl, resourceVersion, resourceName, clusterName)
-}
-
-// makeRequest makes the http request and returns an error with the body if an error occurs
-func (c *PromClient) makeRequest(request *http.Request) error {
-	response, err := c.httpClient.Do(request)
-	if err != nil {
-		return err
-	}
-
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		defer response.Body.Close()
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return err
-		}
-		return errors.Newf(ErrorMessage, response.StatusCode, request.URL, string(body))
-	}
-	return nil
-}
-
-// buildDeleteRequest creates the http.Request to delete the cluster config
-func (c *PromClient) buildDeleteRequest(
-	ctx context.Context, clusterName string,
-) (*http.Request, error) {
-	return http.NewRequestWithContext(ctx, http.MethodDelete, c.getUrl(clusterName), nil)
-}
-
-// NodeTargets contains prometheus scrape targets for each node.
-type NodeTargets map[int][]*NodeInfo
-
-func (nt NodeTargets) String() string {
-	var parts []string
-	for port, infos := range nt {
-		var targets []string
-		for _, info := range infos {
-			targets = append(targets, info.Target)
-		}
-		parts = append(parts, fmt.Sprintf("%d:[%s]", port, strings.Join(targets, ",")))
-	}
-	return strings.Join(parts, " ")
-}
-
-// buildCreateRequest builds the http.Request to create the cluster config
-func (c *PromClient) buildCreateRequest(
-	ctx context.Context, clusterName string, nodes NodeTargets,
-) (*http.Request, error) {
-	body, err := c.buildCreateRequestBody(nodes)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.getUrl(clusterName), body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", httputil.JSONContentType)
-	return req, nil
-}
-
-// createBuildRequestBody creates the cluster config file per node
-func (c *PromClient) buildCreateRequestBody(nodes NodeTargets) (io.Reader, error) {
-	configs := make([]*CCParams, 0)
-	for _, n := range nodes {
-		for _, node := range n {
-			params := &CCParams{
-				Targets: []string{node.Target},
-				Labels:  map[string]string{},
-			}
-			// custom labels - this can override the default labels if needed
-			for n, v := range node.CustomLabels {
-				params.Labels[n] = v
-			}
-			configs = append(configs, params)
-		}
-	}
-	cb, err := yaml.Marshal(&configs)
-	if err != nil {
-		return nil, err
-	}
-	b, err := json.Marshal(&instanceConfigRequest{
-		Config: string(cb),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(b), nil
+func (c *PromClient) setUrl(url string) {
+	c.promUrl = url
+	c.disabled = false
 }
 
 // instanceConfigRequest is the HTTP request received for generating instance config
@@ -286,6 +96,107 @@ type instanceConfigRequest struct {
 	//Config is the content of the yaml file
 	Config   string `json:"config"`
 	Insecure bool   `json:"insecure"`
+}
+
+// UpdatePrometheusTargets updates the cluster config in the promUrl
+func (c *PromClient) UpdatePrometheusTargets(
+	ctx context.Context,
+	clusterName string,
+	forceFetchCreds bool,
+	nodes map[int]*NodeInfo,
+	insecure bool,
+	l *logger.Logger,
+) error {
+	if c.disabled {
+		l.Printf("Prometheus registration is disabled")
+		return nil
+	}
+	req, err := buildCreateRequest(nodes, insecure)
+	if err != nil {
+		return err
+	}
+	token, err := c.getToken(ctx, forceFetchCreds, l)
+	if err != nil {
+		return err
+	}
+	url := getUrl(c.promUrl, clusterName)
+	l.Printf("invoking PUT for URL: %s", url)
+	h := &http.Header{}
+	h.Set("ContentType", "application/json")
+	if token != "" {
+		h.Set("Authorization", token)
+	}
+	response, err := c.httpPut(ctx, url, h, req)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != http.StatusOK {
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
+			l.Printf("request failed - this may be due to a stale token. retrying with forceFetchCreds true ...")
+			return c.UpdatePrometheusTargets(ctx, clusterName, true, nodes, insecure, l)
+		}
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return err
+		}
+		return errors.Newf(ErrorMessage, response.StatusCode, url, string(body))
+	}
+	return nil
+}
+
+// DeleteClusterConfig deletes the cluster config in the promUrl
+func (c *PromClient) DeleteClusterConfig(
+	ctx context.Context, clusterName string, forceFetchCreds, insecure bool, l *logger.Logger,
+) error {
+
+	if c.disabled {
+		return nil
+	}
+	token, err := c.getToken(ctx, forceFetchCreds, l)
+	if err != nil {
+		return err
+	}
+	url := getUrl(c.promUrl, clusterName)
+	if insecure {
+		url = fmt.Sprintf("%s?insecure=true", url)
+	}
+	h := &http.Header{}
+	h.Set("Authorization", token)
+	response, err := c.httpDelete(ctx, url, h)
+	if err != nil {
+		return errors.Wrapf(err, "DeleteClusterConfig: failed on url: %s", url)
+	}
+	if response.StatusCode != http.StatusNoContent {
+		defer func() { _ = response.Body.Close() }()
+		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
+			return c.DeleteClusterConfig(ctx, clusterName, true, insecure, l)
+		}
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return err
+		}
+		return errors.Newf(ErrorMessage, response.StatusCode, url, string(body))
+	}
+	return nil
+}
+
+func getUrl(promUrl, clusterName string) string {
+	return fmt.Sprintf("%s/%s/%s/%s", promUrl, resourceVersion, resourceName, clusterName)
+}
+
+// IsSupportedNodeProvider returns true if the provider is supported
+// for prometheus target.
+func (c *PromClient) IsSupportedNodeProvider(provider string) bool {
+	_, ok := c.supportedPromProviders[provider]
+	return ok
+}
+
+// IsSupportedPromProject returns true if the project is supported
+// for prometheus target.
+func (c *PromClient) IsSupportedPromProject(project string) bool {
+	_, ok := c.supportedPromProjects[project]
+	return ok
 }
 
 // CCParams are the params for the cluster configs
@@ -300,23 +211,48 @@ type NodeInfo struct {
 	CustomLabels map[string]string // Custom labels to be added to the cluster config
 }
 
-type Option interface {
-	apply(*PromClient)
+// createClusterConfigFile creates the cluster config file per node
+func buildCreateRequest(nodes map[int]*NodeInfo, insecure bool) (io.Reader, error) {
+	configs := make([]*CCParams, 0)
+	for _, n := range nodes {
+		params := &CCParams{
+			Targets: []string{n.Target},
+			Labels:  map[string]string{},
+		}
+		// custom labels - this can override the default labels if needed
+		for n, v := range n.CustomLabels {
+			params.Labels[n] = v
+		}
+		configs = append(configs, params)
+	}
+	cb, err := yaml.Marshal(&configs)
+	if err != nil {
+		return nil, err
+	}
+	b, err := json.Marshal(&instanceConfigRequest{Config: string(cb), Insecure: insecure})
+	if err != nil {
+		return nil, err
+	}
+	return bytes.NewReader(b), nil
 }
 
-type OptionFunc func(*PromClient)
-
-func (o OptionFunc) apply(c *PromClient) { o(c) }
-
-func WithIAPTokenSource(tokenSource roachprodutil.IAPTokenSource) OptionFunc {
-	return func(c *PromClient) {
-		c.httpClient = tokenSource.GetHTTPClient()
+// getToken gets the Authorization token for grafana
+func (c *PromClient) getToken(
+	ctx context.Context, forceFetchCreds bool, l *logger.Logger,
+) (string, error) {
+	if strings.HasPrefix(c.promUrl, "http:/") {
+		// no token needed for insecure URL
+		return "", nil
 	}
-}
-
-func WithCustomURL(url string) OptionFunc {
-	return func(c *PromClient) {
-		c.promUrl = url
-		c.disabled = false
+	// Read in the service account key and audience, so we can retrieve the identity token.
+	if credSrc, err := roachprodutil.SetServiceAccountCredsEnv(ctx, forceFetchCreds); err != nil {
+		return "", err
+	} else {
+		l.Printf("Prometheus credentials obtained from %s", credSrc)
 	}
+	token, err := roachprodutil.GetServiceAccountToken(ctx, c.newTokenSource)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Bearer %s", token), nil
 }

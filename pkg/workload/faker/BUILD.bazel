@@ -11,6 +11,7 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/faker",
     visibility = ["//visibility:public"],
+    deps = ["@org_golang_x_exp//rand"],
 )
 
 go_test(
@@ -18,5 +19,8 @@ go_test(
     size = "small",
     srcs = ["faker_test.go"],
     embed = [":faker"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@org_golang_x_exp//rand",
+    ],
 )

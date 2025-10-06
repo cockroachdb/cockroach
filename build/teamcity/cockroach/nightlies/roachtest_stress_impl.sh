@@ -10,10 +10,7 @@ set -exuo pipefail
 
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-# N.B. export variables like `root` s.t. they can be used by scripts called below.
-set -a
 source "$dir/../../../teamcity-support.sh"
-set +a
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-stress $(date)" -N "" -f ~/.ssh/id_rsa

@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -49,12 +47,7 @@ func TestIndexInterface(t *testing.T) {
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
 	}
-	runner := sqlutils.MakeSQLRunner(conn)
-
-	// Enable vector indexes.
-	runner.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
-
-	runner.Exec(t, `
+	sqlutils.MakeSQLRunner(conn).Exec(t, `
 		CREATE TABLE d.t (
 			c1 INT,
 			c2 INT,
@@ -63,19 +56,17 @@ func TestIndexInterface(t *testing.T) {
 			c5 VARCHAR,
 			c6 JSONB,
 			c7 GEOGRAPHY(GEOMETRY,4326) NULL,
-			c8 VECTOR(3),
 			CONSTRAINT pk PRIMARY KEY (c1 ASC, c2 ASC, c3 ASC),
 			INDEX s1 (c4 DESC, c5 DESC),
 			INVERTED INDEX s2 (c6),
 			INDEX s3 (c2, c3) STORING (c5, c6),
 			INDEX s4 (c5) USING HASH WITH (bucket_count=8),
 			UNIQUE INDEX s5 (c1, c4) WHERE c4 = 'x',
-			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2),
-			VECTOR INDEX s7 (c8)
+			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2)
 		);
 	`)
 
-	indexNames := []string{"pk", "s1", "s2", "s3", "s4", "s5", "s6", "s7"}
+	indexNames := []string{"pk", "s1", "s2", "s3", "s4", "s5", "s6"}
 	indexColumns := [][]string{
 		{"c1", "c2", "c3"},
 		{"c4", "c5"},
@@ -84,7 +75,6 @@ func TestIndexInterface(t *testing.T) {
 		{"crdb_internal_c5_shard_8", "c5"},
 		{"c1", "c4"},
 		{"c7"},
-		{"c8"},
 	}
 	extraColumnsAsPkColOrdinals := [][]int{
 		{},
@@ -93,7 +83,6 @@ func TestIndexInterface(t *testing.T) {
 		{0},
 		{0, 1, 2},
 		{1, 2},
-		{0, 1, 2},
 		{0, 1, 2},
 	}
 
@@ -120,7 +109,6 @@ func TestIndexInterface(t *testing.T) {
 	s4 := indexes[4]
 	s5 := indexes[5]
 	s6 := indexes[6]
-	s7 := indexes[7]
 
 	// Check that GetPrimaryIndex returns the primary index.
 	require.Equal(t, pk, tableI.GetPrimaryIndex())
@@ -184,12 +172,6 @@ func TestIndexInterface(t *testing.T) {
 			catalog.TableDescriptor.PartialIndexes,
 			catalog.ForEachPartialIndex,
 			catalog.FindPartialIndex,
-		},
-		{"VectorIndex",
-			[]string{"s7"},
-			catalog.TableDescriptor.VectorIndexes,
-			catalog.ForEachVectorIndex,
-			catalog.FindVectorIndex,
 		},
 		{
 			"PublicNonPrimaryIndex",
@@ -282,7 +264,6 @@ func TestIndexInterface(t *testing.T) {
 	require.Equal(t, "c4 = 'x':::STRING", s5.GetPredicate())
 	require.Equal(t, "crdb_internal_c5_shard_8", s4.GetShardColumnName())
 	require.Equal(t, int32(2), s6.GetGeoConfig().S2Geography.S2Config.LevelMod)
-	require.Equal(t, int32(3), s7.GetVecConfig().Dims)
 	for _, idx := range indexes {
 		require.Equalf(t, idx == s5, idx.IsPartial(),
 			errMsgFmt, "IsPartial", idx.GetName())
@@ -290,7 +271,7 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetPredicate", idx.GetName())
 		require.Equal(t, idx == s5 || idx == pk, idx.IsUnique(),
 			errMsgFmt, "IsUnique", idx.GetName())
-		require.Equal(t, idx == s2 || idx == s6, idx.GetType() == idxtype.INVERTED,
+		require.Equal(t, idx == s2 || idx == s6, idx.GetType() == descpb.IndexDescriptor_INVERTED,
 			errMsgFmt, "GetType", idx.GetName())
 		require.Equal(t, idx == s4, idx.IsSharded(),
 			errMsgFmt, "IsSharded", idx.GetName())
@@ -302,9 +283,6 @@ func TestIndexInterface(t *testing.T) {
 			errMsgFmt, "GetSharded", idx.GetName())
 		require.Equalf(t, idx != s3, idx.NumSecondaryStoredColumns() == 0,
 			errMsgFmt, "NumSecondaryStoredColumns", idx.GetName())
-		vecConfig := idx.GetVecConfig()
-		require.Equal(t, idx == s7, !(&vecpb.Config{}).Equal(&vecConfig),
-			errMsgFmt, "GetVecConfig", idx.GetName())
 	}
 
 	// Check index columns.
@@ -347,8 +325,6 @@ func TestIndexInterface(t *testing.T) {
 	require.Equal(t, 2, s3.NumSecondaryStoredColumns())
 	require.Equal(t, "c5", s3.GetStoredColumnName(0))
 	require.Equal(t, "c6", s3.GetStoredColumnName(1))
-	require.Equal(t, s7.GetKeyColumnID(0), s7.VectorColumnID())
-	require.Equal(t, "c8", s7.VectorColumnName())
 }
 
 // TestIndexStrictColumnIDs tests that the index format version value
@@ -405,7 +381,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Retrieve KV trace and check for redundant values.
-	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE '%Put%/Table/%/2% ->%'`)
+	rows, err := conn.Query(`SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE message LIKE 'InitPut%'`)
 	require.NoError(t, err)
 	defer rows.Close()
 	require.True(t, rows.Next())
@@ -416,7 +392,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	if srv.TenantController().StartedDefaultTestTenant() {
 		tenantPrefix = codec.TenantPrefix().String()
 	}
-	expected := fmt.Sprintf(`Put %s/Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, tenantPrefix, mut.GetID())
+	expected := fmt.Sprintf(`InitPut %s/Table/%d/2/0/0/0/0/0/0 -> /BYTES/0x2300030003000300`, tenantPrefix, mut.GetID())
 	require.Equal(t, expected, msg)
 
 	// Test that with the strict guarantees, this table descriptor would have been
@@ -459,7 +435,6 @@ func TestLatestIndexDescriptorVersionValues(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Test relies on legacy schema changer testing knobs.
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 	// Populate the test cluster with all manner of indexes and index mutations.
 	tdb.Exec(t, "CREATE SEQUENCE s")

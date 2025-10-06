@@ -56,7 +56,6 @@ const defaultActiveStatement: ActiveStatement = {
   user: "user",
   clientAddress: "clientAddress",
   isFullScan: false,
-  isolationLevel: "SERIALIZABLE",
 };
 
 // makeActiveStatement creates an ActiveStatement object with the default active statement above
@@ -182,7 +181,7 @@ describe("test activeStatementUtils", () => {
   });
 
   describe("getActiveExecutionsFromSessions", () => {
-    it("should convert sessions response to active statements result with isolation levels", () => {
+    it("should convert sessions response to active statements result", () => {
       const sessionsResponse: SessionsResponse = {
         sessions: [
           {
@@ -190,18 +189,14 @@ describe("test activeStatementUtils", () => {
             username: "bar",
             application_name: "application",
             client_address: "clientAddress",
-            active_queries: [
-              makeActiveQuery({ id: "1", isolation_level: "SERIALIZABLE" }),
-            ],
+            active_queries: [makeActiveQuery({ id: "1" })],
           },
           {
             id: new Uint8Array(),
             username: "foo",
             application_name: "application2",
             client_address: "clientAddress2",
-            active_queries: [
-              makeActiveQuery({ id: "2", isolation_level: "READ COMMITTED" }),
-            ],
+            active_queries: [makeActiveQuery({ id: "2" })],
           },
           {
             id: new Uint8Array(),
@@ -226,14 +221,13 @@ describe("test activeStatementUtils", () => {
         if (stmt.user === "bar") {
           expect(stmt.application).toBe("application");
           expect(stmt.clientAddress).toBe("clientAddress");
-          expect(stmt.isolationLevel).toBe("SERIALIZABLE");
         } else if (stmt.user === "foo") {
           expect(stmt.application).toBe("application2");
           expect(stmt.clientAddress).toBe("clientAddress2");
-          expect(stmt.isolationLevel).toBe("READ COMMITTED");
         } else {
           fail(`stmt user should be foo or bar, got ${stmt.user}`);
         }
+        // expect(stmt.transactionID).toBe(defaultActiveStatement.transactionID);
         expect(stmt.status).toBe(ExecutionStatus.Executing);
         expect(stmt.start.unix()).toBe(
           TimestampToMoment(defaultActiveQuery.start).unix(),
@@ -258,7 +252,6 @@ describe("test activeStatementUtils", () => {
               }),
               num_auto_retries: 3,
               num_statements_executed: 4,
-              isolation_level: "SERIALIZABLE",
             },
           },
           {
@@ -274,7 +267,6 @@ describe("test activeStatementUtils", () => {
               }),
               num_auto_retries: 4,
               num_statements_executed: 3,
-              isolation_level: "READ COMMITTED",
             },
           },
           {
@@ -336,11 +328,6 @@ describe("test activeStatementUtils", () => {
         expect(txn.start.unix()).toBe(
           TimestampToMoment(defaultActiveQuery.start).unix(),
         );
-        if (txn.application === "application") {
-          expect(txn.isolationLevel).toBe("SERIALIZABLE");
-        } else if (txn.application === "application2") {
-          expect(txn.isolationLevel).toBe("READ COMMITTED");
-        }
       });
 
       expect(executingCnt).toEqual(2);

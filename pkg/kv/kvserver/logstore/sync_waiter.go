@@ -88,7 +88,7 @@ func (w *SyncWaiterLoop) waitLoop(ctx context.Context, stopper *stop.Stopper) {
 		select {
 		case w := <-w.q:
 			if err := w.wg.SyncWait(); err != nil {
-				log.KvExec.Fatalf(ctx, "SyncWait error: %+v", err)
+				log.Fatalf(ctx, "SyncWait error: %+v", err)
 			}
 			w.cb.run()
 			w.wg.Close()
@@ -120,7 +120,7 @@ func (w *SyncWaiterLoop) enqueue(ctx context.Context, wg syncWaiter, cb syncWait
 			// with enough capacity to hold more in-progress sync operations than
 			// Pebble allows (pebble/record.SyncConcurrency). However, we can still
 			// see this in cases where consumption from the queue is delayed.
-			log.KvExec.VWarningf(ctx, 1, "SyncWaiterLoop.enqueue blocking due to insufficient channel capacity")
+			log.VWarningf(ctx, 1, "SyncWaiterLoop.enqueue blocking due to insufficient channel capacity")
 		}
 		select {
 		case w.q <- b:

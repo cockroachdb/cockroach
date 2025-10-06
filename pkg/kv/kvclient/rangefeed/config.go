@@ -7,7 +7,6 @@ package rangefeed
 
 import (
 	"context"
-	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
 // Option configures a RangeFeed.
@@ -39,7 +39,6 @@ type config struct {
 	withDiff              bool
 	withFiltering         bool
 	withMatchingOriginIDs []uint32
-	consumerID            int64
 	onUnrecoverableError  OnUnrecoverableError
 	onCheckpoint          OnCheckpoint
 	frontierQuantize      time.Duration
@@ -160,12 +159,6 @@ func WithOriginIDsMatching(originIDs ...uint32) Option {
 	})
 }
 
-func WithConsumerID(cid int64) Option {
-	return optionFunc(func(c *config) {
-		c.consumerID = cid
-	})
-}
-
 // WithInvoker makes an option to invoke the rangefeed tasks such as running the
 // the client and processing events emitted by the client with a caller-supplied
 // function, which can make it easier to introspect into work done by a given
@@ -255,6 +248,10 @@ func WithOnMetadata(fn OnMetadata) Option {
 // DeleteRange is called with UseRangeTombstone, but not when the range is
 // deleted using point tombstones). If this callback is not provided, an error
 // is emitted when these are encountered.
+//
+// MVCC range tombstones are currently experimental, and requires the
+// MVCCRangeTombstones version gate. They are only expected during certain
+// operations like schema GC and IMPORT INTO (i.e. not across live tables).
 type OnDeleteRange func(ctx context.Context, value *kvpb.RangeFeedDeleteRange)
 
 // WithOnDeleteRange sets up a callback that's invoked whenever an MVCC range
@@ -280,7 +277,7 @@ func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 // VisitableFrontier is the subset of the span.Frontier interface required to
 // inspect the content of the frontier.
 type VisitableFrontier interface {
-	Entries() iter.Seq2[roachpb.Span, hlc.Timestamp]
+	Entries(span.Operation)
 }
 
 // FrontierSpanVisitor is called when the frontier is updated by a checkpoint,

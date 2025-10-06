@@ -8,7 +8,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,12 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
@@ -95,7 +94,7 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	require.NoError(t, err)
 	require.NoError(t, os.RemoveAll(localCertsDir))
 	require.NoError(t, c.Get(ctx, t.L(), certsDir, localCertsDir, c.Node(1)))
-	require.NoError(t, filepath.WalkDir(localCertsDir, func(path string, d fs.DirEntry, err error) error {
+	require.NoError(t, filepath.Walk(localCertsDir, func(path string, info os.FileInfo, err error) error {
 		// Don't change permissions for the certs directory.
 		if path == localCertsDir {
 			return nil
@@ -166,7 +165,7 @@ SELECT $1::INT = ALL (
 	// in case an error occurs.
 	woopsCh := make(chan struct{}, len(serverNodes)-1)
 
-	m := c.NewDeprecatedMonitor(ctx, serverNodes)
+	m := c.NewMonitor(ctx, serverNodes)
 
 	var numConns uint32
 
@@ -331,21 +330,21 @@ func runClientNetworkConnectionTimeout(ctx context.Context, t test.Test, c clust
 	require.NoError(t, err)
 	defer db.Close()
 
-	grp := t.NewErrorGroup(task.WithContext(ctx))
+	grp := ctxgroup.WithContext(ctx)
 	// Startup a connection on the client server, which will be running a
 	// long transaction (i.e. just the sleep builtin).
 	var runOutput install.RunResultDetails
-	grp.Go(func(ctx context.Context, l *logger.Logger) error {
-		urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
+	grp.GoCtx(func(ctx context.Context) error {
+		urls, err := roachprod.PgURL(ctx, t.L(), c.MakeNodes(c.Node(1)), certsDir, roachprod.PGURLOptions{
 			External: true,
-			Secure:   install.SimpleSecureOption(true),
+			Secure:   true,
 		})
 		if err != nil {
 			return err
 		}
 		commandThatWillDisconnect := fmt.Sprintf(`./cockroach sql --certs-dir %s --url %s -e "SELECT pg_sleep(600)"`, certsDir, urls[0])
-		l.Printf("Executing long running query: %s", commandThatWillDisconnect)
-		output, err := c.RunWithDetails(ctx, l, option.WithNodes(clientNode), commandThatWillDisconnect)
+		t.L().Printf("Executing long running query: %s", commandThatWillDisconnect)
+		output, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(clientNode), commandThatWillDisconnect)
 		runOutput = output[0]
 		return err
 	})
@@ -411,7 +410,7 @@ sudo iptables -F OUTPUT;
 	require.Greaterf(t, timeutil.Since(blockStartTime), time.Second*30, "connection dropped earlier than expected")
 	t.L().Printf("Connection was dropped after %s", timeutil.Since(blockStartTime))
 	// We expect the connection to be dropped with the lower keep alive settings.
-	require.NoError(t, grp.WaitE())
+	require.NoError(t, grp.Wait())
 	require.Contains(t, runOutput.Stderr, "If the server is running, check --host client-side and --advertise server-side",
 		"Did not detect connection failure %s %d", runOutput.Stderr, runOutput.RemoteExitStatus)
 }
@@ -442,19 +441,17 @@ func registerNetwork(r registry.Registry) {
 }
 
 // iptablesPacketsDropped returns the number of packets dropped to a given node due to an iptables rule.
-// TODO(darrylwong): this is mostly just a validation check to make sure we set up the rules correctly.
-// We should remove this in favor for the failure injection library which has it's own validation.
 func iptablesPacketsDropped(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, node option.NodeListOption,
 ) (int, error) {
-	// Filter for only rules on the SQL port as roachprod adds firewall rules for node_exporter.
-	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), fmt.Sprintf("sudo iptables -L -x -v -n | grep {pgport%s}", node))
+	res, err := c.RunWithDetailsSingleNode(ctx, l, option.WithNodes(node), "sudo iptables -L -v -n")
 	if err != nil {
 		return 0, err
 	}
 	rows := strings.Split(res.Stdout, "\n")
-	// There will be an input and output rule, either works.
-	values := strings.Fields(rows[0])
+	// iptables -L outputs rows in the order of: chain, fields, and then values.
+	// We care about the values so only look at row 2.
+	values := strings.Fields(rows[2])
 	if len(values) == 0 {
 		return 0, errors.Errorf("no configured iptables rules found:\n%s", res.Stdout)
 	}

@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "funcdesc",
@@ -19,7 +18,7 @@ go_library(
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/funcinfo",
-        "//pkg/sql/parserutils",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
@@ -45,7 +44,6 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/security/username",
-        "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catpb",
@@ -64,9 +62,4 @@ go_test(
         "@com_github_lib_pq//oid",
         "@com_github_stretchr_testify//require",
     ],
-)
-
-disallowed_imports_test(
-    src = "funcdesc",
-    disallowed_list = ["//pkg/sql/parser"],
 )

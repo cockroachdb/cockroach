@@ -95,7 +95,7 @@ func TestBuildProvided(t *testing.T) {
 				)
 			}
 
-			res := BuildProvided(context.Background(), evalCtx, f.Memo(), expr, &physical.Distribution{})
+			res := BuildProvided(context.Background(), evalCtx, expr, &physical.Distribution{})
 			if res.String() != expected.String() {
 				t.Errorf("expected '%s', got '%s'", expected, res)
 			}

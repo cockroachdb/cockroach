@@ -110,7 +110,7 @@ func TestHealthCheck(t *testing.T) {
 		store.Metrics().UnavailableRangeCount.Update(100)
 		result := recorder.CheckHealth(ctx, *recorder.GenerateNodeStatus(ctx))
 		expAlerts := []statuspb.HealthAlert{
-			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, SafeDescription: "ranges.unavailable", Value: 100.0},
+			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
 		}
 		if !reflect.DeepEqual(expAlerts, result.Alerts) {
 			return errors.Newf("expected %+v, got %+v", expAlerts, result.Alerts)
@@ -724,7 +724,7 @@ func TestServeIndexHTML(t *testing.T) {
 			// in `server` and not in `server_test`). However, serverutils
 			// doesn't link ccl, so it says it uses OSS distribution. Reconcile
 			// this mismatch.
-			buildInfo := strings.Replace(build.GetInfo().Short().StripMarkers(), "CockroachDB CCL", "CockroachDB OSS", 1)
+			buildInfo := strings.Replace(build.GetInfo().Short(), "CockroachDB CCL", "CockroachDB OSS", 1)
 			expected := fmt.Sprintf(`<!DOCTYPE html>
 <title>CockroachDB</title>
 Binary built without web UI.

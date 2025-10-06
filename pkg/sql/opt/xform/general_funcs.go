@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -60,7 +59,7 @@ func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 
 	// Skip the primary index because it cannot be inverted.
 	for i := 1; i < tab.IndexCount(); i++ {
-		if tab.Index(i).Type() == idxtype.INVERTED {
+		if tab.Index(i).IsInverted() {
 			return true
 		}
 	}
@@ -680,28 +679,4 @@ func (c *CustomFuncs) getKnownScanConstraint(
 	var cons constraint.Constraint
 	instance.Constraint(&cons)
 	return &cons, !cons.IsUnconstrained()
-}
-
-// GetFilteredCanonicalScan looks at a *ScanExpr or *SelectExpr "relation" and
-// returns the input *ScanExpr and FiltersExpr, along with ok=true, if the Scan
-// is a canonical scan. If "relation" is a different type, or if it's a
-// *SelectExpr with an Input other than a *ScanExpr, ok=false is returned. Scans
-// or Selects with no filters may return filters as nil.
-func (c *CustomFuncs) GetFilteredCanonicalScan(
-	relation memo.RelExpr,
-) (scanExpr *memo.ScanExpr, filters memo.FiltersExpr, ok bool) {
-	var selectExpr *memo.SelectExpr
-	if selectExpr, ok = relation.(*memo.SelectExpr); ok {
-		if scanExpr, ok = selectExpr.Input.(*memo.ScanExpr); !ok {
-			return nil, nil, false
-		}
-		filters = selectExpr.Filters
-	} else if scanExpr, ok = relation.(*memo.ScanExpr); !ok {
-		return nil, nil, false
-	}
-	scanPrivate := &scanExpr.ScanPrivate
-	if !c.IsCanonicalScan(scanPrivate) {
-		return nil, nil, false
-	}
-	return scanExpr, filters, true
 }

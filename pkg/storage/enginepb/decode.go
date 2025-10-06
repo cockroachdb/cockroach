@@ -27,14 +27,11 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 	if len(mvccKey) == 0 {
 		return nil, nil, false
 	}
-	// Last byte is the version length + 1 when there is a version,
-	// else it is 0.
 	tsLen := int(mvccKey[len(mvccKey)-1])
 	if tsLen == 1 {
 		// We never encode an empty version.
 		return nil, nil, false
 	}
-	// -1 is for excluding the sentinel 0x00 byte.
 	keyPartEnd := len(mvccKey) - 1 - tsLen
 	if keyPartEnd < 0 {
 		return nil, nil, false
@@ -42,7 +39,6 @@ func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
 
 	key = mvccKey[:keyPartEnd]
 	if tsLen > 0 {
-		// +1 is for excluding the sentinel 0x00 byte.
 		ts = mvccKey[keyPartEnd+1 : len(mvccKey)-1]
 	}
 	return key, ts, true

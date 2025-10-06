@@ -45,7 +45,7 @@ func validateSchemaChangerState(d catalog.Descriptor, vea catalog.ValidationErro
 				i, got, d.GetID()))
 		}
 		switch t.TargetStatus {
-		case scpb.Status_PUBLIC, scpb.Status_ABSENT, scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_PUBLIC:
+		case scpb.Status_PUBLIC, scpb.Status_ABSENT, scpb.Status_TRANSIENT_ABSENT:
 			// These are valid target status values.
 		default:
 			report(errors.Errorf("target %d is targeting an invalid status %s",

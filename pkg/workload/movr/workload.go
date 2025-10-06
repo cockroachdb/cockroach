@@ -7,7 +7,6 @@ package movr
 
 import (
 	"context"
-	"math/rand/v2"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -15,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/faker"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"golang.org/x/exp/rand"
 )
 
 type rideInfo struct {
@@ -114,8 +114,8 @@ func (m *movrWorker) addUser(id uuid.UUID, city string) error {
 }
 
 func (m *movrWorker) createPromoCode(id uuid.UUID, _ string) error {
-	expirationTime := m.creationTime.Add(time.Duration(m.rng.IntN(30)) * 24 * time.Hour)
-	creationTime := expirationTime.Add(-time.Duration(m.rng.IntN(30)) * 24 * time.Hour)
+	expirationTime := m.creationTime.Add(time.Duration(m.rng.Intn(30)) * 24 * time.Hour)
+	creationTime := expirationTime.Add(-time.Duration(m.rng.Intn(30)) * 24 * time.Hour)
 	const rulesJSON = `{"type": "percent_discount", "value": "10%"}`
 	q := `INSERT INTO promo_codes VALUES ($1, $2, $3, $4, $5)`
 	_, err := m.db.Exec(q, id.String(), m.faker.Paragraph(m.rng), creationTime, expirationTime, rulesJSON)
@@ -174,7 +174,7 @@ func (m *movrWorker) startRide(id uuid.UUID, city string) error {
 		return err
 	}
 	q := `INSERT INTO rides VALUES ($1, $2, $2, $3, $4, $5, NULL, now(), NULL, $6)`
-	_, err = m.db.Exec(q, id.String(), city, rider, vehicle, m.faker.StreetAddress(m.rng), m.rng.IntN(100))
+	_, err = m.db.Exec(q, id.String(), city, rider, vehicle, m.faker.StreetAddress(m.rng), m.rng.Intn(100))
 	if err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func (m *movr) Ops(
 	}
 	worker := movrWorker{
 		db:           db,
-		rng:          rand.New(rand.NewPCG(RandomSeed.Seed(), 0)),
+		rng:          rand.New(rand.NewSource(RandomSeed.Seed())),
 		faker:        m.faker,
 		creationTime: m.creationTime,
 		activeRides:  []rideInfo{},

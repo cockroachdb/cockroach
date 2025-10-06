@@ -151,7 +151,7 @@ enum Family {
     // for various character-based operations such as sorting, pattern matching,
     // and builtin functions like lower and upper.
     //
-    //   Oid      : T_text, T_varchar, T_bpchar, T_char, T_citext
+    //   Oid      : T_text, T_varchar, T_bpchar, T_char
     //   Width    : max # characters (0 = no specified limit)
     //   Locale   : name of locale (e.g. EN or DE)
     //
@@ -407,18 +407,6 @@ enum Family {
     //   Oid      : T_trigger
     TriggerFamily = 33;
 
-    // JsonpathFamily is a type family for the jsonpath type, which is the type
-    // representing JSON path expressions.
-    //  Canonical: types.Jsonpath
-    //  Oid: T_jsonpath
-    JsonpathFamily = 34;
-
-    // LTreeFamily is a type family for the ltree type, which is the type
-    // representing ltree expressions.
-    //  Canonical: types.LTree
-    //  Oid: T_ltree
-    LTreeFamily = 35;
-
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
@@ -540,9 +528,6 @@ message InternalType {
     // field. It previously contained an alias for any types where our internal
     // representation is different than the user specification. Examples are INT4,
     // FLOAT4, etc. Mostly for Postgres compatibility.
-    // TODO(rafi): remove when we no longer need compatibility with 25.3, which
-    // is the last version to reference VisibleType.
-    // See https://github.com/cockroachdb/cockroach/issues/152629.
     optional int32 visible_type = 6 [(gogoproto.nullable) = false];
 
     // ArrayElemType is deprecated in 19.2, since it is now superseded by the

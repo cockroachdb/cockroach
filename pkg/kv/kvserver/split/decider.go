@@ -9,8 +9,7 @@ package split
 
 import (
 	"context"
-	"math"
-	"math/rand/v2"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,16 +22,6 @@ import (
 const minSplitSuggestionInterval = time.Minute
 const minNoSplitKeyLoggingMetricsInterval = time.Minute
 const minPerSecondSampleDuration = time.Second
-
-type PopularKey struct {
-	Key       roachpb.Key
-	Frequency float64
-}
-
-type SplitStatistics struct {
-	AccessDirection float64
-	PopularKey      PopularKey
-}
 
 type LoadBasedSplitter interface {
 	redact.SafeFormatter
@@ -54,16 +43,12 @@ type LoadBasedSplitter interface {
 	// empty string.
 	NoSplitKeyCauseLogMsg() redact.RedactableString
 
-	// PopularKey returns the most popular key in the sample dataset in addition
-	// to its frequency..
-	PopularKey() PopularKey
+	// PopularKeyFrequency returns the percentage that the most popular key
+	// appears in the sampled candidate split keys.
+	PopularKeyFrequency() float64
 
 	// String formats the state of the load based splitter.
 	String() string
-
-	// AccessDirection returns a value in [-1, 1] indicating
-	// how requests are shifting over time (left/descending vs right/ascending).
-	AccessDirection() float64
 }
 
 type LoadSplitConfig interface {
@@ -85,9 +70,9 @@ type RandSource interface {
 	// interval [0.0,1.0) from the RandSource.
 	Float64() float64
 
-	// IntN returns, as an int, a non-negative pseudo-random number in the
+	// Intn returns, as an int, a non-negative pseudo-random number in the
 	// half-open interval [0,n).
-	IntN(n int) int
+	Intn(n int) int
 }
 
 // globalRandSource implements the RandSource interface.
@@ -99,10 +84,10 @@ func (g globalRandSource) Float64() float64 {
 	return rand.Float64()
 }
 
-// IntN returns, as an int, a non-negative pseudo-random number in the
+// Intn returns, as an int, a non-negative pseudo-random number in the
 // half-open interval [0,n).
-func (g globalRandSource) IntN(n int) int {
-	return rand.IntN(n)
+func (g globalRandSource) Intn(n int) int {
+	return rand.Intn(n)
 }
 
 // GlobalRandSource returns an implementation of the RandSource interface that
@@ -144,9 +129,8 @@ func GlobalRandSource() RandSource {
 
 // LoadSplitterMetrics consists of metrics for load-based splitter split key.
 type LoadSplitterMetrics struct {
-	PopularKeyCount     *metric.Counter
-	NoSplitKeyCount     *metric.Counter
-	ClearDirectionCount *metric.Counter
+	PopularKeyCount *metric.Counter
+	NoSplitKeyCount *metric.Counter
 }
 
 // Decider tracks the latest load and if certain conditions are met, records
@@ -283,28 +267,13 @@ func (d *Decider) recordLocked(
 				if now.Sub(d.mu.lastNoSplitKeyLoggingMetrics) > minNoSplitKeyLoggingMetricsInterval {
 					d.mu.lastNoSplitKeyLoggingMetrics = now
 					if causeMsg := d.mu.splitFinder.NoSplitKeyCauseLogMsg(); causeMsg != "" {
+						popularKeyFrequency := d.mu.splitFinder.PopularKeyFrequency()
+						log.KvDistribution.Infof(ctx, "%s, most popular key occurs in %d%% of samples",
+							causeMsg, int(popularKeyFrequency*100))
 						log.KvDistribution.VInfof(ctx, 3, "splitter_state=%v", (*lockedDecider)(d))
-						popularKeyDetected := ", no popular key"
-						clearDirectionDetected := ", no clear direction"
-
-						popularKeyFrequency := d.mu.splitFinder.PopularKey().Frequency
 						if popularKeyFrequency >= splitKeyThreshold {
-							popularKeyDetected = ", popular key detected"
 							d.loadSplitterMetrics.PopularKeyCount.Inc(1)
 						}
-
-						accessDirection := d.mu.splitFinder.AccessDirection()
-						direction := directionStr(accessDirection)
-						if math.Abs(accessDirection) >= clearDirectionThreshold {
-							clearDirectionDetected = ", clear direction detected"
-							d.loadSplitterMetrics.ClearDirectionCount.Inc(1)
-						}
-
-						log.KvDistribution.Infof(
-							ctx, "%s, most popular key occurs in %d%% of samples, access balance %s-biased %d%%%s%s",
-							causeMsg, int(popularKeyFrequency*100), direction, int(math.Abs(accessDirection)*100),
-							redact.SafeString(popularKeyDetected), redact.SafeString(clearDirectionDetected),
-						)
 						d.loadSplitterMetrics.NoSplitKeyCount.Inc(1)
 					}
 				}
@@ -393,21 +362,6 @@ func (d *Decider) MaybeSplitKey(ctx context.Context, now time.Time) roachpb.Key 
 		key = d.mu.splitFinder.Key()
 	}
 	return key
-}
-
-// SplitStatistics gets the split stats of the current replica if load-based
-// splitting has been engaged.
-func (d *Decider) SplitStatistics() *SplitStatistics {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if d.mu.splitFinder != nil {
-		return &SplitStatistics{
-			AccessDirection: d.mu.splitFinder.AccessDirection(),
-			PopularKey:      d.mu.splitFinder.PopularKey(),
-		}
-	}
-	return nil
 }
 
 // Reset deactivates any current attempt at determining a split key. The method
@@ -573,17 +527,4 @@ func (t *maxStatTracker) max(now time.Time, minRetention time.Duration) (float64
 func (t *maxStatTracker) windowWidth() time.Duration {
 	// NB: -1 because during a rotation, only len(t.windows)-1 windows survive.
 	return t.minRetention / time.Duration(len(t.windows)-1)
-}
-
-// Returns the absolute percentage and direction of accesses
-// as a string to be used in a log statement.
-func directionStr(direction float64) redact.SafeString {
-	dstr := "right"
-	if direction == 0 {
-		dstr = "even"
-	}
-	if direction < 0 {
-		dstr = "left"
-	}
-	return redact.SafeString(dstr)
 }

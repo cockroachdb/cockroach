@@ -93,7 +93,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	leftHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	mj := NewMergeJoinOp(
-		ctx, testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
+		testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 		leftMJSource, rightMJSource, typs, typs,
 		[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

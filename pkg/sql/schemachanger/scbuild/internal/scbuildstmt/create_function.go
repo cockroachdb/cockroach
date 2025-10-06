@@ -8,6 +8,7 @@ package scbuildstmt
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
@@ -19,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -30,20 +30,11 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 	}
 	b.IncrementSchemaChangeCreateCounter("function")
 
-	var dbElts, scElts ElementResultSet
-	if resolveTemporaryStatus(n.Name.ObjectNamePrefix, tree.PersistencePermanent) {
-		dbElts, scElts = MaybeCreateOrResolveTemporarySchema(b)
-	} else {
-		dbElts, scElts = b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
-	}
+	dbElts, scElts := b.ResolveTargetObject(n.Name.ToUnresolvedObjectName(), privilege.CREATE)
 	_, _, sc := scpb.FindSchema(scElts)
 	_, _, db := scpb.FindDatabase(dbElts)
 	_, _, scName := scpb.FindNamespace(scElts)
 	_, _, dbname := scpb.FindNamespace(dbElts)
-
-	if sc.IsTemporary {
-		panic(unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema"))
-	}
 
 	n.Name.SchemaName = tree.Name(scName.Name)
 	n.Name.CatalogName = tree.Name(dbname.Name)
@@ -252,6 +243,10 @@ func validateFunctionToFunctionReferences(
 	b BuildCtx, refProvider ReferenceProvider, parentDBID descpb.ID,
 ) {
 	err := refProvider.ForEachFunctionReference(func(id descpb.ID) error {
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V24_1) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"user defined functions cannot reference other user defined functions")
+		}
 		funcElts := b.QueryByID(id)
 		funcName := funcElts.FilterFunctionName().MustGetOneElement()
 		schemaParent := funcElts.FilterSchemaChild().MustGetOneElement()

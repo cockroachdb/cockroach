@@ -81,13 +81,10 @@ SELECT crdb_internal.decode_plan_gist('$gist')
 
 # Regression test for #76800
 statement ok
-CREATE TABLE t2 (a int, b int, c int, d int, e int) WITH (schema_locked = false)
+CREATE TABLE t2 (a int, b int, c int, d int, e int)
 
 let $gist
 EXPLAIN (GIST) SELECT * FROM t2
-
-statement ok
-SET autocommit_before_ddl = false
 
 # To hit bug requires deleting lots of columns because of hidden columns.
 statement ok
@@ -168,10 +165,10 @@ SELECT crdb_internal.decode_plan_gist('AgGSARIAAwlAsJ8BE5IBAhcGFg==')
 • limit
 │
 └── • index join
-    │ table: inspect_errors@primary
+    │ table: ?@?
     │
     └── • scan
-          table: inspect_errors@?
+          table: ?@?
           spans: 1+ spans
           limit
 
@@ -262,13 +259,13 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
 └── • render
     │
     └── • group (hash)
-        │ group by: udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog, udt_catalog
+        │ group by: table_catalog, table_catalog, table_catalog, table_catalog, table_catalog, table_catalog, table_catalog
         │
         └── • sort
             │ order
             │
             └── • hash join (left outer)
-                │ equality: (udt_catalog) = (srs_id)
+                │ equality: (table_catalog) = (constraint_catalog)
                 │
                 ├── • filter
                 │   │
@@ -279,12 +276,3 @@ SELECT crdb_internal.decode_plan_gist('AgH8/f//nxkAAN6DgICAgDQAAAADAZz9//+fGQAAz
                     │
                     └── • virtual table
                           table: @primary
-
-# Regression test for trying to decode a plan gist that contains a virtual table
-# with a virtual index that didn't exist on older versions (#142989, #147838).
-query T nosort
-SELECT crdb_internal.decode_plan_gist('AgHk+v//3xoEAKAFAgAABQQGBA==');
-----
-• virtual table
-  table: @?
-  spans: 1+ spans

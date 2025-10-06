@@ -6,11 +6,11 @@ error: invalid owner "badowner"
 
 filter suite=badsuite
 ----
-error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest,acceptance,perturbation,mixedversion
+error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,smoketest,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest,acceptance,perturbation
 
 filter owner=badowner suite=badsuite
 ----
-error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest,acceptance,perturbation,mixedversion
+error: invalid suite "badsuite"; valid suites are nightly,weekly,release_qualification,orm,driver,tool,smoketest,quick,fixtures,pebble,pebble_nightly_write,pebble_nightly_ycsb,pebble_nightly_ycsb_race,roachtest,acceptance,perturbation
 
 # Filters with one field leading to no matches.
 

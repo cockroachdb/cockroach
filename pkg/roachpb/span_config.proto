@@ -175,11 +175,6 @@ message SpanConfig {
   //   themselves will not over-satisfy any ConstraintsConjunction in
   //   Constraints.
   //
-  // Additionally, we require that Constraints is not under-specified compared
-  // to VoterConstraints. That is, if there is a ConstraintsConjunction in
-  // VoterConstraints, there is a corresponding ConstraintsConjunction in
-  // Constraints that has NumReplicas at least that of VoterConstraints.
-  //
   // For existing clusters, these strictness requirements may not be met, so
   // internally the system tries to do a normalization to meet the strictness
   // requirement.

@@ -10,25 +10,19 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"reflect"
 	"strconv"
 	"testing"
-	"testing/quick"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/datadriven"
-	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,20 +31,6 @@ var (
 		cfg := logger.Config{
 			Stdout: io.Discard,
 			Stderr: io.Discard,
-		}
-		l, err := cfg.NewLogger("" /* path */)
-		if err != nil {
-			panic(err)
-		}
-
-		return l
-	}()
-
-	// Like nilLogger but keeps stderr.
-	// Useful for debugging a failed test like Test_UpgradePaths since otherwise the test plan isn't logged.
-	stderrLogger = func() *logger.Logger {
-		cfg := logger.Config{
-			Stdout: io.Discard,
 		}
 		l, err := cfg.NewLogger("" /* path */)
 		if err != nil {
@@ -103,7 +83,6 @@ func TestTestPlanner(t *testing.T) {
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "plan" {
-				assertValidTest(mvt, t.Fatal)
 				plan, err := mvt.plan()
 				require.NoError(t, err)
 
@@ -135,8 +114,6 @@ func TestTestPlanner(t *testing.T) {
 				}
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
-			case "before-cluster-start":
-				mvt.BeforeClusterStart(d.CmdArgs[0].Vals[0], dummyHook)
 			case "on-startup":
 				mvt.OnStartup(d.CmdArgs[0].Vals[0], dummyHook)
 			case "in-mixed-version":
@@ -151,7 +128,6 @@ func TestTestPlanner(t *testing.T) {
 				cmd := roachtestutil.NewCommand("./cockroach some-command")
 				mvt.BackgroundCommand(d.CmdArgs[0].Vals[0], nodes, cmd)
 			case "require-concurrent-hooks":
-				assertValidTest(mvt, t.Fatal)
 				plan, err := mvt.plan()
 				require.NoError(t, err)
 				require.NoError(t, requireConcurrentHooks(t, plan.Steps(), d.CmdArgs[0].Vals...))
@@ -172,7 +148,6 @@ func TestDeterministicTestPlan(t *testing.T) {
 		mvt.InMixedVersion("mixed-version 1", dummyHook)
 		mvt.InMixedVersion("mixed-version 2", dummyHook)
 
-		assertValidTest(mvt, t.Fatal)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 		return plan
@@ -225,7 +200,6 @@ func TestDeterministicHookSeeds(t *testing.T) {
 			emptyHelper = &Helper{}
 		)
 
-		assertValidTest(mvt, t.Fatal)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 
@@ -237,12 +211,12 @@ func TestDeterministicHookSeeds(t *testing.T) {
 		require.Equal(t, "do something", firstRun.hook.name)
 		require.NoError(t, firstRun.Run(ctx, nilLogger, firstRunStep.rng, emptyHelper))
 
-		secondRunStep := upgradeStep.steps[2].(sequentialRunStep).steps[3].(*singleStep)
+		secondRunStep := upgradeStep.steps[2].(sequentialRunStep).steps[2].(*singleStep)
 		secondRun := secondRunStep.impl.(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
 		require.NoError(t, secondRun.Run(ctx, nilLogger, secondRunStep.rng, emptyHelper))
 
-		thirdRunStep := upgradeStep.steps[3].(sequentialRunStep).steps[2].(*singleStep)
+		thirdRunStep := upgradeStep.steps[3].(sequentialRunStep).steps[3].(*singleStep)
 		thirdRun := thirdRunStep.impl.(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
 		require.NoError(t, thirdRun.Run(ctx, nilLogger, thirdRunStep.rng, emptyHelper))
@@ -252,9 +226,9 @@ func TestDeterministicHookSeeds(t *testing.T) {
 	}
 
 	expectedData := [][]int{
-		{58, 39, 39, 59, 92},
+		{82, 35, 57, 54, 8},
 		{25, 95, 87, 77, 75},
-		{40, 27, 42, 16, 3},
+		{73, 20, 18, 96, 25},
 	}
 	const numRums = 50
 	for j := 0; j < numRums; j++ {
@@ -270,7 +244,6 @@ func Test_startClusterID(t *testing.T) {
 	// When fixtures are disabled, the startStep should always be the
 	// first step of the test (ID = 1) in system-only deployments.
 	mvt := newTest(NeverUseFixtures, EnabledDeploymentModes(SystemOnlyDeployment))
-	assertValidTest(mvt, t.Fatal)
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 
@@ -283,7 +256,6 @@ func Test_startClusterID(t *testing.T) {
 	// step of the test (ID = 2) in system-only deployments i.e., after
 	// fixtures are installed.
 	mvt = newTest(AlwaysUseFixtures, EnabledDeploymentModes(SystemOnlyDeployment))
-	assertValidTest(mvt, t.Fatal)
 	plan, err = mvt.plan()
 	require.NoError(t, err)
 	ss = plan.Steps()[1].(*singleStep)
@@ -314,7 +286,6 @@ func Test_upgradeTimeout(t *testing.T) {
 
 	assertTimeout := func(expectedTimeout time.Duration, opts ...CustomOption) {
 		mvt := newTest(opts...)
-		assertValidTest(mvt, t.Fatal)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 		waitUpgrades := findUpgradeWaitSteps(plan)
@@ -335,7 +306,6 @@ func Test_upgradeTimeout(t *testing.T) {
 // should be returned.
 func Test_maxNumPlanSteps(t *testing.T) {
 	mvt := newBasicUpgradeTest()
-	assertValidTest(mvt, t.Fatal)
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 	// N.B. the upper bound is very conservative; largest "basic upgrade" plan is well below it.
@@ -354,10 +324,10 @@ func Test_maxNumPlanSteps(t *testing.T) {
 
 	// There is in fact no "basic upgrade" test plan with fewer than 13 steps.
 	// The smallest plan is,
-	// planner_test.go:314: Seed:               12345
-	// Upgrades:           v24.1.1 → <current>
+	//planner_test.go:314: Seed:               12345
+	//Upgrades:           v24.1.1 → <current>
 	//		Deployment mode:    system-only
-	// Plan:
+	//Plan:
 	//	├── start cluster at version "v24.1.1" (1)
 	//	├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (2)
 	//	└── upgrade cluster from "v24.1.1" to "<current>"
@@ -375,81 +345,9 @@ func Test_maxNumPlanSteps(t *testing.T) {
 	//	├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (12)
 	//	└── run "after finalization" (13)
 	mvt = newBasicUpgradeTest(MaxNumPlanSteps(5))
-	assertValidTest(mvt, t.Fatal)
 	plan, err = mvt.plan()
 	require.ErrorContains(t, err, "unable to generate a test plan")
 	require.Nil(t, plan)
-}
-
-// TestNoConcurrentFailureInjections tests that failure injection
-// steps properly manage node availability. Specifically:
-// - Failure injection steps should only run if no other failure is currently injected.
-// - Failure recovery steps can only occur if there is an active failure injected.
-// - We can only bump the cluster version if no failures are currently injected.
-func TestNoConcurrentFailureInjections(t *testing.T) {
-	const numIterations = 500
-	rngSource := rand.NewSource(randutil.NewPseudoSeed())
-	// Set all failure injection mutator probabilities to 1.
-	var opts []CustomOption
-	for _, mutator := range failureInjectionMutators {
-		opts = append(opts, WithMutatorProbability(mutator.Name(), 1.0))
-	}
-	opts = append(opts, NumUpgrades(3))
-	getFailer := func(name string) (*failures.Failer, error) {
-		return nil, nil
-	}
-
-	for range numIterations {
-		mvt := newTest(opts...)
-		mvt._getFailer = getFailer
-		mvt.InMixedVersion("test hook", dummyHook)
-		// Use different seed for each iteration
-		mvt.prng = rand.New(rngSource)
-
-		assertValidTest(mvt, t.Fatal)
-		plan, err := mvt.plan()
-		require.NoError(t, err)
-
-		isFailureInjected := false
-
-		var checkSteps func(steps []testStep)
-		checkSteps = func(steps []testStep) {
-			for _, step := range steps {
-				switch s := step.(type) {
-				case *singleStep:
-					switch s.impl.(type) {
-					case panicNodeStep:
-						require.False(t, isFailureInjected, "there should be no active failure when panicNodeStep runs")
-						isFailureInjected = true
-					case networkPartitionInjectStep:
-						require.False(t, isFailureInjected, "there should be no active failure when networkPartitionInjectStep runs")
-						isFailureInjected = true
-					case restartNodeStep:
-						require.True(t, isFailureInjected, "there is no active failure to recover from")
-						isFailureInjected = false
-					case networkPartitionRecoveryStep:
-						require.True(t, isFailureInjected, "there is no active failure to recover from")
-						isFailureInjected = false
-					case waitForStableClusterVersionStep:
-						require.False(t, isFailureInjected, "waitForStableClusterVersionStep cannot run under failure injection")
-					}
-				case sequentialRunStep:
-					checkSteps(s.steps)
-				case concurrentRunStep:
-					// Failure injection steps should never run concurrently with other steps, so treat concurrent
-					// steps as sequential for simplicity.
-					for _, delayedStepInterface := range s.delayedSteps {
-						ds := delayedStepInterface.(delayedStep)
-						checkSteps([]testStep{ds.step})
-					}
-				}
-			}
-		}
-
-		checkSteps(plan.Steps())
-
-		require.False(t, isFailureInjected, "all failure injections should be cleaned up at the end of the test")
-	}
 }
 
 // setDefaultVersions overrides the test's view of the current build
@@ -458,7 +356,7 @@ func TestNoConcurrentFailureInjections(t *testing.T) {
 // the oldest supported version. Called by TestMain.
 func setDefaultVersions() func() {
 	previousBuildV := clusterupgrade.TestBuildVersion
-	clusterupgrade.TestBuildVersion = &buildVersion
+	clusterupgrade.TestBuildVersion = buildVersion
 
 	previousOldestV := OldestSupportedVersion
 	OldestSupportedVersion = minimumSupported
@@ -488,7 +386,6 @@ func newTest(options ...CustomOption) *Test {
 	defaultTestOverrides := []CustomOption{
 		EnabledDeploymentModes(SystemOnlyDeployment),
 		DisableSkipVersionUpgrades,
-		DisableAllFailureInjectionMutators(),
 	}
 
 	for _, fn := range defaultTestOverrides {
@@ -506,7 +403,7 @@ func newTest(options ...CustomOption) *Test {
 
 	return &Test{
 		ctx:       ctx,
-		logger:    stderrLogger,
+		logger:    nilLogger,
 		crdbNodes: nodes,
 		options:   testOptions,
 		_arch:     archP(vm.ArchAMD64),
@@ -538,10 +435,12 @@ func boolP(b bool) *bool {
 // Always use the same predecessor version to make this test
 // deterministic even as changes continue to happen in the
 // cockroach_releases.yaml file.
-func testPredecessorFunc(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+func testPredecessorFunc(
+	rng *rand.Rand, v, _ *clusterupgrade.Version,
+) (*clusterupgrade.Version, error) {
 	pred, ok := testPredecessorMapping[v.Series()]
 	if !ok {
-		return nil, fmt.Errorf("no known predecessor for %q (%q series)", v, v.Series())
+		return nil, fmt.Errorf("no known predecessor for %q", v)
 	}
 
 	return pred, nil
@@ -600,15 +499,6 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 		case "deployment_mode":
 			opts = append(opts, EnabledDeploymentModes(DeploymentMode(arg.Vals[0])))
 
-		case "workload_node":
-			workloadNodes := option.NodeListOption{}
-			for _, nodeStr := range arg.Vals {
-				n, err := strconv.Atoi(nodeStr)
-				require.NoError(t, err)
-				workloadNodes = append(workloadNodes, n)
-			}
-			opts = append(opts, WithWorkloadNodes(workloadNodes))
-
 		default:
 			t.Errorf("unknown mixed-version-test option: %s", arg.Key)
 		}
@@ -619,9 +509,8 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 	if isLocal != nil {
 		mvt._isLocal = isLocal
 	}
-
 	if predecessors != nil {
-		mvt.options.predecessorFunc = func(_ *rand.Rand, v *clusterupgrade.Version) (*clusterupgrade.Version, error) {
+		mvt.options.predecessorFunc = func(_ *rand.Rand, v, _ *clusterupgrade.Version) (*clusterupgrade.Version, error) {
 			if v.IsCurrent() {
 				return predecessors[len(predecessors)-1], nil
 			}
@@ -661,7 +550,7 @@ func Test_stepSelectorFilter(t *testing.T) {
 			name:                   "no filter",
 			predicate:              func(*singleStep) bool { return true },
 			expectedAllSteps:       true,
-			expectedRandomStepType: restartWithNewBinaryStep{},
+			expectedRandomStepType: runHookStep{},
 		},
 		{
 			name: "filter eliminates all steps",
@@ -710,7 +599,6 @@ func Test_stepSelectorFilter(t *testing.T) {
 				DisableSkipVersionUpgrades,
 				EnabledDeploymentModes(SystemOnlyDeployment),
 			)
-			assertValidTest(mvt, t.Fatal)
 			plan, err := mvt.plan()
 			require.NoError(t, err)
 
@@ -725,7 +613,6 @@ func Test_stepSelectorFilter(t *testing.T) {
 			}
 
 			randomSelector := newSelector.RandomStep(newRand())
-
 			if tc.expectedRandomStepType == nil {
 				require.Empty(t, randomSelector)
 			} else {
@@ -868,7 +755,6 @@ func Test_stepSelectorMutations(t *testing.T) {
 				DisableSkipVersionUpgrades,
 				EnabledDeploymentModes(SystemOnlyDeployment),
 			)
-			assertValidTest(mvt, t.Fatal)
 			plan, err := mvt.plan()
 			require.NoError(t, err)
 
@@ -972,9 +858,7 @@ type concurrentUserHooksMutator struct{}
 func (concurrentUserHooksMutator) Name() string         { return "concurrent_user_hooks_mutator" }
 func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (concurrentUserHooksMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) ([]mutation, error) {
+func (concurrentUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -983,7 +867,7 @@ func (concurrentUserHooksMutator) Generate(
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		InsertConcurrent(&testSingleStep{}), nil
+		InsertConcurrent(&testSingleStep{})
 }
 
 // removeUserHooksMutator is a test mutator that removes every
@@ -993,52 +877,18 @@ type removeUserHooksMutator struct{}
 func (removeUserHooksMutator) Name() string         { return "remove_user_hooks_mutator" }
 func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (removeUserHooksMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) ([]mutation, error) {
+func (removeUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		Remove(), nil
+		Remove()
 }
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
 	return nil
-}
-
-func Test_DisableAllMutators(t *testing.T) {
-	mvt := newTest(DisableAllMutators())
-
-	rng, seed := randutil.NewTestRand()
-	mvt.seed = seed
-	mvt.prng = rng
-
-	assertValidTest(mvt, t.Fatal)
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-	require.Nil(t, plan.enabledMutators)
-
-}
-
-func Test_DisableAllClusterSettingMutators(t *testing.T) {
-	mvt := newTest(DisableAllClusterSettingMutators())
-
-	rng, seed := randutil.NewTestRand()
-	mvt.seed = seed
-	mvt.prng = rng
-
-	assertValidTest(mvt, t.Fatal)
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-
-	for _, enabled := range plan.enabledMutators {
-		if _, ok := enabled.(clusterSettingMutator); ok {
-			t.Errorf("cluster setting mutator %q was not disabled", enabled.Name())
-		}
-	}
 }
 
 // This is a regression test to ensure that separate process deployments
@@ -1048,11 +898,8 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 	testOverrides := []CustomOption{
 		EnabledDeploymentModes(SeparateProcessDeployment),
 		DisableSkipVersionUpgrades,
-		DisableAllFailureInjectionMutators(),
 		MinUpgrades(5),
 		MaxUpgrades(5),
-		// Lower the minimum bootstrap version to allow for 5 upgrades.
-		MinimumBootstrapVersion("v22.1.1"),
 	}
 
 	for _, fn := range testOverrides {
@@ -1070,9 +917,9 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 		seed:      seed,
 	}
 
-	assertValidTest(mvt, t.Fatal)
 	plan, err := mvt.plan()
 	require.NoError(t, err)
+	//
 	upgradePath := plan.Versions()
 	// Remove the last element as it's the current version which is a special case.
 	// The unit test framework hardcodes the current version which should have no
@@ -1082,197 +929,6 @@ func Test_SeparateProcessUsesLatestPred(t *testing.T) {
 		series := version.Series()
 		latestVersion, err := clusterupgrade.LatestPatchRelease(series)
 		require.NoError(t, err)
-		if !version.Equal(latestVersion) && !version.Equal(mvt.options.minimumSupportedVersion) {
-			t.Errorf("expected version %s to be latest patch release %s or mininumSupportVersion %s", version, latestVersion, mvt.options.minimumSupportedVersion)
-		}
 		require.Equal(t, latestVersion, version)
 	}
-}
-
-// This is a regression test for the problem described in [1] and addressed in [2].
-// Namely, when 24.3 is the minimum supported version,
-// an upgrade plan terminating in 25.2 could end up skipping 25.1, at which point the user hooks
-// would never execute.
-//
-// N.B. Test_UpgradePaths below is a more exhaustive test for the soundness of `chooseUpgradePath`.
-//
-// [1] https://github.com/cockroachdb/cockroach/pull/151404
-// [2] https://github.com/cockroachdb/cockroach/pull/146857
-func Test_minimum_supported_version_regression(t *testing.T) {
-	defer withTestBuildVersion("v25.2.1")()
-
-	mvt := newBasicUpgradeTest(
-		NumUpgrades(4),
-		MinimumSupportedVersion("v24.3.1"),
-		// N.B. prior to the fix in [2], this would yield a runtime panic of the form,
-		// panic: runtime error: slice bounds out of range [:-1]
-		// owing to slices.IndexFunc in setupTest, failing to find a _from_ version <= MinimumSupportedVersion("v24.3.1").
-		WithSkipVersionProbability(1))
-
-	assertValidTest(mvt, t.Fatal)
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-	require.NotNil(t, plan)
-	// We expect the upgrade path to be ...-> v24.2.x -> v24.3.1 -> v24.3.x -> v25.2.1
-	require.GreaterOrEqual(t, len(plan.Versions()), mvt.options.minUpgrades,
-		"expected at least %d upgrades in the plan", mvt.options.minUpgrades)
-}
-
-// A property-based test that generates random upgrade plans and verifies their validity.
-//
-// The generator uses `minimumSupported` as the oldest possible version, v25.3.0 as the latest possible version.
-// It generates the following random inputs, constrained by the above oldest and latest versions,
-//
-//	finalVersion, minBootstrapVersion, minSupportedVersion, numUpgrades, skipVersions
-//
-// The asserted properties are described below in `assertNumUpgrades`, `assertMsbAndMsv`, `assertSkipUpgrade`.
-// In summary, we check that for all possible number of upgrades between the initial and final versions, a test plan
-// is feasible; i.e., the resulting test plan has the expected number of upgrades. We check that the minimum supported
-// and bootstrap versions, when specified, yield a valid test plan. This also exercises `assertExpectedUserHooks`, which
-// ensures that the resulting plan contains all expected user hooks. Finally, we check that skip upgrades are exercised,
-// when feasible, and that the skip to the final version is prioritized.
-func Test_UpgradePaths(t *testing.T) {
-	rng, _ := randutil.NewTestRand()
-	defer withTestBuildVersion("v25.3.0")()
-
-	randomNthPredecessor := func(rng *rand.Rand, v *clusterupgrade.Version, n int) *clusterupgrade.Version {
-		curVersion := v.Version
-		for range n {
-			versionStr, err := release.RandomPredecessor(rng, &curVersion)
-			require.NoError(t, err)
-			clusterupgradeVersion, err := clusterupgrade.ParseVersion(versionStr)
-			require.NoError(t, err)
-			curVersion = clusterupgradeVersion.Version
-		}
-		return &clusterupgrade.Version{Version: curVersion}
-	}
-	// N.B. technically, v22.1.0 is the oldest version with release data, but we want to streamline input generation.
-	// By designating `minimumSupported` (v22.2.0) as oldest, we can avoid a special case wherein generated finalVersion
-	// has the same release series as `minimumSupported`.
-	oldestVersionSupported := minimumSupported
-	newestPossibleVersion := clusterupgrade.MustParseVersion("v25.3.0")
-	maxPossibleUpgrades, err := release.MajorReleasesBetween(&newestPossibleVersion.Version, &oldestVersionSupported.Version)
-	require.NoError(t, err)
-
-	generator := func(values []reflect.Value, rng *rand.Rand) {
-		// We don't always want to upgrade into the latest release (v25.3) so pick a release
-		// n predecessors older, excluding oldestVersionSupported.
-		n := rng.Intn(maxPossibleUpgrades)
-		finalVersion := randomNthPredecessor(rng, newestPossibleVersion, n)
-		values[0] = reflect.ValueOf(finalVersion.Version.String())
-
-		upgradesRemaining := maxPossibleUpgrades - n
-		require.Greater(t, upgradesRemaining, 0)
-		// Randomly choose minimumBootstrapVersion <= minimumSupportedVersion.
-		// N.B. we use rejection sampling to ensure all ordered pairs are chosen with uniform distribution.
-		chooseMbvAndMsv := func() (*clusterupgrade.Version, *clusterupgrade.Version) {
-			for {
-				// N.B. zero predecessor is the same as "no minimum bootstrap/supported version".
-				versionA := randomNthPredecessor(rng, finalVersion, rng.Intn(upgradesRemaining+1))
-				versionB := randomNthPredecessor(rng, finalVersion, rng.Intn(upgradesRemaining+1))
-
-				if versionB.Version.AtLeast(versionA.Version) {
-					return versionA, versionB
-				}
-				// Otherwise, reject the sample and try again.
-				// N.B. it may seem tempting to swap the versions and return, but that would bias the distribution since
-				// there are two ways to pick a valid pair when the versions are distinct, and one way when they are equal.
-			}
-		}
-		mbv, msv := chooseMbvAndMsv()
-		initialVersion := oldestVersionSupported // default, in case mbv is "zero".
-		if mbv.Version.Equals(finalVersion.Version) {
-			// Chosen minimumBootstrapVersion equals finalVersion, assume it's unspecified.
-			values[1] = reflect.ValueOf("")
-		} else {
-			values[1] = reflect.ValueOf(mbv.Version.String())
-			initialVersion = mbv
-		}
-		if msv.Version.Equals(finalVersion.Version) {
-			// Chosen minimumSupportedVersion equals finalVersion, assume it's unspecified.
-			values[2] = reflect.ValueOf("")
-		} else {
-			values[2] = reflect.ValueOf(msv.Version.String())
-		}
-
-		// Find the maximum amount of possible upgrades from the minBootstrapVersion
-		// and pick a random value [1, maxUpgradesFromMBV] to set numUpgrades to.
-		maxUpgradesFromMBV, err := release.MajorReleasesBetween(&finalVersion.Version, &initialVersion.Version)
-		require.NoError(t, err)
-
-		numUpgrades := rng.Intn(maxUpgradesFromMBV) + 1
-		values[3] = reflect.ValueOf(numUpgrades)
-		values[4] = reflect.ValueOf(rng.Float64() > 0.5) // skipVersions
-	}
-
-	verifyPlan := func(
-		finalVersion string, minBootstrapVersion string, minSupportedVersion string, numUpgrades int, skipVersions bool,
-	) bool {
-		// The top level withTestBuildVersion will take care of resetting this for us.
-		_ = withTestBuildVersion(finalVersion)
-
-		genNewTest := func() *Test {
-			// Set up our test plan using the generated values.
-			opts := []CustomOption{NumUpgrades(numUpgrades)}
-			if minBootstrapVersion != "" {
-				opts = append(opts, MinimumBootstrapVersion(minBootstrapVersion))
-			}
-			if minSupportedVersion != "" {
-				opts = append(opts, MinimumSupportedVersion(minSupportedVersion))
-			}
-			mvt := newTest(
-				opts...,
-			)
-			// N.B. randomPredecessor is the default, but it can be overridden; e.g., SeparateProcessDeployment uses latestPredecessor.
-			// Here, we want to ensure that we are testing all possible upgrade paths, so we explicitly set randomPredecessor.
-			mvt.options.predecessorFunc = randomPredecessor
-
-			if skipVersions {
-				mvt.options.skipVersionProbability = 1
-			} else {
-				mvt.options.skipVersionProbability = 0
-			}
-			// Setup user hooks so that we can exercise `mvt.assertExpectedUserHooks`.
-			mvt.BeforeClusterStart("BeforeClusterStart", dummyHook)
-			mvt.BackgroundFunc("Background", dummyHook)
-			mvt.OnStartup("OnStartup", dummyHook)
-			mvt.InMixedVersion("InMixedVersion", dummyHook)
-			mvt.AfterUpgradeFinalized("AfterUpgradeFinalized", dummyHook)
-
-			// As in mixedversion.NewTest, we must ensure that we have a valid test, before returning it.
-			assertValidTest(mvt, t.Fatal)
-			return mvt
-		}
-		// We have a valid test, let's get a plan.
-		mvt := genNewTest()
-		assertValidTest(mvt, t.Fatal)
-		plan, err := mvt.plan()
-		if err != nil {
-			// Log the error and assert property failure.
-			// N.B. To retain the stacktrace, use "%+v"; t.Error uses "%v".
-			t.Errorf("%+v", err)
-			return false
-		}
-		if plan == nil {
-			t.Error("expected a valid plan; got nil")
-			return false
-		}
-		// We have a valid plan owing to `assertValidPlan` in `mvt.plan()`.
-		return true
-	}
-	// 100 iterations take ~1.5 seconds on mac m1pro
-	numIterations := 100
-
-	if skip.NightlyStress() {
-		// Nightly stress tests take longer to run, so we increase the number of iterations.
-		numIterations = 1000
-	}
-
-	cfg := quick.Config{
-		MaxCount: numIterations,
-		Rand:     rng,
-		Values:   generator,
-	}
-
-	require.NoError(t, quick.Check(verifyPlan, &cfg))
 }

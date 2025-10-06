@@ -12,17 +12,16 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -31,23 +30,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
 
@@ -61,6 +50,7 @@ var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
 	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
@@ -235,7 +225,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	var defaultExprs, computedExprs []tree.TypedExpr
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
-	if err := flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
 		if err := typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
@@ -244,7 +234,6 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext(&resolver)
 		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
-		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
 			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
@@ -280,12 +269,9 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 
 // Close frees the resources used by the ColumnBackfiller.
 func (cb *ColumnBackfiller) Close(ctx context.Context) {
+	cb.fetcher.Close(ctx)
 	if cb.mon != nil {
-		// fetcher is only initialized when mon has been set. If mon is nil,
-		// then Close has already been called.
-		cb.fetcher.Close(ctx)
 		cb.mon.Stop(ctx)
-		cb.mon = nil
 	}
 }
 
@@ -308,15 +294,17 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	requestedCols = append(requestedCols, cb.added...)
 	requestedCols = append(requestedCols, cb.dropped...)
 	ru, err := row.MakeUpdater(
+		ctx,
+		txn,
 		cb.evalCtx.Codec,
 		tableDesc,
 		nil, /* uniqueWithTombstoneIndexes */
-		nil, /* lockedIndexes */
 		cb.updateCols,
 		requestedCols,
 		row.UpdaterOnlyColumns,
-		cb.evalCtx.SessionData(),
+		&cb.alloc,
 		&cb.evalCtx.Settings.SV,
+		cb.evalCtx.SessionData().Internal,
 		cb.rowMetrics,
 	)
 	if err != nil {
@@ -332,7 +320,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 
 	// Update the fetcher to use the new txn.
 	if err := cb.fetcher.SetTxn(txn); err != nil {
-		log.Dev.Errorf(ctx, "scan error during SetTxn: %s", err)
+		log.Errorf(ctx, "scan error during SetTxn: %s", err)
 		return roachpb.Key{}, err
 	}
 
@@ -349,7 +337,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		rowinfra.GetDefaultBatchBytesLimit(cb.evalCtx.TestingKnobs.ForceProductionValues),
 		chunkSize,
 	); err != nil {
-		log.Dev.Errorf(ctx, "scan error: %s", err)
+		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
 	}
 
@@ -372,7 +360,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	}
 
 	for i := int64(0); i < int64(chunkSize); i++ {
-		ok, _, err := cb.fetcher.NextRowDecodedInto(ctx, fetchedValues, cb.colIdxMap)
+		ok, err := cb.fetcher.NextRowDecodedInto(ctx, fetchedValues, cb.colIdxMap)
 		if err != nil {
 			return roachpb.Key{}, err
 		}
@@ -408,14 +396,12 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		}
 		copy(oldValues, fetchedValues)
 
-		// No existing secondary indexes will be updated by adding or dropping a column.
-		// It is safe to use an empty PartialIndexUpdateHelper and
-		// VectorIndexUpdateHelper in this case.
+		// No existing secondary indexes will be updated by adding or dropping a
+		// column. It is safe to use an empty PartialIndexUpdateHelper in this
+		// case.
 		var pm row.PartialIndexUpdateHelper
-		var vh row.VectorIndexUpdateHelper
-		var oth row.OriginTimestampCPutHelper
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, pm, vh, oth, false /* mustValidateOldPKValues */, traceKV,
+			ctx, b, oldValues, updateValues, pm, nil, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
@@ -457,7 +443,7 @@ func ConvertBackfillError(
 	if err != nil {
 		return err
 	}
-	return row.ConvertBatchError(ctx, desc, b, true /* alwaysConvertCondFailed */)
+	return row.ConvertBatchError(ctx, desc, b)
 }
 
 type muBoundAccount struct {
@@ -467,445 +453,6 @@ type muBoundAccount struct {
 	// boundAccount is associated with mon and is used to track allocations during
 	// an	index backfill.
 	boundAccount mon.BoundAccount
-}
-
-// VectorIndexHelperBase contains the common fields shared between
-// VectorIndexHelper and VectorIndexMergeHelper.
-type VectorIndexHelperBase struct {
-	// vectorColID is the column ID of the vector column.
-	vectorColID catid.ColumnID
-	// numPrefixCols is the number of non-vector index key columns.
-	numPrefixCols int
-	// vecIndex is the vector index retrieved from the vector index manager.
-	vecIndex *cspann.Index
-	// tableDesc is the table descriptor for the table containing the vector index.
-	tableDesc catalog.TableDescriptor
-	// fullVecFetchSpec is the fetch spec for the full vector.
-	fullVecFetchSpec vecstorepb.GetFullVectorsFetchSpec
-}
-
-// initBase initializes the shared fields in VectorIndexHelperBase.
-func (vihb *VectorIndexHelperBase) initBase(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	desc catalog.TableDescriptor,
-	destIndex catalog.Index,
-	sourceIndex catalog.Index,
-	vecIndexManager *vecindex.Manager,
-) error {
-	var err error
-
-	vihb.vectorColID = destIndex.VectorColumnID()
-	vihb.numPrefixCols = destIndex.NumKeyColumns() - 1
-	vihb.tableDesc = desc
-
-	vihb.vecIndex, err = vecIndexManager.Get(ctx, desc.GetID(), destIndex.GetID())
-	if err != nil {
-		return err
-	}
-
-	if err := vecstore.InitGetFullVectorsFetchSpec(
-		&vihb.fullVecFetchSpec,
-		evalCtx,
-		desc,
-		destIndex,
-		sourceIndex,
-	); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// VectorIndexHelper is used by backfill writers to re-encode vectors at write
-// time. This is necessary because the key written may change between the time
-// the key is read and the time it's written. So, instead of having the reader
-// write the exact keys it wants to be written, it uses some placeholder values
-// that are replaced at write time.
-type VectorIndexHelper struct {
-	VectorIndexHelperBase
-	// vectorOrd is the ordinal of the vector column in the table.
-	vectorOrd int
-	// centroid is an all zeros centroid of the appropriate dimension for the
-	// vector column. It's used to encode the vector in the reader. The writer
-	// will re-encode the vector with the centroid for the partition selected.
-	centroid vector.T
-	// indexPrefix are the prefix bytes for this index (/Tenant/Table/Index).
-	indexPrefix []byte
-	// evalCtx is the evaluation context used for vector operations.
-	evalCtx *eval.Context
-	// vectorIndex is the vector index descriptor.
-	vectorIndex catalog.Index
-}
-
-// NewVectorIndexHelper initializes a VectorIndexHelper for the given index.
-// It returns a VectorIndexHelper that can be used to re-encode vectors for the
-// given index.
-func NewVectorIndexHelper(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	desc catalog.TableDescriptor,
-	idx catalog.Index,
-	sourceIndexID catid.IndexID,
-	vecIndexManager *vecindex.Manager,
-) (*VectorIndexHelper, error) {
-	vectorCol, err := catalog.MustFindColumnByID(desc, idx.VectorColumnID())
-	if err != nil {
-		return nil, err
-	}
-
-	var sourceIndex catalog.Index
-	if sourceIndexID != 0 {
-		sourceIndex, err = catalog.MustFindIndexByID(desc, sourceIndexID)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		sourceIndex = desc.GetPrimaryIndex()
-	}
-
-	vih := &VectorIndexHelper{
-		vectorOrd:   vectorCol.Ordinal(),
-		centroid:    make(vector.T, idx.GetVecConfig().Dims),
-		indexPrefix: rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID()),
-		evalCtx:     evalCtx,
-		vectorIndex: idx,
-	}
-
-	if err := vih.initBase(ctx, evalCtx, desc, idx, sourceIndex, vecIndexManager); err != nil {
-		return nil, err
-	}
-
-	return vih, nil
-}
-
-// ReEncodeVector takes a rowenc.indexEntry, extracts the key values, unquantized
-// vector and any suffix bytes added by rowenc and performs a lookup in the
-// context of the provided transaction. This lookup then gives the leaf partition
-// where the index entry is to be inserted and the unquantized vector can then be
-// re-encoded to get the properly quantized vector with the new partition's
-// centroid. The new key is then returned in the outputEntry. The inputEntry is
-// not overwritten in case the transaction has to be retried.
-func (vih *VectorIndexHelper) ReEncodeVector(
-	ctx context.Context, txn *kv.Txn, inputEntry rowenc.IndexEntry, outputEntry *rowenc.IndexEntry,
-) (*rowenc.IndexEntry, error) {
-	keyBytes := inputEntry.Key[len(vih.indexPrefix):]
-	key, err := vecencoding.DecodeVectorKey(keyBytes, vih.numPrefixCols)
-	if err != nil {
-		return &rowenc.IndexEntry{}, err
-	}
-
-	valueBytes, err := inputEntry.Value.GetBytes()
-	if err != nil {
-		return &rowenc.IndexEntry{}, err
-	}
-	suffix, vector, err := vector.Decode(valueBytes)
-	if err != nil {
-		return &rowenc.IndexEntry{}, err
-	}
-
-	var searcher vecindex.MutationSearcher
-	searcher.Init(vih.evalCtx, vih.vecIndex, txn, &vih.fullVecFetchSpec)
-
-	if err := searcher.SearchForInsert(ctx, roachpb.Key(key.Prefix), vector); err != nil {
-		return &rowenc.IndexEntry{}, err
-	}
-	key.PartitionKey = cspann.PartitionKey(tree.MustBeDInt(searcher.PartitionKey()))
-	key.Level = cspann.LeafLevel
-	quantizedVector, ok := searcher.EncodedVector().(*tree.DBytes)
-	if !ok {
-		return &rowenc.IndexEntry{}, errors.AssertionFailedf("expected encoded vector to be of type DBytes")
-	}
-
-	outputEntry.Key = append(outputEntry.Key[:0], vih.indexPrefix...)
-	outputEntry.Key = key.Encode(outputEntry.Key)
-
-	entryValueLen := vecencoding.EncodedVectorValueLen(quantizedVector.UnsafeBytes(), suffix)
-	buf := outputEntry.Value.AllocBytes(entryValueLen)[:0]
-	vecencoding.EncodeVectorValue(buf, quantizedVector.UnsafeBytes(), suffix)
-
-	outputEntry.Family = inputEntry.Family
-
-	return outputEntry, nil
-}
-
-// VectorIndexMergeHelper is used to initialize the VectorIndexMergerTxn. It
-// contains the state that is stable over the lifetime of the merge operation
-// and is safe to share across different go routines.
-type VectorIndexMergeHelper struct {
-	VectorIndexHelperBase
-	// codec is the codec for the table.
-	codec keys.SQLCodec
-
-	// sourcePrefix is the prefix for the source index.
-	sourcePrefix []byte
-	// destIndex is the index descriptor of the vector index that is being built.
-	destIndex catalog.Index
-
-	// fetchSpec is the fetch spec for pulling values from the temporary index.
-	fetchSpec fetchpb.IndexFetchSpec
-	// colMap is the column map that maps column IDs to their position in the
-	// fetched rows of the fetchSpec.
-	colMap catalog.TableColMap
-	// vectorPos is the position of the vector column in the fetched rows
-	// of the fetchSpec.
-	vectorPos int
-
-	// primaryIndex is the primary index that should be used to execute this
-	// merge operation.
-	primaryIndex catalog.Index
-	// splitter is the span splitter for reading from the primary key.
-	splitter span.Splitter
-}
-
-// VectorIndexMergerTxn holds thread and transaction local state for repeated
-// calls to MergeVector to avoid allocations and repeated initialization.
-type VectorIndexMergerTxn struct {
-	vim *VectorIndexMergeHelper
-	// encRow is reused for decoding key values from temporary index entries
-	encRow rowenc.EncDatumRow
-	// rowDatums is reused for storing fetched row data from the primary key
-	rowDatums tree.Datums
-	// alloc is reused for datum allocations
-	alloc tree.DatumAlloc
-	// fetcher is reused for fetching row data from the primary key
-	fetcher row.Fetcher
-	// searcher is reused for vector index searches
-	searcher vecindex.MutationSearcher
-	// vectorEncodingHelper is reused for encoding vector index entries
-	vectorEncodingHelper rowenc.VectorIndexEncodingHelper
-	// spanToScan is the span to scan for the vector index
-	spansToScan roachpb.Spans
-	// builder is the span builder for reading from the primary key.
-	builder span.Builder
-}
-
-func (vimh *VectorIndexMergeHelper) Init(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	desc catalog.TableDescriptor,
-	vecIndexManager *vecindex.Manager,
-	destIndex catalog.Index,
-	sourceIndex catalog.Index,
-) error {
-	// Initialize the base fields using the shared initialization
-	if err := vimh.initBase(ctx, evalCtx, desc, destIndex, desc.GetPrimaryIndex(), vecIndexManager); err != nil {
-		return err
-	}
-
-	vimh.sourcePrefix = rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), sourceIndex.GetID())
-	vimh.primaryIndex = desc.GetPrimaryIndex()
-	vimh.destIndex = destIndex
-	vimh.codec = evalCtx.Codec
-
-	// Initialize the merge fetch spec for extracting vector column and prefix
-	// columns from primary key. This is used by MergeVector to get the vector
-	// column and any prefix columns from primary key entries.
-	var columnsToFetch []descpb.ColumnID
-	var columnsSeen catalog.TableColSet
-
-	// Add all the vector index columns and then any unused PK columns
-	for _, index := range []catalog.Index{destIndex, vimh.primaryIndex} {
-		for i := range index.NumKeyColumns() {
-			colID := index.GetKeyColumnID(i)
-			if columnsSeen.Contains(colID) {
-				continue
-			}
-			columnsToFetch = append(columnsToFetch, colID)
-			columnsSeen.Add(colID)
-		}
-	}
-
-	// Initialize the fetch spec for pulling values from the primary key.
-	if err := rowenc.InitIndexFetchSpec(
-		&vimh.fetchSpec,
-		evalCtx.Codec,
-		desc,
-		vimh.primaryIndex,
-		columnsToFetch,
-	); err != nil {
-		return err
-	}
-
-	// Initialize the merge splitter for optimizing column family fetches
-	var neededColOrdinals intsets.Fast
-	for _, colSpec := range vimh.fetchSpec.FetchedColumns {
-		col, err := catalog.MustFindColumnByID(desc, colSpec.ColumnID)
-		if err != nil {
-			return err
-		}
-		neededColOrdinals.Add(col.Ordinal())
-	}
-	vimh.splitter = span.MakeSplitter(desc, vimh.primaryIndex, neededColOrdinals)
-
-	// Create a custom colMap that maps column IDs to positions in our packed
-	// rowDatums array. This includes both the vector index columns and the
-	// primary key columns.
-	for i, colSpec := range vimh.fetchSpec.FetchedColumns {
-		vimh.colMap.Set(colSpec.ColumnID, i)
-	}
-	// Extract the vector column from the fetched row using the colMap
-	// Find the position of the vector column in the rowDatums array
-	var found bool
-	vimh.vectorPos, found = vimh.colMap.Get(vimh.vectorColID)
-	if !found {
-		return errors.AssertionFailedf("vector column ID %d not found in colMap", vimh.vectorColID)
-	}
-
-	return nil
-}
-
-// NewVectorIndexMergerTxn initializes a VectorIndexMergerTxn for the given transaction.
-func (vimh *VectorIndexMergeHelper) NewVectorIndexMergerTxn(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
-) (*VectorIndexMergerTxn, error) {
-	vm := VectorIndexMergerTxn{
-		vim:         vimh,
-		encRow:      make(rowenc.EncDatumRow, len(vimh.fetchSpec.KeyAndSuffixColumns)),
-		rowDatums:   make(tree.Datums, len(vimh.fetchSpec.FetchedColumns)),
-		spansToScan: make(roachpb.Spans, 1),
-	}
-
-	if err := vm.fetcher.Init(ctx, row.FetcherInitArgs{
-		Txn:   txn,
-		Alloc: &vm.alloc,
-		Spec:  &vimh.fetchSpec,
-	}); err != nil {
-		return nil, err
-	}
-
-	vm.searcher.Init(evalCtx, vimh.vecIndex, txn, &vimh.fullVecFetchSpec)
-
-	// Initialize the span builder for reading from the primary key.
-	vm.builder.InitWithFetchSpec(evalCtx, evalCtx.Codec, &vimh.fetchSpec)
-
-	return &vm, nil
-}
-
-// MergeVector takes a key value read from the temporary index, looks up the
-// vector and prefix columns from the primary key, and then builds a new index
-// entry for the vector index. It returns a kv.KeyValue containing the merged
-// index entry and a boolean indicating if the entry was deleted. If the entry
-// was deleted, the returned kv.KeyValue is nil because there is no way to
-// calculate the key of a deleted entry (we need the full vector for that).
-// Deleted index entries are allowed to stay in the newly built index and will
-// eventually be deleted by the fixup process. In the meantime, the lack of a
-// corresponding PK value means we will never return stale results.
-func (vm *VectorIndexMergerTxn) MergeVector(
-	ctx context.Context, sourceKV *kv.KeyValue, destKey roachpb.Key,
-) (*kv.KeyValue, bool, error) {
-	tempWrapper, err := rowenc.DecodeWrapper(sourceKV.Value)
-	if err != nil {
-		return nil, false, err
-	}
-
-	if tempWrapper.Deleted {
-		// Not really anything we can do about a deleted key since that means
-		// the vector in the PK is already deleted.
-		return nil, true, nil
-	}
-
-	// Extract the key bytes from the temporary index entry. The temporary
-	// index has the same key structure as the primary key.
-	keyBytes := sourceKV.Key[len(vm.vim.sourcePrefix):]
-
-	// Decode the key bytes into EncDatumRow so we can use the span.Builder
-	// properly.
-	_, _, err = rowenc.DecodeKeyValsUsingSpec(vm.vim.fetchSpec.KeyAndSuffixColumns, keyBytes, vm.encRow)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// Use the span.Builder to create a proper span from the decoded
-	// EncDatumRow.
-	spanToScan, containsNull, err := vm.builder.SpanFromEncDatums(vm.encRow)
-	if err != nil {
-		return nil, false, err
-	}
-	if containsNull {
-		// Primary key contains null, skip this entry
-		return nil, true, nil
-	}
-
-	// Use the cached span.Splitter to only fetch the needed column families
-	vm.spansToScan = vm.spansToScan[:0]
-	vm.spansToScan = vm.vim.splitter.MaybeSplitSpanIntoSeparateFamilies(
-		vm.spansToScan,
-		spanToScan,
-		len(vm.encRow),
-		containsNull,
-	)
-
-	// Use the span to fetch the vector column and prefix columns from the
-	// primary index.
-	if err := vm.fetcher.StartScan(
-		ctx,
-		vm.spansToScan,
-		nil, /* spanIDs */
-		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
-		1, /* rowLimit */
-	); err != nil {
-		return nil, false, err
-	}
-
-	// Fetch the row containing the vector column using pre-allocated memory
-	ok, _, err := vm.fetcher.NextRowDecodedInto(ctx, vm.rowDatums, vm.vim.colMap)
-	if err != nil {
-		return nil, false, err
-	} else if !ok {
-		// Primary key row not found -- this row is deleted
-		return nil, true, nil
-	}
-
-	vectorDatum := vm.rowDatums[vm.vim.vectorPos]
-	if vectorDatum == tree.DNull {
-		// Null vector, skip this entry
-		return nil, true, nil
-	}
-	vector := tree.MustBeDPGVector(vectorDatum).T
-
-	// Extract the prefix columns for the search from the fetched rowDatums
-	prefixCols := vm.vim.tableDesc.IndexFetchSpecKeyAndSuffixColumns(vm.vim.destIndex)[:vm.vim.destIndex.NumKeyColumns()-1]
-	prefixKey, _, err := rowenc.EncodePartialIndexKey(prefixCols, vm.vim.colMap, vm.rowDatums, []byte{})
-	if err != nil {
-		return nil, false, err
-	}
-
-	// Search for the partition that should contain the new index entry
-	if err := vm.searcher.SearchForInsert(ctx, prefixKey, vector); err != nil {
-		return nil, false, err
-	}
-	vm.vectorEncodingHelper.InitForPut()
-	vm.vectorEncodingHelper.PartitionKeys[vm.vim.destIndex.GetID()] = vm.searcher.PartitionKey()
-	vm.vectorEncodingHelper.QuantizedVecs[vm.vim.destIndex.GetID()] = vm.searcher.EncodedVector()
-
-	// Encode the index entry for the vector index
-	entries, err := rowenc.EncodeSecondaryIndex(
-		ctx,
-		vm.vim.codec,
-		vm.vim.tableDesc,
-		vm.vim.destIndex,
-		vm.vim.colMap,
-		vm.rowDatums,
-		vm.vectorEncodingHelper,
-		false, /* includeEmpty */
-	)
-	if err != nil {
-		return nil, false, err
-	}
-	if len(entries) != 1 {
-		return nil, false, errors.AssertionFailedf("expected exactly one index entry, got %d", len(entries))
-	}
-
-	return &kv.KeyValue{
-		Key:   entries[0].Key,
-		Value: &entries[0].Value,
-	}, false, nil
-}
-
-// Close closes the VectorIndexMergerTxn.
-func (vm *VectorIndexMergerTxn) Close(ctx context.Context) {
-	vm.fetcher.Close(ctx)
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -930,21 +477,6 @@ type IndexBackfiller struct {
 	// backfilled.
 	indexesToEncode []catalog.Index
 
-	// sourceIndex the primary index that should be used to execute this
-	// backfill.
-	sourceIndex catalog.Index
-
-	// keyPrefixes is a slice of key prefixes for each index in indexesToEncode.
-	// indexesToEncode and keyPrefixes should both have the same ordering.
-	keyPrefixes [][]byte
-
-	// map of index IDs to VectorIndexHelpers, so that writers can map from
-	// IndexEntry keys they see to the proper re-encoding logic.
-	VectorIndexes        map[descpb.IndexID]*VectorIndexHelper
-	vectorEncodingHelper rowenc.VectorIndexEncodingHelper
-	VectorIndexManager   *vecindex.Manager
-	VectorOnly           bool
-
 	alloc tree.DatumAlloc
 
 	// mon is a memory monitor linked with the IndexBackfiller on creation.
@@ -955,7 +487,7 @@ type IndexBackfiller struct {
 // ContainsInvertedIndex returns true if backfilling an inverted index.
 func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 	for _, idx := range ib.added {
-		if idx.GetType() == idxtype.INVERTED {
+		if idx.GetType() == descpb.IndexDescriptor_INVERTED {
 			return true
 		}
 	}
@@ -965,32 +497,16 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 // InitForLocalUse initializes an IndexBackfiller for use during local execution
 // within a transaction. In this case, the entire backfill process is occurring
 // on the gateway as part of the user's transaction.
-//
-// Non-nil memory monitor must be provided. If an error is returned, it'll be
-// stopped automatically; otherwise, the backfiller takes ownership of the
-// monitor.
 func (ib *IndexBackfiller) InitForLocalUse(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
-	vecIndexManager *vecindex.Manager,
-) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
-	defer func() {
-		if retErr != nil {
-			mon.Stop(ctx)
-		}
-	}()
+) error {
 
 	// Initialize ib.added.
-	// TODO(150163): Pass vecIndexManager once vector index build is supported with the legacy schema changer.
-	if err := ib.initIndexes(ctx, evalCtx, desc, nil /* allowList */, 0 /*sourceIndex*/, nil /*vecIndexManager*/); err != nil {
-		return err
-	}
+	ib.initIndexes(desc, nil /* allowList */)
 
 	// Initialize ib.cols and ib.colIdxMap.
 	if err := ib.initCols(desc); err != nil {
@@ -1010,8 +526,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	ib.init(evalCtx, predicates, colExprs, mon)
-	return nil
+	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
 // constructExprs is a helper to construct the index and column expressions
@@ -1122,55 +637,32 @@ func constructExprs(
 // backfill operation manages its own transactions. This separation is necessary
 // due to the different procedure for accessing user defined type metadata as
 // part of a distributed flow.
-//
-// Non-nil memory monitor must be provided. If an error is returned, it'll be
-// stopped automatically; otherwise, the backfiller takes ownership of the
-// monitor.
 func (ib *IndexBackfiller) InitForDistributedUse(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	desc catalog.TableDescriptor,
 	allowList []catid.IndexID,
-	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
-) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
-	defer func() {
-		if retErr != nil {
-			mon.Stop(ctx)
-		}
-	}()
-
-	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
-	// to make a copy.
-	evalCtx := flowCtx.NewEvalCtx()
+) error {
 
 	// Initialize ib.added.
-	if err := ib.initIndexes(
-		ctx,
-		evalCtx,
-		desc,
-		allowList,
-		sourceIndexID,
-		flowCtx.Cfg.VecIndexManager.(*vecindex.Manager),
-	); err != nil {
-		return err
-	}
+	ib.initIndexes(desc, allowList)
 
 	// Initialize ib.indexBackfillerCols.
 	if err := ib.initCols(desc); err != nil {
 		return err
 	}
 
+	// We'll be modifying the eval.Context in BuildIndexEntriesChunk, so we need
+	// to make a copy.
+	evalCtx := flowCtx.NewEvalCtx()
 	var predicates map[descpb.IndexID]tree.TypedExpr
 	var colExprs map[descpb.ColumnID]tree.TypedExpr
 	var referencedColumns catalog.TableColSet
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
-	if err := flowCtx.Cfg.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
@@ -1179,7 +671,6 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext(&resolver)
 		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
-		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		// Convert any partial index predicate strings into expressions.
 		predicates, colExprs, referencedColumns, err = constructExprs(
 			ctx, desc, ib.added, ib.cols, ib.addedCols, ib.computedCols, evalCtx, &semaCtx,
@@ -1199,8 +690,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		ib.valNeededForCol.Add(ib.colIdxMap.GetDefault(col))
 	})
 
-	ib.init(evalCtx, predicates, colExprs, mon)
-	return nil
+	return ib.init(evalCtx, predicates, colExprs, mon)
 }
 
 // Close releases the resources used by the IndexBackfiller. It can be called
@@ -1237,25 +727,16 @@ func (ib *IndexBackfiller) ShrinkBoundAccount(ctx context.Context, shrinkBy int6
 // populates the cols and colIdxMap fields.
 func (ib *IndexBackfiller) initCols(desc catalog.TableDescriptor) (err error) {
 	ib.indexBackfillerCols, err = makeIndexBackfillColumns(
-		desc, desc.DeletableColumns(), ib.sourceIndex, ib.added,
+		desc.DeletableColumns(), desc.GetPrimaryIndex(), ib.added,
 	)
 	return err
 }
 
 // initIndexes is a helper to populate index metadata of an IndexBackfiller. It
-// populates the added field to be all adding index mutations, along with the
-// keyPrefixes field to be the respective keyPrefixes (these slices should
-// maintain the same ordering).
+// populates the added field to be all adding index mutations.
 // If `allowList` is non-nil, we only add those in this list.
 // If `allowList` is nil, we add all adding index mutations.
-func (ib *IndexBackfiller) initIndexes(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	desc catalog.TableDescriptor,
-	allowList []catid.IndexID,
-	sourceIndexID catid.IndexID,
-	vecIndexManager *vecindex.Manager,
-) error {
+func (ib *IndexBackfiller) initIndexes(desc catalog.TableDescriptor, allowList []catid.IndexID) {
 	var allowListAsSet catid.IndexSet
 	if len(allowList) > 0 {
 		allowListAsSet = catid.MakeIndexIDSet(allowList...)
@@ -1263,12 +744,6 @@ func (ib *IndexBackfiller) initIndexes(
 
 	mutations := desc.AllMutations()
 	mutationID := mutations[0].MutationID()
-	if sourceIndexID != 0 {
-		ib.sourceIndex = catalog.FindIndexByID(desc, sourceIndexID)
-	} else {
-		ib.sourceIndex = desc.GetPrimaryIndex()
-	}
-	ib.keyPrefixes = make([][]byte, 0, len(ib.added))
 	// Mutations in the same transaction have the same ID. Loop through the
 	// mutations and collect all index mutations.
 	for _, m := range mutations {
@@ -1279,52 +754,17 @@ func (ib *IndexBackfiller) initIndexes(
 			(allowListAsSet.Empty() || allowListAsSet.Contains(m.AsIndex().GetID())) {
 			idx := m.AsIndex()
 			ib.added = append(ib.added, idx)
-			keyPrefix := rowenc.MakeIndexKeyPrefix(evalCtx.Codec, desc.GetID(), idx.GetID())
-			ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 		}
 	}
-
-	if len(ib.added) > 0 {
-		ib.VectorOnly = true
-	}
-	for _, idx := range ib.added {
-		if idx.GetType() != idxtype.VECTOR {
-			ib.VectorOnly = false
-			continue
-		}
-
-		if vecIndexManager == nil {
-			return unimplemented.NewWithIssue(
-				150163,
-				"vector index build not supported with the legacy schema changer",
-			)
-		}
-
-		if ib.VectorIndexes == nil {
-			ib.VectorIndexes = make(map[descpb.IndexID]*VectorIndexHelper)
-		}
-
-		helper, err := NewVectorIndexHelper(ctx, evalCtx, desc, idx, sourceIndexID, vecIndexManager)
-		if err != nil {
-			return err
-		}
-
-		ib.VectorIndexes[idx.GetID()] = helper
-	}
-
-	return nil
 }
 
 // init completes the initialization of an IndexBackfiller.
-//
-// The IndexBackfiller takes ownership of the monitor which must be non-nil.
-// It'll be closed when the backfiller is closed.
 func (ib *IndexBackfiller) init(
 	evalCtx *eval.Context,
 	predicateExprs map[descpb.IndexID]tree.TypedExpr,
 	colExprs map[descpb.ColumnID]tree.TypedExpr,
 	mon *mon.BytesMonitor,
-) {
+) error {
 	ib.evalCtx = evalCtx
 	ib.predicates = predicateExprs
 	ib.colExprs = colExprs
@@ -1336,7 +776,6 @@ func (ib *IndexBackfiller) init(
 	ib.indexesToEncode = ib.added
 	if len(ib.predicates) > 0 {
 		ib.indexesToEncode = make([]catalog.Index, 0, len(ib.added))
-		ib.keyPrefixes = make([][]byte, 0, len(ib.added))
 	}
 
 	ib.types = make([]*types.T, len(ib.cols))
@@ -1345,20 +784,21 @@ func (ib *IndexBackfiller) init(
 	}
 
 	// Create a bound account associated with the index backfiller monitor.
+	if mon == nil {
+		return errors.AssertionFailedf("no memory monitor linked to IndexBackfiller during init")
+	}
 	ib.mon = mon
 	ib.muBoundAccount.boundAccount = mon.MakeBoundAccount()
+	return nil
 }
 
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp
 // provided, and builds all the added indexes.
 // The method accounts for the memory used by the index entries for this chunk
 // using the memory monitor associated with ib and returns the amount of memory
-// that needs to be freed once the returned IndexEntry slice is freed. This is
-// returned for the successful and failure cases. It is the callers responsibility
-// to clear the associated bound account when appropriate.
-// A non-nil resumeKey is returned when there is still work to be done in this
-// span (sp.Key < resumeKey < sp.EndKey), which happens if the entire span does
-// not fit within the batch size.
+// that needs to be freed once the returned IndexEntry slice is freed.
+// It is the callers responsibility to clear the associated bound account when
+// appropriate.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -1366,11 +806,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	traceKV bool,
-) (entries []rowenc.IndexEntry, resumeKey roachpb.Key, memUsedPerChunk int64, err error) {
+) ([]rowenc.IndexEntry, roachpb.Key, int64, error) {
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
 	const sizeOfIndexEntry = int64(unsafe.Sizeof(rowenc.IndexEntry{}))
+	var memUsedPerChunk int64
 
 	indexEntriesInChunkInitialBufferSize :=
 		sizeOfIndexEntry * initBufferSize * int64(len(ib.added))
@@ -1379,7 +820,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			"failed to initialize empty buffer to store the index entries of all rows in the chunk")
 	}
 	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
-	entries = make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
+	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
 	var fetcherCols []descpb.ColumnID
 	for i, c := range ib.cols {
@@ -1404,9 +845,9 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// read or used
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, ib.evalCtx.Codec, tableDesc, ib.sourceIndex, fetcherCols,
+		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
 	); err != nil {
-		return nil, nil, memUsedPerChunk, err
+		return nil, nil, 0, err
 	}
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
@@ -1420,7 +861,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
-		return nil, nil, memUsedPerChunk, err
+		return nil, nil, 0, err
 	}
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
@@ -1428,8 +869,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		rowinfra.GetDefaultBatchBytesLimit(ib.evalCtx.TestingKnobs.ForceProductionValues),
 		initBufferSize,
 	); err != nil {
-		log.Dev.Errorf(ctx, "scan error: %s", err)
-		return nil, nil, memUsedPerChunk, err
+		log.Errorf(ctx, "scan error: %s", err)
+		return nil, nil, 0, err
 	}
 
 	iv := &schemaexpr.RowIndexedVarContainer{
@@ -1440,7 +881,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
 	if err := ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {
-		return nil, nil, memUsedPerChunk, errors.Wrap(err,
+		return nil, nil, 0, errors.Wrap(err,
 			"failed to initialize empty buffer to store the index entries of a single row")
 	}
 	memUsedPerChunk += indexEntriesPerRowInitialBufferSize
@@ -1483,11 +924,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		}
 		return nil
 	}
-
 	for i := int64(0); i < chunkSize; i++ {
-		ok, _, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
+		ok, err := fetcher.NextRowDecodedInto(ctx, ib.rowVals, ib.colIdxMap)
 		if err != nil {
-			return nil, nil, memUsedPerChunk, err
+			return nil, nil, 0, err
 		}
 		if !ok {
 			break
@@ -1498,10 +938,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// may reference default values.
 		if len(ib.colExprs) > 0 {
 			if err := evaluateExprs(ib.addedCols); err != nil {
-				return nil, nil, memUsedPerChunk, err
+				return nil, nil, 0, err
 			}
 			if err := evaluateExprs(ib.computedCols); err != nil {
-				return nil, nil, memUsedPerChunk, err
+				return nil, nil, 0, err
 			}
 		}
 
@@ -1509,14 +949,11 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		// indexes that the current row should be added to.
 		if len(ib.predicates) > 0 {
 			ib.indexesToEncode = ib.indexesToEncode[:0]
-			ib.keyPrefixes = ib.keyPrefixes[:0]
 			for _, idx := range ib.added {
 				if !idx.IsPartial() {
 					// If the index is not a partial index, all rows should have
 					// an entry.
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
-					keyPrefix := rowenc.MakeIndexKeyPrefix(ib.evalCtx.Codec, tableDesc.GetID(), idx.GetID())
-					ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 					continue
 				}
 
@@ -1526,37 +963,13 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 
 				val, err := eval.Expr(ctx, ib.evalCtx, texpr)
 				if err != nil {
-					return nil, nil, memUsedPerChunk, err
+					return nil, nil, 0, err
 				}
 
 				if val == tree.DBoolTrue {
 					ib.indexesToEncode = append(ib.indexesToEncode, idx)
-					keyPrefix := rowenc.MakeIndexKeyPrefix(ib.evalCtx.Codec, tableDesc.GetID(), idx.GetID())
-					ib.keyPrefixes = append(ib.keyPrefixes, keyPrefix)
 				}
 			}
-		}
-
-		firstVectorIndex := true
-		for indexID, vectorIndexHelper := range ib.VectorIndexes {
-			if firstVectorIndex {
-				ib.vectorEncodingHelper.InitForPut()
-				firstVectorIndex = false
-			}
-
-			if ib.rowVals[vectorIndexHelper.vectorOrd] == tree.DNull {
-				ib.vectorEncodingHelper.QuantizedVecs[indexID] = tree.DNull
-				ib.vectorEncodingHelper.PartitionKeys[indexID] = tree.DNull
-				continue
-			}
-
-			vectorValue := tree.MustBeDPGVector(ib.rowVals[vectorIndexHelper.vectorOrd]).T
-			encodedVector, err := vector.Encode([]byte{}, vectorValue)
-			if err != nil {
-				return nil, nil, memUsedPerChunk, err
-			}
-			ib.vectorEncodingHelper.QuantizedVecs[indexID] = tree.NewDBytes(tree.DBytes(encodedVector))
-			ib.vectorEncodingHelper.PartitionKeys[indexID] = tree.NewDInt(tree.DInt(cspann.RootKey))
 		}
 
 		// We're resetting the length of this slice for variable length indexes such as inverted
@@ -1576,20 +989,17 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				ib.evalCtx.Codec,
 				tableDesc,
 				ib.indexesToEncode,
-				ib.keyPrefixes,
 				ib.colIdxMap,
 				ib.rowVals,
-				ib.vectorEncodingHelper,
 				buffer,
 				false, /* includeEmpty */
 				&ib.muBoundAccount.boundAccount,
 			)
 		}(buffer)
-		// Account for memory use prior to error checking
-		memUsedPerChunk += memUsedDuringEncoding
 		if err != nil {
-			return nil, nil, memUsedPerChunk, err
+			return nil, nil, 0, err
 		}
+		memUsedPerChunk += memUsedDuringEncoding
 
 		// The memory monitor has already accounted for cap(entries). If the number
 		// of index entries are going to cause the entries buffer to re-slice, then
@@ -1598,7 +1008,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		if cap(entries)-len(entries) < len(buffer) {
 			resliceSize := sizeOfIndexEntry * int64(cap(entries))
 			if err := ib.GrowBoundAccount(ctx, resliceSize); err != nil {
-				return nil, nil, memUsedPerChunk, err
+				return nil, nil, 0, err
 			}
 			memUsedPerChunk += resliceSize
 		}
@@ -1612,6 +1022,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ib.ShrinkBoundAccount(ctx, shrinkSize)
 	memUsedPerChunk -= shrinkSize
 
+	var resumeKey roachpb.Key
 	if fetcher.Key() != nil {
 		resumeKey = make(roachpb.Key, len(fetcher.Key()))
 		copy(resumeKey, fetcher.Key())
@@ -1641,13 +1052,9 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 
 	for _, entry := range entries {
 		if traceKV {
-			log.VEventf(ctx, 2, "CPut %s -> %s", entry.Key, entry.Value.PrettyPrint())
+			log.VEventf(ctx, 2, "InitPut %s -> %s", entry.Key, entry.Value.PrettyPrint())
 		}
-		// Note that we generally don't expect the previous value to exist, so
-		// CPut with nil expValue would be sufficient. This is not the case when
-		// performing the primary key change where the previous value might
-		// exist.
-		batch.CPutAllowingIfNotExists(entry.Key, &entry.Value, entry.Value.TagAndDataBytes())
+		batch.InitPut(entry.Key, &entry.Value, false /* failOnTombstones */)
 	}
 	writeBatch := txn.Run
 	if alsoCommit {

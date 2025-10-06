@@ -40,7 +40,7 @@ func TestGossipFirstRange(t *testing.T) {
 	descs := make(chan *roachpb.RangeDescriptor)
 	unregister := tc.Servers[0].GossipI().(*gossip.Gossip).
 		RegisterCallback(gossip.KeyFirstRangeDescriptor,
-			func(_ string, content roachpb.Value, _ int64) {
+			func(_ string, content roachpb.Value) {
 				var desc roachpb.RangeDescriptor
 				if err := content.GetProto(&desc); err != nil {
 					select {
@@ -76,7 +76,7 @@ func TestGossipFirstRange(t *testing.T) {
 				if reflect.DeepEqual(&desc, gossiped) {
 					return
 				}
-				log.KvDistribution.Infof(context.Background(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
+				log.Infof(context.Background(), "expected\n%+v\nbut found\n%+v", desc, gossiped)
 			}
 		}
 	}
@@ -174,7 +174,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	newServerArgs.SQLAddr = tc.Servers[oldNodeIdx].AdvSQLAddr()
 	newServerArgs.PartOfCluster = true
 	newServerArgs.JoinAddr = tc.Servers[1].AdvRPCAddr()
-	log.KvDistribution.Infof(ctx, "stopping server %d", oldNodeIdx)
+	log.Infof(ctx, "stopping server %d", oldNodeIdx)
 	tc.StopServer(oldNodeIdx)
 	// We are re-using a hard-coded port. Other processes on the system may by now
 	// be listening on this port, so there will be flakes. For now, skip the test

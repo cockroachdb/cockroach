@@ -80,21 +80,6 @@ func Map[T, K any](collection []T, fn func(T) K) []K {
 	return out
 }
 
-// MapE returns a new slice containing the results of fn for each element
-// within a collection. If fn returns an error for any element, the function
-// exits early and returns the error.
-func MapE[T, K any](collection []T, fn func(T) (K, error)) ([]K, error) {
-	out := make([]K, len(collection))
-	for i, el := range collection {
-		value, err := fn(el)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = value
-	}
-	return out, nil
-}
-
 // MapFrom returns a map populated with keys and values returned by fn.
 // Usage:
 //
@@ -125,14 +110,4 @@ func InsertUnique[T cmp.Ordered](s []T, v T) []T {
 		return s
 	}
 	return slices.Insert(s, idx, v)
-}
-
-// Reduce applies a function against an accumulator and each element of a
-// collection, reducing it to a single value.
-func Reduce[T any, U any](collection []T, fn func(acc U, el T, idx int) U, init U) U {
-	acc := init
-	for idx, el := range collection {
-		acc = fn(acc, el, idx)
-	}
-	return acc
 }

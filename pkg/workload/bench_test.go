@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -25,9 +24,9 @@ func columnByteSize(col *coldata.Vec) int64 {
 	case types.IntFamily:
 		switch t.Width() {
 		case 0, 64:
-			return int64(len(col.Int64())) * memsize.Int64
+			return int64(len(col.Int64()) * 8)
 		case 16:
-			return int64(len(col.Int16())) * memsize.Int16
+			return int64(len(col.Int16()) * 2)
 		default:
 			panic(fmt.Sprintf("unexpected int width: %d", t.Width()))
 		}
@@ -36,10 +35,6 @@ func columnByteSize(col *coldata.Vec) int64 {
 	case types.BytesFamily:
 		// We subtract the overhead to be in line with Int64 and Float64 cases.
 		return col.Bytes().Size() - coldata.FlatBytesOverhead
-	case types.TimestampTZFamily:
-		return int64(col.Timestamp().Len()) * memsize.Time
-	case types.DecimalFamily:
-		return int64(col.Decimal().Len()) * memsize.Decimal
 	default:
 		panic(fmt.Sprintf(`unhandled type %s`, t))
 	}

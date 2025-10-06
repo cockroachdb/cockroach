@@ -69,11 +69,6 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 			r.Escaped("Schema:")
 			r.CodeBlock("", rsgCrash.Schema)
 		}
-	} else if fnr, ok := data.CondensedMessage.FatalNodeRoachtest(); ok {
-		r.Escaped("Failed with:")
-		r.CodeBlock("", fnr.Message)
-		r.Escaped("Fatal entries found in Cockroach logs:")
-		r.CodeBlock("", fnr.FatalLogs)
 	} else {
 		r.CodeBlock("", data.CondensedMessage.Digest(50))
 	}

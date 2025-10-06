@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -41,7 +40,7 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	ctx := context.Background()
 	sysIDPayload := testIDPayload{tenantID: "1"}
-	ctx = serverident.ContextWithServerIdentification(ctx, sysIDPayload)
+	ctx = context.WithValue(ctx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
 
 	Errorf(ctx, "test1 %v end", "hello")
 	if contains(redactableIndicator, t) {
@@ -228,156 +227,4 @@ func TestDefaultRedactable(t *testing.T) {
 	if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
 		t.Errorf("expected marked data, got %q", contents())
 	}
-
-	t.Run("with defaut safe redaction", func(t *testing.T) {
-		defer capture()()
-		defer setShouldSanitizeArgs(true)()
-
-		// when "default safe" redaction is enabled, we need to explicitly
-		// mark the unsafe arg as unsafe.
-		Infof(context.Background(), "safe %s", encoding.Unsafe("unsafe"))
-		if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
-			t.Errorf("expected marked data, got %q", contents())
-		}
-	})
-}
-
-func setShouldSanitizeArgs(val bool) func() {
-	prev := envDefaultSafeRedactionEnabled
-	envDefaultSafeRedactionEnabled = val
-	return func() { envDefaultSafeRedactionEnabled = prev }
-}
-
-// does not implement SafeFormatter
-type sampleSafe struct {
-	a string
-}
-
-func (s sampleSafe) String() string {
-	return s.a
-}
-
-// implements SafeFormatter
-type sampleWithUnsafe struct {
-	a, b string
-}
-
-func (s sampleWithUnsafe) String() string {
-	return fmt.Sprintf("a: %s, b: %s", s.a, s.b)
-}
-
-func (s sampleWithUnsafe) SafeFormat(w redact.SafePrinter, _ rune) {
-	// explicitly marks s.a as safe
-	w.Printf("a: %s, b: %s", redact.Safe(s.a), s.b)
-}
-
-type errWithHint struct {
-	err error
-}
-
-func (e errWithHint) Error() string {
-	return e.err.Error()
-}
-
-func (e errWithHint) ErrorHint() string {
-	return "hint"
-}
-
-func TestDefaultSafeRedaction(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer ScopeWithoutShowLogs(t).Close(t)
-	defer setShouldSanitizeArgs(true)()
-
-	tt := []struct {
-		name     string
-		args     any
-		expected string
-	}{
-		{
-			name:     "does not implement SafeFormatter",
-			args:     sampleSafe{a: "safe"},
-			expected: "safe",
-		},
-		{
-			name:     "implements SafeFormatter",
-			args:     sampleWithUnsafe{a: "safe", b: "unsafe"},
-			expected: "a: safe, b: ‹unsafe›",
-		},
-		{
-			name:     "uses encoding.Unsafe with struct",
-			args:     encoding.Unsafe(sampleSafe{a: "unsafe"}),
-			expected: "‹unsafe›",
-		},
-		{
-			name:     "uses primitive type", // should always be safe
-			args:     "safe",
-			expected: "safe",
-		},
-		{
-			name:     "uses encoding.Unsafe with primitive type",
-			args:     encoding.Unsafe(100),
-			expected: "‹100›",
-		},
-		{
-			name:     "has error hints",
-			args:     errWithHint{err: errors.New("error")},
-			expected: "‹error›\n+HINT: ‹hint›",
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			defer capture()()
-			Infof(context.Background(), "%v", tc.args)
-
-			messages := []string{} // there might be more than one log line. Collect all the messages
-			for _, line := range strings.Split(strings.TrimSpace(contents()), "\n") {
-				messages = append(messages, strings.TrimSpace(parseLogEntry(t, line).Message))
-			}
-
-			require.Equal(t, tc.expected, strings.Join(messages, "\n"))
-		})
-	}
-}
-
-func parseLogEntry(t *testing.T, line string) logpb.Entry {
-	t.Helper()
-
-	reader := strings.NewReader(line)
-	decoder, err := NewEntryDecoderWithFormat(reader, WithMarkedSensitiveData, "crdb-v1")
-	require.NoError(t, err)
-
-	var entry logpb.Entry
-	require.NoError(t, decoder.Decode(&entry))
-	return entry
-}
-
-func BenchmarkDefaultSafeRedaction(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	defer ScopeWithoutShowLogs(b).Close(b)
-	defer capture()()
-
-	printLogLines := func() {
-		Info(context.Background(), "safe")
-		Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
-		Infof(context.Background(), "%s", sampleSafe{a: "safe"})
-		Infof(
-			context.Background(), "%s %s",
-			sampleWithUnsafe{a: "safe", b: "unsafe"}, sampleSafe{a: "safe"},
-		)
-	}
-
-	b.Run("with default unsafe (current behaviour)", func(b *testing.B) {
-		defer setShouldSanitizeArgs(false)()
-		for i := 0; i < b.N; i++ {
-			printLogLines()
-		}
-	})
-
-	b.Run("with default safe", func(b *testing.B) {
-		defer setShouldSanitizeArgs(true)()
-		for i := 0; i < b.N; i++ {
-			printLogLines()
-		}
-	})
 }

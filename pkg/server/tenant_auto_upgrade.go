@@ -47,7 +47,7 @@ func (s *SQLServer) startTenantAutoUpgradeLoop(ctx context.Context) error {
 				if storageClusterVersion.Equal(clusterversion.Latest.Version()) {
 					upgradeCompleted, err := s.startAttemptTenantUpgrade(ctx)
 					if err != nil {
-						log.Dev.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
+						log.Errorf(ctx, "failed to start an upgrade attempt: %v", err)
 					}
 
 					if upgradeCompleted {
@@ -70,10 +70,10 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) (bool, error)
 	if k := s.cfg.TestingKnobs.Server; k != nil {
 		upgradeTestingKnobs := k.(*TestingKnobs)
 		if disableCh := upgradeTestingKnobs.DisableAutomaticVersionUpgrade; disableCh != nil {
-			log.Dev.Infof(ctx, "auto upgrade disabled by testing")
+			log.Infof(ctx, "auto upgrade disabled by testing")
 			select {
 			case <-disableCh:
-				log.Dev.Infof(ctx, "auto upgrade no longer disabled by testing")
+				log.Infof(ctx, "auto upgrade no longer disabled by testing")
 			case <-s.stopper.ShouldQuiesce():
 				return false, nil
 			}
@@ -113,16 +113,16 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) (bool, error)
 	case UpgradeBlockedDueToError:
 		return false, err
 	case UpgradeDisabledByConfiguration:
-		log.Dev.Infof(ctx, "auto upgrade is disabled for current version (cluster.auto_upgrade.enabled): %s", redact.Safe(tenantClusterVersion.Version))
+		log.Infof(ctx, "auto upgrade is disabled for current version (cluster.auto_upgrade.enabled): %s", redact.Safe(tenantClusterVersion.Version))
 		return false, nil
 	case UpgradeDisabledByConfigurationToPreserveDowngrade:
-		log.Dev.Infof(ctx, "auto upgrade is disabled for current version (cluster.preserve_downgrade_option): %s", redact.Safe(tenantClusterVersion.Version))
+		log.Infof(ctx, "auto upgrade is disabled for current version (cluster.preserve_downgrade_option): %s", redact.Safe(tenantClusterVersion.Version))
 		return false, nil
 	case UpgradeAlreadyCompleted:
-		log.Dev.Info(ctx, "no need to upgrade, instance already at the newest version")
+		log.Info(ctx, "no need to upgrade, instance already at the newest version")
 		return true, nil
 	case UpgradeBlockedDueToLowStorageClusterVersion:
-		log.Dev.Info(ctx, "upgrade blocked because storage binary version doesn't support upgrading to minimum tenant binary version")
+		log.Info(ctx, "upgrade blocked because storage binary version doesn't support upgrading to minimum tenant binary version")
 		return false, nil
 	case UpgradeAllowed:
 		// Fall out of the select below.
@@ -147,7 +147,7 @@ func (s *SQLServer) startAttemptTenantUpgrade(ctx context.Context) (bool, error)
 		); err != nil {
 			return false, errors.Wrap(err, "error when finalizing tenant cluster version upgrade")
 		} else {
-			log.Dev.Infof(ctx, "successfully upgraded tenant cluster version to %v", upgradeToVersion)
+			log.Infof(ctx, "successfully upgraded tenant cluster version to %v", upgradeToVersion)
 			return false, nil
 		}
 	}

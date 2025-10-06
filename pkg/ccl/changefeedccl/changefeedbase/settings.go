@@ -23,6 +23,7 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	"changefeed.experimental_poll_interval",
 	"polling interval for the table descriptors",
 	1*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // DefaultMinCheckpointFrequency is the default frequency to flush sink.
@@ -52,6 +53,7 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 	"changefeed.slow_span_log_threshold",
 	"a changefeed will log spans with resolved timestamps this far behind the current wall-clock time; if 0, a default value is calculated based on other cluster settings",
 	0,
+	settings.NonNegativeDuration,
 )
 
 // IdleTimeout controls how long the changefeed will wait for a new KV being
@@ -61,37 +63,32 @@ var IdleTimeout = settings.RegisterDurationSetting(
 	"changefeed.idle_timeout",
 	"a changefeed will mark itself idle if no changes have been emitted for greater than this duration; if 0, the changefeed will never be marked idle",
 	10*time.Minute,
+	settings.NonNegativeDuration,
 	settings.WithName("changefeed.auto_idle.timeout"),
 )
 
-// SpanCheckpointInterval controls how often span-level checkpoints
-// can be written.
-var SpanCheckpointInterval = settings.RegisterDurationSetting(
+// FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
+var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_frequency",
-	"interval at which span-level checkpoints will be written; "+
-		"if 0, span-level checkpoints are disabled",
+	"controls the frequency with which span level checkpoints will be written; if 0, disabled",
 	10*time.Minute,
-	settings.WithName("changefeed.span_checkpoint.interval"),
+	settings.NonNegativeDuration,
 )
 
-// SpanCheckpointLagThreshold controls the amount of time a changefeed's
-// lagging spans must lag behind its leading spans before a span-level
-// checkpoint is written.
-var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
+// FrontierHighwaterLagCheckpointThreshold controls the amount the high-water
+// mark is allowed to lag behind the leading edge of the frontier before we
+// begin to attempt checkpointing spans above the high-water mark
+var FrontierHighwaterLagCheckpointThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_highwater_lag_checkpoint_threshold",
-	"the amount of time a changefeed's lagging (slowest) spans must lag "+
-		"behind its leading (fastest) spans before a span-level checkpoint "+
-		"to save leading span progress is written; if 0, span-level checkpoints "+
-		"due to lagging spans is disabled",
+	"controls the maximum the high-water mark is allowed to lag behind the leading spans of the frontier before per-span checkpointing is enabled; if 0, checkpointing due to high-water lag is disabled",
 	10*time.Minute,
-	settings.WithPublic,
-	settings.WithName("changefeed.span_checkpoint.lag_threshold"),
-)
+	settings.NonNegativeDuration,
+	settings.WithPublic)
 
-// SpanCheckpointMaxBytes controls the maximum number of key bytes that will be added
-// to a span-level checkpoint record.
+// FrontierCheckpointMaxBytes controls the maximum number of key bytes that will be added
+// to the checkpoint record.
 // Checkpoint record could be fairly large.
 // Assume we have a 10T table, and a 1/2G max range size: 20K spans.
 // Span frontier merges adjacent spans, so worst case we have 10K spans.
@@ -103,13 +100,12 @@ var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
 //   - Assume we want to have at most 150MB worth of checkpoints in the job record.
 //
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
-// SpanCheckpointInterval setting, 1 MB per checkpoint.
-var SpanCheckpointMaxBytes = settings.RegisterByteSizeSetting(
+// FrontierCheckpointFrequency setting, 1 MB per checkpoint.
+var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_max_bytes",
-	"the maximum size of a changefeed span-level checkpoint as measured by the total size of key bytes",
+	"controls the maximum size of the checkpoint as a total size of key bytes",
 	1<<20, // 1 MiB
-	settings.WithName("changefeed.span_checkpoint.max_bytes"),
 )
 
 // ScanRequestLimit is the number of Scan requests that can run at once.
@@ -169,20 +165,17 @@ func validateSinkThrottleConfig(values *settings.Values, configStr string) error
 	return json.Unmarshal([]byte(configStr), config)
 }
 
-// ResolvedTimestampMinUpdateInterval specifies the minimum amount of time that
-// must have elapsed since the last time a changefeed's resolved timestamp was
-// updated before it is eligible to updated again.
-var ResolvedTimestampMinUpdateInterval = settings.RegisterDurationSetting(
+// MinHighWaterMarkCheckpointAdvance specifies the minimum amount of time the
+// changefeed high water mark must advance for it to be eligible for checkpointing.
+var MinHighWaterMarkCheckpointAdvance = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.min_highwater_advance",
-	"minimum amount of time that must have elapsed since the last time "+
-		"a changefeed's resolved timestamp was updated before it is eligible to be "+
-		"updated again; default of 0 means no minimum interval is enforced but "+
-		"updating will still be limited by the average time it takes to checkpoint progress",
+	"minimum amount of time the changefeed high water mark must advance "+
+		"for it to be eligible for checkpointing; Default of 0 will checkpoint every time frontier "+
+		"advances, as long as the rate of checkpointing keeps up with the rate of frontier changes",
 	0,
-	settings.WithPublic,
-	settings.WithName("changefeed.resolved_timestamp.min_update_interval"),
-)
+	settings.NonNegativeDuration,
+	settings.WithPublic)
 
 // EventMemoryMultiplier is the multiplier for the amount of memory needed to process an event.
 //
@@ -215,21 +208,13 @@ var ProtectTimestampLag = settings.RegisterDurationSetting(
 	10*time.Minute,
 	settings.PositiveDuration)
 
-// PerTableProtectedTimestamps enables per-table protected timestamp records
-// instead of a single record for all tables in a changefeed.
-var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.protect_timestamp.per_table.enabled",
-	"if true, creates separate protected timestamp records for each table in a changefeed; "+
-		"if false, uses a single protected timestamp record for all tables",
-	metamorphic.ConstantWithTestBool("changefeed.protect_timestamp.per_table.enabled", false))
-
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.protect_timestamp.max_age",
 	"fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration",
 	4*24*time.Hour,
+	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // BatchReductionRetryEnabled enables the temporary reduction of batch sizes upon kafka message too large errors
@@ -330,7 +315,7 @@ var UsageMetricsReportingInterval = settings.RegisterDurationSetting(
 	"changefeed.usage.reporting_interval",
 	"the interval at which the changefeed calculates and updates its usage metric",
 	5*time.Minute,
-	settings.DurationInRange(2*time.Minute, 50*time.Minute),
+	settings.PositiveDuration, settings.DurationInRange(2*time.Minute, 50*time.Minute),
 )
 
 // UsageMetricsReportingTimeoutPercent is the percent of
@@ -350,14 +335,6 @@ var DefaultLaggingRangesThreshold = 3 * time.Minute
 // DefaultLaggingRangesPollingInterval is the default polling rate at which
 // lagging ranges are checked and metrics are updated.
 var DefaultLaggingRangesPollingInterval = 1 * time.Minute
-
-var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
-	"changefeed.resolved_timestamp.granularity",
-	"the granularity at which changefeed progress is quantized to make tracking more efficient",
-	time.Duration(metamorphic.ConstantWithTestRange("changefeed.resolved_timestamp.granularity", 1, 0, 10))*time.Second,
-	settings.DurationWithMinimum(0),
-)
 
 // MaxRetryBackoff is the maximum time a changefeed will backoff when in
 // a top-level retry loop, for example during rolling restarts.
@@ -386,39 +363,6 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.kafka_v2_error_details.enabled",
 	"if enabled, Kafka v2 sinks will include the message key, size, and MVCC timestamp in message too large errors",
-	true,
-	settings.WithPublic,
-)
-
-// UseBareTableNames is used to enable and disable the use of bare table names
-// in changefeed topics.
-var UseBareTableNames = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.bare_table_names.enabled",
-	"set to true to use bare table names in changefeed topics, false to use quoted table names; default is true",
-	true)
-
-// TrackPerTableProgress controls whether a changefeed's in-memory frontiers
-// should track span progress on a per-table basis (via partitioning into
-// one sub-frontier per table). Enabling this is necessary for any other
-// per-table progress features (e.g. per-table PTS) to work.
-var TrackPerTableProgress = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.progress.per_table_tracking.enabled",
-	"track progress on a per-table basis in-memory; enabling this will enable more "+
-		"granular saving/restoring of progress, which will reduce duplicates during restarts, "+
-		"but doing so may incur additional overhead during ordinary changefeed execution",
-	metamorphic.ConstantWithTestBool("changefeed.progress.per_table_tracking.enabled", true),
-)
-
-// FrontierPersistenceInterval configures the minimum amount of time that must
-// elapse before a changefeed will persist its entire span frontier again.
-var FrontierPersistenceInterval = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.ApplicationLevel,
-	"changefeed.progress.frontier_persistence.interval",
-	"minimum amount of time that must elapse before a changefeed "+
-		"will persist its entire span frontier again",
-	30*time.Second, /* defaultValue */
-	settings.DurationInRange(5*time.Second, 10*time.Minute),
+	false,
 	settings.WithPublic,
 )

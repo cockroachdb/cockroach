@@ -66,7 +66,7 @@ import {
   TimeScale,
   timeScale1hMinOptions,
   getValidOption,
-  toDateRange,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import {
@@ -140,7 +140,7 @@ export type TransactionsPageProps = TransactionsPageStateProps &
 type RequestParams = Pick<TState, "timeScale" | "limit" | "reqSortSetting">;
 
 function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
-  const [start, end] = toDateRange(params.timeScale);
+  const [start, end] = toRoundedDateRange(params.timeScale);
   return createCombinedStmtsRequest({
     start,
     end,
@@ -296,9 +296,9 @@ export class TransactionsPage extends React.Component<
     );
   };
 
-  onChangePage = (current: number, pageSize: number): void => {
+  onChangePage = (current: number): void => {
     const { pagination } = this.state;
-    this.setState({ pagination: { ...pagination, current, pageSize } });
+    this.setState({ pagination: { ...pagination, current } });
   };
 
   resetPagination = (): void => {
@@ -654,7 +654,6 @@ export class TransactionsPage extends React.Component<
           current={current}
           total={transactionsToDisplay.length}
           onChange={this.onChangePage}
-          onShowSizeChange={this.onChangePage}
         />
       </>
     );

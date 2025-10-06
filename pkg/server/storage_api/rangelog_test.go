@@ -25,7 +25,11 @@ import (
 func TestAdminAPIRangeLogByRangeID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Disable the default test tenant for now as this tests fails
+		// with it enabled. Tracked with #81590.
+		DefaultTestTenant: base.TODOTestTenantDisabled,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	rangeID := 654321
@@ -91,6 +95,9 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
+			// Disable the default test tenant for now as this tests fails
+			// with it enabled. Tracked with #81590.
+			DefaultTestTenant: base.TODOTestTenantDisabled,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					DisableSplitQueue: true,

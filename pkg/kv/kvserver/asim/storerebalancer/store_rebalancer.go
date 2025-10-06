@@ -7,7 +7,6 @@ package storerebalancer
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -17,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -130,36 +128,33 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 }
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
-	dim := kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension()
 	return &allocatorimpl.LoadScorerOptions{
-		BaseScorerOptions: allocatorimpl.BaseScorerOptions{
-			IOOverload:    src.allocator.IOOverloadOptions(),
-			DiskCapacity:  src.allocator.DiskOptions(),
-			Deterministic: true,
-		},
-		LoadDims:                     []load.Dimension{dim},
-		LoadThreshold:                allocatorimpl.LoadThresholds(&src.settings.ST.SV, dim),
-		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(dim),
-		MinRequiredRebalanceLoadDiff: allocatorimpl.LoadRebalanceRequiredMinDiff(&src.settings.ST.SV, dim),
+		IOOverloadOptions:            src.allocator.IOOverloadOptions(),
+		DiskOptions:                  src.allocator.DiskOptions(),
+		Deterministic:                true,
+		LoadDims:                     []load.Dimension{load.Queries},
+		LoadThreshold:                allocatorimpl.MakeQPSOnlyDim(src.settings.LBRebalanceQPSThreshold),
+		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(load.Queries),
+		MinRequiredRebalanceLoadDiff: allocatorimpl.MakeQPSOnlyDim(src.settings.LBMinRequiredQPSDiff),
 	}
 }
 
-func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
+func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Time, _ error) {
 	ticket := src.rebalancerState.pendingTicket
 	op, ok := src.controller.Check(ticket)
 	if !ok {
-		panic(fmt.Sprintf("operation not found for ticket %v", ticket))
+		return true, time.Time{}, nil
 	}
-	done, _ = op.Done()
+	done, next = op.Done()
 	if !done {
-		return false, nil
+		return false, op.Next(), nil
 	}
-	return true, op.Errors()
+	return true, next, op.Errors()
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
-	src.sr.AddLogTag("tick", tick.Sub(src.settings.StartTime))
-	ctx = src.sr.AnnotateCtx(ctx)
+	src.sr.AddLogTag("tick", tick)
+	ctx = src.sr.ResetAndAnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
 		src.phaseSleep(ctx, tick, state)
@@ -193,7 +188,7 @@ func (src *storeRebalancerControl) phasePrologue(
 			s, src.storeID,
 			kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension(),
 		),
-		kvserverbase.LoadBasedRebalancingMode.Get(&src.settings.ST.SV),
+		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
 	)
 
 	if !src.sr.ShouldRebalanceStore(ctx, rctx) {
@@ -212,7 +207,7 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance(ctx context.Contex
 		return true
 	}
 
-	done, err := src.checkPendingTicket()
+	done, _, err := src.checkPendingTicket()
 	if !done {
 		// No more we can do in this tick - we need to wait for the
 		// transfer to complete.
@@ -255,6 +250,7 @@ func (src *storeRebalancerControl) applyLeaseRebalance(
 		candidateReplica.GetRangeID(),
 		candidateReplica.StoreID(),
 		target.StoreID,
+		candidateReplica.RangeUsageInfo(),
 	)
 
 	// Dispatch the transfer and updating the pending transfer state.
@@ -303,7 +299,7 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance(ctx context.Contex
 		return true
 	}
 
-	done, err := src.checkPendingTicket()
+	done, _, err := src.checkPendingTicket()
 	if !done {
 		// No more we can do in this tick - we need to wait for the
 		// relocate to complete.

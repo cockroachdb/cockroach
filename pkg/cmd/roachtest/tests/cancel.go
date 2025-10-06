@@ -14,11 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -44,14 +42,14 @@ func registerCancel(r registry.Registry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		m := c.NewDeprecatedMonitor(ctx, c.All())
+		m := c.NewMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
 			t.Status("restoring TPCH dataset for Scale Factor 1")
 			if err := loadTPCHDataset(
-				ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx), c.All(), false, /* disableMergeQueue */
+				ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -68,32 +66,30 @@ func registerCancel(r registry.Registry) {
 					// (either query execution error or an error indicating the
 					// absence of expected cancellation error).
 					errCh := make(chan error, 1)
-					t.Go(func(taskCtx context.Context, l *logger.Logger) error {
-						runnerConn := c.Conn(taskCtx, l, 1)
+					go func(queryNum int) {
+						runnerConn := c.Conn(ctx, t.L(), 1)
 						defer runnerConn.Close()
 						setupQueries := []string{"USE tpch;"}
 						if !useDistsql {
 							setupQueries = append(setupQueries, "SET distsql = off;")
 						}
 						for _, setupQuery := range setupQueries {
-							l.Printf("executing setup query %q", setupQuery)
+							t.L().Printf("executing setup query %q", setupQuery)
 							if _, err := runnerConn.Exec(setupQuery); err != nil {
 								errCh <- err
 								close(sem)
-								// Errors are handled in the main goroutine.
-								return nil //nolint:returnerrcheck
+								return
 							}
 						}
 						query := tpch.QueriesByNumber[queryNum]
-						l.Printf("executing q%d\n", queryNum)
+						t.L().Printf("executing q%d\n", queryNum)
 						close(sem)
 						_, err := runnerConn.Exec(query)
 						if err == nil {
 							err = errors.New("query completed before it could be canceled")
 						}
 						errCh <- err
-						return nil
-					}, task.Name("query-runner"))
+					}(queryNum)
 
 					// Wait for the query-runner goroutine to start as well as
 					// to execute setup queries.
@@ -185,7 +181,6 @@ func registerCancel(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, true /* useDistsql */)
 		},
@@ -200,7 +195,6 @@ func registerCancel(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, false /* useDistsql */)
 		},

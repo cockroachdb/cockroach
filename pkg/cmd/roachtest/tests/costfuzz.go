@@ -45,6 +45,7 @@ func registerCostFuzz(r registry.Registry) {
 			Owner:            registry.OwnerSQLQueries,
 			Timeout:          timeOut,
 			RedactResults:    redactResults,
+			RequiresLicense:  true,
 			Cluster:          clusterSpec,
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),

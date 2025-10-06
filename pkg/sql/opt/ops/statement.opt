@@ -55,9 +55,6 @@ define CreateViewPrivate {
     # TypeDeps contains the type dependencies of the view.
     TypeDeps SchemaTypeDeps
 
-    # FuncDeps contains the function dependencies of the function.
-    FuncDeps SchemaFunctionDeps
-
     # WithData indicates if the materialized view is populated
     # with data upon creation.
     WithData bool
@@ -355,19 +352,6 @@ define CreateStatistics {
 define CreateStatisticsPrivate {
     # Syntax is the tree.CreateStats AST node.
     Syntax CreateStats
-
-    # Table identifies the table on which statistics are being created.
-    Table TableID
-
-    # Index identifies the index to scan if this is a constrained statistic
-    # (with a WHERE clause). It can be passed to the cat.Table.Index() method in
-    # order to fetch the cat.Index metadata.
-    Index IndexOrdinal
-
-    # Constraint, if set, contains a set of spans that will be used to restrict
-    # which rows are scanned for constrained statistics. It is nil if the stat
-    # collection has no WHERE clause.
-    Constraint Constraint
 }
 
 # AlterRangeRelocate represents an `ALTER RANGE .. RELOCATE ..` statement.

@@ -76,7 +76,7 @@ func (t *parallelTest) processTestFile(path string, nodeIdx int, db *gosql.DB, c
 		rng:     rng,
 	}
 	if err := l.processTestFile(path, logictest.TestClusterConfig{}); err != nil {
-		log.Dev.Errorf(context.Background(), "error processing %s: %s", path, err)
+		log.Errorf(context.Background(), "error processing %s: %s", path, err)
 		t.Error(err)
 	}
 }
@@ -124,9 +124,9 @@ func (t *parallelTest) run(dir string) {
 		skip.IgnoreLint(t, spec.SkipReason)
 	}
 
-	log.Dev.Infof(t.ctx, "Running test %s", dir)
+	log.Infof(t.ctx, "Running test %s", dir)
 	if testing.Verbose() || log.V(1) {
-		log.Dev.Infof(t.ctx, "spec: %+v", spec)
+		log.Infof(t.ctx, "spec: %+v", spec)
 	}
 
 	t.setup(context.Background(), &spec)
@@ -138,7 +138,7 @@ func (t *parallelTest) run(dir string) {
 			for _, re := range runList {
 				descr = append(descr, fmt.Sprintf("%d:%s", re.Node, re.File))
 			}
-			log.Dev.Infof(t.ctx, "%s: run list %d: %s", mainFile, runListIdx,
+			log.Infof(t.ctx, "%s: run list %d: %s", mainFile, runListIdx,
 				strings.Join(descr, ", "))
 		}
 		// Store the number of clients used so far (per node).
@@ -162,7 +162,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 	}
 
 	if testing.Verbose() || log.V(1) {
-		log.Dev.Infof(t.ctx, "Cluster Size: %d", spec.ClusterSize)
+		log.Infof(t.ctx, "Cluster Size: %d", spec.ClusterSize)
 	}
 
 	t.cluster = serverutils.StartCluster(t, spec.ClusterSize, base.TestClusterArgs{})
@@ -187,7 +187,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 
 	if spec.RangeSplitSize != 0 {
 		if testing.Verbose() || log.V(1) {
-			log.Dev.Infof(t.ctx, "Setting range split size: %d", spec.RangeSplitSize)
+			log.Infof(t.ctx, "Setting range split size: %d", spec.RangeSplitSize)
 		}
 		zoneCfg := zonepb.DefaultZoneConfig()
 		zoneCfg.RangeMaxBytes = proto.Int64(int64(spec.RangeSplitSize))
@@ -208,7 +208,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 	)
 
 	if testing.Verbose() || log.V(1) {
-		log.Dev.Infof(t.ctx, "Creating database")
+		log.Infof(t.ctx, "Creating database")
 	}
 
 	r0.Exec(t, "CREATE DATABASE test")
@@ -217,7 +217,7 @@ func (t *parallelTest) setup(ctx context.Context, spec *parTestSpec) {
 	}
 
 	if testing.Verbose() || log.V(1) {
-		log.Dev.Infof(t.ctx, "Test setup done")
+		log.Infof(t.ctx, "Test setup done")
 	}
 }
 
@@ -249,8 +249,8 @@ func TestParallel(t *testing.T) {
 		})
 	}
 	if failed == 0 {
-		log.Dev.Infof(context.Background(), "%d parallel tests passed", total)
+		log.Infof(context.Background(), "%d parallel tests passed", total)
 	} else {
-		log.Dev.Infof(context.Background(), "%d out of %d parallel tests failed", failed, total)
+		log.Infof(context.Background(), "%d out of %d parallel tests failed", failed, total)
 	}
 }

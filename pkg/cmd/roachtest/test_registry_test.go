@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -36,10 +37,10 @@ func TestMakeTestRegistry(t *testing.T) {
 	require.EqualValues(t, 4, s.CPUs)
 	require.True(t, s.TerminateOnMigration)
 
-	s = r.MakeClusterSpec(10, spec.CPU(16), spec.Arch(spec.OnlyARM64))
+	s = r.MakeClusterSpec(10, spec.CPU(16), spec.Arch(vm.ArchARM64))
 	require.EqualValues(t, 10, s.NodeCount)
 	require.EqualValues(t, 16, s.CPUs)
-	require.EqualValues(t, spec.OnlyARM64, s.CompatibleArchs)
+	require.EqualValues(t, vm.ArchARM64, s.Arch)
 }
 
 // TestPrometheusMetricParser tests that the registry.PromSub()

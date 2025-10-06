@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs !fakedist !fakedist-vec-off !fakedist-disk !weak-iso-level-configs !local-prepared
+# LogicTest: !3node-tenant-default-configs !fakedist !fakedist-vec-off !fakedist-disk !weak-iso-level-configs
 # This is skipped under weak-iso-level-configs, since it uses
 # cluster_logical_timestamp() heavily, which does not work under
 # READ COMMITTED or REPEATABLE READ.

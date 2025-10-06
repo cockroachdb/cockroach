@@ -100,7 +100,7 @@ func newTrackerConfig(codec keys.SQLCodec, rc RangeCounter, job *jobs.Job) track
 			if err := job.NoTxn().FractionProgressed(
 				ctx, jobs.FractionUpdater(fractionProgressed),
 			); err != nil {
-				return jobs.SimplifyInvalidStateError(err)
+				return jobs.SimplifyInvalidStatusError(err)
 			}
 			return nil
 		},
@@ -221,10 +221,10 @@ func (b *Tracker) FlushFractionCompleted(ctx context.Context) error {
 		return err
 	}
 	if !updated {
-		log.Dev.VInfof(ctx, 2, "backfill has no fraction completed to flush")
+		log.VInfof(ctx, 2, "backfill has no fraction completed to flush")
 		return nil
 	}
-	log.Dev.Infof(ctx, "backfill fraction completed is %.3f / 1.000", fractionRangesFinished)
+	log.Infof(ctx, "backfill fraction completed is %.3f / 1.000", fractionRangesFinished)
 	return b.writeProgressFraction(ctx, fractionRangesFinished)
 }
 
@@ -232,7 +232,7 @@ func (b *Tracker) FlushFractionCompleted(ctx context.Context) error {
 func (b *Tracker) FlushCheckpoint(ctx context.Context) error {
 	needsFlush, bps, mps := b.collectProgressForCheckpointFlush()
 	if !needsFlush {
-		log.Dev.VInfof(ctx, 2, "backfill has no checkpoint to flush")
+		log.VInfof(ctx, 2, "backfill has no checkpoint to flush")
 		return nil
 	}
 	sort.Slice(bps, func(i, j int) bool {
@@ -255,7 +255,7 @@ func (b *Tracker) FlushCheckpoint(ctx context.Context) error {
 		}
 		return false
 	})
-	log.Dev.Infof(ctx, "writing %d backfill checkpoints and %d merge checkpoints", len(bps), len(mps))
+	log.Infof(ctx, "writing %d backfill checkpoints and %d merge checkpoints", len(bps), len(mps))
 	return b.writeCheckpoint(ctx, bps, mps)
 }
 

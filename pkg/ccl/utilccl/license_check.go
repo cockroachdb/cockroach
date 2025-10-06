@@ -108,7 +108,7 @@ var GetLicenseTTL = func(
 ) int64 {
 	license, err := GetLicense(st)
 	if err != nil {
-		log.Dev.Errorf(ctx, "unable to find license: %v", err)
+		log.Errorf(ctx, "unable to find license: %v", err)
 		return 0
 	}
 	if license == nil {
@@ -181,7 +181,7 @@ func RegisterCallbackOnLicenseChange(
 	refreshFunc := func(ctx context.Context, isChange bool) {
 		lic, err := GetLicense(st)
 		if err != nil {
-			log.Dev.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
+			log.Errorf(ctx, "unable to refresh license enforcer for license change: %v", err)
 			return
 		}
 		var licenseType licenseserver.LicType
@@ -205,7 +205,7 @@ func RegisterCallbackOnLicenseChange(
 
 		expiry, err := licenseEnforcer.UpdateTrialLicenseExpiry(ctx, licenseType, isChange, licenseExpiry.Unix())
 		if err != nil {
-			log.Dev.Errorf(ctx, "unable to update trial license expiry: %v", err)
+			log.Errorf(ctx, "unable to update trial license expiry: %v", err)
 			return
 		}
 		trialLicenseExpiryTimestamp.Store(expiry)

@@ -505,7 +505,7 @@ func (c *tenantSideCostController) onTick(ctx context.Context, newTime time.Time
 	// Switch to the fallback rate if needed.
 	if !c.run.fallbackRateStart.IsZero() && !newTime.Before(c.run.fallbackRateStart) &&
 		c.run.fallbackRate != 0 {
-		log.Dev.Infof(ctx, "switching to fallback rate %.10g tokens/s", c.run.fallbackRate)
+		log.Infof(ctx, "switching to fallback rate %.10g tokens/s", c.run.fallbackRate)
 		c.limiter.Reconfigure(c.timeSource.Now(), limiterReconfigureArgs{
 			NewRate:   c.run.fallbackRate,
 			MaxTokens: bufferTokens + c.run.fallbackRate*c.run.targetPeriod.Seconds(),
@@ -601,25 +601,23 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		c.run.lastReportedTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
 	}
 
+	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 	err := c.stopper.RunAsyncTask(ctx, "token-bucket-request", func(ctx context.Context) {
-		var cancel context.CancelFunc
-		ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
 		if log.ExpensiveLogEnabled(ctx, 1) {
-			log.Dev.Infof(ctx, "TokenBucket request: %s\n", req.String())
+			log.Infof(ctx, "TokenBucket request: %s\n", req.String())
 		}
 		resp, err := c.provider.TokenBucket(ctx, req)
 		if err != nil {
 			// Don't log any errors caused by the stopper canceling the context.
 			if !errors.Is(err, context.Canceled) {
-				log.Dev.Warningf(ctx, "TokenBucket RPC error: %v", err)
+				log.Warningf(ctx, "TokenBucket RPC error: %v", err)
 			}
 			resp = nil
 		} else if (resp.Error != errorspb.EncodedError{}) {
 			// This is a "logic" error which indicates a configuration problem on the
 			// host side. We will keep retrying periodically.
 			err = errors.DecodeError(ctx, resp.Error)
-			log.Dev.Warningf(ctx, "TokenBucket error: %v", err)
+			log.Warningf(ctx, "TokenBucket error: %v", err)
 			resp = nil
 		}
 		c.responseChan <- resp
@@ -634,7 +632,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	ctx context.Context, req *kvpb.TokenBucketRequest, resp *kvpb.TokenBucketResponse,
 ) {
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Dev.Infof(
+		log.Infof(
 			ctx, "TokenBucket response: %g tokens over %s (fallback rate %g)",
 			resp.GrantedTokens, resp.TrickleDuration, resp.FallbackRate,
 		)
@@ -720,7 +718,7 @@ func (c *tenantSideCostController) handleTokenBucketResponse(
 	c.run.lastRate = cfg.NewRate
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Dev.Infof(ctx, "Limiter: %s", c.limiter.String(now))
+		log.Infof(ctx, "Limiter: %s", c.limiter.String(now))
 	}
 }
 

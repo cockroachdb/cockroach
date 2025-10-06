@@ -111,18 +111,19 @@ func (h *historyRetentionResumer) Resume(ctx context.Context, execCtx interface{
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
+			t.Read = true
 			t.Reset(historyRetentionExpirationPollInterval.Get(execCfg.SV()))
 			p, err := jobs.LoadJobProgress(ctx, execCfg.InternalDB, h.job.ID())
 			if err != nil {
 				if jobs.HasJobNotFoundError(err) {
 					return errors.Wrapf(err, "job progress not found")
 				}
-				log.Dev.Errorf(ctx,
+				log.Errorf(ctx,
 					"failed loading job progress (retrying): %v", err)
 				continue
 			}
 			if p == nil {
-				log.Dev.Errorf(ctx, "job progress not found (retrying)")
+				log.Errorf(ctx, "job progress not found (retrying)")
 				continue
 			}
 			historyProgress := p.GetDetails().(*jobspb.Progress_HistoryRetentionProgress).HistoryRetentionProgress

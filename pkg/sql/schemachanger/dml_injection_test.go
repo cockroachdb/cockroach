@@ -14,10 +14,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
@@ -57,13 +53,11 @@ func toAnySlice(strings []string) []any {
 }
 
 const (
-	valInitial       = "1"
-	valUpdated       = "2"
-	opBackfillUpdate = "backfillUpdate"
-	opBackfillDelete = "backfillDelete"
-	opDelete         = "delete"
-	opUpdate         = "update"
-	na               = "n/a"
+	valInitial = "1"
+	valUpdated = "2"
+	opDelete   = "delete"
+	opUpdate   = "update"
+	na         = "n/a"
 	// insert_phase_ordinal is the phaseOrdinal the record was inserted by
 	// operation_phase_ordinal is the phaseOrdinal that will modify the record
 	// operation is the operation the operation_phase_ordinal will do to the record
@@ -99,24 +93,6 @@ func (po phaseOrdinal) deleteRow(operationPO phaseOrdinal) []string {
 		po.String(),
 		operationPO.String(),
 		opDelete,
-		valInitial,
-	}
-}
-
-func (po phaseOrdinal) backfillCallbackDeleteRow(operationPO phaseOrdinal, isAfter bool) []string {
-	return []string{
-		po.String(),
-		operationPO.String(),
-		fmt.Sprintf("%s_%t", opBackfillDelete, isAfter),
-		valInitial,
-	}
-}
-
-func (po phaseOrdinal) backfillCallbackUpdateRow(operationPO phaseOrdinal, isAfter bool) []string {
-	return []string{
-		po.String(),
-		operationPO.String(),
-		fmt.Sprintf("%s_%t", opBackfillUpdate, isAfter),
 		valInitial,
 	}
 }
@@ -194,72 +170,15 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
 		},
 		{
-			desc:         "add column default serial rowid",
-			setup:        []string{"SET serial_normalization=rowid"},
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
-		},
-		{
-			desc:         "add column default serial unordered_rowid",
-			setup:        []string{"SET serial_normalization=unordered_rowid"},
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
-		},
-		{
-			desc:         "add column default serial sql_sequence",
-			setup:        []string{"SET serial_normalization=sql_sequence"},
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
-			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
-		},
-		{
-			desc:         "add column default serial sql_sequence_cached",
-			setup:        []string{"SET serial_normalization=sql_sequence_cached"},
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
-			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
-		},
-		{
-			desc:         "add column default serial sql_sequence_cached_node",
-			setup:        []string{"SET serial_normalization=sql_sequence_cached_node"},
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
-			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
-		},
-		{
-			desc:         "add column default serial virtual_sequence",
-			setup:        []string{"SET serial_normalization=virtual_sequence"},
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col SERIAL",
-			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
-		},
-		{
-			desc:         "alter column type trivial",
+			desc:         "alter column type",
 			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col SMALLINT NOT NULL DEFAULT 100"},
 			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE BIGINT",
-		},
-		{
-			desc:         "alter column type validate",
-			setup:        []string{"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100"},
-			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE SMALLINT",
-		},
-		{
-			desc: "alter column type general",
-			setup: []string{
-				"ALTER TABLE tbl ADD COLUMN new_col BIGINT NOT NULL DEFAULT 100",
-			},
-			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_col SET DATA TYPE TEXT",
-			query:        "SELECT new_col FROM tbl LIMIT 1",
-		},
-		{
-			desc: "alter column type general compute",
-			setup: []string{
-				"ALTER TABLE tbl SET (schema_locked=false)", // The statement below falls back.
-				"ALTER TABLE tbl ADD COLUMN new_col DATE NOT NULL DEFAULT '2013-05-06', " +
-					"ADD COLUMN new_comp DATE AS (new_col) STORED",
-			},
-			schemaChange: "ALTER TABLE tbl ALTER COLUMN new_comp SET DATA TYPE DATE USING '2021-05-06'",
-			query:        "SELECT new_comp FROM tbl LIMIT 1",
 		},
 		{
 			desc:         "add column default udf",
 			setup:        []string{"CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$"},
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",
-			skipIssue:    147472,
+			skipIssue:    87699,
 		},
 		{
 			desc: "drop column default udf",
@@ -268,7 +187,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 				"ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT f()",
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN new_col",
-			skipIssue:    147472,
+			skipIssue:    87699,
 		},
 		{
 			desc:         "add column unique not null",
@@ -393,6 +312,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			// Run a query against the secondary index at each stage.
 			query:        "SELECT operation FROM tbl@i1",
 			schemaChange: "ALTER TABLE tbl ALTER PRIMARY KEY USING COLUMNS (insert_phase_ordinal, operation_phase_ordinal, operation)",
+			skipIssue:    133129,
 		},
 		{
 			desc:        "alter primary key using columns using hash",
@@ -410,20 +330,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			},
 			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
 			query:        "select * from pg_catalog.pg_constraint",
-		},
-		{
-			desc: "drop a column with a check constraint while querying crdb_internal.create_statements",
-			setup: []string{
-				"ALTER TABLE tbl ADD COLUMN i INT CHECK (i is NOT NULL) DEFAULT 10",
-			},
-			schemaChange: "ALTER TABLE tbl DROP COLUMN i",
-			// Run a query against crdb_internal.create_statements. We don't
-			// care about the result — only that it doesn't fail. This is
-			// valuable when dropping constraints because create_statements performs
-			// descriptor introspection, including rendering expressions for
-			// check constraints. If a column in the check constraint is in the
-			// process of being dropped it will have a placeholder name.
-			query: `SELECT * FROM "".crdb_internal.create_statements`,
 		},
 		{
 			desc:         "create index",
@@ -454,28 +360,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			desc:         "drop index using hash",
 			setup:        []string{"CREATE INDEX idx ON tbl (val) USING HASH"},
 			schemaChange: "DROP INDEX idx",
-		},
-		{
-			desc: "alter policy name",
-			setup: []string{
-				"CREATE POLICY p ON tbl FOR SELECT USING (val > 0)",
-				"ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY",
-				"CREATE USER foo",
-				"ALTER TABLE tbl OWNER TO foo",
-				"SET ROLE foo",
-			},
-			schemaChange: "ALTER POLICY p ON tbl RENAME TO policy_1",
-		},
-		{
-			desc: "alter policy using expression",
-			setup: []string{
-				"CREATE POLICY p ON tbl FOR SELECT USING (val > 0)",
-				"ALTER TABLE tbl ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY",
-				"CREATE USER foo",
-				"ALTER TABLE tbl OWNER TO foo",
-				"SET ROLE foo",
-			},
-			schemaChange: "ALTER POLICY p ON tbl USING (val > -10)",
 		},
 		{
 			desc: "drop column with index using hash cascade",
@@ -558,15 +442,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			},
 			schemaChange: "DROP INDEX idx CASCADE",
 		},
-		{
-			desc: "drop a uwi constraint and a column referenced in the constraint predicate",
-			setup: []string{
-				"SET experimental_enable_unique_without_index_constraints = true",
-				"ALTER TABLE tbl ADD COLUMN i INT DEFAULT 11",
-				"ALTER TABLE tbl ADD CONSTRAINT c UNIQUE WITHOUT INDEX (insert_phase_ordinal, operation_phase_ordinal, operation, i) WHERE i IS NOT NULL",
-			},
-			schemaChange: "ALTER TABLE tbl DROP CONSTRAINT c, DROP COLUMN i",
-		},
 	}
 
 	ctx := context.Background()
@@ -587,11 +462,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			poMap := make(map[phaseOrdinal]int)
 			poCompleted := make(map[phaseOrdinal]struct{})
 			var poSlice []phaseOrdinal
-			// Separate rows are updated and deleted within the backfill.
-			var currentPOForBackFill atomic.Value
-			currentPOForBackFill.Store(phaseOrdinal{})
-			var beforeBackfillCallbackDone, afterBackfillCallbackDone atomic.Bool
-			var backfillCallback func(isAfter bool)
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
@@ -599,27 +469,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 							// We disable the randomization of some batch sizes because with
 							// some low values the test takes much longer.
 							ForceProductionValues: true,
-						},
-						// Intentionally modify data during the backfill process
-						// as well.
-						DistSQL: &execinfra.TestingKnobs{
-							RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-								backfillCallback(false)
-								return nil
-							},
-							RunAfterBackfillChunk: func() {
-								backfillCallback(true)
-							},
-							IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
-								RunBeforeScanChunk: func(startKey roachpb.Key) error {
-									backfillCallback(false)
-									return nil
-								},
-								RunBeforeMergeTxn: func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key, keysToSkipCount int) error {
-									backfillCallback(true)
-									return nil
-								},
-							},
 						},
 						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 							BeforeStage: func(p scplan.Plan, stageIdx int) error {
@@ -643,9 +492,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 
 								currentStage := p.Stages[stageIdx]
 								currentPO := toPhaseOrdinal(currentStage)
-								currentPOForBackFill.Store(currentPO)
-								afterBackfillCallbackDone.Store(false)
-								beforeBackfillCallbackDone.Store(false)
 								errorMessage := fmt.Sprintf("phaseOrdinal=%s", currentPO)
 
 								// Capture all stages in the StatementPhase before they disappear,
@@ -694,7 +540,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 									}
 									panic(fmt.Sprintf("slice contains duplicate elements a=%s b=%s %s", a, b, errorMessage))
 								})
-								actualResults := sqlDB.QueryStr(t, `SELECT insert_phase_ordinal, operation_phase_ordinal, operation, val FROM tbl WHERE operation NOT LIKE 'backfill%'`)
+								actualResults := sqlDB.QueryStr(t, `SELECT 	insert_phase_ordinal, operation_phase_ordinal, operation, val FROM tbl`)
 								// Transaction retry errors can occur, so don't repeat the same
 								// DML if hit such a case to avoid flaky tests.
 								if _, exists := poCompleted[currentPO]; exists {
@@ -746,34 +592,6 @@ func TestAlterTableDMLInjection(t *testing.T) {
 					},
 				},
 			})
-
-			// Invoked via backfill / merge testing knobs.
-			backfillCallback = func(isAfter bool) {
-				currentPO := currentPOForBackFill.Load().(phaseOrdinal)
-				poIdx := poMap[currentPO]
-				errorMessage := fmt.Sprintf("backfill phaseOrdinal=%s", currentPO)
-
-				// Insert for later stages, there is a risk of these
-				// callbacks invoked multiple times.
-				backfillDone := false
-				if isAfter {
-					backfillDone = afterBackfillCallbackDone.Swap(true)
-				} else {
-					backfillDone = beforeBackfillCallbackDone.Swap(true)
-				}
-				if !backfillDone {
-					for j := poIdx; j < len(poMap); j++ {
-						sqlDB.ExecWithMessage(t, errorMessage, insert, toAnySlice(currentPO.backfillCallbackUpdateRow(poSlice[j], isAfter))...)
-						sqlDB.ExecWithMessage(t, errorMessage, insert, toAnySlice(currentPO.backfillCallbackDeleteRow(poSlice[j], isAfter))...)
-					}
-				}
-				// Execute queries to modify rows.
-				operationUpdate := fmt.Sprintf("%s_%t", opBackfillUpdate, isAfter)
-				operationDelete := fmt.Sprintf("%s_%t", opBackfillDelete, isAfter)
-				sqlDB.ExecWithMessage(t, errorMessage, "UPDATE tbl SET val=val WHERE operation=$1 AND operation_phase_ordinal = $2", operationUpdate, currentPO.String())
-				sqlDB.ExecWithMessage(t, errorMessage, "DELETE FROM  tbl WHERE operation=$1 AND operation_phase_ordinal = $2", operationDelete, currentPO.String())
-
-			}
 			defer testCluster.Stopper().Stop(ctx)
 			sqlDB = sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 			create := tc.createTable

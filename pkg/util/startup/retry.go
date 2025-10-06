@@ -142,7 +142,7 @@ func RunIdempotentWithRetryEx[T any](
 			break
 		}
 		if every.ShouldLog() {
-			log.Dev.Infof(ctx, "failed %s during node startup, retrying %s", opName, err)
+			log.Infof(ctx, "failed %s during node startup, retrying %s", opName, err)
 		}
 	}
 	return result, err
@@ -162,7 +162,7 @@ func Begin(ctx context.Context) func() {
 	startupGoroutineIDs.Lock()
 	defer startupGoroutineIDs.Unlock()
 	if _, ok := startupGoroutineIDs.ids[startupID]; ok {
-		log.Dev.Fatal(ctx, "startup.Begin() is called twice")
+		log.Fatal(ctx, "startup.Begin() is called twice")
 	}
 	startupGoroutineIDs.ids[startupID] = true
 
@@ -189,7 +189,7 @@ func AssertStartupRetry(ctx context.Context) {
 
 	rv := ctx.Value(startupRetryKey{})
 	if rv == nil && inStartup() {
-		log.Dev.Fatal(ctx, "startup query called outside of startup retry loop. See util/startup/retry.go docs")
+		log.Fatal(ctx, "startup query called outside of startup retry loop. See util/startup/retry.go docs")
 	}
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHealthAPI(t *testing.T) {
@@ -43,16 +44,7 @@ func TestHealthAPI(t *testing.T) {
 			return srvtestutils.GetAdminJSONProto(ts, "health", &resp)
 		})
 
-		// Before we start the test, ensure that the health check succeeds. This is
-		// contingent on the Server heartbeating its liveness record, which can race
-		// with this check here.
-		testutils.SucceedsSoon(t, func() error {
-			var resp serverpb.HealthResponse
-			return srvtestutils.GetAdminJSONProto(ts, "health?ready=1", &resp)
-		})
-
-		// Make the SQL listener appear unavailable. Verify that health fails after
-		// that.
+		// Make the SQL listener appear unavailable. Verify that health fails after that.
 		ts.SetReady(false)
 		var resp serverpb.HealthResponse
 		err := srvtestutils.GetAdminJSONProto(ts, "health?ready=1", &resp)
@@ -78,13 +70,6 @@ func TestHealthAPI(t *testing.T) {
 		if err := srvtestutils.GetAdminJSONProto(s, "health", &resp); err != nil {
 			t.Fatal(err)
 		}
-
-		// Before we start the test, ensure that the health check succeeds. This is
-		// contingent on the Server heartbeating its liveness record, and we want
-		// that to happen before we pause heartbeats.
-		testutils.SucceedsSoon(t, func() error {
-			return srvtestutils.GetAdminJSONProto(s, "health?ready=1", &resp)
-		})
 
 		// Expire this node's liveness record by pausing heartbeats and advancing the
 		// server's clock.
@@ -122,14 +107,16 @@ func TestLivenessAPI(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
-	ctx := context.Background()
-
 	// The liveness endpoint needs a special tenant capability.
-	if tc.DefaultTenantDeploymentMode().IsExternal() {
+	if tc.Server(0).TenantController().StartedDefaultTestTenant() {
 		// Enable access to the nodes endpoint for the test tenant.
-		tc.GrantTenantCapabilities(
-			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"})
+		_, err := tc.SystemLayer(0).SQLConn(t).Exec(
+			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+
+		tc.WaitForTenantCapabilities(t, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanViewNodeInfo: "true",
+		})
 	}
 
 	ts := tc.Server(0).ApplicationLayer()

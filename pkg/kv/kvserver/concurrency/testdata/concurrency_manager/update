@@ -71,7 +71,7 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [-] update txn: increasing timestamp of txn1
 [2] sequence req2: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,1}
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -189,7 +189,7 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [-] update txn: increasing timestamp of txn1
 [2] sequence req2: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,3}
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -316,7 +316,7 @@ on-txn-updated txn=txn1 status=pending ts=12,2
 [-] update txn: increasing timestamp of txn1
 [2] sequence req2: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,5}
 [2] sequence req2: lock wait-queue event: done waiting
-[2] sequence req2: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[2] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [2] sequence req2: acquiring latches
 [2] sequence req2: scanning lock table for conflicting locks
 [2] sequence req2: sequencing complete, returned guard
@@ -388,7 +388,7 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [3] sequence req4: resolving intent ‹"k"› for txn 00000001 with COMMITTED status
 [3] sequence req4: lock wait-queue event: done waiting
-[3] sequence req4: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
+[3] sequence req4: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [3] sequence req4: acquiring latches
 [3] sequence req4: scanning lock table for conflicting locks
 [3] sequence req4: sequencing complete, returned guard

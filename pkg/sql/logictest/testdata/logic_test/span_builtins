@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 ## Tests for span construction/manipulation builtins
 
 subtest tenant_span_0_arg

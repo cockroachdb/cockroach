@@ -26,7 +26,6 @@ import "gogoproto/gogo.proto";
 //
 // For the ReplicaState persisted on the Replica, all optional fields are
 // populated (i.e. no nil pointers or enums with the default value).
-// Exception: TruncatedState is nil.
 message ReplicaState {
   option (gogoproto.equal) = true;
 
@@ -42,8 +41,6 @@ message ReplicaState {
   // (*Replica).setDesc* methods.
   roachpb.RangeDescriptor desc = 3;
   // The latest range lease.
-  // The pointer may change, but the referenced Lease struct itself must be
-  // treated as immutable; it is leaked out of the lock.
   //
   // Note that this message is both sent over the network and used to model
   // replica state in memory. In memory (Replica.mu.state), the lease is never
@@ -51,16 +48,6 @@ message ReplicaState {
   // as part of ReplicatedEvalResult.
   roachpb.Lease lease = 4;
   // The truncation state of the Raft log.
-  //
-  // Since v25.1, this field can only be used in ReplicatedEvalResult, for
-  // proposals that were evaluated before V25_1_MoveRaftTruncatedState version
-  // gate. Everywhere else it is set to nil. The log truncation state is stored
-  // in a separate unreplicated rangeID-local key, and Replica maintains a
-  // separate RaftTruncatedState in memory.
-  //
-  // TODO(#97613): finalize moving this field out of the ReplicaState. Remove it
-  // when v25.1 version gates are removed, and all the historical entries have
-  // been compacted out of raft logs.
   RaftTruncatedState truncated_state = 5;
   // GCThreshold is the GC threshold of the Range, typically updated when keys
   // are garbage collected. Reads and writes at timestamps <= this time will
@@ -152,13 +139,6 @@ message ReplicaState {
   // with other related ranges to reduce load on pebble.
   roachpb.GCHint gc_hint = 15 [(gogoproto.customname) = "GCHint"];
 
-  // ForceFlushIndex is only non-empty for the Range Raft state machine cached
-  // in memory (see the comment at the top of ReplicaState). It is never used
-  // for proposer-evaluated Raft (this represents a Raft index, which is
-  // unknown to the proposer evaluator). It is persisted on the Replica with
-  // the RangeForceFlushKey.
-  roachpb.ForceFlushIndex force_flush_index = 16 [(gogoproto.nullable) = false];
-
   reserved 8, 9, 10;
 }
 
@@ -206,7 +186,6 @@ message RangeInfo {
   // circuit breaker on the source Replica is tripped.
   string circuit_breaker_error = 20;
   repeated int32 paused_replicas = 21 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
-  // Next tag: 22
 }
 
 // RangeSideTransportInfo describes a range's closed timestamp info communicated

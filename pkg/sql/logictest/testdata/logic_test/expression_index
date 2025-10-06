@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared
+# LogicTest: default-configs
 
 statement ok
 CREATE TABLE t (
@@ -7,16 +7,13 @@ CREATE TABLE t (
   b INT,
   c STRING,
   j JSON,
-  v VECTOR,
   comp INT AS (a + 10) VIRTUAL,
   INDEX t_a_plus_b_idx ((a + b)),
   INDEX t_lower_c_a_plus_b_idx (lower(c), (a + b)),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a') ASC),
-  VECTOR INDEX t_vec (a, (v::VECTOR(3))),
-  FAMILY (k, a, b, c, j, v)
+  FAMILY (k, a, b, c, j)
 )
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -26,37 +23,14 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c STRING NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
-  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
-  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-);
+  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+)
 
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t]
-----
-CREATE TABLE public.t (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
-  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-  INDEX t_a_plus_b_idx ((a + b) ASC),
-  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
-  INVERTED INDEX t_b_j_a_asc (b DESC, (j->'a':::STRING)),
-  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
-  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-) WITH (schema_locked = true);
-
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
 ----
@@ -66,47 +40,24 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c STRING NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL AS (a + ‹×›:::INT8) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
-  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
-  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT]
-----
-CREATE TABLE public.t (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL AS (a + ‹×›:::INT8) VIRTUAL,
-  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-  INDEX t_a_plus_b_idx ((a + b) ASC),
-  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
-  INVERTED INDEX t_b_j_a_asc (b DESC, (j->‹×›:::STRING)),
-  VECTOR INDEX t_vec (a, (v::VECTOR(3)) vector_l2_ops),
-  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-) WITH (schema_locked = true);
+  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+)
 
 query TTBTTTB colnames
 SELECT * FROM [SHOW COLUMNS FROM t] ORDER BY column_name
 ----
-column_name  data_type  is_nullable  column_default  generation_expression  indices                                                           is_hidden
-a            INT8       true         NULL            ·                      {t_pkey,t_vec}                                                    false
-b            INT8       true         NULL            ·                      {t_b_j_a_asc,t_pkey}                                              false
-c            STRING     true         NULL            ·                      {t_pkey}                                                          false
-comp         INT8       true         NULL            a + 10                 {}                                                                false
-j            JSONB      true         NULL            ·                      {t_pkey}                                                          false
-k            INT8       false        NULL            ·                      {t_a_plus_b_idx,t_b_j_a_asc,t_lower_c_a_plus_b_idx,t_pkey,t_vec}  false
-v            VECTOR     true         NULL            ·                      {t_pkey}                                                          false
+column_name  data_type  is_nullable  column_default  generation_expression  indices                                                     is_hidden
+a            INT8       true         NULL            ·                      {t_pkey}                                                    false
+b            INT8       true         NULL            ·                      {t_b_j_a_asc,t_pkey}                                        false
+c            STRING     true         NULL            ·                      {t_pkey}                                                    false
+comp         INT8       true         NULL            a + 10                 {}                                                          false
+j            JSONB      true         NULL            ·                      {t_pkey}                                                    false
+k            INT8       false        NULL            ·                      {t_a_plus_b_idx,t_b_j_a_asc,t_lower_c_a_plus_b_idx,t_pkey}  false
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr\" is inaccessible and cannot be referenced
@@ -162,32 +113,17 @@ CREATE TABLE err (a INT, INDEX (a, (NULL)))
 statement ok
 CREATE TABLE t_null_cast (a INT, INDEX (a, (NULL::TEXT)))
 
-statement error column \(\(a, b\)\) has type record, which is not indexable
+statement error index element \(a, b\) of type record is not indexable
 CREATE TABLE err (a INT, b INT, INDEX (a, (row(a, b))))
 
-statement error column \(a \+ b\) has type int, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (a + b)))
 
-statement error column \(\(a, b\)\) has type record, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE TABLE err (a INT, b INT, INVERTED INDEX (a, (row(a, b))))
 
 statement error the last column in an inverted index cannot have the DESC option
 CREATE TABLE err (a INT, j JSON, INVERTED INDEX (a, (j->'a') DESC))
-
-statement error column \(a \+ b\) has type int, which is not allowed as the last column in a vector index
-CREATE TABLE err (a INT, b INT, VECTOR INDEX (a, (a + b)))
-
-statement error column \(vec1::VECTOR\(3\)\) has type vector, which is only allowed as the last column in a vector index
-CREATE TABLE err (a INT, vec1 VECTOR, VECTOR INDEX ((vec1::VECTOR(3)), a))
-
-statement error pq: a vector index does not support the DESC option
-CREATE TABLE err (a INT, vec1 VECTOR, VECTOR INDEX (a, (vec1::VECTOR(3)) DESC))
-
-statement error vector column \(vec1::VECTOR\) does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
-CREATE TABLE err (a INT, vec1 VECTOR(3), VECTOR INDEX (a, (vec1::VECTOR)))
-
-statement error column \(vec1::VECTOR\(3\)\) has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
-CREATE TABLE err (a INT, vec1 VECTOR, INDEX (a, (vec1::VECTOR(3))))
 
 statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE TABLE err (a INT, INDEX ((a + random()::INT)))
@@ -220,9 +156,8 @@ CREATE TABLE t (
   b INT,
   c STRING,
   j JSON,
-  v VECTOR NULL,
   comp INT AS (a + 10) VIRTUAL,
-  FAMILY (k, a, b, c, j, v)
+  FAMILY (k, a, b, c, j)
 )
 
 statement ok
@@ -240,7 +175,6 @@ CREATE INDEX t_a_plus_ten_idx ON t ((a + 10))
 statement error index \"err\" contains duplicate expression
 CREATE INDEX err ON t ((a + 10), (a + 10))
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -250,39 +184,14 @@ CREATE TABLE public.t (
   b INT8 NULL,
   c STRING NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
   INDEX t_a_plus_b_idx ((a + b) ASC),
   INDEX t_lower_c_idx (lower(c) ASC),
   INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
   INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
-  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t]
-----
-CREATE TABLE public.t (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL AS (a + 10:::INT8) VIRTUAL,
-  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-  INDEX t_a_plus_b_idx ((a + b) ASC),
-  INDEX t_lower_c_idx (lower(c) ASC),
-  INDEX t_lower_c_a_plus_b_idx (lower(c) ASC, (a + b) ASC),
-  INDEX t_a_plus_ten_idx ((a + 10:::INT8) ASC),
-  FAMILY fam_0_k_a_b_c_j_v (k, a, b, c, j, v)
-) WITH (schema_locked = true);
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t SET (schema_locked=false);
+  FAMILY fam_0_k_a_b_c_j (k, a, b, c, j)
+)
 
 # Referencing an inaccessible column in a CHECK constraint is not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
@@ -309,10 +218,6 @@ CREATE INDEX err ON t (crdb_internal_idx_expr_2)
 # not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced
 CREATE INDEX err ON t (a) WHERE crdb_internal_idx_expr_2 > 0
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t RESET (schema_locked);
 
 # Referencing an inaccessible column in a FK is not allowed.
 statement error column \"crdb_internal_idx_expr_2\" is inaccessible and cannot be referenced by a foreign key
@@ -353,7 +258,7 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 10, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 skipif config local-legacy-schema-changer
 query T
@@ -363,7 +268,7 @@ SELECT * FROM (
   ) AS desc FROM system.descriptor WHERE id = 't'::REGCLASS
 ) AS cols WHERE cols.desc->'name' = '"crdb_internal_idx_expr_2"'
 ----
-{"computeExpr": "a + 10:::INT8", "id": 10, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 statement ok
 DROP INDEX t_lower_c_a_plus_b_idx
@@ -380,8 +285,8 @@ SELECT cols.desc FROM (
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
 ORDER BY id
 ----
-{"computeExpr": "a + b", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
-{"computeExpr": "lower(c)", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 onlyif config local-legacy-schema-changer
 query T
@@ -392,8 +297,8 @@ SELECT cols.desc FROM (
 ) AS cols WHERE cols.desc->>'name' IN ('crdb_internal_idx_expr', 'crdb_internal_idx_expr_1')
 ORDER BY id
 ----
-{"computeExpr": "a + b", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
-{"computeExpr": "lower(c)", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
+{"computeExpr": "a + b", "id": 7, "inaccessible": true, "name": "crdb_internal_idx_expr", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
+{"computeExpr": "lower(c)", "id": 8, "inaccessible": true, "name": "crdb_internal_idx_expr_1", "nullable": true, "type": {"family": "StringFamily", "oid": 25}, "virtual": true}
 
 statement ok
 DROP INDEX t_a_plus_b_idx
@@ -416,10 +321,6 @@ ALTER TABLE t ADD COLUMN crdb_internal_idx_expr INT
 statement ok
 ALTER TABLE t DROP COLUMN crdb_internal_idx_expr
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t SET (schema_locked=false);
-
 statement error random\(\): volatile functions are not allowed in EXPRESSION INDEX ELEMENT
 CREATE INDEX err ON t ((a + random()::INT))
 
@@ -435,17 +336,13 @@ CREATE INDEX err ON t (a, (NULL), b)
 statement ok
 CREATE INDEX t_cast_idx ON t (a, (NULL::TEXT), b)
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t RESET (schema_locked);
-
 statement ok
 CREATE INDEX err ON t (a, (j->'a'));
 
 statement ok
 DROP INDEX err
 
-statement error column \(\(a, b\)\) has type record, which is not indexable
+statement error index element \(a, b\) of type record is not indexable
 CREATE INDEX err ON t (a, (row(a, b)));
 
 statement ok
@@ -454,10 +351,10 @@ CREATE INVERTED INDEX err ON t ((j->'a'), j);
 statement ok
 DROP INDEX err
 
-statement error column \(a \+ b\) has type int, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error index element a \+ b of type int is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (a + b));
 
-statement error column \(\(a, b\)\) has type record, which is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error index element \(a, b\) of type record is not allowed as the last column in an inverted index.*\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX err ON t (a, (row(a, b)));
 
 statement error the last column in an inverted index cannot have the DESC option
@@ -465,27 +362,6 @@ CREATE INVERTED INDEX err ON t (a, (j->'a') DESC);
 
 statement ok
 CREATE INVERTED INDEX ON t (a, (j->'a') ASC);
-
-statement ok
-CREATE VECTOR INDEX err ON t (b, (v::VECTOR(3)));
-
-statement ok
-DROP INDEX err
-
-statement error column \(a \+ b\) has type int, which is not allowed as the last column in a vector index
-CREATE VECTOR INDEX err ON t (a, (a + b))
-
-statement error column \(v::VECTOR\(3\)\) has type vector, which is only allowed as the last column in a vector index
-CREATE VECTOR INDEX err ON t ((v::VECTOR(3)), a)
-
-statement error pq: a vector index does not support the DESC option
-CREATE VECTOR INDEX err ON t (a, (v::VECTOR(3)) DESC)
-
-statement error vector column \(v::VECTOR\) does not have a fixed number of dimensions, so it cannot be indexed\nDETAIL: specify the number of dimensions in the type, like VECTOR\(128\) for 128 dimensions
-CREATE VECTOR INDEX err ON t (a, (v::VECTOR))
-
-statement error column \(v::VECTOR\(3\)\) has type vector, which is not indexable in a non-vector index\nHINT: you may want to create a vector index instead
-CREATE INDEX err ON t (a, (v::VECTOR(3)))
 
 statement ok
 CREATE TABLE other (
@@ -531,20 +407,17 @@ CREATE TABLE src (
   a INT,
   b INT,
   j JSON,
-  v VECTOR,
   comp INT8 AS (1 + 10) VIRTUAL,
   INDEX ((a + b)),
   INDEX named_idx ((a + 1)),
   UNIQUE INDEX ((a + 10)),
-  INVERTED INDEX ((a + b), (j->'a')),
-  VECTOR INDEX (b, (v::VECTOR(3)))
+  INVERTED INDEX ((a + b), (j->'a'))
 );
 CREATE TABLE copy (LIKE src);
 CREATE TABLE copy_generated (LIKE src INCLUDING GENERATED);
 CREATE TABLE copy_indexes (LIKE src INCLUDING INDEXES);
 CREATE TABLE copy_all (LIKE src INCLUDING ALL)
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy]
 ----
@@ -553,26 +426,10 @@ CREATE TABLE public.copy (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE copy]
-----
-CREATE TABLE public.copy (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
+)
 
 # Inaccessible expression index columns should not be copied if the indexes are
 # not copied. copy should not have any crdb_internal_idx_expr columns.
@@ -585,7 +442,6 @@ SELECT count(*) FROM (
 ----
 0
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_generated]
 ----
@@ -594,26 +450,10 @@ CREATE TABLE public.copy_generated (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE copy_generated]
-----
-CREATE TABLE public.copy_generated (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
+)
 
 # Inaccessible expression index columns should not be copied if the indexes are
 # not copied. copy_generated should not have any crdb_internal_idx_expr columns.
@@ -626,7 +466,6 @@ SELECT count(*) FROM (
 ----
 0
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_indexes]
 ----
@@ -635,34 +474,13 @@ CREATE TABLE public.copy_indexes (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL,
   CONSTRAINT src_pkey PRIMARY KEY (k ASC),
   INDEX src_expr_idx ((a + b) ASC),
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE copy_indexes]
-----
-CREATE TABLE public.copy_indexes (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL,
-  CONSTRAINT src_pkey PRIMARY KEY (k ASC),
-  INDEX src_expr_idx ((a + b) ASC),
-  INDEX named_idx ((a + 1:::INT8) ASC),
-  UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
-) WITH (schema_locked = true);
+  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
+)
 
 # Inaccessible expression index columns should be copied if the indexes are
 # copied. copy_indexes should have crdb_internal_idx_expr columns.
@@ -673,9 +491,8 @@ SELECT count(*) FROM (
   ) AS desc FROM system.descriptor WHERE id = 'copy_indexes'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' LIKE 'crdb_internal_idx_expr%'
 ----
-5
+4
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
 ----
@@ -684,34 +501,13 @@ CREATE TABLE public.copy_all (
   a INT8 NULL,
   b INT8 NULL,
   j JSONB NULL,
-  v VECTOR NULL,
   comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
   CONSTRAINT src_pkey PRIMARY KEY (k ASC),
   INDEX src_expr_idx ((a + b) ASC),
   INDEX named_idx ((a + 1:::INT8) ASC),
   UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE copy_all]
-----
-CREATE TABLE public.copy_all (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
-  CONSTRAINT src_pkey PRIMARY KEY (k ASC),
-  INDEX src_expr_idx ((a + b) ASC),
-  INDEX named_idx ((a + 1:::INT8) ASC),
-  UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING)),
-  VECTOR INDEX src_b_expr_idx (b, (v::VECTOR(3)) vector_l2_ops)
-) WITH (schema_locked = true);
+  INVERTED INDEX src_expr_expr1_idx ((a + b) ASC, (j->'a':::STRING))
+)
 
 # Inaccessible expression index columns should be copied if the indexes are
 # copied. copy_all should have crdb_internal_idx_expr columns.
@@ -722,7 +518,7 @@ SELECT count(*) FROM (
   ) AS desc FROM system.descriptor WHERE id = 'copy_all'::REGCLASS
 ) AS cols WHERE cols.desc->>'name' LIKE 'crdb_internal_idx_expr%'
 ----
-5
+4
 
 # Test anonymous index name generation.
 
@@ -740,7 +536,6 @@ CREATE UNIQUE INDEX ON anon (lower(c), b);
 CREATE INDEX ON anon ((a + 10), b, lower(c));
 CREATE INDEX ON anon ((a + 10), (b + 100), lower(c));
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -756,25 +551,7 @@ CREATE TABLE public.anon (
   INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   FAMILY fam_0_k_a_b_c (k, a, b, c)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE anon]
-----
-CREATE TABLE public.anon (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  CONSTRAINT anon_pkey PRIMARY KEY (k ASC),
-  INDEX anon_expr_idx ((a + b) ASC),
-  INDEX anon_expr_b_idx ((a + 10:::INT8) ASC, b ASC),
-  UNIQUE INDEX anon_expr_b_key (lower(c) ASC, b ASC),
-  INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
-  INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
-  FAMILY fam_0_k_a_b_c (k, a, b, c)
-) WITH (schema_locked = true);
+)
 
 statement ok
 DROP TABLE anon;
@@ -793,7 +570,6 @@ CREATE TABLE anon (
   FAMILY (k, a, b, c)
 )
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE anon]
 ----
@@ -809,26 +585,7 @@ CREATE TABLE public.anon (
   INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
   INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
   FAMILY fam_0_k_a_b_c (k, a, b, c)
-);
-
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE anon]
-----
-CREATE TABLE public.anon (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  CONSTRAINT anon_pkey PRIMARY KEY (k ASC),
-  INDEX anon_expr_idx ((a + b) ASC),
-  INDEX anon_expr_b_idx ((a + 10:::INT8) ASC, b ASC),
-  UNIQUE INDEX anon_expr_b_key (lower(c) ASC, b ASC),
-  INDEX anon_expr_b_expr1_idx ((a + 10:::INT8) ASC, b ASC, lower(c) ASC),
-  INDEX anon_expr_expr1_expr2_idx ((a + 10:::INT8) ASC, (b + 100:::INT8) ASC, lower(c) ASC),
-  FAMILY fam_0_k_a_b_c (k, a, b, c)
-) WITH (schema_locked = true);
+)
 
 # Querying expression indexes.
 
@@ -998,16 +755,10 @@ DROP TABLE bf
 # transaction. This is a limitation of virtual computed columns.
 
 statement ok
-CREATE TABLE bf (a INT) WITH (schema_locked = false)
+CREATE TABLE bf (a INT)
 
 statement ok
-SET autocommit_before_ddl = false
-
-statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-
-statement ok
-SET LOCAL autocommit_before_ddl=off;
+BEGIN
 
 statement ok
 ALTER TABLE bf ADD COLUMN b INT DEFAULT 10
@@ -1017,9 +768,6 @@ CREATE INDEX a_plus_b ON bf ((a + b))
 
 statement ok
 ABORT
-
-statement ok
-RESET autocommit_before_ddl
 
 statement ok
 DROP TABLE bf
@@ -1111,13 +859,7 @@ statement ok
 INSERT INTO l VALUES (1, 1), (6, 6)
 
 statement ok
-ALTER TABLE l SET (schema_locked=false);
-
-statement ok
 TRUNCATE l
-
-statement ok
-ALTER TABLE l RESET (schema_locked);
 
 query II rowsort
 SELECT * FROM l@a_plus_b
@@ -1378,7 +1120,7 @@ INSERT INTO uniq VALUES (4, 1, 219) ON CONFLICT ((a + b)) DO UPDATE SET b = 90
 
 # Regression test for #72012. CHECK CONSTRAINT should not check inaccessible columns.
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t72012 (col integer);
 
 statement ok
@@ -1387,7 +1129,6 @@ CREATE INDEX t72012_idx ON t72012 ((abs(col)));
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col SET NOT NULL
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t72012
 ----
@@ -1396,19 +1137,7 @@ t72012  CREATE TABLE public.t72012 (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
           INDEX t72012_idx (abs(col) ASC)
-        );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE t72012
-----
-t72012  CREATE TABLE public.t72012 (
-          col INT8 NOT NULL,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
-          INDEX t72012_idx (abs(col) ASC)
-        ) WITH (schema_locked = true);
-
+        )
 
 statement ok
 ALTER TABLE t72012 ALTER COLUMN col DROP NOT NULL;
@@ -1429,21 +1158,12 @@ CREATE TABLE t74216 (
     UNIQUE ((a::STRING))
 )
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t SET (schema_locked = false)
-
 # create index using an expression works even when retried
 statement ok
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
-SET LOCAL autocommit_before_ddl=off;
+BEGIN;
 CREATE INDEX t_a_times_three_idx ON t ((a * 3));
 SELECT crdb_internal.force_retry('10ms');
 COMMIT
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t SET (schema_locked = true)
 
 # JSON Expression Unique Indexes
 
@@ -1458,248 +1178,3 @@ statement error duplicate key value violates unique constraint "uniq_json_expr_k
 INSERT INTO uniq_json VALUES
   (1, '{"a": "b"}'),
   (2, '{"a": "b"}')
-
-# Test that primary keys that are expressions are displayed correctly.
-subtest display_expressions_in_indexes
-
-# Test with a table where the primary key includes an expression in the middle
-statement ok
-CREATE TABLE expr_tab (
-  a INT,
-  b INT,
-  c STRING,
-  PRIMARY KEY (a, (b + 100), lower(c)),
-  INDEX ((a * 2), b),
-  FAMILY fam (a, b, c)
-)
-
-onlyif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
-----
-CREATE TABLE public.expr_tab (
-  a INT8 NOT NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  CONSTRAINT expr_tab_pkey PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC),
-  INDEX expr_tab_expr_b_idx ((a * 2:::INT8) ASC, b ASC),
-  FAMILY fam (a, b, c)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab]
-----
-CREATE TABLE public.expr_tab (
-  a INT8 NOT NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  CONSTRAINT expr_tab_pkey PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC),
-  INDEX expr_tab_expr_b_idx ((a * 2:::INT8) ASC, b ASC),
-  FAMILY fam (a, b, c)
-) WITH (schema_locked = true);
-
-query TT
-SELECT c.conname, c.condef
-FROM pg_catalog.pg_constraint c
-JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
-WHERE t.relname = 'expr_tab'
-ORDER BY c.conname
-----
-expr_tab_pkey  PRIMARY KEY (a ASC, (b + 100:::INT8) ASC, lower(c) ASC)
-
-# Test with a table where the primary key starts with an expression
-statement ok
-CREATE TABLE expr_tab2 (
-  a INT,
-  b INT,
-  c STRING,
-  PRIMARY KEY ((a + b), c),
-  INDEX ((c || 'suffix'), (a - b)),
-  FAMILY fam (a, b, c)
-)
-
-onlyif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
-----
-CREATE TABLE public.expr_tab2 (
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NOT NULL,
-  CONSTRAINT expr_tab2_pkey PRIMARY KEY ((a + b) ASC, c ASC),
-  INDEX expr_tab2_expr_expr1_idx ((c || 'suffix':::STRING) ASC, (a - b) ASC),
-  FAMILY fam (a, b, c)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab2]
-----
-CREATE TABLE public.expr_tab2 (
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NOT NULL,
-  CONSTRAINT expr_tab2_pkey PRIMARY KEY ((a + b) ASC, c ASC),
-  INDEX expr_tab2_expr_expr1_idx ((c || 'suffix':::STRING) ASC, (a - b) ASC),
-  FAMILY fam (a, b, c)
-) WITH (schema_locked = true);
-
-query TT
-SELECT c.conname, c.condef
-FROM pg_catalog.pg_constraint c
-JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
-WHERE t.relname = 'expr_tab2'
-ORDER BY c.conname
-----
-expr_tab2_pkey  PRIMARY KEY ((a + b) ASC, c ASC)
-
-# Test with multiple expressions in primary key
-statement ok
-CREATE TABLE expr_tab3 (
-  a INT,
-  b INT,
-  c STRING,
-  PRIMARY KEY ((a + b), (b * 2), lower(c)),
-  UNIQUE INDEX ((b / 2), upper(c)),
-  FAMILY fam (a, b, c)
-)
-
-onlyif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
-----
-CREATE TABLE public.expr_tab3 (
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  CONSTRAINT expr_tab3_pkey PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC),
-  UNIQUE INDEX expr_tab3_expr_expr1_key ((b / 2:::INT8) ASC, upper(c) ASC),
-  FAMILY fam (a, b, c)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab3]
-----
-CREATE TABLE public.expr_tab3 (
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  CONSTRAINT expr_tab3_pkey PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC),
-  UNIQUE INDEX expr_tab3_expr_expr1_key ((b / 2:::INT8) ASC, upper(c) ASC),
-  FAMILY fam (a, b, c)
-) WITH (schema_locked = true);
-
-query TT
-SELECT c.conname, c.condef
-FROM pg_catalog.pg_constraint c
-JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
-WHERE t.relname = 'expr_tab3'
-ORDER BY c.conname
-----
-expr_tab3_expr_expr1_key  UNIQUE ((b / 2:::INT8) ASC, upper(c) ASC)
-expr_tab3_pkey            PRIMARY KEY ((a + b) ASC, (b * 2:::INT8) ASC, lower(c) ASC)
-
-# Test with a primary key that's just a single expression
-statement ok
-CREATE TABLE expr_tab4 (
-  a INT,
-  b INT,
-  PRIMARY KEY ((a + b)),
-  INDEX ((a + 1)),
-  FAMILY fam (a, b)
-)
-
-onlyif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
-----
-CREATE TABLE public.expr_tab4 (
-  a INT8 NULL,
-  b INT8 NULL,
-  CONSTRAINT expr_tab4_pkey PRIMARY KEY ((a + b) ASC),
-  INDEX expr_tab4_expr_idx ((a + 1:::INT8) ASC),
-  FAMILY fam (a, b)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab4]
-----
-CREATE TABLE public.expr_tab4 (
-  a INT8 NULL,
-  b INT8 NULL,
-  CONSTRAINT expr_tab4_pkey PRIMARY KEY ((a + b) ASC),
-  INDEX expr_tab4_expr_idx ((a + 1:::INT8) ASC),
-  FAMILY fam (a, b)
-) WITH (schema_locked = true);
-
-query TT
-SELECT c.conname, c.condef
-FROM pg_catalog.pg_constraint c
-JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
-WHERE t.relname = 'expr_tab4'
-ORDER BY c.conname
-----
-expr_tab4_pkey  PRIMARY KEY ((a + b) ASC)
-
-# Test with both primary key and multiple secondary indexes with expressions
-statement ok
-CREATE TABLE expr_tab5 (
-  a INT,
-  b INT,
-  c STRING,
-  j JSON,
-  v VECTOR,
-  PRIMARY KEY ((a + b)),
-  INDEX ((a * b), (b - a)),
-  INVERTED INDEX ((j->'data')),
-  VECTOR INDEX ((v::VECTOR(3))),
-  FAMILY fam (a, b, c, j, v)
-)
-
-onlyif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
-----
-CREATE TABLE public.expr_tab5 (
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  CONSTRAINT expr_tab5_pkey PRIMARY KEY ((a + b) ASC),
-  INDEX expr_tab5_expr_expr1_idx ((a * b) ASC, (b - a) ASC),
-  INVERTED INDEX expr_tab5_expr_idx ((j->'data':::STRING)),
-  VECTOR INDEX expr_tab5_expr_idx1 ((v::VECTOR(3)) vector_l2_ops),
-  FAMILY fam (a, b, c, j, v)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE expr_tab5]
-----
-CREATE TABLE public.expr_tab5 (
-  a INT8 NULL,
-  b INT8 NULL,
-  c STRING NULL,
-  j JSONB NULL,
-  v VECTOR NULL,
-  CONSTRAINT expr_tab5_pkey PRIMARY KEY ((a + b) ASC),
-  INDEX expr_tab5_expr_expr1_idx ((a * b) ASC, (b - a) ASC),
-  INVERTED INDEX expr_tab5_expr_idx ((j->'data':::STRING)),
-  VECTOR INDEX expr_tab5_expr_idx1 ((v::VECTOR(3)) vector_l2_ops),
-  FAMILY fam (a, b, c, j, v)
-) WITH (schema_locked = true);
-
-query TT
-SELECT c.conname, c.condef
-FROM pg_catalog.pg_constraint c
-JOIN pg_catalog.pg_class t ON c.conrelid = t.oid
-WHERE t.relname = 'expr_tab5'
-ORDER BY c.conname
-----
-expr_tab5_pkey  PRIMARY KEY ((a + b) ASC)
-
-subtest end

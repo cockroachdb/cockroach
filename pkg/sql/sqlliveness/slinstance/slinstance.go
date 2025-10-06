@@ -12,7 +12,6 @@ package slinstance
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,7 +47,11 @@ type Writer interface {
 type session struct {
 	id    sqlliveness.SessionID
 	start hlc.Timestamp
-	exp   atomic.Pointer[hlc.Timestamp]
+
+	mu struct {
+		syncutil.Mutex
+		exp hlc.Timestamp
+	}
 }
 
 // ID implements the sqlliveness.Session interface.
@@ -57,7 +59,9 @@ func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
-	return *s.exp.Load()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.exp
 }
 
 // Start implements the sqlliveness.Session interface.
@@ -66,7 +70,9 @@ func (s *session) Start() hlc.Timestamp {
 }
 
 func (s *session) setExpiration(exp hlc.Timestamp) {
-	s.exp.Swap(&exp)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.exp = exp
 }
 
 // SessionEventListener is an interface used by the Instance to notify
@@ -169,11 +175,11 @@ func (l *Instance) clearSession(ctx context.Context) (createNewSession bool) {
 
 func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession bool) {
 	if l.mu.s == nil {
-		log.Dev.Fatal(ctx, "expected session to be set")
+		log.Fatal(ctx, "expected session to be set")
 	}
 	// When the session is set, blockCh should not be set.
 	if l.mu.blockCh != nil {
-		log.Dev.Fatal(ctx, "unexpected blockCh")
+		log.Fatal(ctx, "unexpected blockCh")
 	}
 
 	l.mu.s = nil
@@ -214,15 +220,14 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 		// Note: Concurrent access is not possible at this point because
 		// the session has not been returned, so we have no need to acquire
 		// the lock.
-		newExp := s.start.Add(l.ttl().Nanoseconds(), 0)
-		s.exp.Swap(&newExp)
+		s.mu.exp = s.start.Add(l.ttl().Nanoseconds(), 0)
 		i++
 		if err = l.storage.Insert(ctx, s.id, s.Expiration()); err != nil {
 			if ctx.Err() != nil {
 				break
 			}
 			if everySecond.ShouldLog() {
-				log.Dev.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
+				log.Errorf(ctx, "failed to create a session at %d-th attempt: %v", i, err)
 			}
 			// Unauthenticated errors are unrecoverable, we should break instead
 			// of retrying.
@@ -232,7 +237,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 			// Previous insert was ambiguous, so select a new session ID,
 			// since there may be a row that exists.
 			if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-				log.Dev.Infof(ctx,
+				log.Infof(ctx,
 					"failed to create a session due to an ambiguous result error: %s",
 					s.ID().String())
 				s.id = ""
@@ -244,7 +249,7 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Dev.Infof(ctx, "created new SQL liveness session %s", s.ID())
+	log.Infof(ctx, "created new SQL liveness session %s", s.ID())
 	return s, nil
 }
 
@@ -286,7 +291,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	if err != nil {
 		if ctx.Err() == nil {
-			log.Dev.Fatalf(ctx, "expected canceled ctx on err: %s", err)
+			log.Fatalf(ctx, "expected canceled ctx on err: %s", err)
 		}
 		return false, err
 	}
@@ -301,7 +306,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 func (l *Instance) heartbeatLoop(ctx context.Context) {
 	err := l.heartbeatLoopInner(ctx)
 	if err == nil {
-		log.Dev.Fatal(ctx, "expected heartbeat to always terminate with an error")
+		log.Fatal(ctx, "expected heartbeat to always terminate with an error")
 	}
 
 	// Keep track of the fact that this Instance is not usable anymore. Further
@@ -313,9 +318,9 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 	select {
 	case <-l.drain:
-		log.Dev.Infof(ctx, "draining heartbeat loop")
+		log.Infof(ctx, "draining heartbeat loop")
 	default:
-		log.Dev.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
+		log.Warningf(ctx, "exiting heartbeat loop with error: %v", l.mu.stopErr)
 		if l.mu.s != nil {
 			_ = l.clearSessionLocked(ctx)
 		}
@@ -328,7 +333,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	defer func() {
-		log.Dev.Warning(ctx, "exiting heartbeat loop")
+		log.Warning(ctx, "exiting heartbeat loop")
 	}()
 	// Operations below retry endlessly after the stopper started quiescing if we
 	// don't cancel their ctx.
@@ -345,6 +350,8 @@ func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 		case <-ctx.Done():
 			return stop.ErrUnavailable
 		case <-t.C:
+			t.Read = true
+
 			var s *session
 			l.mu.Lock()
 			s = l.mu.s
@@ -408,11 +415,7 @@ func NewSQLInstance(
 		stopper:        stopper,
 		sessionEvents:  sessionEvents,
 		ttl: func() time.Duration {
-			ttl := slbase.DefaultTTL.Get(&settings.SV)
-			if util.RaceEnabled {
-				ttl *= 5
-			}
-			return ttl
+			return slbase.DefaultTTL.Get(&settings.SV)
 		},
 		hb: func() time.Duration {
 			return slbase.DefaultHeartBeat.Get(&settings.SV)
@@ -430,7 +433,7 @@ func NewSQLInstance(
 func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
 	l.currentRegion = regionPhysicalRep
 
-	log.Dev.Infof(ctx, "starting SQL liveness instance")
+	log.Infof(ctx, "starting SQL liveness instance")
 	// Detach from ctx's cancelation.
 	taskCtx := l.AnnotateCtx(context.Background())
 	taskCtx = logtags.WithTags(taskCtx, logtags.FromContext(ctx))
@@ -472,7 +475,7 @@ func (l *Instance) PauseLivenessHeartbeat(ctx context.Context) {
 	firstToBlock := l.mu.blockedExtensions == 0
 	l.mu.blockedExtensions++
 	if firstToBlock {
-		log.Dev.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
+		log.Infof(ctx, "disabling sqlliveness extension because of availability issue on system tables")
 	}
 }
 
@@ -482,7 +485,7 @@ func (l *Instance) UnpauseLivenessHeartbeat(ctx context.Context) {
 	l.mu.blockedExtensions--
 	lastToUnblock := l.mu.blockedExtensions == 0
 	if lastToUnblock {
-		log.Dev.Infof(ctx, "enabling sqlliveness extension due to restored availability")
+		log.Infof(ctx, "enabling sqlliveness extension due to restored availability")
 	}
 }
 

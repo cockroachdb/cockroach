@@ -21,7 +21,6 @@ import (
 )
 
 type alterTableSetSchemaNode struct {
-	zeroInputPlanNode
 	newSchema string
 	prefix    catalog.ResolvedObjectPrefix
 	tableDesc *tabledesc.Mutable
@@ -79,13 +78,13 @@ func (p *planner) AlterTableSetSchema(
 		if !dependent.ByID {
 			return nil, p.dependentError(
 				ctx, string(tableDesc.DescriptorType()), tableDesc.Name,
-				tableDesc.ParentID, dependent.ID, tableDesc.ID, "set schema on",
+				tableDesc.ParentID, dependent.ID, "set schema on",
 			)
 		}
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
 		return nil, err
 	}
 

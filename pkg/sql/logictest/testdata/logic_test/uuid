@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE u (token uuid PRIMARY KEY,
                 token2 uuid,

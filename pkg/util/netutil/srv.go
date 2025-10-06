@@ -36,7 +36,7 @@ func SRV(ctx context.Context, name string) ([]string, error) {
 		}
 
 		if log.V(1) {
-			log.Dev.Infof(context.TODO(), "failed to lookup SRV record for %q: %v", name, err)
+			log.Infof(context.TODO(), "failed to lookup SRV record for %q: %v", name, err)
 		}
 
 		return nil, nil

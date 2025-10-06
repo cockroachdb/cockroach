@@ -7,26 +7,24 @@ package roachtestutil
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"math/rand"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/errors"
 )
 
-// TODO(darryl): Once the failure injection library is a first class citizen of roachtest,
-// i.e. synced with the monitor, test + cluster spec validation, observability into failure
-// modes, etc. we can remove this interface entirely.
 type DiskStaller interface {
 	Setup(ctx context.Context)
 	Cleanup(ctx context.Context)
 	Stall(ctx context.Context, nodes option.NodeListOption)
-	StallCycle(ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration)
 	Slow(ctx context.Context, nodes option.NodeListOption, bytesPerSecond int)
-	Unstall(ctx context.Context, nodes option.NodeListOption) error
+	Unstall(ctx context.Context, nodes option.NodeListOption)
 	DataDir() string
 	LogDir() string
 }
@@ -41,11 +39,7 @@ func (n NoopDiskStaller) LogDir() string                                        
 func (n NoopDiskStaller) Setup(ctx context.Context)                              {}
 func (n NoopDiskStaller) Slow(_ context.Context, _ option.NodeListOption, _ int) {}
 func (n NoopDiskStaller) Stall(_ context.Context, _ option.NodeListOption)       {}
-func (n NoopDiskStaller) StallCycle(
-	_ context.Context, _ option.NodeListOption, _, _ time.Duration,
-) {
-}
-func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption) error { return nil }
+func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption)     {}
 
 type Fataler interface {
 	Fatal(args ...interface{})
@@ -54,23 +48,20 @@ type Fataler interface {
 }
 
 type cgroupDiskStaller struct {
-	*failures.Failer
-	f          Fataler
-	c          cluster.Cluster
-	stallReads bool
-	stallLogs  bool
+	f           Fataler
+	c           cluster.Cluster
+	readOrWrite []bandwidthReadWrite
+	logsToo     bool
 }
 
 var _ DiskStaller = (*cgroupDiskStaller)(nil)
 
-func MakeCgroupDiskStaller(
-	f Fataler, c cluster.Cluster, stallReads bool, stallLogs bool, disableStateValidation bool,
-) DiskStaller {
-	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.CgroupsDiskStallName, disableStateValidation)
-	if err != nil {
-		f.Fatalf("failed to get failer: %s", err)
+func MakeCgroupDiskStaller(f Fataler, c cluster.Cluster, readsToo bool, logsToo bool) DiskStaller {
+	bwRW := []bandwidthReadWrite{writeBandwidth}
+	if readsToo {
+		bwRW = append(bwRW, readBandwidth)
 	}
-	return &cgroupDiskStaller{Failer: diskStaller, f: f, c: c, stallReads: stallReads, stallLogs: stallLogs}
+	return &cgroupDiskStaller{f: f, c: c, readOrWrite: bwRW, logsToo: logsToo}
 }
 
 func (s *cgroupDiskStaller) DataDir() string { return "{store-dir}" }
@@ -82,88 +73,135 @@ func (s *cgroupDiskStaller) Setup(ctx context.Context) {
 		// Safety measure.
 		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
 	}
-	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Setup")
-	if err := s.Failer.Setup(ctx, l, failures.DiskStallArgs{
-		StallLogs: s.stallLogs,
-		Nodes:     s.c.CRDBNodes().InstallNodes(),
-	}); err != nil {
-		s.f.Fatalf("failed to setup disk stall: %s", err)
+	if s.logsToo {
+		s.c.Run(ctx, option.WithNodes(s.c.All()), "mkdir -p {store-dir}/logs")
+		s.c.Run(ctx, option.WithNodes(s.c.All()), "rm -f logs && ln -s {store-dir}/logs logs || true")
 	}
 }
-func (s *cgroupDiskStaller) Cleanup(ctx context.Context) {
-	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Cleanup")
-	err := s.Failer.Cleanup(ctx, l)
-	if err != nil {
-		s.f.Fatalf("failed to cleanup disk stall: %s", err)
-	}
-}
+func (s *cgroupDiskStaller) Cleanup(ctx context.Context) {}
 
 func (s *cgroupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
-	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
-		StallLogs:   s.stallLogs,
-		StallWrites: true,
-		StallReads:  s.stallReads,
-		Nodes:       nodes.InstallNodes(),
-	}); err != nil {
-		s.f.Fatalf("failed to stall disk: %s", err)
-	}
-}
-
-func (s *cgroupDiskStaller) StallCycle(
-	ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration,
-) {
-	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
-	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
-		StallLogs:            s.stallLogs,
-		StallWrites:          true,
-		StallReads:           s.stallReads,
-		Nodes:                nodes.InstallNodes(),
-		Cycle:                true,
-		CycleStallDuration:   stallDuration,
-		CycleUnstallDuration: unstallDuration,
-	}); err != nil {
-		s.f.Fatalf("failed to stall disk: %s", err)
-	}
+	// NB: I don't understand why, but attempting to set a bytesPerSecond={0,1}
+	// results in Invalid argument from the io.max cgroupv2 API.
+	s.Slow(ctx, nodes, 4)
 }
 
 func (s *cgroupDiskStaller) Slow(
 	ctx context.Context, nodes option.NodeListOption, bytesPerSecond int,
 ) {
-	l := newDiskStallLogger(s.f.L(), nodes, "Slow")
-	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
-		StallLogs:   s.stallLogs,
-		StallWrites: true,
-		StallReads:  s.stallReads,
-		Nodes:       nodes.InstallNodes(),
-		Throughput:  bytesPerSecond,
-	}); err != nil {
-		s.f.Fatalf("failed to slow disk: %s", err)
+	// Shuffle the order of read and write stall initiation.
+	rand.Shuffle(len(s.readOrWrite), func(i, j int) {
+		s.readOrWrite[i], s.readOrWrite[j] = s.readOrWrite[j], s.readOrWrite[i]
+	})
+	for _, rw := range s.readOrWrite {
+		if err := s.setThroughput(ctx, nodes, rw, throughput{limited: true, bytesPerSecond: bytesPerSecond}); err != nil {
+			s.f.Fatal(err)
+		}
 	}
 }
 
-func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) error {
-	l := newDiskStallLogger(s.f.L(), nodes, "Unstall")
-	// cgroup may fail when unstalling the disk, usually because the node already
-	// fataled and the cgroup is no longer available. Return the error and let
-	// the caller decide if a node fatal is expected or not.
-	return errors.Wrap(s.Failer.Recover(ctx, l), "failed to unstall disk")
+func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
+	for _, rw := range s.readOrWrite {
+		err := s.setThroughput(ctx, nodes, rw, throughput{limited: false})
+		if err != nil {
+			s.f.L().PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
+		}
+		// NB: We log the error and continue on because unstalling may not
+		// succeed if the process has successfully exited.
+	}
+}
+
+func (s *cgroupDiskStaller) device(nodes option.NodeListOption) (major, minor int) {
+	// TODO(jackson): Programmatically determine the device major,minor numbers.
+	// eg,:
+	//    deviceName := getDevice(s.t, s.c)
+	//    `cat /proc/partitions` and find `deviceName`
+	res, err := s.c.RunWithDetailsSingleNode(context.TODO(), s.f.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $2}'")
+	if err != nil {
+		s.f.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	parts := strings.Split(strings.TrimSpace(res.Stdout), ":")
+	if len(parts) != 2 {
+		s.f.Fatalf("unexpected output from lsblk: %s", res.Stdout)
+		return 0, 0
+	}
+	major, err = strconv.Atoi(parts[0])
+	if err != nil {
+		s.f.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	minor, err = strconv.Atoi(parts[1])
+	if err != nil {
+		s.f.Fatalf("error when determining block device: %s", err)
+		return 0, 0
+	}
+	return major, minor
+}
+
+type throughput struct {
+	limited        bool
+	bytesPerSecond int
+}
+
+type bandwidthReadWrite int8
+
+const (
+	readBandwidth bandwidthReadWrite = iota
+	writeBandwidth
+)
+
+func (rw bandwidthReadWrite) cgroupV2BandwidthProp() string {
+	switch rw {
+	case readBandwidth:
+		return "rbps"
+	case writeBandwidth:
+		return "wbps"
+	default:
+		panic("unreachable")
+	}
+}
+
+func (s *cgroupDiskStaller) setThroughput(
+	ctx context.Context, nodes option.NodeListOption, rw bandwidthReadWrite, bw throughput,
+) error {
+	maj, min := s.device(nodes)
+	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", SystemInterfaceSystemdUnitName()+".service", "io.max")
+
+	bytesPerSecondStr := "max"
+	if bw.limited {
+		bytesPerSecondStr = fmt.Sprintf("%d", bw.bytesPerSecond)
+	}
+	return s.c.RunE(ctx, option.WithNodes(nodes), "sudo", "/bin/bash", "-c", fmt.Sprintf(
+		`'echo %d:%d %s=%s > %s'`,
+		maj,
+		min,
+		rw.cgroupV2BandwidthProp(),
+		bytesPerSecondStr,
+		cockroachIOController,
+	))
+}
+
+func GetDiskDevice(f Fataler, c cluster.Cluster, nodes option.NodeListOption) string {
+	res, err := c.RunWithDetailsSingleNode(context.TODO(), f.L(), option.WithNodes(nodes[:1]), "lsblk | grep /mnt/data1 | awk '{print $1}'")
+	if err != nil {
+		f.Fatalf("error when determining block device: %s", err)
+		return ""
+	}
+	return "/dev/" + strings.TrimSpace(res.Stdout)
 }
 
 type dmsetupDiskStaller struct {
-	*failures.Failer
 	f Fataler
 	c cluster.Cluster
+
+	dev string // set in Setup; s.device() doesn't work when volume is not set up
 }
 
 var _ DiskStaller = (*dmsetupDiskStaller)(nil)
 
-func MakeDmsetupDiskStaller(f Fataler, c cluster.Cluster, disableStateValidation bool) DiskStaller {
-	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.DmsetupDiskStallName, disableStateValidation)
-	if err != nil {
-		f.Fatalf("failed to get failer: %s", err)
-	}
-	return &dmsetupDiskStaller{Failer: diskStaller, f: f, c: c}
+func (s *dmsetupDiskStaller) device(nodes option.NodeListOption) string {
+	return GetDiskDevice(s.f, s.c, nodes)
 }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
@@ -171,40 +209,38 @@ func (s *dmsetupDiskStaller) Setup(ctx context.Context) {
 		// We disable journaling and do all kinds of things below.
 		s.f.Fatalf("cluster needs ReusePolicyNone to support disk stalls")
 	}
-	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Setup")
-	if err := s.Failer.Setup(ctx, l, failures.DiskStallArgs{Nodes: s.c.CRDBNodes().InstallNodes()}); err != nil {
-		s.f.Fatalf("failed to setup disk stall: %s", err)
+	s.dev = s.device(s.c.All())
+	// snapd will run "snapd auto-import /dev/dm-0" via udev triggers when
+	// /dev/dm-0 is created. This possibly interferes with the dmsetup create
+	// reload, so uninstall snapd.
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get purge -y snapd`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount -f /mnt/data1 || true`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
+	// See https://github.com/cockroachdb/cockroach/issues/129619#issuecomment-2316147244.
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo tune2fs -O ^has_journal `+s.dev)
+	err := s.c.RunE(ctx, option.WithNodes(s.c.All()), `echo "0 $(sudo blockdev --getsz `+s.dev+`) linear `+s.dev+` 0" | `+
+		`sudo dmsetup create data1`)
+	if err != nil {
+		// This has occasionally been seen to fail with "Device or resource busy",
+		// with no clear explanation. Try to find out who it is.
+		s.c.Run(ctx, option.WithNodes(s.c.All()), "sudo bash -c 'ps aux; dmsetup status; mount; lsof'")
+		s.f.Fatal(err)
 	}
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo mount /dev/mapper/data1 /mnt/data1`)
 }
 
 func (s *dmsetupDiskStaller) Cleanup(ctx context.Context) {
-	l := newDiskStallLogger(s.f.L(), s.c.CRDBNodes(), "Cleanup")
-	if err := s.Failer.Cleanup(ctx, l); err != nil {
-		s.f.Fatalf("failed to cleanup disk stall: %s", err)
-	}
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup resume data1`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo umount /mnt/data1`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo dmsetup remove_all`)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo tune2fs -O has_journal `+s.dev)
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo mount /mnt/data1`)
+	// Reinstall snapd in case subsequent tests need it.
+	s.c.Run(ctx, option.WithNodes(s.c.All()), `sudo apt-get install -y snapd`)
 }
 
 func (s *dmsetupDiskStaller) Stall(ctx context.Context, nodes option.NodeListOption) {
-	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
-	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
-		Nodes: nodes.InstallNodes(),
-	}); err != nil {
-		s.f.Fatalf("failed to stall disk: %s", err)
-	}
-}
-
-func (s *dmsetupDiskStaller) StallCycle(
-	ctx context.Context, nodes option.NodeListOption, stallDuration, unstallDuration time.Duration,
-) {
-	l := newDiskStallLogger(s.f.L(), nodes, "Stall")
-	if err := s.Failer.Inject(ctx, l, failures.DiskStallArgs{
-		Nodes:                nodes.InstallNodes(),
-		Cycle:                true,
-		CycleStallDuration:   stallDuration,
-		CycleUnstallDuration: unstallDuration,
-	}); err != nil {
-		s.f.Fatalf("failed to stall disk: %s", err)
-	}
+	s.c.Run(ctx, option.WithNodes(nodes), `sudo dmsetup suspend --noflush --nolockfs data1`)
 }
 
 func (s *dmsetupDiskStaller) Slow(
@@ -214,27 +250,13 @@ func (s *dmsetupDiskStaller) Slow(
 	s.f.Fatal("Slow is not supported for dmsetupDiskStaller")
 }
 
-func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) error {
-	l := newDiskStallLogger(s.f.L(), nodes, "Unstall")
-	// Any unstall error for dmsetup is unexpected and should fail the test.
-	if err := s.Failer.Recover(ctx, l); err != nil {
-		s.f.Fatalf("failed to unstall disk: %s", err)
-	}
-	return nil
+func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOption) {
+	s.c.Run(ctx, option.WithNodes(nodes), `sudo dmsetup resume data1`)
 }
 
 func (s *dmsetupDiskStaller) DataDir() string { return "{store-dir}" }
 func (s *dmsetupDiskStaller) LogDir() string  { return "logs" }
 
-// newDiskStallLogger attempts to create a quiet child logger for a given
-// disk staller method. If the child logger cannot be created, it logs
-// a warning and continues with the parent logger.
-func newDiskStallLogger(l *logger.Logger, nodes option.NodeListOption, name string) *logger.Logger {
-	quietLogger, file, err := LoggerForCmd(l, nodes, name)
-	if err != nil {
-		l.Printf("WARN: failed to create child logger for %s(): %s", name, err)
-		return l
-	}
-	l.Printf("%s() details in %s.log", name, file)
-	return quietLogger
+func MakeDmsetupDiskStaller(f Fataler, c cluster.Cluster) DiskStaller {
+	return &dmsetupDiskStaller{f: f, c: c}
 }

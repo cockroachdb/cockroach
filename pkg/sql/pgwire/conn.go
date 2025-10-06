@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -151,7 +149,7 @@ func (c *conn) processCommands(
 	ctx context.Context,
 	authOpt authOptions,
 	ac AuthConn,
-	server *Server,
+	sqlServer *sql.Server,
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
 	sessionID clusterunique.ID,
@@ -175,7 +173,7 @@ func (c *conn) processCommands(
 		// network read on the connection's goroutine.
 		c.cancelConn()
 
-		pgwireKnobs := server.SQLServer.GetExecutorConfig().PGWireTestingKnobs
+		pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
 		if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
 			if r := recover(); r != nil {
 				// Catch the panic and return it to the client as an error.
@@ -203,14 +201,14 @@ func (c *conn) processCommands(
 
 	// Authenticate the connection.
 	if connCloseAuthHandler, retErr = c.handleAuthentication(
-		ctx, ac, authOpt, server,
+		ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
 	); retErr != nil {
 		// Auth failed or some other error.
 		return
 	}
 
 	var decrementConnectionCount func()
-	if decrementConnectionCount, retErr = server.SQLServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
+	if decrementConnectionCount, retErr = sqlServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
 		// This will return pgcode.TooManyConnections which is used by the sql proxy
 		// to skip failed auth throttle (as in this case the auth was fine but the
 		// error occurred before sending back auth ok msg)
@@ -224,7 +222,7 @@ func (c *conn) processCommands(
 	}
 
 	// Inform the client of the default session settings.
-	connHandler, retErr = c.sendInitialConnData(ctx, server.SQLServer, onDefaultIntSizeChange, sessionID)
+	connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange, sessionID)
 	if retErr != nil {
 		return
 	}
@@ -250,7 +248,7 @@ func (c *conn) processCommands(
 
 	// Now actually process commands.
 	reservedOwned = false // We're about to pass ownership away.
-	retErr = server.SQLServer.ServeConn(
+	retErr = sqlServer.ServeConn(
 		ctx,
 		connHandler,
 		reserved,
@@ -344,7 +342,7 @@ func (c *conn) bufferInitialReadyForQuery(queryCancelKey pgwirecancel.BackendKey
 func (c *conn) handleSimpleQuery(
 	ctx context.Context,
 	buf *pgwirebase.ReadBuffer,
-	timeReceived crtime.Mono,
+	timeReceived time.Time,
 	unqualifiedIntSize *types.T,
 ) error {
 	query, err := buf.GetUnsafeString()
@@ -352,7 +350,7 @@ func (c *conn) handleSimpleQuery(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 
-	startParse := crtime.NowMono()
+	startParse := timeutil.Now()
 	if c.sessionArgs.ReplicationMode != sessiondatapb.ReplicationMode_REPLICATION_MODE_DISABLED &&
 		pgreplparser.IsReplicationProtocolCommand(query) {
 		stmt, err := pgreplparser.Parse(query)
@@ -368,7 +366,7 @@ func (c *conn) handleSimpleQuery(
 				Err: unimplemented.NewWithIssueDetail(0, fmt.Sprintf("%T", stmt.AST), "replication protocol command not implemented"),
 			})
 		}
-		endParse := crtime.NowMono()
+		endParse := timeutil.Now()
 		return c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
@@ -381,12 +379,12 @@ func (c *conn) handleSimpleQuery(
 			},
 		)
 	}
-	stmts, err := c.parser.ParseWithOptions(query, sqlcommenter.MaybeRetainComments(c.sv).WithIntType(unqualifiedIntSize))
+	stmts, err := c.parser.ParseWithInt(query, unqualifiedIntSize)
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse simple query: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	endParse := crtime.NowMono()
+	endParse := timeutil.Now()
 
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
@@ -516,8 +514,8 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 		inTypeHints[i] = oid.Oid(typ)
 	}
 
-	startParse := crtime.NowMono()
-	stmts, err := c.parser.ParseWithOptions(query, sqlcommenter.MaybeRetainComments(c.sv).WithIntType(nakedIntSize))
+	startParse := timeutil.Now()
+	stmts, err := c.parser.ParseWithInt(query, nakedIntSize)
 	if err != nil {
 		log.SqlExec.Infof(ctx, "could not parse: %s", query)
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -574,7 +572,7 @@ func (c *conn) handleParse(ctx context.Context, nakedIntSize *types.T) error {
 		}
 	}
 
-	endParse := crtime.NowMono()
+	endParse := timeutil.Now()
 
 	if _, ok := stmt.AST.(*tree.CopyFrom); ok {
 		// We don't support COPY in extended protocol because it'd be complicated:
@@ -774,7 +772,7 @@ func (c *conn) handleBind(ctx context.Context) error {
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleExecute(
-	ctx context.Context, timeReceived crtime.Mono, followedBySync bool,
+	ctx context.Context, timeReceived time.Time, followedBySync bool,
 ) error {
 	telemetry.Inc(sqltelemetry.ExecuteRequestCounter)
 	portalName, err := c.readBuf.GetUnsafeString()
@@ -1211,7 +1209,7 @@ func (c *conn) writeRowDescription(
 	c.msgBuilder.putInt16(int16(len(columns)))
 	for i, column := range columns {
 		if log.V(2) {
-			log.Dev.Infof(ctx, "pgwire: writing column %s of type: %s", column.Name, column.Typ)
+			log.Infof(ctx, "pgwire: writing column %s of type: %s", column.Name, column.Typ)
 		}
 		c.msgBuilder.writeTerminatedString(column.Name)
 		typ := pgTypeForParserType(column.Typ)
@@ -1362,7 +1360,14 @@ func (c *conn) CreateStatementResult(
 	implicitTxn bool,
 	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn, portalPausability)
+	rowLimit := limit
+	if tree.ReturnsAtMostOneRow(stmt) {
+		// When a statement returns at most one row, the result row limit doesn't
+		// matter. We set it to 0 to fetch all rows, which allows us to clean up
+		// resources sooner if using a pausable portal.
+		rowLimit = 0
+	}
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, rowLimit, portalName, implicitTxn, portalPausability)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.

@@ -29,7 +29,7 @@ func gcTenant(
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if log.V(2) {
-		log.Dev.Infof(ctx, "GC is being considered for tenant: %d", tenID)
+		log.Infof(ctx, "GC is being considered for tenant: %d", tenID)
 	}
 
 	if progress.Tenant.Status == jobspb.SchemaChangeGCProgress_WAITING_FOR_CLEAR {
@@ -51,7 +51,7 @@ func gcTenant(
 				// This will happen if the job deletes the tenant row and fails to update
 				// its progress. In this case there's nothing to do but update the job
 				// progress.
-				log.Dev.Errorf(ctx, "tenant ID %d not found while attempting to GC", tenID)
+				log.Errorf(ctx, "tenant ID %d not found while attempting to GC", tenID)
 				progress.Tenant.Status = jobspb.SchemaChangeGCProgress_CLEARED
 			}
 			return nil

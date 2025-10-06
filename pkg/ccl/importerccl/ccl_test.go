@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,8 +56,6 @@ func sharedTestdata(t *testing.T) string {
 func TestImportMultiRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "takes >1min under race")
 
 	baseDir := sharedTestdata(t)
 	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -100,6 +97,54 @@ func TestImportMultiRegion(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
+
+	viewsAndSequencesTestCases := []struct {
+		desc      string
+		importSQL string
+		expected  map[string]string
+	}{
+		{
+			desc:      "pgdump",
+			importSQL: `IMPORT PGDUMP 'nodelocal://1/pgdump/views_and_sequences.sql' WITH ignore_unsupported_statements`,
+			expected: map[string]string{
+				"tbl": "REGIONAL BY TABLE IN PRIMARY REGION",
+				"s":   "REGIONAL BY TABLE IN PRIMARY REGION",
+				// views are ignored.
+			},
+		},
+		{
+			desc:      "mysqldump",
+			importSQL: `IMPORT MYSQLDUMP 'nodelocal://1/mysqldump/views_and_sequences.sql'`,
+			expected: map[string]string{
+				"tbl":          "REGIONAL BY TABLE IN PRIMARY REGION",
+				"tbl_auto_inc": "REGIONAL BY TABLE IN PRIMARY REGION",
+				// views are ignored.
+			},
+		},
+	}
+
+	for _, tc := range viewsAndSequencesTestCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			tdb.Exec(t, `USE multi_region`)
+			defer tdb.Exec(t, `
+DROP TABLE IF EXISTS tbl;
+DROP SEQUENCE IF EXISTS s;
+DROP SEQUENCE IF EXISTS table_auto_inc;
+DROP VIEW IF EXISTS v`,
+			)
+
+			tdb.Exec(t, tc.importSQL)
+			rows := tdb.Query(t, "SELECT table_name, locality FROM [SHOW TABLES] ORDER BY table_name")
+			results := make(map[string]string)
+			for rows.Next() {
+				var tableName, locality string
+				require.NoError(t, rows.Scan(&tableName, &locality))
+				results[tableName] = locality
+			}
+			require.NoError(t, rows.Err())
+			require.Equal(t, tc.expected, results)
+		})
+	}
 
 	t.Run("avro", func(t *testing.T) {
 		tests := []struct {
@@ -361,14 +406,8 @@ FROM TABLE original_rbr;`)
  crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region;`)
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET (schema_locked = false)`)
-	require.NoError(t, err)
-
 	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET LOCALITY
  REGIONAL BY ROW AS crdb_region;`)
-	require.NoError(t, err)
-
-	_, err = sqlDB.Exec(`ALTER TABLE destination_fake_rbr SET (schema_locked = true)`)
 	require.NoError(t, err)
 
 	// Insert some more rows and ensure that the default values get generated.

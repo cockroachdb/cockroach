@@ -272,7 +272,7 @@ func (l *LivenessFabric) WithdrawSupportFor(fromID pb.PeerID, forID pb.PeerID) {
 	fromEntry.withdrawSupportFor(forID)
 }
 
-// WithdrawSupportFrom causes the store liveness SupportFrom() to return not
+// WithdrawSupportFor causes the store liveness SupportFrom() to return not
 // supported when fromID calls it for forID.
 func (l *LivenessFabric) WithdrawSupportFrom(fromID pb.PeerID, forID pb.PeerID) {
 	fromEntry, exists := l.state[fromID]
@@ -289,22 +289,22 @@ func (l *LivenessFabric) WithdrawSupport(fromID pb.PeerID, forID pb.PeerID) {
 	l.WithdrawSupportFrom(forID, fromID)
 }
 
-// GrantSupportFor causes the store liveness SupportFor() to return supported
-// when fromID calls it for forID.
+// GrantSupport causes the store liveness SupportFor() to return supported when
+// fromID calls it for forID.
 func (l *LivenessFabric) GrantSupportFor(fromID pb.PeerID, forID pb.PeerID) {
 	fromEntry, exists := l.state[fromID]
 	if !exists {
-		panic("attempting to call GrantSupportFor() for a non-existing fromID entry")
+		panic("attempting to call GrantSupport() for a non-existing fromID entry")
 	}
 	fromEntry.grantSupportFor(forID)
 }
 
-// GrantSupportFrom causes the store liveness SupportFrom() to return supported
-// when fromID calls it for forID.
+// GrantSupport causes the store liveness SupportFrom() to return supported when
+// fromID calls it for forID.
 func (l *LivenessFabric) GrantSupportFrom(fromID pb.PeerID, forID pb.PeerID) {
 	fromEntry, exists := l.state[fromID]
 	if !exists {
-		panic("attempting to call GrantSupportFrom() for a non-existing fromID entry")
+		panic("attempting to call GrantSupport() for a non-existing fromID entry")
 	}
 	fromEntry.grantSupportFrom(forID)
 }
@@ -348,33 +348,5 @@ func (l *LivenessFabric) BumpAllSupportEpochs() {
 		for s2ID := range storeLiveness.state {
 			l.BumpEpoch(s1ID, s2ID)
 		}
-	}
-}
-
-// Isolate isolates the target peer from all other peers in the liveness fabric.
-func (l *LivenessFabric) Isolate(targetID pb.PeerID) {
-	for id := range l.state {
-		if id == targetID {
-			// We don't want to withdraw the support from our self.
-			continue
-		}
-
-		l.WithdrawSupport(id, targetID)
-		l.WithdrawSupport(targetID, id)
-	}
-}
-
-// UnIsolate is the opposite of Isolate(). It unisolates the target peer from
-// all other peers in the liveness fabric.
-func (l *LivenessFabric) UnIsolate(targetID pb.PeerID) {
-	for id := range l.state {
-		if id == targetID {
-			// We don't have to grant support to our self since Isolate() doesn't
-			// withdraw it.
-			continue
-		}
-
-		l.GrantSupport(id, targetID)
-		l.GrantSupport(targetID, id)
 	}
 }

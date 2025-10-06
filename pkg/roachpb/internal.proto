@@ -90,9 +90,6 @@ message InternalTimeSeriesData {
   // during this sample period. If this column is elided, its value for all
   // samples is zero.
   repeated double variance = 11 [packed=true];
-
-  // Note: if more repeated fields are added, ResetRetainingSlices should be
-  // updated to retain the slice.
 }
 
 // A InternalTimeSeriesSample represents data gathered from multiple

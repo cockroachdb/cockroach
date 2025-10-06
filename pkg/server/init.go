@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -155,6 +155,33 @@ func (i *initState) validate() error {
 	return nil
 }
 
+// initialStoreIDs returns the initial set of store IDs a node starts off with.
+// If it's a restarting node, restarted with no additional stores, this is just
+// all the local store IDs. If there's an additional store post-restart that's
+// yet to be initialized, it's not found in this list. For nodes newly added to
+// the cluster, it's just the first initialized store. For the remaining stores
+// in all these cases, they're accessible through
+// (*initState).additionalStoreIDs once they're initialized.
+func (i *initState) initialStoreIDs() ([]roachpb.StoreID, error) {
+	return getStoreIDsInner(i.initializedEngines)
+}
+
+func (i *initState) additionalStoreIDs() ([]roachpb.StoreID, error) {
+	return getStoreIDsInner(i.uninitializedEngines)
+}
+
+func getStoreIDsInner(engines []storage.Engine) ([]roachpb.StoreID, error) {
+	storeIDs := make([]roachpb.StoreID, 0, len(engines))
+	for _, eng := range engines {
+		storeID, err := eng.GetStoreID()
+		if err != nil {
+			return nil, err
+		}
+		storeIDs = append(storeIDs, roachpb.StoreID(storeID))
+	}
+	return storeIDs, nil
+}
+
 // joinResult is used to represent the result of a node attempting to join
 // an already bootstrapped cluster.
 type joinResult struct {
@@ -194,8 +221,8 @@ func (s *initServer) ServeAndWait(
 		return s.inspectedDiskState, false, nil
 	}
 
-	log.Dev.Info(ctx, "no stores initialized")
-	log.Dev.Info(ctx, "awaiting `cockroach init` or join with an already initialized node")
+	log.Info(ctx, "no stores initialized")
+	log.Info(ctx, "awaiting `cockroach init` or join with an already initialized node")
 
 	// If we end up joining a bootstrapped cluster, the resulting init state
 	// will be passed through this channel.
@@ -259,9 +286,9 @@ func (s *initServer) ServeAndWait(
 				return nil, false, err
 			}
 
-			log.Dev.Infof(ctx, "cluster %s has been created", state.clusterID)
-			log.Dev.Infof(ctx, "allocated node ID: n%d (for self)", state.nodeID)
-			log.Dev.Infof(ctx, "active cluster version: %s", state.clusterVersion)
+			log.Infof(ctx, "cluster %s has been created", state.clusterID)
+			log.Infof(ctx, "allocated node ID: n%d (for self)", state.nodeID)
+			log.Infof(ctx, "active cluster version: %s", state.clusterVersion)
 
 			return state, true, nil
 		case result := <-joinCh:
@@ -282,9 +309,9 @@ func (s *initServer) ServeAndWait(
 
 			state := result.state
 
-			log.Dev.Infof(ctx, "joined cluster %s through join rpc", state.clusterID)
-			log.Dev.Infof(ctx, "received node ID: %d", state.nodeID)
-			log.Dev.Infof(ctx, "received cluster version: %s", state.clusterVersion)
+			log.Infof(ctx, "joined cluster %s through join rpc", state.clusterID)
+			log.Infof(ctx, "received node ID: %d", state.nodeID)
+			log.Infof(ctx, "received cluster version: %s", state.clusterVersion)
 
 			return state, true, nil
 		case <-stopper.ShouldQuiesce():
@@ -323,7 +350,7 @@ func (s *initServer) Bootstrap(
 
 	state, err := bootstrapCluster(ctx, s.inspectedDiskState.uninitializedEngines, s.config)
 	if err != nil {
-		log.Dev.Errorf(ctx, "bootstrap: %v", err)
+		log.Errorf(ctx, "bootstrap: %v", err)
 		s.mu.rejectErr = errInternalBootstrapError
 		return nil, s.mu.rejectErr
 	}
@@ -370,9 +397,9 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 			// Try the next node if unsuccessful.
 
 			if grpcutil.IsWaitingForInit(err) {
-				log.Dev.Infof(ctx, "%s is itself waiting for init, will retry", addr)
+				log.Infof(ctx, "%s is itself waiting for init, will retry", addr)
 			} else {
-				log.Dev.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+				log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
 			}
 			continue
 		}
@@ -416,9 +443,9 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 				// logging. See grpcutil.connectionRefusedRe.
 
 				if grpcutil.IsWaitingForInit(err) {
-					log.Dev.Infof(ctx, "%s is itself waiting for init, will retry", addr)
+					log.Infof(ctx, "%s is itself waiting for init, will retry", addr)
 				} else {
-					log.Dev.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
+					log.Warningf(ctx, "outgoing join rpc to %s unsuccessful: %v", addr, err.Error())
 				}
 				continue
 			}
@@ -448,7 +475,7 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
 ) (*kvpb.JoinNodeResponse, error) {
-	dialOpts, err := s.config.getDialOpts(ctx, addr, rpcbase.SystemClass)
+	dialOpts, err := s.config.getDialOpts(ctx, addr, rpc.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -466,8 +493,7 @@ func (s *initServer) attemptJoinTo(
 		BinaryVersion: &latestVersion,
 	}
 
-	// TODO(server): add support for DRPC initClient
-	var initClient kvpb.RPCNodeClient = kvpb.NewGRPCInternalClientAdapter(conn)
+	initClient := kvpb.NewInternalClient(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
@@ -481,7 +507,7 @@ func (s *initServer) attemptJoinTo(
 		// to be changed as well.
 
 		if status.Code() == codes.PermissionDenied {
-			log.Dev.Infof(ctx, "%s is running a version higher than our binary version %s", addr, req.BinaryVersion.String())
+			log.Infof(ctx, "%s is running a version higher than our binary version %s", addr, req.BinaryVersion.String())
 			return nil, ErrIncompatibleBinaryVersion
 		}
 
@@ -585,7 +611,7 @@ type initServerCfg struct {
 	defaultZoneConfig       zonepb.ZoneConfig
 
 	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
-	getDialOpts func(ctx context.Context, target string, class rpcbase.ConnectionClass) ([]grpc.DialOption, error)
+	getDialOpts func(ctx context.Context, target string, class rpc.ConnectionClass) ([]grpc.DialOption, error)
 
 	// bootstrapAddresses is a list of node addresses (populated using --join
 	// addresses) that is used to form a connected graph/network of CRDB servers.
@@ -606,7 +632,7 @@ type initServerCfg struct {
 func newInitServerConfig(
 	ctx context.Context,
 	cfg Config,
-	getDialOpts func(context.Context, string, rpcbase.ConnectionClass) ([]grpc.DialOption, error),
+	getDialOpts func(context.Context, string, rpc.ConnectionClass) ([]grpc.DialOption, error),
 ) initServerCfg {
 	latestVersion := cfg.Settings.Version.LatestVersion()
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()
@@ -632,7 +658,7 @@ func newInitServerConfig(
 		}
 	}
 	if latestVersion.Less(minSupportedVersion) {
-		log.Dev.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
+		log.Fatalf(ctx, "binary version (%s) less than min supported version (%s)",
 			latestVersion, minSupportedVersion)
 	}
 

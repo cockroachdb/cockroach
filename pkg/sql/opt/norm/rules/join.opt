@@ -80,7 +80,7 @@
             (CanMapJoinOpFilter
                 $item
                 $leftCols:(OutputCols $left)
-                $equivSet:(GetEquivGroups $on $left $right)
+                $equivSet:(GetEquivSet $on $left $right)
             ) &
             (CanMapJoinOpFilter
                 $item
@@ -140,7 +140,7 @@
             (CanMapJoinOpFilter
                 $item
                 $leftCols
-                $equivSet:(GetEquivGroups $on $left $right)
+                $equivSet:(GetEquivSet $on $left $right)
             )
         ...
     ]
@@ -174,7 +174,7 @@
             (CanMapJoinOpFilter
                 $item
                 $rightCols
-                $equivSet:(GetEquivGroups $on $left $right)
+                $equivSet:(GetEquivSet $on $left $right)
             )
         ...
     ]
@@ -324,15 +324,6 @@
 =>
 (ConstructNonLeftJoin (OpName) $left $right $on $private)
 
-# SimplifyLeftJoinWithZeroRowsRight replaces a LeftJoin with a Project when
-# the right input never returns any rows. The Project passes through columns
-# from the left input and produces NULL values for each column in the right
-# input.
-[SimplifyLeftJoinWithZeroRowsRight, Normalize]
-(LeftJoin $left:* $right:* & (HasZeroRows $right))
-=>
-(Project $left (MakeNullProjections $right) (OutputCols $left))
-
 # SimplifyRightJoin reduces a FullJoin operator to a LeftJoin operator when it's
 # known that every row in the join's right input will match at least one row in
 # the left input. This rule is symmetric with SimplifyLeftJoin; see that rule
@@ -425,106 +416,35 @@ $left
 # them down (to prune columns), or else to pull them up (to get them out of the
 # way of other operators).
 #
-# It's not always beneficial to hoist projections above joins, but we need some
-# projection hoisting to happen to help join reordering, and doing it all in an
-# exploration rule risks creating a huge number of plans when combined with join
-# reordering.
-#
-# Projections are allowed in the case when they are simple remaps from input to
-# output column IDs, in which case it is simple to replace the column references
-# in the join condition.
-#
 # TODO(andyk): Add other join types.
 [HoistJoinProjectRight, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:*
-    $right:(Project
-        $input:*
-        $projections:* &
-            (AllAreRemappingProjections $projections) &
-
-            # Ensure that there are no outer-column references in the
-            # projections, since otherwise hoisting the Project could change
-            # the result of a left-join due to the NULL-extended rows.
-            # TODO(drewk): we could allow this for inner-joins.
-            (ColsAreSubset
-                (ProjectionOuterCols $projections)
-                (OutputCols $input)
-            )
-        $passThrough:*
-    )
+    $right:(Project $input:* $projections:[])
     $on:*
     $private:*
 )
 =>
 (Project
-    ((OpName)
-        $left
-        $input
-        (UnbindFiltersFromProjections $projections $on)
-        $private
-    )
+    ((OpName) $left $input $on $private)
     $projections
-    (UnionCols (OutputCols $left) $passThrough)
+    (OutputCols2 $left $right)
 )
 
 # HoistJoinProjectLeft is the same as HoistJoinProjectRight, but for the left
 # input of the join.
 [HoistJoinProjectLeft, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
-    $left:(Project
-        $input:*
-        $projections:* & ^(HasVolatileProjection $projections)
-        $passThrough:*
-    )
-    $right:* &
-
-        # For apply-joins, the right input could reference the projected
-        # columns, in which case pulling the Project up would be incorrect.
-        # This isn't an issue for HoistJoinProjectRight because outer column
-        # references cannot be from the left input to the right input.
-        # TODO(drewk): we could remap the right input as well.
-        ^(IsCorrelated $right (ProjectionCols $projections))
+    $left:(Project $input:* $projections:[])
+    $right:*
     $on:*
-    $private:* &
-
-        # We can only hoist the projection if each new column is either:
-        # 1. a simple remapping that can be reversed in the join condition, OR
-        # 2. not referenced in the join condition AND
-        # 3. the projection does not reference input columns
-        #
-        # The last condition, (3), is a very conservative heuristic to avoid
-        # hoisting projections that could prevent column pruning. We might be
-        # able to remove it or make it smarter.
-        #
-        # TODO(michae2): we could work around (2) by inlining the projection
-        # expression into the join condition, similar to
-        # PushSelectIntoInlinableProject.
-        (Let
-            ($remap $other $ok):(CanHoistNonRemappingProjections
-                $projections
-            )
-            $ok
-        ) &
-        ^(ColsIntersect
-            (FilterOuterCols $on)
-            (ProjectionCols $other)
-        ) &
-        ^(ColsIntersect
-            (ProjectionOuterCols $other)
-            (OutputCols $input)
-        )
+    $private:*
 )
 =>
 (Project
-    ((OpName)
-        $input
-        $right
-        (UnbindFiltersFromProjections $remap $on)
-        $private
-    )
+    ((OpName) $input $right $on $private)
     $projections
-    (UnionCols $passThrough (OutputCols $right))
+    (OutputCols2 $left $right)
 )
 
 # SimplifyJoinNotNullEquality simplifies an Is/IsNot equality filter condition
@@ -875,48 +795,4 @@ $left
         (OutputCols $left)
     )
     $on
-)
-
-# PushLeakproofJoinIntoPermeableBarrierLeft moves a join below a permeable
-# Barrier on its left input when all ON filters are leakproof. The Barrier is
-# then placed above the join. This is safe because leakproof filters can be
-# reordered freely, and the Barrier allows such movement when marked as
-# LeakproofPermeable. This rule is effectively pushing the left input into the
-# Barrier, so the left input must be leakproof as well.
-[PushLeakproofJoinIntoPermeableBarrierLeft, Normalize]
-(InnerJoin | InnerJoinApply
-    (Barrier
-        $left:*
-        $leakproofPermeable:* & (If $leakproofPermeable)
-    )
-    $right:* & (IsLeakproof $right)
-    $on:* & (HasAllLeakProofFilters $on)
-    $private:*
-)
-=>
-(Barrier
-    ((OpName) $left $right $on $private)
-    $leakproofPermeable
-)
-
-# PushLeakproofJoinIntoPermeableBarrierRight is the right-side variant.
-# It moves a join below a permeable Barrier on its right input when all ON
-# filters are leakproof, then rewraps the join in the Barrier to preserve its
-# blocking behavior for non-leakproof expressions higher in the plan. This rule
-# is effectively pushing the right input into the Barrier, so the right input
-# must be leakproof as well.
-[PushLeakproofJoinIntoPermeableBarrierRight, Normalize]
-(InnerJoin | InnerJoinApply
-    $left:* & (IsLeakproof $left)
-    (Barrier
-        $right:*
-        $leakproofPermeable:* & (If $leakproofPermeable)
-    )
-    $on:* & (HasAllLeakProofFilters $on)
-    $private:*
-)
-=>
-(Barrier
-    ((OpName) $left $right $on $private)
-    $leakproofPermeable
 )

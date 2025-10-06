@@ -54,16 +54,16 @@ func (g *ExprNameGenerator) GenerateName(op opt.Operator) string {
 // ColumnNameGenerator is used to generate a unique name for each column of a
 // relational expression. See GenerateName for details.
 type ColumnNameGenerator struct {
-	mem  *Memo
+	e    RelExpr
 	pres physical.Presentation
 	seen map[string]int
 }
 
 // NewColumnNameGenerator creates a new instance of ColumnNameGenerator,
 // initialized with the given relational expression.
-func NewColumnNameGenerator(mem *Memo, e RelExpr) *ColumnNameGenerator {
+func NewColumnNameGenerator(e RelExpr) *ColumnNameGenerator {
 	return &ColumnNameGenerator{
-		mem:  mem,
+		e:    e,
 		pres: e.RequiredPhysical().Presentation,
 		seen: make(map[string]int, e.Relational().OutputCols.Len()),
 	}
@@ -74,7 +74,7 @@ func NewColumnNameGenerator(mem *Memo, e RelExpr) *ColumnNameGenerator {
 // for the columns in the table that will be created if the session
 // variable `save_tables_prefix` is non-empty.
 func (g *ColumnNameGenerator) GenerateName(col opt.ColumnID) string {
-	colMeta := g.mem.Metadata().ColumnMeta(col)
+	colMeta := g.e.Memo().Metadata().ColumnMeta(col)
 	colName := colMeta.Alias
 
 	// Check whether the presentation has a different name for this column, and

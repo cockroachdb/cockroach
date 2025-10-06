@@ -131,14 +131,14 @@ func maybeDropMsgApp(
 	}
 
 	if verbose {
-		log.KvExec.Infof(ctx, "start key is contained in replica %v", lhsRepl)
+		log.Infof(ctx, "start key is contained in replica %v", lhsRepl)
 	}
 	if age > maxDelaySplitTriggerDur {
 		// This is an escape hatch in case there are other scenarios (missed in
 		// the above analysis) in which a split trigger just isn't coming. If
 		// there are, the idea is that we notice this log message and improve
 		// the heuristics.
-		log.KvExec.Warningf(
+		log.Warningf(
 			ctx,
 			"would have dropped incoming MsgApp to wait for split trigger, "+
 				"but allowing because uninitialized replica was created %s (>%s) ago",
@@ -146,7 +146,7 @@ func maybeDropMsgApp(
 		return false
 	}
 	if verbose {
-		log.KvExec.Infof(ctx, "dropping MsgApp at index %d to wait for split trigger", msg.Index)
+		log.Infof(ctx, "dropping MsgApp at index %d to wait for split trigger", msg.Index)
 	}
 	return true
 }

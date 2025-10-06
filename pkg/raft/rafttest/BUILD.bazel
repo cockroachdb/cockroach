@@ -55,6 +55,7 @@ go_test(
     name = "rafttest_test",
     srcs = [
         "network_test.go",
+        "node_bench_test.go",
         "node_test.go",
     ],
     embed = [":rafttest"],

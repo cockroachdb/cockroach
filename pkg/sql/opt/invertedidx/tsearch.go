@@ -54,12 +54,6 @@ func (t *tsqueryFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		return inverted.NonInvertedColExpression{}, expr, nil
 	}
 	d := memo.ExtractConstDatum(constantVal)
-	if d == tree.DNull {
-		// ... @@ NULL or NULL @@ ... results in no rows, but it'd be tricky to
-		// encode that with a span expression, so we simply skip inverted index
-		// acceleration in this case (which should be pretty rare).
-		return inverted.NonInvertedColExpression{}, expr, nil
-	}
 	if !d.ResolvedType().Identical(types.TSQuery) {
 		panic(errors.AssertionFailedf(
 			"trying to apply tsvector inverted index to unsupported type %s", d.ResolvedType().SQLStringForError(),

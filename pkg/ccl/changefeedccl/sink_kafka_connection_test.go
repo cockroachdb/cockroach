@@ -70,12 +70,7 @@ func (e *externalConnectionKafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (e *externalConnectionKafkaSink) EmitRow(
-	_ context.Context,
-	_ TopicDescriptor,
-	_, _ []byte,
-	_, _ hlc.Timestamp,
-	_ kvevent.Alloc,
-	_ rowHeaders,
+	_ context.Context, _ TopicDescriptor, _, _ []byte, _, _ hlc.Timestamp, _ kvevent.Alloc,
 ) error {
 	return nil
 }
@@ -403,7 +398,7 @@ func TestAzureKafkaDefaults(t *testing.T) {
 
 	assertExpectedKgoOpts := func(exp expectation, opts []kgo.Opt) {
 		sinkClient, err := newKafkaSinkClientV2(ctx, opts, sinkBatchConfig{},
-			"", cluster.MakeTestingClusterSettings(), kafkaSinkV2Knobs{}, nilMetricsRecorderBuilder, nil, nil)
+			"", cluster.MakeTestingClusterSettings(), kafkaSinkV2Knobs{}, nilMetricsRecorderBuilder, nil)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, sinkClient.Close()) }()
 		client := sinkClient.client.(*kgo.Client)
@@ -469,11 +464,6 @@ func TestAzureKafkaDefaults(t *testing.T) {
 		{
 			name:     "test more complex key/password with saspolicyhistory policy",
 			uri:      "azure-event-hub://myeventhubs.servicebus.windows.net:9093?shared_access_key_name=saspolicyhistory&shared_access_key=q%2BSecretRedacted%3D",
-			expected: makeExpectation("myeventhubs.servicebus.windows.net", "saspolicyhistory", "q+SecretRedacted="),
-		},
-		{
-			name:     "test camel case to snake case param names fallback",
-			uri:      "azure-event-hub://myeventhubs.servicebus.windows.net:9093?SharedAccessKeyName=saspolicyhistory&SharedAccessKey=q%2BSecretRedacted%3D",
 			expected: makeExpectation("myeventhubs.servicebus.windows.net", "saspolicyhistory", "q+SecretRedacted="),
 		},
 	}

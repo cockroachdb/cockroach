@@ -8,6 +8,7 @@
 // We allow shadows of a few variable names, like err.
 
 //go:build bazel
+// +build bazel
 
 package shadow
 

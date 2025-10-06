@@ -81,7 +81,7 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 			if err != nil {
 				t.Errorf("Unexpected error received when getting min from sliding window: %+v", err)
 			}
-			minResult := res.(*tree.DInt)
+			minResult, _ := tree.AsDInt(res)
 			naiveMin := tree.DInt(maxInt)
 			for idx := wfr.RowIdx - offset; idx <= wfr.RowIdx+offset; idx++ {
 				if idx < 0 || idx >= wfr.PartitionSize() {
@@ -95,12 +95,12 @@ func testMin(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 				if err != nil {
 					panic(err)
 				}
-				el := datum.(*tree.DInt)
-				if *el < naiveMin {
-					naiveMin = *el
+				el, _ := tree.AsDInt(datum)
+				if el < naiveMin {
+					naiveMin = el
 				}
 			}
-			if *minResult != naiveMin {
+			if minResult != naiveMin {
 				t.Errorf("Min sliding window returned wrong result: expected %+v, found %+v", naiveMin, minResult)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
 				t.Error(min.sw.string())
@@ -124,7 +124,7 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 			if err != nil {
 				t.Errorf("Unexpected error received when getting max from sliding window: %+v", err)
 			}
-			maxResult := res.(*tree.DInt)
+			maxResult, _ := tree.AsDInt(res)
 			naiveMax := tree.DInt(-maxInt)
 			for idx := wfr.RowIdx - offset; idx <= wfr.RowIdx+offset; idx++ {
 				if idx < 0 || idx >= wfr.PartitionSize() {
@@ -138,12 +138,12 @@ func testMax(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun) {
 				if err != nil {
 					panic(err)
 				}
-				el := datum.(*tree.DInt)
-				if *el > naiveMax {
-					naiveMax = *el
+				el, _ := tree.AsDInt(datum)
+				if el > naiveMax {
+					naiveMax = el
 				}
 			}
-			if *maxResult != naiveMax {
+			if maxResult != naiveMax {
 				t.Errorf("Max sliding window returned wrong result: expected %+v, found %+v", naiveMax, maxResult)
 				t.Errorf("partitionSize: %+v idx: %+v offset: %+v", wfr.PartitionSize(), wfr.RowIdx, offset)
 				t.Error(max.sw.string())
@@ -184,8 +184,8 @@ func testSumAndAvg(t *testing.T, evalCtx *eval.Context, wfr *eval.WindowFrameRun
 				if err != nil {
 					panic(err)
 				}
-				el := datum.(*tree.DInt)
-				naiveSum += int64(*el)
+				el, _ := tree.AsDInt(datum)
+				naiveSum += int64(el)
 			}
 			s, err := sumResult.Int64()
 			if err != nil {

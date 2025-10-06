@@ -40,9 +40,9 @@ SELECT
     c.*
 FROM
     crdb_internal.jobs AS j
-    INNER LOOKUP JOIN system.comments AS c ON c.type = (j.coordinator_id - 1)::INT8
+    INNER LOOKUP JOIN system.comments AS c ON c.type = (j.num_runs - 1)::INT8
 WHERE
-    j.coordinator_id = 1;
+    j.num_runs = 1;
 `)
 	runner.Exec(t, "SET tracing = off")
 

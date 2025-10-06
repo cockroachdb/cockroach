@@ -81,7 +81,9 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	addCommonBazelArguments(&args)
+	if numCPUs != 0 {
+		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	}
 	if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
@@ -140,10 +142,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	if runSepProcessTenant {
 		args = append(args, "--test_arg", "-run-sep-process-tenant")
 	}
-	// The `crdb_test` flag enables metamorphic variables and various "extra" debug
-	// checking code paths that can interfere with performance testing, hence
-	// it should disabled for benchmarks.
-	args = append(args, "--crdb_test_off", "--crdb_bench")
+	args = append(args, "--crdb_test_off")
 	if testArgs != "" {
 		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
 		if err != nil {

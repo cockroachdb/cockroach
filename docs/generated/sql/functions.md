@@ -39,8 +39,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: jsonb[], elem: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_append"></a><code>array_append(array: ltree[], elem: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -88,8 +86,6 @@
 <tr><td><a name="array_cat"></a><code>array_cat(left: geometry[], right: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: jsonb[], right: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_cat"></a><code>array_cat(left: ltree[], right: ltree[]) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
@@ -179,10 +175,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: jsonb[], elem: jsonb, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_position"></a><code>array_position(array: ltree[], elem: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_position"></a><code>array_position(array: ltree[], elem: ltree, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: oid[], elem: oid, start: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>, with the search begins at <code>start</code> index.</p>
@@ -243,8 +235,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: jsonb[], elem: jsonb) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_positions"></a><code>array_positions(array: ltree[], elem: ltree) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
@@ -292,8 +282,6 @@
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: geometry, array: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: jsonb, array: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_prepend"></a><code>array_prepend(elem: ltree, array: ltree[]) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: oid, array: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
@@ -343,8 +331,6 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: jsonb[], elem: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="array_remove"></a><code>array_remove(array: ltree[], elem: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
@@ -392,8 +378,6 @@
 <tr><td><a name="array_replace"></a><code>array_replace(array: geometry[], toreplace: geometry, replacewith: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: jsonb[], toreplace: jsonb, replacewith: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="array_replace"></a><code>array_replace(array: ltree[], toreplace: ltree, replacewith: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: oid[], toreplace: oid, replacewith: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -455,9 +439,9 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="least"></a><code>least(anyelement...) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the element with the lowest value.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="num_nonnulls"></a><code>num_nonnulls(any...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of nonnull arguments.</p>
+<tr><td><a name="num_nonnulls"></a><code>num_nonnulls(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of nonnull arguments.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="num_nulls"></a><code>num_nulls(any...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of null arguments.</p>
+<tr><td><a name="num_nulls"></a><code>num_nulls(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of null arguments.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
@@ -1068,10 +1052,6 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="levenshtein_less_equal"></a><code>levenshtein_less_equal(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>, max_d: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. If actual distance is less or equal then max_d, then it returns the distance. Otherwise this function returns a value greater than max_d. The maximum length of the input strings is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="levenshtein_less_equal"></a><code>levenshtein_less_equal(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, max_d: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. If actual distance is less or equal then max_d, then it returns the distance. Otherwise this function returns a value greater than max_d. The maximum length of the input strings is 255 characters.</p>
-</span></td><td>Immutable</td></tr>
 <tr><td><a name="metaphone"></a><code>metaphone(source: <a href="string.html">string</a>, max_output_length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Metaphone code. Maximum input length is 255 characters</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
@@ -1177,7 +1157,7 @@ available replica will error.</p>
 </span></td><td>Leakproof</td></tr>
 <tr><td><a name="fnv64a"></a><code>fnv64a(<a href="string.html">string</a>...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the 64-bit FNV-1a hash value of a set of values.</p>
 </span></td><td>Leakproof</td></tr>
-<tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2. Returns 0 or count+1 for an input outside that range.</p>
+<tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="decimal.html">decimal</a>, b1: <a href="decimal.html">decimal</a>, b2: <a href="decimal.html">decimal</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="width_bucket"></a><code>width_bucket(operand: <a href="int.html">int</a>, b1: <a href="int.html">int</a>, b2: <a href="int.html">int</a>, count: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>return the bucket number to which operand would be assigned in a histogram having count equal-width buckets spanning the range b1 to b2.</p>
 </span></td><td>Immutable</td></tr>
@@ -1200,9 +1180,9 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="json_array_length"></a><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="json_build_array"></a><code>json_build_array(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
+<tr><td><a name="json_build_array"></a><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="json_build_object"></a><code>json_build_object(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
+<tr><td><a name="json_build_object"></a><code>json_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="json_each"></a><code>json_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
@@ -1238,9 +1218,9 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="jsonb_array_length"></a><code>jsonb_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
+<tr><td><a name="jsonb_build_array"></a><code>jsonb_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(any...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
+<tr><td><a name="jsonb_build_object"></a><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="jsonb_each"></a><code>jsonb_each(input: jsonb) &rarr; tuple{string AS key, jsonb AS value}</code></td><td><span class="funcdesc"><p>Expands the outermost JSON or JSONB object into a set of key/value pairs.</p>
 </span></td><td>Immutable</td></tr>
@@ -1280,118 +1260,6 @@ available replica will error.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_jsonb"></a><code>to_jsonb(val: anyelement) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the value as JSON or JSONB.</p>
 </span></td><td>Stable</td></tr></tbody>
-</table>
-
-### Jsonpath functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="jsonb_path_exists"></a><code>jsonb_path_exists(target: jsonb, path: jsonpath) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether the JSON path returns any item for the specified JSON value.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_exists"></a><code>jsonb_path_exists(target: jsonb, path: jsonpath, vars: jsonb) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether the JSON path returns any item for the specified JSON value.
-The vars argument must be a JSON object, and its fields provide named
-values to be substituted into the jsonpath expression.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_exists"></a><code>jsonb_path_exists(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether the JSON path returns any item for the specified JSON value.
-The vars argument must be a JSON object, and its fields provide named
-values to be substituted into the jsonpath expression. If the silent
-argument is true, the function suppresses the following errors:
-missing object field or array element, unexpected JSON item type,
-datetime and numeric errors.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_match"></a><code>jsonb_path_match(target: jsonb, path: jsonpath) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns the SQL boolean result of a JSON path predicate check
-for the specified JSON value. (This is useful only with predicate check
-expressions, not SQL-standard JSON path expressions, since it will
-either fail or return NULL if the path result is not a single boolean
-value.)</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_match"></a><code>jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns the SQL boolean result of a JSON path predicate check
-for the specified JSON value. (This is useful only with predicate check
-expressions, not SQL-standard JSON path expressions, since it will
-either fail or return NULL if the path result is not a single boolean
-value.) The vars argument must be a JSON object, and its fields provide
-named values to be substituted into the jsonpath expression.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_match"></a><code>jsonb_path_match(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns the SQL boolean result of a JSON path predicate check
-for the specified JSON value. (This is useful only with predicate check
-expressions, not SQL-standard JSON path expressions, since it will
-either fail or return NULL if the path result is not a single boolean
-value.) The vars argument must be a JSON object, and its fields provide
-named values to be substituted into the jsonpath expression. If the
-silent argument is true, the function suppresses the following errors:
-missing object field or array element, unexpected JSON item type,
-datetime and numeric errors.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query"></a><code>jsonb_path_query(target: jsonb, path: jsonpath) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the specified JSON value.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query"></a><code>jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the specified JSON value.
-The vars argument must be a JSON object, and its fields provide named values
-to be substituted into the jsonpath expression.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query"></a><code>jsonb_path_query(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the specified JSON value.
-The vars argument must be a JSON object, and its fields provide named values
-to be substituted into the jsonpath expression. If the silent argument is true,
-the function suppresses the following errors: missing object field or array
-element, unexpected JSON item type, datetime and numeric errors.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query_array"></a><code>jsonb_path_query_array(target: jsonb, path: jsonpath) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the
-specified JSON value, as a JSON array.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query_array"></a><code>jsonb_path_query_array(target: jsonb, path: jsonpath, vars: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the
-specified JSON value, as a JSON array. The vars argument must be a
-JSON object, and its fields provide named values to be substituted
-into the jsonpath expression.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query_array"></a><code>jsonb_path_query_array(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns all JSON items returned by the JSON path for the
-specified JSON value, as a JSON array. The vars argument must be a
-JSON object, and its fields provide named values to be substituted
-into the jsonpath expression. If the silent argument is true, the
-function suppresses the following errors: missing object field or
-array element, unexpected JSON item type, datetime and numeric errors.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query_first"></a><code>jsonb_path_query_first(target: jsonb, path: jsonpath) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the first JSON item returned by the JSON path for the
-specified JSON value, or NULL if there are no results.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query_first"></a><code>jsonb_path_query_first(target: jsonb, path: jsonpath, vars: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the first JSON item returned by the JSON path for the
-specified JSON value, or NULL if there are no results. The vars
-argument must be a JSON object, and its fields provide named values
-to be substituted into the jsonpath expression.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="jsonb_path_query_first"></a><code>jsonb_path_query_first(target: jsonb, path: jsonpath, vars: jsonb, silent: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the first JSON item returned by the JSON path for the
-specified JSON value, or NULL if there are no results. The vars
-argument must be a JSON object, and its fields provide named values
-to be substituted into the jsonpath expression. If the silent argument is true, the
-function suppresses the following errors: missing object field or
-array element, unexpected JSON item type, datetime and numeric errors.</p>
-</span></td><td>Immutable</td></tr></tbody>
-</table>
-
-### LTree functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
-<tbody>
-<tr><td><a name="index"></a><code>index(a: ltree, b: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>; -1 if not found</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="index"></a><code>index(a: ltree, b: ltree, offset: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>, starting at <code>offset</code>; -1 if not found</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="lca"></a><code>lca(ltree, ltree, ltree...) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="lca"></a><code>lca(ltree[]: ltree[]) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="ltree2text"></a><code>ltree2text(ltree: ltree) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>cast <code>ltree</code> to text</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="nlevel"></a><code>nlevel(ltree: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>number of labels in path <code>ltree</code></p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="subltree"></a><code>subltree(ltree: ltree, start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> from position <code>start</code> to position <code>end</code>-1 (counting from 0)</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, extending to end of path. If <code>offset</code> is negative, subpath starts that far from the end of the path.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, length <code>length</code>. If <code>offset</code> is negative, subpath starts that far from the end of the path. If <code>length</code> is negative, leaves that many labels off the end of the path.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="text2ltree"></a><code>text2ltree(text: <a href="string.html">string</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>cast <code>text</code> to ltree</p>
-</span></td><td>Immutable</td></tr></tbody>
 </table>
 
 ### Multi-region functions
@@ -1654,9 +1522,9 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="unnest"></a><code>unnest(input: anyelement[]) &rarr; anyelement</code></td><td><span class="funcdesc"><p>Returns the input array as a set of rows</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="workload_index_recs"></a><code>workload_index_recs() &rarr; tuple{string AS index_rec, bytes[] AS fingerprint_ids}</code></td><td><span class="funcdesc"><p>Returns index recommendations and the fingerprint ids that the indexes will impact</p>
+<tr><td><a name="workload_index_recs"></a><code>workload_index_recs() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns set of index recommendations</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="workload_index_recs"></a><code>workload_index_recs(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; tuple{string AS index_rec, bytes[] AS fingerprint_ids}</code></td><td><span class="funcdesc"><p>Returns index recommendations and the fingerprint ids that the indexes will impact</p>
+<tr><td><a name="workload_index_recs"></a><code>workload_index_recs(timestamptz: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns set of index recommendations</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
@@ -1810,11 +1678,6 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tr><td><a name="postgis_version"></a><code>postgis_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="postgis_wagyu_version"></a><code>postgis_wagyu_version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compatibility placeholder function with PostGIS. Returns a fixed string based on PostGIS 3.0.1, with minor edits.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="st_3dlength"></a><code>st_3dlength(geometry: geometry) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Returns the 3-dimensional or 2-dimensional length of the geometry.</p>
-<p>Note ST_3DLength is only valid for LineString or MultiLineString.
-For 2-D lines it will return the 2-D length (same as ST_Length and ST_Length2D)</p>
-<p>This function utilizes the GEOS module.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_addmeasure"></a><code>st_addmeasure(geometry: geometry, start: <a href="float.html">float</a>, end: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns a copy of a LineString or MultiLineString with measure coordinates linearly interpolated between the specified start and end values. Any existing M coordinates will be overwritten.</p>
 </span></td><td>Immutable</td></tr>
@@ -3017,9 +2880,9 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="compress"></a><code>compress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Compress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>, ‘lz4’, ‘snappy’, 'zstd).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="concat"></a><code>concat(any...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
+<tr><td><a name="concat"></a><code>concat(anyelement...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="concat_ws"></a><code>concat_ws(<a href="string.html">string</a>, any...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Uses the first argument as a separator between the concatenation of the subsequent arguments.</p>
+<tr><td><a name="concat_ws"></a><code>concat_ws(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Uses the first argument as a separator between the concatenation of the subsequent arguments.</p>
 <p>For example <code>concat_ws('!','wow','great')</code> returns <code>wow!great</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="convert_from"></a><code>convert_from(str: <a href="bytes.html">bytes</a>, enc: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decode the bytes in <code>str</code> into a string using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
@@ -3034,7 +2897,7 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="encode"></a><code>encode(data: <a href="bytes.html">bytes</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Encodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="format"></a><code>format(<a href="string.html">string</a>, any...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Interprets the first argument as a format string similar to C sprintf and interpolates the remaining arguments.</p>
+<tr><td><a name="format"></a><code>format(<a href="string.html">string</a>, anyelement...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Interprets the first argument as a format string similar to C sprintf and interpolates the remaining arguments.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="from_ip"></a><code>from_ip(val: <a href="bytes.html">bytes</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Converts the byte string representation of an IP to its character string representation.</p>
 </span></td><td>Immutable</td></tr>
@@ -3256,8 +3119,8 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="similar_to_escape"></a><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using <code>escape</code> as an escape token.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> using <code>delimiter</code> and returns the field at <code>return_index_pos</code> (starting from 1). If <code>return_index_pos</code> is negative, it returns the |<code>return_index_pos</code>|'th field from the end.</p>
-<p>For example, <code>split_part('123.456.789.0', '.', 3)</code> returns <code>789</code>.</p>
+<tr><td><a name="split_part"></a><code>split_part(input: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>, return_index_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Splits <code>input</code> on <code>delimiter</code> and return the value in the <code>return_index_pos</code>  position (starting at 1).</p>
+<p>For example, <code>split_part('123.456.789.0','.',3)</code>returns <code>789</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="strpos"></a><code>strpos(input: <a href="bytes.html">bytes</a>, find: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the position where the byte subarray <code>find</code> begins in <code>input</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -3297,9 +3160,6 @@ Case mode values range between 0 - 1, representing lower casing and upper casing
 <tr><td><a name="substring"></a><code>substring(input: varbit, start_pos: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="substring"></a><code>substring(input: varbit, start_pos: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Returns a bit subarray of <code>input</code> starting at <code>start_pos</code> (count starts at 1) and including up to <code>length</code> characters.</p>
-</span></td><td>Immutable</td></tr>
-<tr><td><a name="substring_index"></a><code>substring_index(input: <a href="string.html">string</a>, delim: <a href="string.html">string</a>, count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns a substring of <code>input</code> before <code>count</code> occurrences of <code>delim</code>.
-If <code>count</code> is positive, the leftmost part is returned. If <code>count</code> is negative, the rightmost part is returned.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char_with_style"></a><code>to_char_with_style(date: <a href="date.html">date</a>, datestyle: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an date to a string assuming the string is formatted using the given DateStyle.</p>
 </span></td><td>Immutable</td></tr>
@@ -3549,12 +3409,6 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="has_server_privilege"></a><code>has_server_privilege(user: oid, server: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for foreign server.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="has_system_privilege"></a><code>has_system_privilege(privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for system.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="has_system_privilege"></a><code>has_system_privilege(user: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for system.</p>
-</span></td><td>Stable</td></tr>
-<tr><td><a name="has_system_privilege"></a><code>has_system_privilege(user: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for system.</p>
-</span></td><td>Stable</td></tr>
 <tr><td><a name="has_table_privilege"></a><code>has_table_privilege(table: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for table.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="has_table_privilege"></a><code>has_table_privilege(table: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for table.</p>
@@ -3611,11 +3465,11 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_column_is_updatable"></a><code>pg_column_is_updatable(reloid: oid, attnum: int2, include_triggers: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the given column can be updated.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="pg_column_size"></a><code>pg_column_size(any...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
-</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_column_size"></a><code>pg_column_size(anyelement...) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return size in bytes of the column provided as an argument</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it.</p>
+<tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it. Currently, this always returns NULL, since CockroachDB does not support default values.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (with defaults) necessary to identify a function, in the form it would need to appear in within CREATE FUNCTION.</p>
 </span></td><td>Stable</td></tr>

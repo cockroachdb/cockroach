@@ -168,7 +168,7 @@ func (t *lockfreeTracker) Untrack(ctx context.Context, tok RemovalToken) {
 	// types.
 	refcnt := b.refcnt.Add(-1)
 	if refcnt < 0 {
-		log.KvDistribution.Fatalf(ctx, "negative bucket refcount: %d", refcnt)
+		log.Fatalf(ctx, "negative bucket refcount: %d", refcnt)
 	}
 	if refcnt == 0 {
 		// Reset the bucket, so that future Track() calls can create a new one.

@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // These rules ensure that column-dependent elements, like a column's name, its
@@ -66,7 +65,7 @@ func init() {
 func init() {
 
 	registerDepRule(
-		"column type dependents removed right before column type, except if part of a column type alteration ",
+		"column type dependents removed right before column type",
 		scgraph.SameStagePrecedence,
 		"dependent", "column-type",
 		func(from, to NodeVars) rel.Clauses {
@@ -74,25 +73,6 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
 				to.Type((*scpb.ColumnType)(nil)),
 				JoinOnColumnID(from, to, "table-id", "col-id"),
-				IsNotAlterColumnTypeOp("table-id", "col-id"),
-				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
-			}
-		},
-	)
-
-	// This rule is similar to the previous one but relaxes SameStagePrecedence,
-	// allowing for planning in case the ALTER COLUMN .. TYPE needs to roll back
-	// (particularly when altering columns with DEFAULT or ON UPDATE expressions).
-	registerDepRule(
-		"during a column type alterations, column type dependents removed before column type",
-		scgraph.Precedence,
-		"dependent", "column-type",
-		func(from, to NodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isColumnTypeDependent),
-				to.Type((*scpb.ColumnType)(nil)),
-				JoinOnColumnID(from, to, "table-id", "col-id"),
-				rel.And(IsAlterColumnTypeOp("table-id", "col-id")...),
 				StatusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
 			}
 		},
@@ -111,7 +91,7 @@ func init() {
 	// able to express the _absence_ of a target element as a query clause.
 	//
 	// Note that DEFAULT and ON UPDATE expressions are column-dependent elements
-	// which also hold references to other descriptors. The rules prior to this one
+	// which also hold references to other descriptors. The rule prior to this one
 	// ensures that they transition to ABSENT before scpb.ColumnType does.
 	registerDepRule(
 		"column type removed right before column when not dropping relation",
@@ -128,74 +108,45 @@ func init() {
 		},
 	)
 
-	// These rules ensure that computed column expressions are dropped before
-	// the columns they depend on. Originally, a single rule applied to all
-	// computed columns, but this caused deadlocks during DROP COLUMN CASCADE
-	// operations with STORED computed columns. The rules are now split by type:
+	// This rule ensures that a column is dropped only after any computed column
+	// dependent on it is dropped. For example, if column B is a computed column
+	// using column A in its compute expression, this rule ensures that the
+	// compute expression of B is dropped before column A is dropped. The rules
+	// above ensure that column B is dropped before the expression is dropped,
+	// so this rule also implicitly implies that column B is dropped before column
+	// A. This is relevant for expression and hash indexes which create an
+	// internal, virtual column that computes the hash/expression key for the index.
 	//
-	// 1. VIRTUAL computed columns need this rule due to an optimizer edge case.
-	//    The optimizer can evaluate virtual computed expressions during schema
-	//    changes, so the dependent column must remain accessible until the
-	//    expression is fully dropped.
+	// N.B. Originally, this rule was specific only to virtual, computed columns.
+	// The rationale was that it was needed due to an edge case within the
+	// optimizer. The optimizer allows the compute expression of virtual computed
+	// columns to be evaluated during an active schema change. Without this rule,
+	// the optimizer cannot read the dependent column as the dependent column
+	// moves to the WRITE_ONLY stage before the computed column is fully dropped.
 	//
-	// 2. STORED computed columns only need this rule during ALTER COLUMN TYPE
-	//    operations, where temporary expressions map old rows to new column types.
-	//    For regular DROP COLUMN operations, applying this rule creates deadlocks
-	//    as the optimizer doesn't evaluate stored expressions during drops.
+	// However, it is now needed for all compute expressions. When altering a
+	// column's type such that a backfill is required, a new version of the column
+	// is added, and the old version is dropped. A temporary compute expression is
+	// set to map the old rows to the new column type. This expression is dropped
+	// *before* dropping the old column, which this rule helps to enforce.
 	registerDepRuleForDrop(
-		"Virtual computed column expression is dropped before the column it depends on",
+		"Computed column expression is dropped before the column it depends on",
 		scgraph.Precedence,
-		"virtual-column-expr", "column",
+		"column-expr", "column",
 		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
-			colType := MkNodeVars("column-type")
-			colID := rel.Var("col-id")
 			return rel.Clauses{
 				from.Type((*scpb.ColumnComputeExpression)(nil)),
 				to.Type((*scpb.Column)(nil)),
-				colType.Type((*scpb.ColumnType)(nil)),
 				JoinOnDescID(from, to, "table-id"),
-				JoinOnColumnID(from, colType, "table-id", "target-col-id"),
-				to.El.AttrEqVar(screl.ColumnID, colID),
-				from.ReferencedColumnIDsContains(colID),
-				FilterElements("columnTypeIsVirtual", colType, from,
-					func(columnType *scpb.ColumnType, computeExpression *scpb.ColumnComputeExpression) bool {
-						return columnType.IsVirtual
-					}),
-			}
-		},
-	)
-
-	// This rule handles STORED computed column expressions specifically during
-	// ALTER COLUMN TYPE operations. When altering a column's type such that a
-	// backfill is required, a new version of the column is added, and the old
-	// version is dropped. A temporary compute expression is set to map the old
-	// rows to the new column type. This expression must be dropped *before*
-	// dropping the old column.
-	//
-	// This rule is intentionally limited to ALTER COLUMN TYPE operations only
-	// to avoid the deadlock issues that occur with STORED computed columns
-	// during regular DROP COLUMN CASCADE operations.
-	registerDepRuleForDrop(
-		"Stored computed column expression for alter type is dropped before the column it depends on",
-		scgraph.Precedence,
-		"stored-column-expr", "column",
-		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
-		func(from, to NodeVars) rel.Clauses {
-			colType := MkNodeVars("column-type")
-			colID := rel.Var("col-id")
-			return rel.Clauses{
-				from.Type((*scpb.ColumnComputeExpression)(nil)),
-				to.Type((*scpb.Column)(nil)),
-				colType.Type((*scpb.ColumnType)(nil)),
-				JoinOnDescID(from, to, "table-id"),
-				JoinOnColumnID(from, colType, "table-id", "target-col-id"),
-				rel.And(IsAlterColumnTypeOp("table-id", "target-col-id")...),
-				to.El.AttrEqVar(screl.ColumnID, colID),
-				from.ReferencedColumnIDsContains(colID),
-				FilterElements("columnTypeIsStored", colType, from,
-					func(columnType *scpb.ColumnType, computeExpression *scpb.ColumnComputeExpression) bool {
-						return !columnType.IsVirtual
+				FilterElements("computedColumnTypeReferencesColumn", from, to,
+					func(computeExpression *scpb.ColumnComputeExpression, column *scpb.Column) bool {
+						for _, refColumns := range computeExpression.ReferencedColumnIDs {
+							if refColumns == column.ColumnID {
+								return true
+							}
+						}
+						return false
 					}),
 			}
 		},
@@ -232,16 +183,13 @@ func init() {
 	// storing all public columns within the table (as the column being dropped is still considered public
 	// before it moves to WRITE_ONLY but the new primary index does not contain it since the schema changer
 	// knows it is transitioning to a target status of ABSENT).
-	//
-	// This rule applies only when the operation is not ALTER COLUMN TYPE. A variant of this rule follows,
-	// allowing added and dropped columns to be swapped in the same stage during ALTER COLUMN TYPE.
 	registerDepRule(
 		"New primary index should go public only after columns being dropped move to WRITE_ONLY",
 		scgraph.Precedence,
 		"column", "new-primary-index",
 		func(from, to NodeVars) rel.Clauses {
 			ic := MkNodeVars("index-column")
-			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("old-column-id"), rel.Var("index-id")
+			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("column-id"), rel.Var("index-id")
 			return rel.Clauses{
 				from.Type((*scpb.Column)(nil)),
 				to.Type((*scpb.PrimaryIndex)(nil)),
@@ -251,30 +199,6 @@ func init() {
 				from.CurrentStatus(scpb.Status_WRITE_ONLY),
 				to.TargetStatus(scpb.ToPublic),
 				to.CurrentStatus(scpb.Status_PUBLIC),
-				IsNotDroppedColumnPartOfAlterColumnTypeOp("table-id", "old-column-id"),
-			}
-		},
-	)
-
-	// This rule is similar to the previous one but applies specifically to ALTER COLUMN ... TYPE operations.
-	// It uses SameStagePrecedence to enable the swapping of dropped and added columns within the same stage.
-	registerDepRule(
-		"New primary index for alter column type should go public in the same stage as dropped column",
-		scgraph.SameStagePrecedence,
-		"column", "new-primary-index",
-		func(from, to NodeVars) rel.Clauses {
-			ic := MkNodeVars("index-column")
-			relationID, columnID, indexID := rel.Var("table-id"), rel.Var("old-column-id"), rel.Var("index-id")
-			return rel.Clauses{
-				from.Type((*scpb.Column)(nil)),
-				to.Type((*scpb.PrimaryIndex)(nil)),
-				ColumnInSourcePrimaryIndex(ic, to, relationID, columnID, indexID),
-				JoinOnColumnID(ic, from, relationID, columnID),
-				from.TargetStatus(scpb.ToAbsent),
-				from.CurrentStatus(scpb.Status_WRITE_ONLY),
-				to.TargetStatus(scpb.ToPublic),
-				to.CurrentStatus(scpb.Status_PUBLIC),
-				rel.And(IsDroppedColumnPartOfAlterColumnTypeOp("table-id", "old-column-id")...),
 			}
 		},
 	)
@@ -310,25 +234,27 @@ func init() {
 			}
 		},
 	)
-}
 
-// Special rules to ensure that swapping default expressions is done in order.
-func init() {
-	registerDepRule(
-		"handle default column expression swaps",
+	registerDepRuleForDrop(
+		"secondary index partial no longer public before referenced column",
 		scgraph.Precedence,
-		"old-column-expression", "new-column-expression",
+		"secondary-partial-index", "column",
+		scpb.Status_ABSENT, scpb.Status_WRITE_ONLY,
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.Type((*scpb.ColumnDefaultExpression)(nil), (*scpb.ColumnOnUpdateExpression)(nil)),
-				to.Type((*scpb.ColumnDefaultExpression)(nil), (*scpb.ColumnOnUpdateExpression)(nil)),
-				from.El.AttrEqVar(rel.Type, "same-type"),
-				to.El.AttrEqVar(rel.Type, "same-type"),
-				JoinOnColumnID(from, to, "table-id", "col-id"),
-				from.TargetStatus(scpb.ToAbsent),
-				from.CurrentStatus(scpb.Status_ABSENT),
-				to.TargetStatus(scpb.ToPublic),
-				to.CurrentStatus(scpb.Status_PUBLIC),
+				from.Type((*scpb.SecondaryIndexPartial)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				descriptorIsNotBeingDropped(from.El),
+				FilterElements("secondaryIndexReferencesColumn", from, to,
+					func(index *scpb.SecondaryIndexPartial, column *scpb.Column) bool {
+						for _, refColumns := range index.ReferencedColumnIDs {
+							if refColumns == column.ColumnID {
+								return true
+							}
+						}
+						return false
+					}),
 			}
 		},
 	)

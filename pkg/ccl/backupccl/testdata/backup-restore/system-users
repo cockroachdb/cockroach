@@ -1,0 +1,53 @@
+new-cluster name=s1
+----
+
+exec-sql
+CREATE ROLE testuser NOLOGIN;
+CREATE ROLE testuser2 WITH CONTROLJOB CREATEDB;
+CREATE ROLE developer WITH CREATEDB;
+CREATE USER abbey WITH PASSWORD 'lincoln';
+GRANT developer TO abbey;
+----
+
+query-sql
+SHOW ROLES
+----
+abbey  {developer}
+admin  {}
+developer CREATEDB, NOLOGIN {}
+root  {admin}
+testuser NOLOGIN {}
+testuser2 CONTROLJOB, CREATEDB, NOLOGIN {}
+
+query-sql
+SHOW GRANTS ON ROLE developer
+----
+developer abbey false
+
+exec-sql
+BACKUP DATABASE system INTO 'nodelocal://1/test/'
+----
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s2 share-io-dir=s1
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s2
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/test/'
+----
+
+query-sql cluster=s2
+SHOW ROLES
+----
+abbey  {developer}
+admin  {}
+developer CREATEDB, NOLOGIN {}
+root  {admin}
+testuser NOLOGIN {}
+testuser2 CONTROLJOB, CREATEDB, NOLOGIN {}
+
+query-sql cluster=s2
+SHOW GRANTS ON ROLE developer
+----
+developer abbey false

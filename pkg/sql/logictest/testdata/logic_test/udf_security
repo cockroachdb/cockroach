@@ -1,3 +1,5 @@
+# LogicTest: !local-mixed-24.1 !local-mixed-24.2
+
 subtest basic_owner
 
 statement ok

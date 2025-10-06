@@ -66,7 +66,6 @@ Connection
                     connect to a server or print the current connection URL.
                     Omitted values reuse previous parameters. Use '-' to skip a field.
                     The option "autocerts" attempts to auto-discover TLS client certs.
-                    The option "tenant=NAME" switches to the specified tenant.
   \password [USERNAME]
                     securely change the password for a user
 
@@ -1709,11 +1708,6 @@ func (c *cliState) handleConnectInternal(cmd []string, omitConnString bool) erro
 		if cmd[4] != "-" {
 			if cmd[4] == "autocerts" {
 				autoCerts = true
-			} else if strings.HasPrefix(cmd[4], "tenant=") {
-				tenantName := strings.TrimPrefix(cmd[4], "tenant=")
-				if err := newURL.SetOption("options", "-ccluster="+tenantName); err != nil {
-					return err
-				}
 			} else {
 				return errors.Newf(`unknown syntax: \c %s`, strings.Join(cmd, " "))
 			}
@@ -2175,12 +2169,8 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			// shell.
 		} else {
 			traceType := ""
-			compact := ""
 			if strings.Contains(c.iCtx.autoTrace, "kv") {
 				traceType = "kv"
-			}
-			if strings.Contains(c.iCtx.autoTrace, "compact") {
-				compact = "COMPACT"
 			}
 			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
 				defer c.maybeFlushOutput()
@@ -2189,7 +2179,7 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 					c.iCtx.queryOutput, // query output
 					c.iCtx.stdout,      // timings
 					c.iCtx.stderr,      // errors
-					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s %s TRACE FOR SESSION", compact, traceType)))
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
 			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
@@ -2278,14 +2268,12 @@ func (c *cliState) doRunShell(state cliStateEnum, cmdIn, cmdOut, cmdErr *os.File
 		}
 		switch state {
 		case cliStart:
-			//nolint:deferloop
 			defer func() {
 				if err := c.closeOutputFile(); err != nil {
 					fmt.Fprintf(cmdErr, "warning: closing output file: %v\n", err)
 				}
 			}()
 			cleanupFn, err := c.configurePreShellDefaults(cmdIn, cmdOut, cmdErr)
-			//nolint:deferloop
 			defer cleanupFn()
 			if err != nil {
 				return err

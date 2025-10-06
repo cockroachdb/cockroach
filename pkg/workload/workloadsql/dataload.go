@@ -66,10 +66,6 @@ func (l InsertsDataLoader) InitialDataLoad(
 		batchEnd := min(currentTable+maxTableBatchSize, len(tables))
 		nextBatch := tables[currentTable:batchEnd]
 		if err := crdb.ExecuteTx(ctx, db, &gosql.TxOptions{}, func(tx *gosql.Tx) error {
-			// Run the operations in a single txn so they complete more quickly.
-			if _, err := tx.Exec("SET LOCAL autocommit_before_ddl = false"); err != nil {
-				return err
-			}
 			currentDatabase := ""
 			for _, table := range nextBatch {
 				// Switch databases if one is explicitly specified for multi-region
@@ -131,9 +127,6 @@ func (l InsertsDataLoader) InitialDataLoad(
 				var numRows int
 				flush := func() error {
 					if len(params) > 0 {
-						if table.InitialRows.MayContainDuplicates {
-							fmt.Fprint(&insertStmtBuf, ` ON CONFLICT DO NOTHING`)
-						}
 						insertStmt := insertStmtBuf.String()
 						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
 							return errors.Wrapf(err, "failed insert into %s", tableName.String())
@@ -177,7 +170,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 			return 0, err
 		}
 		tableRows := int(tableRowsAtomic.Load())
-		log.Dev.Infof(ctx, `imported %s (%s, %d rows)`,
+		log.Infof(ctx, `imported %s (%s, %d rows)`,
 			table.Name, timeutil.Since(tableStart).Round(time.Second), tableRows,
 		)
 	}

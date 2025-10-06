@@ -308,21 +308,6 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, errors.Wrap(err, "updating MVCCStats")
 	}
 
-	// Update the HardState to clear the LeadEpoch, as otherwise we may risk
-	// seeing an epoch regression in raft. See #136908 for more details.
-	hs, err := sl.LoadHardState(ctx, readWriter)
-	if err != nil {
-		return PrepareReplicaReport{}, errors.Wrap(err, "loading HardState")
-	}
-
-	hs.LeadEpoch = 0
-
-	// TODO(sep-raft-log): when raft and state machine engines are separated, this
-	// update must be written to the raft engine.
-	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
-		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
-	}
-
 	return report, nil
 }
 
@@ -380,7 +365,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return errors.Wrap(err, "failed to check cluster version against storage")
 		}
 
-		log.KvExec.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
+		log.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {
 			ident, err := kvstorage.ReadStoreIdent(ctx, e)
@@ -388,7 +373,7 @@ func MaybeApplyPendingRecoveryPlan(
 				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
 			}
 			b := e.NewBatch()
-			defer b.Close() //nolint:deferloop
+			defer b.Close()
 			batches[ident.StoreID] = b
 		}
 		prepRep, err := PrepareUpdateReplicas(ctx, plan, uuid.DefaultGenerator, clock.Now(), nodeID, batches)
@@ -396,7 +381,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return err
 		}
 		if len(prepRep.MissingStores) > 0 {
-			log.KvExec.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
+			log.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
 				strutil.JoinIDs("s", prepRep.MissingStores))
 		}
 		_, err = CommitReplicaChanges(batches)
@@ -426,14 +411,14 @@ func MaybeApplyPendingRecoveryPlan(
 			// This is wrong, we must not have staged plans in a non-bootstrapped
 			// node. But we can't write an error here as store init might refuse to
 			// work if there are already some keys in store.
-			log.KvExec.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
+			log.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
 			return nil
 		}
 		return err
 	}
 
 	if err := planStore.RemovePlan(); err != nil {
-		log.KvExec.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
+		log.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
 	}
 
 	err = applyPlan(storeIdent.NodeID, plan)
@@ -443,11 +428,11 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 	if err != nil {
 		r.Error = err.Error()
-		log.KvExec.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
+		log.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
 	}
 	if err = writeNodeRecoveryResults(ctx, engines[0], r,
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
-		log.KvExec.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
+		log.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
 	return nil
 }

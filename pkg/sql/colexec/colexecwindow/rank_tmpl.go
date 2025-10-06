@@ -5,6 +5,7 @@
 
 // {{/*
 //go:build execgen_template
+// +build execgen_template
 
 //
 // This file is the execgen template for rank.eg.go. It's formatted in a
@@ -69,7 +70,7 @@ func NewRankOperator(
 		}
 		return &denseRankNoPartitionOp{rankInitFields: initFields}, nil
 	default:
-		return nil, errors.AssertionFailedf("unsupported rank type %s", windowFn)
+		return nil, errors.Errorf("unsupported rank type %s", windowFn)
 	}
 }
 

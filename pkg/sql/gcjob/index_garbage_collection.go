@@ -32,7 +32,7 @@ func deleteIndexData(
 ) error {
 	droppedIndexes := progress.Indexes
 	if log.V(2) {
-		log.Dev.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
+		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
 	}
 
 	// Before deleting any indexes, ensure that old versions of the table descriptor
@@ -85,7 +85,7 @@ func gcIndexes(
 ) error {
 	droppedIndexes := progress.Indexes
 	if log.V(2) {
-		log.Dev.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
+		log.Infof(ctx, "GC is being considered on table %d for indexes indexes: %+v", parentID, droppedIndexes)
 	}
 
 	// Before deleting any indexes, ensure that old versions of the table descriptor
@@ -162,7 +162,7 @@ func clearIndex(
 	indexID descpb.IndexID,
 	clearOrDeleteSpanData clearOrDeleteSpanDataFunc,
 ) error {
-	log.Dev.Infof(ctx, "clearing index %d from table %d", indexID, tableDesc.GetID())
+	log.Infof(ctx, "clearing index %d from table %d", indexID, tableDesc.GetID())
 
 	sp := tableDesc.IndexSpan(execCfg.Codec, indexID)
 	start, err := keys.Addr(sp.Key)
@@ -215,7 +215,7 @@ func deleteIndexZoneConfigsAfterGC(
 		err := execCfg.InternalDB.DescsTxn(ctx, removeIndexZoneConfigs)
 		switch {
 		case isMissingDescriptorError(err):
-			log.Dev.Infof(ctx, "removing index %d zone config from table %d failed: %v",
+			log.Infof(ctx, "removing index %d zone config from table %d failed: %v",
 				index.IndexID, parentID, err)
 		case err != nil:
 			return errors.Wrapf(err, "removing index %d zone configs", index.IndexID)
@@ -236,7 +236,7 @@ func handleTableDescriptorDeleted(
 	droppedIndexes := progress.Indexes
 	// If the descriptor has been removed, then we need to assume that the relevant
 	// zone configs and data have been cleaned up by another process.
-	log.Dev.Infof(ctx, "descriptor %d dropped, assuming another process has handled GC", parentID)
+	log.Infof(ctx, "descriptor %d dropped, assuming another process has handled GC", parentID)
 	for _, index := range droppedIndexes {
 		markIndexGCed(
 			ctx, index.IndexID, progress, jobspb.SchemaChangeGCProgress_CLEARED,

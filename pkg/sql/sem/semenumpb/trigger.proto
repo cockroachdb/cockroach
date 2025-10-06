@@ -12,6 +12,8 @@ syntax = "proto3";
 package cockroach.sql.sem.semenumpb;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb";
 
+import "gogoproto/gogo.proto";
+
 // TriggerActionTime describes the timing of a trigger: before, after, or
 // instead of the event.
 enum TriggerActionTime {

@@ -17,9 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
-	mockcluster "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster/mock"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -201,15 +199,9 @@ var (
 	}
 
 	benchMarkFn = func(totalKey string, totalValue float64) func(
-		summaries map[string]StatSummary) *roachtestutil.AggregatedMetric {
-		return func(summaries map[string]StatSummary) *roachtestutil.AggregatedMetric {
-			return &roachtestutil.AggregatedMetric{
-				Name:             totalKey,
-				Value:            roachtestutil.MetricPoint(totalValue),
-				Unit:             "count",
-				IsHigherBetter:   true,
-				AdditionalLabels: nil,
-			}
+		summaries map[string]StatSummary) (string, float64) {
+		return func(summaries map[string]StatSummary) (string, float64) {
+			return totalKey, totalValue
 		}
 	}
 )
@@ -329,17 +321,16 @@ func TestExport(t *testing.T) {
 			makePromQueryRange(barStat.Query, []string{"1", "2", "3"}, 5, barTS, false),
 		})
 		mockTest := getMockTest(t, ctrl, true, statsFileDest)
-		mockCluster := mockcluster.NewMockCluster(ctrl)
+		mockCluster := NewMockCluster(ctrl)
 		mockTest.EXPECT().Name().Return("mock_name")
-		mockTest.EXPECT().GetRunId().Return("mock_id").AnyTimes()
 		mockCluster.EXPECT().Cloud().Times(1).Return(spec.GCE)
-		mockTest.EXPECT().Spec().Return(&registry.TestSpec{
+		mockTest.EXPECT().Spec().Times(2).Return(&registry.TestSpec{
 			Owner: "roachtest_mock", Suites: registry.Suites(registry.Nightly),
-		}).AnyTimes()
+		})
 		statsWriter = func(ctx context.Context, tt test.Test, c cluster.Cluster, buffer *bytes.Buffer, dest string) error {
 			require.Equal(t, mockTest, tt)
 			require.Equal(t, mockCluster, c)
-			require.Equal(t, "/location/of/file/stats.om", dest)
+			require.Equal(t, "/location/of/file/openmetrics.om", dest)
 
 			require.Equal(t, parseData(expectedOutput), parseData(buffer.String()))
 			return nil
@@ -355,21 +346,13 @@ func TestExport(t *testing.T) {
 			benchMarkFn("t3", 404),
 		)
 		require.Nil(t, err)
-
-		// Compare individual fields instead of the whole struct
-		require.Equal(t, map[string]float64{"t1": 203, "t3": 404}, testRun.Total)
-		require.Equal(t, map[string]StatSummary{
-			fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 5, "1", "2", "3"),
-			barStat.Query: makeExpectedTs(barTS, barAggQuery, 5, "1", "2", "3"),
-		}, testRun.Stats)
-
-		// Verify BenchmarkMetrics
-		require.NotNil(t, testRun.BenchmarkMetrics)
-		require.Len(t, testRun.BenchmarkMetrics, 2)
-		require.Contains(t, testRun.BenchmarkMetrics, "t1")
-		require.Contains(t, testRun.BenchmarkMetrics, "t3")
-		require.Equal(t, float64(203), float64(testRun.BenchmarkMetrics["t1"].Value))
-		require.Equal(t, float64(404), float64(testRun.BenchmarkMetrics["t3"].Value))
+		require.Equal(t, ClusterStatRun{
+			Stats: map[string]StatSummary{
+				fooStat.Query: makeExpectedTs(fooTS, fooAggQuery, 5, "1", "2", "3"),
+				barStat.Query: makeExpectedTs(barTS, barAggQuery, 5, "1", "2", "3"),
+			},
+			Total: map[string]float64{"t1": 203, "t3": 404},
+		}, *testRun)
 	})
 	t.Run("multi tag, multi stat, 5 ticks with openmetrics false", func(t *testing.T) {
 		c := getClusterStatCollector(ctx, ctrl, []expectPromRangeQuery{
@@ -377,7 +360,7 @@ func TestExport(t *testing.T) {
 			makePromQueryRange(barStat.Query, []string{"1", "2", "3"}, 5, barTS, false),
 		})
 		mockTest := getMockTest(t, ctrl, false, statsFileDest)
-		mockCluster := mockcluster.NewMockCluster(ctrl)
+		mockCluster := NewMockCluster(ctrl)
 		statsWriter = func(ctx context.Context, tt test.Test, c cluster.Cluster, buffer *bytes.Buffer, dest string) error {
 			require.Equal(t, mockTest, tt)
 			require.Equal(t, mockCluster, c)
@@ -441,7 +424,6 @@ func getMockTest(
 	tst.EXPECT().L().Return(l)
 	tst.EXPECT().ExportOpenmetrics().Times(1).Return(exportOpenmetrics)
 	tst.EXPECT().PerfArtifactsDir().Times(1).Return(dest)
-	tst.EXPECT().Owner().Return("roachtest_mock").AnyTimes()
 	return tst
 }
 

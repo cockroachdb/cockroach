@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -112,6 +111,8 @@ type LineWidthMode int
 const (
 	// DefaultLineWidth is the line width used with the default pretty-printing configuration.
 	DefaultLineWidth = 60
+	// ConsoleLineWidth is the line width used on the frontend console.
+	ConsoleLineWidth = 108
 )
 
 // keywordWithText returns a pretty.Keyword with left and/or right
@@ -184,7 +185,7 @@ func (p *PrettyCfg) fmtFlags() FmtFlags {
 		return p.FmtFlags
 	}
 
-	prettyFlags := FmtShowPasswords | FmtParsable
+	prettyFlags := FmtShowPasswords | FmtParsable | FmtTagDollarQuotes
 	if p.ValueRedaction {
 		prettyFlags |= FmtMarkRedactionNode | FmtOmitNameRedaction
 	}
@@ -1051,7 +1052,7 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(nTyp) {
+		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && nTyp.Family() == types.CollatedStringFamily {
 			// COLLATE clause needs to go after CAST expression, so create
 			// equivalent string type without the locale to get name of string
 			// type without the COLLATE.
@@ -1080,7 +1081,7 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(nTyp) {
+		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && nTyp.Family() == types.CollatedStringFamily {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),
@@ -1302,13 +1303,6 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 	}
-	switch node.OnCommit {
-	case CreateTableOnCommitUnset:
-	case CreateTableOnCommitPreserveRows:
-		clauses = append(clauses, pretty.Keyword("ON COMMIT PRESERVE ROWS"))
-	default:
-		panic(errors.AssertionFailedf("unexpected CreateTableOnCommitSetting: %d", node.OnCommit))
-	}
 	if node.Locality != nil {
 		clauses = append(clauses, p.Doc(node.Locality))
 	}
@@ -1346,16 +1340,6 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 		d = pretty.ConcatSpace(
 			d,
 			p.bracket("(", p.Doc(&node.ColumnNames), ")"),
-		)
-	}
-	if node.Options != nil {
-		withClause := pretty.Keyword("WITH")
-		d = pretty.ConcatSpace(
-			d,
-			pretty.ConcatSpace(
-				withClause,
-				p.bracket("(", p.Doc(node.Options), ")"),
-			),
 		)
 	}
 	d = p.nestUnder(
@@ -1644,7 +1628,7 @@ func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
-	// CREATE [UNIQUE] [INVERTED | VECTOR] INDEX [name]
+	// CREATE [UNIQUE] [INVERTED] INDEX [name]
 	//    ON tbl (cols...)
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
@@ -1658,11 +1642,8 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 	if node.Unique {
 		title = append(title, pretty.Keyword("UNIQUE"))
 	}
-	switch node.Type {
-	case idxtype.INVERTED:
+	if node.Inverted {
 		title = append(title, pretty.Keyword("INVERTED"))
-	case idxtype.VECTOR:
-		title = append(title, pretty.Keyword("VECTOR"))
 	}
 	title = append(title, pretty.Keyword("INDEX"))
 	if node.Concurrently {
@@ -1743,7 +1724,7 @@ func (node *LikeTableDef) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
-	// [INVERTED | VECTOR] INDEX [name] (columns...)
+	// [INVERTED] INDEX [name] (columns...)
 	//    [STORING ( ... )]
 	//    [INTERLEAVE ...]
 	//    [PARTITION BY ...]
@@ -1754,11 +1735,8 @@ func (node *IndexTableDef) doc(p *PrettyCfg) pretty.Doc {
 	if node.Name != "" {
 		title = pretty.ConcatSpace(title, p.Doc(&node.Name))
 	}
-	switch node.Type {
-	case idxtype.INVERTED:
+	if node.Inverted {
 		title = pretty.ConcatSpace(pretty.Keyword("INVERTED"), title)
-	case idxtype.VECTOR:
-		title = pretty.ConcatSpace(pretty.Keyword("VECTOR"), title)
 	}
 	title = pretty.ConcatSpace(title, p.bracket("(", p.Doc(&node.Columns), ")"))
 
@@ -2184,17 +2162,24 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 	if node.Targets != nil {
 		items = append(items, node.Targets.docRow(p))
 	}
-	if node.Subdir != nil {
-		items = append(items, p.row("INTO ", p.Doc(node.Subdir)))
-		items = append(items, p.row(" IN ", p.Doc(&node.To)))
-	} else if node.AppendToLatest {
-		items = append(items, p.row("INTO LATEST IN", p.Doc(&node.To)))
+	if node.Nested {
+		if node.Subdir != nil {
+			items = append(items, p.row("INTO ", p.Doc(node.Subdir)))
+			items = append(items, p.row(" IN ", p.Doc(&node.To)))
+		} else if node.AppendToLatest {
+			items = append(items, p.row("INTO LATEST IN", p.Doc(&node.To)))
+		} else {
+			items = append(items, p.row("INTO", p.Doc(&node.To)))
+		}
 	} else {
-		items = append(items, p.row("INTO", p.Doc(&node.To)))
+		items = append(items, p.row("TO", p.Doc(&node.To)))
 	}
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
+	}
+	if node.IncrementalFrom != nil {
+		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
 	}
 	if !node.Options.IsDefault() {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))
@@ -2209,9 +2194,16 @@ func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
 	if node.DescriptorCoverage == RequestedDescriptors {
 		items = append(items, node.Targets.docRow(p))
 	}
-	from := p.Doc(&node.From)
-	items = append(items, p.row("FROM", p.Doc(node.Subdir)))
-	items = append(items, p.row("IN", from))
+	from := make([]pretty.Doc, len(node.From))
+	for i := range node.From {
+		from[i] = p.Doc(&node.From[i])
+	}
+	if node.Subdir != nil {
+		items = append(items, p.row("FROM", p.Doc(node.Subdir)))
+		items = append(items, p.row("IN", p.commaSeparated(from...)))
+	} else {
+		items = append(items, p.row("FROM", p.commaSeparated(from...)))
+	}
 
 	if node.AsOf.Expr != nil {
 		items = append(items, node.AsOf.docRow(p))
@@ -2284,17 +2276,25 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 	items := make([]pretty.TableRow, 0, 5)
 	items = append(items, p.row("IMPORT", pretty.Nil))
 
-	into := p.Doc(node.Table)
-	if node.IntoCols != nil {
-		into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
+	if node.Bundle {
+		if node.Table != nil {
+			items = append(items, p.row("TABLE", p.Doc(node.Table)))
+			items = append(items, p.row("FROM", pretty.Nil))
+		}
+		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
+	} else if node.Into {
+		into := p.Doc(node.Table)
+		if node.IntoCols != nil {
+			into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
+		}
+		items = append(items, p.row("INTO", into))
+		data := p.bracketKeyword(
+			"DATA", " (",
+			p.Doc(&node.Files),
+			")", "",
+		)
+		items = append(items, p.row(node.FileFormat, data))
 	}
-	items = append(items, p.row("INTO", into))
-	data := p.bracketKeyword(
-		"DATA", " (",
-		p.Doc(&node.Files),
-		")", "",
-	)
-	items = append(items, p.row(node.FileFormat, data))
 
 	if node.Options != nil {
 		items = append(items, p.row("WITH", p.Doc(&node.Options)))

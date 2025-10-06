@@ -104,7 +104,7 @@ func (authManager *ldapAuthManager) reloadConfigLocked(ctx context.Context, st *
 	var err error
 	authManager.mu.util, err = NewLDAPUtil(ctx, authManager.mu.conf)
 	if err != nil {
-		log.Dev.Warningf(ctx, "LDAP auth manager: unable to initialize LDAP connection: %v", err)
+		log.Warningf(ctx, "LDAP auth manager: unable to initialize LDAP connection: %v", err)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (authManager *ldapAuthManager) reloadConfigLocked(ctx context.Context, st *
 		telemetry.Inc(enableUseCounter)
 	}
 	authManager.mu.enabled = true
-	log.Dev.Infof(ctx, "initialized LDAP authManager")
+	log.Infof(ctx, "initialized LDAP authManager")
 }
 
 // setLDAPConfigOptions extracts hba conf parameters required for connecting and

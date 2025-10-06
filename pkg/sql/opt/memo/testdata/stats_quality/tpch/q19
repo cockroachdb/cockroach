@@ -66,45 +66,45 @@ scalar-group-by
  │    ├── save-table-name: q19_project_2
  │    ├── columns: column30:30(float!null)
  │    ├── immutable
- │    ├── stats: [rows=185.6, distinct(30)=185.559, null(30)=0]
+ │    ├── stats: [rows=185.5999, distinct(30)=185.559, null(30)=0]
  │    ├── project
  │    │    ├── save-table-name: q19_project_3
  │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
- │    │    ├── stats: [rows=185.6, distinct(2)=185.6, null(2)=0, distinct(5)=5.55556, null(5)=0, distinct(6)=185.55, null(6)=0, distinct(7)=11, null(7)=0, distinct(14)=1, null(14)=0, distinct(15)=2, null(15)=0, distinct(19)=185.6, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=16.6667, null(24)=0, distinct(25)=12, null(25)=0, distinct(6,7)=185.559, null(6,7)=0, distinct(22,24,25)=185.6, null(22,24,25)=0]
+ │    │    ├── stats: [rows=185.5999, distinct(2)=185.6, null(2)=0, distinct(5)=5.55556, null(5)=0, distinct(6)=185.55, null(6)=0, distinct(7)=11, null(7)=0, distinct(14)=1, null(14)=0, distinct(15)=2, null(15)=0, distinct(19)=185.6, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=16.6667, null(24)=0, distinct(25)=12, null(25)=0, distinct(6,7)=185.559, null(6,7)=0, distinct(22,24,25)=185.6, null(22,24,25)=0]
  │    │    ├── fd: ()-->(14), (19)-->(22,24,25), (2)==(19), (19)==(2)
  │    │    └── distinct-on
  │    │         ├── save-table-name: q19_distinct_on_4
  │    │         ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
  │    │         ├── grouping columns: l_orderkey:1(int!null) l_linenumber:4(int!null) p_partkey:19(int!null)
- │    │         ├── stats: [rows=182.369, distinct(1)=182.304, null(1)=0, distinct(2)=182.369, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=182.369, null(5)=0, distinct(6)=182.369, null(6)=0, distinct(7)=182.369, null(7)=0, distinct(14)=182.369, null(14)=0, distinct(15)=182.369, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=182.369, null(22)=0, distinct(24)=182.369, null(24)=0, distinct(25)=182.369, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
+ │    │         ├── stats: [rows=182.3692, distinct(1)=182.304, null(1)=0, distinct(2)=182.369, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=182.369, null(5)=0, distinct(6)=182.369, null(6)=0, distinct(7)=182.369, null(7)=0, distinct(14)=182.369, null(14)=0, distinct(15)=182.369, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=182.369, null(22)=0, distinct(24)=182.369, null(24)=0, distinct(25)=182.369, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
  │    │         ├── key: (1,4,19)
- │    │         ├── fd: (1,4,19)-->(2,5-7,14,15,22,24,25), (2)==(19), (19)==(2)
+ │    │         ├── fd: (2)==(19), (19)==(2), (1,4,19)-->(2,5-7,14,15,22,24,25)
  │    │         ├── union-all
  │    │         │    ├── save-table-name: q19_union_all_5
  │    │         │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
  │    │         │    ├── left columns: l_orderkey:32(int) l_partkey:33(int) l_linenumber:35(int) l_quantity:36(float) l_extendedprice:37(float) l_discount:38(float) l_shipinstruct:45(char) l_shipmode:46(char) p_partkey:50(int) p_brand:53(char) p_size:55(int) p_container:56(char)
  │    │         │    ├── right columns: l_orderkey:61(int) l_partkey:62(int) l_linenumber:64(int) l_quantity:65(float) l_extendedprice:66(float) l_discount:67(float) l_shipinstruct:74(char) l_shipmode:75(char) p_partkey:79(int) p_brand:82(char) p_size:84(int) p_container:85(char)
- │    │         │    ├── stats: [rows=182.369, distinct(1)=182.304, null(1)=0, distinct(2)=163.44, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=16.3504, null(5)=0, distinct(6)=182.302, null(6)=0, distinct(7)=21.9927, null(7)=0, distinct(14)=2, null(14)=0, distinct(15)=4, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=21.6667, null(24)=0, distinct(25)=12, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
+ │    │         │    ├── stats: [rows=182.3692, distinct(1)=182.304, null(1)=0, distinct(2)=163.44, null(2)=0, distinct(4)=13.9999, null(4)=0, distinct(5)=16.3504, null(5)=0, distinct(6)=182.302, null(6)=0, distinct(7)=21.9927, null(7)=0, distinct(14)=2, null(14)=0, distinct(15)=4, null(15)=0, distinct(19)=163.44, null(19)=0, distinct(22)=3, null(22)=0, distinct(24)=21.6667, null(24)=0, distinct(25)=12, null(25)=0, distinct(1,4,19)=182.369, null(1,4,19)=0]
  │    │         │    ├── fd: (2)==(19), (19)==(2)
  │    │         │    ├── inner-join (lookup lineitem)
  │    │         │    │    ├── save-table-name: q19_lookup_join_6
  │    │         │    │    ├── columns: l_orderkey:32(int!null) l_partkey:33(int!null) l_linenumber:35(int!null) l_quantity:36(float!null) l_extendedprice:37(float!null) l_discount:38(float!null) l_shipinstruct:45(char!null) l_shipmode:46(char!null) p_partkey:50(int!null) p_brand:53(char!null) p_size:55(int!null) p_container:56(char!null)
  │    │         │    │    ├── key columns: [32 35] = [32 35]
  │    │         │    │    ├── lookup columns are key
- │    │         │    │    ├── stats: [rows=99.8804, distinct(32)=99.8241, null(32)=0, distinct(33)=80.9514, null(33)=0, distinct(35)=7, null(35)=0, distinct(36)=10.7949, null(36)=0, distinct(37)=99.823, null(37)=0, distinct(38)=10.9987, null(38)=0, distinct(45)=1, null(45)=0, distinct(46)=2, null(46)=0, distinct(50)=80.9514, null(50)=0, distinct(53)=1, null(53)=0, distinct(55)=5, null(55)=0, distinct(56)=4, null(56)=0, distinct(32,35,50)=99.8804, null(32,35,50)=0]
+ │    │         │    │    ├── stats: [rows=99.88038, distinct(32)=99.8241, null(32)=0, distinct(33)=80.9514, null(33)=0, distinct(35)=7, null(35)=0, distinct(36)=10.7949, null(36)=0, distinct(37)=99.823, null(37)=0, distinct(38)=10.9987, null(38)=0, distinct(45)=1, null(45)=0, distinct(46)=2, null(46)=0, distinct(50)=80.9514, null(50)=0, distinct(53)=1, null(53)=0, distinct(55)=5, null(55)=0, distinct(56)=4, null(56)=0, distinct(32,35,50)=99.8804, null(32,35,50)=0]
  │    │         │    │    ├── key: (32,35)
  │    │         │    │    ├── fd: ()-->(45,53), (32,35)-->(33,36-38,46), (50)-->(55,56), (33)==(50), (50)==(33)
  │    │         │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │         │    │    │    ├── save-table-name: q19_lookup_join_7
  │    │         │    │    │    ├── columns: l_orderkey:32(int!null) l_partkey:33(int!null) l_linenumber:35(int!null) p_partkey:50(int!null) p_brand:53(char!null) p_size:55(int!null) p_container:56(char!null)
  │    │         │    │    │    ├── key columns: [50] = [33]
- │    │         │    │    │    ├── stats: [rows=2438.29, distinct(32)=2436.35, null(32)=0, distinct(33)=80.9514, null(33)=0, distinct(35)=7, null(35)=0, distinct(50)=80.9514, null(50)=0, distinct(53)=1, null(53)=0, distinct(55)=5, null(55)=0, distinct(56)=4, null(56)=0]
+ │    │         │    │    │    ├── stats: [rows=2438.288, distinct(32)=2436.35, null(32)=0, distinct(33)=80.9514, null(33)=0, distinct(35)=7, null(35)=0, distinct(50)=80.9514, null(50)=0, distinct(53)=1, null(53)=0, distinct(55)=5, null(55)=0, distinct(56)=4, null(56)=0]
  │    │         │    │    │    ├── key: (32,35)
  │    │         │    │    │    ├── fd: ()-->(53), (50)-->(55,56), (32,35)-->(33), (33)==(50), (50)==(33)
  │    │         │    │    │    ├── select
  │    │         │    │    │    │    ├── save-table-name: q19_select_8
  │    │         │    │    │    │    ├── columns: p_partkey:50(int!null) p_brand:53(char!null) p_size:55(int!null) p_container:56(char!null)
- │    │         │    │    │    │    ├── stats: [rows=80.9514, distinct(50)=80.9514, null(50)=0, distinct(53)=1, null(53)=0, distinct(55)=5, null(55)=0, distinct(56)=4, null(56)=0, distinct(53,55,56)=20, null(53,55,56)=0]
+ │    │         │    │    │    │    ├── stats: [rows=80.95144, distinct(50)=80.9514, null(50)=0, distinct(53)=1, null(53)=0, distinct(55)=5, null(55)=0, distinct(56)=4, null(56)=0, distinct(53,55,56)=20, null(53,55,56)=0]
  │    │         │    │    │    │    │   histogram(53)=  0    80.951
  │    │         │    │    │    │    │                 <--- 'Brand#12'
  │    │         │    │    │    │    │   histogram(55)=  0 16.968 47.988 15.996
@@ -139,36 +139,36 @@ scalar-group-by
  │    │         │    └── project
  │    │         │         ├── save-table-name: q19_project_10
  │    │         │         ├── columns: l_orderkey:61(int!null) l_partkey:62(int!null) l_linenumber:64(int!null) l_quantity:65(float!null) l_extendedprice:66(float!null) l_discount:67(float!null) l_shipinstruct:74(char!null) l_shipmode:75(char!null) p_partkey:79(int!null) p_brand:82(char!null) p_size:84(int!null) p_container:85(char!null)
- │    │         │         ├── stats: [rows=82.4889, distinct(61)=82.4798, null(61)=0, distinct(62)=82.4889, null(62)=0, distinct(64)=6.99995, null(64)=0, distinct(65)=5.55556, null(65)=0, distinct(66)=82.479, null(66)=0, distinct(67)=10.9939, null(67)=0, distinct(74)=1, null(74)=0, distinct(75)=2, null(75)=0, distinct(79)=82.4889, null(79)=0, distinct(82)=2, null(82)=0, distinct(84)=16.6667, null(84)=0, distinct(85)=8, null(85)=0, distinct(61,64,79)=82.4889, null(61,64,79)=0, distinct(82,84,85)=82.4889, null(82,84,85)=0]
+ │    │         │         ├── stats: [rows=82.48887, distinct(61)=82.4798, null(61)=0, distinct(62)=82.4889, null(62)=0, distinct(64)=6.99995, null(64)=0, distinct(65)=5.55556, null(65)=0, distinct(66)=82.479, null(66)=0, distinct(67)=10.9939, null(67)=0, distinct(74)=1, null(74)=0, distinct(75)=2, null(75)=0, distinct(79)=82.4889, null(79)=0, distinct(82)=2, null(82)=0, distinct(84)=16.6667, null(84)=0, distinct(85)=8, null(85)=0, distinct(61,64,79)=82.4889, null(61,64,79)=0, distinct(82,84,85)=82.4889, null(82,84,85)=0]
  │    │         │         ├── key: (61,64)
  │    │         │         ├── fd: ()-->(74), (61,64)-->(62,65-67,75), (79)-->(82,84,85), (62)==(79), (79)==(62)
  │    │         │         └── distinct-on
  │    │         │              ├── save-table-name: q19_distinct_on_11
  │    │         │              ├── columns: l_orderkey:61(int!null) l_partkey:62(int!null) l_linenumber:64(int!null) l_quantity:65(float!null) l_extendedprice:66(float!null) l_discount:67(float!null) l_shipinstruct:74(char!null) l_shipmode:75(char!null) p_partkey:79(int!null) p_brand:82(char!null) p_size:84(int!null) p_container:85(char!null)
  │    │         │              ├── grouping columns: l_orderkey:61(int!null) l_linenumber:64(int!null) p_partkey:79(int!null)
- │    │         │              ├── stats: [rows=487, distinct(61)=486.233, null(61)=0, distinct(62)=487, null(62)=0, distinct(64)=14, null(64)=0, distinct(65)=487, null(65)=0, distinct(66)=487, null(66)=0, distinct(67)=487, null(67)=0, distinct(74)=487, null(74)=0, distinct(75)=487, null(75)=0, distinct(79)=401.84, null(79)=0, distinct(82)=487, null(82)=0, distinct(84)=487, null(84)=0, distinct(85)=487, null(85)=0, distinct(61,64,79)=487, null(61,64,79)=0]
+ │    │         │              ├── stats: [rows=486.9996, distinct(61)=486.233, null(61)=0, distinct(62)=487, null(62)=0, distinct(64)=14, null(64)=0, distinct(65)=487, null(65)=0, distinct(66)=487, null(66)=0, distinct(67)=487, null(67)=0, distinct(74)=487, null(74)=0, distinct(75)=487, null(75)=0, distinct(79)=401.84, null(79)=0, distinct(82)=487, null(82)=0, distinct(84)=487, null(84)=0, distinct(85)=487, null(85)=0, distinct(61,64,79)=487, null(61,64,79)=0]
  │    │         │              ├── key: (61,64,79)
- │    │         │              ├── fd: (61,64,79)-->(62,65-67,74,75,82,84,85), (62)==(79), (79)==(62)
+ │    │         │              ├── fd: (62)==(79), (79)==(62), (61,64,79)-->(62,65-67,74,75,82,84,85)
  │    │         │              ├── union-all
  │    │         │              │    ├── save-table-name: q19_union_all_12
  │    │         │              │    ├── columns: l_orderkey:61(int!null) l_partkey:62(int!null) l_linenumber:64(int!null) l_quantity:65(float!null) l_extendedprice:66(float!null) l_discount:67(float!null) l_shipinstruct:74(char!null) l_shipmode:75(char!null) p_partkey:79(int!null) p_brand:82(char!null) p_size:84(int!null) p_container:85(char!null)
  │    │         │              │    ├── left columns: l_orderkey:90(int) l_partkey:91(int) l_linenumber:93(int) l_quantity:94(float) l_extendedprice:95(float) l_discount:96(float) l_shipinstruct:103(char) l_shipmode:104(char) p_partkey:108(int) p_brand:111(char) p_size:113(int) p_container:114(char)
  │    │         │              │    ├── right columns: l_orderkey:119(int) l_partkey:120(int) l_linenumber:122(int) l_quantity:123(float) l_extendedprice:124(float) l_discount:125(float) l_shipinstruct:132(char) l_shipmode:133(char) p_partkey:137(int) p_brand:140(char) p_size:142(int) p_container:143(char)
- │    │         │              │    ├── stats: [rows=487, distinct(61)=486.233, null(61)=0, distinct(62)=401.84, null(62)=0, distinct(64)=14, null(64)=0, distinct(65)=19.5918, null(65)=0, distinct(66)=486.22, null(66)=0, distinct(67)=22, null(67)=0, distinct(74)=2, null(74)=0, distinct(75)=4, null(75)=0, distinct(79)=401.84, null(79)=0, distinct(82)=2, null(82)=0, distinct(84)=25, null(84)=0, distinct(85)=8, null(85)=0, distinct(61,64,79)=487, null(61,64,79)=0]
+ │    │         │              │    ├── stats: [rows=486.9996, distinct(61)=486.233, null(61)=0, distinct(62)=401.84, null(62)=0, distinct(64)=14, null(64)=0, distinct(65)=19.5918, null(65)=0, distinct(66)=486.22, null(66)=0, distinct(67)=22, null(67)=0, distinct(74)=2, null(74)=0, distinct(75)=4, null(75)=0, distinct(79)=401.84, null(79)=0, distinct(82)=2, null(82)=0, distinct(84)=25, null(84)=0, distinct(85)=8, null(85)=0, distinct(61,64,79)=487, null(61,64,79)=0]
  │    │         │              │    ├── fd: (62)==(79), (79)==(62)
  │    │         │              │    ├── inner-join (lookup lineitem)
  │    │         │              │    │    ├── save-table-name: q19_lookup_join_13
  │    │         │              │    │    ├── columns: l_orderkey:90(int!null) l_partkey:91(int!null) l_linenumber:93(int!null) l_quantity:94(float!null) l_extendedprice:95(float!null) l_discount:96(float!null) l_shipinstruct:103(char!null) l_shipmode:104(char!null) p_partkey:108(int!null) p_brand:111(char!null) p_size:113(int!null) p_container:114(char!null)
  │    │         │              │    │    ├── key columns: [90 93] = [90 93]
  │    │         │              │    │    ├── lookup columns are key
- │    │         │              │    │    ├── stats: [rows=291.964, distinct(90)=291.434, null(90)=0, distinct(91)=240.909, null(91)=0, distinct(93)=7, null(93)=0, distinct(94)=9.79592, null(94)=0, distinct(95)=291.425, null(95)=0, distinct(96)=11, null(96)=0, distinct(103)=1, null(103)=0, distinct(104)=2, null(104)=0, distinct(108)=240.909, null(108)=0, distinct(111)=1, null(111)=0, distinct(113)=15, null(113)=0, distinct(114)=4, null(114)=0, distinct(90,93,108)=291.964, null(90,93,108)=0]
+ │    │         │              │    │    ├── stats: [rows=291.9642, distinct(90)=291.434, null(90)=0, distinct(91)=240.909, null(91)=0, distinct(93)=7, null(93)=0, distinct(94)=9.79592, null(94)=0, distinct(95)=291.425, null(95)=0, distinct(96)=11, null(96)=0, distinct(103)=1, null(103)=0, distinct(104)=2, null(104)=0, distinct(108)=240.909, null(108)=0, distinct(111)=1, null(111)=0, distinct(113)=15, null(113)=0, distinct(114)=4, null(114)=0, distinct(90,93,108)=291.964, null(90,93,108)=0]
  │    │         │              │    │    ├── key: (90,93)
  │    │         │              │    │    ├── fd: ()-->(103,111), (90,93)-->(91,94-96,104), (108)-->(113,114), (91)==(108), (108)==(91)
  │    │         │              │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │         │              │    │    │    ├── save-table-name: q19_lookup_join_14
  │    │         │              │    │    │    ├── columns: l_orderkey:90(int!null) l_partkey:91(int!null) l_linenumber:93(int!null) p_partkey:108(int!null) p_brand:111(char!null) p_size:113(int!null) p_container:114(char!null)
  │    │         │              │    │    │    ├── key columns: [108] = [91]
- │    │         │              │    │    │    ├── stats: [rows=7256.3, distinct(90)=7239.11, null(90)=0, distinct(91)=240.909, null(91)=0, distinct(93)=7, null(93)=0, distinct(108)=240.909, null(108)=0, distinct(111)=1, null(111)=0, distinct(113)=15, null(113)=0, distinct(114)=4, null(114)=0]
+ │    │         │              │    │    │    ├── stats: [rows=7256.302, distinct(90)=7239.11, null(90)=0, distinct(91)=240.909, null(91)=0, distinct(93)=7, null(93)=0, distinct(108)=240.909, null(108)=0, distinct(111)=1, null(111)=0, distinct(113)=15, null(113)=0, distinct(114)=4, null(114)=0]
  │    │         │              │    │    │    ├── key: (90,93)
  │    │         │              │    │    │    ├── fd: ()-->(111), (108)-->(113,114), (90,93)-->(91), (91)==(108), (108)==(91)
  │    │         │              │    │    │    ├── select
@@ -211,20 +211,20 @@ scalar-group-by
  │    │         │              │         ├── columns: l_orderkey:119(int!null) l_partkey:120(int!null) l_linenumber:122(int!null) l_quantity:123(float!null) l_extendedprice:124(float!null) l_discount:125(float!null) l_shipinstruct:132(char!null) l_shipmode:133(char!null) p_partkey:137(int!null) p_brand:140(char!null) p_size:142(int!null) p_container:143(char!null)
  │    │         │              │         ├── key columns: [119 122] = [119 122]
  │    │         │              │         ├── lookup columns are key
- │    │         │              │         ├── stats: [rows=195.035, distinct(119)=194.799, null(119)=0, distinct(120)=160.93, null(120)=0, distinct(122)=7, null(122)=0, distinct(123)=9.79592, null(123)=0, distinct(124)=194.795, null(124)=0, distinct(125)=11, null(125)=0, distinct(132)=1, null(132)=0, distinct(133)=2, null(133)=0, distinct(137)=160.93, null(137)=0, distinct(140)=1, null(140)=0, distinct(142)=10, null(142)=0, distinct(143)=4, null(143)=0, distinct(119,122,137)=195.035, null(119,122,137)=0]
+ │    │         │              │         ├── stats: [rows=195.0355, distinct(119)=194.799, null(119)=0, distinct(120)=160.93, null(120)=0, distinct(122)=7, null(122)=0, distinct(123)=9.79592, null(123)=0, distinct(124)=194.795, null(124)=0, distinct(125)=11, null(125)=0, distinct(132)=1, null(132)=0, distinct(133)=2, null(133)=0, distinct(137)=160.93, null(137)=0, distinct(140)=1, null(140)=0, distinct(142)=10, null(142)=0, distinct(143)=4, null(143)=0, distinct(119,122,137)=195.035, null(119,122,137)=0]
  │    │         │              │         ├── key: (119,122)
  │    │         │              │         ├── fd: ()-->(132,140), (119,122)-->(120,123-125,133), (137)-->(142,143), (120)==(137), (137)==(120)
  │    │         │              │         ├── inner-join (lookup lineitem@l_pk)
  │    │         │              │         │    ├── save-table-name: q19_lookup_join_18
  │    │         │              │         │    ├── columns: l_orderkey:119(int!null) l_partkey:120(int!null) l_linenumber:122(int!null) p_partkey:137(int!null) p_brand:140(char!null) p_size:142(int!null) p_container:143(char!null)
  │    │         │              │         │    ├── key columns: [137] = [120]
- │    │         │              │         │    ├── stats: [rows=4847.29, distinct(119)=4839.62, null(119)=0, distinct(120)=160.93, null(120)=0, distinct(122)=7, null(122)=0, distinct(137)=160.93, null(137)=0, distinct(140)=1, null(140)=0, distinct(142)=10, null(142)=0, distinct(143)=4, null(143)=0]
+ │    │         │              │         │    ├── stats: [rows=4847.295, distinct(119)=4839.62, null(119)=0, distinct(120)=160.93, null(120)=0, distinct(122)=7, null(122)=0, distinct(137)=160.93, null(137)=0, distinct(140)=1, null(140)=0, distinct(142)=10, null(142)=0, distinct(143)=4, null(143)=0]
  │    │         │              │         │    ├── key: (119,122)
  │    │         │              │         │    ├── fd: ()-->(140), (137)-->(142,143), (119,122)-->(120), (120)==(137), (137)==(120)
  │    │         │              │         │    ├── select
  │    │         │              │         │    │    ├── save-table-name: q19_select_19
  │    │         │              │         │    │    ├── columns: p_partkey:137(int!null) p_brand:140(char!null) p_size:142(int!null) p_container:143(char!null)
- │    │         │              │         │    │    ├── stats: [rows=160.931, distinct(137)=160.93, null(137)=0, distinct(140)=1, null(140)=0, distinct(142)=10, null(142)=0, distinct(143)=4, null(143)=0, distinct(140,142,143)=40, null(140,142,143)=0]
+ │    │         │              │         │    │    ├── stats: [rows=160.9307, distinct(137)=160.93, null(137)=0, distinct(140)=1, null(140)=0, distinct(142)=10, null(142)=0, distinct(143)=4, null(143)=0, distinct(140,142,143)=40, null(140,142,143)=0]
  │    │         │              │         │    │    │   histogram(140)=  0    160.93
  │    │         │              │         │    │    │                  <--- 'Brand#23'
  │    │         │              │         │    │    │   histogram(142)=  0 16.968 127.97 15.996

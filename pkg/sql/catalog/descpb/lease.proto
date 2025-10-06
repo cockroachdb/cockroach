@@ -32,7 +32,4 @@ message WaitStats {
     (gogoproto.customtype) =
       "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
-  // TargetCount the number of leases we expected to observe, which will be
-  // non-zero for wait for initial version.
-  int32 target_count  = 7;
 }

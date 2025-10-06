@@ -271,10 +271,6 @@ func newHashBasedPartitioner(
 		inputTypes:         inputTypes,
 		hashCols:           hashCols,
 		inMemMainOp:        inMemMainOpConstructor(partitionedInputs),
-		// TODO(yuzefovich): we could delay creation of the disk-backed fallback
-		// operator until we actually need it. This isn't a big deal though
-		// since we only create the hash-based partitioner once some other
-		// operator spills to disk.
 		diskBackedFallbackOp: diskBackedFallbackOpConstructor(
 			partitionedInputs, maxNumberActivePartitions, partitionedDiskQueueSemaphore,
 		),

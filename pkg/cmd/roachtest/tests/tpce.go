@@ -7,7 +7,6 @@ package tests
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -201,7 +199,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	}
 
 	if opts.setupType == usingTPCEInit && !t.SkipInit() {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			estimatedSetupTimeStr := ""
 			if opts.estimatedSetupTime != 0 {
@@ -223,7 +221,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		return
 	}
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+	m := c.NewMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		t.Status("running workload")
 		workloadDuration := opts.workloadDuration
@@ -256,7 +254,7 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		}
 
 		if opts.exportMetrics {
-			return exportTPCEResults(t, c, result.Stdout)
+			return exportTPCEResults(t, result.Stdout)
 		}
 		return nil
 	})
@@ -329,7 +327,7 @@ type tpceMetrics struct {
 //
 // The Measured Throughput is computed as the total number of Valid Trade-Result Transactions
 // within the Measurement Interval divided by the duration of the Measurement Interval in seconds.
-func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
+func exportTPCEResults(t test.Test, result string) error {
 	// Filter out everything but the TradeResult transaction metrics.
 	//
 	// Example output of TPCE:
@@ -359,20 +357,7 @@ func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 			P99Latency:  removeUnits(fields[11]),
 			PMaxLatency: removeUnits(fields[12]),
 		}
-
-		var metricBytes []byte
-		var err error
-		fileName := roachtestutil.GetBenchmarkMetricsFileName(t)
-		if t.ExportOpenmetrics() {
-			labels := map[string]string{
-				"workload": "tpce",
-			}
-			labelString := roachtestutil.GetOpenmetricsLabelString(t, c, labels)
-			metricBytes = GetTpceOpenmetricsBytes(metrics, fields[5], labelString)
-		} else {
-			metricBytes, err = json.Marshal(metrics)
-		}
-
+		metricBytes, err := json.Marshal(metrics)
 		if err != nil {
 			return err
 		}
@@ -384,36 +369,7 @@ func exportTPCEResults(t test.Test, c cluster.Cluster, result string) error {
 			return err
 		}
 
-		return os.WriteFile(fmt.Sprintf("%s/%s", perfDir, fileName), metricBytes, 0666)
+		return os.WriteFile(fmt.Sprintf("%s/stats.json", perfDir), metricBytes, 0666)
 	}
 	return errors.Errorf("exportTPCEResults: found no lines starting with TradeResult")
-}
-
-func GetTpceOpenmetricsBytes(
-	metrics tpceMetrics, countOfLatencies string, labelString string,
-) []byte {
-
-	var buffer bytes.Buffer
-	now := timeutil.Now().Unix()
-
-	buffer.WriteString("# TYPE tpce_latency summary\n")
-	buffer.WriteString("# HELP tpce_latency Latency metrics for TPC-E transactions\n")
-
-	latencyString := func(quantile, latency string) string {
-		return fmt.Sprintf("tpce_latency{%s,unit=\"ms\",is_higher_better=\"false\",quantile=\"%s\"} %s %d\n", labelString, quantile, latency, now)
-	}
-
-	buffer.WriteString(latencyString("0.5", metrics.P50Latency))
-	buffer.WriteString(latencyString("0.9", metrics.P90Latency))
-	buffer.WriteString(latencyString("0.99", metrics.P99Latency))
-	buffer.WriteString(latencyString("1.0", metrics.PMaxLatency))
-	// Sum is hardcoded is zero to denote null values, since we don't have exact values
-	buffer.WriteString(fmt.Sprintf("tpce_latency_sum{%s} %d %d\n", labelString, 0, now))
-	buffer.WriteString(fmt.Sprintf("tpce_latency_count{%s} %s %d\n", labelString, countOfLatencies, now))
-	buffer.WriteString("# TYPE tpce_avg_latency gauge\n")
-	buffer.WriteString(fmt.Sprintf("tpce_avg_latency{%s,unit=\"ms\",is_higher_better=\"false\"} %s %d\n", labelString, metrics.AvgLatency, now))
-	buffer.WriteString("# EOF")
-
-	metricsBytes := buffer.Bytes()
-	return metricsBytes
 }

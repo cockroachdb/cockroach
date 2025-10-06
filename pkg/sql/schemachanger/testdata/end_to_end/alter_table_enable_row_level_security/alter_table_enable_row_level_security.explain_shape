@@ -1,8 +1,0 @@
-/* setup */
-CREATE TABLE roaches();
-
-/* test */
-EXPLAIN (DDL, SHAPE) ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
-----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› ENABLE ROW LEVEL SECURITY;
- └── execute 2 system table mutations transactions

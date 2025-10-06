@@ -118,7 +118,7 @@ vectorized: <hidden>
 plan type: generic, reused
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -130,6 +130,7 @@ quality of service: regular
   regions: <hidden>
   actual row count: 1
   KV time: 0µs
+  KV contention time: 0µs
   KV rows decoded: 1
   KV pairs read: 2
   KV bytes read: 8 B
@@ -148,7 +149,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, reused
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -160,6 +161,7 @@ quality of service: regular
   regions: <hidden>
   actual row count: 0
   KV time: 0µs
+  KV contention time: 0µs
   KV rows decoded: 0
   KV bytes read: 0 B
   KV gRPC calls: 0

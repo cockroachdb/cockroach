@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Test cases for using invertedFilterer on an inverted geospatial index.
 
 statement ok

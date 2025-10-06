@@ -32,7 +32,7 @@ ok
 
 process-ready 2
 ----
-Ready:
+Ready MustSync=true:
 Entries:
 1/12 EntryNormal "init_prop"
 Messages:
@@ -42,8 +42,10 @@ Messages:
 2->5 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "init_prop"]
 2->6 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "init_prop"]
 2->7 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "init_prop"]
-OnSync:
-2->2 MsgAppResp Term:1 Log:0/12 Commit:11
+2->AppendThread MsgStorageAppend Term:0 Log:1/12 Entries:[1/12 EntryNormal "init_prop"] Responses:[
+  2->2 MsgAppResp Term:1 Log:0/12 Commit:11
+  AppendThread->2 MsgStorageAppendResp Term:0 Log:1/12
+]
 
 deliver-msgs 1 drop=(3,4,5,6,7)
 ----
@@ -58,11 +60,14 @@ dropped: 2->7 MsgApp Term:1 Log:1/11 Commit:11 Entries:[1/12 EntryNormal "init_p
 
 process-ready 1
 ----
-Ready:
+Ready MustSync=true:
 Entries:
 1/12 EntryNormal "init_prop"
-OnSync:
-1->2 MsgAppResp Term:1 Log:0/12 Commit:11
+Messages:
+1->AppendThread MsgStorageAppend Term:0 Log:1/12 Entries:[1/12 EntryNormal "init_prop"] Responses:[
+  1->2 MsgAppResp Term:1 Log:0/12 Commit:11
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
+]
 
 # Step 4: node 3 becomes the leader after getting a vote from nodes 4, 5, and 6.
 
@@ -90,7 +95,7 @@ INFO 3 [logterm: 1, index: 11] sent MsgVote request to 7 at term 2
 
 process-ready 3
 ----
-Ready:
+Ready MustSync=true:
 State:StateCandidate
 HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
 Messages:
@@ -100,65 +105,75 @@ Messages:
 3->5 MsgVote Term:2 Log:1/11
 3->6 MsgVote Term:2 Log:1/11
 3->7 MsgVote Term:2 Log:1/11
-OnSync:
-3->3 MsgVoteResp Term:2 Log:0/0
+3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
+  3->3 MsgVoteResp Term:2 Log:0/0
+]
 
 deliver-msgs 4 5 6
 ----
 3->4 MsgVote Term:2 Log:1/11
-INFO 4 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
+INFO 4 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
 INFO 4 became follower at term 2
 INFO 4 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 3->5 MsgVote Term:2 Log:1/11
-INFO 5 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
+INFO 5 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
 INFO 5 became follower at term 2
 INFO 5 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 3->6 MsgVote Term:2 Log:1/11
-INFO 6 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
+INFO 6 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
 INFO 6 became follower at term 2
 INFO 6 [logterm: 1, index: 11, vote: 0] cast MsgVote for 3 [logterm: 1, index: 11] at term 2
 
 process-ready 4 5 6
 ----
 > 4 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
-  4->3 MsgVoteResp Term:2 Log:0/0
+  Messages:
+  4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
+    4->3 MsgVoteResp Term:2 Log:0/0
+  ]
 > 5 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
-  5->3 MsgVoteResp Term:2 Log:0/0
+  Messages:
+  5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
+    5->3 MsgVoteResp Term:2 Log:0/0
+  ]
 > 6 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
-  6->3 MsgVoteResp Term:2 Log:0/0
+  Messages:
+  6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3 Responses:[
+    6->3 MsgVoteResp Term:2 Log:0/0
+  ]
 
 process-append-thread 3 4 5 6
 ----
 > 3 processing append thread
-  HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  3->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
+  Responses:
   3->3 MsgVoteResp Term:2 Log:0/0
 > 4 processing append thread
-  HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  4->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
+  Responses:
   4->3 MsgVoteResp Term:2 Log:0/0
 > 5 processing append thread
-  HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  5->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
+  Responses:
   5->3 MsgVoteResp Term:2 Log:0/0
 > 6 processing append thread
-  HardState {Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  6->AppendThread MsgStorageAppend Term:2 Log:0/0 Commit:11 Vote:3
+  Responses:
   6->3 MsgVoteResp Term:2 Log:0/0
 
 deliver-msgs 3
 ----
 3->3 MsgVoteResp Term:2 Log:0/0
-3->3 StorageAppendAck Mark:{Term:0 Index:0}
 INFO 3 received MsgVoteResp from 3 at term 2
 INFO 3 has received 1 MsgVoteResp votes and 0 vote rejections
 4->3 MsgVoteResp Term:2 Log:0/0
@@ -179,7 +194,7 @@ INFO 3 became leader at term 2
 
 process-ready 3
 ----
-Ready:
+Ready MustSync=true:
 State:StateLeader
 HardState Term:2 Vote:3 Commit:11 Lead:3 LeadEpoch:1
 Entries:
@@ -197,14 +212,16 @@ Messages:
 3->5 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->6 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
-OnSync:
-3->3 MsgAppResp Term:2 Log:0/12 Commit:11
-3->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+3->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Vote:3 Lead:3 LeadEpoch:1 Entries:[2/12 EntryNormal ""] Responses:[
+  3->3 MsgAppResp Term:2 Log:0/12 Commit:11
+  3->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  AppendThread->3 MsgStorageAppendResp Term:0 Log:2/12
+]
 
 deliver-msgs 1 drop=(2,4,5,6,7)
 ----
 3->1 MsgVote Term:2 Log:1/11
-INFO 1 [term: 1] received a MsgVote message with higher term from 3 [term: 2], advancing term
+INFO 1 [term: 1] received a MsgVote message with higher term from 3 [term: 2]
 INFO 1 became follower at term 2
 INFO 1 [logterm: 1, index: 12, vote: 0] rejected MsgVote from 3 [logterm: 1, index: 11] at term 2
 3->1 MsgFortifyLeader Term:2 Log:0/0
@@ -226,14 +243,17 @@ dropped: 3->7 MsgApp Term:2 Log:1/11 Commit:11 Entries:[2/12 EntryNormal ""]
 
 process-ready 1
 ----
-Ready:
+Ready MustSync=true:
 HardState Term:2 Commit:11 Lead:3 LeadEpoch:1
 Entries:
 2/12 EntryNormal ""
-OnSync:
-1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
-1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
-1->3 MsgAppResp Term:2 Log:0/12 Commit:11
+Messages:
+1->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Lead:3 LeadEpoch:1 Entries:[2/12 EntryNormal ""] Responses:[
+  1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
+  1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
+  1->3 MsgAppResp Term:2 Log:0/12 Commit:11
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
+]
 
 # Step 6: node 3 crashes and node 4 becomes leader getting the vote from 5, 6, and 7.
 
@@ -250,7 +270,7 @@ INFO 4 [logterm: 1, index: 11] sent MsgVote request to 7 at term 3
 
 process-ready 4
 ----
-Ready:
+Ready MustSync=true:
 State:StateCandidate
 HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
 Messages:
@@ -260,65 +280,75 @@ Messages:
 4->5 MsgVote Term:3 Log:1/11
 4->6 MsgVote Term:3 Log:1/11
 4->7 MsgVote Term:3 Log:1/11
-OnSync:
-4->4 MsgVoteResp Term:3 Log:0/0
+4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
+  4->4 MsgVoteResp Term:3 Log:0/0
+]
 
 deliver-msgs 5 6 7
 ----
 4->5 MsgVote Term:3 Log:1/11
-INFO 5 [term: 2] received a MsgVote message with higher term from 4 [term: 3], advancing term
+INFO 5 [term: 2] received a MsgVote message with higher term from 4 [term: 3]
 INFO 5 became follower at term 3
 INFO 5 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 11] at term 3
 4->6 MsgVote Term:3 Log:1/11
-INFO 6 [term: 2] received a MsgVote message with higher term from 4 [term: 3], advancing term
+INFO 6 [term: 2] received a MsgVote message with higher term from 4 [term: 3]
 INFO 6 became follower at term 3
 INFO 6 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 11] at term 3
 4->7 MsgVote Term:3 Log:1/11
-INFO 7 [term: 1] received a MsgVote message with higher term from 4 [term: 3], advancing term
+INFO 7 [term: 1] received a MsgVote message with higher term from 4 [term: 3]
 INFO 7 became follower at term 3
 INFO 7 [logterm: 1, index: 11, vote: 0] cast MsgVote for 4 [logterm: 1, index: 11] at term 3
 
 process-ready 5 6 7
 ----
 > 5 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
-  5->4 MsgVoteResp Term:3 Log:0/0
+  Messages:
+  5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
+    5->4 MsgVoteResp Term:3 Log:0/0
+  ]
 > 6 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
-  6->4 MsgVoteResp Term:3 Log:0/0
+  Messages:
+  6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
+    6->4 MsgVoteResp Term:3 Log:0/0
+  ]
 > 7 handling Ready
-  Ready:
+  Ready MustSync=true:
   HardState Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0
-  OnSync:
-  7->4 MsgVoteResp Term:3 Log:0/0
+  Messages:
+  7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4 Responses:[
+    7->4 MsgVoteResp Term:3 Log:0/0
+  ]
 
 process-append-thread 4 5 6 7
 ----
 > 4 processing append thread
-  HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  4->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
+  Responses:
   4->4 MsgVoteResp Term:3 Log:0/0
 > 5 processing append thread
-  HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  5->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
+  Responses:
   5->4 MsgVoteResp Term:3 Log:0/0
 > 6 processing append thread
-  HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  6->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
+  Responses:
   6->4 MsgVoteResp Term:3 Log:0/0
 > 7 processing append thread
-  HardState {Term:3 Vote:4 Commit:11 Lead:0 LeadEpoch:0}
-  OnSync:
+  Processing:
+  7->AppendThread MsgStorageAppend Term:3 Log:0/0 Commit:11 Vote:4
+  Responses:
   7->4 MsgVoteResp Term:3 Log:0/0
 
 deliver-msgs 4
 ----
 4->4 MsgVoteResp Term:3 Log:0/0
-4->4 StorageAppendAck Mark:{Term:0 Index:0}
 INFO 4 received MsgVoteResp from 4 at term 3
 INFO 4 has received 1 MsgVoteResp votes and 0 vote rejections
 5->4 MsgVoteResp Term:3 Log:0/0
@@ -334,7 +364,7 @@ INFO 4 became leader at term 3
 
 process-ready 4
 ----
-Ready:
+Ready MustSync=true:
 State:StateLeader
 HardState Term:3 Vote:4 Commit:11 Lead:4 LeadEpoch:1
 Entries:
@@ -352,9 +382,11 @@ Messages:
 4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-OnSync:
-4->4 MsgAppResp Term:3 Log:0/12 Commit:11
-4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+4->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Vote:4 Lead:4 LeadEpoch:1 Entries:[3/12 EntryNormal ""] Responses:[
+  4->4 MsgAppResp Term:3 Log:0/12 Commit:11
+  4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  AppendThread->4 MsgStorageAppendResp Term:0 Log:3/12
+]
 
 # Step 7: before the new entries reach node 1, it hears of the term change and
 # persists the new term. Node 1 then receives these entries, overwriting the
@@ -374,7 +406,7 @@ ok
 
 process-ready 4
 ----
-Ready:
+Ready MustSync=false:
 Messages:
 4->1 MsgFortifyLeader Term:3 Log:0/0
 4->2 MsgFortifyLeader Term:3 Log:0/0
@@ -388,13 +420,14 @@ Messages:
 4->5 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->6 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 4->7 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
-OnSync:
-4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+4->AppendThread MsgStorageAppend Term:0 Log:0/0 Responses:[
+  4->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+]
 
 deliver-msgs 1
 ----
 4->1 MsgFortifyLeader Term:3 Log:0/0
-INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3], new leader indicated, advancing term
+INFO 1 [term: 2] received a MsgFortifyLeader message with higher term from 4 [term: 3]
 INFO 1 became follower at term 3
 4->1 MsgApp Term:3 Log:1/11 Commit:11 Entries:[3/12 EntryNormal ""]
 INFO found conflict at index 12 [existing term: 2, conflicting term: 3]
@@ -402,13 +435,16 @@ INFO replace the unstable entries from index 12
 
 process-ready 1
 ----
-Ready:
+Ready MustSync=true:
 HardState Term:3 Commit:11 Lead:4 LeadEpoch:1
 Entries:
 3/12 EntryNormal ""
-OnSync:
-1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
-1->4 MsgAppResp Term:3 Log:0/12 Commit:11
+Messages:
+1->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Lead:4 LeadEpoch:1 Entries:[3/12 EntryNormal ""] Responses:[
+  1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
+  1->4 MsgAppResp Term:3 Log:0/12 Commit:11
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/12
+]
 
 # Step 8: The asynchronous log appends from the first Ready complete and the
 # MsgStorageAppendResp is returned to the raft node state machine. A decision
@@ -420,9 +456,11 @@ raft-log 1
 
 process-append-thread 1
 ----
-Entry: 1/12 EntryNormal "init_prop"
-OnSync:
+Processing:
+1->AppendThread MsgStorageAppend Term:0 Log:1/12 Entries:[1/12 EntryNormal "init_prop"]
+Responses:
 1->2 MsgAppResp Term:1 Log:0/12 Commit:11
+AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
 
 raft-log 1
 ----
@@ -439,24 +477,26 @@ raft-log 1
 stabilize 1
 ----
 > 1 receiving messages
-  1->1 StorageAppendAck Mark:{Term:1 Index:12}
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:1/12
   INFO mark (term,index)=(1,12) mismatched the last accepted term 3 in unstable log; ignoring 
 > 1 processing append thread
-  HardState {Term:2 Commit:11 Lead:3 LeadEpoch:1}
-  Entry: 2/12 EntryNormal ""
-  OnSync:
+  Processing:
+  1->AppendThread MsgStorageAppend Term:2 Log:2/12 Commit:11 Lead:3 LeadEpoch:1 Entries:[2/12 EntryNormal ""]
+  Responses:
   1->3 MsgVoteResp Term:2 Log:0/0 Rejected (Hint: 0)
   1->3 MsgFortifyLeaderResp Term:2 Log:0/0 LeadEpoch:1
   1->3 MsgAppResp Term:2 Log:0/12 Commit:11
-  HardState {Term:3 Commit:11 Lead:4 LeadEpoch:1}
-  Entry: 3/12 EntryNormal ""
-  OnSync:
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
+  Processing:
+  1->AppendThread MsgStorageAppend Term:3 Log:3/12 Commit:11 Lead:4 LeadEpoch:1 Entries:[3/12 EntryNormal ""]
+  Responses:
   1->4 MsgFortifyLeaderResp Term:3 Log:0/0 LeadEpoch:1
   1->4 MsgAppResp Term:3 Log:0/12 Commit:11
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/12
 > 1 receiving messages
-  1->1 StorageAppendAck Mark:{Term:2 Index:12}
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:2/12
   INFO mark (term,index)=(2,12) mismatched the last accepted term 3 in unstable log; ignoring 
-  1->1 StorageAppendAck Mark:{Term:3 Index:12}
+  AppendThread->1 MsgStorageAppendResp Term:0 Log:3/12
 
 raft-log 1
 ----

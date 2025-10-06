@@ -96,7 +96,7 @@ func newAnyNotNullHashAggAlloc(
 			return &anyNotNullDatumHashAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported any not null agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported any not null agg type %s", t.Name())
 }
 
 // anyNotNullBoolHashAgg implements the ANY_NOT_NULL aggregate, returning the

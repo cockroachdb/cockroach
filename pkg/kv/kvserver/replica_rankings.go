@@ -31,8 +31,6 @@ type CandidateReplica interface {
 	// OwnsValidLease returns whether this replica is the current valid
 	// leaseholder.
 	OwnsValidLease(context.Context, hlc.ClockTimestamp) bool
-	// NodeID returns the Replica's NodeID.
-	NodeID() roachpb.NodeID
 	// StoreID returns the Replica's StoreID.
 	StoreID() roachpb.StoreID
 	// GetRangeID returns the Range ID.
@@ -40,8 +38,9 @@ type CandidateReplica interface {
 	// RaftStatus returns the current raft status of the replica. It returns
 	// nil if the Raft group has not been initialized yet.
 	RaftStatus() *raft.Status
-	// GetCompactedIndex returns the compacted index of the raft log.
-	GetCompactedIndex() kvpb.RaftIndex
+	// GetFirstIndex returns the index of the first entry in the replica's Raft
+	// log.
+	GetFirstIndex() kvpb.RaftIndex
 	// LoadSpanConfig returns the span config for the replica or an error if it can't
 	// be determined.
 	LoadSpanConfig(context.Context) (*roachpb.SpanConfig, error)

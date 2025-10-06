@@ -12,7 +12,6 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/multitenant/mtinfo",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/license",

@@ -412,7 +412,7 @@ func TestHashAggregator(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewTestRand()
 	for _, tc := range hashAggregatorTestCases {
-		log.Dev.Infof(context.Background(), "%s", tc.name)
+		log.Infof(context.Background(), "%s", tc.name)
 		constructors, constArguments, outputTypes, err := colexecagg.ProcessAggregations(
 			context.Background(), &evalCtx, nil /* semaCtx */, tc.spec.Aggregations, tc.typs,
 		)

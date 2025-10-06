@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // serverID is a type that is either a `roachpb.NodeID`
@@ -52,11 +50,6 @@ type ServerIterator interface {
 	dialNode(
 		ctx context.Context, serverID serverID,
 	) (*grpc.ClientConn, error)
-	// drpcDialNode provides a DRPC connection to the node or SQL instance
-	// identified by serverID.
-	drpcDialNode(
-		ctx context.Context, serverID serverID,
-	) (drpc.Conn, error)
 	// getAllNodes returns a map of all nodes in the cluster
 	// or instances in the tenant with their liveness status.
 	getAllNodes(
@@ -80,26 +73,6 @@ type ServerIterator interface {
 	// getServerIDSQLAddress returns a SQL address for the given node
 	// or SQL instance.
 	getServerIDSQLAddress(context.Context, serverID) (*util.UnresolvedAddr, roachpb.Locality, error)
-}
-
-// nodeDialer wraps a ServerIterator to provide a `rpcbase.Dialer`
-// implementation that can be use to create RPC clients. nodeDialer allows
-// reusing utity function in serverpb package to create RPC clients.
-type nodeDialer struct {
-	cs *cluster.Settings
-	si ServerIterator
-}
-
-func (d *nodeDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, _ rpcbase.ConnectionClass,
-) (*grpc.ClientConn, error) {
-	return d.si.dialNode(ctx, serverID(nodeID))
-}
-
-func (d *nodeDialer) DRPCDial(
-	ctx context.Context, nodeID roachpb.NodeID, _ rpcbase.ConnectionClass,
-) (drpc.Conn, error) {
-	return d.si.drpcDialNode(ctx, serverID(nodeID))
 }
 
 type tenantFanoutClient struct {
@@ -167,18 +140,7 @@ func (t *tenantFanoutClient) dialNode(
 	if err != nil {
 		return nil, err
 	}
-	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpcbase.DefaultClass).Connect(ctx)
-}
-
-func (t *tenantFanoutClient) drpcDialNode(
-	ctx context.Context, serverID serverID,
-) (drpc.Conn, error) {
-	id := base.SQLInstanceID(serverID)
-	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return t.rpcCtx.DRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpcbase.DefaultClass).Connect(ctx)
+	return t.rpcCtx.GRPCDialPod(instance.InstanceRPCAddr, id, instance.Locality, rpc.DefaultClass).Connect(ctx)
 }
 
 func (t *tenantFanoutClient) getAllNodes(
@@ -259,16 +221,7 @@ func (k kvFanoutClient) dialNode(ctx context.Context, serverID serverID) (*grpc.
 	if err != nil {
 		return nil, err
 	}
-	return k.rpcCtx.GRPCDialNode(addr.String(), id, locality, rpcbase.DefaultClass).Connect(ctx)
-}
-
-func (k kvFanoutClient) drpcDialNode(ctx context.Context, serverID serverID) (drpc.Conn, error) {
-	id := roachpb.NodeID(serverID)
-	addr, locality, err := k.gossip.GetNodeIDAddress(id)
-	if err != nil {
-		return nil, err
-	}
-	return k.rpcCtx.DRPCDialNode(addr.String(), id, locality, rpcbase.DefaultClass).Connect(ctx)
+	return k.rpcCtx.GRPCDialNode(addr.String(), id, locality, rpc.DefaultClass).Connect(ctx)
 }
 
 func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse, error) {

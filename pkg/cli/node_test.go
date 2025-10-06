@@ -31,7 +31,7 @@ func Example_node() {
 
 	// Refresh time series data, which is required to retrieve stats.
 	if err := c.Server.WriteSummaries(); err != nil {
-		log.Dev.Fatalf(context.Background(), "Couldn't write stats summaries: %s", err)
+		log.Fatalf(context.Background(), "Couldn't write stats summaries: %s", err)
 	}
 
 	c.Run("node ls")

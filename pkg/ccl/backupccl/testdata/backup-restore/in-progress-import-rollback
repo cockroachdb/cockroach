@@ -1,0 +1,449 @@
+# test that we properly fully backup an offline span when it can be non-mvcc
+#
+# TODO(msbutler): waiting for https://github.com/cockroachdb/cockroach/pull/86689 to land
+# Part 1 - ensure clear range induces full reintroduction of spans
+# - begin import jobs and pause it
+# - run inc backup - verify inc has captured the data
+# - roll it back it back non-mvcc
+# - run an inc backup and ensure we reintroduce the table spans
+
+new-cluster name=s1
+----
+
+###########
+# set up
+###########
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+CREATE INDEX foo_idx ON foo (s);
+CREATE INDEX foo_to_drop_idx ON foo (s);
+CREATE TABLE foofoo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo VALUES (10, 'x0');
+CREATE TABLE baz (i INT PRIMARY KEY, s STRING);
+INSERT INTO baz VALUES (1, 'x'),(2,'y'),(3,'z');
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
+----
+
+exec-sql
+EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM baz;
+----
+NOTICE: EXPORT is not the recommended way to move data out of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds
+
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint tag=a
+IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+import expect-pausepoint tag=aa
+IMPORT INTO foofoo (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+# Ensure table, database, and cluster full backups capture importing rows.
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/' with revision_history;
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/database/' with revision_history;
+----
+
+exec-sql
+BACKUP TABLE d.* INTO 'nodelocal://1/table/' with revision_history;
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+# Resume the job so the next set of incremental backups observes that tables are back online
+job cancel=a
+----
+
+job cancel=aa
+----
+
+job tag=a wait-for-state=cancelled
+----
+
+
+job tag=aa wait-for-state=cancelled
+----
+
+# Verify proper rollback
+query-sql
+SELECT count(*) FROM d.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d.foofoo;
+----
+1
+
+# Start and pause another import to ensure the restore checker doesn't spuriously fail on
+# descriptors with an in-progress import.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+CREATE TABLE foo_offline (i INT PRIMARY KEY, s STRING);
+----
+
+import expect-pausepoint tag=never_unpause
+IMPORT INTO foo_offline (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+# Even though the full table will get backed up from ts=0 during the next round of incremental
+# backups, only active indexes (foo_idx and foo_new_idx) should appear in the restored cluster.
+exec-sql
+DROP INDEX foo@foo_to_drop_idx;
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+exec-sql
+CREATE INDEX foo_new_idx ON foo (s);
+----
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/' with revision_history;
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/' with revision_history;
+----
+
+
+exec-sql
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/' with revision_history;
+----
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/cluster/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 3 full
+d foofoo table 4 full
+d foo table 0 incremental
+d foofoo table 3 incremental
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/database/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 3 full
+d foofoo table 4 full
+d foo table 0 incremental
+d foofoo table 3 incremental
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/table/']
+WHERE
+  object_name = 'foo' or object_name = 'foofoo'
+ORDER BY
+  start_time, database_name;
+----
+d foo table 3 full
+d foofoo table 4 full
+d foo table 0 incremental
+d foofoo table 3 incremental
+
+
+# To verify the incremental backed up the pre-import state table, restore d and ensure all tables
+# are in their pre-import state.
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' with new_db_name=d2;
+----
+
+
+query-sql
+SELECT count(*) FROM d2.foo;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d2.foofoo;
+----
+1
+
+
+query-sql
+select DISTINCT index_name FROM [SHOW INDEXES FROM d.foo];
+----
+foo_pkey
+foo_idx
+foo_new_idx
+
+###########
+# Case 2: an incremental backup captures an mvcc rollback
+###########
+
+exec-sql
+DROP DATABASE d2;
+CREATE TABLE foo2 (i INT PRIMARY KEY, s STRING);
+CREATE INDEX foo2_idx ON foo2 (s);
+CREATE INDEX foo2_to_drop_idx ON foo2 (s);
+CREATE TABLE foofoo2 (i INT PRIMARY KEY, s STRING);
+INSERT INTO foofoo2 VALUES (10, 'x0');
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+SET CLUSTER SETTING kv.bulkio.write_metadata_sst.enabled = false;
+----
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint tag=b
+IMPORT INTO foo2 (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+import expect-pausepoint tag=bb
+IMPORT INTO foofoo2 (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+
+# Ensure table, database, and cluster full backups capture importing rows.
+exec-sql
+BACKUP INTO 'nodelocal://1/cluster/';
+----
+
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/database/';
+----
+
+exec-sql
+BACKUP TABLE d.* INTO 'nodelocal://1/table/';
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+
+# Resume the job so the next set of incremental backups observes that tables are back online
+job cancel=b
+----
+
+job cancel=bb
+----
+
+job tag=b wait-for-state=cancelled
+----
+
+
+job tag=bb wait-for-state=cancelled
+----
+
+# Even though the full table will get backed up from ts=0 during the next round of incremental
+# backups, only active indexes (foo2_idx and foo2_new_idx) should appear in the restored cluster.
+exec-sql
+DROP INDEX foo2@foo2_to_drop_idx;
+----
+NOTICE: the data for dropped indexes is reclaimed asynchronously
+HINT: The reclamation delay can be customized in the zone configuration for the table.
+
+exec-sql
+CREATE INDEX foo2_new_idx ON foo2 (s);
+----
+
+
+# These incremental backups will back up all mvcc history from foo2 and foofoo2 because the
+# tables returned online. For each table, this means:
+# - foofoo2 will have 7 rows:
+#    - 1 row from before the import
+#    - 3 rows from the import
+#    - 3 delete tombstones from the import rollback
+# - foo2: will have 3 rows:
+#    - 3 rows from the import
+#    - Note because foo2 had no data pre import, an mvcc range tombstone will delete the imported data.
+#      The incremental backup will capture this range tombstone, however, SHOW BACKUP currently will
+#      not record this range as a "row" in the backup.
+
+exec-sql
+BACKUP INTO LATEST IN 'nodelocal://1/cluster/';
+----
+
+exec-sql
+BACKUP DATABASE d INTO LATEST IN 'nodelocal://1/database/';
+----
+
+
+exec-sql
+BACKUP TABLE d.* INTO LATEST IN 'nodelocal://1/table/';
+----
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/cluster/']
+WHERE
+  object_name = 'foo2' or object_name = 'foofoo2'
+ORDER BY
+  start_time, database_name;
+----
+d foo2 table 3 full
+d foofoo2 table 4 full
+d foo2 table 0 incremental
+d foofoo2 table 3 incremental
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/database/']
+WHERE
+  object_name = 'foo2' or object_name = 'foofoo2'
+ORDER BY
+  start_time, database_name;
+----
+d foo2 table 3 full
+d foofoo2 table 4 full
+d foo2 table 0 incremental
+d foofoo2 table 3 incremental
+
+
+query-sql
+SELECT
+  database_name, object_name, object_type, rows, backup_type
+FROM
+  [SHOW BACKUP FROM LATEST IN 'nodelocal://1/table/']
+WHERE
+  object_name = 'foo2' or object_name = 'foofoo2'
+ORDER BY
+  start_time, database_name;
+----
+d foo2 table 3 full
+d foofoo2 table 4 full
+d foo2 table 0 incremental
+d foofoo2 table 3 incremental
+
+# To verify the incremental backup captured the tombstones, restore d and ensure all tables
+# are in their pre-import state.
+
+exec-sql
+RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' with new_db_name=d2;
+----
+
+
+query-sql
+SELECT count(*) FROM d2.foo2;
+----
+0
+
+
+query-sql
+SELECT count(*) FROM d2.foofoo2;
+----
+1
+
+query-sql
+select DISTINCT index_name FROM [SHOW INDEXES FROM d2.foo2];
+----
+foo2_pkey
+foo2_idx
+foo2_new_idx
+
+
+exec-sql
+CREATE DATABASE re_restore_test;
+USE re_restore_test;
+CREATE TABLE tab1 (i INT PRIMARY KEY, s STRING);
+INSERT INTO tab1 VALUES (42, 'pre-import');
+----
+
+query-sql
+SELECT * FROM re_restore_test.tab1;
+----
+42 pre-import
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+# Pause the import job, in order to back up the importing data.
+import expect-pausepoint
+IMPORT INTO re_restore_test.tab1 (i,s) CSV DATA ('nodelocal://1/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
+exec-sql
+BACKUP DATABASE re_restore_test INTO 'nodelocal://1/with-paused-import';
+----
+
+exec-sql
+RESTORE DATABASE re_restore_test FROM LATEST IN 'nodelocal://1//with-paused-import' WITH new_db_name=re_restore_test2;
+----
+
+# Should have the pre-import state
+query-sql
+SELECT * FROM re_restore_test2.tab1;
+----
+42 pre-import
+
+# Add another row
+exec-sql
+INSERT INTO re_restore_test2.tab1 VALUES (43, 'post-import-post-restore');
+----
+
+exec-sql
+BACKUP DATABASE re_restore_test2 INTO 'nodelocal://1/after-restore';
+----
+
+exec-sql
+RESTORE DATABASE re_restore_test2 FROM LATEST IN 'nodelocal://1//after-restore' WITH new_db_name=re_restore_test3;
+----
+
+query-sql
+SELECT * FROM re_restore_test3.tab1;
+----
+42 pre-import
+43 post-import-post-restore

@@ -7,15 +7,10 @@ echo
 -- Flow token metrics from n1 after issuing 1x1MiB 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of tokens with
 -- no corresponding returns.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 21 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -48,15 +43,10 @@ ORDER BY
 -- Flow token metrics from n1 after raft leader removed itself from raft group.
 -- All {regular,elastic} tokens deducted are returned. Note that the available
 -- tokens increases, as n1 has seen 4 replication streams, s1,s2,s3,s4.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 32 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  
@@ -87,34 +77,24 @@ ORDER BY
 -- While, n4 should have 3 connected streams to s2,s3,s4. Query the stream count
 -- on n1, then on n4.
 -- n1 connected v2 streams:
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  count(*) AS streams
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-GROUP BY
-  range_id
-ORDER BY
-  range_id;
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
 
 
 -- n4 connected v2 streams:
-SELECT
-  chr(96 + dense_rank() OVER (ORDER BY range_id)) as range_id,
-  count(*) AS streams
-FROM
-  crdb_internal.kv_flow_control_handles_v2
-GROUP BY
-  range_id
-ORDER BY
-  range_id;
+SELECT range_id, count(*) AS streams
+    FROM crdb_internal.kv_flow_control_handles_v2
+GROUP BY (range_id)
+ORDER BY streams DESC;
 
   range_id | stream_count  
 -----------+---------------
-  a        | 3             
+  70       | 3             
 
 
 -- (Allow below-raft admission to proceed.)
@@ -122,15 +102,10 @@ ORDER BY
 
 -- Flow token metrics from n1 after work gets admitted. Tokens were already
 -- returned earlier, so there's no change.
-SELECT 
-  name,
-  crdb_internal.humanize_bytes(value::INT8)
-FROM 
-  crdb_internal.node_metrics
-WHERE 
-  name LIKE '%kvflowcontrol%tokens%'
-ORDER BY
-  name ASC;
+SELECT name, crdb_internal.humanize_bytes(value::INT8)
+    FROM crdb_internal.node_metrics
+   WHERE name LIKE '%kvflowcontrol%tokens%'
+ORDER BY name ASC;
 
   kvflowcontrol.tokens.eval.elastic.available                       | 32 MiB   
   kvflowcontrol.tokens.eval.elastic.deducted                        | 3.0 MiB  

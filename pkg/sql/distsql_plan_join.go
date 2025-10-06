@@ -39,7 +39,6 @@ type joinPlanningInfo struct {
 	leftMergeOrd, rightMergeOrd                 execinfrapb.Ordering
 	leftPlanDistribution, rightPlanDistribution physicalplan.PlanDistribution
 	allowPartialDistribution                    bool
-	finalizeLastStageCb                         func(*physicalplan.PhysicalPlan)
 }
 
 // makeCoreSpec creates a processor core for hash and merge joins based on the

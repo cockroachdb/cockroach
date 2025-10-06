@@ -211,20 +211,6 @@ func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
 	return s
 }
 
-// IsFastPathNode returns true if the provided RowSource is the
-// planNodeToRowSource wrapper with "fast-path" enabled. The logic is injected
-// in the sql package to avoid an import cycle.
-var IsFastPathNode func(source execinfra.RowSource) bool
-
-// IsColumnarizerAroundFastPathNode returns true if the provided Operator is a
-// Columnarizer that has "fast-path" enabled planNodeToRowSource wrapper as the
-// input.
-func IsColumnarizerAroundFastPathNode(o colexecop.Operator) bool {
-	o = MaybeUnwrapInvariantsChecker(o)
-	c, ok := o.(*Columnarizer)
-	return ok && IsFastPathNode(c.input)
-}
-
 // Next is part of the colexecop.Operator interface.
 func (c *Columnarizer) Next() coldata.Batch {
 	if c.removedFromFlow {

@@ -41,7 +41,7 @@ WHERE x > 'foo'
 with &1
  ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
  ├── volatile, mutations
- ├── stats: [rows=3.33333, distinct(12)=3.33333, null(12)=0]
+ ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
  ├── key: (12)
  ├── fd: ()-->(13,14)
  ├── update xyz
@@ -69,7 +69,6 @@ with &1
  │         │    ├── fd: ()-->(8), (6)-->(7,9,10)
  │         │    ├── scan xyz
  │         │    │    ├── columns: xyz.x:6(string!null) xyz.y:7(int!null) xyz.z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
- │         │    │    ├── flags: avoid-full-scan
  │         │    │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=0, distinct(8)=100, null(8)=10]
  │         │    │    ├── key: (6)
  │         │    │    └── fd: (6)-->(7-10)
@@ -79,7 +78,7 @@ with &1
  │              └── 5 [as=y_new:11, type=int]
  └── select
       ├── columns: x:12(string!null) y:13(int!null) z:14(float!null)
-      ├── stats: [rows=3.33333, distinct(12)=3.33333, null(12)=0]
+      ├── stats: [rows=3.333333, distinct(12)=3.33333, null(12)=0]
       ├── key: (12)
       ├── fd: ()-->(13,14)
       ├── with-scan &1
@@ -125,7 +124,6 @@ update xyz
       │    ├── fd: (6)-->(7-10)
       │    ├── scan xyz
       │    │    ├── columns: x:6(string!null) y:7(int!null) z:8(float) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
-      │    │    ├── flags: avoid-full-scan
       │    │    ├── stats: [rows=1000]
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7-10)
@@ -156,7 +154,7 @@ with &2 (q)
  ├── project
  │    ├── columns: parent.p:11(int)
  │    ├── volatile, mutations
- │    ├── stats: [rows=632.305, distinct(11)=632.305, null(11)=0]
+ │    ├── stats: [rows=632.3046, distinct(11)=632.305, null(11)=0]
  │    ├── fd: ()-->(11)
  │    └── update child
  │         ├── columns: x:1(int) child.c:2(int!null) rowid:3(int!null) parent.p:11(int) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
@@ -170,13 +168,13 @@ with &2 (q)
  │         │    └── rowid:8 => rowid:3
  │         ├── input binding: &1
  │         ├── volatile, mutations
- │         ├── stats: [rows=632.305, distinct(11)=632.305, null(11)=0]
+ │         ├── stats: [rows=632.3046, distinct(11)=632.305, null(11)=0]
  │         ├── key: (3)
- │         ├── fd: ()-->(2,11-13), (3)-->(1), (2)==(11), (11)==(2)
+ │         ├── fd: ()-->(2,11-13), (2)==(11), (11)==(2), (3)-->(1)
  │         ├── distinct-on
  │         │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
  │         │    ├── grouping columns: rowid:8(int!null)
- │         │    ├── stats: [rows=632.305, distinct(8)=632.305, null(8)=0, distinct(11)=632.305, null(11)=0]
+ │         │    ├── stats: [rows=632.3046, distinct(8)=632.305, null(8)=0, distinct(11)=632.305, null(11)=0]
  │         │    ├── key: (8)
  │         │    ├── fd: ()-->(11-13), (8)-->(6,7,9-13)
  │         │    ├── select
@@ -186,12 +184,11 @@ with &2 (q)
  │         │    │    ├── fd: ()-->(11-13), (8)-->(6,7,9,10)
  │         │    │    ├── inner-join (cross)
  │         │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid) parent.p:11(int!null) parent.crdb_internal_mvcc_timestamp:12(decimal) parent.tableoid:13(oid)
- │         │    │    │    ├── stats: [rows=1e+06, distinct(8)=1000, null(8)=0, distinct(11)=1000, null(11)=0]
+ │         │    │    │    ├── stats: [rows=1000000, distinct(8)=1000, null(8)=0, distinct(11)=1000, null(11)=0]
  │         │    │    │    ├── key: (8,11)
  │         │    │    │    ├── fd: (8)-->(6,7,9,10), (11)-->(12,13)
  │         │    │    │    ├── scan child
  │         │    │    │    │    ├── columns: x:6(int) child.c:7(int) rowid:8(int!null) child.crdb_internal_mvcc_timestamp:9(decimal) child.tableoid:10(oid)
- │         │    │    │    │    ├── flags: avoid-full-scan
  │         │    │    │    │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │         │    │    │    │    ├── key: (8)
  │         │    │    │    │    └── fd: (8)-->(6,7,9,10)
@@ -228,11 +225,10 @@ with &2 (q)
  │                        │    ├── columns: c:14(int!null)
  │                        │    ├── mapping:
  │                        │    │    └──  parent.p:11(int) => c:14(int)
- │                        │    ├── stats: [rows=632.305, distinct(14)=632.305, null(14)=0]
+ │                        │    ├── stats: [rows=632.3046, distinct(14)=632.305, null(14)=0]
  │                        │    └── fd: ()-->(14)
  │                        ├── scan parent
  │                        │    ├── columns: parent.p:15(int!null)
- │                        │    ├── flags: avoid-full-scan
  │                        │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
  │                        │    └── key: (15)
  │                        └── filters
@@ -245,7 +241,7 @@ with &2 (q)
       │    ├── columns: p:18(int)
       │    ├── mapping:
       │    │    └──  parent.p:11(int) => p:18(int)
-      │    ├── stats: [rows=632.305, distinct(18)=632.305, null(18)=0]
+      │    ├── stats: [rows=632.3046, distinct(18)=632.305, null(18)=0]
       │    └── fd: ()-->(18)
       └── filters
            └── p:18 = 1 [type=bool, outer=(18), constraints=(/18: [/1 - /1]; tight), fd=()-->(18)]

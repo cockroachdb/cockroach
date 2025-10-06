@@ -58,14 +58,14 @@ func (r RandomizedBasicRanges) String() string {
 }
 
 func (r RandomizedBasicRanges) Generate(
-	_ string, seed int64, settings *config.SimulationSettings, s state.State,
-) (state.State, string) {
+	seed int64, settings *config.SimulationSettings, s state.State,
+) state.State {
 	if r.placementType != gen.Random {
 		panic("RandomizedBasicRanges generate only randomized distributions")
 	}
-	rangesInfo, _ := r.GetRangesInfo(r.placementType, len(s.Stores()), r.randSource, []float64{})
+	rangesInfo := r.GetRangesInfo(r.placementType, len(s.Stores()), r.randSource, []float64{})
 	r.LoadRangeInfo(s, rangesInfo)
-	return s, ""
+	return s
 }
 
 // WeightedRandomizedBasicRanges implements the RangeGen interface, supporting
@@ -84,17 +84,17 @@ func (wr WeightedRandomizedBasicRanges) String() string {
 }
 
 func (wr WeightedRandomizedBasicRanges) Generate(
-	_ string, seed int64, settings *config.SimulationSettings, s state.State,
-) (state.State, string) {
+	seed int64, settings *config.SimulationSettings, s state.State,
+) state.State {
 	if wr.placementType != gen.WeightedRandom || len(wr.weightedRand) == 0 {
 		panic("RandomizedBasicRanges generate only weighted randomized distributions with non-empty weightedRand")
 	}
 	if len(s.Stores()) != len(wr.weightedRand) {
 		panic("mismatch: len(weighted_rand) != stores count")
 	}
-	rangesInfo, _ := wr.GetRangesInfo(wr.placementType, len(s.Stores()), wr.randSource, wr.weightedRand)
+	rangesInfo := wr.GetRangesInfo(wr.placementType, len(s.Stores()), wr.randSource, wr.weightedRand)
 	wr.LoadRangeInfo(s, rangesInfo)
-	return s, ""
+	return s
 }
 
 // TODO(wenyihu6): Instead of duplicating the key generator logic in simulators,

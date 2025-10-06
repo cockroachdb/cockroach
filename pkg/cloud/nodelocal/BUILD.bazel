@@ -36,6 +36,7 @@ go_test(
     deps = [
         "//pkg/cloud/cloudtestutils",
         "//pkg/security/username",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/leaktest",
     ],

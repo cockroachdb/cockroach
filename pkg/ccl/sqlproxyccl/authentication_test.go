@@ -267,9 +267,7 @@ func TestReadTokenAuthResult(t *testing.T) {
 		cli, srv := net.Pipe()
 
 		go func() {
-			buf, err := (&pgproto3.BindComplete{}).Encode(nil)
-			require.NoError(t, err)
-			_, err = srv.Write(buf)
+			_, err := srv.Write((&pgproto3.BindComplete{}).Encode(nil))
 			require.NoError(t, err)
 		}()
 
@@ -282,9 +280,7 @@ func TestReadTokenAuthResult(t *testing.T) {
 		cli, srv := net.Pipe()
 
 		go func() {
-			buf, err := (&pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"}).Encode(nil)
-			require.NoError(t, err)
-			_, err = srv.Write(buf)
+			_, err := srv.Write((&pgproto3.ErrorResponse{Severity: "FATAL", Code: "foo"}).Encode(nil))
 			require.NoError(t, err)
 		}()
 
@@ -298,24 +294,16 @@ func TestReadTokenAuthResult(t *testing.T) {
 		crdbBackendKeyData := &pgproto3.BackendKeyData{ProcessID: 42, SecretKey: 99}
 
 		go func() {
-			buf, err := (&pgproto3.AuthenticationOk{}).Encode(nil)
-			require.NoError(t, err)
-			_, err = srv.Write(buf)
+			_, err := srv.Write((&pgproto3.AuthenticationOk{}).Encode(nil))
 			require.NoError(t, err)
 
-			buf, err = (&pgproto3.ParameterStatus{Name: "Server Version", Value: "1.3"}).Encode(nil)
-			require.NoError(t, err)
-			_, err = srv.Write(buf)
+			_, err = srv.Write((&pgproto3.ParameterStatus{Name: "Server Version", Value: "1.3"}).Encode(nil))
 			require.NoError(t, err)
 
-			buf, err = crdbBackendKeyData.Encode(nil)
-			require.NoError(t, err)
-			_, err = srv.Write(buf)
+			_, err = srv.Write(crdbBackendKeyData.Encode(nil))
 			require.NoError(t, err)
 
-			buf, err = (&pgproto3.ReadyForQuery{}).Encode(nil)
-			require.NoError(t, err)
-			_, err = srv.Write(buf)
+			_, err = srv.Write((&pgproto3.ReadyForQuery{}).Encode(nil))
 			require.NoError(t, err)
 		}()
 

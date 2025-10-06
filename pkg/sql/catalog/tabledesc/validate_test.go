@@ -139,15 +139,10 @@ var validationMap = []struct {
 			"External": {status: todoIAmKnowinglyAddingTechDebt,
 				reason: "TODO(features): add validation that TableID is sane within the same tenant"},
 			// LDRJobIDs is checked in StripDanglingBackreferences.
-			"LDRJobIDs":               {status: iSolemnlySwearThisFieldIsValidated},
-			"ReplicatedPCRVersion":    {status: thisFieldReferencesNoObjects},
-			"Triggers":                {status: iSolemnlySwearThisFieldIsValidated},
-			"NextTriggerID":           {status: thisFieldReferencesNoObjects},
-			"Policies":                {status: iSolemnlySwearThisFieldIsValidated},
-			"NextPolicyID":            {status: iSolemnlySwearThisFieldIsValidated},
-			"RowLevelSecurityEnabled": {status: thisFieldReferencesNoObjects},
-			"RowLevelSecurityForced":  {status: thisFieldReferencesNoObjects},
-			"RBRUsingConstraint":      {status: iSolemnlySwearThisFieldIsValidated},
+			"LDRJobIDs":            {status: iSolemnlySwearThisFieldIsValidated},
+			"ReplicatedPCRVersion": {status: thisFieldReferencesNoObjects},
+			"Triggers":             {status: iSolemnlySwearThisFieldIsValidated},
+			"NextTriggerID":        {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
@@ -187,8 +182,6 @@ var validationMap = []struct {
 			"UseDeletePreservingEncoding": {status: thisFieldReferencesNoObjects},
 			"ConstraintID":                {status: iSolemnlySwearThisFieldIsValidated},
 			"CreatedAtNanos":              {status: thisFieldReferencesNoObjects},
-			"VecConfig":                   {status: thisFieldReferencesNoObjects},
-			"HideForPrimaryKeyRecreate":   {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -315,7 +308,6 @@ var validationMap = []struct {
 			"MinStaleRows":             {status: iSolemnlySwearThisFieldIsValidated},
 			"FractionStaleRows":        {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialEnabled":           {status: iSolemnlySwearThisFieldIsValidated},
-			"FullEnabled":              {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialMinStaleRows":      {status: iSolemnlySwearThisFieldIsValidated},
 			"PartialFractionStaleRows": {status: iSolemnlySwearThisFieldIsValidated},
 		},
@@ -1951,7 +1943,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextConstraintID: 3,
 				Privileges:       catpb.NewBasePrivilegeDescriptor(username.AdminRoleName()),
 			}},
-		{err: ``,
+		{err: `index "sec" cannot store virtual column "c3"`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -2569,18 +2561,6 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID:      2,
 				AutoStatsSettings: &catpb.AutoStatsSettings{PartialEnabled: &boolTrue},
 			}},
-		{err: `Setting sql_stats_automatic_full_collection_enabled may not be set on virtual table`,
-			desc: descpb.TableDescriptor{
-				ID:            catconstants.MinVirtualID,
-				ParentID:      1,
-				Name:          "foo",
-				FormatVersion: descpb.InterleavedFormatVersion,
-				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "bar"},
-				},
-				NextColumnID:      2,
-				AutoStatsSettings: &catpb.AutoStatsSettings{FullEnabled: &boolTrue},
-			}},
 		{err: `Setting sql_stats_automatic_collection_enabled may not be set on a view or sequence`,
 			desc: descpb.TableDescriptor{
 				Name:                    "bar",
@@ -2853,7 +2833,7 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{err: `"ttl_select_batch_size" must be at least 0`,
+		{err: `"ttl_select_batch_size" must be at least 1`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -2988,36 +2968,6 @@ func TestValidateTableDesc(t *testing.T) {
 				NextIndexID:      3,
 				NextConstraintID: 2,
 			}},
-		{err: `index "invisible" (2) is hidden for a primary key recreate without a schema change`,
-			desc: descpb.TableDescriptor{
-				ID:            2,
-				ParentID:      1,
-				Name:          "foo",
-				FormatVersion: descpb.InterleavedFormatVersion,
-				Columns: []descpb.ColumnDescriptor{
-					{ID: 1, Name: "bar"},
-				},
-				Families: []descpb.ColumnFamilyDescriptor{
-					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
-				},
-				PrimaryIndex: descpb.IndexDescriptor{ID: 1, Name: "bar", ConstraintID: 1,
-					KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
-					KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-					EncodingType:        catenumpb.PrimaryIndexEncoding,
-					Version:             descpb.LatestIndexDescriptorVersion,
-				},
-				Indexes: []descpb.IndexDescriptor{
-					{ID: 2, Name: "invisible", KeyColumnIDs: []descpb.ColumnID{1},
-						KeyColumnNames:            []string{"bar"},
-						KeyColumnDirections:       []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
-						HideForPrimaryKeyRecreate: true,
-					},
-				},
-				NextColumnID:     2,
-				NextFamilyID:     1,
-				NextIndexID:      3,
-				NextConstraintID: 2,
-			}},
 		{err: `invalid outbound foreign key "to_this_table": origin table ID should be 4. got 99`,
 			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
 				desc.OutboundFKs[0].OriginTableID = 99
@@ -3128,151 +3078,6 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
-		{err: `policy ID was missing for policy "pol"`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 1
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:   0,
-						Name: "pol",
-					},
-				}
-			}),
-		},
-		{err: `empty policy name`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 2
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:   1,
-						Name: "",
-					},
-				}
-			}),
-		},
-		{err: `duplicate policy name: "pol"`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 3
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:        1,
-						Name:      "pol",
-						Type:      catpb.PolicyType_PERMISSIVE,
-						Command:   catpb.PolicyCommand_ALL,
-						RoleNames: []string{"u1"},
-					},
-					{
-						ID:        2,
-						Name:      "pol",
-						Type:      catpb.PolicyType_RESTRICTIVE,
-						Command:   catpb.PolicyCommand_INSERT,
-						RoleNames: []string{"u1"},
-					},
-				}
-			}),
-		},
-		{err: `policy ID 10 in policy "pol_new" already in use by "pol_old"`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 11
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:        10,
-						Name:      "pol_old",
-						Type:      catpb.PolicyType_RESTRICTIVE,
-						Command:   catpb.PolicyCommand_UPDATE,
-						RoleNames: []string{"u1"},
-					},
-					{
-						ID:        10,
-						Name:      "pol_new",
-						Type:      catpb.PolicyType_PERMISSIVE,
-						Command:   catpb.PolicyCommand_DELETE,
-						RoleNames: []string{"u1"},
-					},
-				}
-			}),
-		},
-		{err: `policy "pol" has ID 20, which is not less than the NextPolicyID value 5 for the table`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 5
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:      20,
-						Name:    "pol",
-						Type:    catpb.PolicyType_PERMISSIVE,
-						Command: catpb.PolicyCommand_SELECT,
-					},
-				}
-			}),
-		},
-		{err: `policy "pol" has an unknown policy type POLICYTYPE_UNUSED`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 2
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:      1,
-						Name:    "pol",
-						Type:    0,
-						Command: catpb.PolicyCommand_ALL,
-					},
-				}
-			}),
-		},
-		{err: `policy "pol" has an unknown policy command POLICYCOMMAND_UNUSED`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 2
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:      1,
-						Name:    "pol",
-						Type:    catpb.PolicyType_PERMISSIVE,
-						Command: 0,
-					},
-				}
-			}),
-		},
-		{err: `policy "pol" has no roles defined`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 2
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:        1,
-						Name:      "pol",
-						Type:      catpb.PolicyType_PERMISSIVE,
-						Command:   catpb.PolicyCommand_DELETE,
-						RoleNames: nil,
-					},
-				}
-			}),
-		},
-		{err: `policy "pol" contains duplicate role name "u1"`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 2
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:        1,
-						Name:      "pol",
-						Type:      catpb.PolicyType_RESTRICTIVE,
-						Command:   catpb.PolicyCommand_ALL,
-						RoleNames: []string{"u1", "u2", "u11", "u1"},
-					},
-				}
-			}),
-		},
-		{err: `the public role must be the first role defined in policy "pol"`,
-			desc: ModifyDescriptor(func(desc *descpb.TableDescriptor) {
-				desc.NextPolicyID = 2
-				desc.Policies = []descpb.PolicyDescriptor{
-					{
-						ID:        1,
-						Name:      "pol",
-						Type:      catpb.PolicyType_PERMISSIVE,
-						Command:   catpb.PolicyCommand_INSERT,
-						RoleNames: []string{"u1", "public"},
-					},
-				}
-			}),
-		},
 	}
 
 	for i, d := range testData {
@@ -3987,103 +3792,6 @@ func TestValidateCrossTableReferences(t *testing.T) {
 					},
 				},
 			},
-		},
-		// 28
-		{
-			err: `depended-on-by relation "user_table_missing" (103) has no reference to this sequence in column "a" (1)`,
-			desc: descpb.TableDescriptor{
-				Name:                    "seq_broken",
-				ID:                      102,
-				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
-				SequenceOpts:            &descpb.TableDescriptor_SequenceOpts{Increment: 1},
-				DependedOnBy: []descpb.TableDescriptor_Reference{
-					{ID: 103, ColumnIDs: []descpb.ColumnID{1}},
-				},
-			},
-			otherDescs: []descpb.TableDescriptor{{
-				Name:                    "user_table_missing",
-				ID:                      103,
-				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
-				Columns: []descpb.ColumnDescriptor{{
-					ID:   1,
-					Name: "a",
-					Type: types.Int,
-				}},
-			}},
-		},
-		// 29
-		{
-			err: `table "table_with_trigger" (103) does not have a forward reference to descriptor "table_ref_in_trigger" (102)`,
-			desc: descpb.TableDescriptor{
-				Name:                    "table_ref_in_trigger",
-				ID:                      102,
-				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
-				Columns: []descpb.ColumnDescriptor{{
-					ID:   1,
-					Name: "a",
-					Type: types.Int,
-				}},
-				DependedOnBy: []descpb.TableDescriptor_Reference{
-					{ID: 103},
-				},
-			},
-			otherDescs: []descpb.TableDescriptor{{
-				Name:                    "table_with_trigger",
-				ID:                      103,
-				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
-				Columns: []descpb.ColumnDescriptor{{
-					ID:   1,
-					Name: "a",
-					Type: types.Int,
-				}},
-				Triggers: []descpb.TriggerDescriptor{
-					{
-						ID:        1,
-						Name:      "tr1",
-						DependsOn: []descpb.ID{}, // Forgot to put forward reference to table_ref_in_trigger
-					},
-				},
-			}},
-		},
-		// 30: like 29, but it does have a valid forward reference in a table
-		{
-			err: "",
-			desc: descpb.TableDescriptor{
-				Name:                    "table_ref_in_trigger",
-				ID:                      102,
-				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
-				Columns: []descpb.ColumnDescriptor{{
-					ID:   1,
-					Name: "a",
-					Type: types.Int,
-				}},
-				DependedOnBy: []descpb.TableDescriptor_Reference{
-					{ID: 103},
-				},
-			},
-			otherDescs: []descpb.TableDescriptor{{
-				Name:                    "table_with_trigger",
-				ID:                      103,
-				ParentID:                1,
-				UnexposedParentSchemaID: keys.PublicSchemaID,
-				Columns: []descpb.ColumnDescriptor{{
-					ID:   1,
-					Name: "a",
-					Type: types.Int,
-				}},
-				Triggers: []descpb.TriggerDescriptor{
-					{
-						ID:        1,
-						Name:      "tr1",
-						DependsOn: []descpb.ID{102},
-					},
-				},
-			}},
 		},
 	}
 

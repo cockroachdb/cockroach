@@ -51,7 +51,7 @@ func (i *panicInjector) Init(ctx context.Context) {
 		return
 	}
 	if i.rng.Float64() < initPanicInjectionProbability {
-		log.Dev.Info(i.Ctx, "injecting panic in Init")
+		log.Info(i.Ctx, "injecting panic in Init")
 		colexecerror.ExpectedError(errors.New("injected panic in Init"))
 	}
 	i.Input.Init(i.Ctx)
@@ -59,7 +59,7 @@ func (i *panicInjector) Init(ctx context.Context) {
 
 func (i *panicInjector) Next() coldata.Batch {
 	if i.rng.Float64() < nextPanicInjectionProbability {
-		log.Dev.Info(i.Ctx, "injecting panic in Next")
+		log.Info(i.Ctx, "injecting panic in Next")
 		colexecerror.ExpectedError(errors.New("injected panic in Next"))
 	}
 	return i.Input.Next()

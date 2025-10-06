@@ -16,7 +16,6 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/multitenant/tenantcapabilities",
-        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

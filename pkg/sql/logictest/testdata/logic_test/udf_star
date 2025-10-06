@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 statement ok
 CREATE TABLE t_onecol (a INT);
 INSERT INTO t_onecol VALUES (1)
@@ -115,7 +113,7 @@ f_subquery  CREATE FUNCTION public.f_subquery()
               LANGUAGE SQL
               SECURITY INVOKER
               AS $$
-              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM public.t_onecol) AS foo) AS bar;
+              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
             $$
 
 query TT
@@ -129,7 +127,7 @@ f_allcolsel_alias  CREATE FUNCTION public.f_allcolsel_alias()
                      LANGUAGE SQL
                      SECURITY INVOKER
                      AS $$
-                     SELECT t1.a, t1.b FROM public.t_twocol AS t1, public.t_twocol AS t2 WHERE t1.a = t2.a;
+                     SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
                    $$
 
 query I
@@ -204,11 +202,6 @@ statement error pgcode 2BP01 pq: cannot rename column "a" because function "f_un
 ALTER TABLE t_twocol RENAME COLUMN a TO d;
 
 # TODO(#101934): Postgres allows table renaming when only referenced by UDFs.
-skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
-statement error pgcode 2BP01 pq: cannot rename relation "test.public.t_twocol" because function "f_unqualified_twocol" depends on it
-ALTER TABLE t_twocol RENAME TO t_twocol_prime;
-
-onlyif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3
 statement error pgcode 2BP01 pq: cannot rename relation "t_twocol" because function "f_unqualified_twocol" depends on it
 ALTER TABLE t_twocol RENAME TO t_twocol_prime;
 

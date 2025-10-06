@@ -8,7 +8,6 @@ package tenantcapabilitiesccl
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -54,7 +52,6 @@ import (
 // update.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		ctx := context.Background()
 
@@ -115,10 +112,7 @@ func TestDataDriven(t *testing.T) {
 				})
 				_, err := tenantSQLDB.Exec(d.Input)
 				if err != nil {
-					errStr := err.Error()
-					// Redact transaction IDs from error strings, for determinism.
-					errStr = regexp.MustCompile(`\[txn: [0-9a-f]+]`).ReplaceAllString(errStr, `[txn: ‹×›]`)
-					return errStr
+					return err.Error()
 				}
 
 			case "exec-sql-tenant":

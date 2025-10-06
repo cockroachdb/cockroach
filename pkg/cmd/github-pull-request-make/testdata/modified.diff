@@ -1,7 +1,7 @@
-diff --git a/pkg/crosscluster/physical/replication_stream_e2e_test.go b/pkg/crosscluster/physical/replication_stream_e2e_test.go
+diff --git a/pkg/ccl/crosscluster/physical/replication_stream_e2e_test.go b/pkg/ccl/crosscluster/physical/replication_stream_e2e_test.go
 index b92047e8651..a76b862ea8c 100644
---- a/pkg/crosscluster/physical/replication_stream_e2e_test.go
-+++ b/pkg/crosscluster/physical/replication_stream_e2e_test.go
+--- a/pkg/ccl/crosscluster/physical/replication_stream_e2e_test.go
++++ b/pkg/ccl/crosscluster/physical/replication_stream_e2e_test.go
 @@ -729,6 +729,7 @@ func TestStreamingAutoReplan(t *testing.T) {
         defer cleanup()
         // Don't allow for replanning until the new nodes and scattered table have been created.

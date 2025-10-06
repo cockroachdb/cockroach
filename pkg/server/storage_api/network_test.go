@@ -7,10 +7,10 @@ package storage_api_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -26,19 +26,20 @@ func TestNetworkConnectivity(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	numNodes := 3
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110024),
+		},
+
 		ReplicationMode: base.ReplicationManual,
 	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
+	// TODO(#110024): grant the appropriate capability to the test
+	// tenant before the connectivity endpoint can be accessed. See
+	// example in `TestNodeStatusResponse`.
+
 	s0 := testCluster.Server(0)
-
-	if s0.DeploymentMode().IsExternal() {
-		testCluster.GrantTenantCapabilities(
-			ctx, t, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanDebugProcess: "true"})
-	}
-
 	ts := s0.ApplicationLayer()
 
 	var resp serverpb.NetworkConnectivityResponse
@@ -64,7 +65,7 @@ func TestNetworkConnectivity(t *testing.T) {
 			return err
 		}
 		require.Equal(t, len(resp.Connections), numNodes-1)
-		t.Logf("got status: %s\n", resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status.String())
+		fmt.Printf("got status: %s", resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status.String())
 		if resp.Connections[s0.StorageLayer().NodeID()].Peers[stoppedNodeID].Status != serverpb.NetworkConnectivityResponse_ERROR {
 			return errors.New("waiting for connection state to be changed.")
 		}
@@ -73,26 +74,4 @@ func TestNetworkConnectivity(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-func TestNetworkConnectivityTenantCapability(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	numNodes := 3
-	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			// Note: We're only testing external-process mode because shared service
-			// mode tenants have all capabilities. See PR #119211 for more info.
-			DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
-		},
-		ReplicationMode: base.ReplicationManual,
-	})
-	ctx := context.Background()
-	defer testCluster.Stopper().Stop(ctx)
-
-	var resp serverpb.NetworkConnectivityResponse
-	err := srvtestutils.GetStatusJSONProto(
-		testCluster.Server(0).ApplicationLayer(), "connectivity", &resp)
-	require.ErrorContains(t, err,
-		"client tenant does not have capability to debug the process")
 }

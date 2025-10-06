@@ -262,16 +262,17 @@ func (s *Set) ExtractCols() opt.ColSet {
 	return res
 }
 
-// ExtractNotNullCols finds the set of columns that cannot be NULL without
-// violating the constraints in the set, and adds them to the given column set.
-func (s *Set) ExtractNotNullCols(ctx context.Context, evalCtx *eval.Context, cols *opt.ColSet) {
+// ExtractNotNullCols returns a set of columns that cannot be NULL for the
+// constraints in the set to hold.
+func (s *Set) ExtractNotNullCols(ctx context.Context, evalCtx *eval.Context) opt.ColSet {
 	if s == Unconstrained || s == Contradiction {
-		return
+		return opt.ColSet{}
 	}
-	s.Constraint(0).ExtractNotNullCols(ctx, evalCtx, cols)
+	res := s.Constraint(0).ExtractNotNullCols(ctx, evalCtx)
 	for i := 1; i < s.Length(); i++ {
-		s.Constraint(i).ExtractNotNullCols(ctx, evalCtx, cols)
+		res.UnionWith(s.Constraint(i).ExtractNotNullCols(ctx, evalCtx))
 	}
+	return res
 }
 
 // ExtractConstCols returns a set of columns which can only have one value

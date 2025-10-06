@@ -26,14 +26,6 @@
 //     changes to the event documentation should be reviewed by
 //     the doc team.
 //
-// Adding a new event:
-//
-// Be sure to include CommonEventDetails as a field in the struct if you
-// want to use the event with log.StructuredEvent.
-//
-// If you're creating a new file, include it in PROTOS.bzl for
-// ./dev generate go to work correctly
-//
 // Maintenance instructions:
 //
 // Generally, the event payloads must be stable across releases.

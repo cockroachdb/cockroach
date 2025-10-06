@@ -10,18 +10,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins" // register all builtins in builtins:init() for seqexpr package
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/stretchr/testify/require"
 )
-
-func init() {
-	sql.DoParserInjection()
-}
 
 func TestGetSequenceFromFunc(t *testing.T) {
 	testData := []struct {
@@ -43,7 +39,7 @@ func TestGetSequenceFromFunc(t *testing.T) {
 				t.Fatal(err)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.AnyElement)
+			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,7 +89,7 @@ func TestGetUsedSequences(t *testing.T) {
 				t.Fatal(err)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.AnyElement)
+			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,7 +140,7 @@ func TestReplaceSequenceNamesWithIDs(t *testing.T) {
 				t.Fatal(err)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.AnyElement)
+			typedExpr, err := tree.TypeCheck(ctx, parsedExpr, &semaCtx, types.Any)
 			if err != nil {
 				t.Fatal(err)
 			}

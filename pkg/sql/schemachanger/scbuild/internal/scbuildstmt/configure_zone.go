@@ -6,11 +6,7 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -36,13 +32,17 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 			"YAML config is deprecated and not supported in the declarative schema changer"))
 	}
 
-	zco, cleanupSchemaLocked, err := astToZoneConfigObject(b, n)
+	// TODO(annie): implement complete support for CONFIGURE ZONE. This currently
+	// Supports:
+	// - Database
+	// - Table
+	// - Index
+	// - Partition/row
+	// Left to support:
+	// - System Ranges
+	zco, err := astToZoneConfigObject(b, n)
 	if err != nil {
 		panic(err)
-	}
-	// Clean up the schema_locked state if no changes occur.
-	if cleanupSchemaLocked != nil {
-		defer cleanupSchemaLocked()
 	}
 
 	zs := n.ZoneSpecifier
@@ -81,65 +81,28 @@ func SetZoneConfig(b BuildCtx, n *tree.SetZoneConfig) {
 		resolvePhysicalTableName(b, n)
 	}
 
+	elem := zco.addZoneConfigToBuildCtx(b)
+
 	// Log event for auditing
 	eventDetails := eventpb.CommonZoneConfigDetails{
 		Target:  tree.AsString(&n.ZoneSpecifier),
 		Options: optionsStr,
 	}
-
-	// In both the cases below, we generate the element for our AST and add/drop
-	// it. For index/partitions, this change includes changing the subzone's
-	// corresponding subzoneSpans -- which could necessitate any existing subzone
-	// to regenerate the keys for their subzoneSpans (see:
-	// `alter_partition_configure_zone_subpartitions.definition` for an example).
-	// Those changes are represented by affectedSubzoneConfigsToUpdate.
-	if n.Discard {
-		// If we are discarding the zone config and a zone config did not previously
-		// exist for us to discard, then no-op.
-		if zco.isNoOp() {
-			return
-		}
-
-		toDropList, affectedSubzoneConfigsToUpdate := zco.getZoneConfigElemForDrop(b)
-		for i, e := range toDropList {
-			// Log the latest dropping element.
-			dropZoneConfigElem(b, e, eventDetails, i == len(toDropList)-1 /* isLoggingNeeded */)
-		}
-		for _, e := range affectedSubzoneConfigsToUpdate {
-			// No need to log the side effects.
-			addZoneConfigElem(b, e, oldZone, eventDetails, false /* isLoggingNeeded */)
-		}
-	} else {
-		toAdd, affectedSubzoneConfigsToUpdate := zco.getZoneConfigElemForAdd(b)
-		addZoneConfigElem(b, toAdd, oldZone, eventDetails, true)
-		for _, e := range affectedSubzoneConfigsToUpdate {
-			// No need to log the side effects.
-			addZoneConfigElem(b, e, oldZone, eventDetails, false /* isLoggingNeeded */)
-		}
-	}
+	info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
+		ResolvedOldConfig: oldZone.String()}
+	b.LogEventForExistingPayload(elem, info)
 }
 
-func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, func(), error) {
-	zs := n.ZoneSpecifier
-
-	// We are named range.
-	if zs.NamedZone != "" {
-		namedZone := zonepb.NamedZone(zs.NamedZone)
-		id, found := zonepb.NamedZones[namedZone]
-		if !found {
-			return nil, nil, pgerror.Newf(pgcode.InvalidName, "%q is not a built-in zone",
-				string(zs.NamedZone))
-		}
-		if n.Discard && id == keys.RootNamespaceID {
-			return nil, nil, pgerror.Newf(pgcode.CheckViolation, "cannot remove default zone")
-		}
-		return &namedRangeZoneConfigObj{rangeID: catid.DescID(id)}, nil, nil
+func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject, error) {
+	if n.Discard {
+		return nil, scerrors.NotImplementedErrorf(n, "discarding zone configurations is not "+
+			"supported in the DSC")
 	}
-
+	zs := n.ZoneSpecifier
 	// We are a database object.
-	if zs.Database != "" {
+	if n.Database != "" {
 		dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
-		return &databaseZoneConfigObj{databaseID: dbElem.DatabaseID}, nil, nil
+		return &databaseZoneConfigObj{databaseID: dbElem.DatabaseID}, nil
 	}
 
 	// The rest of the cases are for table elements -- resolve the table ID now.
@@ -147,20 +110,26 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 	//
 	// TODO(annie): remove this when we have something equivalent to
 	// expandMutableIndexName in the DSC.
-	targetsIndex := zs.TargetsIndex()
-	if targetsIndex && zs.TableOrIndex.Table.Table() == "" {
-		return nil, nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
+	targetsIndex := n.TargetsIndex()
+	if targetsIndex && n.TableOrIndex.Table.Table() == "" {
+		return nil, scerrors.NotImplementedErrorf(n, "referencing an index without a table "+
 			"prefix is not supported in the DSC")
 	}
+
+	if !n.TargetsTable() {
+		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on system ranges "+
+			"are not supported in the DSC")
+	}
+
 	// If this is an ALTER ALL PARTITIONS statement, fallback to the legacy schema
 	// changer.
-	if zs.TargetsPartition() && zs.StarIndex {
-		return nil, nil, scerrors.NotImplementedErrorf(n, "zone configurations on ALL partitions "+
+	if n.TargetsPartition() && n.ZoneSpecifier.StarIndex {
+		return nil, scerrors.NotImplementedErrorf(n, "zone configurations on ALL partitions "+
 			"are not supported in the DSC")
 	}
 	tblName := zs.TableOrIndex.Table.ToUnresolvedObjectName()
 	elems := b.ResolvePhysicalTable(tblName, ResolveParams{})
-	cleanupSchemaLocked := checkTableSchemaChangePrerequisites(b, elems, n)
+	panicIfSchemaChangeIsDisallowed(elems, n)
 	var tableID catid.DescID
 	elems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {
@@ -175,53 +144,29 @@ func astToZoneConfigObject(b BuildCtx, n *tree.SetZoneConfig) (zoneConfigObject,
 		}
 	})
 	if tableID == catid.InvalidDescID {
-		return nil, nil, errors.AssertionFailedf("tableID not found for table %s", tblName)
+		return nil, errors.AssertionFailedf("tableID not found for table %s", tblName)
 	}
-	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
-	dbzco := databaseZoneConfigObj{databaseID: dbID}
-	tzo := tableZoneConfigObj{tableID: tableID, databaseZoneConfigObj: dbzco}
+	tzo := tableZoneConfigObj{tableID: tableID}
 
 	// We are a table object.
-	if zs.TargetsTable() && !zs.TargetsIndex() && !zs.TargetsPartition() {
-		return &tzo, cleanupSchemaLocked, nil
+	if n.TargetsTable() && !n.TargetsIndex() && !n.TargetsPartition() {
+		return &tzo, nil
 	}
 
 	izo := indexZoneConfigObj{tableZoneConfigObj: tzo}
-	if targetsIndex && !zs.TargetsPartition() {
-		return &izo, cleanupSchemaLocked, nil
+	// We are an index object. Determine the index ID and fill this
+	// information out in our zoneConfigObject.
+	izo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
+	if targetsIndex && !n.TargetsPartition() {
+		return &izo, nil
 	}
 
 	// We are a partition object.
-	if zs.TargetsPartition() {
-		partObj := partitionZoneConfigObj{partitionName: string(zs.Partition),
+	if n.TargetsPartition() {
+		partObj := partitionZoneConfigObj{partitionName: string(n.ZoneSpecifier.Partition),
 			indexZoneConfigObj: izo}
-		return &partObj, cleanupSchemaLocked, nil
+		return &partObj, nil
 	}
 
-	return nil, nil, errors.AssertionFailedf("unexpected zone config object")
-}
-
-func dropZoneConfigElem(
-	b BuildCtx, elem scpb.Element, eventDetails eventpb.CommonZoneConfigDetails, isLoggingNeeded bool,
-) {
-	b.Drop(elem)
-	if isLoggingNeeded {
-		info := &eventpb.RemoveZoneConfig{CommonZoneConfigDetails: eventDetails}
-		b.LogEventForExistingPayload(elem, info)
-	}
-}
-
-func addZoneConfigElem(
-	b BuildCtx,
-	elem scpb.Element,
-	oldZone *zonepb.ZoneConfig,
-	eventDetails eventpb.CommonZoneConfigDetails,
-	isLoggingNeeded bool,
-) {
-	b.Add(elem)
-	if isLoggingNeeded {
-		info := &eventpb.SetZoneConfig{CommonZoneConfigDetails: eventDetails,
-			ResolvedOldConfig: oldZone.String()}
-		b.LogEventForExistingPayload(elem, info)
-	}
+	return nil, errors.AssertionFailedf("unexpected zone config object")
 }

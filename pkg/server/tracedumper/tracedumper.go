@@ -84,6 +84,6 @@ func (t *TraceDumper) Dump(ctx context.Context, name string, traceID int64, ie i
 		return nil
 	}()
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to dump trace %v", err)
+		log.Errorf(ctx, "failed to dump trace %v", err)
 	}
 }

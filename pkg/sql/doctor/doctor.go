@@ -172,7 +172,7 @@ func ExamineDescriptors(
 		desc := descLookupFn(id)
 		if desc == nil {
 			// This should never happen as ids are parsed and inserted from descTable.
-			log.Dev.Fatalf(ctx, "Descriptor ID %d not found", row.ID)
+			log.Fatalf(ctx, "Descriptor ID %d not found", row.ID)
 		}
 		if desc.GetID() != id {
 			problemsFound = true

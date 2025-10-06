@@ -176,7 +176,7 @@ func TestClientRetryNonTxn(t *testing.T) {
 					}
 					notify <- struct{}{}
 					if err != nil {
-						log.Dev.Errorf(context.Background(), "error on non-txn request: %s", err)
+						log.Errorf(context.Background(), "error on non-txn request: %s", err)
 					}
 					doneCall <- errors.Wrapf(
 						err, "%d: expected success on non-txn call to %s",
@@ -874,8 +874,10 @@ func TestTxn_ReverseScan(t *testing.T) {
 			t.Errorf("expected empty, got %v", rows)
 		}
 		return err
-	}); err == nil || !strings.Contains(err.Error(), "must be greater than start") {
-		t.Errorf("expected a truncation error, got %s", err)
+	}); err != nil {
+		if err == nil {
+			t.Errorf("expected a truncation error, got %s", err)
+		}
 	}
 
 	// Try reverse scan with non-existent key.

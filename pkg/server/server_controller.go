@@ -100,8 +100,6 @@ type serverController struct {
 
 	disableTLSForHTTP bool
 
-	insecure bool
-
 	mu struct {
 		syncutil.RWMutex
 
@@ -138,7 +136,6 @@ func newServerController(
 	watcher *tenantcapabilitieswatcher.Watcher,
 	disableSQLServer bool,
 	disableTLSForHTTP bool,
-	insecure bool,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -153,7 +150,6 @@ func newServerController(
 		drainCh:             make(chan struct{}),
 		disableSQLServer:    disableSQLServer,
 		disableTLSForHTTP:   disableTLSForHTTP,
-		insecure:            insecure,
 	}
 	c.orchestrator = newChannelOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]*serverState{
@@ -207,13 +203,14 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 		for {
 			allTenants, updateCh := c.watcher.GetAllTenants()
 			if err := c.startMissingServers(ctx, allTenants); err != nil {
-				log.Dev.Warningf(ctx, "cannot update running tenant services: %v", err)
+				log.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
 
 			timer.Reset(watchInterval)
 			select {
 			case <-updateCh:
 			case <-timer.C:
+				timer.Read = true
 			case <-c.stopper.ShouldQuiesce():
 				// Expedited server shutdown of outer server.
 				return
@@ -273,7 +270,7 @@ func (c *serverController) startMissingServers(
 
 		name := t.Name
 		if _, ok := c.mu.servers[name]; !ok {
-			log.Dev.Infof(ctx, "tenant %q has changed service mode, should now start", name)
+			log.Infof(ctx, "tenant %q has changed service mode, should now start", name)
 			// Mark the server for async creation.
 			if _, err := c.createServerEntryLocked(ctx, name); err != nil {
 				return err
@@ -409,7 +406,7 @@ func (c *serverController) newServerForOrchestrator(
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
 	ctx := c.AnnotateCtx(context.Background())
-	log.Dev.Infof(ctx, "server controller shutting down")
+	log.Infof(ctx, "server controller shutting down")
 	entries := c.getAllEntries()
 	// Request immediate shutdown. This is probably not needed; the
 	// server should already be sensitive to the parent stopper
@@ -418,7 +415,7 @@ func (c *serverController) Close() {
 		e.requestImmediateShutdown(ctx)
 	}
 
-	log.Dev.Infof(ctx, "waiting for tenant servers to report stopped")
+	log.Infof(ctx, "waiting for tenant servers to report stopped")
 	for _, e := range entries {
 		<-e.stopped()
 	}
@@ -437,7 +434,7 @@ func (c *serverController) drain(ctx context.Context) (stillRunning int) {
 		select {
 		case <-e.stopped():
 		default:
-			log.Dev.Infof(ctx, "server for tenant %q still running", e.nameContainer())
+			log.Infof(ctx, "server for tenant %q still running", e.nameContainer())
 			notStopped++
 		}
 	}

@@ -15,9 +15,7 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/util/ctxgroup",
@@ -28,6 +26,7 @@ go_library(
         "//pkg/util/retry",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 
@@ -43,19 +42,17 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
-        "//pkg/rpc/rpcbase",
+        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
-        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )

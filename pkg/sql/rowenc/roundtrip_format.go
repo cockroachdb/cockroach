@@ -8,7 +8,7 @@ package rowenc
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -37,7 +37,7 @@ func ParseDatumStringAs(
 func parseAsTyp(
 	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext, typ *types.T, s string,
 ) (tree.Datum, error) {
-	expr, err := parserutils.ParseExpr(s)
+	expr, err := parser.ParseExpr(s)
 	if err != nil {
 		return nil, err
 	}

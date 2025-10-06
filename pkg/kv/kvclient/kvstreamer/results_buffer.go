@@ -377,9 +377,7 @@ type ResultDiskBuffer interface {
 // TestResultDiskBufferConstructor constructs a ResultDiskBuffer for tests. It
 // is injected to be rowcontainer.NewKVStreamerResultDiskBuffer in order to
 // avoid an import cycle.
-var TestResultDiskBufferConstructor func(
-	_ diskmap.Factory, memAcc mon.BoundAccount, diskMonitor *mon.BytesMonitor, reverse bool,
-) ResultDiskBuffer
+var TestResultDiskBufferConstructor func(diskmap.Factory, *mon.BytesMonitor) ResultDiskBuffer
 
 // inOrderResultsBuffer is a resultsBuffer that returns the Results in the same
 // order as the original requests were Enqueued into the Streamer (in other

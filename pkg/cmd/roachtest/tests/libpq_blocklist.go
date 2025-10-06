@@ -6,11 +6,13 @@
 package tests
 
 var libPQBlocklist = blocklist{
+	"pq.ExampleConnectorWithNoticeHandler":           "unknown",
 	"pq.TestBinaryByteSliceToInt":                    "41547",
 	"pq.TestBinaryByteSlicetoUUID":                   "41547",
 	"pq.TestConnListen":                              "41522",
 	"pq.TestConnUnlisten":                            "41522",
 	"pq.TestConnUnlistenAll":                         "41522",
+	"pq.TestConnectorWithNoticeHandler_Simple":       "unknown",
 	"pq.TestConnectorWithNotificationHandler_Simple": "unknown",
 	"pq.TestCopyInRaiseStmtTrigger":                  "5807",
 	"pq.TestCopyInTypes":                             "5807",

@@ -28,7 +28,7 @@ func BoolOrUnknownToSelOp(
 		// can simply plan a zero operator.
 		return NewZeroOp(input), nil
 	default:
-		return nil, errors.AssertionFailedf("unexpectedly %s is neither bool nor unknown", typs[vecIdx].SQLStringForError())
+		return nil, errors.Errorf("unexpectedly %s is neither bool nor unknown", typs[vecIdx])
 	}
 }
 

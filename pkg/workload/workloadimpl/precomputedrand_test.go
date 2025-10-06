@@ -7,11 +7,12 @@ package workloadimpl_test
 
 import (
 	"fmt"
-	"math/rand/v2"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -19,9 +20,9 @@ const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 func TestPrecomputedRand(t *testing.T) {
 	const precomputeLen = 100
 
-	seed0 := workloadimpl.PrecomputedRandInit(rand.NewPCG(0, 0), precomputeLen, alphabet)()
-	seed1 := workloadimpl.PrecomputedRandInit(rand.NewPCG(1, 1), precomputeLen, alphabet)()
-	numbers := workloadimpl.PrecomputedRandInit(rand.NewPCG(0, 0), precomputeLen, `0123456789`)()
+	seed0 := workloadimpl.PrecomputedRandInit(rand.NewSource(0), precomputeLen, alphabet)()
+	seed1 := workloadimpl.PrecomputedRandInit(rand.NewSource(1), precomputeLen, alphabet)()
+	numbers := workloadimpl.PrecomputedRandInit(rand.NewSource(0), precomputeLen, `0123456789`)()
 
 	const shorterThanPrecomputed, longerThanPrecomputed = precomputeLen / 10, precomputeLen + 7
 
@@ -65,7 +66,7 @@ func TestPrecomputedRand(t *testing.T) {
 func BenchmarkPrecomputedRand(b *testing.B) {
 	const precomputeLen = 10000
 	pr := workloadimpl.PrecomputedRandInit(
-		rand.NewPCG(rand.Uint64(), rand.Uint64()), precomputeLen, alphabet)()
+		rand.NewSource(uint64(timeutil.Now().UnixNano())), precomputeLen, alphabet)()
 
 	const shortLen, mediumLen, longLen = 2, 100, 100000
 	scratch := make([]byte, longLen)

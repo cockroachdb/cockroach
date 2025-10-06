@@ -36,7 +36,7 @@ func TestStartSpan(t *testing.T) {
 	tr := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeOnDemand))
 	sp := tr.StartSpan("test")
 	defer sp.Finish()
-	require.Equal(t, "<nil>", sp.OperationName())
+	require.Equal(t, "noop", sp.OperationName())
 
 	sp2 := tr.StartSpan("test", WithRecording(tracingpb.RecordingStructured))
 	defer sp2.Finish()
@@ -145,14 +145,10 @@ func parseLine(s string) (traceLine, error) {
 	if match == nil {
 		return traceLine{}, errors.Newf("line doesn't match: %s", s)
 	}
-	text := match[3]
-	// Strip goroutine IDs from the text for test consistency
-	gidRe := regexp.MustCompile(` gid:\d+`)
-	text = string(gidRe.ReplaceAll([]byte(text), nil))
 	return traceLine{
 		timeSinceTraceStart: match[1],
 		timeSincePrev:       match[2],
-		text:                text,
+		text:                match[3],
 	}, nil
 }
 
@@ -939,7 +935,11 @@ func TestSpan_UseAfterFinish(t *testing.T) {
 				// below.
 				for i := 0; i < 20; i++ {
 					t.Run("invoke", func(t *testing.T) {
-						f.Func.Call(args)
+						if i == 9 {
+							f.Func.Call(args)
+						} else {
+							f.Func.Call(args)
+						}
 					})
 				}
 			})

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -82,7 +81,8 @@ type Context struct {
 	TxnIsSingleStmt bool
 	// TxnIsoLevel is the isolation level of the current transaction.
 	TxnIsoLevel isolation.Level
-	Settings    *cluster.Settings
+
+	Settings *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.
 	ClusterID uuid.UUID
 	// ClusterName is the security string used to secure the RPC layer.
@@ -100,6 +100,11 @@ type Context struct {
 	//   [region=us,dc=east]
 	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
+
+	// OriginalLocality is the initial Locality at the time the connection was
+	// established. Since Locality may be overridden in some paths, this provides
+	// a means of restoring the original Locality.
+	OriginalLocality roachpb.Locality
 
 	Tracer *tracing.Tracer
 
@@ -246,11 +251,6 @@ type Context struct {
 	// bundle request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 
-	// TxnDiagnosticsRequestInsertFunc is used by the
-	// crdb_internal.request_transaction_bundle builtin to insert a transaction
-	// bundle request.
-	TxnDiagnosticsRequestInserter TxnDiagnosticsRequestInsertFunc
-
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.
 	CatalogBuiltins CatalogBuiltins
@@ -312,29 +312,6 @@ type Context struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
-
-	// StartedRoutineStatementCounters contains metrics for statements initiated by
-	// users when calling a UDF/SP. These metrics count user-initiated
-	// operations, regardless of success
-	StartedRoutineStatementCounters RoutineStatementCounters
-	// ExecutedStatementCounters contains metrics for successfully executed
-	// statements defined within the body of a UDF/SP.
-	ExecutedRoutineStatementCounters RoutineStatementCounters
-}
-
-// RoutineStatementCounters encapsulates metrics for tracking the execution
-// of different statement types defined within the body of a UDF or stored
-// procedure (SP).
-type RoutineStatementCounters struct {
-	// QueryCount includes all statements, and it is therefore the sum of
-	// all the below metrics.
-	QueryCount *telemetry.CounterWithMetric
-
-	// Basic CRUD statements.
-	SelectCount *telemetry.CounterWithAggMetric
-	UpdateCount *telemetry.CounterWithAggMetric
-	InsertCount *telemetry.CounterWithAggMetric
-	DeleteCount *telemetry.CounterWithAggMetric
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
@@ -455,7 +432,7 @@ func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placehol
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     mon.MakeName("test-monitor"),
+		Name:     "test-monitor",
 		Settings: st,
 	})
 	return MakeTestingEvalContextWithMon(st, monitor)
@@ -465,14 +442,10 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
-	sessionData := &sessiondata.SessionData{}
-	// Set defaults that match what the session variables system expects.
-	// allow_unsafe_internals defaults to true.
-	sessionData.AllowUnsafeInternals = true
 	ctx := Context{
 		Codec:            keys.SystemSQLCodec,
 		Txn:              &kv.Txn{},
-		SessionDataStack: sessiondata.NewStack(sessionData),
+		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
 	}
@@ -851,7 +824,7 @@ func (ec *Context) BoundedStaleness() bool {
 }
 
 // ensureExpectedType will return an error if a datum does not match the
-// provided type. If the expected type is AnyElement or if the datum is a Null
+// provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
@@ -862,17 +835,13 @@ func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	return nil
 }
 
-// arrayOfType returns a fresh tree.DArray of the input type. 'elements'
-// argument is optional.
-func arrayOfType(typ *types.T, elements tree.Datums) (*tree.DArray, error) {
+// arrayOfType returns a fresh DArray of the input type.
+func arrayOfType(typ *types.T) (*tree.DArray, error) {
 	if typ.Family() != types.ArrayFamily {
 		return nil, errors.AssertionFailedf("array node type (%v) is not types.TArray", typ)
 	}
 	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
 		return nil, err
-	}
-	if elements != nil {
-		return tree.NewDArrayFromDatums(typ.ArrayContents(), elements), nil
 	}
 	return tree.NewDArray(typ.ArrayContents()), nil
 }
@@ -951,8 +920,8 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
-	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
+	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
+	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
 
 	PlanLogicalReplication(
 		ctx context.Context,
@@ -963,9 +932,6 @@ type ReplicationStreamManager interface {
 		ctx context.Context,
 		req streampb.ReplicationProducerRequest,
 	) (streampb.ReplicationProducerSpec, error)
-
-	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
-	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports

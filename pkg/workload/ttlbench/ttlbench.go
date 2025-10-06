@@ -120,7 +120,7 @@ func printJobState(ctx context.Context, db *gosql.DB) (retErr error) {
 
 		rowLevelTTLProgress := progress.UnwrapDetails().(jobspb.RowLevelTTLProgress)
 
-		log.Dev.Infof(
+		log.Infof(
 			ctx,
 			"job id=%s status=%s started=%s finished=%s\n%s",
 			id, status, started, finished, proto.MarshalTextString(&rowLevelTTLProgress),
@@ -207,7 +207,7 @@ func waitForDistribution(ctx context.Context, db *gosql.DB) error {
 		if err != nil {
 			return false, err
 		}
-		log.Dev.Infof(
+		log.Infof(
 			ctx,
 			"pollAt=%s pollCount=%d rangeIDToLeaseholder=\n%s",
 			pollAt.Format(strfmt.RFC3339Millis), pollCount, leaseholderToRangeIDsString,
@@ -234,7 +234,7 @@ func waitForDistribution(ctx context.Context, db *gosql.DB) error {
 		}
 	}
 
-	log.Dev.Infof(ctx, "waitForDistribution complete pollCount=%d", pollCount)
+	log.Infof(ctx, "waitForDistribution complete pollCount=%d", pollCount)
 
 	return nil
 }
@@ -283,7 +283,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 				return err
 			}
 			ttlResetTime := timeutil.Now()
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"TTL set initialExpiredRowCount=%d now=%s\n%s",
 				initialExpiredRowCount, ttlResetTime.Format(strfmt.RFC3339Millis), ttlStatement,
@@ -303,7 +303,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 			}
 
 			ttlStartTime := timeutil.Now()
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"TTL started pollCount=%d expiredRowCount=%d now=%s",
 				pollCount, expiredRowCount, ttlStartTime.Format(strfmt.RFC3339Millis),
@@ -322,7 +322,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 				}
 
 				pollEndTime := timeutil.Now()
-				log.Dev.Infof(
+				log.Infof(
 					ctx,
 					"TTL poll pollCount=%d expiredRowCount=%d now=%s",
 					pollCount, expiredRowCount, pollEndTime.Format(strfmt.RFC3339Millis),
@@ -335,7 +335,7 @@ func (t *ttlBench) Hooks() workload.Hooks {
 			}
 
 			ttlEndTime := timeutil.Now()
-			log.Dev.Infof(
+			log.Infof(
 				ctx,
 				"TTL complete pollCount=%d duration=%dms now=%s",
 				pollCount, ttlEndTime.Sub(ttlStartTime).Milliseconds(), ttlEndTime.Format(strfmt.RFC3339Millis),
@@ -389,7 +389,7 @@ func (t *ttlBench) Tables() []workload.Table {
 					newRowCount := rowCount.Add(1)
 					const printRowCount = 100_000
 					if newRowCount%printRowCount == 0 {
-						log.Dev.Infof(context.Background(), "inserted %d rows", newRowCount)
+						log.Infof(context.Background(), "inserted %d rows", newRowCount)
 					}
 					rng := rand.New(rand.NewSource(t.seed + int64(i)))
 					duration := time.Hour * 48

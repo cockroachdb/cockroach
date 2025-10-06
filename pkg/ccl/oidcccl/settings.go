@@ -7,7 +7,6 @@ package oidcccl
 
 import (
 	"bytes"
-	"crypto/x509"
 	"encoding/json"
 	"net/url"
 	"regexp"
@@ -16,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/errors"
-	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/coreos/go-oidc"
 )
 
 // All cluster settings necessary for the OIDC feature.
@@ -38,10 +37,6 @@ const (
 	OIDCGenerateClusterSSOTokenSQLHostSettingName  = baseOIDCSettingName + "generate_cluster_sso_token.sql_host"
 	OIDCGenerateClusterSSOTokenSQLPortSettingName  = baseOIDCSettingName + "generate_cluster_sso_token.sql_port"
 	oidcAuthClientTimeoutSettingName               = baseOIDCSettingName + "client.timeout"
-	oidcProviderCustomCASettingName                = baseOIDCSettingName + "provider.custom_ca"
-	OIDCAuthZEnabledSettingName                    = baseOIDCSettingName + "authorization.enabled"
-	OIDCAuthGroupClaimSettingName                  = baseOIDCSettingName + "group_claim"
-	OIDCAuthUserinfoGroupKeySettingName            = baseOIDCSettingName + "userinfo_group_key"
 )
 
 // OIDCEnabled enables or disabled OIDC login for the DB Console.
@@ -84,34 +79,8 @@ var OIDCAuthClientTimeout = settings.RegisterDurationSetting(
 	"sets the client timeout for external calls made during OIDC authentication "+
 		"(e.g. authorization code flow, etc.)",
 	15*time.Second,
+	settings.NonNegativeDuration,
 	settings.WithPublic,
-)
-
-// OIDCAuthZEnabled enables authorization for OIDC SSO.
-var OIDCAuthZEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	OIDCAuthZEnabledSettingName, // "server.oidc_authentication.authorization.enabled"
-	"enables role synchronization based on group claims in OIDC tokens",
-	false,
-)
-
-// OIDCAuthGroupClaim is the name of the OIDC claim that contains the groups
-var OIDCAuthGroupClaim = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
-	OIDCAuthGroupClaimSettingName, // "server.oidc_authentication.group_claim"
-	"sets the name of the OIDC claim that contains groups used for authorization",
-	"groups",
-)
-
-// OIDCAuthUserinfoGroupKey is the name of the field in the userinfo response
-// which contains the groups
-// This is an optional fallback for when access_tokens that don't contain a
-// groups claim are used during OIDC auth.
-var OIDCAuthUserinfoGroupKey = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
-	OIDCAuthUserinfoGroupKeySettingName, // "server.oidc_authentication.userinfo_group_key"
-	"sets the field name in userinfo JSON containing the groups claim for authorization",
-	"groups",
 )
 
 type redirectURLConf struct {
@@ -358,26 +327,3 @@ var OIDCGenerateClusterSSOTokenSQLPort = settings.RegisterIntSetting(
 	26257,
 	settings.NonNegativeIntWithMaximum(65535),
 )
-
-// OIDCProviderCustomCA is the custom root CA for verifying certificates while
-// authenticating through the OIDC provider.
-var OIDCProviderCustomCA = settings.RegisterStringSetting(
-	settings.ApplicationLevel,
-	oidcProviderCustomCASettingName,
-	"sets the PEM encoded custom root CA for verifying certificates while authenticating "+
-		"through the OIDC provider",
-	"",
-	settings.WithReportable(false),
-	settings.Sensitive,
-	settings.WithValidateString(validateOIDCProviderCACert),
-	settings.WithPublic,
-)
-
-func validateOIDCProviderCACert(values *settings.Values, s string) error {
-	if len(s) != 0 {
-		if ok := x509.NewCertPool().AppendCertsFromPEM([]byte(s)); !ok {
-			return errors.Newf("OIDC provider custom CA certificate not valid")
-		}
-	}
-	return nil
-}

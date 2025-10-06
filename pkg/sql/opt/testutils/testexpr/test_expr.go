@@ -62,6 +62,9 @@ func (e *Instance) ChildCount() int { panic("not implemented") }
 // Child is part of the RelExpr interface.
 func (e *Instance) Child(nth int) opt.Expr { panic("not implemented") }
 
+// String is part of the RelExpr interface.
+func (e *Instance) String() string { panic("not implemented") }
+
 // SetChild is part of the RelExpr interface.
 func (e *Instance) SetChild(nth int, child opt.Expr) { panic("not implemented") }
 

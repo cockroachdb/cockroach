@@ -18,14 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-var perNodeMaxDownloadAttempts = 5
 
 func (t *statusServer) DownloadSpan(
 	ctx context.Context, req *serverpb.DownloadSpanRequest,
@@ -65,31 +62,8 @@ func (s *systemStatusServer) DownloadSpan(
 	// Send DownloadSpan request to all stores on all nodes.
 	remoteRequest := *req
 	remoteRequest.NodeID = "local"
-	nodeFn := func(
-		ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID,
-	) (*serverpb.DownloadSpanResponse, error) {
-		var nodeResp *serverpb.DownloadSpanResponse
-		var err error
-		for r := retry.StartWithCtx(ctx, retry.Options{
-			InitialBackoff: time.Millisecond * 100,
-			MaxBackoff:     time.Second,
-			MaxRetries:     perNodeMaxDownloadAttempts - 1,
-		}); r.Next(); {
-			nodeResp, err = status.DownloadSpan(ctx, &remoteRequest)
-			for node, encodedErr := range resp.Errors {
-				err = errors.Wrapf(
-					errors.DecodeError(ctx, encodedErr),
-					"download span request failed with error on node n%d",
-					node,
-				)
-				break
-			}
-			if err == nil {
-				break
-			}
-			log.Dev.VInfof(ctx, 1, "attempt %d failed to download span: %v", r.CurrentAttempt(), err)
-		}
-		return nodeResp, err
+	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DownloadSpanResponse, error) {
+		return status.DownloadSpan(ctx, &remoteRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, downloadSpanResp *serverpb.DownloadSpanResponse) {
 		for i, e := range downloadSpanResp.Errors {
@@ -172,7 +146,7 @@ func sendDownloadSpans(ctx context.Context, spans roachpb.Spans, out chan roachp
 			return ctx.Err()
 		}
 	}
-	log.Dev.Infof(ctx, "all %d download spans enqueued", len(spans))
+	log.Infof(ctx, "all %d download spans enqueued", len(spans))
 	return nil
 }
 
@@ -186,7 +160,7 @@ func downloadSpans(ctx context.Context, e storage.Engine, spans chan roachpb.Spa
 				return err
 			}
 		}
-		log.Dev.Infof(ctx, "finished downloading %d spans", len(spans))
+		log.Infof(ctx, "finished downloading %d spans", len(spans))
 		return nil
 	})
 }

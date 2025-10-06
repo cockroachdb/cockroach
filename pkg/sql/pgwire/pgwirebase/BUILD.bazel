@@ -20,7 +20,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo",
-        "//pkg/geo/geopb",
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",
@@ -37,8 +36,6 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/ipaddr",
         "//pkg/util/json",
-        "//pkg/util/jsonpath/parser",
-        "//pkg/util/ltree",
         "//pkg/util/timeofday",
         "//pkg/util/timetz",
         "//pkg/util/timeutil/pgdate",

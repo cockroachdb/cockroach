@@ -10,15 +10,10 @@ stage-exec phase=PreCommitPhase stage=1 schemaChangeExecErrorForRollback=(.*: fo
 UPDATE t1 SET i=-4 WHERE i = -1
 ----
 
-stage-exec phase=PostCommitNonRevertiblePhase stage=1 rollback=true
-INSERT INTO t1 (i) VALUES(-$stageKey)
+stage-exec phase=PostCommitNonRevertiblePhase stage=: rollback=true
+INSERT INTO t1 (i) VALUES(-5)
 ----
-pq: insert on table "t1" violates foreign key constraint "t1_i_fkey"
-
-stage-exec phase=PostCommitNonRevertiblePhase stage=2: rollback=true
-INSERT INTO t1 (i) VALUES(-$stageKey)
-----
-pq: duplicate key value violates unique constraint "t1_pkey"
+insert on table "t1" violates foreign key constraint "t1_i_fkey"
 
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.

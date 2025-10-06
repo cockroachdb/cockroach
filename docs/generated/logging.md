@@ -177,12 +177,3 @@ The `KV_DISTRIBUTION` channel is used to report data distribution events, such a
 replicas between stores in the cluster, or adding (removing) replicas to
 ranges.
 
-### `CHANGEFEED`
-
-The `CHANGEFEED` channel is used to report changefeed events
-
-### `KV_EXEC`
-
-The `KV_EXEC` channel is used to report KV execution events that don't fall into the
-KV_DISTRIBUTION channel.
-

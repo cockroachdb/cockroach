@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
@@ -36,29 +35,27 @@ const (
 //
 // The mvcc value has a "simple" and an "extended" encoding scheme, depending on
 // whether the value's header is empty or not. If the value's header is empty,
-// it is omitted in the encoding and the mvcc value's encoding is just that of
-// roachpb.Value. This provides backwards compatibility and ensures that the
-// MVCCValueHeader optimizes away in the common case. If the value's header is
-// not empty, it is prepended to the roachpb.Value encoding. The encoding
-// scheme's variants are:
+// it is omitted in the encoding and the mvcc value's encoding is identical to
+// that of roachpb.Value. This provided backwards compatibility and ensures that
+// the MVCCValue optimizes away in the common case. If the value's header is not
+// empty, it is prepended to the roachpb.Value encoding. The encoding scheme's
+// variants are:
 //
-// Simple (just the roachpb.Value encoding):
+// Simple (identical to the roachpb.Value encoding):
 //
 //	<4-byte-checksum><1-byte-tag><encoded-data>
 //
-// Extended (header prepended to the roachpb.Value encoding):
+// Extended (header prepended to roachpb.Value encoding):
 //
-//	<4-byte-header-len><1-byte-sentinel-tag><mvcc-header><4-byte-checksum><1-byte-tag><encoded-data>
-//	                                                     ^                                         ^
-//	                                                     \-------- roachpb.Value encoding ---------/
+//	<4-byte-header-len><1-byte-sentinel><mvcc-header><4-byte-checksum><1-byte-tag><encoded-data>
 //
 // The two encoding scheme variants are distinguished using the 5th byte, which
 // is either the roachpb.Value tag (which has many values) or a sentinel tag not
 // used by the roachpb.Value encoding which indicates the extended encoding
 // scheme.
 //
-// For a deletion tombstone, the encoding of roachpb.Value is special-cased to
-// be empty, i.e. no checksum, tag, or encoded-data. In that case the extended
+// For a deletion tombstone, the encoding of roachpb.Value is special cased to
+// be empty, i.e., no checksum, tag, or encoded-data. In that case the extended
 // encoding above is simply:
 //
 //	<4-byte-header-len><1-byte-sentinel><mvcc-header>
@@ -152,9 +149,9 @@ func EncodeMVCCValueForExport(mvccValue MVCCValue, b []byte) ([]byte, bool, erro
 	return EncodeMVCCValueToBuf(mvccValue, b)
 }
 
-// disableSimpleValueEncoding forces encoding of the MVCCValueHeader even when
-// it is empty (see MVCCValue). It is set metamorphically to extend testing
-// coverage.
+// When running a metamorphic build, disable the simple MVCC value encoding to
+// prevent code from assuming that the MVCCValue encoding is identical to the
+// roachpb.Value encoding.
 var disableSimpleValueEncoding = metamorphic.ConstantWithTestBool(
 	"mvcc-value-disable-simple-encoding", false)
 
@@ -173,14 +170,9 @@ func DisableMetamorphicSimpleValueEncoding(t interface {
 	}
 }
 
-//gcassert:inline
-func (v *MVCCValue) useSimpleEncoding() bool {
-	return v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding
-}
-
-// encodedSize returns the size of the MVCCValue when encoded.
-func (v *MVCCValue) encodedSize() int {
-	if v.useSimpleEncoding() {
+// encodedMVCCValueSize returns the size of the MVCCValue when encoded.
+func encodedMVCCValueSize(v MVCCValue) int {
+	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
 		return len(v.Value.RawBytes)
 	}
 	return extendedPreludeSize + v.MVCCValueHeader.Size() + len(v.Value.RawBytes)
@@ -211,14 +203,11 @@ func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 // negates the inlining gain. Reconsider this with Go 1.20. See:
 // https://github.com/cockroachdb/cockroach/issues/88818
 func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, bool, error) {
-	if v.useSimpleEncoding() {
+	if v.MVCCValueHeader.IsEmpty() && !disableSimpleValueEncoding {
 		// Simple encoding. Use the roachpb.Value encoding directly with no
 		// modification. No need to re-allocate or copy.
 		return v.Value.RawBytes, false, nil
 	}
-
-	// NB: This code is duplicated in encodeExtendedMVCCValueToSizedBuf and
-	// edits should be replicated there.
 
 	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
 	// MVCC-level metadata. Requires a re-allocation and copy.
@@ -248,31 +237,6 @@ func EncodeMVCCValueToBuf(v MVCCValue, buf []byte) ([]byte, bool, error) {
 	// <4-byte-checksum><1-byte-tag><encoded-data> or empty for tombstone
 	copy(buf[headerSize:], v.Value.RawBytes)
 	return buf, true, nil
-}
-
-// encodeExtendedMVCCValueToSizedBuf encodes an MVCCValue into its encoded form
-// in the provided buffer. The provided buf must be exactly sized, matching the
-// value returned by MVCCValue.encodedMVCCValueSize.
-//
-// See EncodeMVCCValueToBuf for detailed comments on the encoding scheme.
-func encodeExtendedMVCCValueToSizedBuf(v MVCCValue, buf []byte) error {
-	if buildutil.CrdbTestBuild {
-		if sz := v.encodedSize(); sz != len(buf) {
-			panic(errors.AssertionFailedf("provided buf (len=%d) is not sized correctly; expected %d", len(buf), sz))
-		}
-	}
-	headerSize := len(buf) - len(v.Value.RawBytes)
-	headerLen := headerSize - extendedPreludeSize
-	binary.BigEndian.PutUint32(buf, uint32(headerLen))
-	buf[tagPos] = extendedEncodingSentinel
-	if _, err := v.MVCCValueHeader.MarshalToSizedBuffer(buf[extendedPreludeSize:headerSize]); err != nil {
-		return errors.Wrap(err, "marshaling MVCCValueHeader")
-	}
-	if buildutil.CrdbTestBuild && len(buf[headerSize:]) != len(v.Value.RawBytes) {
-		panic(errors.AssertionFailedf("insufficient space for raw value; expected %d, got %d", len(v.Value.RawBytes), len(buf[headerSize:])))
-	}
-	copy(buf[headerSize:], v.Value.RawBytes)
-	return nil
 }
 
 // DecodeMVCCValue decodes an MVCCKey from its Pebble representation.

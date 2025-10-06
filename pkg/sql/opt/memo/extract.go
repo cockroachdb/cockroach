@@ -81,11 +81,17 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 
 	case *ArrayExpr:
 		elementType := t.Typ.ArrayContents()
-		elements := make(tree.Datums, len(t.Elems))
-		for i := range elements {
-			elements[i] = ExtractConstDatum(t.Elems[i])
+		a := tree.NewDArray(elementType)
+		a.Array = make(tree.Datums, len(t.Elems))
+		for i := range a.Array {
+			a.Array[i] = ExtractConstDatum(t.Elems[i])
+			if a.Array[i] == tree.DNull {
+				a.HasNulls = true
+			} else {
+				a.HasNonNulls = true
+			}
 		}
-		return tree.NewDArrayFromDatums(elementType, elements)
+		return a
 	}
 	panic(errors.AssertionFailedf("non-const expression: %+v", e))
 }

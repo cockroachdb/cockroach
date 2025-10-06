@@ -107,7 +107,7 @@ type TestingKnobs struct {
 	// in the jobs endpoint to calculate earliest_retained_time.
 	StubTimeNow func() time.Time
 
-	// RequireGracefulDrain, if set, causes a shutdown to fail with a log.Dev.Fatal
+	// RequireGracefulDrain, if set, causes a shutdown to fail with a log.Fatal
 	// if the server is not gracefully drained prior to its stopper shutting down.
 	RequireGracefulDrain bool
 

@@ -46,14 +46,15 @@ import (
 // the manager. Some of these fields belong on the manager, in any case, since
 // they're only used by the manager and not by the store itself.
 type storage struct {
-	nodeIDContainer  *base.SQLIDContainer
-	db               isql.DB
-	clock            *hlc.Clock
-	settings         *cluster.Settings
-	codec            keys.SQLCodec
-	regionPrefix     *atomic.Value
-	sysDBCache       *catkv.SystemDatabaseCache
-	livenessProvider sqlliveness.Provider
+	nodeIDContainer         *base.SQLIDContainer
+	db                      isql.DB
+	clock                   *hlc.Clock
+	settings                *cluster.Settings
+	codec                   keys.SQLCodec
+	regionPrefix            *atomic.Value
+	sessionBasedLeasingMode sessionBasedLeasingModeReader
+	sysDBCache              *catkv.SystemDatabaseCache
+	livenessProvider        sqlliveness.Provider
 
 	// group is used for all calls made to acquireNodeLease to prevent
 	// concurrent lease acquisitions from the store.
@@ -71,9 +72,6 @@ type leasingMetrics struct {
 	longWaitForOneVersionsActive               *metric.Gauge
 	longWaitForNoVersionsActive                *metric.Gauge
 	longTwoVersionInvariantViolationWaitActive *metric.Gauge
-	longWaitForInitialVersionActive            *metric.Gauge
-	leaseMaxBytesHist                          metric.IHistogram
-	leaseCurBytesCount                         *metric.Gauge
 }
 
 type leaseFields struct {
@@ -88,6 +86,11 @@ type leaseFields struct {
 type writer interface {
 	deleteLease(context.Context, *kv.Txn, leaseFields) error
 	insertLease(context.Context, *kv.Txn, leaseFields) error
+}
+
+type sessionBasedLeasingModeReader interface {
+	sessionBasedLeasingModeAtLeast(ctx context.Context, minimumMode SessionBasedLeasingMode) bool
+	getSessionBasedLeasingMode(ctx context.Context) SessionBasedLeasingMode
 }
 
 // LeaseRenewalDuration controls the default time before a lease expires when
@@ -106,6 +109,10 @@ var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
 	"controls if cross validation should be done during lease renewal",
 	base.DefaultLeaseRenewalCrossValidate)
 
+func (s storage) leaseRenewalTimeout() time.Duration {
+	return LeaseRenewalDuration.Get(&s.settings.SV)
+}
+
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
 // [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
 func (s storage) jitteredLeaseDuration() time.Duration {
@@ -119,19 +126,19 @@ func (s storage) crossValidateDuringRenewal() bool {
 	return LeaseRenewalCrossValidate.Get(&s.settings.SV)
 }
 
-// acquire a lease on the most recent version of a descriptor. The lease is tied
-// to the provided sqlliveness.Session. If a newer version (then lastVersion) of
-// the descriptor exists, this function will attempt to acquire a lease on it.
-// If no newer version exists, it returns a nil descriptor. If the lease cannot
-// be obtained because the descriptor is being dropped or is offline (currently
-// only applicable to tables), an inactiveTableError is returned.
+// acquire a lease on the most recent version of a descriptor. If the lease
+// cannot be obtained because the descriptor is in the process of being dropped
+// or offline (currently only applicable to tables), the error will be of type
+// inactiveTableError. The expiration time set for the lease > minExpiration. A
+// non-nil session should be provided when session based leasing is enabled,
+// which will cause stored leases to populated sessionIDs.
 func (s storage) acquire(
 	ctx context.Context,
+	minExpiration hlc.Timestamp,
 	session sqlliveness.Session,
 	id descpb.ID,
-	lastVersion descpb.DescriptorVersion,
-	lastSessionID sqlliveness.SessionID,
-) (desc catalog.Descriptor, prefix []byte, _ error) {
+	lastLease *storedLease,
+) (desc catalog.Descriptor, expiration hlc.Timestamp, prefix []byte, _ error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	prefix = s.getRegionPrefix()
 	var sessionID []byte
@@ -154,33 +161,34 @@ func (s storage) acquire(
 		// written a value to the database, which we'd leak if we did not delete it.
 		// Note that the expiration is part of the primary key in the table, so we
 		// would not overwrite the old entry if we just were to do another insert.
-		// repeatIteration = desc != nil
-		if sessionID != nil && desc != nil {
+		//repeatIteration = desc != nil
+		if (!expiration.IsEmpty() || sessionID != nil) && desc != nil {
+			prevExpirationTS := storedLeaseExpiration(expiration)
 			if err := s.writer.deleteLease(ctx, txn, leaseFields{
 				regionPrefix: prefix,
 				descID:       desc.GetID(),
 				version:      desc.GetVersion(),
 				instanceID:   instanceID,
+				expiration:   prevExpirationTS,
 				sessionID:    sessionID,
 			}); err != nil {
 				return errors.Wrap(err, "deleting ambiguously created lease")
 			}
 		}
 
+		expiration = txn.ReadTimestamp().Add(int64(s.jitteredLeaseDuration()), 0)
+		if expiration.LessEq(minExpiration) {
+			// In the rare circumstances where expiration <= minExpiration
+			// use an expiration based on the minExpiration to guarantee
+			// a monotonically increasing expiration.
+			expiration = minExpiration.Add(int64(time.Millisecond), 0)
+		}
 		// Read into a temporary variable in case our read runs into
 		// any retryable error. If we run into an error then the delete
 		// above may need to be executed again.
 		latestDesc, err := s.mustGetDescriptorByID(ctx, txn, id)
-
 		if err != nil {
 			return err
-		}
-		// If the descriptor version hasn't changed, then no new lease to be
-		// inserted unless the session ID has changed on us. No descriptor will
-		// be set indicating to the caller that no new version exists.
-		if latestDesc.GetVersion() == lastVersion &&
-			lastSessionID == session.ID() {
-			return nil
 		}
 		desc = latestDesc
 		if err := catalog.FilterAddingDescriptor(desc); err != nil {
@@ -189,14 +197,36 @@ func (s storage) acquire(
 		if err := catalog.FilterDroppedDescriptor(desc); err != nil {
 			return err
 		}
-		log.VEventf(ctx, 2, "storage attempting to acquire lease %v", desc)
+		log.VEventf(ctx, 2, "storage attempting to acquire lease %v@%v", desc, expiration)
 
-		sessionID = session.ID().UnsafeBytes()
+		ts := storedLeaseExpiration(expiration)
+		var isLeaseRenewal bool
+		var lastLeaseWasWrittenWithSessionID bool
+		// If there was a previous lease then determine if this a renewal and
+		// if it was written with a session ID.
+		if lastLease != nil {
+			isLeaseRenewal = descpb.DescriptorVersion(lastLease.version) == desc.GetVersion()
+			lastLeaseWasWrittenWithSessionID = lastLease.sessionID != nil
+		}
+		// Populate the session the ID for the lease if it has been provided (i.e.
+		// session based leasing is enabled), since the KV writer below will use it
+		// for generating session based leases.
+		// In dual write mode if we know there is lease renewal happening and the
+		// previous lease was written with a session ID, we will intentionally not
+		// set the session ID. This will cause the KV writer to only generate an expiry
+		// based lease row, since we already have a valid session based lease from earlier.
+		// We do not expect lease renewals to happen at all once session based leasing
+		// is fully adopted.
+		if !(isLeaseRenewal && lastLeaseWasWrittenWithSessionID) &&
+			session != nil {
+			sessionID = session.ID().UnsafeBytes()
+		}
 		lf := leaseFields{
 			regionPrefix: prefix,
 			descID:       desc.GetID(),
 			version:      desc.GetVersion(),
 			instanceID:   s.nodeIDContainer.SQLInstanceID(),
+			expiration:   ts,
 			sessionID:    sessionID,
 		}
 		return s.writer.insertLease(ctx, txn, lf)
@@ -235,28 +265,23 @@ func (s storage) acquire(
 				s.livenessProvider.PauseLivenessHeartbeat(ctx)
 				extensionsBlocked = true
 			}
-			log.Dev.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
+			log.Infof(ctx, "retryable replica error occurred during lease acquisition for %v, retrying: %v", id, err)
 			continue
 		case pgerror.GetPGCode(err) == pgcode.UniqueViolation:
-			log.Dev.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
+			log.Infof(ctx, "uniqueness violation occurred due to concurrent lease"+
 				" removal for %v, retrying: %v", id, err)
 			continue
 		case err != nil:
-			return nil, nil, err
+			return nil, hlc.Timestamp{}, nil, err
 		}
-		// If desc is nil then no new descriptor was available to be leased.
-		// i.e. the last version we leased is the latest and still held
-		if desc == nil {
-			return nil, nil, nil
-		}
-		log.VEventf(ctx, 2, "storage acquired lease %v", desc)
+		log.VEventf(ctx, 2, "storage acquired lease %v@%v", desc, expiration)
 		if s.testingKnobs.LeaseAcquiredEvent != nil {
 			s.testingKnobs.LeaseAcquiredEvent(desc, err)
 		}
 		s.outstandingLeases.Inc(1)
-		return desc, prefix, nil
+		return desc, expiration, prefix, nil
 	}
-	return nil, nil, ctx.Err()
+	return nil, hlc.Timestamp{}, nil, ctx.Err()
 }
 
 // Release a previously acquired descriptor. Never let this method
@@ -307,7 +332,7 @@ func (s storage) release(
 		}
 		err := s.writer.deleteLease(ctx, nil /* txn */, lf)
 		if err != nil {
-			log.Dev.Warningf(ctx, "error releasing lease %q: %s", lease, err)
+			log.Warningf(ctx, "error releasing lease %q: %s", lease, err)
 			if grpcutil.IsConnectionRejected(err) {
 				return
 			}
@@ -340,7 +365,7 @@ func (s storage) release(
 // a version of the descriptor. A descriptorVersionState with the
 // expiration time set to expiration is returned.
 //
-// This returns an error when Replica.checkTSAboveGCThreshold()
+// This returns an error when Replica.checkTSAboveGCThresholdRLocked()
 // returns an error when the expiration timestamp is less than the storage
 // layer GC threshold.
 func (s storage) getForExpiration(

@@ -8,12 +8,12 @@ package clisqlclient
 import (
 	"strings"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgtype"
 )
 
 // databaseTypeName returns the database type name for the given type OID.
-func databaseTypeName(tm *pgtype.Map, typeOID uint32) string {
-	dataType, ok := tm.TypeForOID(typeOID)
+func databaseTypeName(ci *pgtype.ConnInfo, typeOID uint32) string {
+	dataType, ok := ci.DataTypeForOID(typeOID)
 	if !ok {
 		// TODO(rafi): remove special logic once jackc/pgtype includes these types.
 		switch typeOID {

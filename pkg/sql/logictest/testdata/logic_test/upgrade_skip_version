@@ -1,0 +1,17 @@
+# LogicTest: cockroach-go-testserver-24.1
+
+query T
+select crdb_internal.active_version()
+----
+{"internal": 0, "major": 24, "minor": 1, "patch": 0}
+
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# Verify that the cluster is upgrading to 24.3.
+query T
+SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]
+----
+24.3

@@ -35,20 +35,20 @@ func (r *Replica) gossipFirstRangeLocked(ctx context.Context) {
 	}
 	log.Event(ctx, "gossiping sentinel and first range")
 	if log.V(1) {
-		log.KvDistribution.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
+		log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(
 		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
 		r.store.cfg.SentinelGossipTTL()); err != nil {
-		log.KvDistribution.Errorf(ctx, "failed to gossip sentinel: %+v", err)
+		log.Errorf(ctx, "failed to gossip sentinel: %+v", err)
 	}
 	if log.V(1) {
-		log.KvDistribution.Infof(ctx, "gossiping first range from store %d, r%d: %s",
+		log.Infof(ctx, "gossiping first range from store %d, r%d: %s",
 			r.store.StoreID(), r.RangeID, r.shMu.state.Desc.Replicas())
 	}
 	if err := r.store.Gossip().AddInfoProto(
 		gossip.KeyFirstRangeDescriptor, r.shMu.state.Desc, configGossipTTL); err != nil {
-		log.KvDistribution.Errorf(ctx, "failed to gossip first range metadata: %+v", err)
+		log.Errorf(ctx, "failed to gossip first range metadata: %+v", err)
 	}
 }
 
@@ -176,7 +176,7 @@ func (r *Replica) getLeaseForGossip(ctx context.Context) (bool, *kvpb.Error) {
 					}
 				default:
 					// Any other error is worth being logged visibly.
-					log.KvDistribution.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
+					log.Warningf(ctx, "could not acquire lease for range gossip: %s", pErr)
 				}
 			}
 		}); err != nil {
@@ -198,7 +198,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *kvpb.Error {
 	// so we error out below.
 	if gossipClusterID, err := r.store.Gossip().GetClusterID(); err == nil {
 		if gossipClusterID != r.store.ClusterID() {
-			log.KvDistribution.Fatalf(
+			log.Fatalf(
 				ctx, "store %d belongs to cluster %s, but attempted to join cluster %s via gossip",
 				r.store.StoreID(), r.store.ClusterID(), gossipClusterID)
 		}
@@ -207,11 +207,11 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *kvpb.Error {
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
 	if log.V(1) {
-		log.KvDistribution.Infof(ctx, "gossiping cluster ID %q from store %d, r%d", r.store.ClusterID(),
+		log.Infof(ctx, "gossiping cluster ID %q from store %d, r%d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddClusterID(r.store.ClusterID()); err != nil {
-		log.KvDistribution.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
+		log.Errorf(ctx, "failed to gossip cluster ID: %+v", err)
 	}
 
 	hasLease, pErr := r.getLeaseForGossip(ctx)

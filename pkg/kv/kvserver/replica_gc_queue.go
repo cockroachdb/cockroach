@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -101,6 +100,7 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 			processDestroyedReplicas: true,
 			successes:                store.metrics.ReplicaGCQueueSuccesses,
 			failures:                 store.metrics.ReplicaGCQueueFailures,
+			storeFailures:            store.metrics.StoreFailures,
 			pending:                  store.metrics.ReplicaGCQueuePending,
 			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
 			disabledConfig:           kvserverbase.ReplicaGCQueueEnabled,
@@ -123,7 +123,7 @@ func (rgcq *replicaGCQueue) shouldQueue(
 	}
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		log.KvDistribution.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
+		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
 	isSuspect := replicaIsSuspect(repl)
@@ -164,6 +164,7 @@ func replicaIsSuspect(repl *Replica) bool {
 		return ok && !liveness.Membership.Active()
 	}
 
+	livenessMap := repl.store.cfg.NodeLiveness.GetIsLiveMap()
 	switch raftStatus.SoftState.RaftState {
 	// If a replica is a candidate, then by definition it has lost contact with
 	// its leader and possibly the rest of the Raft group, so consider it suspect.
@@ -178,7 +179,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// conditions, but if it fails it will be GCed within 12 hours anyway.
 	case raftpb.StateFollower:
 		leadDesc, ok := repl.Desc().GetReplicaDescriptorByID(roachpb.ReplicaID(raftStatus.Lead))
-		if !ok || !repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(leadDesc.NodeID).IsLive(livenesspb.ReplicaGCQueue) {
+		if !ok || !livenessMap[leadDesc.NodeID].IsLive {
 			return true
 		}
 
@@ -187,7 +188,7 @@ func replicaIsSuspect(repl *Replica) bool {
 	// which must cause the stale leader to relinquish its lease and GC itself.
 	case raftpb.StateLeader:
 		if !repl.Desc().Replicas().CanMakeProgress(func(d roachpb.ReplicaDescriptor) bool {
-			return repl.store.cfg.NodeLiveness.GetNodeVitalityFromCache(d.NodeID).IsLive(livenesspb.ReplicaGCQueue)
+			return livenessMap[d.NodeID].IsLive
 		}) {
 			return true
 		}
@@ -215,7 +216,7 @@ func replicaGCShouldQueueImpl(now, lastCheck hlc.Timestamp, isSuspect bool) (boo
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
 ) (processed bool, err error) {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
@@ -299,7 +300,7 @@ func (rgcq *replicaGCQueue) process(
 			// snapshot for *each* of them. This typically happens for the last
 			// range:
 			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
-			log.KvDistribution.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
@@ -315,7 +316,9 @@ func (rgcq *replicaGCQueue) process(
 		// possible if we currently think we're processing a pre-emptive snapshot
 		// but discover in RemoveReplica that this range has since been added and
 		// knows that.
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "MVCC GC queue"); err != nil {
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
 			// Should never get an error from RemoveReplica.
 			const format = "error during replicaGC: %v"
 			logcrash.ReportOrPanic(ctx, &repl.store.ClusterSettings().SV, format, err)
@@ -357,9 +360,9 @@ func (rgcq *replicaGCQueue) process(
 		// A tombstone is written with a value of mergedTombstoneReplicaID because
 		// we know the range to have been merged. See the Merge case of
 		// runPreApplyTriggers() for details.
-		if err := repl.store.RemoveReplica(
-			ctx, repl, mergedTombstoneReplicaID, "dangling subsume via MVCC GC queue",
-		); err != nil {
+		if err := repl.store.RemoveReplica(ctx, repl, mergedTombstoneReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
 			return false, err
 		}
 	}

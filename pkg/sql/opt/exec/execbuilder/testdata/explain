@@ -121,45 +121,13 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: -column70,-created
+│ order: -column29,-started
 │
 └── • render
     │
-    └── • union all
         │
-        ├── • render
-        │   │
-        │   └── • merge join (left outer)
-        │       │ equality: (id) = (job_id)
-        │       │
-        │       ├── • merge join (right outer)
-        │       │   │ equality: (job_id) = (id)
-        │       │   │ right cols are key
-        │       │   │
-        │       │   ├── • scan
-        │       │   │     missing stats
-        │       │   │     table: job_progress@primary
-        │       │   │     spans: FULL SCAN
-        │       │   │
-        │       │       │
-        │       │       └── • scan
-        │       │             missing stats
-        │       │             table: jobs@primary
-        │       │             spans: FULL SCAN
-        │       │
-        │       └── • scan
-        │             missing stats
-        │             table: job_status@primary
-        │             spans: FULL SCAN
-        │
-        └── • render
-            │
-                │ estimated row count: 3
-                │
-                └── • project set
-                    │ estimated row count: 10
-                    │
-                    └── • emptyrow
+        └── • virtual table
+              table: jobs@primary
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -391,7 +359,6 @@ vectorized: true
         │   │
         │   └── • hash join (left outer)
         │       │ equality: (column62) = (table_id)
-        │       │ right cols are key
         │       │
         │       ├── • render
         │       │   │
@@ -416,11 +383,8 @@ vectorized: true
         │       │               └── • virtual table
         │       │                     table: pg_class@primary
         │       │
-        │       └── • distinct
-        │           │ distinct on: table_id
-        │           │
-        │           └── • virtual table
-        │                 table: table_row_statistics@primary
+        │       └── • virtual table
+        │             table: table_row_statistics@primary
         │
         └── • virtual table
               table: tables@tables_database_name_idx (partial index)
@@ -445,7 +409,6 @@ vectorized: true
         │   │
         │   └── • hash join (left outer)
         │       │ equality: (column77) = (table_id)
-        │       │ right cols are key
         │       │
         │       ├── • render
         │       │   │
@@ -476,22 +439,21 @@ vectorized: true
         │       │               └── • sort
         │       │                   │ order: +objoid
         │       │                   │
-        │       │                   └── • filter
-        │       │                       │ filter: objsubid = 0
+        │       │                   └── • render
         │       │                       │
-        │       │                       └── • render
+        │       │                       └── • filter
+        │       │                           │ filter: objsubid = 0
         │       │                           │
-        │       │                           └── • filter
-        │       │                               │ filter: classoid = 4294967081
+        │       │                           └── • render
         │       │                               │
-        │       │                               └── • virtual table
-        │       │                                     table: kv_catalog_comments@primary
+        │       │                               └── • filter
+        │       │                                   │ filter: classoid = 4294967085
+        │       │                                   │
+        │       │                                   └── • virtual table
+        │       │                                         table: kv_catalog_comments@primary
         │       │
-        │       └── • distinct
-        │           │ distinct on: table_id
-        │           │
-        │           └── • virtual table
-        │                 table: table_row_statistics@primary
+        │       └── • virtual table
+        │             table: table_row_statistics@primary
         │
         └── • virtual table
               table: tables@tables_database_name_idx (partial index)
@@ -598,8 +560,7 @@ vectorized: true
     └── • group (hash)
         │ group by: column_name, ordinal_position, column_default, is_nullable, generation_expression, is_hidden, crdb_sql_type
         │
-        └── • sort
-            │ order: +index_name
+        └── • window
             │
             └── • hash join (left outer)
                 │ equality: (column_name) = (column_name)
@@ -649,7 +610,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT * FROM (SELECT tp.table_catalog AS database_name, tp.table_schema AS schema_name, tp.table_name, tp.grantee, tp.privilege_type, tp.is_grantable::BOOL, CASE WHEN s.sequence_name IS NOT NULL THEN 'sequence' ELSE 'table' END AS object_type FROM "".information_schema.table_privileges AS tp LEFT JOIN "".information_schema.sequences AS s ON (((tp.table_catalog = s.sequence_catalog) AND (tp.table_schema = s.sequence_schema)) AND (tp.table_name = s.sequence_name))) WHERE (database_name, schema_name, table_name) IN (('test', 'public', 'foo'),)
-    │ exec mode: discard all rows
+    │ exec mode: all rows
     │
     └── • buffer
         │ label: buffer 1 (r)
@@ -744,13 +705,13 @@ vectorized: true
             └── • virtual table
                   table: pg_namespace@primary
 
-statement ok
+statement OK
 ANALYZE system.users
 
-statement ok
+statement OK
 ANALYZE system.role_options
 
-statement ok
+statement OK
 ANALYZE system.role_members
 
 query T retry
@@ -773,42 +734,39 @@ vectorized: true
             │ estimated row count: 3
             │ order: +"role"
             │
-            └── • merge join (right outer)
+            └── • hash join (left outer)
                 │ estimated row count: 3
-                │ equality: (member) = (username)
-                │ right cols are key
+                │ equality: (username) = (member)
+                │ left cols are key
                 │
-                ├── • scan
-                │     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                │     table: role_members@role_members_member_idx
-                │     spans: FULL SCAN
+                ├── • group (hash)
+                │   │ estimated row count: 3
+                │   │ group by: username
+                │   │
+                │   └── • window
+                │       │ estimated row count: 3
+                │       │
+                │       └── • render
+                │           │
+                │           └── • hash join (left outer)
+                │               │ estimated row count: 3
+                │               │ equality: (username) = (username)
+                │               │ left cols are key
+                │               │
+                │               ├── • scan
+                │               │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
+                │               │     table: users@users_user_id_idx
+                │               │     spans: FULL SCAN
+                │               │
+                │               └── • scan
+                │                     estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+                │                     table: role_options@primary
+                │                     spans: FULL SCAN
                 │
-                └── • group (streaming)
-                    │ estimated row count: 3
-                    │ group by: username
-                    │ ordered: +username
-                    │
-                    └── • sort
-                        │ estimated row count: 3
-                        │ order: +username,+option
-                        │ already ordered: +username
-                        │
-                        └── • render
-                            │
-                            └── • merge join (left outer)
-                                │ estimated row count: 3
-                                │ equality: (username) = (username)
-                                │ left cols are key
-                                │
-                                ├── • scan
-                                │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
-                                │     table: users@primary
-                                │     spans: FULL SCAN
-                                │
-                                └── • scan
-                                      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
-                                      table: role_options@primary
-                                      spans: FULL SCAN
+                └── • scan
+                      estimated row count: 1 (100% of the table; stats collected <hidden> ago)
+                      table: role_members@role_members_role_idx
+                      spans: FULL SCAN
 
 # EXPLAIN selecting from a sequence.
 statement ok
@@ -1025,7 +983,6 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: tc@tc_pkey
     │ key columns: rowid
-    │ parallel
     │
     └── • scan
           columns: (a, rowid)
@@ -1054,7 +1011,6 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: tc@tc_pkey
     │ key columns: rowid
-    │ parallel
     │
     └── • scan
           columns: (a, rowid)
@@ -1495,7 +1451,6 @@ distribute
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
- ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1505,7 +1460,6 @@ distribute
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
-      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1513,7 +1467,6 @@ distribute
            ├── columns: a:1 b:2
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
-           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1521,7 +1474,6 @@ distribute
                 ├── constraint: /1/3: [/10 - /10]
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
-                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1532,7 +1484,6 @@ distribute
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
- ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1542,7 +1493,6 @@ distribute
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
-      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1550,7 +1500,6 @@ distribute
            ├── columns: a:1 b:2
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
-           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1558,7 +1507,6 @@ distribute
                 ├── constraint: /1/3: ‹×›
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
-                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1569,7 +1517,6 @@ distribute
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
- ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1579,7 +1526,6 @@ distribute
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
-      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1587,7 +1533,6 @@ distribute
            ├── columns: a:1(int!null) b:2(int)
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
-           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1595,7 +1540,6 @@ distribute
                 ├── constraint: /1/3: [/10 - /10]
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
-                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1606,7 +1550,6 @@ distribute
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
- ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1616,7 +1559,6 @@ distribute
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
-      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1624,7 +1566,6 @@ distribute
            ├── columns: a:1(int!null) b:2(int)
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
-           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1632,7 +1573,6 @@ distribute
                 ├── constraint: /1/3: ‹×›
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
-                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1710,7 +1650,6 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
  ├── cost: 2277.90625
- ├── cost-flags: unbounded-cardinality
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
  ├── prune: (2,9)
@@ -1718,7 +1657,6 @@ inner-join (hash)
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1129.02
- │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -1727,7 +1665,6 @@ inner-join (hash)
  │    ├── columns: k:8 v:9
  │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │    ├── cost: 1108.82
- │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8)
  │    ├── fd: (8)-->(9)
  │    ├── distribution: test
@@ -1767,7 +1704,6 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
  ├── cost: 2277.90625
- ├── cost-flags: unbounded-cardinality
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
  ├── prune: (2,9)
@@ -1775,7 +1711,6 @@ inner-join (hash)
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1129.02
- │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -1784,7 +1719,6 @@ inner-join (hash)
  │    ├── columns: k:8 v:9
  │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │    ├── cost: 1108.82
- │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8)
  │    ├── fd: (8)-->(9)
  │    ├── distribution: test
@@ -1826,9 +1760,8 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1 b:2  [hidden: column8:8]
  ├── immutable
- ├── stats: [rows=333.333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1418.32951
- ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1838,9 +1771,8 @@ distribute
  └── sort
       ├── columns: a:1 b:2 column8:8
       ├── immutable
-      ├── stats: [rows=333.333]
+      ├── stats: [rows=333.3333]
       ├── cost: 1218.30951
-      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1848,24 +1780,21 @@ distribute
       └── project
            ├── columns: column8:8 a:1 b:2
            ├── immutable
-           ├── stats: [rows=333.333]
+           ├── stats: [rows=333.3333]
            ├── cost: 1145.73667
-           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
            ├── select
            │    ├── columns: a:1 b:2
            │    ├── immutable
-           │    ├── stats: [rows=333.333]
+           │    ├── stats: [rows=333.3333]
            │    ├── cost: 1139.05
-           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1 b:2
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
-           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1879,9 +1808,8 @@ EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1 b:2  [hidden: column8:8]
  ├── immutable
- ├── stats: [rows=333.333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1418.32951
- ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1891,9 +1819,8 @@ distribute
  └── sort
       ├── columns: a:1 b:2 column8:8
       ├── immutable
-      ├── stats: [rows=333.333]
+      ├── stats: [rows=333.3333]
       ├── cost: 1218.30951
-      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1901,24 +1828,21 @@ distribute
       └── project
            ├── columns: column8:8 a:1 b:2
            ├── immutable
-           ├── stats: [rows=333.333]
+           ├── stats: [rows=333.3333]
            ├── cost: 1145.73667
-           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
            ├── select
            │    ├── columns: a:1 b:2
            │    ├── immutable
-           │    ├── stats: [rows=333.333]
+           │    ├── stats: [rows=333.3333]
            │    ├── cost: 1139.05
-           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1 b:2
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
-           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1932,9 +1856,8 @@ EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
  ├── immutable
- ├── stats: [rows=333.333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1418.32951
- ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1944,9 +1867,8 @@ distribute
  └── sort
       ├── columns: a:1(int) b:2(int) column8:8(int)
       ├── immutable
-      ├── stats: [rows=333.333]
+      ├── stats: [rows=333.3333]
       ├── cost: 1218.30951
-      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1954,24 +1876,21 @@ distribute
       └── project
            ├── columns: column8:8(int) a:1(int) b:2(int)
            ├── immutable
-           ├── stats: [rows=333.333]
+           ├── stats: [rows=333.3333]
            ├── cost: 1145.73667
-           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
            ├── select
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
-           │    ├── stats: [rows=333.333]
+           │    ├── stats: [rows=333.3333]
            │    ├── cost: 1139.05
-           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1(int) b:2(int)
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
-           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1993,9 +1912,8 @@ EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 distribute
  ├── columns: a:1(int) b:2(int)  [hidden: column8:8(int)]
  ├── immutable
- ├── stats: [rows=333.333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1418.32951
- ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -2005,9 +1923,8 @@ distribute
  └── sort
       ├── columns: a:1(int) b:2(int) column8:8(int)
       ├── immutable
-      ├── stats: [rows=333.333]
+      ├── stats: [rows=333.3333]
       ├── cost: 1218.30951
-      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -2015,24 +1932,21 @@ distribute
       └── project
            ├── columns: column8:8(int) a:1(int) b:2(int)
            ├── immutable
-           ├── stats: [rows=333.333]
+           ├── stats: [rows=333.3333]
            ├── cost: 1145.73667
-           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
            ├── select
            │    ├── columns: a:1(int) b:2(int)
            │    ├── immutable
-           │    ├── stats: [rows=333.333]
+           │    ├── stats: [rows=333.3333]
            │    ├── cost: 1139.05
-           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1(int) b:2(int)
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
-           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -2330,7 +2244,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: custom
 maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
+network usage: <hidden>
 regions: <hidden>
 isolation level: serializable
 priority: normal
@@ -2347,7 +2261,7 @@ quality of service: regular
 query T
 EXPLAIN (OPT, MEMO) SELECT * FROM tc JOIN t ON k=a
 ----
-memo (optimized, ~19KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~18KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:8,v:9] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:8,v:9] [distribution: test]" [presentation: a:1,b:2,k:8,v:9] [distribution: test])
@@ -2428,7 +2342,7 @@ TABLE t
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  └── PRIMARY INDEX t_pkey
       └── k int not null
-memo (optimized, ~19KB, required=[presentation: info:14] [distribution: test])
+memo (optimized, ~18KB, required=[presentation: info:14] [distribution: test])
  ├── G1: (explain G2 [presentation: a:1,b:2,k:8,v:9] [distribution: test])
  │    └── [presentation: info:14] [distribution: test]
  │         ├── best: (explain G2="[presentation: a:1,b:2,k:8,v:9] [distribution: test]" [presentation: a:1,b:2,k:8,v:9] [distribution: test])
@@ -2483,7 +2397,6 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
  ├── cost: 2277.90625
- ├── cost-flags: unbounded-cardinality
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
  ├── prune: (2,9)
@@ -2491,7 +2404,6 @@ inner-join (hash)
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1129.02
- │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -2500,7 +2412,6 @@ inner-join (hash)
  │    ├── columns: k:8 v:9
  │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │    ├── cost: 1108.82
- │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8)
  │    ├── fd: (8)-->(9)
  │    ├── distribution: test
@@ -2542,34 +2453,3 @@ vectorized: true
       estimated row count: 1,000,000,000,000 (100% of the table; stats collected <hidden> ago)
       table: very_large_table@very_large_table_pkey
       spans: FULL SCAN
-
-statement ok
-CREATE TABLE t_float (k FLOAT PRIMARY KEY);
-
-# A query with relatively large number of physical spans.
-query T
-EXPLAIN (VERBOSE) SELECT count(*) FROM t_float
-  WHERE k = ANY (
-                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-                 21, 22, 23, 24, 25, 26, 27, 28, 29, 30,
-                 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
-                );
-----
-distribution: local
-vectorized: true
-·
-• group (scalar)
-│ columns: (count)
-│ estimated row count: 1 (missing stats)
-│ aggregate 0: count_rows()
-│
-└── • project
-    │ columns: ()
-    │
-    └── • scan
-          columns: (k)
-          estimated row count: 40 (missing stats)
-          table: t_float@t_float_pkey
-          spans: /1/0 /2/0 /3/0 /4/0 /5/0 /6/0 /7/0 /8/0 /9/0 /10/0 /11/0 /12/0 /13/0 /14/0 /15/0 /16/0 /17/0 /18/0 /19/0 /20/0 … (20 more)
-          parallel

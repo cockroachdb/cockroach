@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // ShouldCollectStats is a helper function used to determine if a processor
@@ -32,29 +31,9 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 // kvpb.ContentionEvents seen by the listener.
 type ContentionEventsListener struct {
 	cumulativeContentionTime int64 // atomic
-
-	// lockWaitTime is the cumulative time spent waiting in the lock table. It
-	// accounts for a portion of the time in cumulativeContentionTime.
-	lockWaitTime int64 // atomic
-
-	// latchWaitTime is the cumulative time spent waiting to acquire latches. It
-	// accounts for a portion of the time in cumulativeContentionTime.
-	latchWaitTime int64 // atomic
-
-	// txnID is the ID of the transaction that this listener is associated with.
-	// This is used to distinguish self-induced latch wait time
-	// (e.g. for QueryIntent) from contention-induced latch wait time.
-	txnID uuid.UUID
 }
 
 var _ tracing.EventListener = &ContentionEventsListener{}
-
-// Init initializes the listener with the current transaction ID. This is used
-// to distinguish self-induced latch wait time (e.g. for QueryIntent) from
-// contention-induced latch wait time.
-func (c *ContentionEventsListener) Init(txnID uuid.UUID) {
-	c.txnID = txnID
-}
 
 // Notify is part of the tracing.EventListener interface.
 func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.EventConsumptionStatus {
@@ -62,17 +41,7 @@ func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.Even
 	if !ok {
 		return tracing.EventNotConsumed
 	}
-	// Avoid counting this event as contention time if the current transaction
-	// (if any) waited on itself. This can happen when a QueryIntent request
-	// waits for a pipelined write to finish replication.
-	if c.txnID == uuid.Nil || c.txnID != ce.TxnMeta.ID {
-		atomic.AddInt64(&c.cumulativeContentionTime, int64(ce.Duration))
-		if ce.IsLatch {
-			atomic.AddInt64(&c.latchWaitTime, int64(ce.Duration))
-		} else {
-			atomic.AddInt64(&c.lockWaitTime, int64(ce.Duration))
-		}
-	}
+	atomic.AddInt64(&c.cumulativeContentionTime, int64(ce.Duration))
 	return tracing.EventConsumed
 }
 
@@ -80,18 +49,6 @@ func (c *ContentionEventsListener) Notify(event tracing.Structured) tracing.Even
 // seen so far.
 func (c *ContentionEventsListener) GetContentionTime() time.Duration {
 	return time.Duration(atomic.LoadInt64(&c.cumulativeContentionTime))
-}
-
-// GetLockWaitTime returns the cumulative lock wait time this listener has seen
-// so far.
-func (c *ContentionEventsListener) GetLockWaitTime() time.Duration {
-	return time.Duration(atomic.LoadInt64(&c.lockWaitTime))
-}
-
-// GetLatchWaitTime returns the cumulative latch wait time this listener has
-// seen so far.
-func (c *ContentionEventsListener) GetLatchWaitTime() time.Duration {
-	return time.Duration(atomic.LoadInt64(&c.latchWaitTime))
 }
 
 // ScanStatsListener aggregates all kvpb.ScanStats objects into a single
@@ -137,8 +94,6 @@ func (l *ScanStatsListener) Notify(event tracing.Structured) tracing.EventConsum
 	l.mu.ScanStats.separatedPointCount += ss.SeparatedPointCount
 	l.mu.ScanStats.separatedPointValueBytes += ss.SeparatedPointValueBytes
 	l.mu.ScanStats.separatedPointValueBytesFetched += ss.SeparatedPointValueBytesFetched
-	l.mu.ScanStats.separatedPointValueCountFetched += ss.SeparatedPointValueCountFetched
-	l.mu.ScanStats.separatedPointValueReaderCacheMisses += ss.SeparatedPointValueReaderCacheMisses
 	l.mu.ScanStats.numGets += ss.NumGets
 	l.mu.ScanStats.numScans += ss.NumScans
 	l.mu.ScanStats.numReverseScans += ss.NumReverseScans
@@ -198,24 +153,22 @@ type ScanStats struct {
 	numInterfaceSeeks uint64
 	// numInternalSeeks is the number of times that MVCC seek was invoked
 	// internally, including to step over internal, uncompacted Pebble versions.
-	numInternalSeeks                     uint64
-	blockBytes                           uint64
-	blockBytesInCache                    uint64
-	keyBytes                             uint64
-	valueBytes                           uint64
-	pointCount                           uint64
-	pointsCoveredByRangeTombstones       uint64
-	rangeKeyCount                        uint64
-	rangeKeyContainedPoints              uint64
-	rangeKeySkippedPoints                uint64
-	separatedPointCount                  uint64
-	separatedPointValueBytes             uint64
-	separatedPointValueBytesFetched      uint64
-	separatedPointValueCountFetched      uint64
-	separatedPointValueReaderCacheMisses uint64
-	numGets                              uint64
-	numScans                             uint64
-	numReverseScans                      uint64
+	numInternalSeeks                uint64
+	blockBytes                      uint64
+	blockBytesInCache               uint64
+	keyBytes                        uint64
+	valueBytes                      uint64
+	pointCount                      uint64
+	pointsCoveredByRangeTombstones  uint64
+	rangeKeyCount                   uint64
+	rangeKeyContainedPoints         uint64
+	rangeKeySkippedPoints           uint64
+	separatedPointCount             uint64
+	separatedPointValueBytes        uint64
+	separatedPointValueBytesFetched uint64
+	numGets                         uint64
+	numScans                        uint64
+	numReverseScans                 uint64
 	// nodeIDs stores the ordered list of all KV nodes that were used to
 	// evaluate the KV requests.
 	nodeIDs []int32

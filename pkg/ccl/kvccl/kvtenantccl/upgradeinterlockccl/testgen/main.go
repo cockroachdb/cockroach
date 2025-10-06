@@ -21,7 +21,7 @@ var outputPath = flag.String("output-file-path", "", "path to the output file")
 func main() {
 	flag.Parse()
 	if *outputPath == "" {
-		log.Dev.Fatal(context.Background(), "You need to pass -output-file-path flag")
+		log.Fatal(context.Background(), "You need to pass -output-file-path flag")
 	}
 
 	data := struct {
@@ -32,10 +32,10 @@ func main() {
 	tmpl := template.Must(template.New("source").Parse(test_template))
 	file, err := os.Create(filepath.Join(*outputPath))
 	if err != nil {
-		log.Dev.Fatalf(context.Background(), "failed to create file: %v", err)
+		log.Fatalf(context.Background(), "failed to create file: %v", err)
 	}
 	defer file.Close()
 	if err := tmpl.Execute(file, data); err != nil {
-		log.Dev.Fatalf(context.Background(), "failed to execute template: %v", err)
+		log.Fatalf(context.Background(), "failed to execute template: %v", err)
 	}
 }

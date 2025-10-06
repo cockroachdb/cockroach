@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"encoding/base64"
 	"fmt"
-	"math/rand/v2"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -165,7 +165,7 @@ func (b *insights) Tables() []workload.Table {
 			InitialRows: workload.BatchedTuples{
 				NumBatches: numBatches,
 				FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-					rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
+					rng := rand.NewSource(RandomSeed.Seed() + uint64(batchIdx))
 
 					rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
 					if rowEnd > b.rowCount {
@@ -218,7 +218,7 @@ func (b *insights) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	ql := workload.QueryLoad{}
-	rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
+	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 
 	// Most of the insight queries are slow by design. This prevents them from
 	// having enough volume to hit the memory limits of statistics before
@@ -241,8 +241,8 @@ func (b *insights) Ops(
 			// First 4 threads should target same table to cause more contention
 			// scenarios. The rest will target random tables.
 			if useRandomTable {
-				tableNameA = generateTableName(rng.IntN(b.totalTableCount))
-				tableNameB = generateTableName(rng.IntN(b.totalTableCount))
+				tableNameA = generateTableName(rng.Intn(b.totalTableCount))
+				tableNameB = generateTableName(rng.Intn(b.totalTableCount))
 			}
 
 			err = b.incrementAppName(db)
@@ -326,8 +326,9 @@ func (b *insights) incrementAppName(db *gosql.DB) error {
 
 func generateRandomBase64Bytes(size int) []byte {
 	payload := make([]byte, size)
-	for i := range payload {
-		payload[i] = byte(rand.Uint32())
+	_, err := rand.Read(payload)
+	if err != nil {
+		fmt.Println(err)
 	}
 	base64Size := base64.StdEncoding.EncodedLen(size)
 	payloadBase64 := make([]byte, base64Size)
@@ -359,12 +360,12 @@ func orderByOnNonIndexColumn(
 func useTxnToMoveBalance(
 	ctx context.Context, db *gosql.DB, rng *rand.Rand, rowCount int, tableName string,
 ) error {
-	amount := rng.IntN(maxTransfer)
-	from := rng.IntN(rowCount)
-	to := rng.IntN(rowCount - 1)
+	amount := rng.Intn(maxTransfer)
+	from := rng.Intn(rowCount)
+	to := rng.Intn(rowCount - 1)
 	// Change the 'to' row if they are the same row.
 	for from == to && rowCount != 1 {
-		to = rng.IntN(rowCount - 1)
+		to = rng.Intn(rowCount - 1)
 	}
 
 	txn, err := db.BeginTx(ctx, &gosql.TxOptions{})
@@ -400,7 +401,7 @@ func updateWithContention(
 	ctx context.Context, db *gosql.DB, rng *rand.Rand, rowCount int, tableName string,
 ) error {
 	// Pick random row to cause contention on
-	rowToBlock := rng.IntN(rowCount)
+	rowToBlock := rng.Intn(rowCount)
 
 	// In a go routine have it start a transaction, update a row,
 	// sleep for a time, and then complete the transaction.
@@ -436,7 +437,7 @@ func updateWithContention(
 		}
 
 		// Random sleep up to 5 seconds
-		sleepDuration := time.Duration(rng.IntN(5000)) * time.Millisecond
+		sleepDuration := time.Duration(rng.Intn(5000)) * time.Millisecond
 
 		// insights by default has a threshold of 100 milliseconds
 		// this guarantees it will be detected all the time
@@ -450,7 +451,7 @@ func updateWithContention(
 	wgTxnStarted.Wait()
 
 	// This will be blocked until the background go func commits the txn.
-	amount := rng.IntN(maxTransfer)
+	amount := rng.Intn(maxTransfer)
 	query := fmt.Sprintf("UPDATE %s SET balance = $1 WHERE id = $2;", tree.NameString(tableName))
 	_, err := db.ExecContext(ctx, query, amount, rowToBlock)
 

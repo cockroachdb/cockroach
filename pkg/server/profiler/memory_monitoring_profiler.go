@@ -63,7 +63,7 @@ func NewMemoryMonitoringProfiler(
 			envMemprofInterval,
 		),
 	}
-	log.Dev.Infof(ctx, "writing memory monitoring dumps to %s at least every %s", log.SafeManaged(dir), mmp.resetInterval())
+	log.Infof(ctx, "writing memory monitoring dumps to %s at least every %s", log.SafeManaged(dir), mmp.resetInterval())
 	return mmp, nil
 }
 
@@ -87,22 +87,22 @@ func takeMemoryMonitoringDump(
 	ctx context.Context, path string, args ...interface{},
 ) (success bool) {
 	if len(args) != 1 {
-		log.Dev.Errorf(ctx, "%v", errors.AssertionFailedf("expected exactly 1 argument (root memory monitor), got %d", len(args)))
+		log.Errorf(ctx, "%v", errors.AssertionFailedf("expected exactly 1 argument (root memory monitor), got %d", len(args)))
 		return false
 	}
 	root, ok := args[0].(*mon.BytesMonitor)
 	if !ok {
-		log.Dev.Errorf(ctx, "%v", errors.AssertionFailedf("expected *mon.BytesMonitor, got %T", args[0]))
+		log.Errorf(ctx, "%v", errors.AssertionFailedf("expected *mon.BytesMonitor, got %T", args[0]))
 		return false
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error creating memory monitoring dump %s: %v", path, err)
+		log.Warningf(ctx, "error creating memory monitoring dump %s: %v", path, err)
 		return false
 	}
 	defer f.Close()
 	if err = root.TraverseTree(getMonitorStateCb(f)); err != nil {
-		log.Dev.Warningf(ctx, "error traversing memory monitoring tree for dump %s: %v", path, err)
+		log.Warningf(ctx, "error traversing memory monitoring tree for dump %s: %v", path, err)
 		return false
 	}
 	return true

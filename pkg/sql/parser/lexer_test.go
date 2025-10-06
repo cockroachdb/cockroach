@@ -36,7 +36,7 @@ func TestLexer(t *testing.T) {
 			scanTokens = append(scanTokens, lval)
 		}
 		var l lexer
-		l.init(d.sql, scanTokens, defaultNakedIntType, 0 /* numAnnotations */)
+		l.init(d.sql, scanTokens, defaultNakedIntType)
 		var lexTokens []int
 		for {
 			var lval sqlSymType

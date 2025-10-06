@@ -73,7 +73,7 @@ func readEncodingTests(t testing.TB) []*encodingTest {
 			t.Fatal("expected 1 expr")
 		}
 		expr := selectClause.Exprs[0].Expr
-		te, err := expr.TypeCheck(ctx, &sema, types.AnyElement)
+		te, err := expr.TypeCheck(ctx, &sema, types.Any)
 		if err != nil {
 			t.Fatal(err)
 		}

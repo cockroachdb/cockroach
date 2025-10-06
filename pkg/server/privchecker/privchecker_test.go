@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 )
@@ -60,7 +59,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 	execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 	kvDB := ts.DB()
 
-	plannerFn := func(opName redact.SafeString) (sql.AuthorizationAccessor, func()) {
+	plannerFn := func(opName string) (sql.AuthorizationAccessor, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
 		txn := kvDB.NewTxn(ctx, "test")

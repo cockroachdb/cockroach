@@ -217,7 +217,7 @@ func maybeInitializeSem(ctx context.Context) {
 		if n < 1 {
 			n = 1
 		}
-		log.Dev.VInfof(ctx, 1, "configured maximum hashing concurrency: %d", n)
+		log.VInfof(ctx, 1, "configured maximum hashing concurrency: %d", n)
 		expensiveHashComputeSemOnce.sem = quotapool.NewIntPool("password_hashes", uint64(n))
 	})
 }

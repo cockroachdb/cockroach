@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -229,11 +229,11 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		},
 		{
 			stmts: []string{
-				"SELECT crdb_internal.create_tenant(3);",
-				"BACKUP TENANT 3 INTO 'nodelocal://1/foo'",
+				"SELECT crdb_internal.create_tenant(2);",
+				"BACKUP TENANT 2 INTO 'nodelocal://1/foo'",
 			},
 			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: false,
-				TenantTarget: roachpb.MustMakeTenantID(3)}},
+				TenantTarget: roachpb.MustMakeTenantID(2)}},
 		},
 	}
 

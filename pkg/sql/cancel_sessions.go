@@ -18,7 +18,7 @@ import (
 )
 
 type cancelSessionsNode struct {
-	singleInputPlanNode
+	rows     planNode
 	ifExists bool
 }
 
@@ -31,11 +31,11 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	// accumulate all the query IDs and then send batches to each of the
 	// nodes.
 
-	if ok, err := n.input.Next(params); err != nil || !ok {
+	if ok, err := n.rows.Next(params); err != nil || !ok {
 		return ok, err
 	}
 
-	datum := n.input.Values()[0]
+	datum := n.rows.Values()[0]
 	if datum == tree.DNull {
 		return true, nil
 	}
@@ -74,5 +74,5 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 func (*cancelSessionsNode) Values() tree.Datums { return nil }
 
 func (n *cancelSessionsNode) Close(ctx context.Context) {
-	n.input.Close(ctx)
+	n.rows.Close(ctx)
 }

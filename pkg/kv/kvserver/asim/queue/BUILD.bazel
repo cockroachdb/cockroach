@@ -23,7 +23,6 @@ go_library(
         "//pkg/kv/kvserver/constraint",
         "//pkg/kv/kvserver/kvflowcontrol/rac2",
         "//pkg/kv/kvserver/kvserverpb",
-        "//pkg/kv/kvserver/mmaintegration",
         "//pkg/raft",
         "//pkg/roachpb",
         "//pkg/util/hlc",

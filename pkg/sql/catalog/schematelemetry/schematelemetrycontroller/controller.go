@@ -159,13 +159,13 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 			if sj.ScheduleExpr() == cronExpr {
 				return nil
 			}
-			if err := sj.SetScheduleAndNextRun(cronExpr); err != nil {
+			if err := sj.SetSchedule(cronExpr); err != nil {
 				return err
 			}
-			sj.SetScheduleStatus(string(jobs.StatePending))
+			sj.SetScheduleStatus(string(jobs.StatusPending))
 			return jobs.ScheduledJobTxn(txn).Update(ctx, sj)
 		}); err != nil && ctx.Err() == nil {
-			log.Dev.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
+			log.Warningf(ctx, "failed to update SQL schema telemetry schedule: %s", err)
 		} else {
 			return
 		}
@@ -219,7 +219,7 @@ func CreateSchemaTelemetrySchedule(
 	scheduledJob := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 
 	schedule := SchemaTelemetryRecurrence.Get(&st.SV)
-	if err := scheduledJob.SetScheduleAndNextRun(schedule); err != nil {
+	if err := scheduledJob.SetSchedule(schedule); err != nil {
 		return nil, err
 	}
 
@@ -242,7 +242,7 @@ func CreateSchemaTelemetrySchedule(
 		jobspb.ExecutionArguments{Args: args},
 	)
 
-	scheduledJob.SetScheduleStatus(string(jobs.StatePending))
+	scheduledJob.SetScheduleStatus(string(jobs.StatusPending))
 	if err = jobs.ScheduledJobTxn(txn).Create(ctx, scheduledJob); err != nil {
 		return nil, err
 	}
@@ -270,9 +270,9 @@ func GetSchemaTelemetryScheduleID(
 		return 0, errors.AssertionFailedf("unexpectedly received %d columns", len(row))
 	}
 	// Defensively check the type.
-	v, ok := row[0].(*tree.DInt)
+	v, ok := tree.AsDInt(row[0])
 	if !ok {
 		return 0, errors.AssertionFailedf("unexpectedly received non-integer value %v", row[0])
 	}
-	return jobspb.ScheduleID(*v), nil
+	return jobspb.ScheduleID(v), nil
 }

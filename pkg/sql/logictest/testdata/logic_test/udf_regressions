@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 subtest regression_93083
 
 # Regression test for #93083. UDFs with empty bodies should execute successfully
@@ -521,7 +520,7 @@ CREATE FUNCTION public.func104242()
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT 1 FROM public.tab104242 WHERE NULL IN ();
+  SELECT 1 FROM test.public.tab104242 WHERE NULL IN ();
 $$
 
 statement ok
@@ -540,7 +539,7 @@ CREATE FUNCTION public.func104242_not_null()
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT 1 FROM public.tab104242 WHERE 'foo':::public.typ104242 IN ();
+  SELECT 1 FROM test.public.tab104242 WHERE 'foo':::public.typ104242 IN ();
 $$
 
 subtest end

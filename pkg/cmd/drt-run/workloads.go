@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -46,7 +45,7 @@ func (w *workloadRunner) runWorkloadStep(
 		return
 	}
 	pgUrl, err := roachprod.PgURL(ctx, l, w.config.ClusterName, w.config.CertsDir, roachprod.PGURLOptions{
-		Secure:   install.SimpleSecureOption(w.config.CertsDir != ""),
+		Secure:   w.config.CertsDir != "",
 		External: true,
 	})
 	if err != nil {

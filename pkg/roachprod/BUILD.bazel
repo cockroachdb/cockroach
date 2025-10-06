@@ -1,14 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "roachprod",
     srcs = [
         "clusters_cache.go",
         "multitenant.go",
-        "node_stability.go",
         "roachprod.go",
-        "roachprod_pprof.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod",
     visibility = ["//visibility:public"],
@@ -16,6 +13,7 @@ go_library(
         "//pkg/build",
         "//pkg/cli/exit",
         "//pkg/cmd/roachprod/grafana",
+        "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/fluentbit",
@@ -28,9 +26,7 @@ go_library(
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
-        "//pkg/roachprod/vm/flagstub",
         "//pkg/roachprod/vm/gce",
-        "//pkg/roachprod/vm/ibm",
         "//pkg/roachprod/vm/local",
         "//pkg/server/debug/replay",
         "//pkg/util/ctxgroup",
@@ -46,23 +42,11 @@ go_library(
 
 go_test(
     name = "roachprod_test",
-    srcs = [
-        "getpprof_test.go",
-        "roachprod_test.go",
-    ],
+    srcs = ["roachprod_test.go"],
     embed = [":roachprod"],
     deps = [
-        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "@com_github_stretchr_testify//assert",
-        "@com_github_stretchr_testify//require",
-    ],
-)
-
-disallowed_imports_test(
-    src = "roachprod",
-    disallowed_prefixes = [
-        "pkg/cmd/roachtest",
     ],
 )

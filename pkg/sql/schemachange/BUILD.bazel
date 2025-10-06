@@ -45,7 +45,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
-        "@com_github_stretchr_testify//require",
     ],
 )
 

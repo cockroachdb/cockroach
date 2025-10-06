@@ -7,7 +7,7 @@ package codeowners
 
 import (
 	"fmt"
-	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -72,14 +72,14 @@ func LintEverythingIsOwned(
 
 	walkRoot := filepath.Join(repoRoot, walkDir)
 
-	unownedWalkFn := func(path string, d fs.DirEntry) error {
+	unownedWalkFn := func(path string, info os.FileInfo) error {
 		teams := co.Match(path)
 		if len(teams) > 0 {
 			// The file has an owner, so nothing to report.
 			debug("%s <- has team(s) %v", path, teams)
 			return nil
 		}
-		if !d.IsDir() {
+		if !info.IsDir() {
 			// We're looking at a file that has no owner.
 			//
 			// Let's say `path = ./pkg/foo/bar/baz.go`.
@@ -113,7 +113,7 @@ func LintEverythingIsOwned(
 	for len(dirsToWalk) != 0 {
 		// We first visit each directory's files, and then the subdirectories.
 		// See TestLintEverythingIsOwned for details.
-		require.NoError(t, filepath.WalkDir(dirsToWalk[0], func(path string, d fs.DirEntry, err error) error {
+		require.NoError(t, filepath.Walk(dirsToWalk[0], func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -132,7 +132,7 @@ func LintEverythingIsOwned(
 
 				if _, ok := skip[relPath]; ok {
 					debug("skipping %s", relPath)
-					if d.IsDir() {
+					if info.IsDir() {
 						return filepath.SkipDir
 					}
 					return nil
@@ -144,7 +144,7 @@ func LintEverythingIsOwned(
 					}
 					if ok {
 						debug("skipping %s", relPath)
-						if d.IsDir() {
+						if info.IsDir() {
 							return filepath.SkipDir
 						}
 						return nil
@@ -153,21 +153,21 @@ func LintEverythingIsOwned(
 				fname := filepath.Base(relPath)
 				if _, ok := skip[fname]; ok {
 					debug("skipping %s", relPath)
-					if d.IsDir() {
+					if info.IsDir() {
 						return filepath.SkipDir
 					}
 					return nil
 				}
 			}
 
-			if d.IsDir() {
+			if info.IsDir() {
 				if path == dirsToWalk[0] {
 					return nil
 				}
 				dirsToWalk = append(dirsToWalk, path)
 				return filepath.SkipDir
 			}
-			return unownedWalkFn(filepath.Join(walkDir, relPath), d)
+			return unownedWalkFn(filepath.Join(walkDir, relPath), info)
 		}))
 		dirsToWalk = dirsToWalk[1:]
 	}

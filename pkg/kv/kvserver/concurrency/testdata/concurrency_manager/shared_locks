@@ -136,7 +136,7 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [5] sequence req5: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [5] sequence req5: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
-[5] sequence req5: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req5: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000002 to abort
 [5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -148,7 +148,7 @@ on-txn-updated txn=txn2 status=aborted
 [-] update txn: aborting txn2
 [5] sequence req5: resolving intent ‹"a"› for txn 00000002 with ABORTED status
 [5] sequence req5: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
-[5] sequence req5: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req5: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000003 to abort
 [5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -175,12 +175,12 @@ on-txn-updated txn=txn3 status=committed
 [-] update txn: committing txn3
 [5] sequence req5: resolving intent ‹"a"› for txn 00000003 with COMMITTED status
 [5] sequence req5: lock wait-queue event: wait for txn 00000004 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
-[5] sequence req5: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req5: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000004 to abort
 [5] sequence req5: resolving intent ‹"a"› for txn 00000004 with ABORTED status
 [5] sequence req5: lock wait-queue event: done waiting
-[5] sequence req5: conflicted with 00000004-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req5: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: acquiring latches
 [5] sequence req5: scanning lock table for conflicting locks
 [5] sequence req5: sequencing complete, returned guard
@@ -277,7 +277,7 @@ sequence req=req8
 [10] sequence req8: pusher pushed pushee to 11.000000000,2
 [10] sequence req8: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,5}
 [10] sequence req8: lock wait-queue event: done waiting
-[10] sequence req8: conflicted with 00000006-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[10] sequence req8: conflicted with ‹00000006-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [10] sequence req8: acquiring latches
 [10] sequence req8: scanning lock table for conflicting locks
 [10] sequence req8: sequencing complete, returned guard
@@ -346,7 +346,7 @@ new-request name=req10 txn=txn7 ts=10,1
 sequence req=req10
 ----
 [13] sequence req9: lock wait-queue event: done waiting
-[13] sequence req9: conflicted with 00000006-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[13] sequence req9: conflicted with ‹00000006-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [13] sequence req9: acquiring latches
 [13] sequence req9: scanning lock table for conflicting locks
 [13] sequence req9: sequencing complete, returned guard
@@ -359,7 +359,7 @@ sequence req=req10
 [14] sequence req10: pushing timestamp of txn 00000006 above 11.000000000,1
 [14] sequence req10: resolving intent ‹"a"› for txn 00000006 with PENDING status and clock observation {1 123.000000000,8}
 [14] sequence req10: lock wait-queue event: done waiting
-[14] sequence req10: conflicted with 00000006-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[14] sequence req10: conflicted with ‹00000006-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [14] sequence req10: acquiring latches
 [14] sequence req10: scanning lock table for conflicting locks
 [14] sequence req10: sequencing complete, returned guard
@@ -558,19 +558,19 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [6] sequence req16: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [6] sequence req16: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[6] sequence req16: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[6] sequence req16: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req16: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req16: pushing txn 00000002 to abort
 [6] sequence req16: blocked on select in concurrency_test.(*cluster).PushTransaction
 [7] sequence req17: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [7] sequence req17: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[7] sequence req17: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[7] sequence req17: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [7] sequence req17: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req17: pushing txn 00000002 to abort
 [7] sequence req17: blocked on select in concurrency_test.(*cluster).PushTransaction
 [8] sequence req18: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [8] sequence req18: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[8] sequence req18: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[8] sequence req18: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [8] sequence req18: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [8] sequence req18: pushing txn 00000002 to abort
 [8] sequence req18: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -580,19 +580,19 @@ on-txn-updated txn=txn2 status=aborted
 [-] update txn: aborting txn2
 [6] sequence req16: resolving intent ‹"a"› for txn 00000002 with ABORTED status
 [6] sequence req16: lock wait-queue event: done waiting
-[6] sequence req16: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[6] sequence req16: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req16: acquiring latches
 [6] sequence req16: scanning lock table for conflicting locks
 [6] sequence req16: sequencing complete, returned guard
 [7] sequence req17: resolving intent ‹"a"› for txn 00000002 with ABORTED status
 [7] sequence req17: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[7] sequence req17: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[7] sequence req17: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [7] sequence req17: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req17: pushing txn 00000003 to detect request deadlock
 [7] sequence req17: blocked on select in concurrency_test.(*cluster).PushTransaction
 [8] sequence req18: resolving intent ‹"a"› for txn 00000002 with ABORTED status
 [8] sequence req18: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[8] sequence req18: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[8] sequence req18: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [8] sequence req18: not pushing
 [8] sequence req18: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -600,12 +600,12 @@ finish req=req16
 ----
 [-] finish req16: finishing request
 [7] sequence req17: lock wait-queue event: done waiting
-[7] sequence req17: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[7] sequence req17: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [7] sequence req17: acquiring latches
 [7] sequence req17: scanning lock table for conflicting locks
 [7] sequence req17: sequencing complete, returned guard
 [8] sequence req18: lock wait-queue event: wait for txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
-[8] sequence req18: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[8] sequence req18: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [8] sequence req18: not pushing
 [8] sequence req18: blocked on select in concurrency.(*lockTableWaiterImpl).WaitOn
 
@@ -613,7 +613,7 @@ finish req=req17
 ----
 [-] finish req17: finishing request
 [8] sequence req18: lock wait-queue event: done waiting
-[8] sequence req18: conflicted with 00000004-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[8] sequence req18: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [8] sequence req18: acquiring latches
 [8] sequence req18: scanning lock table for conflicting locks
 [8] sequence req18: sequencing complete, returned guard
@@ -742,31 +742,31 @@ on-txn-updated txn=txn1 status=committed
 [-] update txn: committing txn1
 [2] sequence req20: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [2] sequence req20: lock wait-queue event: done waiting
-[2] sequence req20: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[2] sequence req20: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [2] sequence req20: acquiring latches
 [2] sequence req20: scanning lock table for conflicting locks
 [2] sequence req20: sequencing complete, returned guard
 [3] sequence req21: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [3] sequence req21: lock wait-queue event: done waiting
-[3] sequence req21: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req21: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [3] sequence req21: acquiring latches
 [3] sequence req21: scanning lock table for conflicting locks
 [3] sequence req21: sequencing complete, returned guard
 [4] sequence req22: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [4] sequence req22: lock wait-queue event: done waiting
-[4] sequence req22: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[4] sequence req22: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [4] sequence req22: acquiring latches
 [4] sequence req22: scanning lock table for conflicting locks
 [4] sequence req22: sequencing complete, returned guard
 [5] sequence req23: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [5] sequence req23: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
-[5] sequence req23: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req23: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req23: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req23: pushing txn 00000002 to detect request deadlock
 [5] sequence req23: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req24: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [6] sequence req24: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
-[6] sequence req24: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[6] sequence req24: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req24: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req24: pushing txn 00000002 to detect request deadlock
 [6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -790,12 +790,12 @@ finish req=req20
 ----
 [-] finish req20: finishing request
 [5] sequence req23: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[5] sequence req23: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req23: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req23: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req23: pushing txn 00000003 to detect request deadlock
 [5] sequence req23: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req24: lock wait-queue event: wait for txn 00000003 running request @ key ‹"a"› (queuedLockingRequests: 3, queuedReaders: 0)
-[6] sequence req24: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[6] sequence req24: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req24: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req24: pushing txn 00000003 to detect request deadlock
 [6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -819,12 +819,12 @@ finish req=req21
 ----
 [-] finish req21: finishing request
 [5] sequence req23: lock wait-queue event: done waiting
-[5] sequence req23: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req23: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req23: acquiring latches
 [5] sequence req23: scanning lock table for conflicting locks
 [5] sequence req23: sequencing complete, returned guard
 [6] sequence req24: lock wait-queue event: wait for txn 00000004 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
-[6] sequence req24: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[6] sequence req24: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req24: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req24: pushing txn 00000004 to detect request deadlock
 [6] sequence req24: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -841,7 +841,7 @@ finish req=req23
 ----
 [-] finish req23: finishing request
 [6] sequence req24: lock wait-queue event: done waiting
-[6] sequence req24: conflicted with 00000004-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[6] sequence req24: conflicted with ‹00000004-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [6] sequence req24: acquiring latches
 [6] sequence req24: scanning lock table for conflicting locks
 [6] sequence req24: sequencing complete, returned guard
@@ -925,13 +925,13 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [2] sequence req26: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [2] sequence req26: lock wait-queue event: done waiting
-[2] sequence req26: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[2] sequence req26: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [2] sequence req26: acquiring latches
 [2] sequence req26: scanning lock table for conflicting locks
 [2] sequence req26: sequencing complete, returned guard
 [3] sequence req27: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [3] sequence req27: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
-[3] sequence req27: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req27: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [3] sequence req27: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req27: pushing txn 00000002 to detect request deadlock
 [3] sequence req27: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -940,7 +940,7 @@ finish req=req26
 ----
 [-] finish req26: finishing request
 [3] sequence req27: lock wait-queue event: done waiting
-[3] sequence req27: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req27: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [3] sequence req27: acquiring latches
 [3] sequence req27: scanning lock table for conflicting locks
 [3] sequence req27: sequencing complete, returned guard
@@ -1045,11 +1045,11 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [3] sequence req30: detected pusher aborted
-[3] sequence req30: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"b"› for 0.000s
+[3] sequence req30: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"b"› for 0.000s
 [3] sequence req30: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [4] sequence req31: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [4] sequence req31: lock wait-queue event: done waiting
-[4] sequence req31: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[4] sequence req31: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [4] sequence req31: acquiring latches
 [4] sequence req31: scanning lock table for conflicting locks
 [4] sequence req31: sequencing complete, returned guard
@@ -1159,11 +1159,11 @@ on-txn-updated txn=txn1 status=aborted
 ----
 [-] update txn: aborting txn1
 [3] sequence req3: detected pusher aborted
-[3] sequence req3: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"b"› for 0.000s
+[3] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"b"› for 0.000s
 [3] sequence req3: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [4] sequence req4: resolving intent ‹"a"› for txn 00000001 with ABORTED status
 [4] sequence req4: lock wait-queue event: done waiting
-[4] sequence req4: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[4] sequence req4: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [4] sequence req4: acquiring latches
 [4] sequence req4: scanning lock table for conflicting locks
 [4] sequence req4: sequencing complete, returned guard
@@ -1304,7 +1304,7 @@ on-txn-updated txn=txn1 status=committed
 [4] sequence req4: dependency cycle detected 00000002->00000003->00000002
 [5] sequence req5: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
 [5] sequence req5: lock wait-queue event: wait for txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
-[5] sequence req5: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req5: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req5: pushing txn 00000002 to abort
 [5] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
@@ -1315,11 +1315,11 @@ on-txn-updated txn=txn2 status=aborted
 ----
 [-] update txn: aborting txn2
 [4] sequence req4: detected pusher aborted
-[4] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on ‹"b"› for 0.000s
+[4] sequence req4: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"b"› for 0.000s
 [4] sequence req4: sequencing complete, returned error: TransactionAbortedError(ABORT_REASON_PUSHER_ABORTED)
 [5] sequence req5: resolving intent ‹"a"› for txn 00000002 with ABORTED status
 [5] sequence req5: lock wait-queue event: done waiting
-[5] sequence req5: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[5] sequence req5: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [5] sequence req5: acquiring latches
 [5] sequence req5: scanning lock table for conflicting locks
 [5] sequence req5: sequencing complete, returned guard

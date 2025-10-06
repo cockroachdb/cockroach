@@ -19,8 +19,7 @@ SELECT
   num_stmts,
   num_retries,
   num_auto_retries, 
-  last_auto_retry_reason,
-  isolation_level
+  last_auto_retry_reason
 FROM `
 	table := `"".crdb_internal.node_transactions`
 	if n.Cluster {

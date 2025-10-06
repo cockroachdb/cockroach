@@ -9,8 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"io"
-	"math/rand/v2"
 	"os"
 	"regexp"
 	"strconv"
@@ -23,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -32,6 +29,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -49,18 +47,16 @@ const (
 )
 
 type tpcc struct {
-	out          io.Writer
 	flags        workload.Flags
 	connFlags    *workload.ConnFlags
 	workloadName string
 
 	warehouses       int
 	activeWarehouses int
-	nowTime          time.Time
+	nowString        []byte
 	numConns         int
 	idleConns        int
 	txnRetries       bool
-	repairOrderIds   bool
 
 	// txnPreambleFile queries that will be executed before each operation.
 	txnPreambleFile       string
@@ -82,9 +78,11 @@ type tpcc struct {
 	onTxnStartFns []func(ctx context.Context, tx pgx.Tx) error
 
 	workers                int
-	activeWorkers          int
 	fks                    bool
 	separateColumnFamilies bool
+	// deprecatedFKIndexes adds in foreign key indexes that are no longer needed
+	// due to origin index restrictions being lifted.
+	deprecatedFkIndexes bool
 
 	txInfos []txInfo
 	// deck contains indexes into the txInfos slice.
@@ -99,7 +97,6 @@ type tpcc struct {
 	scatter bool
 
 	partitions         int
-	ignorePartitions   bool
 	clientPartitions   int
 	affinityPartitions []int
 	wPart              *partitioner
@@ -133,16 +130,6 @@ type tpcc struct {
 	// context group for any background reset table operation to avoid goroutine leaks during long duration workloads
 	resetTableGrp      ctxgroup.Group
 	resetTableCancelFn context.CancelFunc
-
-	asOfSystemTime string
-
-	// Set to true if a literal implemenation of the workload is desired. In
-	// this case "literal" means that the New Order and Payments transactions
-	// are implemented statement-by-statement as specified in the specification.
-	// This avoids the use of RETURNING clauses to batch updates together with
-	// selects, and performs each row select/update separately, as opposed to
-	// batching them using an IN list.
-	literalImplementation bool
 }
 
 type waitSetter struct {
@@ -182,37 +169,6 @@ func (w *waitSetter) String() string {
 	default:
 		return fmt.Sprintf("%f", *w.val)
 	}
-}
-
-// lastDurationSetter is a pflag.Value implementation that sets the last
-// duration of a workload run for consistency checks. It is used to determine
-// which consistency checks to skip for long duration workloads. It sets the
-// `isLongDurationWorkload` field on the `tpcc` to true if the duration is
-// greater than or equal to the long duration workload threshold.
-type lastDurationSetter struct {
-	val  *time.Duration
-	tpcc *tpcc
-}
-
-// Set implements the pflag.Value interface.
-func (p *lastDurationSetter) Set(val string) error {
-	duration, err := time.ParseDuration(val)
-	if err != nil {
-		return err
-	}
-	p.val = &duration
-	p.tpcc.isLongDurationWorkload = duration >= longDurationWorkloadThreshold
-	return nil
-}
-
-// String implements the pflag.Value interface.
-func (p *lastDurationSetter) String() string {
-	return p.val.String()
-}
-
-// Type implements the pflag.Value interface.
-func (p *lastDurationSetter) Type() string {
-	return "duration"
 }
 
 var _ pgx.QueryTracer = fileLoggerQueryTracer{}
@@ -278,20 +234,17 @@ var tpccMeta = workload.Meta{
 	RandomSeed: RandomSeed,
 	New: func() workload.Generator {
 		g := &tpcc{
-			out:          os.Stdout,
 			workloadName: "tpcc",
 		}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`mix`:                      {RuntimeOnly: true},
 			`partitions`:               {RuntimeOnly: true},
-			`ignore-partitions`:        {RuntimeOnly: true},
 			`client-partitions`:        {RuntimeOnly: true},
 			`partition-affinity`:       {RuntimeOnly: true},
 			`partition-strategy`:       {RuntimeOnly: true},
 			`zones`:                    {RuntimeOnly: true},
 			`active-warehouses`:        {RuntimeOnly: true},
-			`active-workers`:           {RuntimeOnly: true},
 			`scatter`:                  {RuntimeOnly: true},
 			`split`:                    {RuntimeOnly: true},
 			`wait`:                     {RuntimeOnly: true},
@@ -299,22 +252,20 @@ var tpccMeta = workload.Meta{
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
 			`txn-retries`:              {RuntimeOnly: true},
-			`repair-order-ids`:         {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
-			`last-duration`:            {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
 			`regions`:                  {RuntimeOnly: true},
 			`survival-goal`:            {RuntimeOnly: true},
 			`replicate-static-columns`: {RuntimeOnly: true},
+			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 			`query-trace-file`:         {RuntimeOnly: true},
 			`fake-time`:                {RuntimeOnly: true},
-			`txn-preamble-file`:        {RuntimeOnly: true},
-			`aost`:                     {RuntimeOnly: true, CheckConsistencyOnly: true},
-			`literal-implementation`:   {RuntimeOnly: true},
+			"txn-preamble-file":        {RuntimeOnly: true},
 		}
 
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -330,9 +281,7 @@ var tpccMeta = workload.Meta{
 		))
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
 		g.flags.BoolVar(&g.txnRetries, `txn-retries`, true, `Run transactions in a retry loop`)
-		g.flags.BoolVar(&g.repairOrderIds, `repair-order-ids`, false, `Attempt to repair next order id field of district rows automatically in reaction to unique violation during new-order txns (useful when running LDR on overlapping warehouses)`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
-		g.flags.BoolVar(&g.ignorePartitions, `ignore-partitions`, false, `Ignore partitions during load generation`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
 			`Note that if one value is provided, the assumption is that all urls are associated with that partition. In all other cases the assumption `+
@@ -342,7 +291,6 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.multiRegionCfg.regions, "regions", []string{}, "Regions to use for multi-region partitioning. The first region is the PRIMARY REGION. Does not work with --zones.")
 		g.flags.Var(&g.multiRegionCfg.survivalGoal, "survival-goal", "Survival goal to use for multi-region setups. Allowed values: [zone, region].")
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
-		g.flags.IntVar(&g.activeWorkers, `active-workers`, 0, `Number of workers that can execute at any given time. Defaults to --workers'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
@@ -352,21 +300,11 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.queryTraceFile, `query-trace-file`, ``, `File to write the query traces to. Defaults to no output`)
 		// Support executing a query file before each transaction.
 		g.flags.StringVar(&g.txnPreambleFile, "txn-preamble-file", "", "queries that will be injected before each txn")
-		g.flags.StringVar(&g.asOfSystemTime, "aost", "",
-			"This is an optional parameter to specify AOST; used exclusively in conjunction with the TPC-C consistency "+
-				"check. Example values are (\"'-1m'\", \"'-1h'\")")
-		g.flags.BoolVar(&g.literalImplementation, "literal-implementation", false, "If true, use a literal implementation of the TPC-C kit instead of an optimized version")
-		g.flags.Var(&lastDurationSetter{val: &[]time.Duration{0}[0], tpcc: g}, "last-duration", "The duration of the previous workload run (Used to determine which consistency checks to skip for long duration workloads).")
-
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
-		var err error
-		g.nowTime, err = time.Parse(`2006-01-02 15:04:05`, `2006-01-02 15:04:05`)
-		if err != nil {
-			panic(err) // unreachable.
-		}
+		g.nowString = []byte(`2006-01-02 15:04:05`)
 		return g
 	},
 }
@@ -471,12 +409,6 @@ func (w *tpcc) Hooks() workload.Hooks {
 				w.workers = w.activeWarehouses * NumWorkersPerWarehouse
 			}
 
-			if w.activeWorkers > w.workers {
-				return errors.Errorf(`--active-workers needs to be less than or equal to workers (%d)`, w.workers)
-			} else if w.activeWorkers == 0 {
-				w.activeWorkers = w.workers
-			}
-
 			if w.numConns == 0 {
 				// If we're not waiting, open up a connection for each worker. If we are
 				// waiting, we only use up to a set number of connections per warehouse.
@@ -485,25 +417,20 @@ func (w *tpcc) Hooks() workload.Hooks {
 				if w.waitFraction == 0 {
 					w.numConns = w.workers
 				} else {
-					partitionFactor := 1
-					countAffinity := len(w.affinityPartitions)
-					if countAffinity > 0 && w.partitions > 0 {
-						partitionFactor = w.partitions / countAffinity
-					}
-
-					w.numConns = (w.activeWarehouses * numConnsPerWarehouse)
-					w.numConns = w.numConns / partitionFactor
+					w.numConns = w.activeWarehouses * numConnsPerWarehouse
 				}
 			}
 
-			if w.waitFraction > 0 && w.activeWorkers != w.activeWarehouses*NumWorkersPerWarehouse && len(w.affinityPartitions) == 0 {
-				return errors.Errorf(`--wait > 0 and --warehouses=%d and affinity_partitions=0 requires --active-workers=%d`,
+			if w.waitFraction > 0 && w.workers != w.activeWarehouses*NumWorkersPerWarehouse {
+				return errors.Errorf(`--wait > 0 and --warehouses=%d requires --workers=%d`,
 					w.activeWarehouses, w.warehouses*NumWorkersPerWarehouse)
 			}
 
 			if w.queryTraceFile != `` && w.workers != 1 {
 				return errors.Errorf(`--query-trace-file must be used with exactly one worker`)
 			}
+
+			w.auditor = newAuditor(w.activeWarehouses)
 
 			// Create a partitioner to help us partition the warehouses. The base-case is
 			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
@@ -525,11 +452,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				if err != nil {
 					return errors.Wrap(err, "error creating multi-region partitioner")
 				}
-				w.auditor = newAuditor(w.activeWarehouses, w.wMRPart, w.affinityPartitions)
-			} else {
-				w.auditor = newAuditor(w.activeWarehouses, w.wPart, w.affinityPartitions)
 			}
-
 			return initializeMix(w)
 		},
 		PreCreate: func(db *gosql.DB) error {
@@ -583,39 +506,78 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			return nil
 		},
-		PostLoad: func(ctx context.Context, db *gosql.DB) (err error) {
-			conn, err := db.Conn(ctx)
-			if err != nil {
-				return err
+		PostLoad: func(_ context.Context, db *gosql.DB) error {
+			if w.fks {
+				// We avoid validating foreign keys because we just generated
+				// the data set and don't want to scan over the entire thing
+				// again. Unfortunately, this means that we leave the foreign
+				// keys unvalidated for the duration of the test, so the SQL
+				// optimizer can't use them.
+				// TODO(lucy-zhang): expose an internal knob to validate fk
+				// relations without performing full validation. See #38833.
+				fkStmts := []string{
+					`alter table district add foreign key (d_w_id) references warehouse (w_id) not valid`,
+					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
+					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
+					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+					`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+					`alter table stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
+					`alter table stock add foreign key (s_i_id) references item (i_id) not valid`,
+					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
+				}
+
+				for _, fkStmt := range fkStmts {
+					if _, err := db.Exec(fkStmt); err != nil {
+						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+						const idxErr = "foreign key requires an existing index on columns"
+						switch {
+						case strings.Contains(err.Error(), idxErr):
+							fmt.Println(errors.WithHint(err, "try using the --deprecated-fk-indexes flag"))
+							// If the statement failed because of a missing FK index, suggest
+							// to use the deprecated-fks flag.
+							return errors.WithHint(err, "try using the --deprecated-fk-indexes flag")
+						case strings.Contains(err.Error(), duplFKErr):
+							// If the statement failed because the fk already exists,
+							// ignore it. Return the error for any other reason.
+						default:
+							return err
+						}
+					}
+				}
+				// Set GLOBAL only after data is loaded to speed up initialization
+				// time. Otherwise, the mass INSERT at workload init time takes
+				// extraordinarily longer. If data is imported with IMPORT, this
+				// statement is idempotent.
+				if len(w.multiRegionCfg.regions) > 0 {
+					if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE item SET %s`, localityGlobalSuffix)); err != nil {
+						return err
+					}
+				}
 			}
-			defer func() {
-				closeErr := conn.Close()
-				err = errors.WithSecondaryError(err, closeErr)
-			}()
-			if err := w.postLoadImpl(ctx, conn); err != nil {
-				return err
+
+			// With multi-region enabled, we do not need to partition and scatter
+			// our data anymore as it has already been partitioned by the
+			// computed column on REGIONAL BY ROW tables.
+			if len(w.multiRegionCfg.regions) != 0 {
+				return nil
 			}
-			return nil
+			return w.partitionAndScatterWithDB(db)
 		},
 		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks(w.localWarehouses)
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
-			fmt.Fprintln(w.out, totalHeader)
-
-			partitionFactor := 1
-			countAffinity := len(w.affinityPartitions)
-			if countAffinity > 0 && w.wPart.parts > 0 {
-				partitionFactor = w.wPart.parts / countAffinity
-			}
+			fmt.Println(totalHeader)
 
 			const newOrderName = `newOrder`
 			w.reg.Tick(func(t histogram.Tick) {
 				if newOrderName == t.Name {
 					tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
-					fmt.Fprintf(w.out, "%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
+					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
-						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses/partitionFactor)),
+						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses)),
 						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
@@ -642,8 +604,8 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 
 				start := timeutil.Now()
-				err := check.Fn(db, w.asOfSystemTime /* asOfSystemTime */)
-				log.Dev.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
+				err := check.Fn(db, "" /* asOfSystemTime */)
+				log.Infof(ctx, `check %s took %s`, check.Name, timeutil.Since(start))
 				if err != nil {
 					return errors.Wrapf(err, `check failed: %s`, check.Name)
 				}
@@ -656,15 +618,15 @@ func (w *tpcc) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
 	seed := RandomSeed.Seed()
-	aCharsInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, aCharsAlphabet)
-	lettersInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, lettersAlphabet)
-	numbersInit := workloadimpl.PrecomputedRandInit(rand.NewPCG(seed, 0), precomputedLength, numbersAlphabet)
+	aCharsInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, aCharsAlphabet)
+	lettersInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, lettersAlphabet)
+	numbersInit := workloadimpl.PrecomputedRandInit(rand.New(rand.NewSource(seed)), precomputedLength, numbersAlphabet)
 	if w.localsPool == nil {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
 				return &generateLocals{
 					rng: tpccRand{
-						Rand: rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64())),
+						Rand: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
 						// Intentionally wait until here to initialize the precomputed rands
 						// so a caller of Tables that only wants schema doesn't compute
 						// them.
@@ -759,6 +721,10 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `history`,
 		Schema: makeSchema(
 			tpccHistorySchemaBase,
+			maybeAddFkSuffix(
+				w.deprecatedFkIndexes,
+				deprecatedTpccHistorySchemaFkSuffix,
+			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `h_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -818,6 +784,10 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `stock`,
 		Schema: makeSchema(
 			tpccStockSchemaBase,
+			maybeAddFkSuffix(
+				w.deprecatedFkIndexes,
+				deprecatedTpccStockSchemaFkSuffix,
+			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `s_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -830,6 +800,10 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: makeSchema(
 			tpccOrderLineSchemaBase,
+			maybeAddFkSuffix(
+				w.deprecatedFkIndexes,
+				deprecatedTpccOrderLineSchemaFkSuffix,
+			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `ol_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -852,7 +826,7 @@ func (w *tpcc) Ops(
 		// partitioning and scattering occurs only when the PostLoad hook is
 		// run, but to maintain backward compatibility, it's easiest to allow
 		// partitioning and scattering during `workload run`.
-		if err := w.partitionAndScatter(ctx, urls); err != nil {
+		if err := w.partitionAndScatter(urls); err != nil {
 			return workload.QueryLoad{}, err
 		}
 	}
@@ -863,7 +837,7 @@ func (w *tpcc) Ops(
 
 	if duration, err := w.flags.GetDuration("duration"); err == nil {
 		if duration == 0 || duration >= longDurationWorkloadThreshold {
-			log.Dev.Warningf(ctx,
+			log.Warningf(ctx,
 				"Warning: this workload is being used with a long or indefinite duration."+
 					" This could cause it to deviate from the TPCC spec in subtle ways and is not meant for benchmarking. "+
 					"Consistency checks might be disabled",
@@ -871,7 +845,7 @@ func (w *tpcc) Ops(
 			w.isLongDurationWorkload = true
 		}
 	} else {
-		log.Dev.Warningf(ctx, "Couldn't get duration of the tpcc workload run for disabling consistency checks %v", err)
+		log.Warningf(ctx, "Couldn't get duration of the tpcc workload run for disabling consistency checks %v", err)
 	}
 
 	// Need idempotency - Ops might be invoked multiple times with the same
@@ -889,8 +863,7 @@ func (w *tpcc) Ops(
 	// Limit the number of connections per pool (otherwise preparing statements at
 	// startup can be slow).
 	cfg.MaxConnsPerPool = w.connFlags.Concurrency
-	fmt.Fprintf(w.out, "Max Total connections %d Max connections per pool %d \n", cfg.MaxTotalConnections, cfg.MaxConnsPerPool)
-	fmt.Fprintf(w.out, "Initializing %d connections...\n", w.numConns)
+	fmt.Printf("Initializing %d connections...\n", w.numConns)
 
 	// If queries were specified before each operation, then lets
 	// execute those.
@@ -968,15 +941,9 @@ func (w *tpcc) Ops(
 		// URLs are mapped to partitions in a round-robin fashion.
 		// Imagine there are 5 partitions and 15 urls, this code assumes that urls
 		// 0, 5, and 10 correspond to the 0th partition.
-		if len(w.affinityPartitions) == 0 {
-			for i, db := range dbs {
-				p := i % w.partitions
-				partitionDBs[p] = append(partitionDBs[p], db)
-			}
-		} else {
-			for i, p := range w.affinityPartitions {
-				partitionDBs[p] = append(partitionDBs[p], dbs[i])
-			}
+		for i, db := range dbs {
+			p := i % w.partitions
+			partitionDBs[p] = append(partitionDBs[p], db)
 		}
 		for i := range partitionDBs {
 			// Possible if we have more partitions than DB connections.
@@ -986,7 +953,7 @@ func (w *tpcc) Ops(
 		}
 	}
 
-	fmt.Fprintf(w.out, "Initializing %d idle connections...\n", w.idleConns)
+	fmt.Printf("Initializing %d idle connections...\n", w.idleConns)
 	var conns []*pgx.Conn
 	for i := 0; i < w.idleConns; i++ {
 		for _, url := range urls {
@@ -1001,7 +968,7 @@ func (w *tpcc) Ops(
 			conns = append(conns, conn)
 		}
 	}
-	fmt.Fprintf(w.out, "Initializing %d workers and preparing statements...\n", w.workers)
+	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
 	ql := workload.QueryLoad{}
 	ql.WorkerFns = make([]func(context.Context) error, 0, w.workers)
 	var group errgroup.Group
@@ -1017,32 +984,16 @@ func (w *tpcc) Ops(
 		// If nothing is mine, then everything is mine.
 		return len(w.affinityPartitions) == 0
 	}
-
-	workersSem := quotapool.NewIntPool("workers", uint64(w.activeWorkers))
-
 	// Limit the amount of workers we initialize in parallel, to avoid running out
 	// of memory (#36897).
 	sem := make(chan struct{}, 100)
-	elemIndex := -1
-	totalElemsLen := len(w.wPart.totalElems)
-	// Function to get the next warehouse and partition
-	getNextWarehouseAndPartition := func() (int, int) {
-		for {
-			elemIndex++
-			warehouse := w.wPart.totalElems[elemIndex%totalElemsLen]
-			part := w.wPart.partElemsMap[warehouse]
-			if isMyPart(part) {
-				return warehouse, part
-			}
-		}
-	}
-
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
 		workerIdx := workerIdx
-		var warehouse, p int
-
+		var warehouse int
+		var p int
 		if len(w.multiRegionCfg.regions) == 0 {
-			warehouse, p = getNextWarehouseAndPartition()
+			warehouse = w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
+			p = w.wPart.partElemsMap[warehouse]
 		} else {
 			// For multi-region workloads, use the multi-region partitioning.
 			warehouse = w.wMRPart.totalElems[workerIdx%len(w.wMRPart.totalElems)]
@@ -1061,7 +1012,7 @@ func (w *tpcc) Ops(
 		idx := len(ql.WorkerFns) - 1
 		sem <- struct{}{}
 		group.Go(func() error {
-			worker, err := newWorker(ctx, w, db, reg.GetHandle(), w.txCounters, warehouse, workersSem)
+			worker, err := newWorker(ctx, w, db, reg.GetHandle(), w.txCounters, warehouse)
 			if err == nil {
 				ql.WorkerFns[idx] = worker.run
 			}
@@ -1081,29 +1032,22 @@ func (w *tpcc) Ops(
 	ql.Close = func(_ context.Context) error {
 		for _, conn := range conns {
 			if err := conn.Close(ctx); err != nil {
-				log.Dev.Warningf(ctx, "%v", err)
+				log.Warningf(ctx, "%v", err)
 			}
 		}
 		if tracer != nil {
 			if err := tracer.Close(); err != nil {
-				log.Dev.Warningf(ctx, "%v", err)
+				log.Warningf(ctx, "%v", err)
 			}
 		}
 
 		w.resetTableCancelFn()
 		if err := w.resetTableGrp.Wait(); err != nil && !errors.Is(err, context.Canceled) {
-			log.Dev.Warningf(ctx, "%v", err)
+			log.Warningf(ctx, "%v", err)
 		}
 		return nil
 	}
 	return ql, nil
-}
-
-// SetOutput allows overriding where the TPCC output is sent.
-// Note that this is not connected to the --display-format flag,
-// which lives at the main workload level.
-func (w *tpcc) SetOutput(out io.Writer) {
-	w.out = out
 }
 
 // executeTx runs fn inside a transaction with retries, if enabled. On
@@ -1146,41 +1090,24 @@ func (w *tpcc) executeTx(
 	return onTxnStartDuration, tx.Commit(ctx)
 }
 
-func (w *tpcc) partitionAndScatter(ctx context.Context, urls []string) (err error) {
+func (w *tpcc) partitionAndScatter(urls []string) error {
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
-	defer func() {
-		closeErr := db.Close()
-		err = errors.WithSecondaryError(err, closeErr)
-	}()
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		closeErr := conn.Close()
-		err = errors.WithSecondaryError(err, closeErr)
-	}()
-	return w.partitionAndScatterWithDB(ctx, conn)
+	defer db.Close()
+	return w.partitionAndScatterWithDB(db)
 }
 
-func (w *tpcc) partitionAndScatterWithDB(ctx context.Context, conn *gosql.Conn) error {
+func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 	if w.partitions > 1 {
-		// Ignore checking if data is actually partitioned.
-		// Useful incase data is not partitioned, but in load
-		// generation we want to use parition affinity.
-		if w.ignorePartitions {
-			return nil
-		}
 		// Repartitioning can take upwards of 10 minutes, so determine if
 		// the dataset is already partitioned before launching the operation
 		// again.
-		if parts, err := partitionCount(ctx, conn); err != nil {
+		if parts, err := partitionCount(db); err != nil {
 			return errors.Wrapf(err, "could not determine if tables are partitioned")
 		} else if parts == 0 {
-			if err := partitionTables(ctx, conn, w.zoneCfg, w.wPart, w.replicateStaticColumns); err != nil {
+			if err := partitionTables(db, w.zoneCfg, w.wPart, w.replicateStaticColumns); err != nil {
 				return errors.Wrapf(err, "could not partition tables")
 			}
 		} else if parts != w.partitions {
@@ -1190,69 +1117,10 @@ func (w *tpcc) partitionAndScatterWithDB(ctx context.Context, conn *gosql.Conn) 
 	}
 
 	if w.scatter {
-		if err := scatterRanges(ctx, conn); err != nil {
+		if err := scatterRanges(db); err != nil {
 			return errors.Wrapf(err, "could not scatter ranges")
 		}
 	}
 
 	return nil
-}
-
-func (w *tpcc) postLoadImpl(ctx context.Context, conn *gosql.Conn) error {
-	if w.fks {
-		// We avoid validating foreign keys because we just generated
-		// the data set and don't want to scan over the entire thing
-		// again. Unfortunately, this means that we leave the foreign
-		// keys unvalidated for the duration of the test, so the SQL
-		// optimizer can't use them.
-		// TODO(lucy-zhang): expose an internal knob to validate fk
-		// relations without performing full validation. See #38833.
-		fkStmts := []string{
-			`alter table district add foreign key (d_w_id) references warehouse (w_id) not valid`,
-			`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
-			`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-			`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
-			`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-			`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-			`alter table stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
-			`alter table stock add foreign key (s_i_id) references item (i_id) not valid`,
-			`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-			`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
-		}
-
-		for _, fkStmt := range fkStmts {
-			if _, err := conn.ExecContext(ctx, fkStmt); err != nil {
-				// If the statement failed because the fk already
-				// exists, ignore it. Return the error for any other
-				// reason.
-				const duplFKErr = "columns cannot be used by multiple foreign key constraints"
-				if !strings.Contains(err.Error(), duplFKErr) {
-					return err
-				}
-			}
-		}
-		// Set GLOBAL only after data is loaded to speed up initialization
-		// time. Otherwise, the mass INSERT at workload init time takes
-		// extraordinarily longer. If data is imported with IMPORT, this
-		// statement is idempotent.
-		if len(w.multiRegionCfg.regions) > 0 {
-			// Locality changes can only be made if schema_locked is toggled.
-			if _, err := conn.ExecContext(ctx, `ALTER TABLE item SET (schema_locked=false)`); err != nil {
-				return err
-			}
-			if _, err := conn.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE item SET %s`, localityGlobalSuffix)); err != nil {
-				return err
-			}
-			if _, err := conn.ExecContext(ctx, `ALTER TABLE item SET (schema_locked=true)`); err != nil {
-				return err
-			}
-		}
-	}
-	// With multi-region enabled, we do not need to partition and scatter
-	// our data anymore as it has already been partitioned by the
-	// computed column on REGIONAL BY ROW tables.
-	if len(w.multiRegionCfg.regions) != 0 {
-		return nil
-	}
-	return w.partitionAndScatterWithDB(ctx, conn)
 }

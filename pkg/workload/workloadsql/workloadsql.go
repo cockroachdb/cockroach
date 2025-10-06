@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 	"golang.org/x/time/rate"
 )
 
@@ -84,7 +84,7 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	v, err := version.Parse(versionStr)
 	// If we can't parse the error then we'll assume that we should disable the
 	// queue. This happens in testing.
-	if err == nil && v.Major().AtLeast(version.MustParseMajorVersion("v19.2")) {
+	if err == nil && (v.Major() > 19 || (v.Major() == 19 && v.Minor() >= 2)) {
 		return nil
 	}
 	_, err = db.Exec("SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
@@ -117,7 +117,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	// Check to see if we're on a tenant;
 
-	log.Dev.Infof(ctx, `starting %d splits`, len(splitPoints))
+	log.Infof(ctx, `starting %d splits`, len(splitPoints))
 	g := ctxgroup.WithContext(ctx)
 	// Rate limit splitting to prevent replica imbalance.
 	r := rate.NewLimiter(128, 1)
@@ -162,7 +162,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 						// SCATTER can collide with normal replicate queue
 						// operations and fail spuriously, so only print the
 						// error.
-						log.Dev.Warningf(ctx, `%s: %v`, stmt, err)
+						log.Warningf(ctx, `%s: %v`, stmt, err)
 					}
 
 					select {
@@ -191,7 +191,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 			case <-doneCh:
 				finished++
 				if finished%1000 == 0 {
-					log.Dev.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+					log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
 				}
 			case <-ctx.Done():
 				return ctx.Err()

@@ -99,7 +99,7 @@ func CreateSystemTableInTxn(
 	b.CPut(tKey, desc.GetID(), nil)
 	b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
 	if desc.IsSequence() {
-		b.CPut(codec.SequenceKey(uint32(desc.GetID())), desc.GetSequenceOpts().Start, nil /* expValue */)
+		b.InitPut(codec.SequenceKey(uint32(desc.GetID())), desc.GetSequenceOpts().Start, false /* failOnTombstones */)
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		return descpb.InvalidID, false, err

@@ -144,7 +144,7 @@ func (spy *logSpy) handleDebugLogSpy(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := spy.run(ctx, w, opts); err != nil {
 		// This is likely a broken HTTP connection, so nothing too unexpected.
-		log.Dev.Infof(ctx, "%v", err)
+		log.Infof(ctx, "%v", err)
 	}
 }
 
@@ -178,7 +178,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 	// This log message will be served through the interceptor
 	// AND it is also reported in other log sinks, so that
 	// administrators know the logspy was used.
-	log.Dev.Infof(ctx, "intercepting logs with options: %+v", opts)
+	log.Infof(ctx, "intercepting logs with options: %+v", opts)
 
 	// Set up the temporary vmodule config, if requested.
 	prevVModule := log.GetVModule()
@@ -188,23 +188,23 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			return err
 		}
 
-		log.Dev.Infof(ctx, "previous vmodule configuration: %s", prevVModule)
+		log.Infof(ctx, "previous vmodule configuration: %s", prevVModule)
 		// Install the new configuration.
 		if err := log.SetVModule(opts.VModule); err != nil {
 			fmt.Fprintf(w, "error: %v", err)
 			return err
 		}
-		log.Dev.Infof(ctx, "new vmodule configuration (previous will be restored when logspy session completes): %s", redact.SafeString(opts.VModule))
+		log.Infof(ctx, "new vmodule configuration (previous will be restored when logspy session completes): %s", redact.SafeString(opts.VModule))
 		defer func() {
 			// Restore the configuration.
 			err := log.SetVModule(prevVModule)
 
 			// Report the change in logs.
-			log.Dev.Infof(ctx, "restoring vmodule configuration (%q): %v", redact.SafeString(prevVModule), err)
+			log.Infof(ctx, "restoring vmodule configuration (%q): %v", redact.SafeString(prevVModule), err)
 			spy.vsrv.unlockVModule(ctx)
 		}()
 	} else {
-		log.Dev.Infof(ctx, "current vmodule setting: %s", redact.SafeString(prevVModule))
+		log.Infof(ctx, "current vmodule setting: %s", redact.SafeString(prevVModule))
 	}
 
 	const flushInterval = time.Second
@@ -236,6 +236,7 @@ func (spy *logSpy) run(ctx context.Context, w io.Writer, opts logSpyOptions) (er
 			}
 
 		case <-flushTimer.C:
+			flushTimer.Read = true
 			flushTimer.Reset(flushInterval)
 			if flusher, ok := w.(http.Flusher); ok {
 				flusher.Flush()

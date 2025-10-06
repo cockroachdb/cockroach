@@ -8,7 +8,6 @@ package sqlccl_test
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -154,34 +153,14 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	// Keep track of the read timestamps of the read committed transaction during
 	// each KV operation.
 	var txnReadTimestamps []hlc.Timestamp
-	var txnShouldParallelCommit bool
 	filterFunc := func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
 		if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
 			return nil
 		}
-		req := ba.Requests[len(ba.Requests)-1]
-
-		var recordRead bool
-		switch req.GetInner().Method() {
-		case kvpb.ConditionalPut:
-			recordRead = true
-			txnShouldParallelCommit = true
-		case kvpb.Get:
-			recordRead = req.GetGet().KeyLockingStrength == lock.Exclusive
-		case kvpb.EndTxn:
-			if txnShouldParallelCommit {
-				recordRead = req.GetEndTxn().IsParallelCommit()
-			} else {
-				recordRead = true
-			}
-		default:
-			recordRead = false
-		}
-		if recordRead {
-			t.Logf("recording timestamp for %s", req)
+		req := ba.Requests[0]
+		method := req.GetInner().Method()
+		if method == kvpb.ConditionalPut || (method == kvpb.EndTxn && req.GetEndTxn().IsParallelCommit()) {
 			txnReadTimestamps = append(txnReadTimestamps, ba.Txn.ReadTimestamp)
-		} else {
-			t.Logf("not recording timestamp for %s", req)
 		}
 		return nil
 	}
@@ -228,42 +207,15 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 
 	ctx := context.Background()
 	var readCommittedRetryCount atomic.Int64
-	var trapRCTxn atomic.Bool
-	var tableID int
-	rcTxnBlocked, unblockRCTxn := make(chan struct{}, 1), make(chan struct{})
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
-				OnReadCommittedStmtRetry: func(retryReason error) {
-					// Track retries since we don't want them to happen in this
-					// test, since they would change the read timestamp.
-					readCommittedRetryCount.Add(1)
-				},
-			},
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(_ context.Context, req *kvpb.BatchRequest) *kvpb.Error {
-					if !trapRCTxn.Load() {
-						return nil
-					}
-					if len(req.Requests) != 2 {
-						return nil
-					}
-					for _, r := range req.Requests {
-						get, ok := r.GetInner().(*kvpb.GetRequest)
-						if !ok {
-							return nil
-						}
-						if !strings.Contains(get.Key.String(), fmt.Sprintf("/Table/%d", tableID)) {
-							return nil
-						}
-					}
-					rcTxnBlocked <- struct{}{}
-					<-unblockRCTxn
-					return nil
-				},
-			},
+	params := base.TestServerArgs{}
+	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+		OnReadCommittedStmtRetry: func(retryReason error) {
+			// Track retries since we don't want them to happen in this test, since
+			// they would change the read timestamp.
+			readCommittedRetryCount.Add(1)
 		},
-	})
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT PRIMARY KEY, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
@@ -271,8 +223,6 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('a', 10);`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT AS $$ SELECT v FROM kv WHERE k = 'a' OR k = 'b' ORDER BY v LIMIT 1 FOR SHARE $$ LANGUAGE SQL VOLATILE;`)
-	require.NoError(t, err)
-	err = sqlDB.QueryRow("SELECT 'kv'::REGCLASS::OID").Scan(&tableID)
 	require.NoError(t, err)
 
 	g := ctxgroup.WithContext(ctx)
@@ -286,7 +236,6 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 
 	// Start a READ COMMITTED transaction that is blocked on txSerializable, and
 	// which tries to read a key that does not exist yet using a UDF.
-	trapRCTxn.Store(true)
 	txReadCommitted, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
 	require.NoError(t, err)
 	var executedUDF atomic.Bool
@@ -310,9 +259,18 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 	// In a third transaction, add another row to the table after confirming that
 	// txReadCommitted is blocked. This row should not be visible to
 	// txReadCommitted's UDF.
-	<-rcTxnBlocked
-	trapRCTxn.Store(false)
-	close(unblockRCTxn)
+	testutils.SucceedsSoon(t, func() error {
+		var blockedCount int
+		if err := sqlDB.QueryRow(
+			`SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 'kv'`,
+		).Scan(&blockedCount); err != nil {
+			return err
+		}
+		if blockedCount == 0 {
+			return errors.Newf("expected to find blocked transaction")
+		}
+		return nil
+	})
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('b', 2)`)
 	require.NoError(t, err)
 

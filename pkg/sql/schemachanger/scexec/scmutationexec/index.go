@@ -7,9 +7,7 @@ package scmutationexec
 
 import (
 	"context"
-	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -19,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -63,6 +60,11 @@ func addNewIndexMutation(
 		tbl.NextConstraintID = opIndex.ConstraintID + 1
 	}
 
+	// Set up the index descriptor type.
+	indexType := descpb.IndexDescriptor_FORWARD
+	if opIndex.IsInverted {
+		indexType = descpb.IndexDescriptor_INVERTED
+	}
 	// Set up the encoding type.
 	encodingType := catenumpb.PrimaryIndexEncoding
 	indexVersion := descpb.LatestIndexDescriptorVersion
@@ -77,7 +79,7 @@ func addNewIndexMutation(
 		NotVisible:                  opIndex.IsNotVisible,
 		Invisibility:                opIndex.Invisibility,
 		Version:                     indexVersion,
-		Type:                        opIndex.Type,
+		Type:                        indexType,
 		CreatedExplicitly:           true,
 		EncodingType:                encodingType,
 		ConstraintID:                opIndex.ConstraintID,
@@ -92,9 +94,6 @@ func addNewIndexMutation(
 	}
 	if opIndex.GeoConfig != nil {
 		idx.GeoConfig = *opIndex.GeoConfig
-	}
-	if opIndex.VecConfig != nil {
-		idx.VecConfig = *opIndex.VecConfig
 	}
 	return enqueueIndexMutation(tbl, idx, state, descpb.DescriptorMutation_ADD)
 }
@@ -409,7 +408,7 @@ func (i *immediateVisitor) AddColumnToIndex(ctx context.Context, op scop.AddColu
 		})
 	}
 	// If this is an inverted column, note that.
-	if indexDesc.Type == idxtype.INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
+	if indexDesc.Type == descpb.IndexDescriptor_INVERTED && op.ColumnID == indexDesc.InvertedColumnID() {
 		indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{op.InvertedKind}
 	}
 	return nil
@@ -448,7 +447,7 @@ func (i *immediateVisitor) RemoveColumnFromIndex(
 			idx.KeyColumnNames = idx.KeyColumnNames[:i]
 			idx.KeyColumnIDs = idx.KeyColumnIDs[:i]
 			idx.KeyColumnDirections = idx.KeyColumnDirections[:i]
-			if idx.Type == idxtype.INVERTED && i == len(idx.KeyColumnIDs)-1 {
+			if idx.Type == descpb.IndexDescriptor_INVERTED && i == len(idx.KeyColumnIDs)-1 {
 				idx.InvertedColumnKinds = nil
 			}
 		}
@@ -491,97 +490,18 @@ func (i *immediateVisitor) RemoveColumnFromIndex(
 func (m *deferredVisitor) MaybeAddSplitForIndex(
 	_ context.Context, op scop.MaybeAddSplitForIndex,
 ) error {
-	m.AddIndexForMaybeSplitAndScatter(op.TableID, op.IndexID, op.CopyIndexID)
+	m.AddIndexForMaybeSplitAndScatter(op.TableID, op.IndexID)
 	return nil
 }
 
 func (i *immediateVisitor) AddIndexZoneConfig(_ context.Context, op scop.AddIndexZoneConfig) error {
-	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(
-		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)
+	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
 	return nil
 }
 
 func (i *immediateVisitor) AddPartitionZoneConfig(
 	_ context.Context, op scop.AddPartitionZoneConfig,
 ) error {
-	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(
-		op.TableID, op.Subzone, op.SubzoneSpans, op.SubzoneIndexToDelete)
-	return nil
-}
-
-func (i *immediateVisitor) MarkRecreatedIndexAsInvisible(
-	ctx context.Context, op scop.MarkRecreatedIndexAsInvisible,
-) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil || tbl.Dropped() {
-		return err
-	}
-
-	// If the primary index is already visible, then nothing
-	// needs to be done. This can happen if we are able to sequence
-	// publishing the primary and secondary indexes together.
-	if tbl.GetPrimaryIndexID() == op.TargetPrimaryIndexID {
-		return nil
-	}
-	mut, err := FindMutation(tbl, MakeIndexIDMutationSelector(op.IndexID))
-	if err != nil {
-		return err
-	}
-	m := &tbl.TableDesc().Mutations[mut.MutationOrdinal()]
-	if idx := m.GetIndex(); idx != nil {
-		idx.Invisibility = 1.0
-		idx.NotVisible = true
-		if op.SetHideIndexFlag {
-			// Prefix the index, so that the index can't accidentally be accessed.
-			idx.Name = fmt.Sprintf("crdb_internal_%s_recreated", idx.Name)
-			idx.HideForPrimaryKeyRecreate = true
-		}
-	}
-	return nil
-}
-
-func (i *immediateVisitor) MarkRecreatedIndexesAsVisible(
-	ctx context.Context, op scop.MarkRecreatedIndexesAsVisible,
-) error {
-	for indexID, invisibility := range op.IndexVisibilities {
-		err := i.MarkRecreatedIndexAsVisible(ctx, scop.MarkRecreatedIndexAsVisible{
-			TableID:         op.TableID,
-			IndexID:         indexID,
-			IndexVisibility: invisibility,
-		})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (i *immediateVisitor) MarkRecreatedIndexAsVisible(
-	ctx context.Context, op scop.MarkRecreatedIndexAsVisible,
-) error {
-	tbl, err := i.checkOutTable(ctx, op.TableID)
-	if err != nil || tbl.Dropped() {
-		return err
-	}
-
-	idx, err := catalog.MustFindIndexByID(tbl, op.IndexID)
-	if err != nil {
-		return err
-	}
-	idx.IndexDesc().Invisibility = op.IndexVisibility
-	if op.IndexVisibility == 0.0 {
-		idx.IndexDesc().NotVisible = false
-	} else {
-		idx.IndexDesc().NotVisible = true
-	}
-	// On a mixed version cluster, both reverting the name and unsetting
-	// the hide flag are no-ops, since we check for the name prefix and
-	// the default is for the index to be visible.
-	if strings.HasPrefix(idx.IndexDesc().Name, "crdb_internal") &&
-		strings.HasSuffix(idx.IndexDesc().Name, "_recreated") {
-		idx.IndexDesc().Name = strings.TrimSuffix(strings.TrimPrefix(idx.IndexDesc().Name, "crdb_internal_"),
-			"_recreated")
-	}
-	idx.IndexDesc().HideForPrimaryKeyRecreate = false
+	i.ImmediateMutationStateUpdater.UpdateSubzoneConfig(op.TableID, op.Subzone, op.SubzoneSpans)
 	return nil
 }

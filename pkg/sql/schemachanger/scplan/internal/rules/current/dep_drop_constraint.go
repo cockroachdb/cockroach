@@ -10,7 +10,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	. "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
 // These rules ensure that constraint-dependent elements, like an constraint's
@@ -91,28 +90,6 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint),
 				to.Type((*scpb.ConstraintWithoutIndexName)(nil)),
 				JoinOnConstraintID(from, to, "table-id", "constraint-id"),
-			}
-		},
-	)
-}
-
-// These rules ensure that a non-indexed backed constraint with a column
-// name in its expression is cleaned up before the column is dropped.
-func init() {
-	registerDepRuleForDrop(
-		"non-indexed backed constraint should be cleaned up "+
-			"before column name references",
-		scgraph.Precedence,
-		"constraint", "referenced-column-name",
-		scpb.Status_ABSENT, scpb.Status_ABSENT,
-		func(from, to NodeVars) rel.Clauses {
-			fromColumnID := rel.Var("fromColumnID")
-			return rel.Clauses{
-				from.TypeFilter(rulesVersionKey, isNonIndexBackedConstraint, isWithExpression),
-				from.ReferencedColumnIDsContains(fromColumnID),
-				to.Type((*scpb.ColumnName)(nil)),
-				to.El.AttrEqVar(screl.ColumnID, fromColumnID),
-				JoinOnDescID(from, to, "table-id"),
 			}
 		},
 	)

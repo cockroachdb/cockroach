@@ -105,7 +105,7 @@ func verifyOCSP(ctx context.Context, settings TLSSettings, cert, issuer *x509.Ce
 		}
 	}
 	// Non-strict mode: log errors and continue.
-	log.Dev.Warningf(ctx, "OCSP check failed in non-strict mode: %v", errs)
+	log.Warningf(ctx, "OCSP check failed in non-strict mode: %v", errs)
 	return nil
 }
 

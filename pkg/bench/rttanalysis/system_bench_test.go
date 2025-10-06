@@ -5,17 +5,9 @@
 
 package rttanalysis
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-)
-
-func BenchmarkSystemDatabaseQueries(b *testing.B) {
-	skip.UnderShort(b, "skipping long benchmark")
-	reg.Run(b)
-}
-
+func BenchmarkSystemDatabaseQueries(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("SystemDatabaseQueries", []RoundTripBenchTestCase{
 		// This query performs 1-2 lookups: getting the descriptor ID by Name, then

@@ -316,7 +316,7 @@ func (w *worker) run(ctx context.Context) error {
 		defer rows.Close()
 	}
 	if err != nil {
-		log.Dev.Infof(ctx, "[q%d] error: %s", queryNum, err)
+		log.Infof(ctx, "[q%d] error: %s", queryNum, err)
 		return err
 	}
 	var numRows int
@@ -324,14 +324,14 @@ func (w *worker) run(ctx context.Context) error {
 		numRows++
 	}
 	if err := rows.Err(); err != nil {
-		log.Dev.Infof(ctx, "[q%d] error: %s", queryNum, err)
+		log.Infof(ctx, "[q%d] error: %s", queryNum, err)
 		return err
 	}
 	elapsed := timeutil.Since(start)
 	// TODO(yuzefovich): at the moment, we're not printing out the histograms
 	// since that would just be too much noise; however, having the percentiles
 	// in the output would also be useful.
-	log.Dev.Infof(ctx, "[q%d] returned %d rows after %.2f seconds",
+	log.Infof(ctx, "[q%d] returned %d rows after %.2f seconds",
 		queryNum, numRows, elapsed.Seconds())
 	return nil
 }

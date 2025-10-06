@@ -158,7 +158,7 @@ func NewRewindableSpillingQueue(args *NewSpillingQueueArgs) *SpillingQueue {
 // spilling queue will account for memory used by the in-memory copies).
 func (q *SpillingQueue) Enqueue(ctx context.Context, batch coldata.Batch) {
 	if q.rewindable && q.rewindableState.numItemsDequeued > 0 {
-		colexecerror.InternalError(errors.AssertionFailedf("attempted to Enqueue to rewindable SpillingQueue after Dequeue has been called"))
+		colexecerror.InternalError(errors.Errorf("attempted to Enqueue to rewindable SpillingQueue after Dequeue has been called"))
 	}
 
 	n := batch.Length()
@@ -556,7 +556,7 @@ func (q *SpillingQueue) Close(ctx context.Context) error {
 // Rewind rewinds the spilling queue.
 func (q *SpillingQueue) Rewind(ctx context.Context) error {
 	if !q.rewindable {
-		return errors.AssertionFailedf("unexpectedly Rewind() called when spilling queue is not rewindable")
+		return errors.Newf("unexpectedly Rewind() called when spilling queue is not rewindable")
 	}
 	if q.diskQueue != nil {
 		if err := q.diskQueue.(colcontainer.RewindableQueue).Rewind(ctx); err != nil {

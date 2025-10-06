@@ -30,8 +30,7 @@ const (
 
 var (
 	// Shared flags.
-	numCPUs    int
-	pgoEnabled bool
+	numCPUs int
 )
 
 var archivedCdepConfigurations = []configuration{
@@ -165,7 +164,6 @@ func (d *dev) getArchivedCdepString(bazelBin string) (string, error) {
 
 func addCommonBuildFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of CPU cores used for building and testing at the Bazel level (note that this has no impact on GOMAXPROCS or the functionality of any build or test action under the Bazel level)")
-	cmd.Flags().BoolVar(&pgoEnabled, "pgo", false, "build with profile-guided optimization (PGO)")
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {
@@ -238,6 +236,16 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	return nil
 }
 
+func (d *dev) warnAboutChangeInStressBehavior(timeout time.Duration) {
+	if e := d.os.Getenv("DEV_I_UNDERSTAND_ABOUT_STRESS"); e == "" {
+		log.Printf("NOTE: The behavior of `dev test --stress` has changed. The new default behavior is to run the test 1,000 times in parallel (500 for logictests), stopping if any of the tests fail. The number of runs can be tweaked with the `--count` parameter to `dev`.")
+		if timeout > 0 {
+			log.Printf("WARNING: The behavior of --timeout under --stress has changed. --timeout controls the timeout of the test, not the entire `stress` invocation.")
+		}
+		log.Printf("Set DEV_I_UNDERSTAND_ABOUT_STRESS=1 to squelch this message")
+	}
+}
+
 // This function retrieves the merge-base hash between the current branch and master
 func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
 	// List files changed against `master`
@@ -260,14 +268,4 @@ func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(baseBytes)), nil
-}
-
-func addCommonBazelArguments(args *[]string) {
-	if numCPUs != 0 {
-		*args = append(*args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
-		*args = append(*args, fmt.Sprintf("--jobs=%d", numCPUs))
-	}
-	if pgoEnabled {
-		*args = append(*args, "--config=pgo")
-	}
 }

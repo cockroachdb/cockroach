@@ -85,18 +85,14 @@ func (c *Cache) Get(
 	}
 	privDesc, err := c.c.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
 		func(loadCtx context.Context) (_ interface{}, retErr error) {
-			privDesc, err := c.readFromStorage(loadCtx, txn, spo)
-			if err != nil {
-				return nil, err
-			}
-			entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
-			// Only write back to the cache if the table version is committed.
-			c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
-			return privDesc, nil
+			return c.readFromStorage(loadCtx, txn, spo)
 		})
 	if err != nil {
 		return nil, err
 	}
+	entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
+	// Only write back to the cache if the table version is committed.
+	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
 	return privDesc, nil
 }
 
@@ -197,9 +193,9 @@ func (c *Cache) Start(ctx context.Context) {
 		defer close(c.warmed)
 		start := timeutil.Now()
 		if err := c.start(ctx); err != nil {
-			log.Dev.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)
+			log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)
 		} else {
-			log.Dev.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
+			log.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
 		}
 	}); err != nil {
 		close(c.warmed)

@@ -8,7 +8,6 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
-	encjson "encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -44,12 +43,6 @@ const GcpScheme = "gcpubsub"
 const gcpScope = "https://www.googleapis.com/auth/pubsub"
 const cloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 const globalGCPEndpoint = "pubsub.googleapis.com:443"
-
-type jsonPayload struct {
-	Key   encjson.RawMessage `json:"key"`
-	Value encjson.RawMessage `json:"value"`
-	Topic string             `json:"topic"`
-}
 
 // isPubsubSink returns true if url contains scheme with valid pubsub sink
 func isPubsubSink(u *url.URL) bool {
@@ -106,7 +99,7 @@ func makePubsubSinkClient(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
@@ -228,11 +221,10 @@ type pubsubBuffer struct {
 	topicEncoded []byte
 	messages     []*pb.PubsubMessage
 	numBytes     int
-	// Cache for attributes which are sent along with each message. This lets us
-	// re-use expensive map allocs for messages in the batch with the same
-	// attributes. This does not include headers, as they are per-row. In fact,
-	// it's just the table name.
-	attributesCache map[string]map[string]string
+	// Cache for attributes which are sent along with each message.
+	// This lets us re-use expensive map allocs for messages in the batch
+	// with the same attributes.
+	attributesCache map[attributes]map[string]string
 }
 
 var _ BatchBuffer = (*pubsubBuffer)(nil)
@@ -261,11 +253,10 @@ func (psb *pubsubBuffer) Append(
 
 	msg := &pb.PubsubMessage{Data: content}
 	if psb.sc.withTableNameAttribute {
-		attrKey := attributes.tableName
-		if _, ok := psb.attributesCache[attrKey]; !ok {
-			psb.attributesCache[attrKey] = map[string]string{"TABLE_NAME": attributes.tableName}
+		if _, ok := psb.attributesCache[attributes]; !ok {
+			psb.attributesCache[attributes] = map[string]string{"TABLE_NAME": attributes.tableName}
 		}
-		msg.Attributes = psb.attributesCache[attrKey]
+		msg.Attributes = psb.attributesCache[attributes]
 	}
 
 	psb.messages = append(psb.messages, msg)
@@ -296,7 +287,7 @@ func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}
 	if sc.withTableNameAttribute {
-		psb.attributesCache = make(map[string]map[string]string)
+		psb.attributesCache = make(map[attributes]map[string]string)
 	}
 	return psb
 }
@@ -338,7 +329,7 @@ func makePublisherClient(
 
 	// See https://pkg.go.dev/cloud.google.com/go/pubsub#hdr-Emulator for emulator information.
 	if addr, _ := envutil.ExternalEnvString("PUBSUB_EMULATOR_HOST", 1); addr != "" {
-		log.Changefeed.Infof(ctx, "Establishing connection to pubsub emulator at %s", addr)
+		log.Infof(ctx, "Establishing connection to pubsub emulator at %s", addr)
 		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
 			return nil, errors.Newf("grpc.Dial: %w", err)

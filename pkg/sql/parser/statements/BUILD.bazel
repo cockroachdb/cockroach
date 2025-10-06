@@ -8,6 +8,5 @@ go_library(
     deps = [
         "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/tree",
-        "//pkg/util/jsonpath",
     ],
 )

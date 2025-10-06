@@ -1,0 +1,27 @@
+create-replication-clusters
+----
+
+start-replication-stream
+----
+
+exec-sql as=destination-system
+ALTER TENANT "destination" SET REPLICATION RETENTION = '42s'
+----
+
+query-sql as=destination-system
+SELECT crdb_internal.pb_to_json('payload', payload)->'streamIngestion'->'replicationTtlSeconds' as retention_ttl_seconds
+FROM crdb_internal.system_jobs
+WHERE id = (SELECT job_id FROM [SHOW JOBS] WHERE job_type='REPLICATION STREAM INGESTION')
+----
+42
+
+exec-sql as=source-system
+ALTER TENANT "source" SET REPLICATION EXPIRATION WINDOW = '42s'
+----
+
+query-sql as=source-system
+SELECT crdb_internal.pb_to_json('payload', payload)->'streamReplication'->'expirationWindow' as expiration_window
+FROM crdb_internal.system_jobs
+WHERE id = (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'REPLICATION STREAM PRODUCER')
+----
+"42s"

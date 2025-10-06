@@ -7,9 +7,9 @@ go_test(
         "sqlwatcher_test.go",
     ],
     deps = [
-        "//pkg/backup",
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/ccl/backupccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",
         "//pkg/cloud/impl:cloudimpl",

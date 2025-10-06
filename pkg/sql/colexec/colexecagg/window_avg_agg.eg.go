@@ -63,7 +63,7 @@ func newAvgWindowAggAlloc(
 			return &avgIntervalWindowAggAlloc{aggAllocBase: allocBase}, nil
 		}
 	}
-	return nil, errors.AssertionFailedf("unsupported avg agg type %s", t.Name())
+	return nil, errors.Errorf("unsupported avg agg type %s", t.Name())
 }
 
 type avgInt16WindowAgg struct {

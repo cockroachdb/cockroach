@@ -37,7 +37,7 @@ func logStats(ctx context.Context, stats *eventpb.RuntimeStats) {
 	// for use by humans while troubleshooting from log files.
 	var buf strings.Builder
 	if err := statsTemplate.Execute(&buf, stats); err != nil {
-		log.Dev.Warningf(ctx, "failed to render runtime stats: %v", err)
+		log.Warningf(ctx, "failed to render runtime stats: %v", err)
 		return
 	}
 	log.Health.Infof(ctx, "runtime stats: %s", redact.SafeString(buf.String()))

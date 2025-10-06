@@ -105,7 +105,7 @@ func (is Server) WaitForApplication(
 			}
 		}
 		if ctx.Err() == nil {
-			log.KvExec.Fatal(ctx, "infinite retry loop exited but context has no error")
+			log.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
 		return ctx.Err()
 	})
@@ -130,7 +130,7 @@ func (is Server) WaitForReplicaInit(
 			}
 		}
 		if ctx.Err() == nil {
-			log.KvExec.Fatal(ctx, "infinite retry loop exited but context has no error")
+			log.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
 		return ctx.Err()
 	})
@@ -145,7 +145,7 @@ func (is Server) CompactEngineSpan(
 	resp := &CompactEngineSpanResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			return s.TODOEngine().CompactRange(ctx, req.Span.Key, req.Span.EndKey)
+			return s.TODOEngine().CompactRange(req.Span.Key, req.Span.EndKey)
 		})
 	return resp, err
 }

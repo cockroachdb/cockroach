@@ -38,10 +38,8 @@ type GrantTargetList struct {
 	// If the target is for all tables in a set of schemas.
 	AllTablesInSchema bool
 	// If the target is for all functions in a set of schemas.
-	// Note that AllFunctionsInSchema may also be set.
 	AllFunctionsInSchema bool
 	// If the target is for all procedures in a set of schemas.
-	// Note that AllProceduresInSchema may also be set.
 	AllProceduresInSchema bool
 	// If the target is system.
 	System bool
@@ -65,9 +63,6 @@ func (tl *GrantTargetList) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&tl.Schemas)
 	} else if tl.AllTablesInSchema {
 		ctx.WriteString("ALL TABLES IN SCHEMA ")
-		ctx.FormatNode(&tl.Schemas)
-	} else if tl.AllFunctionsInSchema && tl.AllProceduresInSchema {
-		ctx.WriteString("ALL ROUTINES IN SCHEMA ")
 		ctx.FormatNode(&tl.Schemas)
 	} else if tl.AllFunctionsInSchema {
 		ctx.WriteString("ALL FUNCTIONS IN SCHEMA ")

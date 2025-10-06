@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -19,10 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -94,7 +94,7 @@ func (desc *wrapper) GetReferencedDescIDs(
 			// Skip trigger function bodies - they are handled below.
 			return nil
 		}
-		if parsedExpr, err := parserutils.ParseExpr(*expr); err == nil {
+		if parsedExpr, err := parser.ParseExpr(*expr); err == nil {
 			// ignore errors
 			tree.WalkExpr(visitor, parsedExpr)
 		}
@@ -127,18 +127,6 @@ func (desc *wrapper) GetReferencedDescIDs(
 			ids.Add(id)
 		}
 		for _, id := range t.DependsOnTypes {
-			ids.Add(id)
-		}
-	}
-	// Add policy dependencies.
-	for _, p := range desc.Policies {
-		for _, id := range p.DependsOnTypes {
-			ids.Add(id)
-		}
-		for _, id := range p.DependsOnRelations {
-			ids.Add(id)
-		}
-		for _, id := range p.DependsOnFunctions {
 			ids.Add(id)
 		}
 	}
@@ -247,25 +235,12 @@ func (desc *wrapper) ValidateForwardReferences(
 	for i := range desc.Triggers {
 		trigger := &desc.Triggers[i]
 		for _, id := range trigger.DependsOn {
-			vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg))
+			vea.Report(catalog.ValidateOutboundTableRef(id, vdg))
 		}
 		for _, id := range trigger.DependsOnTypes {
 			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
 		}
 		for _, id := range trigger.DependsOnRoutines {
-			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
-		}
-	}
-
-	for i := range desc.Policies {
-		policy := &desc.Policies[i]
-		for _, id := range policy.DependsOnTypes {
-			vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
-		}
-		for _, id := range policy.DependsOnRelations {
-			vea.Report(catalog.ValidateOutboundTableRef(desc.GetID(), id, vdg))
-		}
-		for _, id := range policy.DependsOnFunctions {
 			vea.Report(catalog.ValidateOutboundFunctionRef(id, vdg))
 		}
 	}
@@ -275,22 +250,6 @@ func (desc *wrapper) ValidateForwardReferences(
 func (desc *wrapper) ValidateBackReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
-	// Check that all expression strings can be parsed.
-	// NOTE: This could be performed in ValidateSelf, but we want to avoid that
-	// since parsing all the expressions is a relatively expensive thing to do.
-	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
-		switch typ {
-		case catalog.SQLExpr:
-			_, err = parserutils.ParseExpr(*expr)
-		case catalog.SQLStmt:
-			_, err = parserutils.Parse(*expr)
-		case catalog.PLpgSQLStmt:
-			_, err = parserutils.PLpgSQLParse(*expr)
-		}
-		vea.Report(err)
-		return nil
-	})
-
 	// Check that outbound foreign keys have matching back-references.
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFKBackReference(&desc.OutboundFKs[i], vdg))
@@ -360,6 +319,8 @@ func (desc *wrapper) ValidateBackReferences(
 		}
 		switch depDesc.DescriptorType() {
 		case catalog.Table:
+			// If this is a table, it may be referenced by a view, otherwise if this
+			// is a sequence, then it may be also be referenced by a table.
 			vea.Report(desc.validateInboundTableRef(by, vdg))
 		case catalog.Function:
 			// This relation may be referenced by a function.
@@ -367,33 +328,6 @@ func (desc *wrapper) ValidateBackReferences(
 		default:
 			vea.Report(errors.AssertionFailedf("table is depended on by unexpected %s %s (%d)",
 				depDesc.DescriptorType(), depDesc.GetName(), depDesc.GetID()))
-		}
-	}
-
-	// Check back-references in policies
-	for _, p := range desc.Policies {
-		for _, fnID := range p.DependsOnFunctions {
-			fn, err := vdg.GetFunctionDescriptor(fnID)
-			if err != nil {
-				vea.Report(err)
-				continue
-			}
-			vea.Report(desc.validateOutboundFuncRefBackReference(fn))
-		}
-		for _, id := range p.DependsOnTypes {
-			typ, err := vdg.GetTypeDescriptor(id)
-			if err != nil {
-				vea.Report(err)
-				continue
-			}
-			vea.Report(desc.validateOutboundTypeRefBackReference(typ))
-		}
-		for _, id := range p.DependsOnRelations {
-			ref, _ := vdg.GetTableDescriptor(id)
-			if ref == nil {
-				continue
-			}
-			vea.Report(catalog.ValidateOutboundTableRefBackReference(desc.GetID(), ref))
 		}
 	}
 }
@@ -501,76 +435,49 @@ func (desc *wrapper) validateInboundTableRef(
 			backReferencedTable.GetName(), backReferencedTable.GetID())
 	}
 	if desc.IsSequence() {
-		if err := validateSequenceColumnBackrefs(desc, backReferencedTable, by); err != nil {
-			return err
+		// The ColumnIDs field takes a different meaning when the validated
+		// descriptor is for a sequence. In this case, they refer to the columns
+		// in the referenced descriptor instead.
+		for _, colID := range by.ColumnIDs {
+			// Skip this check if the column ID is zero. This can happen due to
+			// bugs in 20.2.
+			//
+			// TODO(ajwerner): Make sure that a migration in 22.2 fixes this issue.
+			if colID == 0 {
+				continue
+			}
+			col := catalog.FindColumnByID(backReferencedTable, colID)
+			if col == nil {
+				return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
+					backReferencedTable.GetName(), by.ID, colID)
+			}
+			var found bool
+			for i := 0; i < col.NumUsesSequences(); i++ {
+				if col.GetUsesSequenceID(i) == desc.GetID() {
+					found = true
+					break
+				}
+			}
+			if found {
+				continue
+			}
+			return errors.AssertionFailedf(
+				"depended-on-by relation %q (%d) has no reference to this sequence in column %q (%d)",
+				backReferencedTable.GetName(), by.ID, col.GetName(), col.GetID())
 		}
 	}
 
 	// View back-references need corresponding forward reference.
-	if backReferencedTable.IsView() {
-		for _, id := range backReferencedTable.TableDesc().DependsOn {
-			if id == desc.GetID() {
-				return nil
-			}
-		}
-		return errors.AssertionFailedf("depended-on-by view %q (%d) has no corresponding depends-on forward reference",
-			backReferencedTable.GetName(), by.ID)
+	if !backReferencedTable.IsView() {
+		return nil
 	}
-
-	// Table to table back-references must have a trigger reference.
-	if backReferencedTable.IsTable() && desc.IsTable() {
-		for _, trigger := range backReferencedTable.TableDesc().Triggers {
-			for _, id := range trigger.DependsOn {
-				if id == desc.GetID() {
-					return nil
-				}
-			}
+	for _, id := range backReferencedTable.TableDesc().DependsOn {
+		if id == desc.GetID() {
+			return nil
 		}
-
-		// No valid forward reference found to justify the backref.
-		return errors.AssertionFailedf(
-			"table %q (%d) does not have a forward reference to descriptor %q (%d)",
-			backReferencedTable.GetName(), by.ID, desc.GetName(), desc.GetID())
 	}
-	return nil
-}
-
-func validateSequenceColumnBackrefs(
-	seq catalog.Descriptor,
-	backReferencedTable catalog.TableDescriptor,
-	by descpb.TableDescriptor_Reference,
-) error {
-	// The ColumnIDs field takes a different meaning when the validated
-	// descriptor is for a sequence. In this case, they refer to the columns
-	// in the referenced descriptor instead.
-	for _, colID := range by.ColumnIDs {
-		// Skip this check if the column ID is zero. This can happen due to
-		// bugs in 20.2.
-		//
-		// TODO(ajwerner): Make sure that a migration in 22.2 fixes this issue.
-		if colID == 0 {
-			continue
-		}
-		col := catalog.FindColumnByID(backReferencedTable, colID)
-		if col == nil {
-			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
-				backReferencedTable.GetName(), by.ID, colID)
-		}
-		var found bool
-		for i := 0; i < col.NumUsesSequences(); i++ {
-			if col.GetUsesSequenceID(i) == seq.GetID() {
-				found = true
-				break
-			}
-		}
-		if found {
-			continue
-		}
-		return errors.AssertionFailedf(
-			"depended-on-by relation %q (%d) has no reference to this sequence in column %q (%d)",
-			backReferencedTable.GetName(), by.ID, col.GetName(), col.GetID())
-	}
-	return nil
+	return errors.AssertionFailedf("depended-on-by view %q (%d) has no corresponding depends-on forward reference",
+		backReferencedTable.GetName(), by.ID)
 }
 
 // validateFK asserts that references to desc from inbound and outbound FKs are
@@ -994,7 +901,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateUniqueWithoutIndexConstraints(columnsByID),
 			desc.validateTableIndexes(columnsByID, vea.IsActive),
 			desc.validatePartitioning(),
-			desc.validatePolicies(),
 		}
 		hasErrs := false
 		for _, err := range newErrs {
@@ -1088,6 +994,20 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			dscs.JobID, desc.MutationJobs))
 	}
 
+	// Check that all expression strings can be parsed.
+	_ = ForEachExprStringInTableDesc(desc, func(expr *string, typ catalog.DescExprType) (err error) {
+		switch typ {
+		case catalog.SQLExpr:
+			_, err = parser.ParseExpr(*expr)
+		case catalog.SQLStmt:
+			_, err = parser.Parse(*expr)
+		case catalog.PLpgSQLStmt:
+			_, err = plpgsqlparser.Parse(*expr)
+		}
+		vea.Report(err)
+		return nil
+	})
+
 	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
 	// The remaining validation is called separately from ValidateRowLevelTTL
 	// because it can only be called on an initialized table descriptor.
@@ -1100,26 +1020,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
 	ValidateOnUpdate(desc, vea.Report)
-
-	// Validate that the region-lookup constraint (if set) is valid.
-	if !desc.Dropped() {
-		if id := desc.GetRegionalByRowUsingConstraint(); id != descpb.ConstraintID(0) {
-			constraint, err := catalog.MustFindConstraintByID(desc, id)
-			if err != nil {
-				vea.Report(errors.HandleAsAssertionFailure(err))
-				return
-			}
-			regionColName, err := desc.GetRegionalByRowTableRegionColumnName()
-			if err != nil {
-				vea.Report(errors.HandleAsAssertionFailure(err))
-				return
-			}
-			if err = ValidateRBRTableUsingConstraint(desc, constraint, regionColName); err != nil {
-				vea.Report(errors.HandleAsAssertionFailure(err))
-				return
-			}
-		}
-	}
 }
 
 // ValidateNotVisibleIndex returns a notice when dropping the given index may
@@ -1262,7 +1162,7 @@ func (desc *wrapper) validateColumns() error {
 
 		if column.IsComputed() {
 			// Verify that the computed column expression is valid.
-			expr, err := parserutils.ParseExpr(column.GetComputeExpr())
+			expr, err := parser.ParseExpr(column.GetComputeExpr())
 			if err != nil {
 				return err
 			}
@@ -1478,12 +1378,12 @@ func (desc *wrapper) validateTriggers() error {
 
 		// Verify that the WHEN expression and function body statements are valid.
 		if trigger.WhenExpr != "" {
-			_, err := parserutils.ParseExpr(trigger.WhenExpr)
+			_, err := parser.ParseExpr(trigger.WhenExpr)
 			if err != nil {
 				return err
 			}
 		}
-		_, err := parserutils.PLpgSQLParse(trigger.FuncBody)
+		_, err := plpgsqlparser.Parse(trigger.FuncBody)
 		if err != nil {
 			return err
 		}
@@ -1550,7 +1450,7 @@ func (desc *wrapper) validateCheckConstraints(
 		}
 
 		// Verify that the check's expression is valid.
-		expr, err := parserutils.ParseExpr(chk.GetExpr())
+		expr, err := parser.ParseExpr(chk.GetExpr())
 		if err != nil {
 			return err
 		}
@@ -1604,7 +1504,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 		}
 
 		if c.IsPartial() {
-			expr, err := parserutils.ParseExpr(c.GetPredicate())
+			expr, err := parser.ParseExpr(c.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -1758,7 +1658,7 @@ func (desc *wrapper) validateTableIndexes(
 				return errors.Newf("secondary index %q contains dropped stored column %q", idx.GetName(), col.ColName())
 			}
 			// Ensure any active index does not store a primary key column (added and gated in V24.1).
-			if !idx.IsMutation() && catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...).Contains(colID) {
+			if !idx.IsMutation() && catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...).Contains(colID) && isActive(clusterversion.V24_1) {
 				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
 			}
 		}
@@ -1772,7 +1672,7 @@ func (desc *wrapper) validateTableIndexes(
 			}
 		}
 		if idx.IsPartial() {
-			expr, err := parserutils.ParseExpr(idx.GetPredicate())
+			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
 				return err
 			}
@@ -1835,10 +1735,13 @@ func (desc *wrapper) validateTableIndexes(
 			}
 
 			// When newPKColIDs is not empty, it means there is an in-progress `ALTER
-			// PRIMARY KEY`. Certain schema changes will make the new virtual columns
-			// public earlier than the new primary key, which should be acceptable.
+			// PRIMARY KEY`. We don't allow queueing schema changes when there's a
+			// primary key mutation, so it's safe to make the assumption that `Adding`
+			// indexes are associated with the new primary key because they are
+			// rewritten and `Non-adding` indexes should only contain virtual column
+			// from old primary key.
 			isOldPKCol := !idx.Adding() && curPKColIDs.Contains(colID)
-			isNewPKCol := newPKColIDs.Contains(colID)
+			isNewPKCol := idx.Adding() && newPKColIDs.Contains(colID)
 			if newPKColIDs.Len() > 0 && (isOldPKCol || isNewPKCol) {
 				continue
 			}
@@ -1895,15 +1798,7 @@ func (desc *wrapper) validateTableIndexes(
 					idx.GetName(), idx.IndexDesc().EncodingType, catenumpb.SecondaryIndexEncoding)
 			}
 		}
-		// Validate that HideForPrimaryKeyRecreate is only true if a schema
-		// change is active. At the end of a schema change, all public indexes
-		// should be visible.
-		if idx.IndexDesc().HideForPrimaryKeyRecreate &&
-			desc.GetDeclarativeSchemaChangerState() == nil &&
-			len(desc.GetMutations()) == 0 {
-			return errors.AssertionFailedf("index %q (%d) is hidden for a primary key"+
-				" recreate without a schema change", idx.GetName(), idx.GetID())
-		}
+
 		// Ensure that an index column ID shows up at most once in `keyColumnIDs`,
 		// `keySuffixColumnIDs`, and `storeColumnIDs`.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
@@ -2157,128 +2052,6 @@ func (desc *wrapper) validatePartitioning() error {
 	})
 }
 
-func (desc *wrapper) validatePolicies() error {
-	if !desc.IsTable() {
-		return nil
-	}
-	policies := desc.GetPolicies()
-	names := make(map[string]descpb.PolicyID, len(policies))
-	idToName := make(map[descpb.PolicyID]string, len(policies))
-	for _, p := range policies {
-		if err := desc.validatePolicy(&p); err != nil {
-			return err
-		}
-
-		// Perform validation across all policies defined for the table.
-		if otherID, found := names[p.Name]; found && p.ID != otherID {
-			return pgerror.Newf(pgcode.DuplicateObject,
-				"duplicate policy name: %q", p.Name)
-		}
-		names[p.Name] = p.ID
-		if other, found := idToName[p.ID]; found {
-			return pgerror.Newf(pgcode.DuplicateObject,
-				"policy ID %d in policy %q already in use by %q",
-				p.ID, p.Name, other)
-		}
-		idToName[p.ID] = p.Name
-	}
-	return nil
-}
-
-// validatePolicy will validate a single policy in isolation from other policies in the table.
-func (desc *wrapper) validatePolicy(p *descpb.PolicyDescriptor) error {
-	if p.ID == 0 {
-		return errors.AssertionFailedf(
-			"policy ID was missing for policy %q",
-			p.Name)
-	} else if p.ID >= desc.NextPolicyID {
-		return errors.AssertionFailedf(
-			"policy %q has ID %d, which is not less than the NextPolicyID value %d for the table",
-			p.Name, p.ID, desc.NextPolicyID)
-	}
-	if p.Name == "" {
-		return pgerror.Newf(pgcode.Syntax, "empty policy name")
-	}
-	if _, ok := catpb.PolicyType_name[int32(p.Type)]; !ok || p.Type == catpb.PolicyType_POLICYTYPE_UNUSED {
-		return errors.AssertionFailedf(
-			"policy %q has an unknown policy type %v", p.Name, p.Type)
-	}
-	if _, ok := catpb.PolicyCommand_name[int32(p.Command)]; !ok || p.Command == catpb.PolicyCommand_POLICYCOMMAND_UNUSED {
-		return errors.AssertionFailedf(
-			"policy %q has an unknown policy command %v", p.Name, p.Command)
-	}
-	if err := desc.validatePolicyRoles(p); err != nil {
-		return err
-	}
-	if err := desc.validatePolicyExprs(p); err != nil {
-		return err
-	}
-	return nil
-}
-
-// validatePolicyRoles will validate the roles that are in one policy.
-func (desc *wrapper) validatePolicyRoles(p *descpb.PolicyDescriptor) error {
-	if len(p.RoleNames) == 0 {
-		return errors.AssertionFailedf(
-			"policy %q has no roles defined", p.Name)
-	}
-	rolesInUse := make(map[string]struct{}, len(p.RoleNames))
-	for i, roleName := range p.RoleNames {
-		if _, found := rolesInUse[roleName]; found {
-			return errors.AssertionFailedf(
-				"policy %q contains duplicate role name %q", p.Name, roleName)
-		}
-		rolesInUse[roleName] = struct{}{}
-		// The public role, if included, must always be the first entry in the
-		// role names slice.
-		if roleName == username.PublicRole && i > 0 {
-			return errors.AssertionFailedf(
-				"the public role must be the first role defined in policy %q", p.Name)
-		}
-	}
-	return nil
-}
-
-// validatePolicyExprs will validate the expressions within the policy.
-func (desc *wrapper) validatePolicyExprs(p *descpb.PolicyDescriptor) error {
-	if p.WithCheckExpr != "" {
-		_, err := parserutils.ParseExpr(p.WithCheckExpr)
-		if err != nil {
-			return errors.Wrapf(err, "WITH CHECK expression %q is invalid", p.WithCheckExpr)
-		}
-	}
-	if p.UsingExpr != "" {
-		_, err := parserutils.ParseExpr(p.UsingExpr)
-		if err != nil {
-			return errors.Wrapf(err, "USING expression %q is invalid", p.UsingExpr)
-		}
-	}
-
-	// Ensure the validity of policy back-references. The existence and status of
-	// referenced objects are verified during the execution of
-	// ValidateForwardReferences and ValidateBackwardReferences for the table.
-	var seenIDs catalog.DescriptorIDSet
-	for _, id := range []struct {
-		idName string
-		ids    []descpb.ID
-	}{
-		{"type", p.DependsOnTypes},
-		{"functions", p.DependsOnFunctions},
-		{"relations", p.DependsOnRelations},
-	} {
-		for idx, depID := range id.ids {
-			if depID == descpb.InvalidID {
-				return errors.Newf("invalid %s id %d in depends-on references #%d", id.idName, id, idx)
-			}
-			if seenIDs.Contains(depID) {
-				return errors.Newf("%s id %d in depends-on references #%d is duplicated", id.idName, depID, idx)
-			}
-			seenIDs.Add(depID)
-		}
-	}
-	return nil
-}
-
 // validateAutoStatsSettings validates that any new settings in
 // catpb.AutoStatsSettings hold a valid value.
 func (desc *wrapper) validateAutoStatsSettings(vea catalog.ValidationErrorAccumulator) {
@@ -2287,7 +2060,6 @@ func (desc *wrapper) validateAutoStatsSettings(vea catalog.ValidationErrorAccumu
 	}
 	desc.validateAutoStatsEnabled(vea, catpb.AutoStatsEnabledTableSettingName, desc.AutoStatsSettings.Enabled)
 	desc.validateAutoStatsEnabled(vea, catpb.AutoPartialStatsEnabledTableSettingName, desc.AutoStatsSettings.PartialEnabled)
-	desc.validateAutoStatsEnabled(vea, catpb.AutoFullStatsEnabledTableSettingName, desc.AutoStatsSettings.FullEnabled)
 
 	desc.validateMinStaleRows(vea, catpb.AutoStatsMinStaleTableSettingName, desc.AutoStatsSettings.MinStaleRows)
 	desc.validateMinStaleRows(vea, catpb.AutoPartialStatsMinStaleTableSettingName, desc.AutoStatsSettings.PartialMinStaleRows)
@@ -2335,83 +2107,4 @@ func (desc *wrapper) validateFractionStaleRows(
 			vea.Report(errors.Newf("invalid float value for %s: cannot set to a negative value: %f", settingName, *value))
 		}
 	}
-}
-
-// ValidateRBRTableUsingConstraint validates the constraint used to look up the
-// region column in a REGIONAL BY ROW table. It checks that the referenced
-// constraint is a foreign key and contains the required columns. In addition,
-// computed columns may not reference the region column, and the region column
-// may not be itself a computed column.
-func ValidateRBRTableUsingConstraint(
-	tableDesc catalog.TableDescriptor, constraint catalog.Constraint, regionColName tree.Name,
-) error {
-	fk := constraint.AsForeignKey()
-	if fk == nil {
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"constraint %q is not a foreign key constraint",
-			constraint.GetName(),
-		)
-	}
-	if regionColName == tree.RegionalByRowRegionNotSpecifiedName {
-		regionColName = tree.RegionalByRowRegionDefaultColName
-	}
-	regionCol, err := catalog.MustFindColumnByName(tableDesc, string(regionColName))
-	if err != nil {
-		return err
-	}
-	if regionCol.IsComputed() {
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"cannot use computed column %q as the region column in a REGIONAL BY ROW table with "+
-				"the %q storage parameter specified",
-			regionColName, catpb.RBRUsingConstraintTableSettingName,
-		)
-	}
-	regionColID := regionCol.GetID()
-	fkHasRegionCol := false
-	for i := 0; i < fk.NumOriginColumns(); i++ {
-		colID := fk.GetOriginColumnID(i)
-		if colID == regionColID {
-			fkHasRegionCol = true
-			break
-		}
-	}
-	if !fkHasRegionCol {
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
-				"as it does not include the region column %q",
-			constraint.GetName(), regionColName,
-		)
-	}
-	if fk.NumOriginColumns() == 1 {
-		return pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
-				"as it only includes the region column",
-			constraint.GetName(),
-		)
-	}
-	// Ensure that computed columns do not reference the region column. This is
-	// needed because the values of every (possibly computed) foreign-key column
-	// must be known in order to determine the value for the region column.
-	for _, col := range tableDesc.NonDropColumns() {
-		if !col.IsComputed() {
-			continue
-		}
-		expr, err := parserutils.ParseExpr(col.GetComputeExpr())
-		if err != nil {
-			// At this point, we should be able to parse the computed expression.
-			return errors.WithAssertionFailure(err)
-		}
-		colIDs, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
-		if err != nil {
-			return errors.WithAssertionFailure(err)
-		}
-		if colIDs.Contains(regionColID) {
-			return sqlerrors.NewComputedColReferencesRegionColError(col.ColName(), regionColName)
-		}
-	}
-	return nil
 }

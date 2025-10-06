@@ -11,7 +11,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 32 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
  │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
@@ -89,7 +89,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 32 elements transitioning toward ABSENT
- │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
  │    │    │    ├── ABSENT    → PUBLIC Owner:{DescID: 106 (v3-)}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
@@ -125,7 +125,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 32 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
  │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
@@ -202,13 +202,13 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 105 (v2), ColumnID: 2 (j), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 105 (v2), ColumnID: 3 (rowid), IndexID: 2 (idx-)}
-      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 105 (v2), Name: "idx", IndexID: 2 (idx-)}
       │    │    ├── DROPPED   → ABSENT      View:{DescID: 106 (v3-)}
       │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-)}
@@ -221,10 +221,10 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":105}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 105 (v2), IndexID: 2 (idx-)}
            └── 4 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":105}

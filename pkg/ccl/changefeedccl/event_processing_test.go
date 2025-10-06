@@ -6,7 +6,6 @@
 package changefeedccl
 
 import (
-	"context"
 	"math/rand"
 	"testing"
 
@@ -79,7 +78,7 @@ func TestTopicForEvent(t *testing.T) {
 			details: jobspb.ChangefeedDetails{
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
-						DescID:            1,
+						TableID:           1,
 						StatementTimeName: "t1",
 					},
 				},
@@ -92,7 +91,7 @@ func TestTopicForEvent(t *testing.T) {
 			details: jobspb.ChangefeedDetails{
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
-						DescID:            1,
+						TableID:           1,
 						StatementTimeName: "old_name",
 					},
 				},
@@ -106,7 +105,7 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-						DescID:            1,
+						TableID:           1,
 						FamilyName:        "fam",
 						StatementTimeName: "t1",
 					},
@@ -121,13 +120,13 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-						DescID:            1,
+						TableID:           1,
 						FamilyName:        "fam",
 						StatementTimeName: "old_name",
 					},
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-						DescID:            1,
+						TableID:           1,
 						FamilyName:        "fam2",
 						StatementTimeName: "old_name",
 					},
@@ -142,7 +141,7 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-						DescID:            1,
+						TableID:           1,
 						FamilyName:        "fam",
 						StatementTimeName: "t1",
 					},
@@ -153,17 +152,11 @@ func TestTopicForEvent(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Can pass in nil for execCfg to AllTargets because we're not testing
-			// database-level targets.
-			targets, err := AllTargets(context.Background(), tc.details, nil)
-			require.NoError(t, err)
-			cfg, err := makeChangefeedConfigFromJobDetails(tc.details, targets)
-			require.NoError(t, err)
 			c := kvEventToRowConsumer{
-				details:              cfg,
+				details:              makeChangefeedConfigFromJobDetails(tc.details),
 				topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 			}
-			tn, err := MakeTopicNamer(targets)
+			tn, err := MakeTopicNamer(AllTargets(tc.details))
 			require.NoError(t, err)
 
 			td, err := c.topicForEvent(tc.event)

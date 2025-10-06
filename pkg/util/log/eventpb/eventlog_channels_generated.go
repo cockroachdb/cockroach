@@ -5,12 +5,6 @@ package eventpb
 import "github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AlterChangefeed) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *ChangefeedCanceled) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *ChangefeedEmittedBytes) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
@@ -27,9 +21,6 @@ func (m *DiskSlownessCleared) LoggingChannel() logpb.Channel { return logpb.Chan
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DiskSlownessDetected) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *LowDiskSpace) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *NodeDecommissioned) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
@@ -59,16 +50,10 @@ func (m *TenantSharedServiceStart) LoggingChannel() logpb.Channel { return logpb
 func (m *TenantSharedServiceStop) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *AggregatedContentionInfo) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *DebugRecoverReplica) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *DebugSendKvBatch) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_HEALTH }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *RuntimeStats) LoggingChannel() logpb.Channel { return logpb.Channel_HEALTH }
@@ -96,14 +81,6 @@ func (m *RoleBasedAuditEvent) LoggingChannel() logpb.Channel { return logpb.Chan
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SensitiveTableAccess) LoggingChannel() logpb.Channel { return logpb.Channel_SENSITIVE_ACCESS }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *UnsafeInternalsAccessed) LoggingChannel() logpb.Channel {
-	return logpb.Channel_SENSITIVE_ACCESS
-}
-
-// LoggingChannel implements the EventPayload interface.
-func (m *UnsafeInternalsDenied) LoggingChannel() logpb.Channel { return logpb.Channel_SENSITIVE_ACCESS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *QueryExecute) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
@@ -177,9 +154,6 @@ func (m *CreateFunction) LoggingChannel() logpb.Channel { return logpb.Channel_S
 func (m *CreateIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *CreatePolicy) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *CreateSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
@@ -210,9 +184,6 @@ func (m *DropFunction) LoggingChannel() logpb.Channel { return logpb.Channel_SQL
 func (m *DropIndex) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
-func (m *DropPolicy) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
-
-// LoggingChannel implements the EventPayload interface.
 func (m *DropSchema) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
@@ -238,9 +209,6 @@ func (m *FinishSchemaChangeRollback) LoggingChannel() logpb.Channel { return log
 
 // LoggingChannel implements the EventPayload interface.
 func (m *ForceDeleteTableDataEntry) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
-
-// LoggingChannel implements the EventPayload interface.
-func (m *RefreshMaterializedView) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *RenameDatabase) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
@@ -380,6 +348,9 @@ func (m *StoreStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEM
 
 // LoggingChannel implements the EventPayload interface.
 func (m *CapturedIndexUsageStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *HotRangesStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *MVCCIteratorStats) LoggingChannel() logpb.Channel { return logpb.Channel_TELEMETRY }

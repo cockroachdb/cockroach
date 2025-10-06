@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -18,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
@@ -36,10 +36,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}
 
-	isTemp := resolveTemporaryStatus(cf.Name.ObjectNamePrefix, tree.PersistencePermanent)
-	if isTemp {
-		panic(unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema"))
-	}
 	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
@@ -104,6 +100,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	}
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
+	}
+	if language == tree.RoutineLangPLpgSQL {
+		if err := plpgsql.CheckClusterSupportsPLpgSQL(b.evalCtx.Settings); err != nil {
+			panic(err)
+		}
 	}
 
 	// Track the dependencies in the arguments, return type, and statements in
@@ -365,7 +366,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		typeDeps.Add(int(id))
 	})
 
-	isSetReturning := cf.ReturnType != nil && cf.ReturnType.SetOf
 	targetVolatility := tree.GetRoutineVolatility(cf.Options)
 	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
 
@@ -407,11 +407,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
-		if isSetReturning {
-			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V25_2) {
-				panic(unimplemented.Newf("PL/pgSQL set-returning functions",
-					"PL/pgSQL set-returning functions are only supported in v25.2 and later"))
-			}
+		if cf.ReturnType != nil && cf.ReturnType.SetOf {
+			panic(unimplemented.NewWithIssueDetail(105240,
+				"set-returning PL/pgSQL functions",
+				"set-returning PL/pgSQL functions are not yet supported",
+			))
 		}
 
 		// Parse the function body.
@@ -433,7 +433,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 
 		// Special handling for trigger functions.
-		var skipSQL, isTriggerFn bool
+		buildSQL := true
 		if funcReturnType.Identical(types.Trigger) {
 			// Trigger functions cannot have user-defined parameters. However, they do
 			// have a set of implicitly defined parameters.
@@ -454,22 +454,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 			// Analysis of SQL expressions for trigger functions must be deferred
 			// until the function is bound to a trigger.
-			isTriggerFn = true
-			skipSQL = true
+			buildSQL = false
 		}
 
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
-		options := basePLOptions().
-			SetIsSetReturning(isSetReturning).
-			SetIsProcedure(cf.IsProcedure).
-			SetIsTriggerFn(isTriggerFn).
-			SetSkipSQL(skipSQL)
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, options, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
-				funcReturnType, nil /* outScope */, 0, /* resultBufferID */
+				b, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
+				funcReturnType, cf.IsProcedure, buildSQL, nil, /* outScope */
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
@@ -482,12 +476,9 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
+	if stmtScope != nil {
 		// Validate that the result type of the last statement matches the
-		// return type of the function. We skip this validation for PL/pgSQL SRFs
-		// because those handle their own validation, and do not return a result
-		// directly from their last body statement anyway.
-		//
+		// return type of the function.
 		// TODO(mgartner): stmtScope.cols does not describe the result
 		// columns of the statement. We should use physical.Presentation
 		// instead.

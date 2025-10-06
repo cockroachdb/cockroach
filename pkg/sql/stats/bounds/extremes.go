@@ -12,6 +12,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -78,9 +80,6 @@ func ConstructUsingExtremesSpans(
 
 // GetUsingExtremesBounds returns a tree.Datum representing the exclusive upper
 // and exclusive lower bounds of the USING EXTREMES span for partial statistics.
-//
-// lowerBound can be nil which is the case when the exclusive lower bound
-// doesn't exist.
 func GetUsingExtremesBounds(
 	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket,
 ) (lowerBound tree.Datum, upperBound tree.Datum, _ error) {
@@ -96,8 +95,8 @@ func GetUsingExtremesBounds(
 		upperBound = histogram[len(histogram)-2].UpperBound
 	}
 
-	// Pick the earliest lowerBound that is not null and isn't an outer bucket.
-	// We'll return nil if none exist which the caller is required to handle.
+	// Pick the earliest lowerBound that is not null and isn't an outer bucket,
+	// but if none exist, return error
 	for i := range histogram {
 		hist := &histogram[i]
 		if cmp, err := hist.UpperBound.Compare(ctx, evalCtx, tree.DNull); err != nil {
@@ -106,6 +105,12 @@ func GetUsingExtremesBounds(
 			lowerBound = hist.UpperBound
 			break
 		}
+	}
+	if lowerBound == nil {
+		return lowerBound, nil,
+			pgerror.Newf(
+				pgcode.ObjectNotInPrerequisiteState,
+				"only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected")
 	}
 	return lowerBound, upperBound, nil
 }

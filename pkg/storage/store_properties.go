@@ -45,7 +45,7 @@ func getFileSystemProperties(ctx context.Context, dir string) roachpb.FileStoreP
 
 	absPath, err := filepath.Abs(dir)
 	if err != nil {
-		log.Dev.Warningf(ctx, "cannot compute absolute file path for %q: %v", dir, err)
+		log.Warningf(ctx, "cannot compute absolute file path for %q: %v", dir, err)
 		return fsprops
 	}
 
@@ -57,7 +57,7 @@ func getFileSystemProperties(ctx context.Context, dir string) roachpb.FileStoreP
 	//
 	var fslist gosigar.FileSystemList
 	if err := fslist.Get(); err != nil {
-		log.Dev.Warningf(ctx, "cannot retrieve filesystem list: %v", err)
+		log.Warningf(ctx, "cannot retrieve filesystem list: %v", err)
 		return fsprops
 	}
 

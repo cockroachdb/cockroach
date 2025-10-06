@@ -471,7 +471,7 @@ func (et *EvictionToken) EvictLease(ctx context.Context) {
 	defer et.rdc.rangeCache.Unlock()
 
 	if et.entry.lease.Empty() {
-		log.Dev.Fatalf(ctx, "attempting to clear lease from cache entry without lease")
+		log.Fatalf(ctx, "attempting to clear lease from cache entry without lease")
 	}
 
 	lh := et.entry.lease.Replica
@@ -1143,13 +1143,13 @@ func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*cacheEntry) [
 	entries := make([]*cacheEntry, len(rs))
 	for i, ent := range rs {
 		if !ent.desc.IsInitialized() {
-			log.Dev.Fatalf(ctx, "inserting uninitialized desc: %s", ent)
+			log.Fatalf(ctx, "inserting uninitialized desc: %s", ent)
 		}
 		if !ent.lease.Empty() {
 			replID := ent.lease.Replica.ReplicaID
 			_, ok := ent.desc.GetReplicaDescriptorByID(replID)
 			if !ok {
-				log.Dev.Fatalf(ctx, "leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
+				log.Fatalf(ctx, "leaseholder replicaID: %d not part of descriptor: %s. lease: %s",
 					replID, ent.desc, ent.lease)
 			}
 		}
@@ -1170,7 +1170,7 @@ func (rc *RangeCache) insertLockedInner(ctx context.Context, rs []*cacheEntry) [
 			continue
 		}
 		if log.V(2) {
-			log.Dev.Infof(ctx, "adding cache entry: value=%s", ent)
+			log.Infof(ctx, "adding cache entry: value=%s", ent)
 		}
 		rc.addEntryLocked(ent)
 		entries[i] = ent
@@ -1211,7 +1211,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 		entry := rc.getValue(e)
 		if newEntry.overrides(entry) {
 			if log.V(2) {
-				log.Dev.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rc.getValue(e))
+				log.Infof(ctx, "clearing overlapping descriptor: key=%s entry=%s", e.Key, rc.getValue(e))
 			}
 			rc.delEntryLocked(e)
 		} else {
@@ -1221,7 +1221,7 @@ func (rc *RangeCache) clearOlderOverlappingLocked(
 				// We've found a similar descriptor in the cache; there can't be any
 				// other overlapping ones so let's stop the iteration.
 				if len(overlapping) != 1 {
-					log.Dev.Errorf(ctx, "%s", errors.AssertionFailedf(
+					log.Errorf(ctx, "%s", errors.AssertionFailedf(
 						"found compatible descriptor but also got multiple overlapping results. newEntry: %s. overlapping: %s",
 						newEntry, overlapping).Error())
 				}
@@ -1239,7 +1239,7 @@ func (rc *RangeCache) swapEntryLocked(
 	if newEntry != nil {
 		old := rc.getValue(oldEntry)
 		if !descsCompatible(&old.desc, &newEntry.desc) {
-			log.Dev.Fatalf(ctx, "attempting to swap non-compatible descs: %s vs %s",
+			log.Fatalf(ctx, "attempting to swap non-compatible descs: %s vs %s",
 				old, newEntry)
 		}
 	}
@@ -1485,7 +1485,7 @@ func (e *cacheEntry) maybeUpdate(
 	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
 ) (updated, updatedLease bool, newEntry *cacheEntry) {
 	if !descsCompatible(&e.desc, rangeDesc) {
-		log.Dev.Fatalf(ctx, "attempting to update by comparing non-compatible descs: %s vs %s",
+		log.Fatalf(ctx, "attempting to update by comparing non-compatible descs: %s vs %s",
 			e.desc, rangeDesc)
 	}
 

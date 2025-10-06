@@ -132,7 +132,7 @@ func (c *completions) Close(ctx context.Context) {
 	if c.rows != nil {
 		err := c.rows.Close()
 		if err != nil {
-			log.Dev.Warningf(ctx, "closing completion iterator: %v", err)
+			log.Warningf(ctx, "closing completion iterator: %v", err)
 		}
 	}
 }

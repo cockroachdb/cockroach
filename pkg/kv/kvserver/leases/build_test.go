@@ -26,12 +26,10 @@ var (
 	cts10 = hlc.ClockTimestamp{WallTime: 10}
 	cts20 = hlc.ClockTimestamp{WallTime: 20}
 	cts30 = hlc.ClockTimestamp{WallTime: 30}
-	cts35 = hlc.ClockTimestamp{WallTime: 35}
 	cts40 = hlc.ClockTimestamp{WallTime: 40}
 	cts50 = hlc.ClockTimestamp{WallTime: 50}
 	ts10  = cts10.ToTimestamp()
 	ts30  = cts30.ToTimestamp()
-	ts35  = cts35.ToTimestamp()
 	ts40  = cts40.ToTimestamp()
 	ts50  = cts50.ToTimestamp()
 )
@@ -205,7 +203,6 @@ func defaultSettings() Settings {
 		ExpToEpochEquiv:                   true,
 		MinExpirationSupported:            true,
 		RangeLeaseDuration:                20,
-		FortificationGracePeriod:          15,
 	}
 }
 
@@ -446,7 +443,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts35,
+						MinExpiration:   ts40,
 					},
 				},
 			},
@@ -463,7 +460,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        8,
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts35,
+						MinExpiration:   ts40,
 					},
 				},
 			},
@@ -726,7 +723,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        7, // sequence not changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts35,
+						MinExpiration:   ts40,
 					},
 				},
 			},
@@ -822,7 +819,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        7, // sequence not changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts35,
+						MinExpiration:   ts40,
 					},
 				},
 			},
@@ -930,7 +927,7 @@ func TestBuild(t *testing.T) {
 						Term:            5,
 						Sequence:        8, // sequence changed
 						AcquisitionType: roachpb.LeaseAcquisitionType_Request,
-						MinExpiration:   ts35,
+						MinExpiration:   ts40,
 					},
 					PrevLeaseManipulation: PrevLeaseManipulation{
 						RevokeAndForwardNextExpiration: true,
@@ -1198,7 +1195,7 @@ func TestInputToVerifyInput(t *testing.T) {
 		LocalReplicaID: 1,
 		Desc:           &roachpb.RangeDescriptor{},
 		RaftStatus:     &raft.Status{},
-		RaftCompacted:  1,
+		RaftFirstIndex: 1,
 		PrevLease: roachpb.Lease{
 			Start:      cts,
 			Expiration: &ts,
@@ -1218,7 +1215,6 @@ func TestInputToVerifyInput(t *testing.T) {
 			NodeID: 1, StoreID: 1, ReplicaID: 1, Type: 1,
 		},
 		BypassSafetyChecks: true,
-		DesiredLeaseType:   roachpb.LeaseLeader,
 	}
 	verifyInput := noZeroBuildInput.toVerifyInput()
 	require.NoError(t, zerofields.NoZeroField(verifyInput),

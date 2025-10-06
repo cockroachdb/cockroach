@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/redact"
 )
 
 // Clock is used to provide a timestamp to track loosely when something
@@ -79,18 +78,11 @@ type ImmediateMutationStateUpdater interface {
 	// InitSequence initializes a sequence.
 	InitSequence(id descpb.ID, startVal int64)
 
-	// UpdateZoneConfig upserts a zone config.
+	// UpdateZoneConfig updates a zone config.
 	UpdateZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig)
 
-	// UpdateSubzoneConfig upserts a subzone config.
-	UpdateSubzoneConfig(tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan, idxRefToDelete int32)
-
-	// DeleteZoneConfig deletes the zone config for the given ID.
-	DeleteZoneConfig(id descpb.ID)
-
-	// DeleteSubzoneConfig deletes the given subzone config for the given table
-	// ID.
-	DeleteSubzoneConfig(tableID descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan)
+	// UpdateSubzoneConfig updates subzone zone configs.
+	UpdateSubzoneConfig(tableid descpb.ID, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan)
 
 	// Reset schedules a reset of the in-txn catalog state
 	// to undo the modifications from earlier stages.
@@ -125,7 +117,7 @@ type DeferredMutationStateUpdater interface {
 		isNonCancelable bool,
 		auth scpb.Authorization,
 		descriptorIDs catalog.DescriptorIDSet,
-		runningStatus redact.RedactableString,
+		runningStatus string,
 	) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
@@ -133,7 +125,7 @@ type DeferredMutationStateUpdater interface {
 	UpdateSchemaChangerJob(
 		jobID jobspb.JobID,
 		isNonCancelable bool,
-		runningStatus redact.RedactableString,
+		runningStatus string,
 		descriptorIDsToRemove catalog.DescriptorIDSet,
 	) error
 
@@ -146,9 +138,6 @@ type DeferredMutationStateUpdater interface {
 	// AddIndexForMaybeSplitAndScatter splits and scatters rows for a given index,
 	// if it's either hash sharded or under the system tenant.
 	AddIndexForMaybeSplitAndScatter(
-		tableID catid.DescID, indexID catid.IndexID, copyIndexID catid.IndexID,
+		tableID catid.DescID, indexID catid.IndexID,
 	)
-
-	// UpdateTTLScheduleMetadata updates the TTL schedule metadata for a table.
-	UpdateTTLScheduleMetadata(ctx context.Context, tableID descpb.ID, newName string) error
 }

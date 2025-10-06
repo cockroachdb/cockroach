@@ -74,31 +74,6 @@ func init() {
 			descriptorData.DescIDEq(descID),
 			descriptorDataIsNotBeingAdded(descID),
 		}
-		// Indexes are allowed to skip the two version invariant if we can guarantee
-		// no backfill is required. For truncate both the source and temporary index
-		// IDs will be cleared to indicate this.
-		addIndexClause := false
-		switch el.(type) {
-		case *scpb.SecondaryIndex:
-			addIndexClause = true
-		case *scpb.PrimaryIndex:
-			addIndexClause = true
-		}
-		if addIndexClause && targetStatus == scpb.ToPublic {
-			clauses = append(clauses,
-				FilterElements("skip indexes that no require no backfill", from, to, func(from, to scpb.Element) bool {
-					if targetStatus == scpb.ToAbsent {
-						return true
-					}
-					switch elt := from.(type) {
-					case *scpb.PrimaryIndex:
-						return elt.TemporaryIndexID != 0 && elt.SourceIndexID != 0
-					case *scpb.SecondaryIndex:
-						return elt.TemporaryIndexID != 0 && elt.SourceIndexID != 0
-					}
-					return true
-				}))
-		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
 				GetNotJoinOnNodeWithStatusIn(prePrevStatuses)(from.Target),
@@ -139,12 +114,8 @@ func init() {
 			addRules(el, scpb.ToPublic)
 		}
 		if opgen.HasTransient(el) {
-			addRules(el, scpb.TransientAbsent)
+			addRules(el, scpb.Transient)
 		}
-		if opgen.HasTransientPublic(el) {
-			addRules(el, scpb.TransientPublic)
-		}
-
 		addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		return nil
 	})

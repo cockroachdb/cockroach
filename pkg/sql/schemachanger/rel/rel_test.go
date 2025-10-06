@@ -241,8 +241,7 @@ func (sa stringAttr) String() string { return string(sa) }
 // so.
 func TestTooManyAttributesInValues(t *testing.T) {
 	type tooManyAttrs struct {
-		F1, F2, F3, F4, F5, F6, F7, F8        *uint32
-		F9, F10, F11, F12, F13, F14, F15, F16 *uint32
+		F1, F2, F3, F4, F5, F6, F7, F8 *uint32
 	}
 	sc := rel.MustSchema("too_many",
 		rel.EntityMapping(reflect.TypeOf((*tooManyAttrs)(nil)),
@@ -254,14 +253,6 @@ func TestTooManyAttributesInValues(t *testing.T) {
 			rel.EntityAttr(stringAttr("A6"), "F6"),
 			rel.EntityAttr(stringAttr("A7"), "F7"),
 			rel.EntityAttr(stringAttr("A8"), "F8"),
-			rel.EntityAttr(stringAttr("A9"), "F9"),
-			rel.EntityAttr(stringAttr("A10"), "F10"),
-			rel.EntityAttr(stringAttr("A11"), "F11"),
-			rel.EntityAttr(stringAttr("A12"), "F12"),
-			rel.EntityAttr(stringAttr("A13"), "F13"),
-			rel.EntityAttr(stringAttr("A14"), "F14"),
-			rel.EntityAttr(stringAttr("A15"), "F15"),
-			rel.EntityAttr(stringAttr("A16"), "F16"),
 		),
 	)
 	one := uint32(1)
@@ -276,62 +267,38 @@ func TestTooManyAttributesInValues(t *testing.T) {
 				{Attr: stringAttr("A6"), Eq: one},
 				{Attr: stringAttr("A7"), Eq: one},
 				{Attr: stringAttr("A8"), Eq: one},
-				{Attr: stringAttr("A9"), Eq: one},
-				{Attr: stringAttr("A10"), Eq: one},
-				{Attr: stringAttr("A11"), Eq: one},
-				{Attr: stringAttr("A12"), Eq: one},
-				{Attr: stringAttr("A13"), Eq: one},
-				{Attr: stringAttr("A14"), Eq: one},
-				{Attr: stringAttr("A15"), Eq: one},
-				{Attr: stringAttr("A16"), Eq: one},
 				{Attr: rel.Type, Eq: reflect.TypeOf((*tooManyAttrs)(nil))},
 			},
 		})
-		require.EqualError(t, err, `invalid index predicate [{A1 1} {A2 1} {A3 1} {A4 1} {A5 1} {A6 1} {A7 1} {A8 1} {A9 1} {A10 1} {A11 1} {A12 1} {A13 1} {A14 1} {A15 1} {A16 1} {Type *rel_test.tooManyAttrs}] with more than 16 attributes`)
+		require.EqualError(t, err, `invalid index predicate [{A1 1} {A2 1} {A3 1} {A4 1} {A5 1} {A6 1} {A7 1} {A8 1} {Type *rel_test.tooManyAttrs}] with more than 8 attributes`)
 	})
 	db, err := rel.NewDatabase(sc, rel.Index{})
 	require.NoError(t, err)
 	t.Run("index predicate too large", func(t *testing.T) {
-		require.Regexp(t, `invalid entity \*rel_test.tooManyAttrs has too many attributes: maximum allowed is 16, have at least \[A1 A2 A3 A4 A5 A6 A7 A8 A9 A10 A11 A12 A13 A14 Self Type A15\]`, db.Insert(&tooManyAttrs{
-			F1:  &one,
-			F2:  &one,
-			F3:  &one,
-			F4:  &one,
-			F5:  &one,
-			F6:  &one,
-			F7:  &one,
-			F8:  &one,
-			F9:  &one,
-			F10: &one,
-			F11: &one,
-			F12: &one,
-			F13: &one,
-			F14: &one,
-			F15: &one,
-			F16: &one,
+		require.Regexp(t, `invalid entity \*rel_test.tooManyAttrs has too many attributes: maximum allowed is 8, have at least \[A1 A2 A3 A4 A5 A6 Self Type A7\]`, db.Insert(&tooManyAttrs{
+			F1: &one,
+			F2: &one,
+			F3: &one,
+			F4: &one,
+			F5: &one,
+			F6: &one,
+			F7: &one,
+			F8: &one,
 		}))
 
 	})
 	t.Run("query join predicate too large", func(t *testing.T) {
 		require.NoError(t, db.Insert(&tooManyAttrs{
-			F1:  &one,
-			F2:  &one,
-			F3:  &one,
-			F4:  &one,
-			F9:  &one,
-			F10: &one,
-			F11: &one,
-			F12: &one,
+			F1: &one,
+			F2: &one,
+			F3: &one,
+			F4: &one,
 		}))
 		require.NoError(t, db.Insert(&tooManyAttrs{
-			F5:  &one,
-			F6:  &one,
-			F7:  &one,
-			F8:  &one,
-			F13: &one,
-			F14: &one,
-			F15: &one,
-			F16: &one,
+			F5: &one,
+			F6: &one,
+			F7: &one,
+			F8: &one,
 		}))
 		var a, b, c rel.Var = "a", "b", "c"
 		base := []rel.Clause{
@@ -346,19 +313,11 @@ func TestTooManyAttributesInValues(t *testing.T) {
 			rel.Var("f6").Entities(stringAttr("A6"), b, c),
 			rel.Var("f7").Entities(stringAttr("A7"), b, c),
 			rel.Var("f8").Entities(stringAttr("A8"), b, c),
-			rel.Var("f9").Entities(stringAttr("A9"), a, c),
-			rel.Var("f10").Entities(stringAttr("A10"), a, c),
-			rel.Var("f11").Entities(stringAttr("A11"), a, c),
-			rel.Var("f12").Entities(stringAttr("A12"), a, c),
-			rel.Var("f13").Entities(stringAttr("A13"), b, c),
-			rel.Var("f14").Entities(stringAttr("A14"), b, c),
-			rel.Var("f15").Entities(stringAttr("A15"), b, c),
-			rel.Var("f16").Entities(stringAttr("A16"), b, c),
 		}
 		{
 			q, err := rel.NewQuery(sc, append(base, c.Type((*tooManyAttrs)(nil)))...)
 			require.NoError(t, err)
-			require.Regexp(t, "failed to create predicate with more than 16 attributes", q.Iterate(db, &rel.QueryStats{}, func(r rel.Result) error {
+			require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, &rel.QueryStats{}, func(r rel.Result) error {
 				return nil
 			}))
 		}
@@ -368,7 +327,7 @@ func TestTooManyAttributesInValues(t *testing.T) {
 					base, c.Type((*tooManyAttrs)(nil), (*rel.Schema)(nil)),
 				)...)
 				require.NoError(t, err)
-				require.Regexp(t, "failed to create predicate with more than 16 attributes", q.Iterate(db, nil, func(r rel.Result) error {
+				require.Regexp(t, "failed to create predicate with more than 8 attributes", q.Iterate(db, nil, func(r rel.Result) error {
 					return nil
 				}))
 			}

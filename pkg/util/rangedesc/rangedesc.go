@@ -27,7 +27,7 @@ type Scanner interface {
 	//     _ = rdi.Iterate(...,
 	//         func(descriptors ...roachpb.RangeDescriptor) error {
 	//             processed += len(descriptors) // we'll over count if retried
-	//             log.Dev.Infof(ctx, "processed %d ranges", processed)
+	//             log.Infof(ctx, "processed %d ranges", processed)
 	//         },
 	//     )
 	//
@@ -39,7 +39,7 @@ type Scanner interface {
 	//     _ = rdi.Iterate(..., init,
 	//         func(descriptors ...roachpb.RangeDescriptor) error {
 	//             processed += len(descriptors)
-	//             log.Dev.Infof(ctx, "processed %d ranges", processed)
+	//             log.Infof(ctx, "processed %d ranges", processed)
 	//         },
 	//     )
 	//

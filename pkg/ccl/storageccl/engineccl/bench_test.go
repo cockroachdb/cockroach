@@ -61,7 +61,7 @@ func loadTestData(
 			tb.Fatal(err)
 		}
 
-		log.Dev.Infof(context.Background(), "creating test data: %s", dir)
+		log.Infof(context.Background(), "creating test data: %s", dir)
 
 		// Generate the same data every time.
 		rng := rand.New(rand.NewSource(1449168817))
@@ -81,7 +81,7 @@ func loadTestData(
 		for i, key := range keys {
 			if scaled := len(keys) / numBatches; (i % scaled) == 0 {
 				if i > 0 {
-					log.Dev.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
+					log.Infof(ctx, "committing (%d/~%d)", i/scaled, numBatches)
 					if err := batch.Commit(false /* sync */); err != nil {
 						tb.Fatal(err)
 					}
@@ -113,7 +113,7 @@ func loadTestData(
 		eng.Close()
 	})
 
-	log.Dev.Infof(context.Background(), "using test data: %s", dir)
+	log.Infof(context.Background(), "using test data: %s", dir)
 	eng, err := storage.Open(
 		ctx,
 		fs.MustInitPhysicalTestingEnv(dir),
@@ -142,7 +142,7 @@ func runIterate(
 
 	// Store the database in this directory so we don't have to regenerate it on
 	// each benchmark run.
-	eng := loadTestData(b, "mvcc_data_v3", numKeys, numBatches, batchTimeSpan, valueBytes)
+	eng := loadTestData(b, "mvcc_data_v2", numKeys, numBatches, batchTimeSpan, valueBytes)
 	defer eng.Close()
 
 	b.SetBytes(int64(numKeys * valueBytes))

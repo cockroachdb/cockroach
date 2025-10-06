@@ -7,13 +7,18 @@ package importer
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
@@ -21,29 +26,34 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
-// MakeTestingSimpleTableDescriptor creates a tabledesc.Mutable from a
-// CreateTable parse node without the full machinery. Many parts of the syntax
-// are unsupported (see the implementation and
-// TestMakeSimpleTableDescriptorErrors for details), but this is enough for some
-// unit tests.
-//
-// Any occurrence of SERIAL in the column definitions is handled using
-// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
-// unique_rowid().
-//
-// TODO(yuzefovich): move this out of importer package into some test utils
-// package.
+type fkHandler struct {
+	allowed  bool
+	skip     bool
+	resolver fkResolver
+}
+
+// NoFKs is used by formats that do not support FKs.
+var NoFKs = fkHandler{resolver: fkResolver{
+	tableNameToDesc: make(map[string]*tabledesc.Mutable),
+}}
+
+// MakeTestingSimpleTableDescriptor is like MakeSimpleTableDescriptor but it
+// uses parentID and parentSchemaID instead of descriptors.
 func MakeTestingSimpleTableDescriptor(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	st *cluster.Settings,
 	create *tree.CreateTable,
 	parentID, parentSchemaID, tableID descpb.ID,
+	fks fkHandler,
 	walltime int64,
 ) (*tabledesc.Mutable, error) {
 	db := dbdesc.NewInitial(parentID, "foo", username.RootUserName())
@@ -59,12 +69,40 @@ func MakeTestingSimpleTableDescriptor(
 			username.RootUserName(),
 		),
 	}).BuildCreatedMutableSchema()
+	return MakeSimpleTableDescriptor(ctx, semaCtx, st, create, db, sc, tableID, fks, walltime)
+}
+
+func makeSemaCtxWithoutTypeResolver(semaCtx *tree.SemaContext) *tree.SemaContext {
+	semaCtxCopy := *semaCtx
+	semaCtxCopy.TypeResolver = nil
+	return &semaCtxCopy
+}
+
+// MakeSimpleTableDescriptor creates a tabledesc.Mutable from a CreateTable
+// parse node without the full machinery. Many parts of the syntax are
+// unsupported (see the implementation and TestMakeSimpleTableDescriptorErrors
+// for details), but this is enough for our csv IMPORT and for some unit tests.
+//
+// Any occurrence of SERIAL in the column definitions is handled using
+// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
+// unique_rowid().
+func MakeSimpleTableDescriptor(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	st *cluster.Settings,
+	create *tree.CreateTable,
+	db catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+	tableID descpb.ID,
+	fks fkHandler,
+	walltime int64,
+) (*tabledesc.Mutable, error) {
 	create.HoistConstraints()
 	if create.IfNotExists {
-		return nil, errors.Newf("IF NOT EXISTS is not supported")
+		return nil, unimplemented.NewWithIssueDetailf(42846, "import.if-no-exists", "unsupported IF NOT EXISTS")
 	}
 	if create.AsSource != nil {
-		return nil, errors.Newf("CREATE AS is not supported")
+		return nil, unimplemented.NewWithIssueDetailf(42846, "import.create-as", "CREATE AS not supported")
 	}
 
 	filteredDefs := create.Defs[:0]
@@ -77,21 +115,34 @@ func MakeTestingSimpleTableDescriptor(
 		case *tree.IndexTableDef:
 			for i := range def.Columns {
 				if def.Columns[i].Expr != nil {
-					return nil, errors.Newf("expression indexes are not supported")
+					return nil, unimplemented.NewWithIssueDetail(56002, "import.expression-index",
+						"to import into a table with expression indexes, use IMPORT INTO")
 				}
 			}
+
 		case *tree.ColumnTableDef:
 			if def.IsComputed() && def.IsVirtual() {
-				return nil, errors.Newf("virtual computed columns are not supported")
+				return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
+					"to import into a table with virtual computed columns, use IMPORT INTO")
 			}
 
 			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
 				return nil, err
 			}
+
 		case *tree.ForeignKeyConstraintTableDef:
-			return nil, errors.Newf("foreign keys are not supported")
+			if !fks.allowed {
+				return nil, unimplemented.NewWithIssueDetailf(42846, "import.fk",
+					"this IMPORT format does not support foreign keys")
+			}
+			if fks.skip {
+				continue
+			}
+			// Strip the schema/db prefix.
+			def.Table = tree.MakeUnqualifiedTableName(def.Table.ObjectName)
+
 		default:
-			return nil, errors.Newf("unsupported table definition: %s", tree.AsString(def))
+			return nil, unimplemented.Newf(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))
 		}
 		// only append this def after we make it past the error checks and continues
 		filteredDefs = append(filteredDefs, create.Defs[i])
@@ -111,7 +162,7 @@ func MakeTestingSimpleTableDescriptor(
 	tableDesc, err := sql.NewTableDesc(
 		ctx,
 		nil, /* txn */
-		nil, /* vt */
+		&fks.resolver,
 		st,
 		create,
 		db,
@@ -136,14 +187,29 @@ func MakeTestingSimpleTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	tableDesc.SetPublic()
+	if err := fixDescriptorFKState(tableDesc); err != nil {
+		return nil, err
+	}
 
 	return tableDesc, nil
+}
+
+// fixDescriptorFKState repairs validity and table states set during descriptor
+// creation. sql.NewTableDesc and ResolveFK set the table to the ADD state
+// and mark references an validated. This function sets the table to PUBLIC
+// and the FKs to unvalidated.
+func fixDescriptorFKState(tableDesc *tabledesc.Mutable) error {
+	tableDesc.SetPublic()
+	for i := range tableDesc.OutboundFKs {
+		tableDesc.OutboundFKs[i].Validity = descpb.ConstraintValidity_Unvalidated
+	}
+	return nil
 }
 
 var (
 	errSequenceOperators = errors.New("sequence operations unsupported")
 	errRegionOperator    = errors.New("region operations unsupported")
+	errSchemaResolver    = errors.New("schema resolver unsupported")
 )
 
 // Implements the tree.RegionOperator interface.
@@ -264,4 +330,112 @@ func (so *importSequenceOperators) SetSequenceValueByID(
 	ctx context.Context, seqID uint32, newVal int64, isCalled bool,
 ) error {
 	return errSequenceOperators
+}
+
+type fkResolver struct {
+	tableNameToDesc map[string]*tabledesc.Mutable
+	format          roachpb.IOFileFormat
+}
+
+var _ resolver.SchemaResolver = &fkResolver{}
+
+// GetObjectNamesAndIDs implements the resolver.SchemaResolver interface.
+func (r *fkResolver) GetObjectNamesAndIDs(
+	ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+) (tree.TableNames, descpb.IDs, error) {
+	return nil, nil, errors.AssertionFailedf("GetObjectNamesAndIDs is not implemented by fkResolver")
+}
+
+// MustGetCurrentSessionDatabase implements the resolver.SchemaResolver interface.
+func (r *fkResolver) MustGetCurrentSessionDatabase(
+	ctx context.Context,
+) (catalog.DatabaseDescriptor, error) {
+	return nil, errors.AssertionFailedf("MustGetCurrentSessionDatabase is not implemented by fkResolver")
+}
+
+// CurrentDatabase implements the resolver.SchemaResolver interface.
+func (r *fkResolver) CurrentDatabase() string {
+	return ""
+}
+
+// CurrentSearchPath implements the resolver.SchemaResolver interface.
+func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
+	return sessiondata.SearchPath{}
+}
+
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
+func (r *fkResolver) LookupObject(
+	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
+	// PGDUMP supports non-public schemas so respect the schema name.
+	var lookupName string
+	if r.format.Format == roachpb.IOFileFormat_PgDump {
+		if scName == "" || dbName == "" {
+			return false, prefix, nil, errors.Errorf("expected catalog and schema name to be set when resolving"+
+				" table %q in PGDUMP", obName)
+		}
+		lookupName = fmt.Sprintf("%s.%s", scName, obName)
+	} else {
+		if scName != "" {
+			lookupName = strings.TrimPrefix(obName, scName+".")
+		}
+	}
+	tbl, ok := r.tableNameToDesc[lookupName]
+	if ok {
+		return true, prefix, tbl, nil
+	}
+	names := make([]string, 0, len(r.tableNameToDesc))
+	for k := range r.tableNameToDesc {
+		names = append(names, k)
+	}
+	suggestions := strings.Join(names, ",")
+	return false, prefix, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)",
+		lookupName, suggestions)
+}
+
+// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
+func (r fkResolver) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
+	return false, scMeta, errSchemaResolver
+}
+
+// ResolveTypeByOID implements the resolver.SchemaResolver interface.
+func (r fkResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
+	return nil, errSchemaResolver
+}
+
+// ResolveType implements the resolver.SchemaResolver interface.
+func (r fkResolver) ResolveType(
+	ctx context.Context, name *tree.UnresolvedObjectName,
+) (*types.T, error) {
+	return nil, errSchemaResolver
+}
+
+// GetQualifiedTableNameByID implements the resolver.SchemaResolver interface.
+func (r fkResolver) GetQualifiedTableNameByID(
+	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
+) (*tree.TableName, error) {
+	return nil, errSchemaResolver
+}
+
+// GetQualifiedFunctionNameByID implements the resolver.SchemaResolver interface.
+func (r fkResolver) GetQualifiedFunctionNameByID(
+	ctx context.Context, id int64,
+) (*tree.RoutineName, error) {
+	return nil, errSchemaResolver
+}
+
+// ResolveFunction implements the resolver.SchemaResolver interface.
+func (r fkResolver) ResolveFunction(
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
+) (*tree.ResolvedFunctionDefinition, error) {
+	return nil, errSchemaResolver
+}
+
+// ResolveFunctionByOID implements the resolver.SchemaResolver interface.
+func (r fkResolver) ResolveFunctionByOID(
+	ctx context.Context, oid oid.Oid,
+) (*tree.RoutineName, *tree.Overload, error) {
+	return nil, nil, errSchemaResolver
 }

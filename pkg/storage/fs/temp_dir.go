@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/pebble/vfs"
@@ -45,36 +46,36 @@ func unlockFile(lock lockStruct) error {
 // parentDir and returns the absolute path of the temporary directory.
 // It is advised to invoke CleanupTempDirs before creating new temporary
 // directories in cases where the disk is completely full.
-func CreateTempDir(parentDir, prefix string) (_ string, unlockDirFn func(), _ error) {
+func CreateTempDir(parentDir, prefix string, stopper *stop.Stopper) (string, error) {
 	// We generate a unique temporary directory with the specified prefix.
 	tempPath, err := os.MkdirTemp(parentDir, prefix)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	// TempDir creates a directory with permissions 0700. Manually change the
 	// permissions to be 0755 like every other directory created by cockroach.
 	if err := os.Chmod(tempPath, 0755); err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	absPath, err := filepath.Abs(tempPath)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
 
 	// Create a lock file.
 	flock, err := lockFile(filepath.Join(absPath, lockFilename))
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "could not create lock on new temporary directory")
+		return "", errors.Wrapf(err, "could not create lock on new temporary directory")
 	}
-	unlockDirFn = func() {
+	stopper.AddCloser(stop.CloserFn(func() {
 		if err := unlockFile(flock); err != nil {
-			log.Dev.Errorf(context.TODO(), "could not unlock file lock on temporary directory: %s", err.Error())
+			log.Errorf(context.TODO(), "could not unlock file lock on temporary directory: %s", err.Error())
 		}
-	}
+	}))
 
-	return absPath, unlockDirFn, nil
+	return absPath, nil
 }
 
 // RecordTempDir records tempPath to the record file specified by recordPath to
@@ -123,7 +124,7 @@ func CleanupTempDirs(recordPath string) error {
 
 		// Check if the temporary directory exists; if it does not, skip over it.
 		if _, err := os.Stat(path); oserror.IsNotExist(err) {
-			log.Dev.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
+			log.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
 			continue
 		}
 
@@ -143,7 +144,7 @@ func CleanupTempDirs(recordPath string) error {
 		// process is dead because we were able to acquire the lock in the first
 		// place.
 		if err := unlockFile(flock); err != nil {
-			log.Dev.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
+			log.Errorf(context.TODO(), "could not unlock file lock when removing temporary directory: %s", err.Error())
 		}
 
 		// If path/directory does not exist, error is nil.

@@ -12,14 +12,7 @@ INSERT INTO fuzzystrmatch_table VALUES
   (3, '😄', '🐯'),
   (4, null, 'a'),
   (5, 'a', null),
-  (6, null, null),
-  (7, 'apple', 'apple'),
-  (8, 'a', 'abcd'),
-  (9, '', ''),
-  (10, '', 'abc'),
-  (11, 'xyz', ''),
-  (12, 'extensive', 'exhaustive'),
-  (13, '🌞', 'a')
+  (6, null, null)
 
 statement error levenshtein argument exceeds maximum length of 255 characters
 SELECT levenshtein(lpad('', 256, 'x'), '')
@@ -36,59 +29,6 @@ apple  banana  5     18
 NULL   a       NULL  NULL
 a      NULL    NULL  NULL
 NULL   NULL    NULL  NULL
-apple  apple   0     0
-a      abcd    3     6
-·      ·       0     0
-·      abc     3     6
-xyz    ·       3     9
-extensive  exhaustive  4     14
-🌞      a       1     4
-
-statement error levenshtein_less_equal argument exceeds maximum length of 255 characters
-SELECT levenshtein_less_equal(lpad('', 256, 'x'), '', 4)
-
-statement error levenshtein_less_equal argument exceeds maximum length of 255 characters
-SELECT levenshtein_less_equal(lpad('', 256, 'x'), '', 4, 2, 3, 4)
-
-statement error levenshtein_less_equal argument exceeds maximum length of 255 characters
-SELECT levenshtein_less_equal(repeat('🌞', 256), '', 4)
-
-statement error levenshtein_less_equal argument exceeds maximum length of 255 characters
-SELECT levenshtein_less_equal('', repeat('🌞', 256), 4)
-
-query TTII
-SELECT a, b, levenshtein_less_equal(a, b, 3), levenshtein_less_equal(a, b, 2, 3, 4, 12) FROM fuzzystrmatch_table ORDER BY id
-----
-apple  banana  4     13
-·      pear    4     8
-😄      🐯       1     4
-NULL   a       NULL  NULL
-a      NULL    NULL  NULL
-NULL   NULL    NULL  NULL
-apple  apple   0     0
-a      abcd    3     6
-·      ·       0     0
-·      abc     3     6
-xyz    ·       3     9
-extensive  exhaustive  4     13
-🌞      a       1     4
-
-# Test cases from PostgreSQL
-query I
-SELECT levenshtein_less_equal('extensive', 'exhaustive', 2)
-----
-3
-
-query I
-SELECT levenshtein_less_equal('extensive', 'exhaustive', 4)
-----
-4
-
-# Test negative max distance (should behave like regular levenshtein)
-query I
-SELECT levenshtein_less_equal('extensive', 'exhaustive', -1)
-----
-4
 
 query T
 SELECT soundex('hello world!')

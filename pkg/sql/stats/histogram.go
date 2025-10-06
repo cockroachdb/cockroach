@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -109,11 +110,15 @@ Please add new entries at the top.
 // using value-encoding for upper bound datums.
 const upperBoundsValueEncodedVersion = HistogramVersion(3)
 
+// upperBoundsKeyEncodedVersion is the HistogramVersion at which we still used
+// key-encoding for upper bound datums.
+const upperBoundsKeyEncodedVersion = HistogramVersion(2)
+
 // EncodeUpperBound encodes the upper-bound datum of a histogram bucket.
 func EncodeUpperBound(version HistogramVersion, upperBound tree.Datum) ([]byte, error) {
 	if version >= upperBoundsValueEncodedVersion || upperBound.ResolvedType().Family() == types.TSQueryFamily {
 		// TSQuery doesn't have key-encoding, so we must use value-encoding.
-		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound)
+		return valueside.Encode(nil /* appendTo */, valueside.NoColumnID, upperBound, nil /* scratch */)
 	}
 	return keyside.Encode(nil /* b */, upperBound, encoding.Ascending)
 }
@@ -879,6 +884,12 @@ func (h histogram) toHistogramData(
 	ctx context.Context, colType *types.T, st *cluster.Settings,
 ) (HistogramData, error) {
 	version := HistVersion
+	if !st.Version.IsActive(ctx, clusterversion.V24_1) {
+		// If the cluster hasn't been upgraded to 24.1 version yet, then we
+		// cannot yet use the newest histogram version to preserve
+		// backwards-compatibility.
+		version = upperBoundsKeyEncodedVersion
+	}
 	histogramData := HistogramData{
 		Buckets:    make([]HistogramData_Bucket, len(h.buckets)),
 		ColumnType: colType,

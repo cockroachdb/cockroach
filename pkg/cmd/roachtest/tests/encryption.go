@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -17,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,7 +55,7 @@ func registerEncryption(r registry.Registry) {
 					keys[keyIdx], keys[keyIdx-1]),
 			}
 			c.Start(ctx, t.L(), opts, install.MakeClusterSettings(), c.Range(1, nodes))
-			roachtestutil.WaitForReady(ctx, t, c, c.Range(1, nodes))
+			WaitForReady(ctx, t, c, c.Range(1, nodes))
 
 			// Check that /_status/stores/local endpoint has encryption status.
 			adminAddrs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, nodes))
@@ -68,7 +68,7 @@ func registerEncryption(r registry.Registry) {
 				if err := httpClient.GetJSON(ctx, url, &storesResponse); err != nil {
 					t.Fatal(err)
 				}
-				var encryptionStatus enginepb.EncryptionStatus
+				var encryptionStatus enginepbccl.EncryptionStatus
 				if err := protoutil.Unmarshal(storesResponse.Stores[0].EncryptionStatus,
 					&encryptionStatus); err != nil {
 					t.Fatal(err)

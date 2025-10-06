@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -34,8 +33,6 @@ import (
 func TestLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "test takes too long")
 
 	testCases := []struct {
 		name  string
@@ -56,14 +53,6 @@ func TestLargeKeys(t *testing.T) {
 		{
 			name:  "lookup join, with ordering",
 			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_blob = pk_blob ORDER BY pk_blob",
-		},
-		{
-			name:  "lookup join on non-unique index, with ordering",
-			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_attribute = attribute ORDER BY pk_blob",
-		},
-		{
-			name:  "lookup join on non-unique index, with reverse ordering",
-			query: "SELECT * FROM bar INNER LOOKUP JOIN foo ON lookup_attribute = attribute ORDER BY pk_blob DESC",
 		},
 	}
 
@@ -144,7 +133,7 @@ func TestLargeKeys(t *testing.T) {
 						INDEX (attribute)%s
 					);`, familiesSuffix))
 				require.NoError(t, err)
-				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING PRIMARY KEY, lookup_attribute INT8)")
+				_, err = db.Exec("CREATE TABLE bar (lookup_blob STRING PRIMARY KEY)")
 				require.NoError(t, err)
 
 				// Insert some number of rows.
@@ -162,7 +151,7 @@ func TestLargeKeys(t *testing.T) {
 					blobSize := int(float64(valueSize)*5.0*rng.Float64()) + 1
 					_, err = db.Exec("INSERT INTO foo SELECT repeat($1, $2), 1, 1, repeat($1, $3);", letter, valueSize, blobSize)
 					require.NoError(t, err)
-					_, err = db.Exec("INSERT INTO bar SELECT repeat($1, $2), $3;", letter, valueSize, i)
+					_, err = db.Exec("INSERT INTO bar SELECT repeat($1, $2);", letter, valueSize)
 					require.NoError(t, err)
 				}
 

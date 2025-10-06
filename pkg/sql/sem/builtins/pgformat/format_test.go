@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -59,11 +59,6 @@ func TestFormat(t *testing.T) {
 			// REFCURSOR doesn't support comparison operators.
 			return true
 		}
-
-		// Skip jsonpath because we don't support <jsonpath> = <string> comparisons.
-		if typ.Family() == types.JsonpathFamily {
-			return true
-		}
 		return !randgen.IsLegalColumnType(typ)
 	}
 	for _, typ := range types.OidToType {
@@ -72,10 +67,10 @@ func TestFormat(t *testing.T) {
 		}
 	}
 
-	rng, _ := randutil.NewTestRand()
+	seed := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 	createTable := func(t *testing.T, tdb *sqlutils.SQLRunner, typ *types.T) (tableNamer func(string) string) {
 		columnSpec := fmt.Sprintf("c %s", typ.SQLString())
-		tableName := fmt.Sprintf("%s_table_%d", strings.Replace(typ.String(), "\"", "", -1), rng.Int())
+		tableName := fmt.Sprintf("%s_table_%d", strings.Replace(typ.String(), "\"", "", -1), seed.Int())
 		tableName = strings.Replace(tableName, `[]`, `_array`, -1)
 
 		// Create the table.
@@ -101,7 +96,7 @@ func TestFormat(t *testing.T) {
 					d = tree.DNull
 				} else {
 					const nullOk = false
-					d = randgen.RandDatum(rng, col.GetType(), nullOk)
+					d = randgen.RandDatum(seed, col.GetType(), nullOk)
 				}
 				row = append(row, tree.AsStringWithFlags(d, tree.FmtParsable))
 			}
@@ -142,9 +137,6 @@ func TestFormat(t *testing.T) {
 					case types.Float4:
 						// Arrays of float4s are tricky, see issue for details.
 						skip.WithIssue(t, 84326)
-					case types.CIText, types.LTree:
-						// Explicit casts should be used for these types and their respective array literals.
-						skip.IgnoreLint(t)
 					}
 				}
 				stmts := tdb.Query(t, r(`SELECT rowid, format('%L', c) FROM tablename WHERE c IS NOT NULL`))

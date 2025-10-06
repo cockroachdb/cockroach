@@ -287,16 +287,6 @@ func (collatedStringDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
 	return &tree.DCollatedString{Contents: string(v)}, nil
 }
 
-type ltreeDecoder struct{}
-
-func (ltreeDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
-	d, err := tree.ParseDLTree(string(v))
-	if err != nil {
-		return nil, err
-	}
-	return d, err
-}
-
 // decoderFromFamilyAndType returns the decoder to use based on the type oid and
 // family. Note the logical similarity to makeColumn in schema.go. This is
 // intentional as each decoder returned by this function corresponds to a
@@ -386,8 +376,6 @@ func decoderFromFamilyAndType(typOid oid.Oid, family types.Family) (decoder, err
 		return nil, errors.AssertionFailedf("could not determine type from oid %d", typOid)
 	case types.CollatedStringFamily:
 		return collatedStringDecoder{}, nil
-	case types.LTreeFamily:
-		return ltreeDecoder{}, nil
 	default:
 		return nil, errors.AssertionFailedf("could not find decoder for type oid %d and family %d", typOid, family)
 	}

@@ -82,7 +82,7 @@ sequence req=req1
 [3] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
 [3] sequence req1: resolving intent ‹"a"› for txn 00000002 with ABORTED status
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with 00000002-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
+[3] sequence req1: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
 [3] sequence req1: resolving a batch of 9 intent(s)
 [3] sequence req1: resolving intent ‹"b"› for txn 00000002 with ABORTED status
 [3] sequence req1: resolving intent ‹"c"› for txn 00000002 with ABORTED status

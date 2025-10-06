@@ -55,7 +55,7 @@ func (c *ClusterIDContainer) Set(ctx context.Context, val uuid.UUID) {
 	if cur == uuid.Nil {
 		c.clusterID.Store(val)
 	} else if cur != val {
-		// NB: we are avoiding log.Dev.Fatal here because we want to avoid a dependency
+		// NB: we are avoiding log.Fatal here because we want to avoid a dependency
 		// on the log package. Also, this assertion would denote a serious bug and
 		// we may as well panic.
 		panic(errors.AssertionFailedf("different ClusterIDs set: %s, then %s", cur, val))

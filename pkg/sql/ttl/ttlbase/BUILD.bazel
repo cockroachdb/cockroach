@@ -10,10 +10,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/settings",
-        "//pkg/sql/catalog",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/spanutils",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
     ],

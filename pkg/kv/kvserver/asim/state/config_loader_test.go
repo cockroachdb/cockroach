@@ -158,11 +158,11 @@ func TestLoadRangesInfo(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			settings := config.DefaultSimulationSettings()
 			state := NewState(settings)
-			_, ok := state.AddStore(state.AddNode(-1, roachpb.Locality{}).NodeID())
+			_, ok := state.AddStore(state.AddNode().NodeID())
 			require.True(t, ok)
-			_, ok = state.AddStore(state.AddNode(-1, roachpb.Locality{}).NodeID())
+			_, ok = state.AddStore(state.AddNode().NodeID())
 			require.True(t, ok)
-			_, ok = state.AddStore(state.AddNode(-1, roachpb.Locality{}).NodeID())
+			_, ok = state.AddStore(state.AddNode().NodeID())
 			require.True(t, ok)
 
 			if tc.expectPanic {

@@ -8,20 +8,14 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,7 +79,7 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 			if h.name != "" {
 				prefix = fmt.Sprintf("[%s] ", h.name)
 			}
-			log.KvExec.Infof(
+			log.Infof(
 				ctx,
 				"%sdropping r%d Raft message %s",
 				prefix,
@@ -105,7 +99,7 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 			if h.name != "" {
 				prefix = fmt.Sprintf("[%s] ", h.name)
 			}
-			log.KvExec.Infof(
+			log.Infof(
 				ctx,
 				"%s [raft] r%d Raft message %s",
 				prefix,
@@ -232,8 +226,8 @@ func (h *testClusterStoreRaftMessageHandler) HandleDelegatedSnapshot(
 	return store.HandleDelegatedSnapshot(ctx, req)
 }
 
-// testClusterPartitionedRange is a convenient abstraction to create a range on
-// a node in a multiTestContext which can be partitioned and unpartitioned.
+// testClusterPartitionedRange is a convenient abstraction to create a range on a node
+// in a multiTestContext which can be partitioned and unpartitioned.
 type testClusterPartitionedRange struct {
 	rangeID roachpb.RangeID
 	mu      struct {
@@ -241,18 +235,8 @@ type testClusterPartitionedRange struct {
 		partitionedNodeIdx  int
 		partitioned         bool
 		partitionedReplicas map[roachpb.ReplicaID]bool
-		partitionedStores   map[roachpb.StoreID]bool
 	}
 	handlers []kvserver.IncomingRaftMessageHandler
-}
-
-func (p *testClusterPartitionedRange) String() string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return fmt.Sprintf("partition[rangeID: %s, replicas: %v; stores: %v]",
-		p.rangeID,
-		slices.Collect(maps.Keys(p.mu.partitionedReplicas)),
-		slices.Collect(maps.Keys(p.mu.partitionedStores)))
 }
 
 // setupPartitionedRange sets up an testClusterPartitionedRange for the provided
@@ -330,7 +314,6 @@ func setupPartitionedRangeWithHandlers(
 	pr.mu.partitionedReplicas = map[roachpb.ReplicaID]bool{
 		replicaID: true,
 	}
-	pr.mu.partitionedStores = map[roachpb.StoreID]bool{}
 	for i := range tc.Servers {
 		s := i
 		h := &unreliableRaftHandler{
@@ -396,40 +379,6 @@ func setupPartitionedRangeWithHandlers(
 		}
 		pr.handlers = append(pr.handlers, h)
 		tc.Servers[s].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(tc.Target(s).StoreID, h)
-
-		// Also partition the store in the storeliveness layer.
-		pr.addStore(tc.Servers[partitionedNodeIdx].GetFirstStoreID())
-
-		shouldDropStoreLivenessMessage := func(from roachpb.StoreID, to roachpb.StoreID) bool {
-			pr.mu.RLock()
-			defer pr.mu.RUnlock()
-			// Drop all messages from/to partitioned stores.
-			return pr.mu.partitioned && (pr.mu.partitionedStores[from] || pr.mu.partitionedStores[to])
-		}
-
-		store, err := tc.Servers[s].GetStores().(*kvserver.Stores).
-			GetStore(tc.Servers[s].GetFirstStoreID())
-		if err != nil {
-			return nil, err
-		}
-
-		tc.Servers[s].StoreLivenessTransport().(*storeliveness.Transport).
-			ListenMessages(store.StoreID(), &storeliveness.UnreliableHandler{
-				MessageHandler: store.TestingStoreLivenessSupportManager(),
-				UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
-					DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
-						drop := shouldDropStoreLivenessMessage(msg.From.StoreID, msg.To.StoreID)
-						if drop {
-							log.KvExec.Infof(context.Background(), "dropping StoreLiveness msg %s from store %d: to %d",
-								msg.Type, msg.From.StoreID, msg.To.StoreID)
-						} else {
-							log.KvExec.Infof(context.Background(), "allowing StoreLiveness msg %s from store %d: to %d",
-								msg.Type, msg.From.StoreID, msg.To.StoreID)
-						}
-						return drop
-					},
-				},
-			})
 	}
 	return pr, nil
 }
@@ -448,19 +397,6 @@ func (pr *testClusterPartitionedRange) addReplica(replicaID roachpb.ReplicaID) {
 	pr.mu.partitionedReplicas[replicaID] = true
 }
 
-func (pr *testClusterPartitionedRange) addStore(storeID roachpb.StoreID) {
-	pr.mu.Lock()
-	defer pr.mu.Unlock()
-	pr.mu.partitionedStores[storeID] = true
-}
-
-func (pr *testClusterPartitionedRange) removeStore(storeID roachpb.StoreID) {
-	pr.mu.Lock()
-	defer pr.mu.Unlock()
-
-	pr.mu.partitionedStores[storeID] = false
-}
-
 func (pr *testClusterPartitionedRange) extend(
 	tc *testcluster.TestCluster,
 	rangeID roachpb.RangeID,
@@ -473,35 +409,32 @@ func (pr *testClusterPartitionedRange) extend(
 }
 
 // dropRaftMessagesFrom sets up a Raft message handler on the given server that
-// drops inbound Raft messages from the given range and replica IDs. In addition
-// to raft messages, StoreLiveness messages from the replica IDs' store are also
-// dropped. Outbound messages are not affected, and must be dropped on the
-// receiver.
+// drops inbound Raft messages from the given range and replica IDs. Outbound
+// messages are not affected, and must be dropped on the receiver.
 //
 // If cond is given, messages are only dropped when the atomic bool is true.
 // Otherwise, messages are always dropped.
 //
-// This will replace the previous message handlers, if any.
+// This will replace the previous message handler, if any.
 func dropRaftMessagesFrom(
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	desc roachpb.RangeDescriptor,
+	rangeID roachpb.RangeID,
 	fromReplicaIDs []roachpb.ReplicaID,
 	cond *atomic.Bool,
 ) {
-	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
-	require.NoError(t, err)
-
 	dropFrom := map[roachpb.ReplicaID]bool{}
 	for _, id := range fromReplicaIDs {
 		dropFrom[id] = true
 	}
 	shouldDrop := func(rID roachpb.RangeID, from roachpb.ReplicaID) bool {
-		return rID == desc.RangeID && (cond == nil || cond.Load()) && dropFrom[from]
+		return rID == rangeID && (cond == nil || cond.Load()) && dropFrom[from]
 	}
 
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	require.NoError(t, err)
 	srv.RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
+		rangeID:                    rangeID,
 		IncomingRaftMessageHandler: store,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
 			dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
@@ -515,93 +448,6 @@ func dropRaftMessagesFrom(
 			},
 		},
 	})
-	dropStoreLivenessHeartbeatsFrom(t, srv, desc, fromReplicaIDs, cond)
-}
-
-// dropStoreLivenessHeartbeatsFrom sets up a StoreLiveness message handler
-// that drops inbound store liveness messages from the given range and replica's
-// store.
-//
-// If cond is given, messages are only dropped when the atomic bool is true.
-// Otherwise, messages are always dropped.
-func dropStoreLivenessHeartbeatsFrom(
-	t *testing.T,
-	srv serverutils.TestServerInterface,
-	desc roachpb.RangeDescriptor,
-	fromReplicaIDs []roachpb.ReplicaID,
-	cond *atomic.Bool,
-) {
-	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
-	require.NoError(t, err)
-
-	dropFromStore := map[roachpb.StoreID]bool{}
-	for _, id := range fromReplicaIDs {
-		rep, ok := desc.GetReplicaDescriptorByID(id)
-		if !ok {
-			t.Fatalf("replica %d not found in range descriptor: %v", id, desc)
-		}
-		t.Logf("from store %d; adding store %s to drop list", store.StoreID(), rep.StoreID)
-		dropFromStore[rep.StoreID] = true
-	}
-
-	shouldDropFromStore := func(from roachpb.StoreID) bool {
-		return (cond == nil || cond.Load()) && dropFromStore[from]
-	}
-
-	srv.StoreLivenessTransport().(*storeliveness.Transport).ListenMessages(store.StoreID(), &storeliveness.UnreliableHandler{
-		MessageHandler: store.TestingStoreLivenessSupportManager(),
-		UnreliableHandlerFuncs: storeliveness.UnreliableHandlerFuncs{
-			DropStoreLivenessMsg: func(msg *storelivenesspb.Message) bool {
-				drop := shouldDropFromStore(msg.From.StoreID)
-				if drop {
-					t.Logf("dropping StoreLiveness msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
-				} else {
-					t.Logf("allowing StoreLiveness msg %s from store %d: to %d", msg.Type, msg.From.StoreID, msg.To.StoreID)
-				}
-				return drop
-			},
-		},
-	})
-}
-
-// waitForPartitionedLeaderStepDownAndNewLeaderToStepUp is supplied a
-// partitioned node ID, presumed to be the leader for the range described by the
-// supplied descriptor, and it then waits for the leader to step down (by virtue
-// of CheckQuourum). It then waits for a new leader to be elected, as seen by
-// the other node supplied, and returns the newly elected leader's ID.
-func waitForPartitionedLeaderStepDownAndNewLeaderToStepUp(
-	t *testing.T,
-	tc *testcluster.TestCluster,
-	desc roachpb.RangeDescriptor,
-	partitionNodeIdx, otherNodeIdx int,
-) (leaderReplicaID roachpb.ReplicaID) {
-	partitionStore := tc.GetFirstStoreFromServer(t, partitionNodeIdx)
-	partRepl, err := partitionStore.GetReplica(desc.RangeID)
-	require.NoError(t, err)
-	partReplDesc, err := partRepl.GetReplicaDescriptor()
-	require.NoError(t, err)
-	otherStore := tc.GetFirstStoreFromServer(t, otherNodeIdx)
-	otherRepl, err := otherStore.GetReplica(desc.RangeID)
-	require.NoError(t, err)
-
-	// Wait until another replica campaigns and becomes leader, replacing the
-	// partitioned one.
-	t.Logf("test: waiting for leadership to fail over")
-	testutils.SucceedsSoon(t, func() error {
-		if partRepl.RaftStatus().RaftState == raftpb.StateLeader {
-			return errors.New("partitioned replica should have stepped down")
-		}
-		lead := otherRepl.RaftStatus().Lead
-		if lead == raft.None {
-			return errors.New("no leader yet")
-		}
-		if roachpb.ReplicaID(lead) == partReplDesc.ReplicaID {
-			return errors.New("partitioned replica is still leader")
-		}
-		return nil
-	})
-
-	return roachpb.ReplicaID(otherRepl.RaftStatus().Lead)
 }
 
 // getMapsDiff returns the difference between the values of corresponding

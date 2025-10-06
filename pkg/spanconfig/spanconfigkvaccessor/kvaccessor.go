@@ -78,7 +78,7 @@ func New(
 // WithTxn is part of the KVAccessor interface.
 func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAccessor {
 	if k.optionalTxn != nil {
-		log.Dev.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?)")
+		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithTxn(...) chained multiple times?)")
 	}
 	return newKVAccessor(k.db, k.ie, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn)
 }
@@ -86,7 +86,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 // WithISQLTxn is part of the KVAccessor interface.
 func (k *KVAccessor) WithISQLTxn(ctx context.Context, txn isql.Txn) spanconfig.KVAccessor {
 	if k.optionalTxn != nil {
-		log.Dev.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithISQLTxn(...) chained multiple times?)")
+		log.Fatalf(ctx, "KVAccessor already scoped to txn (was .WithISQLTxn(...) chained multiple times?)")
 	}
 	return newKVAccessor(txn.KV().DB(), txn, k.settings, k.clock, k.configurationsTableFQN, k.knobs, txn.KV())
 }
@@ -163,7 +163,7 @@ func (k *KVAccessor) UpdateSpanConfigRecords(
 	toUpsert []spanconfig.Record,
 	minCommitTS, maxCommitTS hlc.Timestamp,
 ) error {
-	log.Dev.VInfof(ctx, 2, "kv accessor updating span configs: toDelete=%+v, toUpsert=%+v, minCommitTS=%s, maxCommitTS=%s", toDelete, toUpsert, minCommitTS, maxCommitTS)
+	log.VInfof(ctx, 2, "kv accessor updating span configs: toDelete=%+v, toUpsert=%+v, minCommitTS=%s, maxCommitTS=%s", toDelete, toUpsert, minCommitTS, maxCommitTS)
 
 	if k.optionalTxn != nil {
 		return k.updateSpanConfigRecordsWithTxn(ctx, toDelete, toUpsert, k.optionalTxn, minCommitTS, maxCommitTS)
@@ -212,7 +212,7 @@ func (k *KVAccessor) getSpanConfigRecordsWithTxn(
 	ctx context.Context, targets []spanconfig.Target, txn *kv.Txn,
 ) ([]spanconfig.Record, error) {
 	if txn == nil {
-		log.Dev.Fatalf(ctx, "expected non-nil txn")
+		log.Fatalf(ctx, "expected non-nil txn")
 	}
 
 	if len(targets) == 0 {
@@ -276,7 +276,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	minCommitTS, maxCommitTS hlc.Timestamp,
 ) error {
 	if txn == nil {
-		log.Dev.Fatalf(ctx, "expected non-nil txn")
+		log.Fatalf(ctx, "expected non-nil txn")
 	}
 
 	if !minCommitTS.Less(maxCommitTS) {

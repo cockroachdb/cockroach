@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -188,7 +187,7 @@ func TestOutboxInbox(t *testing.T) {
 	}
 
 	streamCtx, streamCancelFn := context.WithCancel(ctx)
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(streamCtx)
 	require.NoError(t, err)
 
@@ -506,7 +505,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	outboxCtx, outboxCtxCancel := context.WithCancel(outboxHostCtx)
 
 	// Initiate the FlowStream RPC from the outbox.
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(outboxCtx)
 	require.NoError(t, err)
 
@@ -676,7 +675,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+			client := execinfrapb.NewDistSQLClient(conn)
 			clientStream, err := client.FlowStream(ctx)
 			require.NoError(t, err)
 
@@ -783,7 +782,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 		require.NoError(b, err)
 	}()
 
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(ctx)
 	require.NoError(b, err)
 
@@ -867,12 +866,7 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 	outboxMemAcc := testMemMonitor.MakeBoundAccount()
 	defer outboxMemAcc.Close(ctx)
 	outbox, err := NewOutbox(
-		&execinfra.FlowCtx{
-			Gateway: false,
-			Cfg: &execinfra.ServerConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
-			},
-		},
+		&execinfra.FlowCtx{Gateway: false},
 		0, /* processorID */
 		colmem.NewAllocator(ctx, &outboxMemAcc, coldata.StandardColumnFactory),
 		testMemAcc, colexecargs.OpWithMetaInfo{Root: input}, typs, nil, /* getStats */

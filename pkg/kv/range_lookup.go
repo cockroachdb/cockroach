@@ -249,13 +249,13 @@ func RangeLookup(
 		if rc == kvpb.INCONSISTENT {
 			return nil, nil, nil
 		}
-		log.Dev.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
+		log.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
 			key, prefetchedRanges)
 	}
 
 	ctxErr := ctx.Err()
 	if ctxErr == nil {
-		log.Dev.Fatalf(ctx, "retry loop broke before context expired")
+		log.Fatalf(ctx, "retry loop broke before context expired")
 	}
 	return nil, nil, ctxErr
 }
@@ -320,7 +320,7 @@ func lookupRangeFwdScan(
 		RequestHeader: kvpb.RequestHeaderFromSpan(bounds.AsRawSpanWithNoLocals()),
 	})
 	if !TestingIsRangeLookup(ba) {
-		log.Dev.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
+		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
 	}
 
 	br, pErr := sender.Send(ctx, ba)
@@ -394,7 +394,7 @@ func lookupRangeRevScan(
 		RequestHeader: kvpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),
 	})
 	if !TestingIsRangeLookup(ba) {
-		log.Dev.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
+		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
 	}
 
 	br, pErr := sender.Send(ctx, ba)

@@ -37,7 +37,7 @@ type ScheduledJobExecutor interface {
 		ctx context.Context,
 		txn isql.Txn,
 		jobID jobspb.JobID,
-		jobState State,
+		jobStatus Status,
 		details jobspb.Details,
 		env scheduledjobs.JobSchedulerEnv,
 		schedule *ScheduledJob,
@@ -173,7 +173,7 @@ func NotifyJobTermination(
 	txn isql.Txn,
 	env scheduledjobs.JobSchedulerEnv,
 	jobID jobspb.JobID,
-	jobStatus State,
+	jobStatus Status,
 	jobDetails jobspb.Details,
 	scheduleID jobspb.ScheduleID,
 ) error {

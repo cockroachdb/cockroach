@@ -1,7 +1,7 @@
 # CockroachDB on Kubernetes as a StatefulSet
 
 This example deploys CockroachDB on [Kubernetes](https://kubernetes.io) as a
-[StatefulSet](https://github.com/kubernetes/examples/tree/master/_archived/cockroachdb).
+[StatefulSet](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/).
 Kubernetes is an open source system for managing containerized applications
 across multiple hosts, providing basic mechanisms for deployment, maintenance,
 and scaling of applications.
@@ -25,9 +25,9 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start-s
 ### Kubernetes version
 
 The minimum Kubernetes version to successfully run the examples in this
-directory without modification is `1.21`. If you want to run them on an older
+directory without modification is `1.8`. If you want to run them on an older
 version of Kubernetes, use the files from the appropriate subdirectory (e.g. the
-`v1.20` directory for Kubernetes 1.20).
+`v1.7` directory for Kubernetes 1.7 or the `v1.6` directory for Kubernetes 1.6).
 Older Kubernetes versions that don't have their own directory are no longer
 supported.
 

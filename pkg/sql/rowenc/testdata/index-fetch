@@ -41,7 +41,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -53,7 +53,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     },
     {
@@ -98,7 +98,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -154,7 +154,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -166,7 +166,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     },
     {
@@ -216,7 +216,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -291,7 +291,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -303,7 +303,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     },
     {
@@ -365,7 +365,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -377,7 +377,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     },
     {
@@ -453,7 +453,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -465,7 +465,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]
@@ -518,7 +518,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -530,7 +530,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]
@@ -583,7 +583,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -595,7 +595,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]
@@ -648,7 +648,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -660,7 +660,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]
@@ -713,7 +713,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "a",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -725,7 +725,7 @@ columns:
     {
       "column_id": 1,
       "name": "a",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]
@@ -780,7 +780,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "k",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -798,7 +798,7 @@ columns:
     {
       "column_id": 1,
       "name": "k",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]
@@ -832,7 +832,7 @@ columns:
       "column": {
         "column_id": 2,
         "name": "b",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": false
       },
       "direction": 0,
@@ -854,7 +854,7 @@ columns:
       "column": {
         "column_id": 1,
         "name": "k",
-        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+        "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
         "is_non_nullable": true
       },
       "direction": 0,
@@ -872,13 +872,13 @@ columns:
     {
       "column_id": 2,
       "name": "b",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": false
     },
     {
       "column_id": 1,
       "name": "k",
-      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 3\noid: 20\ntime_precision_is_set: false\n",
+      "type": "family: IntFamily\nwidth: 64\nprecision: 0\nlocale: \"\"\nvisible_type: 0\noid: 20\ntime_precision_is_set: false\n",
       "is_non_nullable": true
     }
   ]

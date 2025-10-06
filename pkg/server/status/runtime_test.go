@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"runtime/metrics"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -130,51 +129,9 @@ func TestSubtractDiskCounters(t *testing.T) {
 		// Don't touch iops in progress; it is a gauge, not a counter.
 		iopsInProgress: 3,
 	}
-	subtractDiskCounters(context.Background(), &from, &sub)
+	subtractDiskCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, from)
-	}
-}
-
-func TestSubtractDiskCountersReset(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Test case where current values are lower than baseline (indicating counter reset)
-	stats := DiskStats{
-		ReadBytes:      2,                      // lower than sub (10)
-		readCount:      5,                      // higher than sub (3)
-		readTime:       time.Millisecond * 100, // lower than sub (200ms)
-		WriteBytes:     3,                      // lower than sub (8)
-		writeCount:     7,                      // higher than sub (4)
-		writeTime:      time.Millisecond * 150, // higher than sub (50ms)
-		ioTime:         time.Millisecond * 80,  // lower than sub (120ms)
-		weightedIOTime: time.Millisecond * 200, // higher than sub (180ms)
-		iopsInProgress: 5,                      // gauge - should not be affected
-	}
-	baseline := DiskStats{
-		ReadBytes:      10,
-		readCount:      3,
-		readTime:       time.Millisecond * 200,
-		WriteBytes:     8,
-		writeCount:     4,
-		writeTime:      time.Millisecond * 50,
-		ioTime:         time.Millisecond * 120,
-		weightedIOTime: time.Millisecond * 180,
-		iopsInProgress: 2,
-	}
-
-	// Expected: all values should be reset
-	expected := DiskStats{}
-
-	// Verify that baselines were updated correctly for reset fields
-	expectedBaseline := stats
-
-	subtractDiskCounters(context.Background(), &stats, &baseline)
-	if !reflect.DeepEqual(stats, expected) {
-		t.Fatalf("expected %+v; got %+v", expected, stats)
-	}
-	if !reflect.DeepEqual(baseline, expectedBaseline) {
-		t.Fatalf("expected sub %+v; got %+v", expectedBaseline, baseline)
 	}
 }
 
@@ -223,66 +180,9 @@ func TestSubtractNetCounters(t *testing.T) {
 		TCPRetransSegs: 3,
 		TCPFastRetrans: 6,
 	}
-	subtractNetworkCounters(context.Background(), &from, &sub)
+	subtractNetworkCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, from)
-	}
-}
-
-func TestSubtractNetCountersReset(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Test case where current values are lower than baseline (indicating counter reset)
-	stats := netCounters{
-		IOCounters: net.IOCountersStat{
-			PacketsRecv: 2, // lower than sub (5)
-			BytesRecv:   1, // lower than sub (10)
-			Errin:       3, // higher than sub (2)
-			Dropin:      1, // lower than sub (4)
-			BytesSent:   5, // lower than sub (8)
-			PacketsSent: 7, // higher than sub (3)
-			Errout:      2, // lower than sub (6)
-			Dropout:     4, // higher than sub (1)
-		},
-		TCPRetransSegs:      15, // lower than sub (20)
-		TCPFastRetrans:      8,  // higher than sub (5)
-		TCPTimeouts:         3,  // lower than sub (12)
-		TCPSlowStartRetrans: 9,  // higher than sub (7)
-		TCPLossProbes:       1,  // lower than sub (4)
-	}
-	baseline := netCounters{
-		IOCounters: net.IOCountersStat{
-			PacketsRecv: 5,
-			BytesRecv:   10,
-			Errin:       2,
-			Dropin:      4,
-			BytesSent:   8,
-			PacketsSent: 3,
-			Errout:      6,
-			Dropout:     1,
-		},
-		TCPRetransSegs:      20,
-		TCPFastRetrans:      5,
-		TCPTimeouts:         12,
-		TCPSlowStartRetrans: 7,
-		TCPLossProbes:       4,
-	}
-
-	// Expected: reset values should be set to sub values when from < sub,
-	// then normal subtraction occurs, resulting in 0 for reset fields
-	expected := netCounters{
-		IOCounters: net.IOCountersStat{},
-	}
-
-	// Verify that baselines were updated correctly for reset fields
-	expectedBaseilne := stats
-
-	subtractNetworkCounters(context.Background(), &stats, &baseline)
-	if !reflect.DeepEqual(stats, expected) {
-		t.Fatalf("expected %+v; got %+v", expected, stats)
-	}
-	if !reflect.DeepEqual(baseline, expectedBaseilne) {
-		t.Fatalf("expected sub %+v; got %+v", expectedBaseilne, baseline)
 	}
 }
 

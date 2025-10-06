@@ -132,7 +132,6 @@ export function getActiveExecutionsFromSessions(
           clientAddress: session.client_address,
           isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
           planGist: query.plan_gist,
-          isolationLevel: query.isolation_level,
         };
 
         statements.push(activeStmt);
@@ -159,7 +158,6 @@ export function getActiveExecutionsFromSessions(
         statementCount: activeTxn.num_statements_executed,
         lastAutoRetryReason: activeTxn.last_auto_retry_reason,
         priority: activeTxn.priority,
-        isolationLevel: activeTxn.isolation_level,
       });
     });
 

@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 query B
 SELECT '%' LIKE 't%' ESCAPE CASE WHEN (SELECT '-A' SIMILAR TO '--A' ESCAPE '-') THEN 't' ELSE 'f' END
 ----

@@ -37,7 +37,7 @@ type CatalogReader interface {
 
 	// IsNameInCache return true when all the by-name catalog data for this name
 	// key is known to be in the cache.
-	IsNameInCache(key descpb.NameInfo) bool
+	IsNameInCache(key catalog.NameKey) bool
 
 	// IsDescIDKnownToNotExist returns true when we know that there definitely
 	// exists no descriptor in storage with that ID.
@@ -136,7 +136,7 @@ func (cr catalogReader) IsIDInCache(_ descpb.ID) bool {
 }
 
 // IsNameInCache is part of the CatalogReader interface.
-func (cr catalogReader) IsNameInCache(_ descpb.NameInfo) bool {
+func (cr catalogReader) IsNameInCache(_ catalog.NameKey) bool {
 	return false
 }
 
@@ -402,10 +402,9 @@ func (cr catalogReader) GetByNames(
 	var mc nstree.MutableCatalog
 	cq := catalogQuery{codec: cr.codec}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		for i := range nameInfos {
-			ni := &nameInfos[i]
-			if ni.Name != "" {
-				get(ctx, b, catalogkeys.EncodeNameKey(codec, ni))
+		for _, nameInfo := range nameInfos {
+			if nameInfo.Name != "" {
+				get(ctx, b, catalogkeys.EncodeNameKey(codec, nameInfo))
 			}
 		}
 	})

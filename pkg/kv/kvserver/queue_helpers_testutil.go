@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -19,16 +18,7 @@ import (
 func (bq *baseQueue) testingAdd(
 	ctx context.Context, repl replicaInQueue, priority float64,
 ) (bool, error) {
-	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, noopProcessCallback)
-}
-
-// testingAddWithCallback is the same as testingAdd, but allows the caller to
-// register a process callback that will be invoked when the replica is enqueued
-// or processed.
-func (bq *baseQueue) testingAddWithCallback(
-	ctx context.Context, repl replicaInQueue, priority float64, cb processCallback,
-) (bool, error) {
-	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority, cb)
+	return bq.addInternal(ctx, repl.Desc(), repl.ReplicaID(), priority)
 }
 
 func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
@@ -50,7 +40,7 @@ func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 
 func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
 	if err := forceScanAndProcess(ctx, s, q); err != nil {
-		log.KvDistribution.Fatalf(ctx, "%v", err)
+		log.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -101,23 +91,6 @@ func (s *Store) ForceRaftSnapshotQueueProcess() error {
 // ForceConsistencyQueueProcess runs all the ranges through the consistency
 // queue.
 func (s *Store) ForceConsistencyQueueProcess() error {
-	var errorResettingTimestamp error
-	// Reset the consistency checker last processed timestamp. This is to ensure
-	// that the consistency checker actually runs on all replicas. This is
-	// especially important now that new replicas start with their consistency
-	// checker last processed timestamp set to "now".
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		if err := repl.setQueueLastProcessed(
-			context.Background(), "consistencyChecker", hlc.Timestamp{}); err != nil {
-			errorResettingTimestamp = err
-		}
-		return true
-	})
-
-	if errorResettingTimestamp != nil {
-		return errorResettingTimestamp
-	}
-
 	return forceScanAndProcess(context.TODO(), s, s.consistencyQueue.baseQueue)
 }
 

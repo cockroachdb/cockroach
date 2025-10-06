@@ -26,19 +26,16 @@ go_library(
         "//pkg/security/username",  # keep
         "//pkg/sql/lexbase",
         "//pkg/sql/parser/statements",
-        "//pkg/sql/parserutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/scanner",
         "//pkg/sql/sem/builtins/builtinsregistry",
-        "//pkg/sql/sem/idxtype",  # keep
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",  # keep
         "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/sem/tree/treewindow",  # keep
         "//pkg/sql/types",
-        "//pkg/util/buildutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/vector",  # keep
         "@com_github_cockroachdb_errors//:errors",
@@ -57,16 +54,11 @@ go_test(
         "parse_internal_test.go",
         "parse_test.go",
         "scanner_test.go",
-        "unused_keywords_test.go",
         ":gen-helpmap-test",  # keep
     ],
-    data = glob(["testdata/**"]) + [
-        "sql.y",
-        "unused_keywords.sh",
-    ],
+    data = glob(["testdata/**"]),
     embed = [":parser"],
     deps = [
-        "//pkg/build/bazel",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/randgen",

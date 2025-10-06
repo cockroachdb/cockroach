@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "lease",
@@ -10,22 +11,22 @@ go_library(
         "kv_writer.go",
         "lease.go",
         "lease_test_utils.go",
-        "lease_timestamp.go",
         "name_cache.go",
         "storage.go",
         "testutils.go",
+        ":gen-lease-mode-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/lease",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
         "//pkg/server/settingswatcher",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -55,7 +56,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
-        "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/startup",
@@ -70,6 +70,12 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
     ],
+)
+
+stringer(
+    name = "gen-lease-mode-stringer",
+    src = "lease.go",
+    typ = "SessionBasedLeasingMode",
 )
 
 go_test(
@@ -130,8 +136,6 @@ go_test(
         "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/sqlliveness/slprovider",
         "//pkg/sql/sqlliveness/slstorage",
-        "//pkg/sql/sqlliveness/sqllivenesstestutils",
-        "//pkg/sql/sqltestutils",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/storage",
@@ -143,7 +147,6 @@ go_test(
         "//pkg/util/admission",
         "//pkg/util/allstacks",
         "//pkg/util/ctxgroup",
-        "//pkg/util/debugutil",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

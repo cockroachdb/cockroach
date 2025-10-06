@@ -65,6 +65,17 @@ type Walker struct {
 // all files (i.e. the expected outputs, one per test case) are kept.
 //
 // Model usage:
+//
+//	   w := NewWalker(t, datapathutils.TestDataPath(t))
+//		 for _, test := range []struct{ name string }{
+//		    {name: "foo"},
+//		    {name: "bar"},
+//		 } {
+//		    t.Run(test.name, w.Run(t, test.name, func(t *testing.T, path string) {
+//		       Require(t, fmt.Sprintf("hello, %s", test.name), path)
+//		    }))
+//		 }
+//
 // w := NewWalker(t, datapathutils.TestDataPath(t))
 //
 //	for _, test := range []struct{ name string }{

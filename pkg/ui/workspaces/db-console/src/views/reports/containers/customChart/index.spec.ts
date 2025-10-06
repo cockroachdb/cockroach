@@ -4,35 +4,26 @@
 // included in the /LICENSE file.
 
 import * as protos from "src/js/protos";
-import { MetricsMetadata } from "src/redux/metricMetadata";
 import { NodesSummary } from "src/redux/nodes";
 import { INodeStatus } from "src/util/proto";
 import { CustomMetricState } from "src/views/reports/containers/customChart/customMetric";
-import { getSources } from "src/views/reports/containers/customChart/index";
+import { GetSources } from "src/views/reports/containers/customChart/index";
 
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 
-const emptyMetricsMetadata: MetricsMetadata = {
-  metadata: {},
-  recordedNames: {},
-};
 describe("Custom charts page", function () {
   describe("Getting metric sources", function () {
     it("returns empty when nodesSummary is undefined", function () {
       const metricState = new testCustomMetricStateBuilder().build();
-      expect(
-        getSources(undefined, metricState, emptyMetricsMetadata),
-      ).toStrictEqual([]);
+      expect(GetSources(undefined, metricState)).toStrictEqual([]);
     });
 
     it("returns empty when the nodeStatuses collection is empty", function () {
       const nodesSummary = new testNodesSummaryBuilder().build();
       nodesSummary.nodeStatuses = [];
       const metricState = new testCustomMetricStateBuilder().build();
-      expect(
-        getSources(nodesSummary, metricState, emptyMetricsMetadata),
-      ).toStrictEqual([]);
+      expect(GetSources(nodesSummary, metricState)).toStrictEqual([]);
     });
 
     it("returns empty when no specific node source is requested, nor per-source metrics", function () {
@@ -41,9 +32,7 @@ describe("Custom charts page", function () {
         .setNodeSource("")
         .setIsPerSource(false)
         .build();
-      expect(
-        getSources(nodesSummary, metricState, emptyMetricsMetadata),
-      ).toStrictEqual([]);
+      expect(GetSources(nodesSummary, metricState)).toStrictEqual([]);
     });
 
     describe("The metric is at the store-level", function () {
@@ -60,9 +49,9 @@ describe("Custom charts page", function () {
             "1": expectedSources,
           })
           .build();
-        expect(
-          getSources(nodesSummary, metricState, emptyMetricsMetadata),
-        ).toStrictEqual(expectedSources);
+        expect(GetSources(nodesSummary, metricState)).toStrictEqual(
+          expectedSources,
+        );
       });
 
       it("returns all known store IDs for the cluster when no node source is set", function () {
@@ -77,11 +66,7 @@ describe("Custom charts page", function () {
             "3": ["7", "8", "9"],
           })
           .build();
-        const actualSources = getSources(
-          nodesSummary,
-          metricState,
-          emptyMetricsMetadata,
-        ).sort();
+        const actualSources = GetSources(nodesSummary, metricState).sort();
         expect(actualSources).toStrictEqual(expectedSources);
       });
     });
@@ -96,9 +81,9 @@ describe("Custom charts page", function () {
           .setNodeSource("1")
           .build();
         const nodesSummary = new testNodesSummaryBuilder().build();
-        expect(
-          getSources(nodesSummary, metricState, emptyMetricsMetadata),
-        ).toStrictEqual(expectedSources);
+        expect(GetSources(nodesSummary, metricState)).toStrictEqual(
+          expectedSources,
+        );
       });
 
       it("returns all known node IDs when no node source is set", function () {
@@ -109,9 +94,9 @@ describe("Custom charts page", function () {
         const nodesSummary = new testNodesSummaryBuilder()
           .setNodeIDs(["1", "2", "3"])
           .build();
-        expect(
-          getSources(nodesSummary, metricState, emptyMetricsMetadata),
-        ).toStrictEqual(expectedSources);
+        expect(GetSources(nodesSummary, metricState)).toStrictEqual(
+          expectedSources,
+        );
       });
     });
   });

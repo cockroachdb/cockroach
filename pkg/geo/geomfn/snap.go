@@ -14,11 +14,6 @@ import (
 // geometry. Tolerance is used to control where snapping is performed.
 // If no snapping occurs then the input geometry is returned unchanged.
 func Snap(input, target geo.Geometry, tolerance float64) (geo.Geometry, error) {
-	if input.Empty() {
-		// If input is empty, return it unchanged (snap has no effect on empty
-		// geoms).
-		return input, nil
-	}
 	snappedEWKB, err := geos.Snap(input.EWKB(), target.EWKB(), tolerance)
 	if err != nil {
 		return geo.Geometry{}, err
