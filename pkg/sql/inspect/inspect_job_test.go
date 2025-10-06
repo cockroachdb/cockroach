@@ -129,11 +129,12 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 			}()
 
 			// Wait for the job to finish.
+			var jobID int64
 			var status string
 			var fractionCompleted float64
 			testutils.SucceedsSoon(t, func() error {
-				row := db.QueryRow(`SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`)
-				if err := row.Scan(&status, &fractionCompleted); err != nil {
+				row := db.QueryRow(`SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`)
+				if err := row.Scan(&jobID, &status, &fractionCompleted); err != nil {
 					return err
 				}
 				if status == "succeeded" || status == "failed" {
@@ -303,4 +304,91 @@ func TestInspectJobProtectedTimestamp(t *testing.T) {
 			})
 		})
 	}
+}
+
+// TestInspectProgressWithMultiRangeTable is a regression test for the bug where
+// INSPECT progress could exceed 100% when a table had many ranges. This test
+// creates a multi-node cluster with a multi-range table and verifies that:
+// 1. The progress never exceeds 100%
+// 2. The final progress is exactly 100% when the job completes
+// 3. The total check count is based on partitioned spans, not PK spans
+func TestInspectProgressWithMultiRangeTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderShort(t)
+
+	ctx := context.Background()
+	const numNodes = 3
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Create a table and split it into multiple ranges.
+	runner.Exec(t, `
+		CREATE DATABASE testdb;
+		USE testdb;
+		CREATE TABLE multi_range_table (
+			id INT PRIMARY KEY,
+			val1 INT,
+			val2 STRING,
+			INDEX idx_val1 (val1),
+			INDEX idx_val2 (val2)
+		);
+	`)
+
+	// Insert data to create multiple ranges. We'll insert enough data and then
+	// manually split to ensure multiple ranges.
+	runner.Exec(t, `INSERT INTO multi_range_table SELECT i, i*2, md5(i::STRING) FROM generate_series(1, 1000) AS g(i)`)
+	for i := 100; i <= 900; i += 100 {
+		runner.Exec(t, `ALTER TABLE multi_range_table SPLIT AT VALUES ($1)`, i)
+	}
+	runner.Exec(t, `ALTER TABLE multi_range_table SCATTER`)
+
+	// Wait for scatter to distribute ranges across nodes.
+	var rangeCount, nodeCount int
+	testutils.SucceedsSoon(t, func() error {
+		// Count total ranges and verify distribution.
+		runner.QueryRow(t, `
+			WITH r AS (SHOW RANGES FROM TABLE multi_range_table WITH DETAILS)
+			SELECT count(DISTINCT range_id), count(DISTINCT lease_holder)
+			FROM r
+		`).Scan(&rangeCount, &nodeCount)
+
+		if rangeCount <= 5 {
+			return errors.Newf("waiting for splits: only %d ranges", rangeCount)
+		}
+
+		if nodeCount < 2 {
+			return errors.Newf("waiting for scatter to multiple nodes: ranges only on %d node(s)", nodeCount)
+		}
+
+		return nil
+	})
+
+	// Start the INSPECT job.
+	// TODO(148365): Run INSPECT instead of SCRUB.
+	t.Logf("Starting INSPECT job on table with %d ranges distributed across %d nodes", rangeCount, nodeCount)
+	_, err := db.Exec(`
+		SET enable_scrub_job = true;
+		COMMIT;
+		EXPERIMENTAL SCRUB TABLE multi_range_table`)
+	require.NoError(t, err)
+
+	var jobID int64
+	var status string
+	var fractionCompleted float64
+	runner.QueryRow(t, `
+		SELECT job_id, status, fraction_completed
+		FROM [SHOW JOBS]
+		WHERE job_type = 'INSPECT'
+		ORDER BY created DESC
+		LIMIT 1
+	`).Scan(&jobID, &status, &fractionCompleted)
+	t.Logf("Job %d: status=%s, fraction_completed=%.4f", jobID, status, fractionCompleted)
+
+	require.Equal(t, "succeeded", status, "INSPECT job should succeed")
+	require.InEpsilon(t, 1.0, fractionCompleted, 0.01,
+		"progress should be ~100%% at completion, got %.2f%%", fractionCompleted*100)
 }

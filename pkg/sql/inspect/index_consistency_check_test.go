@@ -31,6 +31,21 @@ import (
 
 const expectedInspectFoundInconsistencies = "INSPECT found inconsistencies"
 
+// requireCheckCountsMatch verifies that the job's total check count equals its completed check count.
+// This is used to verify that progress tracking correctly counted all checks.
+func requireCheckCountsMatch(t *testing.T, r *sqlutils.SQLRunner, jobID int64) {
+	t.Helper()
+	var totalChecks, completedChecks int64
+	r.QueryRow(t, `
+		SELECT
+			(crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Progress', value)->'inspect'->>'jobTotalCheckCount')::INT,
+			(crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Progress', value)->'inspect'->>'jobCompletedCheckCount')::INT
+		FROM system.job_info
+		WHERE job_id = $1 AND info_key = 'legacy_progress'
+	`, jobID).Scan(&totalChecks, &completedChecks)
+	require.Equal(t, totalChecks, completedChecks, "total checks should equal completed checks when job succeeds")
+}
+
 // encodeSecondaryIndexEntry encodes row data into a secondary index entry.
 // The datums must be ordered according to the table's public columns.
 // Returns the encoded index entry, expecting exactly one entry to be produced.
@@ -517,13 +532,15 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			}
 
 			// Validate job status matches expected outcome
+			var jobID int64
 			var jobStatus string
 			var fractionCompleted float64
-			r.QueryRow(t, `SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobStatus, &fractionCompleted)
+			r.QueryRow(t, `SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobID, &jobStatus, &fractionCompleted)
 
 			if tc.expectedErrRegex == "" {
 				require.Equal(t, "succeeded", jobStatus, "expected job to succeed when no issues found")
 				require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
+				requireCheckCountsMatch(t, r, jobID)
 			} else {
 				require.Equal(t, "failed", jobStatus, "expected job to fail when inconsistencies found")
 			}
@@ -578,9 +595,11 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 	require.Equal(t, 0, issueLogger.numIssuesFound(), "No issues should be found in happy path test")
 
 	// Verify job succeeded and progress reached 100%
+	var jobID int64
 	var jobStatus string
 	var fractionCompleted float64
-	r.QueryRow(t, `SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobStatus, &fractionCompleted)
+	r.QueryRow(t, `SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobID, &jobStatus, &fractionCompleted)
 	require.Equal(t, "succeeded", jobStatus, "INSPECT job should succeed")
 	require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
+	requireCheckCountsMatch(t, r, jobID)
 }
