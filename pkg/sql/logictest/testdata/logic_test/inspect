@@ -137,3 +137,43 @@ statement ok
 INSPECT DATABASE test;
 
 subtest end
+
+subtest inspect_unsupported_indexes
+
+user root
+
+# Test that unsupported indexes (hash-sharded, expression) are skipped.
+# Table has both unsupported indexes and a regular index.
+statement ok
+CREATE TABLE t2 (x INT, y INT, z INT, INDEX hash_idx (x) USING HASH, INDEX expr_idx ((y + z)), INDEX regular_idx (z));
+
+statement ok
+INSERT INTO t2 (x, y, z) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+
+# Should succeed, checking only the regular index.
+skipif config local-mixed-25.2 local-mixed-25.3
+statement ok
+EXPERIMENTAL SCRUB TABLE t2 AS OF SYSTEM TIME '-1us';
+
+# Verify only one check was created (for the regular index).
+skipif config local-mixed-25.2 local-mixed-25.3
+query TI
+SELECT
+  json_extract_path_text(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
+    'inspectDetails', 'checks', '0', 'type'
+  ) AS check_type,
+  jsonb_array_length(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) -> 'inspectDetails' -> 'checks'
+  ) AS num_checks
+FROM crdb_internal.system_jobs
+WHERE job_type = 'INSPECT'
+ORDER BY created DESC
+LIMIT 1
+----
+INSPECT_CHECK_INDEX_CONSISTENCY  1
+
+statement ok
+DROP TABLE t2;
+
+subtest end

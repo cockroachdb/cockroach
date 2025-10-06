@@ -379,12 +379,26 @@ func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 			// We can only check a secondary index that has a 1-to-1 mapping between
 			// keys in the primary index. Unsupported indexes should be filtered out
 			// when the job is created.
+			// TODO(154862): support partial indexes
 			if idx.IsPartial() {
 				return errors.AssertionFailedf(
 					"unsupported index type for consistency check: partial index",
 				)
 			}
+			// TODO(154762): support hash sharded indexes
+			if idx.IsSharded() {
+				return errors.AssertionFailedf(
+					"unsupported index type for consistency check: hash-sharded index",
+				)
+			}
+			// TODO(154772): support expression indexes
+			if c.tableDesc.IsExpressionIndex(idx) {
+				return errors.AssertionFailedf(
+					"unsupported index type for consistency check: expression index",
+				)
+			}
 			switch idx.GetType() {
+			// TODO(154860): support inverted indexes
 			case idxtype.INVERTED, idxtype.VECTOR:
 				return errors.AssertionFailedf(
 					"unsupported index type for consistency check: %s", idx.GetType(),
