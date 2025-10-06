@@ -179,13 +179,46 @@ func TestCoordinatorFrontier(t *testing.T) {
 }
 
 type frontier interface {
-	AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error
+	AddSpansAt(hlc.Timestamp, ...roachpb.Span) error
 	Frontier() hlc.Timestamp
+	Forward(roachpb.Span, hlc.Timestamp) (bool, error)
 	ForwardResolvedSpan(jobspb.ResolvedSpan) (bool, error)
 	InBackfill(jobspb.ResolvedSpan) bool
 	AtBoundary() (bool, jobspb.ResolvedSpan_BoundaryType, hlc.Timestamp)
 	All() iter.Seq[jobspb.ResolvedSpan]
 	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
+}
+
+func newFrontier(
+	t testing.TB,
+	frontierType string,
+	statementTime hlc.Timestamp,
+	initialHighwater hlc.Timestamp,
+	codec resolvedspan.TableCodec,
+	perTableTracking bool,
+	spans ...roachpb.Span,
+) (frontier, error) {
+	switch frontierType {
+	case "aggregator":
+		return resolvedspan.NewAggregatorFrontier(
+			statementTime,
+			initialHighwater,
+			codec,
+			perTableTracking,
+			spans...,
+		)
+	case "coordinator":
+		return resolvedspan.NewCoordinatorFrontier(
+			statementTime,
+			initialHighwater,
+			codec,
+			perTableTracking,
+			spans...,
+		)
+	default:
+		t.Fatalf("unknown frontier type: %s", frontierType)
+	}
+	panic("unreachable")
 }
 
 func testBackfillSpan(
@@ -379,29 +412,15 @@ func TestFrontierPerTableResolvedTimestamps(t *testing.T) {
 			initialHighWater := hlc.Timestamp{}
 
 			// Create frontier with multiple table spans.
-			f, err := func() (frontier, error) {
-				switch frontierType {
-				case "aggregator":
-					return resolvedspan.NewAggregatorFrontier(
-						statementTime,
-						initialHighWater,
-						codec,
-						true, /* perTableTracking */
-						tableSpans...,
-					)
-				case "coordinator":
-					return resolvedspan.NewCoordinatorFrontier(
-						statementTime,
-						initialHighWater,
-						codec,
-						true, /* perTableTracking */
-						tableSpans...,
-					)
-				default:
-					t.Fatalf("unknown frontier type: %s", frontierType)
-				}
-				panic("unreachable")
-			}()
+			f, err := newFrontier(
+				t,
+				frontierType,
+				statementTime,
+				initialHighWater,
+				codec,
+				true, /* perTableTracking */
+				tableSpans...,
+			)
 			require.NoError(t, err)
 			require.Equal(t, initialHighWater, f.Frontier())
 
@@ -503,29 +522,15 @@ func TestFrontierForwardFullTableSpan(t *testing.T) {
 			statementTime := makeTS(5)
 			var initialHighWater hlc.Timestamp
 
-			f, err := func() (span.Frontier, error) {
-				switch frontierType {
-				case "aggregator":
-					return resolvedspan.NewAggregatorFrontier(
-						statementTime,
-						initialHighWater,
-						codec,
-						true, /* perTableTracking */
-						tableSpans...,
-					)
-				case "coordinator":
-					return resolvedspan.NewCoordinatorFrontier(
-						statementTime,
-						initialHighWater,
-						codec,
-						true, /* perTableTracking */
-						tableSpans...,
-					)
-				default:
-					t.Fatalf("unknown frontier type: %s", frontierType)
-				}
-				panic("unreachable")
-			}()
+			f, err := newFrontier(
+				t,
+				frontierType,
+				statementTime,
+				initialHighWater,
+				codec,
+				true, /* perTableTracking */
+				tableSpans...,
+			)
 			require.NoError(t, err)
 			require.Equal(t, initialHighWater, f.Frontier())
 
@@ -610,26 +615,14 @@ FROM [SHOW RANGES FROM TABLE foo WITH KEYS]`)
 						now := makeTS(timeutil.Now().Unix())
 
 						// Create the frontier and add all the spans.
-						f, err := func() (frontier, error) {
-							switch frontierType {
-							case "aggregator":
-								return resolvedspan.NewAggregatorFrontier(
-									now,
-									now,
-									codec,
-									perTableTracking,
-								)
-							case "coordinator":
-								return resolvedspan.NewCoordinatorFrontier(
-									now,
-									now,
-									codec,
-									perTableTracking,
-								)
-							default:
-								panic("unreachable")
-							}
-						}()
+						f, err := newFrontier(
+							b,
+							frontierType,
+							now,
+							now,
+							codec,
+							perTableTracking,
+						)
 						require.NoError(b, err)
 						require.NoError(b, f.AddSpansAt(now, spans...))
 
@@ -654,4 +647,64 @@ FROM [SHOW RANGES FROM TABLE foo WITH KEYS]`)
 			}
 		}
 	}
+}
+
+func TestFrontierAtBoundary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rnd, _ := randutil.NewTestRand()
+	perTableTracking := rnd.Intn(2) == 0
+	t.Logf("per-table tracking: %t", perTableTracking)
+
+	testutils.RunValues(t, "frontier type", []string{"aggregator", "coordinator"},
+		func(t *testing.T, frontierType string) {
+			statementTime := makeTS(timeutil.Now().Unix())
+			var initialHighWater hlc.Timestamp
+			f, err := newFrontier(
+				t,
+				frontierType,
+				statementTime,
+				initialHighWater,
+				mockCodec{},
+				perTableTracking,
+				makeSpan("a", "f"),
+			)
+			require.NoError(t, err)
+
+			// We can't be at boundary until a boundary is set.
+			atBoundary, _, _ := f.AtBoundary()
+			require.False(t, atBoundary)
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:      makeSpan("a", "f"),
+				Timestamp: statementTime,
+			})
+			require.NoError(t, err)
+			atBoundary, _, _ = f.AtBoundary()
+			require.False(t, atBoundary)
+
+			// Set a boundary by forwarding part of the span space.
+			ts := statementTime.AddDuration(3 * time.Second)
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:         makeSpan("a", "c"),
+				Timestamp:    ts,
+				BoundaryType: jobspb.ResolvedSpan_BACKFILL,
+			})
+			require.NoError(t, err)
+			atBoundary, _, _ = f.AtBoundary()
+			require.False(t, atBoundary)
+
+			// Verify the boundary is reached after forwarding
+			// the rest of the span space.
+			_, err = f.ForwardResolvedSpan(jobspb.ResolvedSpan{
+				Span:         makeSpan("c", "f"),
+				Timestamp:    ts,
+				BoundaryType: jobspb.ResolvedSpan_BACKFILL,
+			})
+			require.NoError(t, err)
+			atBoundary, boundaryType, boundaryTS := f.AtBoundary()
+			require.True(t, atBoundary)
+			require.Equal(t, jobspb.ResolvedSpan_BACKFILL, boundaryType)
+			require.Equal(t, ts, boundaryTS)
+		})
 }
