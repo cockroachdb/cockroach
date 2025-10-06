@@ -94,6 +94,11 @@ type Config struct {
 	// enables filtering out any transactional writes with that flag set to true.
 	WithFiltering bool
 
+	// WithBulkDelivery is propagated via the RangefeedRequest to the rangefeed
+	// server, where if true, the server will deliver rangefeed events in bulk
+	// during catchup scans.
+	WithBulkDelivery bool
+
 	// WithFrontierQuantize specifies the resolved timestamp quantization
 	// granularity. If non-zero, resolved timestamps from rangefeed checkpoint
 	// events will be rounded down to the nearest multiple of the quantization
@@ -135,7 +140,7 @@ func Run(ctx context.Context, cfg Config) error {
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering,
+		cfg.NeedsInitialScan, cfg.WithDiff, cfg.WithFiltering, cfg.WithBulkDelivery,
 		cfg.WithFrontierQuantize,
 		cfg.ConsumerID,
 		cfg.InitialHighWater, cfg.InitialSpanTimePairs, cfg.EndTime,
@@ -260,6 +265,7 @@ type kvFeed struct {
 	withDiff             bool
 	withFiltering        bool
 	withInitialBackfill  bool
+	withBulkDelivery     bool
 	consumerID           int64
 	initialHighWater     hlc.Timestamp
 	initialSpanTimePairs []kvcoord.SpanTimePair
@@ -289,7 +295,7 @@ func newKVFeed(
 	spans []roachpb.Span,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
-	withInitialBackfill, withDiff, withFiltering bool,
+	withInitialBackfill, withDiff, withFiltering, withBulkDelivery bool,
 	withFrontierQuantize time.Duration,
 	consumerID int64,
 	initialHighWater hlc.Timestamp,
@@ -312,6 +318,7 @@ func newKVFeed(
 		withDiff:             withDiff,
 		withFiltering:        withFiltering,
 		withFrontierQuantize: withFrontierQuantize,
+		withBulkDelivery:     withBulkDelivery,
 		consumerID:           consumerID,
 		initialHighWater:     initialHighWater,
 		endTime:              endTime,
@@ -615,6 +622,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		WithDiff:             f.withDiff,
 		WithFiltering:        f.withFiltering,
 		WithFrontierQuantize: f.withFrontierQuantize,
+		WithBulkDelivery:     f.withBulkDelivery,
 		ConsumerID:           f.consumerID,
 		Knobs:                f.knobs,
 		Timers:               f.timers,
