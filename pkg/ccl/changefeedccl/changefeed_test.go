@@ -12727,9 +12727,9 @@ func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 
 func getChangefeedLoggingChannel(sv *settings.Values) logpb.Channel {
 	if log.ShouldMigrateEvent(sv) {
-		return logpb.Channel_CHANGEFEED
+		return logpb.Channel_TELEMETRY
 	}
-	return logpb.Channel_TELEMETRY
+	return logpb.Channel_CHANGEFEED
 }
 
 func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {

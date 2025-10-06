@@ -2317,7 +2317,7 @@ func getChangefeedEventMigrator(migrateEvent bool) log.StructuredEventMigrator {
 		func() bool {
 			return migrateEvent
 		},
-		channel.CHANGEFEED,
+		channel.TELEMETRY,
 	)
 }
 

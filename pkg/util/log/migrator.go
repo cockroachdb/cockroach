@@ -22,7 +22,7 @@ var ChannelCompatibilityModeEnabled = settings.RegisterBoolSetting(
 	"when true, logs will continue to log to the expected logging channels; "+
 		"when false, logs will be moved to new logging channels as part of a "+
 		"logging channel consolidation effort",
-	metamorphic.ConstantWithTestBool("log.channel_compatibility_mode.enabled", true),
+	metamorphic.ConstantWithTestBool("log.channel_compatibility_mode.enabled", false),
 	settings.WithPublic,
 )
 
@@ -73,7 +73,6 @@ func (sem StructuredEventMigrator) structuredEventDepth(
 		structuredEventDepth(ctx, sev, depth+1, sem.newChannel, event)
 	} else {
 		structuredEventDepth(ctx, sev, depth+1, event.LoggingChannel(), event)
-
 	}
 }
 
