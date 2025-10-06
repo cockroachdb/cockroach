@@ -5,6 +5,8 @@
 
 package aws
 
+import "github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+
 type Option interface {
 	apply(*Provider)
 }
@@ -48,11 +50,18 @@ func WithAssumeSTSRole(role string) OptionFunc {
 	}
 }
 
+func WithDNSProvider(dnsProvider vm.DNSProvider) OptionFunc {
+	return func(p *Provider) {
+		p.dnsProvider = dnsProvider
+	}
+}
+
 // ProviderOptions holds options for configuring the AWS provider.
 type ProviderOptions struct {
 	Profile       string
 	AccountID     string
 	AssumeSTSRole string
+	DNSProvider   vm.DNSProvider
 }
 
 // ToOptions converts ProviderOptions to a slice of Option functions to be used
@@ -67,6 +76,9 @@ func (po *ProviderOptions) ToOptions() []Option {
 	}
 	if po.AssumeSTSRole != "" {
 		opts = append(opts, WithAssumeSTSRole(po.AssumeSTSRole))
+	}
+	if po.DNSProvider != nil {
+		opts = append(opts, WithDNSProvider(po.DNSProvider))
 	}
 	return opts
 }

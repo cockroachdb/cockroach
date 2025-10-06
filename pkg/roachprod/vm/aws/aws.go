@@ -387,6 +387,8 @@ type Provider struct {
 		// credentials are the AWS credentials.
 		credentials *awsststypes.Credentials
 	}
+
+	dnsProvider vm.DNSProvider
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -1225,7 +1227,7 @@ type DescribeInstancesOutputInstance struct {
 
 // toVM converts an ec2 instance to a vm.VM struct.
 func (in *DescribeInstancesOutputInstance) toVM(
-	volumes map[string]vm.Volume, remoteUserName string,
+	volumes map[string]vm.Volume, remoteUserName string, dnsProvider vm.DNSProvider,
 ) *vm.VM {
 
 	// Convert the tag map into a more useful representation
@@ -1271,6 +1273,15 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		iamIdentifier = strings.Split(strings.TrimPrefix(in.IamInstanceProfile.Arn, "arn:aws:iam::"), ":")[0]
 	}
 
+	publicDns := ""
+	publicDnsZone := ""
+	dnsProviderName := ""
+	if dnsProvider != nil {
+		publicDns = fmt.Sprintf("%s.%s", tagMap["Name"], dnsProvider.PublicDomain())
+		publicDnsZone = dnsProvider.PublicDomain()
+		dnsProviderName = dnsProvider.ProviderName()
+	}
+
 	return &vm.VM{
 		CreatedAt:              createdAt,
 		DNS:                    in.PrivateDNSName,
@@ -1283,6 +1294,9 @@ func (in *DescribeInstancesOutputInstance) toVM(
 		ProviderID:             in.InstanceID,
 		ProviderAccountID:      iamIdentifier,
 		PublicIP:               in.PublicIPAddress,
+		PublicDNS:              publicDns,
+		PublicDNSZone:          publicDnsZone,
+		DNSProvider:            dnsProviderName,
 		RemoteUser:             remoteUserName,
 		VPC:                    in.VpcID,
 		MachineType:            in.InstanceType,
@@ -1373,7 +1387,7 @@ func (p *Provider) describeInstances(
 
 	var ret vm.List
 	for _, in := range instances {
-		v := in.toVM(volumes[in.InstanceID], opts.RemoteUserName)
+		v := in.toVM(volumes[in.InstanceID], opts.RemoteUserName, p.dnsProvider)
 		ret = append(ret, *v)
 	}
 
@@ -1537,7 +1551,9 @@ func (p *Provider) runInstance(
 
 	// Volumes are attached to the instance only after the instance is running.
 	// We will fill in the volume information during the waitForIPs call.
-	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName)
+	v := runInstancesOutput.Instances[0].toVM(
+		map[string]vm.Volume{}, providerOpts.RemoteUserName, p.dnsProvider,
+	)
 	return v, err
 }
 
@@ -1563,7 +1579,7 @@ func runSpotInstance(
 		return nil, errors.Errorf("No instances found for spot request, likely the spot request had bad parameter")
 	}
 
-	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName)
+	v := runInstancesOutput.Instances[0].toVM(map[string]vm.Volume{}, providerOpts.RemoteUserName, p.dnsProvider)
 
 	instanceId := runInstancesOutput.Instances[0].InstanceID
 	spotInstanceRequestId, err := getSpotInstanceRequestId(l, p, regionName, instanceId)
