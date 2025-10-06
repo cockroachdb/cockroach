@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -910,6 +911,7 @@ type Store struct {
 	consistencyLimiter   *quotapool.RateLimiter      // Rate limits consistency checks
 	metrics              *StoreMetrics
 	intentResolver       *intentresolver.IntentResolver
+	lockTableFlusher     *concurrency.LockTableFlusher
 	recoveryMgr          txnrecovery.Manager
 	storeLiveness        storeliveness.Fabric
 	syncWaiters          []*logstore.SyncWaiterLoop
@@ -2223,6 +2225,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		RangeDescriptorCache: intentResolverRangeCache,
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
+
+	s.lockTableFlusher = concurrency.NewLockTableFlusher(s.db, stopper)
 
 	// Create the raft log truncator and register the callback.
 	s.raftTruncator = makeRaftLogTruncator(s.cfg.AmbientCtx, (*storeForTruncatorImpl)(s), stopper)

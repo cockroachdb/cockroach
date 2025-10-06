@@ -143,6 +143,13 @@ var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
 	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
 )
 
+var UnreplicatedLockReliabilityLockLimit = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.lock_limit.enabled",
+	"whether the replica should attempt to keep unreplicated locks when the lock table hits its limit",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lock_limit.enabled", true),
+)
+
 var MaxLockFlushSize = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.max_flush_size",
@@ -180,11 +187,13 @@ type Config struct {
 	NodeDesc  *roachpb.NodeDescriptor
 	RangeDesc *roachpb.RangeDescriptor
 	// Components.
-	Settings       *cluster.Settings
-	DB             *kv.DB
-	Clock          *hlc.Clock
-	Stopper        *stop.Stopper
-	IntentResolver IntentResolver
+	Settings         *cluster.Settings
+	DB               *kv.DB
+	Clock            *hlc.Clock
+	Stopper          *stop.Stopper
+	IntentResolver   IntentResolver
+	LockTableFlusher *LockTableFlusher
+
 	// Metrics.
 	TxnWaitMetrics     *txnwait.Metrics
 	SlowLatchGauge     *metric.Gauge
@@ -206,7 +215,7 @@ func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
 	lt := maybeWrapInVerifyingLockTable(
-		newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings),
+		newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings, cfg.LockTableFlusher),
 	)
 	*m = managerImpl{
 		st: cfg.Settings,
