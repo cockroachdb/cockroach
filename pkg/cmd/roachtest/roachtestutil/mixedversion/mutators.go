@@ -40,7 +40,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Name() string {
 	return PreserveDowngradeOptionRandomizer
 }
 
-func (m preserveDowngradeOptionRandomizerMutator) Init(_ *testPlanner) bool {
+func (m preserveDowngradeOptionRandomizerMutator) IsCompatible(_ *testPlanner) bool {
 	return true
 }
 
@@ -218,7 +218,7 @@ func (m clusterSettingMutator) Name() string {
 	return ClusterSettingMutator(m.name)
 }
 
-func (m clusterSettingMutator) Init(_ *testPlanner) bool {
+func (m clusterSettingMutator) IsCompatible(_ *testPlanner) bool {
 	return true
 }
 
@@ -415,7 +415,7 @@ func (m panicNodeMutator) Name() string {
 	return PanicNode
 }
 
-func (m panicNodeMutator) Init(p *testPlanner) bool {
+func (m panicNodeMutator) IsCompatible(p *testPlanner) bool {
 	return shouldEnableFailureInjection(p)
 }
 

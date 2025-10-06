@@ -400,15 +400,25 @@ func TestNoConcurrentFailureInjections(t *testing.T) {
 	}
 
 	for range numIterations {
+		rng := rand.New(rngSource)
+		if rng.Float64() < 0.5 {
+			opts = append(opts, WithMutatorProbability(singleNetworkPartitionMutator.Name(), 1.0))
+			opts = append(opts, WithMutatorProbability(protectedNetworkPartitionMutator.Name(), 0))
+		} else {
+			opts = append(opts, WithMutatorProbability(singleNetworkPartitionMutator.Name(), 0))
+			opts = append(opts, WithMutatorProbability(protectedNetworkPartitionMutator.Name(), 1.0))
+		}
+
 		mvt := newTest(opts...)
 		mvt._getFailer = getFailer
 		mvt.InMixedVersion("test hook", dummyHook)
 		// Use different seed for each iteration
-		mvt.prng = rand.New(rngSource)
+		mvt.prng = rng
 
 		assertValidTest(mvt, t.Fatal)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
+		t.Log(plan.PrettyPrint())
 
 		isFailureInjected := false
 
@@ -960,9 +970,9 @@ NEXT_STEP:
 // concurrently with every user-provided hook.
 type concurrentUserHooksMutator struct{}
 
-func (concurrentUserHooksMutator) Name() string             { return "concurrent_user_hooks_mutator" }
-func (concurrentUserHooksMutator) Init(_ *testPlanner) bool { return true }
-func (concurrentUserHooksMutator) Probability() float64     { return 0.5 }
+func (concurrentUserHooksMutator) Name() string                     { return "concurrent_user_hooks_mutator" }
+func (concurrentUserHooksMutator) IsCompatible(_ *testPlanner) bool { return true }
+func (concurrentUserHooksMutator) Probability() float64             { return 0.5 }
 
 func (concurrentUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
@@ -982,9 +992,9 @@ func (concurrentUserHooksMutator) Generate(
 // user-provided hook from the plan.
 type removeUserHooksMutator struct{}
 
-func (removeUserHooksMutator) Name() string             { return "remove_user_hooks_mutator" }
-func (removeUserHooksMutator) Init(_ *testPlanner) bool { return true }
-func (removeUserHooksMutator) Probability() float64     { return 0.5 }
+func (removeUserHooksMutator) Name() string                     { return "remove_user_hooks_mutator" }
+func (removeUserHooksMutator) IsCompatible(_ *testPlanner) bool { return true }
+func (removeUserHooksMutator) Probability() float64             { return 0.5 }
 
 func (removeUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,

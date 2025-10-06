@@ -259,7 +259,7 @@ func TestSinglePartitionStrategy(t *testing.T) {
 
 	nodes := option.NodeListOption{1, 2, 3, 4}
 	strategy := singlePartitionStrategy{}
-	partitions, unavailableNodes, err := strategy.selectPartitions(rng, nodes)
+	partitions, unavailableNodes, err := strategy.selectPartitions(rng, nil, nodes)
 	require.NoError(t, err)
 	// We should only see one partition created between two nodes.
 	require.Len(t, partitions, 1)
@@ -281,8 +281,7 @@ func TestProtectedPartitionStrategy(t *testing.T) {
 
 	nodes := option.NodeListOption{1, 2, 3, 4}
 	strategy := &protectedPartitionStrategy{
-		protectedNodes: make(map[int]bool),
-		quorum:         2,
+		quorum: 2,
 	}
 
 	// Select protected nodes
@@ -293,7 +292,7 @@ func TestProtectedPartitionStrategy(t *testing.T) {
 	t.Logf("protected nodes: %v", protectedNodes)
 
 	// Generate partitions
-	partitions, unavailableNodes, err := strategy.selectPartitions(rng, nodes)
+	partitions, unavailableNodes, err := strategy.selectPartitions(rng, protectedNodes, nodes)
 	t.Logf("generated partitions %v", partitions)
 	t.Logf("unavailable nodes: %v", unavailableNodes)
 

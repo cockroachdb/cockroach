@@ -19,7 +19,7 @@ import (
 type PartitionStrategy interface {
 	String() string
 	selectProtectedNodes(rng *rand.Rand, nodes option.NodeListOption) (option.NodeListOption, error)
-	selectPartitions(rng *rand.Rand, nodes option.NodeListOption) ([]failures.NetworkPartition, option.NodeListOption, error)
+	selectPartitions(rng *rand.Rand, protectedNodes, nodes option.NodeListOption) ([]failures.NetworkPartition, option.NodeListOption, error)
 }
 
 type partitionStrategy = PartitionStrategy
@@ -37,7 +37,7 @@ func (s singlePartitionStrategy) selectProtectedNodes(rng *rand.Rand, nodes opti
 	return nil, nil
 }
 
-func (s singlePartitionStrategy) selectPartitions(rng *rand.Rand, nodes option.NodeListOption) ([]failures.NetworkPartition, option.NodeListOption, error) {
+func (s singlePartitionStrategy) selectPartitions(rng *rand.Rand, protectedNodes, nodes option.NodeListOption) ([]failures.NetworkPartition, option.NodeListOption, error) {
 	if len(nodes) < 3 {
 		return nil, nil, errors.New("at least three nodes are required to create a partition")
 	}
@@ -60,8 +60,7 @@ func (s singlePartitionStrategy) selectPartitions(rng *rand.Rand, nodes option.N
 // will never be partitioned from any other node in the cluster, and will always have pinned
 // voter replicas.
 type protectedPartitionStrategy struct {
-	protectedNodes map[int]bool
-	quorum         int
+	quorum int
 }
 
 func (p protectedPartitionStrategy) String() string {
@@ -78,17 +77,18 @@ func (p protectedPartitionStrategy) selectProtectedNodes(
 	rng.Shuffle(len(nodes), func(i, j int) {
 		nodes[i], nodes[j] = nodes[j], nodes[i]
 	})
-
-	for _, node := range nodes[:p.quorum] {
-		p.protectedNodes[node] = true
-	}
 	return nodes[:p.quorum], nil
 }
 
 func (p protectedPartitionStrategy) selectPartitions(
-	rng *rand.Rand, nodes option.NodeListOption,
+	rng *rand.Rand, protectedNodes, nodes option.NodeListOption,
 ) ([]failures.NetworkPartition, option.NodeListOption, error) {
-	if len(nodes)-len(p.protectedNodes) < 2 {
+	protectedNodesMap := make(map[int]bool)
+	for _, node := range nodes[:p.quorum] {
+		protectedNodesMap[node] = true
+	}
+
+	if len(nodes)-len(protectedNodesMap) < 2 {
 		return nil, nil, errors.New("at least two non protected nodes are required to create a partition")
 	}
 
@@ -97,7 +97,7 @@ func (p protectedPartitionStrategy) selectPartitions(
 	var connections [][2]int
 	for i := 0; i < len(nodes); i++ {
 		for j := i + 1; j < len(nodes); j++ {
-			if p.protectedNodes[nodes[i]] && p.protectedNodes[nodes[j]] {
+			if protectedNodesMap[nodes[i]] && protectedNodesMap[nodes[j]] {
 				continue
 			}
 			connections = append(connections, [2]int{nodes[i], nodes[j]})
@@ -121,10 +121,10 @@ func (p protectedPartitionStrategy) selectPartitions(
 		}
 		// For simplicity, we say any node that has a partition touching it is unavailable,
 		// except the protected nodes, since those will always maintain quorum.
-		if !p.protectedNodes[conn[0]] {
+		if !protectedNodesMap[conn[0]] {
 			unvailableNodes = unvailableNodes.Merge(option.NodeListOption{conn[0]})
 		}
-		if !p.protectedNodes[conn[1]] {
+		if !protectedNodesMap[conn[1]] {
 			unvailableNodes = unvailableNodes.Merge(option.NodeListOption{conn[1]})
 		}
 	}
@@ -137,19 +137,30 @@ func (p protectedPartitionStrategy) selectPartitions(
 	return partitions, unvailableNodes /* unavailableNodes */, nil
 }
 
+var (
+	singleNetworkPartitionMutator = networkPartitionMutator{
+		strategy:    singlePartitionStrategy{},
+		probability: 0.3,
+	}
+
+	protectedNetworkPartitionMutator = networkPartitionMutator{
+		strategy: protectedPartitionStrategy{
+			quorum: 2,
+		},
+		probability: 0.0,
+	}
+)
+
 type networkPartitionMutator struct {
-	strategy partitionStrategy
+	strategy    partitionStrategy
+	probability float64
 }
 
 func (m networkPartitionMutator) Name() string {
 	return fmt.Sprintf("network-partition-mutator-%s", m.strategy)
 }
 
-func (m networkPartitionMutator) Init(p *testPlanner) bool {
-	m.strategy = singlePartitionStrategy{}
-	if p.options.partitionStrategy != nil {
-		m.strategy = p.options.partitionStrategy
-	}
+func (m networkPartitionMutator) IsCompatible(p *testPlanner) bool {
 	// Disable network partitions for separate process deployments. Network partitions
 	// currently only support partitions between VMs, forcing us to unconditionally partition
 	// all processes on a VM. This can cause separate process tenants to shut down.
@@ -157,19 +168,30 @@ func (m networkPartitionMutator) Init(p *testPlanner) bool {
 }
 
 func (m networkPartitionMutator) Probability() float64 {
-	return 0.3
+	return m.probability
 }
 
 func (m networkPartitionMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) ([]mutation, error) {
-	fmt.Printf("partition strategy: %s\n", m.strategy)
-	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
+	var mutations []mutation
+	protectedNodes, err := m.strategy.selectProtectedNodes(rng, planner.currentContext.System.Descriptor.Nodes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
+		return nil, err
+	}
+	if len(protectedNodes) > 0 {
+		protectedNodesMut, err := m.createProtectedNodesMutation(plan.newStepSelector(), protectedNodes)
+		if err != nil {
+			return nil, err
+		}
+		mutations = append(mutations, protectedNodesMut...)
 	}
 
-	var mutations []mutation
+	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get failer for %s", failures.IPTablesNetworkPartitionName)
+	}
+
 	upgrades := randomUpgrades(rng, plan)
 	idx := newStepIndex(plan)
 
@@ -180,10 +202,11 @@ func (m networkPartitionMutator) Generate(
 			continue
 		}
 
-		mut, err := m.generatePartition(rng, upgrade, idx, planner, f)
+		mut, err := m.generatePartition(rng, upgrade, idx, planner, protectedNodes, f)
 		if err != nil {
-			planner.logger.Printf("failed to generate valid partition: %v", err)
-		} else {
+			return nil, err
+		}
+		if mut != nil {
 			mutations = append(mutations, mut...)
 		}
 	}
@@ -191,12 +214,30 @@ func (m networkPartitionMutator) Generate(
 	return mutations, nil
 }
 
+func (m networkPartitionMutator) createProtectedNodesMutation(
+	steps stepSelector, protectedNodes option.NodeListOption,
+) ([]mutation, error) {
+	// Find the last setup step. We want to set the zone constraints
+	// after the cluster is setup, but before any meaningful work is done.
+	setupSteps := steps.Filter(func(step *singleStep) bool {
+		return step.context.System.Stage < OnStartupStage
+	})
+
+	if len(setupSteps) == 0 {
+		return nil, errors.New("no setup steps found")
+	}
+
+	lastSetupStep := setupSteps[len(setupSteps)-1]
+	return stepSelector{lastSetupStep}.InsertAfter(
+		pinVoterReplicasStep{protectedNodes: protectedNodes},
+	), nil
+}
+
 func (m networkPartitionMutator) generatePartition(
-	rng *rand.Rand, steps stepSelector, idx stepIndex, planner *testPlanner, f *failures.Failer,
+	rng *rand.Rand, steps stepSelector, idx stepIndex, planner *testPlanner, protectedNodes option.NodeListOption, f *failures.Failer,
 ) ([]mutation, error) {
 	const maxAttempts = 500
-
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for range maxAttempts {
 		// Randomly select a step to inject before and a step to recover after.
 		// This ensures that we skip "uninteresting partition windows", i.e. immediately
 		// recovering after injecting.
@@ -204,11 +245,16 @@ func (m networkPartitionMutator) generatePartition(
 		recoverIdx := rng.Intn(len(steps))
 
 		if m.isValidPartitionWindow(injectIdx, recoverIdx, steps, idx, planner) {
-			return m.createPartitionMutations(rng, injectIdx, recoverIdx, steps, f, planner)
+			return m.createPartitionMutations(rng, injectIdx, recoverIdx, steps, f, protectedNodes, planner)
 		}
 	}
-
-	return nil, errors.Newf("failed to find valid partition window after %d attempts", maxAttempts)
+	// We should always have at least one valid step (i.e. the preserve downgrade step) that
+	// supports a partition window. However, this step may have already been selected by another
+	// failure injection mutator (e.g. node panic). In this case, we just skip injecting a partition.
+	// TODO(darryl): ideally failure injection mutators could avoid having to coordinate within
+	// the mutators themselves, e.g. we could enforce that each upgrade only has at most one failure
+	// injection mutator.
+	return nil, nil
 }
 
 // A partition window is valid if:
@@ -295,9 +341,10 @@ func (m networkPartitionMutator) createPartitionMutations(
 	recoverIdx int,
 	steps stepSelector,
 	f *failures.Failer,
+	protectedNodes option.NodeListOption,
 	planner *testPlanner,
 ) ([]mutation, error) {
-	partitions, unavailableNodes, err := m.strategy.selectPartitions(rng, planner.currentContext.System.Descriptor.Nodes)
+	partitions, unavailableNodes, err := m.strategy.selectPartitions(rng, protectedNodes, planner.currentContext.System.Descriptor.Nodes)
 	if err != nil {
 		return nil, err
 	}

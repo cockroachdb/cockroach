@@ -130,9 +130,8 @@ type (
 		// to opt-out of mutators that are incompatible with a test, if
 		// necessary.
 		Name() string
-		// Init runs any necessary mutator init work and returns whether the
-		// mutator is compatible with the current test.
-		Init(*testPlanner) bool
+		// IsCompatible returns whether the mutator is compatible with the current test.
+		IsCompatible(*testPlanner) bool
 		// Probability returns the probability that this mutator will run
 		// in any given test run. Every mutator should run under some
 		// probability. Making this an explicit part of the interface
@@ -236,7 +235,8 @@ const (
 // failure injection mutators.
 var failureInjectionMutators = []mutator{
 	panicNodeMutator{},
-	networkPartitionMutator{},
+	singleNetworkPartitionMutator,
+	protectedNetworkPartitionMutator,
 }
 
 // clusterSettingMutators includes a list of all
@@ -1165,7 +1165,7 @@ func (p *testPlanner) newRNG() *rand.Rand {
 }
 
 func (p *testPlanner) mutatorEnabled(mut mutator) bool {
-	if !mut.Init(p) {
+	if !mut.IsCompatible(p) {
 		return false
 	}
 
