@@ -110,7 +110,13 @@ func alterPrimaryKey(
 	b.LogEventForExistingTarget(inflatedChain.finalSpec.primary)
 
 	// Recreate all secondary indexes.
-	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary)
+	// inter1Spec has all the required columns for any new primary key, so it will
+	// be used as the source for the new secondary indexes.
+	// inter2Spec will have the new key columns, so the index will be fully usable
+	// once this index publishes.
+	// finalSpec is the final state of the primary index, which will have any
+	// added / dropped columns applied and the new primary key.
+	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary, inflatedChain.inter1Spec.primary)
 
 	// Drop the rowid column, if applicable.
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
@@ -585,19 +591,23 @@ func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrim
 
 // recreateAllSecondaryIndexes recreates all secondary indexes. While the key
 // columns remain the same in the face of a primary key change, the key suffix
-// columns or the stored columns may not.
+// columns or the stored columns may not. newPrimaryIndex is the final primary
+// index of this ALTER PRIMARY KEY, and the key columns will be determined by
+// this. usablePrimaryIndex is the first primary index that has matching key
+// columns to the final primary index. sourcePrimaryIndex is the first primary
+// index with all columns required for the backfill.
 func recreateAllSecondaryIndexes(
 	b BuildCtx,
 	t alterPrimaryKeySpec,
 	tbl *scpb.Table,
-	newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
+	finalPrimaryIndex, primaryIndexWithNewKey, sourcePrimaryIndex *scpb.PrimaryIndex,
 ) {
 	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
 	// Generate all possible key suffix columns.
 	var newKeySuffix []indexColumnSpec
 	{
 		scpb.ForEachIndexColumn(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
-			if ic.IndexID == newPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
+			if ic.IndexID == finalPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
 				newKeySuffix = append(newKeySuffix, indexColumnSpec{
 					columnID:  ic.ColumnID,
 					kind:      scpb.IndexColumn_KEY_SUFFIX,
@@ -722,7 +732,7 @@ func recreateAllSecondaryIndexes(
 			in.secondary.RecreateSourceIndexID = out.indexID()
 		}
 		in.secondary.HideForPrimaryKeyRecreated = b.ClusterSettings().Version.IsActive(b, clusterversion.V25_4)
-		in.secondary.RecreateTargetIndexID = newPrimaryIndex.IndexID
+		in.secondary.RecreateTargetIndexID = primaryIndexWithNewKey.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)

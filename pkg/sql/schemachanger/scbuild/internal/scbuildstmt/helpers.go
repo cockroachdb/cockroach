@@ -1483,6 +1483,9 @@ func updateElementsToDependOnNewFromOld(
 			if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
 				e.SourceIndexID = new
 			}
+			if e.RecreateTargetIndexID == old {
+				e.RecreateTargetIndexID = new
+			}
 		case *scpb.CheckConstraint:
 			if e.IndexIDForValidation == old {
 				e.IndexIDForValidation = new

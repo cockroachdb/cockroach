@@ -295,6 +295,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
+	metaSubsumeLocksWrittenCount = metric.Metadata{
+		Name:        "subsume.locks_written",
+		Help:        "Number of locks written to storage during subsume (range merge)",
+		Measurement: "Locks Written",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaReqCPUNanos = metric.Metadata{
 		Name:        "replicas.cpunanospersecond",
 		Help:        "Nanoseconds of CPU time in Replica request processing including evaluation but not replication",
@@ -3363,6 +3370,8 @@ type StoreMetrics struct {
 	SplitsWithEstimatedStats     *metric.Counter
 	SplitEstimatedTotalBytesDiff *metric.Counter
 
+	SubsumeLocksWritten *metric.Counter
+
 	FlushUtilization *metric.GaugeFloat64
 	FsyncLatency     *metric.ManualWindowHistogram
 
@@ -3717,6 +3726,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
 		ResolveAbortCount:  metric.NewCounter(metaResolveAbort),
 		ResolvePoisonCount: metric.NewCounter(metaResolvePoison),
+
+		// Subsume metrics
+		SubsumeLocksWritten: metric.NewCounter(metaSubsumeLocksWrittenCount),
 
 		Capacity:  metric.NewGauge(metaCapacity),
 		Available: metric.NewGauge(metaAvailable),
@@ -4515,6 +4527,9 @@ func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.M
 
 	sm.SplitEstimatedTotalBytesDiff.Inc(int64(metric.SplitEstimatedTotalBytesDiff))
 	metric.SplitEstimatedTotalBytesDiff = 0
+
+	sm.SubsumeLocksWritten.Inc(int64(metric.SubsumeLocksWritten))
+	metric.SubsumeLocksWritten = 0
 
 	if metric != (result.Metrics{}) {
 		log.KvExec.Fatalf(ctx, "unhandled fields in metrics result: %+v", metric)

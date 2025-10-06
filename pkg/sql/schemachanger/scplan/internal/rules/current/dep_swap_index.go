@@ -152,8 +152,8 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			newIndex := MkNodeVars("new-index")
 			return append(rel.Clauses{
-				to.Type((*scpb.PrimaryIndex)(nil)),
 				from.Type((*scpb.SecondaryIndex)(nil)),
+				to.Type((*scpb.PrimaryIndex)(nil)),
 				JoinOnDescID(from, to, "table-id"),
 				from.TargetStatus(scpb.ToAbsent),
 				from.CurrentStatus(scpb.Status_VALIDATED),
@@ -163,9 +163,9 @@ func init() {
 				to.El.AttrEqVar(screl.IndexID, "new-primary-index-id"),
 				// Only active this rule on secondary indexes created after 25.4
 				FilterElements("only apply to secondary indexes created after 25.4",
-					from, to,
-					func(from *scpb.PrimaryIndex, to *scpb.SecondaryIndex) bool {
-						return to.HideForPrimaryKeyRecreated
+					newIndex, to,
+					func(newIndex *scpb.SecondaryIndex, to *scpb.PrimaryIndex) bool {
+						return newIndex.HideForPrimaryKeyRecreated
 					}),
 			},
 				IsPotentialSecondaryIndexSwapWithNodeVars(from, newIndex, "index-id", "table-id")...)

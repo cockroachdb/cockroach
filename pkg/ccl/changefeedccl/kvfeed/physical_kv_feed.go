@@ -34,6 +34,7 @@ type rangeFeedConfig struct {
 	WithDiff             bool
 	WithFiltering        bool
 	WithFrontierQuantize time.Duration
+	WithBulkDelivery     bool
 	ConsumerID           int64
 	RangeObserver        kvcoord.RangeObserver
 	Knobs                TestingKnobs
@@ -97,7 +98,10 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	// Bulk delivery is an optimization that decreases rangefeed overhead during
 	// catchup scans. It results in the emission of BulkEvents instead of
 	// individual events where possible.
-	rfOpts := []kvcoord.RangeFeedOption{kvcoord.WithBulkDelivery()}
+	var rfOpts []kvcoord.RangeFeedOption
+	if cfg.WithBulkDelivery {
+		rfOpts = append(rfOpts, kvcoord.WithBulkDelivery())
+	}
 	if cfg.WithDiff {
 		rfOpts = append(rfOpts, kvcoord.WithDiff())
 	}
