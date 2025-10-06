@@ -377,7 +377,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if ca.knobs.OverrideExecCfg != nil {
 		execCfg = ca.knobs.OverrideExecCfg(execCfg)
 	}
-	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg)
+	ca.targets, err = AllTargetsWithTS(ctx, ca.spec.Feed, execCfg, *ca.spec.InitialHighWater)
 	if err != nil {
 		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
 		ca.MoveToDraining(err)
@@ -451,6 +451,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	kvFeedHighWater := ca.frontier.Frontier()
 	if needsInitialScan {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
+		fmt.Printf("Using statement time for kv feed high water: %s\n", kvFeedHighWater)
+	} else {
+		fmt.Printf("Using frontier for kv feed high water: %s\n", kvFeedHighWater)
 	}
 
 	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
@@ -562,6 +565,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	if schemaChange.Policy == changefeedbase.OptSchemaChangePolicyIgnore || initialScanOnly {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
+		fmt.Printf("creating schema feed with initial frontier: %s\n", initialHighWater)
 		sf = schemafeed.New(ctx, cfg, schemaChange.EventClass, ca.targets,
 			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
 	}
@@ -1330,7 +1334,8 @@ func newChangeFrontierProcessor(
 	if cf.knobs.OverrideExecCfg != nil {
 		execCfg = cf.knobs.OverrideExecCfg(execCfg)
 	}
-	targets, err := AllTargets(ctx, spec.Feed, execCfg)
+	fmt.Printf("change frontier getting targets with initial high water: %s\n", spec.InitialHighWater)
+	targets, err := AllTargetsWithTS(ctx, spec.Feed, execCfg, *spec.InitialHighWater)
 	if err != nil {
 		return nil, err
 	}
