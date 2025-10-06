@@ -114,7 +114,10 @@ type VM struct {
 
 	// PublicDNS is the public DNS name that can be used to connect to the VM.
 	PublicDNS string `json:"public_dns"`
-	// The DNS provider to use for DNS operations performed for this VM.
+	// PublicDNSZone is the public DNS zone that can be used to connect to the VM
+	// (e.g. roachprod.crdb.io).
+	PublicDNSZone string `json:"public_dns_zone"`
+	// The DNS provider to use for DNS operations performed for this VM (e.g. gce).
 	DNSProvider string `json:"dns_provider"`
 
 	// The name of the cloud provider that hosts the VM instance
@@ -811,4 +814,15 @@ func SanitizeLabelValues(labels map[string]string) map[string]string {
 		sanitized[k] = SanitizeLabel(v)
 	}
 	return sanitized
+}
+
+// GetVMDNSInfo returns the full DNS name, domain, and provider name for a VM
+// given its name and DNS provider.
+func GetVMDNSInfo(
+	ctx context.Context, vmName string, provider DNSProvider,
+) (string, string, string) {
+	if provider == nil {
+		return "", "", ""
+	}
+	return fmt.Sprintf("%s.%s", vmName, provider.Domain()), provider.Domain(), provider.ProviderName()
 }
