@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,9 +57,12 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 		jobsprofiler.StorePlanDiagram(ctx, s.ApplicationLayer().AppStopper(), plan, db, fakeJobID)
 		testutils.SucceedsSoon(t, func() error {
 			var count int
-			if err := sqlDB.QueryRow(
+			unsafesql.TestOverrideAllowUnsafeInternals = true
+			err := sqlDB.QueryRow(
 				`SELECT count(*) FROM system.job_info WHERE job_id = $1`, fakeJobID,
-			).Scan(&count); err != nil {
+			).Scan(&count)
+			unsafesql.TestOverrideAllowUnsafeInternals = false
+			if err != nil {
 				return err
 			}
 			if expected := min(i, jobsprofiler.MaxRetainedDSPDiagramsPerJob); count != expected {
@@ -107,8 +111,10 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 			require.NoError(t, err)
 
 			var jobID jobspb.JobID
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			err = sqlDB.QueryRow(
 				`SELECT id FROM crdb_internal.system_jobs WHERE job_type = $1`, tc.typ.String()).Scan(&jobID)
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 			require.NoError(t, err)
 
 			execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)

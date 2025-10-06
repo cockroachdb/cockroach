@@ -42,6 +42,8 @@ func TestRemoveLimiters() func() {
 	}
 }
 
+var TestOverrideAllowUnsafeInternals bool
+
 // CheckInternalsAccess checks if the current session has permission to access
 // unsafe internal tables and functionality. This includes system tables and
 // virtual tables / builtins in the crdb_internal schema.
@@ -54,6 +56,10 @@ func CheckInternalsAccess(
 ) error {
 	// If the querier is internal, we should allow it.
 	if sd.Internal {
+		return nil
+	}
+
+	if TestOverrideAllowUnsafeInternals {
 		return nil
 	}
 

@@ -63,6 +63,7 @@ go_test(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

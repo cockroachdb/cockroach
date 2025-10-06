@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -70,7 +71,9 @@ func (j *Job) Succeeded(ctx context.Context) error {
 func (j *Job) TestingCurrentState(ctx context.Context) (State, error) {
 	var stateString tree.DString
 	const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	row, err := j.registry.db.Executor().QueryRow(ctx, "job-status", nil, selectStmt, j.ID())
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	if err != nil {
 		return "", errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
 	}

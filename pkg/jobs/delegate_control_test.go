@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,6 +44,10 @@ func TestScheduleControl(t *testing.T) {
 			"DROP SCHEDULES SELECT schedule_id FROM system.scheduled_jobs",
 		} {
 			t.Run(command, func(t *testing.T) {
+				if strings.Contains(command, "system.") {
+					unsafesql.TestOverrideAllowUnsafeInternals = true
+					defer func() { unsafesql.TestOverrideAllowUnsafeInternals = false }()
+				}
 				th.sqlDB.ExecRowsAffected(t, 0, command)
 			})
 		}
@@ -216,8 +221,10 @@ func TestJobsControlForSchedules(t *testing.T) {
 					// Alas, because we don't actually run real jobs (see comment above),
 					// We can't just pause the job (since it will stay in pause-requested state forever).
 					// So, just force set job state to paused.
+					unsafesql.TestOverrideAllowUnsafeInternals = true
 					th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", StatePaused,
 						jobID)
+					unsafesql.TestOverrideAllowUnsafeInternals = false
 				}
 			}
 		}
@@ -305,7 +312,9 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 			jobID := registry.MakeJobID()
 			_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
 			require.NoError(t, err)
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", state, jobID)
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 		}
 
 		jobControl := fmt.Sprintf(tc.command+" JOBS FOR SCHEDULE %d", scheduleID)
@@ -326,7 +335,9 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 		})
 
 		// Clear the system.jobs table for the next test run.
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		th.sqlDB.Exec(t, "DELETE FROM system.jobs")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 	}
 }
 
@@ -348,8 +359,10 @@ func TestJobControlByType(t *testing.T) {
 	delayedShowJobs := func(t *testing.T, query string) fmt.Stringer {
 		return delayedStringer{
 			func() string {
+				unsafesql.TestOverrideAllowUnsafeInternals = true
 				qrows := th.sqlDB.QueryStr(t, query)
 				jrows := th.sqlDB.QueryStr(t, "TABLE crdb_internal.jobs")
+				unsafesql.TestOverrideAllowUnsafeInternals = false
 
 				var buf strings.Builder
 				tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
@@ -449,7 +462,9 @@ func TestJobControlByType(t *testing.T) {
 							jobIDStrings = append(jobIDStrings, fmt.Sprintf("%d", jobID))
 							_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
 							require.NoError(t, err)
+							unsafesql.TestOverrideAllowUnsafeInternals = true
 							th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
+							unsafesql.TestOverrideAllowUnsafeInternals = false
 							t.Logf("created job %d (%T) with status %s", jobID, record.Details, status)
 						}
 					}
@@ -458,8 +473,10 @@ func TestJobControlByType(t *testing.T) {
 				jobIdsClause := strings.Join(jobIDStrings, ", ")
 				defer func() {
 					// Clear the system.jobs table for the next test run.
+					unsafesql.TestOverrideAllowUnsafeInternals = true
 					th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.jobs WHERE id IN (%s)", jobIdsClause))
 					th.sqlDB.Exec(t, fmt.Sprintf("DELETE FROM system.job_info WHERE job_id IN (%s)", jobIdsClause))
+					unsafesql.TestOverrideAllowUnsafeInternals = false
 				}()
 
 				// Execute the command and verify it is executed on the expected number of rows.

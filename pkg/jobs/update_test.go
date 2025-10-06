@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -99,16 +100,20 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 		t.Run("verify against system.jobs", func(t *testing.T) {
 			require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				countSystemJobs := `SELECT count(*)  FROM system.jobs`
+				unsafesql.TestOverrideAllowUnsafeInternals = true
 				row, err := txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
 					sessiondata.NodeUserSessionDataOverride, countSystemJobs)
+				unsafesql.TestOverrideAllowUnsafeInternals = false
 				if err != nil {
 					return err
 				}
 				jobsCount := tree.MustBeDInt(row[0])
 
 				countSystemJobInfo := `SELECT count(*)  FROM system.job_info;`
+				unsafesql.TestOverrideAllowUnsafeInternals = true
 				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
 					sessiondata.NodeUserSessionDataOverride, countSystemJobInfo)
+				unsafesql.TestOverrideAllowUnsafeInternals = false
 				if err != nil {
 					return err
 				}
