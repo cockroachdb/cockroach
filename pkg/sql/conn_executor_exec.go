@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -3101,6 +3102,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 	if shouldLog {
 		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails()
 		var event logpb.EventPayload
+		var migrator log.StructuredEventMigrator
 		if ex.executorType == executorTypeInternal {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimitInternal{
@@ -3113,6 +3115,9 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
+			migrator = log.NewStructuredEventMigrator(func() bool {
+				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
+			}, logpb.Channel_SQL_INTERNAL_PERF)
 		} else {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimit{
@@ -3125,12 +3130,12 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
-			migrator := log.NewStructuredEventMigrator(func() bool {
+			migrator = log.NewStructuredEventMigrator(func() bool {
 				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
 			}, logpb.Channel_SQL_PERF)
-			migrator.StructuredEvent(ctx, severity.INFO, event)
-			logCounter.Inc(1)
 		}
+		migrator.StructuredEvent(ctx, severity.INFO, event)
+		logCounter.Inc(1)
 	}
 	if shouldErr {
 		if isRead {
