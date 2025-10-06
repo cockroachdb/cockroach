@@ -98,6 +98,8 @@ type Provider struct {
 	// If left empty then falls back to env var then default subscription.
 	SubscriptionNames []string
 
+	dnsProvider vm.DNSProvider
+
 	mu struct {
 		syncutil.Mutex
 
@@ -599,8 +601,20 @@ func (p *Provider) computeVirtualMachineToVM(cvm compute.VirtualMachine) (*vm.VM
 		azureSubscription = strings.Split(strings.TrimPrefix(*cvm.ID, "/subscriptions/"), "/")[0]
 	}
 
+	publicDns := ""
+	publicDnsZone := ""
+	dnsProviderName := ""
+	if p.dnsProvider != nil {
+		publicDns = fmt.Sprintf("%s.%s", *cvm.Name, p.dnsProvider.PublicDomain())
+		publicDnsZone = p.dnsProvider.PublicDomain()
+		dnsProviderName = p.dnsProvider.ProviderName()
+	}
+
 	m := &vm.VM{
 		Name:              *cvm.Name,
+		PublicDNS:         publicDns,
+		PublicDNSZone:     publicDnsZone,
+		DNSProvider:       dnsProviderName,
 		Labels:            tags,
 		Provider:          ProviderName,
 		ProviderID:        *cvm.ID,

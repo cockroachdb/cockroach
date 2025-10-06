@@ -6,6 +6,7 @@
 package ibm
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -606,6 +607,17 @@ func (i *instance) toVM() vm.VM {
 		nonBootAttachedVolumes = append(nonBootAttachedVolumes, v.toVmVolume())
 	}
 
+	publicDNS := ""
+	publicDNSZone := ""
+	dnsProviderName := ""
+	if i.provider.dnsProvider != nil {
+		if i.instance.Name != nil {
+			publicDNS = fmt.Sprintf("%s.%s", *i.instance.Name, i.provider.dnsProvider.PublicDomain())
+			publicDNSZone = i.provider.dnsProvider.PublicDomain()
+			dnsProviderName = i.provider.dnsProvider.ProviderName()
+		}
+	}
+
 	v := vm.VM{
 		ProviderAccountID: i.provider.config.accountID,
 		Provider:          ProviderName,
@@ -617,12 +629,15 @@ func (i *instance) toVM() vm.VM {
 		RemoteUser:        defaultRemoteUser,
 		Preemptible:       false,
 
-		ProviderID: *i.instance.CRN,
-		Name:       *i.instance.Name,
-		CreatedAt:  time.Time(*i.instance.CreatedAt),
-		PublicIP:   publicIP,
-		PrivateIP:  privateIP,
-		DNS:        privateIP,
+		ProviderID:    *i.instance.CRN,
+		Name:          *i.instance.Name,
+		CreatedAt:     time.Time(*i.instance.CreatedAt),
+		PublicIP:      publicIP,
+		PrivateIP:     privateIP,
+		DNS:           privateIP,
+		PublicDNS:     publicDNS,
+		PublicDNSZone: publicDNSZone,
+		DNSProvider:   dnsProviderName,
 
 		NonBootAttachedVolumes: nonBootAttachedVolumes,
 		LocalDisks:             nil, // No local disks on IBM Cloud
