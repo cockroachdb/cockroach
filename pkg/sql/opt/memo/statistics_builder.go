@@ -8,9 +8,12 @@ package memo
 import (
 	"context"
 	"math"
+	"math/rand"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -23,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -91,6 +95,22 @@ const (
 	// a histogram from it.
 	maxValuesForFullHistogramFromCheckConstraint = tabledesc.MaxBucketAllowed
 )
+
+// TOOD: think about which level it should be.
+// This should not apply to internal queries.
+var canaryOdd = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.stats.canary.odd",
+	"odd of a query to use canary stats",
+	0.1,
+	settings.FloatInRange(0, 1),
+)
+
+func canaryRollDice(evalCtx *eval.Context) bool {
+	threshold := canaryOdd.Get(&evalCtx.Settings.SV)
+	actual := rand.Float64()
+	return actual < threshold
+}
 
 // statisticsBuilder is responsible for building the statistics that are
 // used by the coster to estimate the cost of expressions.
@@ -231,6 +251,7 @@ type statisticsBuilder struct {
 	md                    *opt.Metadata
 	checkInputMinRowCount float64
 	minRowCount           float64
+	useCanary             bool
 }
 
 func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, mem *Memo) {
@@ -243,6 +264,7 @@ func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, me
 		md:                    mem.Metadata(),
 		checkInputMinRowCount: evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		minRowCount:           evalCtx.SessionData().OptimizerMinRowCount,
+		useCanary:             canaryRollDice(evalCtx),
 	}
 }
 
@@ -636,11 +658,14 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
+	tabMeta := sb.md.TableMeta(tabID)
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
 	// TODO(mgartner): It might be simpler to iterate over all the table columns
 	// looking for inverted columns.
+	tabName := tab.Name()
+	_ = tabName
 	invertedIndexCols := make(map[int]invertedIndexColInfo)
 	for indexI, indexN := 0, tab.IndexCount(); indexI < indexN; indexI++ {
 		index := tab.Index(indexI)
@@ -695,6 +720,17 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 				continue
+			}
+
+			if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
+				if !sb.useCanary {
+					// Too young.
+					if duration.Add(stat.CreatedAt(), canaryWindow).After(time.Now()) {
+						if i < tab.StatisticCount()-1 {
+							continue
+						}
+					}
+				}
 			}
 
 			var cols opt.ColSet

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -214,6 +215,8 @@ type TableMeta struct {
 		cached     *intsets.Fast
 		notVisible *intsets.Fast
 	}
+
+	CanaryWindowSize duration.Duration
 }
 
 // IsIndexNotVisible returns true if the given index is not visible, and false
