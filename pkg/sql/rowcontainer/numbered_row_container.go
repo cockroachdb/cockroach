@@ -186,8 +186,7 @@ func (d *DiskBackedNumberedRowContainer) GetRow(
 			return nil, nil
 		}
 		mrc := d.rc.mrc
-		mrc.getEncRow(mrc.scratchEncRow, idx)
-		return mrc.scratchEncRow, nil
+		return mrc.scratchEncRow, mrc.getEncRow(mrc.scratchEncRow, idx)
 	}
 	return d.rowIter.getRow(ctx, idx, skip)
 }
