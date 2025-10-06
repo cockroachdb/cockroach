@@ -11,7 +11,7 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				emit(func(this *scpb.CanaryWindow) *scop.SetCanaryWindow {
-					return &scop.SetCanaryWindow{TableID: this.TableID}
+					return &scop.SetCanaryWindow{TableID: this.TableID, CanaryWindow: this.DurationStr}
 				}),
 			),
 		),
@@ -19,7 +19,7 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.CanaryWindow) *scop.SetCanaryWindow {
-					return &scop.SetCanaryWindow{TableID: this.TableID}
+					return &scop.SetCanaryWindow{TableID: this.TableID, CanaryWindow: ""}
 				}),
 			),
 		),

@@ -6,6 +6,7 @@ go_library(
         "op_funcs.go",
         "op_gen.go",
         "opgen_alias_type.go",
+        "opgen_canary_window.go",
         "opgen_check_constraint.go",
         "opgen_check_constraint_unvalidated.go",
         "opgen_column.go",

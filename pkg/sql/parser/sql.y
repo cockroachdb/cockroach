@@ -3106,7 +3106,7 @@ alter_table_cmd:
       Mode: $1.rlsTableMode(),
     }
   }
-| SET CANARY WINDOW string_or_placeholder
+| SET CANARY WINDOW a_expr
   {
   	$$.val = &tree.AlterTableSetCanaryWindow{
   		CanaryWindow: $4.expr(),

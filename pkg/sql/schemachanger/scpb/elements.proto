@@ -442,7 +442,7 @@ message RowLevelSecurityEnabled {
 // TODO: better comment.
 message CanaryWindow {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  int64 duration = 2  [(gogoproto.casttype) = "time.Duration"];
+  string durationStr = 2;
 }
 
 // RowLevelSecurityForced handles forced and no-force row level security of a table.

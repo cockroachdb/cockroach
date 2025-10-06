@@ -1378,7 +1378,9 @@ message TableDescriptor {
   optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
 
-  // Next ID: 71
+  // CanaryWindowSize is the size of the canary stats window.
+  optional string canary_window_size = 71 [(gogoproto.nullable) = false];
+  // Next ID: 72
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
