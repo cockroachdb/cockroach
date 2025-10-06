@@ -62,11 +62,13 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		return err
 	}
 
-	progressTracker, cleanupProgress, remainingSpans, err := c.setupProgressTrackingAndFilter(ctx, execCfg, pkSpans)
+	progressTracker, completedSpans, cleanupProgress, err := c.setupProgressTracking(ctx, execCfg)
 	if err != nil {
 		return err
 	}
 	defer cleanupProgress()
+
+	remainingSpans := c.filterCompletedSpans(pkSpans, completedSpans)
 
 	// If all spans are completed, job is done.
 	if len(remainingSpans) == 0 {
@@ -76,6 +78,13 @@ func (c *inspectResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 	plan, planCtx, err := c.planInspectProcessors(ctx, jobExecCtx, remainingSpans)
 	if err != nil {
+		return err
+	}
+
+	// After planning, we have the finalized set of spans to process (adjacent
+	// spans on the same node are merged). Compute the checks to run and initialize
+	// progress tracking from the plan.
+	if err := c.initProgressFromPlan(ctx, execCfg, progressTracker, plan, completedSpans); err != nil {
 		return err
 	}
 
@@ -240,11 +249,11 @@ func (c *inspectResumer) runInspectPlan(
 	return metadataCallbackWriter.Err()
 }
 
-// setupProgressTrackingAndFilter initializes progress tracking and returns
-// it, along with a cleanup function and the remaining spans to process.
-func (c *inspectResumer) setupProgressTrackingAndFilter(
-	ctx context.Context, execCfg *sql.ExecutorConfig, pkSpans []roachpb.Span,
-) (*inspectProgressTracker, func(), []roachpb.Span, error) {
+// setupProgressTracking initializes progress tracking and returns
+// it, along with a cleanup function.
+func (c *inspectResumer) setupProgressTracking(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) (*inspectProgressTracker, []roachpb.Span, func(), error) {
 	// Create and initialize the tracker. We use the completed spans from the job
 	// (if any) to filter out the spans we need to process in this run of the job.
 	progressTracker := newInspectProgressTracker(
@@ -256,32 +265,53 @@ func (c *inspectResumer) setupProgressTrackingAndFilter(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	remainingSpans := c.filterCompletedSpans(pkSpans, completedSpans)
 
-	applicabilityCheckers, err := buildApplicabilityCheckers(c.job.Details().(jobspb.InspectDetails))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Calculate total applicable checks on ALL spans (not just remaining ones)
-	// This ensures consistent progress calculation across job restarts.
-	totalCheckCount, err := countApplicableChecks(pkSpans, applicabilityCheckers, execCfg.Codec)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	completedCheckCount, err := countApplicableChecks(completedSpans, applicabilityCheckers, execCfg.Codec)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	if err := progressTracker.initJobProgress(ctx, totalCheckCount, completedCheckCount); err != nil {
-		return nil, nil, nil, err
-	}
 	cleanup := func() {
 		progressTracker.terminateTracker()
 	}
 
-	return progressTracker, cleanup, remainingSpans, nil
+	return progressTracker, completedSpans, cleanup, nil
+}
+
+// initProgressFromPlan initializes job progress based on the actual partitioned spans
+// that will be processed.
+func (c *inspectResumer) initProgressFromPlan(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	progressTracker *inspectProgressTracker,
+	plan *sql.PhysicalPlan,
+	completedPartitionedSpans []roachpb.Span,
+) error {
+	// Extract all spans from the plan processors.
+	var remainingPartitionedSpans []roachpb.Span
+	for i := range plan.Processors {
+		if plan.Processors[i].Spec.Core.Inspect != nil {
+			remainingPartitionedSpans = append(remainingPartitionedSpans, plan.Processors[i].Spec.Core.Inspect.Spans...)
+		}
+	}
+
+	applicabilityCheckers, err := buildApplicabilityCheckers(c.job.Details().(jobspb.InspectDetails))
+	if err != nil {
+		return err
+	}
+
+	// Calculate total applicable checks on ALL spans (not just remaining ones)
+	// This ensures consistent progress calculation across job restarts.
+	completedCheckCount, err := countApplicableChecks(completedPartitionedSpans, applicabilityCheckers, execCfg.Codec)
+	if err != nil {
+		return err
+	}
+	remainingCheckCount, err := countApplicableChecks(remainingPartitionedSpans, applicabilityCheckers, execCfg.Codec)
+	if err != nil {
+		return err
+	}
+
+	totalCheckCount := completedCheckCount + remainingCheckCount
+
+	log.Dev.Infof(ctx, "INSPECT progress init: %d partitioned spans, %d total checks (%d remaining + %d completed)",
+		len(remainingPartitionedSpans), totalCheckCount, remainingCheckCount, completedCheckCount)
+
+	return progressTracker.initJobProgress(ctx, totalCheckCount, completedCheckCount)
 }
 
 // filterCompletedSpans removes spans that are already completed from the list to process.

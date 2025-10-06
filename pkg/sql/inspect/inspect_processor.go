@@ -114,7 +114,7 @@ func (p *inspectProcessor) Run(ctx context.Context, output execinfra.RowReceiver
 // Each span is read from a buffered channel and passed to processSpan.
 // The function blocks until all spans are processed or an error occurs.
 func (p *inspectProcessor) runInspect(ctx context.Context, output execinfra.RowReceiver) error {
-	log.Dev.Infof(ctx, "INSPECT processor started processorID=%d concurrency=%d", p.processorID, p.concurrency)
+	log.Dev.Infof(ctx, "INSPECT processor started processorID=%d concurrency=%d spans=%d", p.processorID, p.concurrency, len(p.spec.Spans))
 
 	group := ctxgroup.WithContext(ctx)
 
@@ -262,9 +262,6 @@ func (p *inspectProcessor) processSpan(
 		if stepErr != nil {
 			return stepErr
 		}
-		if !ok {
-			break
-		}
 
 		// Check if any inspections have completed (when the count decreases).
 		currentCheckCount := runner.CheckCount()
@@ -274,6 +271,10 @@ func (p *inspectProcessor) processSpan(
 			if err := p.sendInspectProgress(ctx, output, int64(checksCompleted), false /* finished */); err != nil {
 				return err
 			}
+		}
+
+		if !ok {
+			break
 		}
 	}
 
