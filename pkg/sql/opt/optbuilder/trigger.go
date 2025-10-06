@@ -373,7 +373,7 @@ func (mb *mutationBuilder) recomputeComputedColsForTrigger(eventType tree.Trigge
 			colIDs[i] = 0
 		}
 	}
-	mb.addSynthesizedComputedCols(colIDs, false /* restrict */)
+	_ = mb.projectSynthesizedComputedCols(colIDs, false /* restrict */)
 }
 
 // ============================================================================

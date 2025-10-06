@@ -795,7 +795,22 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 }
 
 // addSynthesizedComputedCols is a helper method for addSynthesizedColsForInsert
-// and addSynthesizedColsForUpdate that scans the list of table columns, looking
+// and addSynthesizedColsForUpdate that projects computed column expressions and
+// adds the corresponding target table columns to targetColList and
+// targetColSet. See projectSynthesizedComputedCols for more details.
+//
+// NOTE: colIDs is updated with the column IDs of any synthesized columns which
+// are added to mb.outScope. If restrict is true, only columns that depend on
+// columns that were already in the list (plus all write-only columns) are
+// updated.
+func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList, restrict bool) {
+	mb.targetColSet = mb.projectSynthesizedComputedCols(colIDs, restrict)
+	for col, ok := mb.targetColSet.Next(0); ok; col, ok = mb.targetColSet.Next(col + 1) {
+		mb.targetColList = append(mb.targetColList, col)
+	}
+}
+
+// projectSynthesizedComputedCols  scans the list of table columns, looking
 // for any that are computed and do not yet have values provided by the input
 // expression. New columns are synthesized for any missing columns using the
 // computed column expression.
@@ -804,7 +819,9 @@ func (mb *mutationBuilder) addSynthesizedDefaultCols(
 // are added to mb.outScope. If restrict is true, only columns that depend on
 // columns that were already in the list (plus all write-only columns) are
 // updated.
-func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList, restrict bool) {
+func (mb *mutationBuilder) projectSynthesizedComputedCols(
+	colIDs opt.OptionalColList, restrict bool,
+) (targetColSet opt.ColSet) {
 	// We will construct a new Project operator that will contain the newly
 	// synthesized column(s).
 	pb := makeProjectionBuilder(mb.b, mb.outScope)
@@ -876,11 +893,11 @@ func (mb *mutationBuilder) addSynthesizedComputedCols(colIDs opt.OptionalColList
 		}
 
 		// Add corresponding target column.
-		mb.targetColList = append(mb.targetColList, tabColID)
-		mb.targetColSet.Add(tabColID)
+		targetColSet.Add(tabColID)
 	}
 
 	mb.outScope = pb.Finish()
+	return targetColSet
 }
 
 // maybeAddRegionColLookup adds a lookup join to the target table of a foreign
