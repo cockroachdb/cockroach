@@ -148,7 +148,7 @@ func TestKVFeed(t *testing.T) {
 		st := timers.New(time.Minute).GetOrCreateScopedTimers("")
 		f := newKVFeed(buf, tc.spans,
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
-			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, tc.withFrontierQuantize,
+			tc.needsInitialScan, tc.withDiff, true /* withFiltering */, changefeedbase.BulkDelivery.Get(&settings.SV), tc.withFrontierQuantize,
 			0, /* consumerID */
 			tc.initialHighWater, tc.initialSpanTimePairs, tc.endTime,
 			codec,

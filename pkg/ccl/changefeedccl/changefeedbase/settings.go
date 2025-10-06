@@ -224,6 +224,14 @@ var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
 		"if false, uses a single protected timestamp record for all tables",
 	metamorphic.ConstantWithTestBool("changefeed.protect_timestamp.per_table.enabled", false))
 
+// BulkDelivery enables bulk delivery of rangefeed events, which can improve performance during catchup scans.
+var BulkDelivery = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.bulk_delivery.enabled",
+	"if true, rangefeed events are delivered in bulk during catchup scans; "+
+		"if false, rangefeed events are delivered individually",
+	metamorphic.ConstantWithTestBool("changefeed.bulk_delivery.enabled", true))
+
 // MaxProtectedTimestampAge controls the frequency of protected timestamp record updates
 var MaxProtectedTimestampAge = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
