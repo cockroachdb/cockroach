@@ -6,8 +6,6 @@
 package scop
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -1182,7 +1180,7 @@ type ForcedRowLevelSecurityMode struct {
 type SetCanaryWindow struct {
 	immediateMutationOp
 	TableID      descpb.ID
-	CanaryWindow time.Duration
+	CanaryWindow string
 }
 
 // MarkRecreatedIndexAsInvisible is used to mark secondary indexes recreated

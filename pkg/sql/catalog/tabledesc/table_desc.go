@@ -740,3 +740,8 @@ func (desc *wrapper) IsRowLevelSecurityEnabled() bool {
 func (desc *wrapper) IsRowLevelSecurityForced() bool {
 	return desc.RowLevelSecurityForced
 }
+
+// GetCanaryWindowSize implements the TableDescriptor interface.
+func (desc *wrapper) GetCanaryWindowSize() string {
+	return desc.CanaryWindowSize
+}
