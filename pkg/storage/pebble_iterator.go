@@ -1041,12 +1041,19 @@ func (p *pebbleIterator) assertMVCCInvariants() error {
 	return nil
 }
 
+var exemptFromTracking = [...]bool{
+	fs.BatchEvalReadCategory:            true,
+	fs.ScanRegularBatchEvalReadCategory: true,
+	fs.IntentResolutionReadCategory:     true,
+	fs.AbortSpanReadCategory:            true,
+}
+
 func makeIterOptions(
 	readCategory fs.ReadCategory, durability DurabilityRequirement,
 ) pebble.IterOptions {
 	return pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		Category:                  readCategory.PebbleCategory(),
-		ExemptFromTracking:        readCategory == fs.BatchEvalReadCategory || readCategory == fs.ScanRegularBatchEvalReadCategory,
+		ExemptFromTracking:        int(readCategory) < len(exemptFromTracking) && exemptFromTracking[readCategory],
 	}
 }

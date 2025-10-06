@@ -582,7 +582,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
-	// Every 5 minutes, log iterators that have been open for more than a minute.
+	// Every 5 minutes, log iterators that have been open for more than 1 minute.
 	opts.Experimental.IteratorTracking.PollInterval = 5 * time.Minute
 	opts.Experimental.IteratorTracking.MaxAge = time.Minute
 
