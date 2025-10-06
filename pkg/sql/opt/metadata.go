@@ -751,11 +751,15 @@ func (md *Metadata) AddBuiltin(name *tree.UnresolvedObjectName) {
 // that its original formatting is preserved for error messages,
 // pretty-printing, etc.
 func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
+	tabIDID := tab.ID()
+	_ = tabIDID
+	tabName := tab.Name()
+	_ = tabName
 	tabID := makeTableID(len(md.tables), ColumnID(len(md.cols)+1))
 	if md.tables == nil {
 		md.tables = make([]TableMeta, 0, 4)
 	}
-	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias})
+	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias, CanaryWindowSize: tab.CanaryWindowSize()})
 
 	colCount := tab.ColumnCount()
 	if md.cols == nil {

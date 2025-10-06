@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/base64"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -681,6 +682,9 @@ func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface
 func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
+
+// CanaryWindowSize is part of the cat.Table interface
+func (u *unknownTable) CanaryWindowSize() duration.Duration { return duration.Duration{} }
 
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }

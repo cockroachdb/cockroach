@@ -964,7 +964,7 @@ func (r *Refresher) maybeRefreshStats(
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
 	var forecast *bool
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */)
+	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil, nil, false)
 	if err != nil {
 		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
 		return

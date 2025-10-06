@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -68,6 +69,8 @@ type optCatalog struct {
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
 	tn tree.TableName
+
+	useCanary bool
 }
 
 var _ cat.Catalog = (*optCatalog)(nil)
@@ -687,6 +690,8 @@ func (oc *optCatalog) dataSourceForTable(
 		}
 		var err error
 		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+		tabID := desc.GetID()
+		_ = tabID
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
@@ -940,6 +945,8 @@ type optTable struct {
 	rlsEnabled bool
 	rlsForced  bool
 	policies   cat.Policies
+
+	canaryWindow duration.Duration
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
@@ -1222,6 +1229,14 @@ func newOptTable(
 	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
 	ot.rlsForced = desc.IsRowLevelSecurityForced()
 	ot.policies = getOptPolicies(desc.GetPolicies())
+
+	if canaryWindowSize := desc.GetCanaryWindowSize(); canaryWindowSize != "" {
+		canaryDur, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, canaryWindowSize)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to parse canary window size %q", desc.GetCanaryWindowSize())
+		}
+		ot.canaryWindow = canaryDur.Duration
+	}
 
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []optCheckConstraint
@@ -1628,6 +1643,11 @@ func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
+
+// CanaryWindowSize is part of the cat.Table interface.
+func (ot *optTable) CanaryWindowSize() duration.Duration {
+	return ot.canaryWindow
+}
 
 // Policies is part of the cat.Table interface.
 func (ot *optTable) Policies() *cat.Policies {
@@ -2775,6 +2795,12 @@ func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
+
+// CanaryWindowSize is part of the cat.Table interface.
+// TODO: think about the actual number.
+func (ot *optVirtualTable) CanaryWindowSize() duration.Duration {
+	return duration.Duration{}
+}
 
 // Policies is part of the cat.Table interface.
 func (ot *optVirtualTable) Policies() *cat.Policies { return nil }
