@@ -29,6 +29,9 @@ jobs:
       - name: Stage 1 - Initial Bug Screening
         id: stage1
         uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
@@ -63,6 +66,9 @@ jobs:
         id: stage2
         if: contains(steps.stage1.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
         uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
@@ -98,6 +104,9 @@ jobs:
         id: stage3
         if: contains(steps.stage2.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
         uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
@@ -147,6 +156,9 @@ jobs:
       - name: Final Analysis Report
         if: always()
         uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: global
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"

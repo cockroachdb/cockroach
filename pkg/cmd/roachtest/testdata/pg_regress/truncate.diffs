@@ -25,7 +25,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  SELECT * FROM truncate_a;
   col1 
  ------
-@@ -32,42 +34,27 @@
+@@ -32,42 +34,34 @@
  -- Test foreign-key checks
  CREATE TABLE trunc_b (a int REFERENCES truncate_a);
  CREATE TABLE trunc_c (a serial PRIMARY KEY);
@@ -37,46 +37,53 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
 -DETAIL:  Table "trunc_b" references "truncate_a".
 -HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE truncate_a,trunc_b;		-- fail
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_e" references "truncate_a".
 -HINT:  Truncate table "trunc_e" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_e"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE truncate_a,trunc_b,trunc_e;	-- ok
  TRUNCATE TABLE truncate_a,trunc_e;		-- fail
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_b" references "truncate_a".
 -HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c;		-- fail
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_d" references "trunc_c".
 -HINT:  Truncate table "trunc_d" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "trunc_c" is referenced by foreign key from table "trunc_d"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,trunc_d;		-- fail
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_e" references "trunc_c".
 -HINT:  Truncate table "trunc_e" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "trunc_c" is referenced by foreign key from table "trunc_e"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,trunc_d,trunc_e;	-- ok
  TRUNCATE TABLE trunc_c,trunc_d,trunc_e,truncate_a;	-- fail
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_b" references "truncate_a".
 -HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,trunc_d,trunc_e,truncate_a,trunc_b;	-- ok
  TRUNCATE TABLE truncate_a RESTRICT; -- fail
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_b" references "truncate_a".
 -HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE truncate_a CASCADE;  -- ok
 -NOTICE:  truncate cascades to table "trunc_b"
 -NOTICE:  truncate cascades to table "trunc_e"
  -- circular references
  ALTER TABLE truncate_a ADD FOREIGN KEY (col1) REFERENCES trunc_c;
  -- Add some data to verify that truncating actually works ...
-@@ -77,21 +64,13 @@
+@@ -77,21 +71,17 @@
  INSERT INTO trunc_d VALUES (1);
  INSERT INTO trunc_e VALUES (1,1);
  TRUNCATE TABLE trunc_c;
@@ -84,25 +91,29 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
 -DETAIL:  Table "truncate_a" references "trunc_c".
 -HINT:  Truncate table "truncate_a" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "trunc_c" is referenced by foreign key from table "truncate_a"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,truncate_a;
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_d" references "trunc_c".
 -HINT:  Truncate table "trunc_d" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,truncate_a,trunc_d;
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_e" references "trunc_c".
 -HINT:  Truncate table "trunc_e" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,truncate_a,trunc_d,trunc_e;
 -ERROR:  cannot truncate a table referenced in a foreign key constraint
 -DETAIL:  Table "trunc_b" references "truncate_a".
 -HINT:  Truncate table "trunc_b" at the same time, or use TRUNCATE ... CASCADE.
 +ERROR:  "truncate_a" is referenced by foreign key from table "trunc_b"
++HINT:  truncate dependent tables at the same time or specify the CASCADE option
  TRUNCATE TABLE trunc_c,truncate_a,trunc_d,trunc_e,trunc_b;
  -- Verify that truncating did actually work
  SELECT * FROM truncate_a
-@@ -117,10 +96,6 @@
+@@ -117,10 +107,6 @@
  INSERT INTO trunc_d VALUES (1);
  INSERT INTO trunc_e VALUES (1,1);
  TRUNCATE TABLE trunc_c CASCADE;  -- ok
@@ -113,7 +124,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  SELECT * FROM truncate_a
     UNION ALL
   SELECT * FROM trunc_c
-@@ -143,144 +118,103 @@
+@@ -143,144 +129,103 @@
  INSERT INTO trunc_f VALUES (1);
  INSERT INTO trunc_f VALUES (2);
  CREATE TABLE trunc_fa (col2a text) INHERITS (trunc_f);
@@ -300,7 +311,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  -- Test ON TRUNCATE triggers
  CREATE TABLE trunc_trigger_test (f1 int, f2 text, f3 text);
  CREATE TABLE trunc_trigger_log (tgop text, tglevel text, tgwhen text,
-@@ -294,12 +228,26 @@
+@@ -294,12 +239,26 @@
      return null;
  end;
  $$ LANGUAGE plpgsql;
@@ -327,7 +338,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  SELECT count(*) as "Row count in test table" FROM trunc_trigger_test;
   Row count in test table 
  -------------------------
-@@ -319,12 +267,12 @@
+@@ -319,12 +278,12 @@
  (1 row)
  
  SELECT * FROM trunc_trigger_log;
@@ -344,7 +355,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  truncate trunc_trigger_log;
  -- same test with an after trigger
  INSERT INTO trunc_trigger_test VALUES(1, 'foo', 'bar'), (2, 'baz', 'quux');
-@@ -332,6 +280,7 @@
+@@ -332,6 +291,7 @@
  AFTER TRUNCATE ON trunc_trigger_test
  FOR EACH STATEMENT
  EXECUTE PROCEDURE trunctrigger('after trigger truncate');
@@ -352,7 +363,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  SELECT count(*) as "Row count in test table" FROM trunc_trigger_test;
   Row count in test table 
  -------------------------
-@@ -351,17 +300,18 @@
+@@ -351,17 +311,18 @@
  (1 row)
  
  SELECT * FROM trunc_trigger_log;
@@ -376,7 +387,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
                           id1 integer default nextval('truncate_a_id1'));
  ALTER SEQUENCE truncate_a_id1 OWNED BY truncate_a.id1;
  INSERT INTO truncate_a DEFAULT VALUES;
-@@ -384,14 +334,20 @@
+@@ -384,14 +345,20 @@
  (2 rows)
  
  TRUNCATE truncate_a RESTART IDENTITY;
@@ -400,7 +411,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  
  CREATE TABLE truncate_b (id int GENERATED ALWAYS AS IDENTITY (START WITH 44));
  INSERT INTO truncate_b DEFAULT VALUES;
-@@ -414,56 +370,74 @@
+@@ -414,56 +381,74 @@
  (2 rows)
  
  TRUNCATE truncate_b RESTART IDENTITY;
@@ -492,7 +503,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  -- foreign key on partitioned table: partition key is referencing column.
  -- Make sure truncate did execute on all tables
  CREATE FUNCTION tp_ins_data() RETURNS void LANGUAGE plpgsql AS $$
-@@ -472,6 +446,7 @@
+@@ -472,6 +457,7 @@
  	INSERT INTO truncpart VALUES (1), (100), (150);
    END
  $$;
@@ -500,7 +511,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/truncate.out --la
  CREATE FUNCTION tp_chk_data(OUT pktb regclass, OUT pkval int, OUT fktb regclass, OUT fkval int)
    RETURNS SETOF record LANGUAGE plpgsql AS $$
    BEGIN
-@@ -481,114 +456,158 @@
+@@ -481,114 +467,158 @@
      ORDER BY 2, 4;
    END
  $$;
