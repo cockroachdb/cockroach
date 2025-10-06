@@ -222,10 +222,10 @@ type controllerImpl struct {
 
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
-	kvAdmissionQ               *admission.WorkQueue
-	storeGrantCoords           *admission.StoreGrantCoordinators
-	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowHandles              kvflowcontrol.ReplicationAdmissionHandles
+	kvAdmissionQ               *admission.WorkQueue                      // foreground CPU admission control
+	storeGrantCoords           *admission.StoreGrantCoordinators         // store-level (IO) admission control
+	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator     // background (elastic) CPU admission control
+	kvflowHandles              kvflowcontrol.ReplicationAdmissionHandles // quorum-replicated flow control
 
 	settings *cluster.Settings
 	every    log.EveryN
