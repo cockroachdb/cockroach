@@ -236,6 +236,26 @@ func NewDRPCServer(_ context.Context, rpcCtx *Context, opts ...ServerOption) (DR
 		streamInterceptors = append(streamInterceptors, a.AuthDRPCStream())
 	}
 
+	if o.interceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, func(
+			ctx context.Context, req interface{}, fullMethod string, handler drpcmux.UnaryHandler,
+		) (interface{}, error) {
+			if err := o.interceptor(fullMethod); err != nil {
+				return nil, err
+			}
+			return handler(ctx, req)
+		})
+
+		streamInterceptors = append(streamInterceptors, func(
+			stream drpc.Stream, fullMethod string, handler drpcmux.StreamHandler,
+		) (interface{}, error) {
+			if err := o.interceptor(fullMethod); err != nil {
+				return nil, err
+			}
+			return handler(stream)
+		})
+	}
+
 	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
 		unaryInterceptors = append(unaryInterceptors, drpcinterceptor.ServerInterceptor(tracer))
 		streamInterceptors = append(streamInterceptors, drpcinterceptor.StreamServerInterceptor(tracer))
