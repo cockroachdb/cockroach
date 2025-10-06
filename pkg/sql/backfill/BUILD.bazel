@@ -87,6 +87,7 @@ go_test(
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
