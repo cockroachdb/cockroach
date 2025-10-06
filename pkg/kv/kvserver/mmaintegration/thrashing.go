@@ -68,8 +68,11 @@ import (
 // stores that satisfy the constraint to compute the lease count mean as well.
 // This approach differs from how mma computes load summary for lease transfers
 // (mma computes load summary over stores that the existing replicas are on).
-// • Note that MMARebalanceAdvisor also always include the existing store in the
-// set of stores to compute the load summary with respect to.
+// • On top of the cands list, MMARebalanceAdvisor currently also always include
+// the existing store in the set of stores to compute the load summary with
+// respect to. This is subject to change, but currently it does not make sense
+// to compute the load summary of the existing store with respect to the cands
+// list that does not include the existing store itself.
 //
 // Alternatives considered:
 // 1. Another option was to let mma choose from a set of candidates, but this was
