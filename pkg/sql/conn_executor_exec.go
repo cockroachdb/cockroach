@@ -3113,6 +3113,10 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 					CommonTxnRowsLimitDetails: commonTxnRowsLimitDetails,
 				}
 			}
+			migrator := log.NewStructuredEventMigrator(func() bool {
+				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
+			}, logpb.Channel_SQL_INTERNAL_PERF)
+			migrator.StructuredEvent(ctx, severity.INFO, event)
 		} else {
 			if isRead {
 				event = &eventpb.TxnRowsReadLimit{

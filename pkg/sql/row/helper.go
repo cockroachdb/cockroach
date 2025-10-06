@@ -472,13 +472,17 @@ func (rh *RowHelper) CheckRowSize(
 		var event logpb.EventPayload
 		if rh.sd.Internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
+			migrator := log.NewStructuredEventMigrator(func() bool {
+				return rh.migrateLargeRowLog
+			}, logpb.Channel_SQL_INTERNAL_PERF)
+			migrator.StructuredEvent(ctx, severity.INFO, event)
 		} else {
 			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
+			migrator := log.NewStructuredEventMigrator(func() bool {
+				return rh.migrateLargeRowLog
+			}, logpb.Channel_SQL_PERF)
+			migrator.StructuredEvent(ctx, severity.INFO, event)
 		}
-		migrator := log.NewStructuredEventMigrator(func() bool {
-			return rh.migrateLargeRowLog
-		}, logpb.Channel_SQL_PERF)
-		migrator.StructuredEvent(ctx, severity.INFO, event)
 	}
 	if shouldErr {
 		if rh.metrics != nil {
