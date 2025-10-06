@@ -4071,11 +4071,8 @@ func BenchmarkFlowControlV2Basic(b *testing.B) {
 
 func setRACv2DebugVModule(t *testing.T) (reset func()) {
 	t.Helper()
-	old := log.GetVModule()
-	require.NoError(t, log.SetVModule("replica_raft=1,replica_proposal_buf=1,"+
+	return testutils.SetVModule(t, "replica_raft=1,replica_proposal_buf=1,"+
 		"raft_transport=2,kvadmission=1,work_queue=1,replica_flow_control=1,"+
 		"tracker=1,client_raft_helpers_test=1,range_controller=2,"+
-		"token_counter=2,token_tracker=2,processor=2",
-	))
-	return func() { require.NoError(t, log.SetVModule(old)) }
+		"token_counter=2,token_tracker=2,processor=2")
 }
