@@ -287,13 +287,22 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescsFn := func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		descriptors := txn.Descriptors()
-		initialDescs = initialDescs[:0]
+		fmt.Printf("primeInitialTableDescs: setting fixed timestamp to %s\n", tf.initialFrontier)
 		if err := txn.KV().SetFixedTimestamp(ctx, tf.initialFrontier); err != nil {
 			return err
 		}
+		descriptors := txn.Descriptors()
+		err := tf.targets.EachTableID(func(id descpb.ID) error {
+			fmt.Printf("targets have table id %d\n", id)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		initialDescs = initialDescs[:0]
 		// Note that all targets are currently guaranteed to be tables.
 		return tf.targets.EachTableID(func(id descpb.ID) error {
+			fmt.Printf("primeInitialTableDescs: fetching table descriptor %d at timestamp %s\n", id, tf.initialFrontier)
 			tableDesc, err := descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
@@ -304,8 +313,10 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	}
 
 	if err := tf.db.DescsTxn(ctx, initialTableDescsFn); err != nil {
+		fmt.Printf("primeInitialTableDescs: error fetching table descriptors: %v\n", err)
 		return err
 	}
+	fmt.Printf("primeInitialTableDescs: fetched %d table descriptors", len(initialDescs))
 
 	func() {
 		tf.mu.Lock()

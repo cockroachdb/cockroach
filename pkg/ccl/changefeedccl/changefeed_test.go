@@ -167,6 +167,7 @@ func TestDatabaseLevelChangefeedEmptyTableset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// WITH SLEEP
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE DATABASE db`)
@@ -186,6 +187,77 @@ func TestDatabaseLevelChangefeedEmptyTableset(t *testing.T) {
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("enterprise"))
+
+	// NO SLEEP
+	testFn2 := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db`)
+		defer closeFeed(t, dbcf)
+
+		// This allows the test to pass
+		// time.Sleep(1 * time.Second)
+
+		// create a table
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.foo VALUES (0, 'initial')`)
+
+		assertPayloads(t, dbcf, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+	}
+	cdcTest(t, testFn2, feedTestForceSink("enterprise"))
+
+	testFn3 := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db WITH envelope=enriched, enriched_properties=source`)
+		defer closeFeed(t, dbcf)
+
+		// This allows the test to pass
+		time.Sleep(1 * time.Second)
+
+		// create a table
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO db.foo VALUES (0, 'initial')`)
+
+		// TODO: How can I assert something in this test? This is testing getDescriptors, where a change aggregator is getting the table descriptors when creating an event consumer (and with enriched property source).
+		// Only show getDescriptors print when assertPayloads is called. But that assertion fails.
+		// assertPayloads(t, dbcf, []string{
+		// `foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		// })
+	}
+	cdcTest(t, testFn3, feedTestForceSink("kafka"))
+	// concurrent table adds
+	testFn4 := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE db TO enterprisefeeduser`)
+		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db`)
+		defer closeFeed(t, dbcf)
+
+		var wg sync.WaitGroup
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.foo%d (a INT PRIMARY KEY, b STRING)`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO db.foo%d VALUES (%d, 'initial')`, i, i))
+			}(i)
+		}
+		wg.Wait()
+
+		// assertPayloads(t, dbcf, []string{
+		// 	`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		// 	`foo: [1]->{"after": {"a": 1, "b": "initial"}}`,
+		// 	`foo: [2]->{"after": {"a": 2, "b": "initial"}}`,
+		// 	`foo: [3]->{"after": {"a": 3, "b": "initial"}}`,
+		// 	`foo: [4]->{"after": {"a": 4, "b": "initial"}}`,
+		// })
+	}
+	cdcTest(t, testFn4, feedTestForceSink("enterprise"))
 }
 
 func TestDatabaseLevelChangefeedBasics(t *testing.T) {

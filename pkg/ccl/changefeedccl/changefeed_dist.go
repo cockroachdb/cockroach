@@ -137,13 +137,13 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
-	// This isn't fixing current error (flowErr: fetching table descriptor 114: relation "[114]" does not exist)
-	// but I think it's necessary to have it.
 	if !schemaTSOverride.IsEmpty() {
+		fmt.Printf("overriding schemaTS from %s to %s\n", schemaTS, schemaTSOverride)
 		schemaTS = schemaTSOverride
 		initialHighWater = schemaTSOverride
-		fmt.Printf("overriding schemaTS to %s from %s\n", schemaTSOverride, schemaTS)
 	}
+
+	fmt.Printf("distChangefeedFlow has num target tables: %d\n", targets.NumUniqueTables())
 
 	return startDistChangefeed(
 		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
@@ -255,7 +255,7 @@ func startDistChangefeed(
 	if err != nil {
 		return err
 	}
-	fmt.Printf("fetched table descriptors\n")
+	fmt.Printf("fetched table descriptors at timestamp %s\n", schemaTS)
 
 	if schemaTS.IsEmpty() {
 		schemaTS = details.StatementTime
@@ -515,6 +515,7 @@ func makePlan(
 				}
 			}
 
+			fmt.Printf("creating change aggregator spec with initial high water: %s\n", initialHighWater)
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
 				Watches:             watches,
 				InitialHighWater:    &initialHighWater,
@@ -542,6 +543,7 @@ func makePlan(
 			Description:         description,
 			ProgressConfig:      progressConfig,
 			ResolvedSpans:       resolvedSpans,
+			InitialHighWater:    &initialHighWater,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
