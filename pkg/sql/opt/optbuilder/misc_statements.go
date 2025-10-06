@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -265,17 +266,31 @@ func (b *Builder) buildWhereForStatistics(
 			"WHERE filter must be on the same column as the one specified in the column list"))
 	}
 
-	// Find a non-partial forward index with the filter column as the first key
-	// column.
+	// Add the partial index predicate expressions to the table metadata so we
+	// can check if the filter implies any partial index predicates.
+	b.addPartialIndexPredicatesForTable(tabMeta, nil /* scan */)
+
+	// Find a forward index with the filter column as the first key column.
 	foundIndex := false
 	var orderingCol opt.OrderingColumn
 	var notNullCols opt.ColSet
+
+	var im partialidx.Implicator
+	im.Init(b.ctx, b.factory, b.factory.Metadata(), b.evalCtx)
 	for i := 0; i < tab.IndexCount(); i++ {
 		idx := tab.Index(i)
-		// TODO (uzair): Allow partial indexes that are implied by the filter.
-		if _, isPartial := idx.Predicate(); isPartial || idx.Type() != idxtype.FORWARD {
+		if idx.Type() != idxtype.FORWARD {
 			continue
 		}
+
+		// If this is a partial index, check if the filter implies its predicate.
+		if pred, isPartialIndex := tabMeta.PartialIndexPredicate(i); isPartialIndex {
+			predFilters := *pred.(*memo.FiltersExpr)
+			if _, ok := im.FiltersImplyPredicate(fe, predFilters, tabMeta.ComputedCols); !ok {
+				continue
+			}
+		}
+
 		if idx.KeyColumnCount() > 0 {
 			col := idx.Column(0)
 			if tabID.IndexColumnID(idx, 0) == filterColID {
@@ -292,7 +307,7 @@ func (b *Builder) buildWhereForStatistics(
 	if !foundIndex {
 		panic(
 			pgerror.Newf(pgcode.InvalidColumnReference,
-				"table %s does not contain a non-partial forward index with %s as a prefix column",
+				"table %s does not contain a suitable index with %s as a prefix column",
 				tab.Name(), tab.Column(tabID.ColumnOrdinal(filterColID)).ColName(),
 			),
 		)
