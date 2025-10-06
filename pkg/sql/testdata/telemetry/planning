@@ -321,3 +321,119 @@ sql.plan.opt.order-by-nulls-non-standard
 feature-usage
 SELECT a FROM x ORDER BY b DESC NULLS LAST
 ----
+
+# Test for clamped histogram selectivity.
+
+feature-list
+sql.plan.clamped-histogram-selectivity
+sql.plan.clamped-inequality-selectivity
+----
+
+exec
+SET optimizer_clamp_low_histogram_selectivity = true;
+----
+
+exec
+SET optimizer_clamp_inequality_selectivity = true;
+----
+
+exec
+CREATE TYPE status_enum AS ENUM ('ACKNOWLEDGED', 'DROPPED', 'PENDING', 'SUCCEEDED');
+----
+
+exec
+CREATE TABLE t_large (
+  k INT PRIMARY KEY,
+  i INT,
+  s STRING,
+  e status_enum,
+  INDEX (i),
+  INDEX (s),
+  INDEX (i) WHERE e = 'PENDING'
+)
+----
+
+exec
+ALTER TABLE t_large INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 1000000000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 99000000, "distinct_range": 99000000, "upper_bound": "100000000"},
+      {"num_eq": 1, "num_range": 199000000, "distinct_range": 199000000, "upper_bound": "300000000"},
+      {"num_eq": 1, "num_range": 299000000, "distinct_range": 299000000, "upper_bound": "600000000"},
+      {"num_eq": 1, "num_range": 399000000, "distinct_range": 399000000, "upper_bound": "1000000000"}
+    ]
+  },
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 44000000,
+    "null_count": 0,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 10000000, "num_range": 90000000, "distinct_range": 10000000, "upper_bound": "100000000"},
+      {"num_eq": 10000000, "num_range": 190000000, "distinct_range": 10000000, "upper_bound": "200000000"},
+      {"num_eq": 20000000, "num_range": 280000000, "distinct_range": 10000000, "upper_bound": "300000000"},
+      {"num_eq": 30000000, "num_range": 370000000, "distinct_range": 10000000, "upper_bound": "400000000"}
+    ]
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 400000000,
+    "null_count": 0,
+    "avg_size": 3,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "banana"},
+      {"num_eq": 100000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "cherry"},
+      {"num_eq": 200000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "mango"},
+      {"num_eq": 200000000, "num_range": 100000000, "distinct_range": 10000000, "upper_bound": "pineapple"}
+    ]
+  },
+  {
+    "columns": ["e"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000000000,
+    "distinct_count": 4,
+    "null_count": 0,
+    "avg_size": 1,
+    "histo_col_type": "status_enum",
+    "histo_buckets": [
+      {"num_eq": 1000000, "num_range": 0, "distinct_range": 0, "upper_bound": "ACKNOWLEDGED"},
+      {"num_eq": 99000000, "num_range": 0, "distinct_range": 0, "upper_bound": "DROPPED"},
+      {"num_eq": 900000000, "num_range": 0, "distinct_range": 0, "upper_bound": "SUCCEEDED"}
+    ]
+  }
+]'
+----
+
+feature-usage
+SELECT * FROM t_large WHERE e = 'PENDING' AND k IN (110000000, 120000000, 130000000, 140000000)
+----
+sql.plan.clamped-histogram-selectivity
+
+feature-usage
+SELECT * FROM t_large WHERE k IN (100000000, 110000000, 120000000, 130000000) AND i > 500000000
+----
+sql.plan.clamped-histogram-selectivity
+sql.plan.clamped-inequality-selectivity
+
+# Cases where the selectivity clamps do not apply.
+feature-usage
+SELECT * FROM t_large WHERE e = 'SUCCEEDED';
+SELECT * FROM t_large;
+SELECT 1;
+----
