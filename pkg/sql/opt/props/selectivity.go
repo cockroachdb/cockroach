@@ -12,13 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// epsilon is the minimum selectivity for normal conditions (that is, conditions
-// that are not contradictions).
-const epsilon = 1e-10
-
-// Selectivity is a value is within the range of [epsilon, 1.0] representing the
-// estimated fraction of rows that pass a given condition. (Selectivity can be
-// 0.0 for conditions that are always false, i.e. contradictions.)
+// Selectivity is a value is within the range of [0, 1.0] representing the
+// estimated fraction of rows that pass a given condition.
 type Selectivity struct {
 	selectivity float64
 }
@@ -110,8 +105,8 @@ func selectivityInRange(sel float64) float64 {
 		panic(errors.AssertionFailedf("selectivity is NaN"))
 	}
 	switch {
-	case sel < epsilon:
-		return epsilon
+	case sel < 0:
+		return 0
 	case sel > 1.0:
 		return 1.0
 	default:

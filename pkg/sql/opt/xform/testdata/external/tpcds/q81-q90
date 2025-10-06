@@ -816,34 +816,34 @@ top-k
       │    ├── immutable
       │    ├── key: (148)
       │    ├── fd: (148)-->(151-153)
-      │    ├── inner-join (lookup customer_address)
+      │    ├── inner-join (lookup web_page)
       │    │    ├── columns: ws_sold_date_sk:1!null ws_item_sk:4!null ws_web_page_sk:13!null ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34!null wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43!null wr_returning_cdemo_sk:45!null wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 wp_web_page_sk:63!null cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null cd2.cd_demo_sk:90!null cd2.cd_marital_status:92!null cd2.cd_education_status:93!null ca_address_sk:101!null ca_state:109!null ca_country:111!null d_date_sk:116!null d_year:122!null r_reason_sk:146!null r_reason_desc:148
-      │    │    ├── key columns: [43] = [101]
+      │    │    ├── key columns: [13] = [63]
       │    │    ├── lookup columns are key
       │    │    ├── immutable
       │    │    ├── key: (39,50)
       │    │    ├── fd: ()-->(111,122), (4,18)-->(1,13,19,22,34), (39,50)-->(41,43,45,49,55,57), (79)-->(81,82), (90)-->(92,93), (101)-->(109), (146)-->(148), (81)==(92), (92)==(81), (82)==(93), (93)==(82), (41)==(79), (79)==(41), (45)==(90), (90)==(45), (43)==(101), (101)==(43), (49)==(146), (146)==(49), (4)==(39), (39)==(4), (18)==(50), (50)==(18), (1)==(116), (116)==(1), (13)==(63), (63)==(13)
       │    │    ├── inner-join (lookup date_dim)
-      │    │    │    ├── columns: ws_sold_date_sk:1!null ws_item_sk:4!null ws_web_page_sk:13!null ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34 wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43 wr_returning_cdemo_sk:45!null wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 wp_web_page_sk:63!null cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null cd2.cd_demo_sk:90!null cd2.cd_marital_status:92!null cd2.cd_education_status:93!null d_date_sk:116!null d_year:122!null r_reason_sk:146!null r_reason_desc:148
+      │    │    │    ├── columns: ws_sold_date_sk:1!null ws_item_sk:4!null ws_web_page_sk:13 ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34!null wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43!null wr_returning_cdemo_sk:45!null wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null cd2.cd_demo_sk:90!null cd2.cd_marital_status:92!null cd2.cd_education_status:93!null ca_address_sk:101!null ca_state:109!null ca_country:111!null d_date_sk:116!null d_year:122!null r_reason_sk:146!null r_reason_desc:148
       │    │    │    ├── key columns: [1] = [116]
       │    │    │    ├── lookup columns are key
       │    │    │    ├── immutable
       │    │    │    ├── key: (39,50)
-      │    │    │    ├── fd: ()-->(122), (79)-->(81,82), (90)-->(92,93), (146)-->(148), (39,50)-->(41,43,45,49,55,57), (4,18)-->(1,13,19,22,34), (13)==(63), (63)==(13), (1)==(116), (116)==(1), (4)==(39), (39)==(4), (18)==(50), (50)==(18), (49)==(146), (146)==(49), (45)==(90), (90)==(45), (81)==(92), (92)==(81), (82)==(93), (93)==(82), (41)==(79), (79)==(41)
-      │    │    │    ├── inner-join (lookup web_page)
-      │    │    │    │    ├── columns: ws_sold_date_sk:1 ws_item_sk:4!null ws_web_page_sk:13!null ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34 wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43 wr_returning_cdemo_sk:45!null wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 wp_web_page_sk:63!null cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null cd2.cd_demo_sk:90!null cd2.cd_marital_status:92!null cd2.cd_education_status:93!null r_reason_sk:146!null r_reason_desc:148
-      │    │    │    │    ├── key columns: [13] = [63]
+      │    │    │    ├── fd: ()-->(111,122), (4,18)-->(1,13,19,22,34), (39,50)-->(41,43,45,49,55,57), (79)-->(81,82), (90)-->(92,93), (101)-->(109), (146)-->(148), (81)==(92), (92)==(81), (82)==(93), (93)==(82), (41)==(79), (79)==(41), (45)==(90), (90)==(45), (43)==(101), (101)==(43), (49)==(146), (146)==(49), (4)==(39), (39)==(4), (18)==(50), (50)==(18), (1)==(116), (116)==(1)
+      │    │    │    ├── inner-join (lookup customer_demographics [as=cd2])
+      │    │    │    │    ├── columns: ws_sold_date_sk:1 ws_item_sk:4!null ws_web_page_sk:13 ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34!null wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43!null wr_returning_cdemo_sk:45!null wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null cd2.cd_demo_sk:90!null cd2.cd_marital_status:92!null cd2.cd_education_status:93!null ca_address_sk:101!null ca_state:109!null ca_country:111!null r_reason_sk:146!null r_reason_desc:148
+      │    │    │    │    ├── key columns: [45] = [90]
       │    │    │    │    ├── lookup columns are key
       │    │    │    │    ├── immutable
       │    │    │    │    ├── key: (39,50)
-      │    │    │    │    ├── fd: (79)-->(81,82), (90)-->(92,93), (146)-->(148), (39,50)-->(41,43,45,49,55,57), (4,18)-->(1,13,19,22,34), (13)==(63), (63)==(13), (4)==(39), (39)==(4), (18)==(50), (50)==(18), (49)==(146), (146)==(49), (45)==(90), (90)==(45), (81)==(92), (92)==(81), (82)==(93), (93)==(82), (41)==(79), (79)==(41)
-      │    │    │    │    ├── inner-join (lookup customer_demographics [as=cd2])
-      │    │    │    │    │    ├── columns: ws_sold_date_sk:1 ws_item_sk:4!null ws_web_page_sk:13 ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34 wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43 wr_returning_cdemo_sk:45!null wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null cd2.cd_demo_sk:90!null cd2.cd_marital_status:92!null cd2.cd_education_status:93!null r_reason_sk:146!null r_reason_desc:148
-      │    │    │    │    │    ├── key columns: [45] = [90]
+      │    │    │    │    ├── fd: ()-->(111), (4,18)-->(1,13,19,22,34), (39,50)-->(41,43,45,49,55,57), (79)-->(81,82), (90)-->(92,93), (101)-->(109), (146)-->(148), (81)==(92), (92)==(81), (82)==(93), (93)==(82), (41)==(79), (79)==(41), (45)==(90), (90)==(45), (43)==(101), (101)==(43), (49)==(146), (146)==(49), (4)==(39), (39)==(4), (18)==(50), (50)==(18)
+      │    │    │    │    ├── inner-join (lookup customer_address)
+      │    │    │    │    │    ├── columns: ws_sold_date_sk:1 ws_item_sk:4!null ws_web_page_sk:13 ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34!null wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43!null wr_returning_cdemo_sk:45 wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null ca_address_sk:101!null ca_state:109!null ca_country:111!null r_reason_sk:146!null r_reason_desc:148
+      │    │    │    │    │    ├── key columns: [43] = [101]
       │    │    │    │    │    ├── lookup columns are key
       │    │    │    │    │    ├── immutable
       │    │    │    │    │    ├── key: (39,50)
-      │    │    │    │    │    ├── fd: (4,18)-->(1,13,19,22,34), (79)-->(81,82), (90)-->(92,93), (39,50)-->(41,43,45,49,55,57), (146)-->(148), (49)==(146), (146)==(49), (45)==(90), (90)==(45), (81)==(92), (92)==(81), (82)==(93), (93)==(82), (41)==(79), (79)==(41), (4)==(39), (39)==(4), (18)==(50), (50)==(18)
+      │    │    │    │    │    ├── fd: ()-->(111), (4,18)-->(1,13,19,22,34), (79)-->(81,82), (101)-->(109), (39,50)-->(41,43,45,49,55,57), (146)-->(148), (49)==(146), (146)==(49), (43)==(101), (101)==(43), (41)==(79), (79)==(41), (4)==(39), (39)==(4), (18)==(50), (50)==(18)
       │    │    │    │    │    ├── inner-join (lookup customer_demographics [as=cd1])
       │    │    │    │    │    │    ├── columns: ws_sold_date_sk:1 ws_item_sk:4!null ws_web_page_sk:13 ws_order_number:18!null ws_quantity:19 ws_sales_price:22!null ws_net_profit:34 wr_item_sk:39!null wr_refunded_cdemo_sk:41!null wr_refunded_addr_sk:43 wr_returning_cdemo_sk:45 wr_reason_sk:49!null wr_order_number:50!null wr_fee:55 wr_refunded_cash:57 cd1.cd_demo_sk:79!null cd1.cd_marital_status:81!null cd1.cd_education_status:82!null r_reason_sk:146!null r_reason_desc:148
       │    │    │    │    │    │    ├── key columns: [41] = [79]
@@ -876,14 +876,14 @@ top-k
       │    │    │    │    │    │    └── filters
       │    │    │    │    │    │         └── (((((cd1.cd_marital_status:81 = 'D') AND (cd1.cd_education_status:82 = 'Primary')) AND (ws_sales_price:22 >= 100.00)) AND (ws_sales_price:22 <= 150.00)) OR ((((cd1.cd_marital_status:81 = 'S') AND (cd1.cd_education_status:82 = 'College')) AND (ws_sales_price:22 >= 50.00)) AND (ws_sales_price:22 <= 100.00))) OR ((((cd1.cd_marital_status:81 = 'U') AND (cd1.cd_education_status:82 = 'Advanced Degree')) AND (ws_sales_price:22 >= 150.00)) AND (ws_sales_price:22 <= 200.00)) [outer=(22,81,82), immutable, constraints=(/22: [/50.00 - /200.00]; /81: [/'D' - /'D'] [/'S' - /'S'] [/'U' - /'U']; /82: [/'Advanced Degree' - /'Advanced Degree'] [/'College' - /'College'] [/'Primary' - /'Primary'])]
       │    │    │    │    │    └── filters
-      │    │    │    │    │         ├── cd1.cd_marital_status:81 = cd2.cd_marital_status:92 [outer=(81,92), constraints=(/81: (/NULL - ]; /92: (/NULL - ]), fd=(81)==(92), (92)==(81)]
-      │    │    │    │    │         └── cd1.cd_education_status:82 = cd2.cd_education_status:93 [outer=(82,93), constraints=(/82: (/NULL - ]; /93: (/NULL - ]), fd=(82)==(93), (93)==(82)]
-      │    │    │    │    └── filters (true)
+      │    │    │    │    │         ├── ((((ca_state:109 IN ('IA', 'NC', 'TX')) AND (ws_net_profit:34 >= 100)) AND (ws_net_profit:34 <= 200)) OR (((ca_state:109 IN ('GA', 'WI', 'WV')) AND (ws_net_profit:34 >= 150)) AND (ws_net_profit:34 <= 300))) OR (((ca_state:109 IN ('KY', 'OK', 'VA')) AND (ws_net_profit:34 >= 50)) AND (ws_net_profit:34 <= 250)) [outer=(34,109), immutable, constraints=(/34: [/50 - /300]; /109: [/'GA' - /'GA'] [/'IA' - /'IA'] [/'KY' - /'KY'] [/'NC' - /'NC'] [/'OK' - /'OK'] [/'TX' - /'TX'] [/'VA' - /'VA'] [/'WI' - /'WI'] [/'WV' - /'WV'])]
+      │    │    │    │    │         └── ca_country:111 = 'United States' [outer=(111), constraints=(/111: [/'United States' - /'United States']; tight), fd=()-->(111)]
+      │    │    │    │    └── filters
+      │    │    │    │         ├── cd1.cd_marital_status:81 = cd2.cd_marital_status:92 [outer=(81,92), constraints=(/81: (/NULL - ]; /92: (/NULL - ]), fd=(81)==(92), (92)==(81)]
+      │    │    │    │         └── cd1.cd_education_status:82 = cd2.cd_education_status:93 [outer=(82,93), constraints=(/82: (/NULL - ]; /93: (/NULL - ]), fd=(82)==(93), (93)==(82)]
       │    │    │    └── filters
       │    │    │         └── d_year:122 = 1998 [outer=(122), constraints=(/122: [/1998 - /1998]; tight), fd=()-->(122)]
-      │    │    └── filters
-      │    │         ├── ((((ca_state:109 IN ('IA', 'NC', 'TX')) AND (ws_net_profit:34 >= 100)) AND (ws_net_profit:34 <= 200)) OR (((ca_state:109 IN ('GA', 'WI', 'WV')) AND (ws_net_profit:34 >= 150)) AND (ws_net_profit:34 <= 300))) OR (((ca_state:109 IN ('KY', 'OK', 'VA')) AND (ws_net_profit:34 >= 50)) AND (ws_net_profit:34 <= 250)) [outer=(34,109), immutable, constraints=(/34: [/50 - /300]; /109: [/'GA' - /'GA'] [/'IA' - /'IA'] [/'KY' - /'KY'] [/'NC' - /'NC'] [/'OK' - /'OK'] [/'TX' - /'TX'] [/'VA' - /'VA'] [/'WI' - /'WI'] [/'WV' - /'WV'])]
-      │    │         └── ca_country:111 = 'United States' [outer=(111), constraints=(/111: [/'United States' - /'United States']; tight), fd=()-->(111)]
+      │    │    └── filters (true)
       │    └── aggregations
       │         ├── avg [as=avg:151, outer=(19)]
       │         │    └── ws_quantity:19

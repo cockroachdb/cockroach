@@ -811,20 +811,20 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: t1_pkey, idx_v_unique_invisible
 │
-└── • lookup join (anti)
-    │ table: t1@idx_v_unique_invisible
-    │ equality: (column2) = (v)
-    │ equality cols are key
+└── • cross join (anti)
     │
-    └── • cross join (anti)
-        │
-        ├── • values
-        │     size: 2 columns, 1 row
-        │
-        └── • scan
-              missing stats
-              table: t1@t1_pkey
-              spans: [/1 - /1]
+    ├── • lookup join (anti)
+    │   │ table: t1@idx_v_unique_invisible
+    │   │ equality: (column2) = (v)
+    │   │ equality cols are key
+    │   │
+    │   └── • values
+    │         size: 2 columns, 1 row
+    │
+    └── • scan
+          missing stats
+          table: t1@t1_pkey
+          spans: [/1 - /1]
 
 # idx_v_unique_invisible is used to check uniqueness.
 query T

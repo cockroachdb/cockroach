@@ -1505,13 +1505,13 @@ delete f
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 29.0500001
+ ├── cost: 29.05
  ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: partial_index_del1:13 f:7 rowid:8
       ├── stats: [rows=10]
-      ├── cost: 29.0400001
+      ├── cost: 29.04
       ├── cost-flags: unbounded-cardinality
       ├── key: (8)
       ├── fd: ()-->(7,13)
@@ -1522,7 +1522,7 @@ delete f
       │    ├── constraint: /7/8: ‹×›
       │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
-      │    ├── cost: 28.8200001
+      │    ├── cost: 28.82
       │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (8)
       │    ├── fd: ()-->(7)
@@ -1540,13 +1540,13 @@ delete f
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 29.0500001
+ ├── cost: 29.05
  ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: partial_index_del1:13(bool!null) f:7(float!null) rowid:8(int!null)
       ├── stats: [rows=10]
-      ├── cost: 29.0400001
+      ├── cost: 29.04
       ├── cost-flags: unbounded-cardinality
       ├── key: (8)
       ├── fd: ()-->(7,13)
@@ -1557,7 +1557,7 @@ delete f
       │    ├── constraint: /7/8: ‹×›
       │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
-      │    ├── cost: 28.8200001
+      │    ├── cost: 28.82
       │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (8)
       │    ├── fd: ()-->(7)

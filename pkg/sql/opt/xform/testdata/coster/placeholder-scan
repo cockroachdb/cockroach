@@ -115,14 +115,14 @@ SELECT k FROM t WHERE a = 1
 project
  ├── columns: k:1!null
  ├── stats: [rows=1000]
- ├── cost: 1078.04001
+ ├── cost: 1078.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null
       ├── constraint: /2/3/1: [/1 - /1]
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-      ├── cost: 1068.02001
+      ├── cost: 1068.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2)
@@ -134,14 +134,14 @@ project
  ├── columns: k:1!null
  ├── has-placeholder
  ├── stats: [rows=1000]
- ├── cost: 1078.04001
+ ├── cost: 1078.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── placeholder-scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null
       ├── has-placeholder
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-      ├── cost: 1068.02001
+      ├── cost: 1068.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2)
@@ -158,7 +158,7 @@ SELECT k FROM t WHERE a = 1 ORDER BY b
 project
  ├── columns: k:1!null  [hidden: b:3]
  ├── stats: [rows=1000]
- ├── cost: 1088.04001
+ ├── cost: 1088.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -167,7 +167,7 @@ project
       ├── columns: k:1!null a:2!null b:3
       ├── constraint: /2/3/1: [/1 - /1]
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-      ├── cost: 1078.02001
+      ├── cost: 1078.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
@@ -181,7 +181,7 @@ sort
  ├── columns: k:1!null  [hidden: b:3]
  ├── has-placeholder
  ├── stats: [rows=1000]
- ├── cost: 1327.52195
+ ├── cost: 1327.52194
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -190,7 +190,7 @@ sort
       ├── columns: k:1!null b:3
       ├── has-placeholder
       ├── stats: [rows=1000]
-      ├── cost: 1088.04001
+      ├── cost: 1088.04
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -198,7 +198,7 @@ sort
            ├── columns: k:1!null a:2!null b:3
            ├── has-placeholder
            ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-           ├── cost: 1078.02001
+           ├── cost: 1078.02
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(3)
@@ -215,7 +215,7 @@ SELECT k FROM t WHERE a = 1 ORDER BY b DESC
 project
  ├── columns: k:1!null  [hidden: b:3]
  ├── stats: [rows=1000]
- ├── cost: 1187.69785
+ ├── cost: 1187.69784
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -224,7 +224,7 @@ project
       ├── columns: k:1!null a:2!null b:3
       ├── constraint: /2/3/1: [/1 - /1]
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-      ├── cost: 1177.67785
+      ├── cost: 1177.67784
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
@@ -238,7 +238,7 @@ sort
  ├── columns: k:1!null  [hidden: b:3]
  ├── has-placeholder
  ├── stats: [rows=1000]
- ├── cost: 1327.52195
+ ├── cost: 1327.52194
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -247,7 +247,7 @@ sort
       ├── columns: k:1!null b:3
       ├── has-placeholder
       ├── stats: [rows=1000]
-      ├── cost: 1088.04001
+      ├── cost: 1088.04
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -255,7 +255,7 @@ sort
            ├── columns: k:1!null a:2!null b:3
            ├── has-placeholder
            ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-           ├── cost: 1078.02001
+           ├── cost: 1078.02
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(3)
@@ -328,14 +328,14 @@ SELECT k FROM t WHERE a > 1 AND a < 10
 project
  ├── columns: k:1!null
  ├── stats: [rows=8000]
- ├── cost: 8498.04001
+ ├── cost: 8498.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null
       ├── constraint: /2/3/1: [/2 - /9]
       ├── stats: [rows=8000, distinct(2)=8, null(2)=0]
-      ├── cost: 8418.02001
+      ├── cost: 8418.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(2)
@@ -754,7 +754,7 @@ SELECT k FROM t WHERE a = 1
 project
  ├── columns: k:1!null
  ├── stats: [rows=1000]
- ├── cost: 1053.04001
+ ├── cost: 1053.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── scan t@t_a_b_idx
@@ -763,7 +763,7 @@ project
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
       │   histogram(2)=  0 1000
       │                <--- 1 -
-      ├── cost: 1043.02001
+      ├── cost: 1043.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2)
@@ -775,14 +775,14 @@ project
  ├── columns: k:1!null
  ├── has-placeholder
  ├── stats: [rows=1000]
- ├── cost: 1053.04001
+ ├── cost: 1053.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── placeholder-scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null
       ├── has-placeholder
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-      ├── cost: 1043.02001
+      ├── cost: 1043.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2)
@@ -799,7 +799,7 @@ SELECT k FROM t WHERE a = 1 ORDER BY b
 project
  ├── columns: k:1!null  [hidden: b:3]
  ├── stats: [rows=1000]
- ├── cost: 1058.04001
+ ├── cost: 1058.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -810,7 +810,7 @@ project
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
       │   histogram(2)=  0 1000
       │                <--- 1 -
-      ├── cost: 1048.02001
+      ├── cost: 1048.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
@@ -824,7 +824,7 @@ sort
  ├── columns: k:1!null  [hidden: b:3]
  ├── has-placeholder
  ├── stats: [rows=1000]
- ├── cost: 1297.52195
+ ├── cost: 1297.52194
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -833,7 +833,7 @@ sort
       ├── columns: k:1!null b:3
       ├── has-placeholder
       ├── stats: [rows=1000]
-      ├── cost: 1058.04001
+      ├── cost: 1058.04
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -841,7 +841,7 @@ sort
            ├── columns: k:1!null a:2!null b:3
            ├── has-placeholder
            ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-           ├── cost: 1048.02001
+           ├── cost: 1048.02
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(3)
@@ -858,7 +858,7 @@ SELECT k FROM t WHERE a = 1 ORDER BY b DESC
 project
  ├── columns: k:1!null  [hidden: b:3]
  ├── stats: [rows=1000]
- ├── cost: 1157.69785
+ ├── cost: 1157.69784
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -869,7 +869,7 @@ project
       ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
       │   histogram(2)=  0 1000
       │                <--- 1 -
-      ├── cost: 1147.67785
+      ├── cost: 1147.67784
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3)
@@ -883,7 +883,7 @@ sort
  ├── columns: k:1!null  [hidden: b:3]
  ├── has-placeholder
  ├── stats: [rows=1000]
- ├── cost: 1297.52195
+ ├── cost: 1297.52194
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3)
@@ -892,7 +892,7 @@ sort
       ├── columns: k:1!null b:3
       ├── has-placeholder
       ├── stats: [rows=1000]
-      ├── cost: 1058.04001
+      ├── cost: 1058.04
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(3)
@@ -900,7 +900,7 @@ sort
            ├── columns: k:1!null a:2!null b:3
            ├── has-placeholder
            ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
-           ├── cost: 1048.02001
+           ├── cost: 1048.02
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(3)
@@ -973,7 +973,7 @@ SELECT k FROM t WHERE a > 1 AND a < 10
 project
  ├── columns: k:1!null
  ├── stats: [rows=8000]
- ├── cost: 8298.04001
+ ├── cost: 8298.04
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── scan t@t_a_b_idx
@@ -982,7 +982,7 @@ project
       ├── stats: [rows=8000, distinct(2)=8, null(2)=0]
       │   histogram(2)=  0  0  7000 1000
       │                <--- 1 ------ 9 -
-      ├── cost: 8218.02001
+      ├── cost: 8218.02
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(2)

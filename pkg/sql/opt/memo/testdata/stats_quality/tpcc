@@ -154,7 +154,7 @@ project
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
  ├── cardinality: [0 - 5]
  ├── volatile
- ├── stats: [rows=4.54855, distinct(1)=4.54855, null(1)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=0.989418, null(14)=0, distinct(15)=0.989418, null(15)=0, distinct(16)=0.989418, null(16)=0, distinct(17)=4.54833, null(17)=0]
+ ├── stats: [rows=4.54845, distinct(1)=4.54845, null(1)=0, distinct(3)=4.43666, null(3)=0, distinct(8)=4.38563, null(8)=0, distinct(14)=0.989417, null(14)=0, distinct(15)=0.989417, null(15)=0, distinct(16)=0.989417, null(16)=0, distinct(17)=4.54823, null(17)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -170,10 +170,10 @@ project
       ├── locking: for-update
       ├── cardinality: [0 - 5]
       ├── volatile
-      ├── stats: [rows=4.54855, distinct(1)=4.54855, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=0.989418, null(14)=0, distinct(15)=0.989418, null(15)=0, distinct(16)=0.989418, null(16)=0, distinct(17)=4.54833, null(17)=0, distinct(1,2)=4.54855, null(1,2)=0]
-      │   histogram(1)=  0 0.966 0 0.966  0 0.966  0 0.82528 0 0.82528
-      │                <--- 900 --- 1000 --- 1100 --- 1400 ---- 1500 -
-      │   histogram(2)=  0 4.5486
+      ├── stats: [rows=4.54845, distinct(1)=4.54845, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.43666, null(3)=0, distinct(8)=4.38563, null(8)=0, distinct(14)=0.989417, null(14)=0, distinct(15)=0.989417, null(15)=0, distinct(16)=0.989417, null(16)=0, distinct(17)=4.54823, null(17)=0, distinct(1,2)=4.54845, null(1,2)=0]
+      │   histogram(1)=  0 0.96598 0 0.96598 0 0.96598 0 0.82526 0 0.82526
+      │                <---- 900 ---- 1000 ---- 1100 ---- 1400 ---- 1500 -
+      │   histogram(2)=  0 4.5485
       │                <---- 4 --
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
@@ -661,7 +661,7 @@ scalar-group-by
  │         │    ├── save-table-name: stock_level_02_scan_4
  │         │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
  │         │    ├── constraint: /3/2/-1/4: [/1/1/999 - /1/1/980]
- │         │    ├── stats: [rows=193.368, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=193.186, null(5)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=20, null(1-3)=0]
+ │         │    ├── stats: [rows=193.367, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=193.186, null(5)=0, distinct(2,3)=1, null(2,3)=0, distinct(1-3)=20, null(1-3)=0]
  │         │    │   histogram(1)=  0   0   122.13 5.4779 54.8 10.96
  │         │    │                <--- 979 -------- 993 ------- 999
  │         │    │   histogram(2)=  0 193.37

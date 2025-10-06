@@ -183,10 +183,10 @@ project
       │    │         │    │    ├── key: (22,39,46)
       │    │         │    │    ├── fd: ()-->(35,62), (12)-->(13-18), (21,22)-->(24), (28)-->(29,30), (39,40)-->(42), (46)-->(49), (55)-->(57), (12)==(22), (22)==(12), (30)==(34), (34)==(30), (15)==(28), (28)==(15), (57)==(61), (61)==(57), (49)==(55), (55)==(49), (40)==(46), (46)==(40), (21)==(39), (39)==(21)
       │    │         │    │    ├── inner-join (hash)
-      │    │         │    │    │    ├── columns: s_suppkey:12!null s_name:13!null s_address:14!null s_nationkey:15!null s_phone:16!null s_acctbal:17!null s_comment:18!null ps_partkey:21!null ps_suppkey:22!null ps_supplycost:24!null n_nationkey:28!null n_name:29!null n_regionkey:30!null r_regionkey:34!null r_name:35!null ps_partkey:39!null ps_suppkey:40!null ps_supplycost:42!null s_suppkey:46!null s_nationkey:49!null
+      │    │         │    │    │    ├── columns: s_suppkey:12!null s_name:13!null s_address:14!null s_nationkey:15!null s_phone:16!null s_acctbal:17!null s_comment:18!null ps_partkey:21!null ps_suppkey:22!null ps_supplycost:24!null n_nationkey:28!null n_name:29!null n_regionkey:30!null r_regionkey:34!null r_name:35!null ps_partkey:39!null ps_suppkey:40!null ps_supplycost:42!null
       │    │         │    │    │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-more)
-      │    │         │    │    │    ├── key: (22,39,46)
-      │    │         │    │    │    ├── fd: ()-->(35), (28)-->(29,30), (12)-->(13-18), (21,22)-->(24), (39,40)-->(42), (46)-->(49), (40)==(46), (46)==(40), (21)==(39), (39)==(21), (12)==(22), (22)==(12), (15)==(28), (28)==(15), (30)==(34), (34)==(30)
+      │    │         │    │    │    ├── key: (22,39,40)
+      │    │         │    │    │    ├── fd: ()-->(35), (28)-->(29,30), (12)-->(13-18), (21,22)-->(24), (39,40)-->(42), (21)==(39), (39)==(21), (12)==(22), (22)==(12), (15)==(28), (28)==(15), (30)==(34), (34)==(30)
       │    │         │    │    │    ├── inner-join (hash)
       │    │         │    │    │    │    ├── columns: s_suppkey:12!null s_name:13!null s_address:14!null s_nationkey:15!null s_phone:16!null s_acctbal:17!null s_comment:18!null ps_partkey:21!null ps_suppkey:22!null ps_supplycost:24!null n_nationkey:28!null n_name:29!null n_regionkey:30!null r_regionkey:34!null r_name:35!null
       │    │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
@@ -232,41 +232,41 @@ project
       │    │         │    │    │    │    │    └── filters (true)
       │    │         │    │    │    │    └── filters
       │    │         │    │    │    │         └── s_nationkey:15 = n_nationkey:28 [outer=(15,28), constraints=(/15: (/NULL - ]; /28: (/NULL - ]), fd=(15)==(28), (28)==(15)]
-      │    │         │    │    │    ├── inner-join (hash)
-      │    │         │    │    │    │    ├── columns: ps_partkey:39!null ps_suppkey:40!null ps_supplycost:42!null s_suppkey:46!null s_nationkey:49!null
-      │    │         │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-      │    │         │    │    │    │    ├── key: (39,46)
-      │    │         │    │    │    │    ├── fd: (39,40)-->(42), (46)-->(49), (40)==(46), (46)==(40)
-      │    │         │    │    │    │    ├── scan partsupp
-      │    │         │    │    │    │    │    ├── columns: ps_partkey:39!null ps_suppkey:40!null ps_supplycost:42!null
-      │    │         │    │    │    │    │    ├── key: (39,40)
-      │    │         │    │    │    │    │    └── fd: (39,40)-->(42)
-      │    │         │    │    │    │    ├── scan supplier@s_nk
-      │    │         │    │    │    │    │    ├── columns: s_suppkey:46!null s_nationkey:49!null
-      │    │         │    │    │    │    │    ├── key: (46)
-      │    │         │    │    │    │    │    └── fd: (46)-->(49)
-      │    │         │    │    │    │    └── filters
-      │    │         │    │    │    │         └── s_suppkey:46 = ps_suppkey:40 [outer=(40,46), constraints=(/40: (/NULL - ]; /46: (/NULL - ]), fd=(40)==(46), (46)==(40)]
+      │    │         │    │    │    ├── scan partsupp
+      │    │         │    │    │    │    ├── columns: ps_partkey:39!null ps_suppkey:40!null ps_supplycost:42!null
+      │    │         │    │    │    │    ├── key: (39,40)
+      │    │         │    │    │    │    └── fd: (39,40)-->(42)
       │    │         │    │    │    └── filters
       │    │         │    │    │         └── ps_partkey:21 = ps_partkey:39 [outer=(21,39), constraints=(/21: (/NULL - ]; /39: (/NULL - ]), fd=(21)==(39), (39)==(21)]
-      │    │         │    │    ├── inner-join (lookup nation@n_rk)
-      │    │         │    │    │    ├── columns: n_nationkey:55!null n_regionkey:57!null r_regionkey:61!null r_name:62!null
-      │    │         │    │    │    ├── key columns: [61] = [57]
-      │    │         │    │    │    ├── key: (55)
-      │    │         │    │    │    ├── fd: ()-->(62), (55)-->(57), (57)==(61), (61)==(57)
-      │    │         │    │    │    ├── select
-      │    │         │    │    │    │    ├── columns: r_regionkey:61!null r_name:62!null
-      │    │         │    │    │    │    ├── key: (61)
-      │    │         │    │    │    │    ├── fd: ()-->(62)
-      │    │         │    │    │    │    ├── scan region
+      │    │         │    │    ├── inner-join (hash)
+      │    │         │    │    │    ├── columns: s_suppkey:46!null s_nationkey:49!null n_nationkey:55!null n_regionkey:57!null r_regionkey:61!null r_name:62!null
+      │    │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │         │    │    │    ├── key: (46)
+      │    │         │    │    │    ├── fd: ()-->(62), (46)-->(49), (55)-->(57), (57)==(61), (61)==(57), (49)==(55), (55)==(49)
+      │    │         │    │    │    ├── scan supplier@s_nk
+      │    │         │    │    │    │    ├── columns: s_suppkey:46!null s_nationkey:49!null
+      │    │         │    │    │    │    ├── key: (46)
+      │    │         │    │    │    │    └── fd: (46)-->(49)
+      │    │         │    │    │    ├── inner-join (lookup nation@n_rk)
+      │    │         │    │    │    │    ├── columns: n_nationkey:55!null n_regionkey:57!null r_regionkey:61!null r_name:62!null
+      │    │         │    │    │    │    ├── key columns: [61] = [57]
+      │    │         │    │    │    │    ├── key: (55)
+      │    │         │    │    │    │    ├── fd: ()-->(62), (55)-->(57), (57)==(61), (61)==(57)
+      │    │         │    │    │    │    ├── select
       │    │         │    │    │    │    │    ├── columns: r_regionkey:61!null r_name:62!null
       │    │         │    │    │    │    │    ├── key: (61)
-      │    │         │    │    │    │    │    └── fd: (61)-->(62)
-      │    │         │    │    │    │    └── filters
-      │    │         │    │    │    │         └── r_name:62 = 'EUROPE' [outer=(62), constraints=(/62: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(62)]
-      │    │         │    │    │    └── filters (true)
+      │    │         │    │    │    │    │    ├── fd: ()-->(62)
+      │    │         │    │    │    │    │    ├── scan region
+      │    │         │    │    │    │    │    │    ├── columns: r_regionkey:61!null r_name:62!null
+      │    │         │    │    │    │    │    │    ├── key: (61)
+      │    │         │    │    │    │    │    │    └── fd: (61)-->(62)
+      │    │         │    │    │    │    │    └── filters
+      │    │         │    │    │    │    │         └── r_name:62 = 'EUROPE' [outer=(62), constraints=(/62: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(62)]
+      │    │         │    │    │    │    └── filters (true)
+      │    │         │    │    │    └── filters
+      │    │         │    │    │         └── s_nationkey:49 = n_nationkey:55 [outer=(49,55), constraints=(/49: (/NULL - ]; /55: (/NULL - ]), fd=(49)==(55), (55)==(49)]
       │    │         │    │    └── filters
-      │    │         │    │         └── s_nationkey:49 = n_nationkey:55 [outer=(49,55), constraints=(/49: (/NULL - ]; /55: (/NULL - ]), fd=(49)==(55), (55)==(49)]
+      │    │         │    │         └── s_suppkey:46 = ps_suppkey:40 [outer=(40,46), constraints=(/40: (/NULL - ]; /46: (/NULL - ]), fd=(40)==(46), (46)==(40)]
       │    │         │    └── aggregations
       │    │         │         ├── min [as=min:66, outer=(42)]
       │    │         │         │    └── ps_supplycost:42

@@ -19,7 +19,7 @@ limit
  ├── columns: x:15 y:16 z:17
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
- ├── cost: 160.090001
+ ├── cost: 160.09
  ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(15-17)
@@ -30,7 +30,7 @@ limit
  │    ├── left columns: a.x:1 a.y:2 a.z:3
  │    ├── right columns: a.x:8 a.y:9 a.z:10
  │    ├── stats: [rows=20]
- │    ├── cost: 160.070001
+ │    ├── cost: 160.07
  │    ├── cost-flags: unbounded-cardinality
  │    ├── limit hint: 1.00
  │    ├── distribution: test
@@ -38,7 +38,7 @@ limit
  │    ├── index-join a
  │    │    ├── columns: a.x:1 a.y:2 a.z:3
  │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- │    │    ├── cost: 80.0200006
+ │    │    ├── cost: 80.02
  │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(2), (1)-->(3)
@@ -58,7 +58,7 @@ limit
  │    └── index-join a
  │         ├── columns: a.x:8 a.y:9 a.z:10
  │         ├── stats: [rows=10, distinct(9)=1, null(9)=0]
- │         ├── cost: 80.0200006
+ │         ├── cost: 80.02
  │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (8)
  │         ├── fd: ()-->(9), (8)-->(10)

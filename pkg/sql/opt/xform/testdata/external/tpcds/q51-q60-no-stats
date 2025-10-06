@@ -596,24 +596,24 @@ project
  │         │    │    │    │    ├── fd: (130)-->(134), (223)-->(226), (177)-->(184,185), (152)==(223), (223)==(152), (130)==(155), (155)==(130), (184)==(215), (215)==(184), (185)==(216), (216)==(185), (134)==(177), (177)==(134)
  │         │    │    │    │    ├── scan store
  │         │    │    │    │    │    └── columns: s_county:215 s_state:216
- │         │    │    │    │    ├── inner-join (lookup customer_address)
+ │         │    │    │    │    ├── inner-join (lookup date_dim)
  │         │    │    │    │    │    ├── columns: customer.c_customer_sk:130!null customer.c_current_addr_sk:134!null ss_sold_date_sk:152!null ss_customer_sk:155!null ss_ext_sales_price:167 ca_address_sk:177!null ca_county:184 ca_state:185 d_date_sk:223!null d_month_seq:226!null
- │         │    │    │    │    │    ├── key columns: [134] = [177]
+ │         │    │    │    │    │    ├── key columns: [152] = [223]
  │         │    │    │    │    │    ├── lookup columns are key
  │         │    │    │    │    │    ├── immutable
  │         │    │    │    │    │    ├── fd: (223)-->(226), (130)-->(134), (177)-->(184,185), (134)==(177), (177)==(134), (130)==(155), (155)==(130), (152)==(223), (223)==(152)
- │         │    │    │    │    │    ├── inner-join (lookup date_dim)
- │         │    │    │    │    │    │    ├── columns: customer.c_customer_sk:130!null customer.c_current_addr_sk:134 ss_sold_date_sk:152!null ss_customer_sk:155!null ss_ext_sales_price:167 d_date_sk:223!null d_month_seq:226!null
- │         │    │    │    │    │    │    ├── key columns: [152] = [223]
- │         │    │    │    │    │    │    ├── lookup columns are key
- │         │    │    │    │    │    │    ├── immutable
- │         │    │    │    │    │    │    ├── fd: (130)-->(134), (223)-->(226), (152)==(223), (223)==(152), (130)==(155), (155)==(130)
- │         │    │    │    │    │    │    ├── inner-join (hash)
- │         │    │    │    │    │    │    │    ├── columns: customer.c_customer_sk:130!null customer.c_current_addr_sk:134 ss_sold_date_sk:152 ss_customer_sk:155!null ss_ext_sales_price:167
- │         │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │    │    │    │    │    │    │    ├── fd: (130)-->(134), (130)==(155), (155)==(130)
- │         │    │    │    │    │    │    │    ├── scan store_sales
- │         │    │    │    │    │    │    │    │    └── columns: ss_sold_date_sk:152 ss_customer_sk:155 ss_ext_sales_price:167
+ │         │    │    │    │    │    ├── inner-join (hash)
+ │         │    │    │    │    │    │    ├── columns: customer.c_customer_sk:130!null customer.c_current_addr_sk:134!null ss_sold_date_sk:152 ss_customer_sk:155!null ss_ext_sales_price:167 ca_address_sk:177!null ca_county:184 ca_state:185
+ │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │    │    │    │    │    │    ├── fd: (130)-->(134), (177)-->(184,185), (134)==(177), (177)==(134), (130)==(155), (155)==(130)
+ │         │    │    │    │    │    │    ├── scan store_sales
+ │         │    │    │    │    │    │    │    └── columns: ss_sold_date_sk:152 ss_customer_sk:155 ss_ext_sales_price:167
+ │         │    │    │    │    │    │    ├── inner-join (lookup customer_address)
+ │         │    │    │    │    │    │    │    ├── columns: customer.c_customer_sk:130!null customer.c_current_addr_sk:134!null ca_address_sk:177!null ca_county:184 ca_state:185
+ │         │    │    │    │    │    │    │    ├── key columns: [134] = [177]
+ │         │    │    │    │    │    │    │    ├── lookup columns are key
+ │         │    │    │    │    │    │    │    ├── key: (130)
+ │         │    │    │    │    │    │    │    ├── fd: (130)-->(134), (177)-->(184,185), (134)==(177), (177)==(134)
  │         │    │    │    │    │    │    │    ├── distinct-on
  │         │    │    │    │    │    │    │    │    ├── columns: customer.c_customer_sk:130!null customer.c_current_addr_sk:134
  │         │    │    │    │    │    │    │    │    ├── grouping columns: customer.c_customer_sk:130!null
@@ -666,66 +666,66 @@ project
  │         │    │    │    │    │    │    │    │    └── aggregations
  │         │    │    │    │    │    │    │    │         └── const-agg [as=customer.c_current_addr_sk:134, outer=(134)]
  │         │    │    │    │    │    │    │    │              └── customer.c_current_addr_sk:134
- │         │    │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │    │         └── customer.c_customer_sk:130 = ss_customer_sk:155 [outer=(130,155), constraints=(/130: (/NULL - ]; /155: (/NULL - ]), fd=(130)==(155), (155)==(130)]
+ │         │    │    │    │    │    │    │    └── filters (true)
  │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         ├── ge [outer=(226), immutable, subquery, constraints=(/226: (/NULL - ])]
- │         │    │    │    │    │    │         │    ├── d_month_seq:226
- │         │    │    │    │    │    │         │    └── subquery
- │         │    │    │    │    │    │         │         └── max1-row
- │         │    │    │    │    │    │         │              ├── columns: "?column?":283
- │         │    │    │    │    │    │         │              ├── error: "more than one row returned by a subquery used as an expression"
- │         │    │    │    │    │    │         │              ├── cardinality: [0 - 1]
- │         │    │    │    │    │    │         │              ├── immutable
- │         │    │    │    │    │    │         │              ├── key: ()
- │         │    │    │    │    │    │         │              ├── fd: ()-->(283)
- │         │    │    │    │    │    │         │              └── distinct-on
- │         │    │    │    │    │    │         │                   ├── columns: "?column?":283
- │         │    │    │    │    │    │         │                   ├── grouping columns: "?column?":283
- │         │    │    │    │    │    │         │                   ├── immutable
- │         │    │    │    │    │    │         │                   ├── key: (283)
- │         │    │    │    │    │    │         │                   └── project
- │         │    │    │    │    │    │         │                        ├── columns: "?column?":283
- │         │    │    │    │    │    │         │                        ├── immutable
- │         │    │    │    │    │    │         │                        ├── select
- │         │    │    │    │    │    │         │                        │    ├── columns: d_month_seq:256 d_year:259!null d_moy:261!null
- │         │    │    │    │    │    │         │                        │    ├── fd: ()-->(259,261)
- │         │    │    │    │    │    │         │                        │    ├── scan date_dim
- │         │    │    │    │    │    │         │                        │    │    └── columns: d_month_seq:256 d_year:259 d_moy:261
- │         │    │    │    │    │    │         │                        │    └── filters
- │         │    │    │    │    │    │         │                        │         ├── d_year:259 = 1999 [outer=(259), constraints=(/259: [/1999 - /1999]; tight), fd=()-->(259)]
- │         │    │    │    │    │    │         │                        │         └── d_moy:261 = 1 [outer=(261), constraints=(/261: [/1 - /1]; tight), fd=()-->(261)]
- │         │    │    │    │    │    │         │                        └── projections
- │         │    │    │    │    │    │         │                             └── d_month_seq:256 + 1 [as="?column?":283, outer=(256), immutable]
- │         │    │    │    │    │    │         └── le [outer=(226), immutable, subquery, constraints=(/226: (/NULL - ])]
- │         │    │    │    │    │    │              ├── d_month_seq:226
- │         │    │    │    │    │    │              └── subquery
- │         │    │    │    │    │    │                   └── max1-row
- │         │    │    │    │    │    │                        ├── columns: "?column?":314
- │         │    │    │    │    │    │                        ├── error: "more than one row returned by a subquery used as an expression"
- │         │    │    │    │    │    │                        ├── cardinality: [0 - 1]
- │         │    │    │    │    │    │                        ├── immutable
- │         │    │    │    │    │    │                        ├── key: ()
- │         │    │    │    │    │    │                        ├── fd: ()-->(314)
- │         │    │    │    │    │    │                        └── distinct-on
- │         │    │    │    │    │    │                             ├── columns: "?column?":314
- │         │    │    │    │    │    │                             ├── grouping columns: "?column?":314
- │         │    │    │    │    │    │                             ├── immutable
- │         │    │    │    │    │    │                             ├── key: (314)
- │         │    │    │    │    │    │                             └── project
- │         │    │    │    │    │    │                                  ├── columns: "?column?":314
- │         │    │    │    │    │    │                                  ├── immutable
- │         │    │    │    │    │    │                                  ├── select
- │         │    │    │    │    │    │                                  │    ├── columns: d_month_seq:287 d_year:290!null d_moy:292!null
- │         │    │    │    │    │    │                                  │    ├── fd: ()-->(290,292)
- │         │    │    │    │    │    │                                  │    ├── scan date_dim
- │         │    │    │    │    │    │                                  │    │    └── columns: d_month_seq:287 d_year:290 d_moy:292
- │         │    │    │    │    │    │                                  │    └── filters
- │         │    │    │    │    │    │                                  │         ├── d_year:290 = 1999 [outer=(290), constraints=(/290: [/1999 - /1999]; tight), fd=()-->(290)]
- │         │    │    │    │    │    │                                  │         └── d_moy:292 = 1 [outer=(292), constraints=(/292: [/1 - /1]; tight), fd=()-->(292)]
- │         │    │    │    │    │    │                                  └── projections
- │         │    │    │    │    │    │                                       └── d_month_seq:287 + 3 [as="?column?":314, outer=(287), immutable]
- │         │    │    │    │    │    └── filters (true)
+ │         │    │    │    │    │    │         └── customer.c_customer_sk:130 = ss_customer_sk:155 [outer=(130,155), constraints=(/130: (/NULL - ]; /155: (/NULL - ]), fd=(130)==(155), (155)==(130)]
+ │         │    │    │    │    │    └── filters
+ │         │    │    │    │    │         ├── ge [outer=(226), immutable, subquery, constraints=(/226: (/NULL - ])]
+ │         │    │    │    │    │         │    ├── d_month_seq:226
+ │         │    │    │    │    │         │    └── subquery
+ │         │    │    │    │    │         │         └── max1-row
+ │         │    │    │    │    │         │              ├── columns: "?column?":283
+ │         │    │    │    │    │         │              ├── error: "more than one row returned by a subquery used as an expression"
+ │         │    │    │    │    │         │              ├── cardinality: [0 - 1]
+ │         │    │    │    │    │         │              ├── immutable
+ │         │    │    │    │    │         │              ├── key: ()
+ │         │    │    │    │    │         │              ├── fd: ()-->(283)
+ │         │    │    │    │    │         │              └── distinct-on
+ │         │    │    │    │    │         │                   ├── columns: "?column?":283
+ │         │    │    │    │    │         │                   ├── grouping columns: "?column?":283
+ │         │    │    │    │    │         │                   ├── immutable
+ │         │    │    │    │    │         │                   ├── key: (283)
+ │         │    │    │    │    │         │                   └── project
+ │         │    │    │    │    │         │                        ├── columns: "?column?":283
+ │         │    │    │    │    │         │                        ├── immutable
+ │         │    │    │    │    │         │                        ├── select
+ │         │    │    │    │    │         │                        │    ├── columns: d_month_seq:256 d_year:259!null d_moy:261!null
+ │         │    │    │    │    │         │                        │    ├── fd: ()-->(259,261)
+ │         │    │    │    │    │         │                        │    ├── scan date_dim
+ │         │    │    │    │    │         │                        │    │    └── columns: d_month_seq:256 d_year:259 d_moy:261
+ │         │    │    │    │    │         │                        │    └── filters
+ │         │    │    │    │    │         │                        │         ├── d_year:259 = 1999 [outer=(259), constraints=(/259: [/1999 - /1999]; tight), fd=()-->(259)]
+ │         │    │    │    │    │         │                        │         └── d_moy:261 = 1 [outer=(261), constraints=(/261: [/1 - /1]; tight), fd=()-->(261)]
+ │         │    │    │    │    │         │                        └── projections
+ │         │    │    │    │    │         │                             └── d_month_seq:256 + 1 [as="?column?":283, outer=(256), immutable]
+ │         │    │    │    │    │         └── le [outer=(226), immutable, subquery, constraints=(/226: (/NULL - ])]
+ │         │    │    │    │    │              ├── d_month_seq:226
+ │         │    │    │    │    │              └── subquery
+ │         │    │    │    │    │                   └── max1-row
+ │         │    │    │    │    │                        ├── columns: "?column?":314
+ │         │    │    │    │    │                        ├── error: "more than one row returned by a subquery used as an expression"
+ │         │    │    │    │    │                        ├── cardinality: [0 - 1]
+ │         │    │    │    │    │                        ├── immutable
+ │         │    │    │    │    │                        ├── key: ()
+ │         │    │    │    │    │                        ├── fd: ()-->(314)
+ │         │    │    │    │    │                        └── distinct-on
+ │         │    │    │    │    │                             ├── columns: "?column?":314
+ │         │    │    │    │    │                             ├── grouping columns: "?column?":314
+ │         │    │    │    │    │                             ├── immutable
+ │         │    │    │    │    │                             ├── key: (314)
+ │         │    │    │    │    │                             └── project
+ │         │    │    │    │    │                                  ├── columns: "?column?":314
+ │         │    │    │    │    │                                  ├── immutable
+ │         │    │    │    │    │                                  ├── select
+ │         │    │    │    │    │                                  │    ├── columns: d_month_seq:287 d_year:290!null d_moy:292!null
+ │         │    │    │    │    │                                  │    ├── fd: ()-->(290,292)
+ │         │    │    │    │    │                                  │    ├── scan date_dim
+ │         │    │    │    │    │                                  │    │    └── columns: d_month_seq:287 d_year:290 d_moy:292
+ │         │    │    │    │    │                                  │    └── filters
+ │         │    │    │    │    │                                  │         ├── d_year:290 = 1999 [outer=(290), constraints=(/290: [/1999 - /1999]; tight), fd=()-->(290)]
+ │         │    │    │    │    │                                  │         └── d_moy:292 = 1 [outer=(292), constraints=(/292: [/1 - /1]; tight), fd=()-->(292)]
+ │         │    │    │    │    │                                  └── projections
+ │         │    │    │    │    │                                       └── d_month_seq:287 + 3 [as="?column?":314, outer=(287), immutable]
  │         │    │    │    │    └── filters
  │         │    │    │    │         ├── ca_county:184 = s_county:215 [outer=(184,215), constraints=(/184: (/NULL - ]; /215: (/NULL - ]), fd=(184)==(215), (215)==(184)]
  │         │    │    │    │         └── ca_state:185 = s_state:216 [outer=(185,216), constraints=(/185: (/NULL - ]; /216: (/NULL - ]), fd=(185)==(216), (216)==(185)]
