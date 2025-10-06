@@ -14,6 +14,8 @@ eexpect "movr>"
 
 set workloadRunning 0
 
+send "set allow_unsafe_internals=true;\r"
+
 for {set i 0} {$i < 10} {incr i} {
   set timeout 1
   send "select key from crdb_internal.node_statement_statistics order by count desc limit 1;\r"

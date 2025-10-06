@@ -43,6 +43,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/physicalplan",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",

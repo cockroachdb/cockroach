@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -69,7 +70,9 @@ func TestRevertSpansFanout(t *testing.T) {
 	db.Exec(t, "INSERT INTO test (k) SELECT generate_series(1, $1)", initRows)
 	db.Exec(t, "UPDATE test SET rev = 1 WHERE k % 3 = 0")
 	db.Exec(t, "DELETE FROM test WHERE k % 10 = 0")
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	before, ts := fingerprintTableNoHistory(t, db, tableID, "")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	targetTime, err := hlc.ParseHLC(ts)
 	require.NoError(t, err)
 
@@ -103,7 +106,9 @@ func TestRevertSpansFanout(t *testing.T) {
 	defer close()
 
 	verifyRevert := func() {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		reverted, _ := fingerprintTableNoHistory(t, db, tableID, "")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		require.Equal(t, before, reverted, "expected reverted table after edits to match before")
 		db.CheckQueryResults(t, "SELECT count(*) FROM test", beforeNumRows)
 	}

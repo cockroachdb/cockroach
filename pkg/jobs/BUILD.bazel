@@ -154,6 +154,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
