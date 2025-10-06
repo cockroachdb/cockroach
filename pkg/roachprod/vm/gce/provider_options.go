@@ -5,6 +5,8 @@
 
 package gce
 
+import "github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+
 type ProviderOptions struct {
 	Project          string
 	MetadataProject  string
@@ -92,6 +94,19 @@ func WithDNSManagedDomain(domain string) OptionFunc {
 			p.dnsProvider = &dnsProvider{}
 		}
 		p.dnsProvider.managedDomain = domain
+	}
+}
+
+// WithDNSProvider returns an option to set the DNS provider.
+// TODO(golgeek): GCE only supports its own DNS provider, so we try and cast
+// the interface before setting it. In case the cast fails, we ignore the provided
+// DNS provider. This will need to be revisited if we ever want to support non-GCE
+// DNS providers.
+func WithDNSProvider(dnsP vm.DNSProvider) OptionFunc {
+	return func(p *Provider) {
+		if gceDnsProvider, isGCE := dnsP.(*dnsProvider); isGCE {
+			p.dnsProvider = gceDnsProvider
+		}
 	}
 }
 

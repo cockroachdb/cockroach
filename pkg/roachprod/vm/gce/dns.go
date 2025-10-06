@@ -303,6 +303,21 @@ func (n *dnsProvider) Domain() string {
 	return n.managedDomain
 }
 
+// PublicDomain implements the vm.DNSProvider interface.
+// This is the domain used for the public zone with A records.
+func (n *dnsProvider) PublicDomain() string {
+	return n.publicDomain
+}
+
+// SyncDNS implements the vm.DNSProvider interface.
+func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return n.syncPublicDNS(l, vms)
+}
+
+func (n *dnsProvider) ProviderName() string {
+	return "gce"
+}
+
 // lookupSRVRecords uses standard net tools to perform a DNS lookup. This
 // function will retry the lookup several times if there are any intermittent
 // network problems. For lookups, we prefer this to using the gcloud command as
