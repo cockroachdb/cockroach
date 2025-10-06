@@ -166,7 +166,7 @@ be fairly distributed across the zones of the cluster).
 `,
 		Args: cobra.ExactArgs(2),
 		Run: Wrap(func(cmd *cobra.Command, args []string) error {
-			count, err := strconv.ParseInt(args[1], 10, 8)
+			count, err := strconv.ParseInt(args[1], 10, 16)
 			if err != nil || count < 1 {
 				return errors.Wrapf(err, "invalid num-nodes argument")
 			}
