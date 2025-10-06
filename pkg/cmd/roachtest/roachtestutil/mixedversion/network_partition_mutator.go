@@ -109,7 +109,7 @@ func (p protectedPartitionStrategy) selectPartitions(
 
 	nodeToPartition := make(map[int]*failures.NetworkPartition)
 	unvailableNodes := make(option.NodeListOption, 0)
-	for _, conn := range connections[:rng.Intn(len(connections))] {
+	for _, conn := range connections[:rng.Intn(len(connections))+1] {
 		if _, ok := nodeToPartition[conn[0]]; !ok {
 			nodeToPartition[conn[0]] = &failures.NetworkPartition{
 				Source:      install.Nodes{install.Node(conn[0])},
@@ -122,10 +122,10 @@ func (p protectedPartitionStrategy) selectPartitions(
 		// For simplicity, we say any node that has a partition touching it is unavailable,
 		// except the protected nodes, since those will always maintain quorum.
 		if !p.protectedNodes[conn[0]] {
-			unvailableNodes = append(unvailableNodes, conn[0])
+			unvailableNodes = unvailableNodes.Merge(option.NodeListOption{conn[0]})
 		}
 		if !p.protectedNodes[conn[1]] {
-			unvailableNodes = append(unvailableNodes, conn[1])
+			unvailableNodes = unvailableNodes.Merge(option.NodeListOption{conn[1]})
 		}
 	}
 

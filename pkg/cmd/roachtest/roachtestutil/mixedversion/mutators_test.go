@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -252,145 +252,76 @@ func TestClusterSettingMutator(t *testing.T) {
 	}))
 }
 
-// TestNetworkPartitionMutator tests the network partition mutator with
-// different partition strategies.
-func TestNetworkPartitionMutator(t *testing.T) {
-	testCases := []struct {
-		name               string
-		strategy           PartitionStrategy
-		expectInitStep     bool
-		validatePartition  func(t *testing.T, partition failures.NetworkPartition)
-		validateProtection func(t *testing.T, protectedNodes option.NodeListOption)
-	}{
-		{
-			name:           "single partition strategy",
-			strategy:       singlePartitionStrategy{},
-			expectInitStep: false,
-			validatePartition: func(t *testing.T, partition failures.NetworkPartition) {
-				// Single partition strategy should partition exactly 2 nodes
-				require.Len(t, partition.Source, 1, "should partition 1 node")
-				require.Len(t, partition.Destination, 1, "should partition from 1 node")
-			},
-		},
-		{
-			name:           "protected partition strategy",
-			strategy:       &protectedPartitionStrategy{},
-			expectInitStep: true,
-			validatePartition: func(t *testing.T, partition failures.NetworkPartition) {
-				// With 4 nodes and 3 protected, we'll partition the 1 unprotected from 1 protected node
-				require.Len(t, partition.Source, 1, "should partition 1 node")
-				require.Len(t, partition.Destination, 1, "should partition from 1 node (fallback with 4 nodes)")
-			},
-			validateProtection: func(t *testing.T, protectedNodes option.NodeListOption) {
-				// Should have quorum-sized protected nodes (4 nodes -> 3 protected)
-				require.Len(t, protectedNodes, 3, "should have 3 protected nodes for quorum")
-			},
-		},
-	}
+// TestSinglePartitionStrategy tests that the single partition strategy
+// correctly selects exactly two nodes to partition.
+func TestSinglePartitionStrategy(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			mvt := newBasicUpgradeTest(
-				NumUpgrades(2),
-				WithPartitionStrategy(tc.strategy),
-				NeverUseFixtures,
-			)
-			assertValidTest(mvt, t.Fatal)
-			plan, err := mvt.plan()
-			require.NoError(t, err)
+	nodes := option.NodeListOption{1, 2, 3, 4}
+	strategy := singlePartitionStrategy{}
+	partitions, unavailableNodes, err := strategy.selectPartitions(rng, nodes)
+	require.NoError(t, err)
+	// We should only see one partition created between two nodes.
+	require.Len(t, partitions, 1)
+	require.Len(t, partitions[0].Source, 1)
+	require.Len(t, partitions[0].Destination, 1)
 
-			// Get protected nodes directly from selectProtectedNodes (no type casting needed!)
-			rng := newRand()
-			nodeList := plan.singleSteps()[0].context.System.Descriptor.Nodes
-			_, protectedNodes := tc.strategy.selectProtectedNodes(rng, nodeList)
+	// The partitioned nodes should be different.
+	require.NotEqual(t, partitions[0].Source[0], partitions[0].Destination[0])
+	// Since we create just a single partition, our cluster should always be able to recover.
+	require.Nil(t, unavailableNodes)
 
-			// Create the mutator and generate mutations
-			mut := networkPartitionMutator{strategy: tc.strategy}
-			mutations, err := mut.Generate(newRand(), plan, nil)
-			require.NoError(t, err)
-
-			if len(mutations) == 0 {
-				// It's possible no mutations are generated if the mutator
-				// didn't pass probability check or had no valid insertion points
-				t.Skip("no mutations generated (probabilistic test)")
-			}
-
-			// Extract the partition from mutations
-			var partition *failures.NetworkPartition
-			hasInject := false
-			hasRecovery := false
-			hasInit := false
-
-			for _, m := range mutations {
-				if inject, ok := m.impl.(networkPartitionInjectStep); ok {
-					hasInject = true
-					partition = &inject.partition
-				}
-				if _, ok := m.impl.(networkPartitionRecoveryStep); ok {
-					hasRecovery = true
-				}
-				if _, ok := m.impl.(pinVoterReplicasStep); ok {
-					hasInit = true
-				}
-			}
-
-			require.True(t, hasInject, "should have partition inject step")
-			require.True(t, hasRecovery, "should have partition recovery step")
-			require.Equal(t, tc.expectInitStep, hasInit, "selectProtectedNodes step expectation mismatch")
-			require.NotNil(t, partition, "should have extracted partition")
-
-			// Run strategy-specific validation
-			tc.validatePartition(t, *partition)
-			if tc.validateProtection != nil {
-				require.NotNil(t, protectedNodes, "should have protected nodes for this strategy")
-				tc.validateProtection(t, protectedNodes)
-			}
-		})
-	}
+	t.Logf("generated partition: %s", partitions[0])
 }
 
-// TestPartitionStrategySelection tests that different nodes are selected
-// for partitioning based on the strategy.
-func TestPartitionStrategySelection(t *testing.T) {
-	rng := newRand()
-	nodeList := option.NodeListOption{1, 2, 3, 4}
+// TestProtectedPartitionStrategy tests that the protected partition strategy
+// correctly selects protected nodes and partitions only unprotected nodes.
+func TestProtectedPartitionStrategy(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
 
-	t.Run("single partition", func(t *testing.T) {
-		strategy := singlePartitionStrategy{}
-		partitionedNodes, _ := strategy.selectPartitions(rng, nodeList)
+	nodes := option.NodeListOption{1, 2, 3, 4}
+	strategy := &protectedPartitionStrategy{
+		protectedNodes: make(map[int]bool),
+		quorum:         2,
+	}
 
-		require.Len(t, partitionedNodes, 2, "should select 2 nodes")
-		require.Len(t, left, 1, "left partition should have 1 node")
-		require.Len(t, right, 1, "right partition should have 1 node")
-		require.NotEqual(t, left[0], right[0], "partitioned nodes should be different")
-	})
+	// Select protected nodes
+	protectedNodes, err := strategy.selectProtectedNodes(rng, nodes)
+	require.NoError(t, err)
+	require.Len(t, protectedNodes, 2)
 
-	t.Run("protected partition", func(t *testing.T) {
-		strategy := &protectedPartitionStrategy{}
-		// Init step would normally be called first
-		initStep, protectedNodes := strategy.selectProtectedNodes(rng, nodeList)
-		require.NotNil(t, initStep, "should return selectProtectedNodes step")
-		require.IsType(t, pinVoterReplicasStep{}, initStep, "selectProtectedNodes step should be pinVoterReplicasStep")
-		require.NotNil(t, protectedNodes, "should return protected nodes")
-		require.Len(t, protectedNodes, 3, "should have 3 protected nodes for quorum")
+	t.Logf("protected nodes: %v", protectedNodes)
 
-		// Now call selectPartitions (no need to reset RNG since strategy stores protected nodes)
-		partitionedNodes, left, right := strategy.selectPartitions(rng, nodeList)
+	// Generate partitions
+	partitions, unavailableNodes, err := strategy.selectPartitions(rng, nodes)
+	t.Logf("generated partitions %v", partitions)
+	t.Logf("unavailable nodes: %v", unavailableNodes)
 
-		require.GreaterOrEqual(t, len(partitionedNodes), 1, "should select at least 1 node")
-		require.Len(t, left, 1, "left partition should have 1 node")
-		require.GreaterOrEqual(t, len(right), 1, "right partition should have at least 1 node")
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(partitions), 1, "should create at least 1 partition")
 
-		// Verify the left partition node is unprotected
-		protectedMap := make(map[int]bool)
-		for _, n := range protectedNodes {
-			protectedMap[n] = true
+	// We should never see a partition between two protected nodes.
+	for _, p := range partitions {
+		srcContainsProtectedNode, dstContainsProtectedNode := false, false
+		for _, protectedNode := range protectedNodes {
+			if p.Source.Contains(install.Node(protectedNode)) {
+				srcContainsProtectedNode = true
+			}
+			if p.Destination.Contains(install.Node(protectedNode)) {
+				dstContainsProtectedNode = true
+			}
 		}
+		require.False(t, srcContainsProtectedNode && dstContainsProtectedNode)
+	}
 
-		require.False(t, protectedMap[int(left[0])], "left partition node should not be protected")
+	// Since the protected nodes can always talk to each other to establish
+	// quorum, they should never be marked unavailable.
+	unavailableMap := make(map[int]bool)
+	for _, n := range unavailableNodes {
+		unavailableMap[n] = true
+	}
 
-		// With 4 nodes (3 protected, 1 unprotected), the fallback will partition
-		// the unprotected from a protected node. Just verify we have a valid partition.
-		require.Len(t, right, 1, "should have 1 node in right partition")
-	})
+	for _, n := range protectedNodes {
+		require.False(t, unavailableMap[n], "protected node %d should not be marked unavailable", n)
+	}
 }
