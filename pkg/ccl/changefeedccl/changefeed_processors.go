@@ -1974,7 +1974,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return cf.frontier.Frontier()
 	}()
 
-	if cf.spec.ProgressConfig.PerTableProtectedTimestamps {
+	if cf.spec.ProgressConfig != nil && cf.spec.ProgressConfig.PerTableProtectedTimestamps {
 		return cf.managePerTableProtectedTimestamps(ctx, txn, &ptsEntries, highwater)
 	}
 
