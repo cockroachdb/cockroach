@@ -31,6 +31,14 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var HeartbeatSmearDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_smear_duration",
+	"duration over which heartbeat messages are smeared to prevent goroutine spikes; "+
+		"all heartbeats for all nodes are sent within this window at the start of each tick",
+	10*time.Millisecond,
+)
+
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
@@ -321,14 +329,11 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
 	// Send heartbeats to each remote store.
-	successes := 0
-	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(ctx, msg); sent {
-			successes++
-		} else {
-			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
-		}
-	}
+	heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
+	successes := heartbeatCoordinator.Enqueue(heartbeats)
+
+	heartbeatCoordinator.sendMessagesWithPacing()
+
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
 	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)

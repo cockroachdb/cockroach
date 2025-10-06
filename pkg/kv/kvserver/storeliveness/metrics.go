@@ -81,6 +81,40 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 	}
 }
 
+// HeartbeatCoordinatorMetrics includes all HeartbeatCoordinator metrics.
+type HeartbeatCoordinatorMetrics struct {
+	// Message counts
+	MessagesEnqueued      *metric.Counter
+	MessagesSent          *metric.Counter
+	MessagesSentImmediate *metric.Counter // Responses that bypass smearing
+
+	// Queue metrics
+	ActiveQueues          *metric.Gauge
+	TotalMessagesInQueues *metric.Gauge
+
+	// Timing metrics
+	TickDuration  *metric.Gauge
+	SmearDuration *metric.Gauge
+
+	// Error metrics
+	SendErrors  *metric.Counter
+	PacerErrors *metric.Counter
+}
+
+func newHeartbeatCoordinatorMetrics() *HeartbeatCoordinatorMetrics {
+	return &HeartbeatCoordinatorMetrics{
+		MessagesEnqueued:      metric.NewCounter(metaHeartbeatCoordinatorMessagesEnqueued),
+		MessagesSent:          metric.NewCounter(metaHeartbeatCoordinatorMessagesSent),
+		MessagesSentImmediate: metric.NewCounter(metaHeartbeatCoordinatorMessagesSentImmediate),
+		ActiveQueues:          metric.NewGauge(metaHeartbeatCoordinatorActiveQueues),
+		TotalMessagesInQueues: metric.NewGauge(metaHeartbeatCoordinatorTotalMessagesInQueues),
+		TickDuration:          metric.NewGauge(metaHeartbeatCoordinatorTickDuration),
+		SmearDuration:         metric.NewGauge(metaHeartbeatCoordinatorSmearDuration),
+		SendErrors:            metric.NewCounter(metaHeartbeatCoordinatorSendErrors),
+		PacerErrors:           metric.NewCounter(metaHeartbeatCoordinatorPacerErrors),
+	}
+}
+
 var (
 	metaSendQueueSize = metric.Metadata{
 		Name: "storeliveness.transport.send-queue-size",
@@ -207,5 +241,61 @@ var (
 		Help:        "Duration of support withdrawal callback processing",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	// HeartbeatCoordinator metric metadata
+	metaHeartbeatCoordinatorMessagesEnqueued = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.messages_enqueued",
+		Help:        "Total number of heartbeat messages enqueued for smearing",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorMessagesSent = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.messages_sent",
+		Help:        "Total number of heartbeat messages sent via transport",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorMessagesSentImmediate = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.messages_sent_immediate",
+		Help:        "Total number of heartbeat response messages sent immediately (bypassing smearing)",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorActiveQueues = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.active_queues",
+		Help:        "Current number of active destination queues",
+		Measurement: "Queues",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorTotalMessagesInQueues = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.total_messages_in_queues",
+		Help:        "Current total number of messages across all queues",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorTickDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.tick_duration_ms",
+		Help:        "Heartbeat tick duration in milliseconds",
+		Measurement: "Duration",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSmearDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.smear_duration_ms",
+		Help:        "Heartbeat smear duration in milliseconds",
+		Measurement: "Duration",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSendErrors = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.send_errors",
+		Help:        "Total number of errors sending heartbeat messages",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorPacerErrors = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.pacer_errors",
+		Help:        "Total number of errors in the pacer",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
 	}
 )
