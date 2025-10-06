@@ -8,6 +8,7 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"os"
 	"path"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -25,8 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -46,7 +52,7 @@ import (
 var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
-	ctx context.Context, tr *SeqTracker,
+	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner, mode TestMode,
 ) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		DisableRaftLogQueue:                   true,
@@ -165,6 +171,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	st := cluster.MakeTestingClusterSettings()
 	// TODO(mira): Remove this cluster setting once the default is set to true.
 	kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &st.SV, true)
+	kvcoord.NonTransactionalWritesNotIdempotent.Override(ctx, &st.SV, true)
 	if cfg.leaseTypeOverride != 0 {
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, cfg.leaseTypeOverride)
 	}
@@ -173,31 +180,89 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		cfg.testSettings(ctx, st)
 	}
 
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: storeKnobs,
-				KVClient: &kvcoord.ClientTestingKnobs{
-					// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
-					// This does happen in real CRDB, but leads to separate atomic subunits, which
-					// would add complexity to kvnemesis that isn't worth it. Instead, the operation
-					// generator for the most part tries to avoid range-spanning requests, and the
-					// ones that do end up happening get a hard error.
-					OnRangeSpanningNonTxnalBatch: func(ba *kvpb.BatchRequest) *kvpb.Error {
-						for _, req := range ba.Requests {
-							if req.GetInner().Method() != kvpb.DeleteRange {
-								continue
-							}
-							if req.GetDeleteRange().UseRangeTombstone == true {
-								return kvpb.NewError(errDelRangeUsingTombstoneStraddlesRangeBoundary)
-							}
+	commonServerArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: storeKnobs,
+			KVClient: &kvcoord.ClientTestingKnobs{
+				// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
+				// This does happen in real CRDB, but leads to separate atomic subunits, which
+				// would add complexity to kvnemesis that isn't worth it. Instead, the operation
+				// generator for the most part tries to avoid range-spanning requests, and the
+				// ones that do end up happening get a hard error.
+				OnRangeSpanningNonTxnalBatch: func(ba *kvpb.BatchRequest) *kvpb.Error {
+					for _, req := range ba.Requests {
+						if req.GetInner().Method() != kvpb.DeleteRange {
+							continue
 						}
-						return nil
-					},
+						if req.GetDeleteRange().UseRangeTombstone == true {
+							return kvpb.NewError(errDelRangeUsingTombstoneStraddlesRangeBoundary)
+						}
+					}
+					return nil
 				},
 			},
-			Settings: st,
 		},
+		Settings: st,
+	}
+
+	// TODO(mira): There should be a need to set the fallback config for liveness
+	// mode. Ideally, the span configs for all ranges in the keyspace should exist
+	// and be correctly derived from the zone config. That's not the case today
+	// because the keyspace kvnemesis writes to does not correspond to a SQL
+	// descriptor. We can change this and make kvnemesis fit better with the SQL
+	// layer, which will let us change zone configs more easily.
+	if mode == Liveness {
+		n1Constraint := roachpb.ConstraintsConjunction{
+			NumReplicas: 1,
+			Constraints: []roachpb.Constraint{{
+				Type:  roachpb.Constraint_REQUIRED,
+				Key:   "node",
+				Value: "n1",
+			}},
+		}
+		n2Constraint := roachpb.ConstraintsConjunction{
+			NumReplicas: 1,
+			Constraints: []roachpb.Constraint{{
+				Type:  roachpb.Constraint_REQUIRED,
+				Key:   "node",
+				Value: "n2",
+			}},
+		}
+		commonServerArgs.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+			OverrideFallbackConf: func(config roachpb.SpanConfig) roachpb.SpanConfig {
+				newConfig := config
+				newConfig.NumReplicas = 3
+				newConfig.NumVoters = 3
+				newConfig.Constraints = []roachpb.ConstraintsConjunction{
+					n1Constraint, n2Constraint,
+				}
+				newConfig.VoterConstraints = []roachpb.ConstraintsConjunction{
+					n1Constraint, n2Constraint,
+				}
+				return newConfig
+			},
+		}
+	}
+
+	args := base.TestClusterArgs{
+		ServerArgs: commonServerArgs,
+		ServerArgsPerNode: func() map[int]base.TestServerArgs {
+			perNode := make(map[int]base.TestServerArgs)
+			for i := 0; i < cfg.numNodes; i++ {
+				nodeId := i + 1
+				ctk := rpc.ContextTestingKnobs{}
+				partitioner.RegisterTestingKnobs(roachpb.NodeID(nodeId), &ctk)
+				perNodeServerArgs := commonServerArgs
+				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{
+					ContextTestingKnobs: ctk,
+				}
+				perNodeServerArgs.Locality = roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("n%d", nodeId)}},
+				}
+				perNode[i] = perNodeServerArgs
+			}
+			return perNode
+		}(),
 	}
 
 	if cfg.testArgs != nil {
@@ -313,6 +378,8 @@ type kvnemesisTestCfg struct {
 	// testGeneratorConfig modifies the default generator configuration. This is
 	// useful if a test configuration does not yet support particular operations.
 	testGeneratorConfig func(*GeneratorConfig)
+
+	mode TestMode
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -403,6 +470,75 @@ func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
 	testKVNemesisImpl(t, cfg)
 }
 
+func TestKVNemesisMultiNode_Faults_Safety(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     5,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Safety,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.AddNetworkPartition = 1
+			cfg.Ops.Fault.RemoveNetworkPartition = 1
+			// TODO(mira): DeleteRangeUsingTombstone and AddSSTable are always
+			// non-transactional, and as such are susceptible to double-application.
+			// The cluster setting kvcoord.NonTransactionalWritesNotIdempotent is
+			// enabled for this test to protect against double-application, but these
+			// requests don't propagate the flag AmbiguousReplayProtection to ensure
+			// the second application fails. We should fix this.
+			cfg.Ops.DB.DeleteRangeUsingTombstone = 0
+			cfg.Ops.DB.AddSSTable = 0
+			// The same issue above occurs for non-transactional DeleteRange requests.
+			cfg.Ops.DB.DeleteRange = 0
+		},
+	})
+}
+
+func TestKVNemesisMultiNode_Faults_Liveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     5,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Liveness,
+		leaseTypeOverride:            roachpb.LeaseLeader,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.AddNetworkPartition = 1
+			cfg.Ops.Fault.RemoveNetworkPartition = 1
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+			// Epoch leases can experience indefinite unavailability in the case of a
+			// leader-leaseholder split and a network partition, so only leader leases
+			// are allowed.
+			cfg.Ops.ChangeSetting = ChangeSettingConfig{}
+			// TODO(mira): Transfers can result in RUEs because in the intermediate
+			// expiration-lease state, a request can get stuck holding latches until
+			// the replica circuit breaker trips and poisons the latches. This results
+			// in RUEs returned to the client. The behavior is expected; we can enable
+			// this setting if we allow the test to tolerate these RUEs.
+			cfg.Ops.ChangeLease = ChangeLeaseConfig{}
+			// TODO(mira): We should investigate splits more. So far I've seen then
+			// fail for two reasons: (1) r1 can become uvavailable (we can fix this by
+			// setting the right zone configs), and (2) if a partition races with the
+			// split, the range ID allocator can get stuck waiting for a response.
+			cfg.Ops.Split = SplitConfig{}
+		},
+	})
+}
+
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -470,8 +606,17 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
 	tr := &SeqTracker{}
-	tc := testcluster.StartTestCluster(t, cfg.numNodes, cfg.testClusterArgs(ctx, tr))
+	var partitioner rpc.Partitioner
+	tc := testcluster.StartTestCluster(
+		t, cfg.numNodes, cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode),
+	)
 	defer tc.Stopper().Stop(ctx)
+	for i := 0; i < cfg.numNodes; i++ {
+		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
+		addr := g.GetNodeAddr().String()
+		nodeID := g.NodeID.Get()
+		partitioner.RegisterNodeAddr(addr, nodeID)
+	}
 	dbs, sqlDBs := make([]*kv.DB, cfg.numNodes), make([]*gosql.DB, cfg.numNodes)
 	for i := 0; i < cfg.numNodes; i++ {
 		dbs[i] = tc.Server(i).DB()
@@ -481,6 +626,12 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
+
+	// In liveness mode, set up zone config constraints to ensure all ranges
+	// have a voter on nodes 1 and 2, the nodes guaranteed to be available.
+	if cfg.mode == Liveness {
+		setAndVerifyZoneConfigs(t, ctx, tc, sqlutils.MakeSQLRunner(sqlDBs[0]), GeneratorDataSpan())
+	}
 
 	config := NewDefaultConfig()
 	config.NumNodes = cfg.numNodes
@@ -500,8 +651,8 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
-	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner}
+	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	for i := 0; i < cfg.numNodes; i++ {
 		t.Logf("[%d] proposed: %d", i,
@@ -547,4 +698,77 @@ func dumpRaftLogsOnFailure(t testing.TB, dir string, srvs []serverutils.TestServ
 			return nil
 		}))
 	}
+}
+
+// setAndVerifyZoneConfigs verifies that the zone config constraints are properly
+// applied to all ranges that overlap with the GeneratorDataSpan on all nodes.
+func setAndVerifyZoneConfigs(
+	t testing.TB,
+	ctx context.Context,
+	tc *testcluster.TestCluster,
+	sqlRunner *sqlutils.SQLRunner,
+	dataSpan roachpb.Span,
+) {
+	// Set constraints on the system database; GeneratorDataTableID inherits from it.
+	sqlRunner.Exec(
+		t, `ALTER DATABASE system CONFIGURE ZONE USING 
+			num_replicas = 3, 
+			num_voters = 3,
+			constraints = '{"+node=n1": 1, "+node=n2": 1}',
+			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
+	)
+
+	// Wait for zone configs to propagate to all span config subscribers.
+	require.NoError(t, tc.WaitForZoneConfigPropagation())
+
+	// TODO(mira): pull this logic out as a helper.
+	testutils.SucceedsSoon(
+		t, func() error {
+			// Query all nodes to verify constraints are applied.
+			for nodeIdx := 0; nodeIdx < tc.NumServers(); nodeIdx++ {
+				store := tc.GetFirstStoreFromServer(t, nodeIdx)
+
+				// Find all replicas that overlap with our data span
+				var overlappingReplicas []*kvserver.Replica
+				store.VisitReplicas(
+					func(replica *kvserver.Replica) (wantMore bool) {
+						desc := replica.Desc()
+						replicaSpan := roachpb.Span{
+							Key:    desc.StartKey.AsRawKey(),
+							EndKey: desc.EndKey.AsRawKey(),
+						}
+						if replicaSpan.Overlaps(dataSpan) {
+							overlappingReplicas = append(overlappingReplicas, replica)
+						}
+						return true // continue
+					},
+				)
+
+				// For each overlapping replica, verify constraints.
+				for _, replica := range overlappingReplicas {
+					desc := replica.Desc()
+					confReader, err := store.GetConfReader(ctx)
+					require.NoError(t, err)
+					spanConfig, _, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+					require.NoError(t, err)
+					if len(spanConfig.Constraints) == 0 {
+						return errors.Errorf("range %d has no constraints in span config yet", desc.RangeID)
+					}
+					if !(spanConfig.Constraints[0].Constraints[0].Key == "node" &&
+						spanConfig.Constraints[0].Constraints[0].Value == "n1" &&
+						spanConfig.Constraints[1].Constraints[0].Key == "node" &&
+						spanConfig.Constraints[1].Constraints[0].Value == "n2") {
+						return errors.Errorf(
+							"range %d does not have expected constraints: %v",
+							desc.RangeID, spanConfig.Constraints,
+						)
+					}
+				}
+			}
+			return nil
+		},
+	)
+
+	// Wait for allocator work to complete
+	require.NoError(t, tc.WaitForFullReplication())
 }

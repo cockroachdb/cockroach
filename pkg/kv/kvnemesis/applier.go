@@ -7,6 +7,7 @@ package kvnemesis
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -98,7 +99,8 @@ func exceptUnhandledRetry(err error) bool {
 }
 
 func exceptAmbiguous(err error) bool { // true if ambiguous result
-	return errors.HasInterface(err, (*kvpb.ClientVisibleAmbiguousError)(nil))
+	return errors.HasInterface(err, (*kvpb.ClientVisibleAmbiguousError)(nil)) ||
+		strings.Contains(err.Error(), "result is ambiguous")
 }
 
 func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
@@ -107,6 +109,15 @@ func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 
 func exceptConditionFailed(err error) bool {
 	return errors.HasType(err, (*kvpb.ConditionFailedError)(nil))
+}
+
+func exceptReplicaUnavailable(err error) bool {
+	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil))
+}
+
+func exceptContextCanceled(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
+		strings.Contains(err.Error(), "query execution canceled")
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
@@ -150,6 +161,12 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		o.Result = resultInit(ctx, err)
 	case *FlushLockTableOperation:
 		o.Result = resultInit(ctx, db.FlushLockTable(ctx, o.Key, o.EndKey))
+	case *AddNetworkPartitionOperation:
+		err := env.Partitioner.AddPartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
+	case *RemoveNetworkPartitionOperation:
+		err := env.Partitioner.RemovePartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
@@ -745,7 +762,12 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 	var opts = retry.Options{}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); dbIdx = (dbIdx + 1) % len(dbs) {
 		sender := dbs[dbIdx].NonTransactionalSender()
-		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.CONSISTENT, 0, false)
+		// Use kvpb.INCONSISTENT because kv.CONSISTENT requires a transactional
+		// sender. In the generator, range lookups are usually used for finding
+		// replica/lease change targets, so it's ok if these are not consistent.
+		// Using kv.CONSISTENT with a non-transactional sender and in the presence
+		// of network partitions can lead to infinitely stuck lookups.
+		descs, _, err := kv.RangeLookup(ctx, sender, key, kvpb.INCONSISTENT, 0, false)
 		if err != nil {
 			log.Dev.Infof(ctx, "looking up descriptor for %s: %+v", key, err)
 			continue
@@ -756,12 +778,11 @@ func getRangeDesc(ctx context.Context, key roachpb.Key, dbs ...*kv.DB) roachpb.R
 		}
 		return descs[0]
 	}
-	panic(`unreachable`)
+	return roachpb.RangeDescriptor{}
 }
 
 func newGetReplicasFn(dbs ...*kv.DB) GetReplicasFn {
-	ctx := context.Background()
-	return func(key roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
+	return func(ctx context.Context, key roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
 		desc := getRangeDesc(ctx, key, dbs...)
 		replicas := desc.Replicas().Descriptors()
 		var voters []roachpb.ReplicationTarget
