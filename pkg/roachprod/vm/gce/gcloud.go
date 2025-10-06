@@ -330,6 +330,7 @@ func (jsonVM *jsonVM) toVM(project string, dnsDomain string) (ret *vm.VM) {
 		ProviderAccountID:      projectName,
 		PublicIP:               publicIP,
 		PublicDNS:              fmt.Sprintf("%s.%s", jsonVM.Name, dnsDomain),
+		PublicDNSZone:          dnsDomain,
 		RemoteUser:             remoteUser,
 		VPC:                    vpc,
 		MachineType:            machineType,

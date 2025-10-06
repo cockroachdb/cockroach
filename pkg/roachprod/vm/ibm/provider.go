@@ -198,6 +198,8 @@ type Provider struct {
 	resourceManagerService    *resourcemanagerv2.ResourceManagerV2
 	transitgatewayService     *transitgatewayapisv1.TransitGatewayApisV1
 
+	dnsProvider vm.DNSProvider
+
 	// GCAccounts is a list of accounts to use during garbage collection.
 	// These are identifiers, expected to match API keys in the environment
 	// with the format: IBM_<account>_APIKEY.
