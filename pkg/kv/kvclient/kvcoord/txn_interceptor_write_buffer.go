@@ -41,7 +41,6 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	"kv.transaction.write_buffering.enabled",
 	"if enabled, transactional writes are buffered on the client",
 	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.enabled", false /* defaultValue */),
-	settings.WithPublic,
 )
 
 var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
@@ -73,7 +72,6 @@ var BufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 		10<<10,            // max, 10KiB
 	)),
 	settings.NonNegativeInt,
-	settings.WithPublic,
 )
 
 // txnWriteBuffer is a txnInterceptor that buffers transactional writes until
