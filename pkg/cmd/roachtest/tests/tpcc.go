@@ -591,6 +591,8 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		// We limit the total number of plan steps to 70, which is roughly 80% of all plan lengths.
 		// See #138014 for more details.
 		mixedversion.MaxNumPlanSteps(70),
+		mixedversion.WithMutatorProbability(mixedversion.SingleNetworkPartition, 0),
+		mixedversion.WithMutatorProbability(mixedversion.ProtectedNodeNetworkPartition, 1.0),
 	}
 
 	// If the test is a chaos test, we want to opt for the more expansive panic

@@ -354,7 +354,6 @@ type (
 		tag                            string
 		overriddenMutatorProbabilities map[string]float64
 		hooksSupportFailureInjection   bool
-		partitionStrategy              partitionStrategy
 	}
 
 	CustomOption func(*testOptions)
@@ -581,14 +580,6 @@ func DisableAllFailureInjectionMutators() CustomOption {
 func WithTag(tag string) CustomOption {
 	return func(opts *testOptions) {
 		opts.tag = tag
-	}
-}
-
-// WithPartitionStrategy sets the partition strategy to use for network
-// partition mutators. By default, singlePartitionStrategy is used.
-func WithPartitionStrategy(strategy PartitionStrategy) CustomOption {
-	return func(opts *testOptions) {
-		opts.partitionStrategy = strategy
 	}
 }
 

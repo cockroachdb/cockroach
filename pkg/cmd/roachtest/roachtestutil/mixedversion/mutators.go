@@ -394,7 +394,9 @@ func (m clusterSettingMutator) changeSteps(
 const (
 	// PanicNode is a mutator that will randomly cause a node to crash during
 	// the test, before safely restarting the node a random number of steps later.
-	PanicNode = "panic_node"
+	PanicNode                     = "panic_node"
+	SingleNetworkPartition        = "single_network_partition"
+	ProtectedNodeNetworkPartition = "protected_node_network_partition"
 )
 
 func shouldEnableFailureInjection(p *testPlanner) bool {

@@ -6,7 +6,6 @@
 package mixedversion
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -29,7 +28,7 @@ type partitionStrategy = PartitionStrategy
 type singlePartitionStrategy struct{}
 
 func (s singlePartitionStrategy) String() string {
-	return "single-partition"
+	return SingleNetworkPartition
 }
 
 func (s singlePartitionStrategy) selectProtectedNodes(rng *rand.Rand, nodes option.NodeListOption) (option.NodeListOption, error) {
@@ -64,7 +63,7 @@ type protectedPartitionStrategy struct {
 }
 
 func (p protectedPartitionStrategy) String() string {
-	return "protected-nodes"
+	return ProtectedNodeNetworkPartition
 }
 
 func (p protectedPartitionStrategy) selectProtectedNodes(
@@ -157,7 +156,7 @@ type networkPartitionMutator struct {
 }
 
 func (m networkPartitionMutator) Name() string {
-	return fmt.Sprintf("network-partition-mutator-%s", m.strategy)
+	return m.strategy.String()
 }
 
 func (m networkPartitionMutator) IsCompatible(p *testPlanner) bool {
