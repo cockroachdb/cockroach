@@ -16,6 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 1
 
       - name: Authenticate to Google Cloud
@@ -29,6 +30,7 @@ jobs:
         id: stage1
         uses: cockroachdb/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
           claude_args: |
             --model claude-sonnet-4-5-20250929
@@ -62,6 +64,7 @@ jobs:
         if: contains(steps.stage1.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
         uses: cockroachdb/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
           claude_args: |
             --model claude-4-5-sonnet-20250929
@@ -96,6 +99,7 @@ jobs:
         if: contains(steps.stage2.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
         uses: cockroachdb/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
           claude_args: |
             --model claude-4-5-sonnet-20250929
@@ -144,6 +148,7 @@ jobs:
         if: always()
         uses: cockroachdb/claude-code-action@v1
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           use_vertex: "true"
           claude_args: |
             --model claude-4-5-sonnet-20250929
