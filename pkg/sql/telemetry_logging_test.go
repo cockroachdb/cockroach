@@ -1630,7 +1630,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 
 func getSampleQueryLoggingChannel(sv *settings.Values) logpb.Channel {
 	if log.ShouldMigrateEvent(sv) {
-		return logpb.Channel_SQL_EXEC
+		return logpb.Channel_TELEMETRY
 	}
-	return logpb.Channel_TELEMETRY
+	return logpb.Channel_SQL_EXEC
 }

@@ -10,12 +10,8 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
 import "gogoproto/gogo.proto";
 import "util/log/eventpb/events.proto";
 
-// TODO (#151948): Update channel from TELEMETRY to CHANGEFEED once the
-// `log.channel_compatibility_mode_enabled` cluster setting is set to false
-// by default.
-
 // Category: Changefeed telemetry events
-// Channel: TELEMETRY
+// Channel: CHANGEFEED
 //
 // Events in this category pertain to changefeed usage and metrics.
 
@@ -23,10 +19,10 @@ import "util/log/eventpb/events.proto";
 // successfully starts running. Failed CREATE statements will show up as
 // ChangefeedFailed events.
 //
-// Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-// To test compatability before this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to false. This will send the
-// events to `CHANGEFEED` instead of `TELEMETRY`.
+// Note: in version 26.1, these events moved to the `CHANGEFEED` channel.
+// To test compatability prior to this, set the cluster setting
+// `log.channel_compatibility_mode.enabled` to true. This will send the
+// events to `TELEMETRY` instead of `CHANGEFEED`.
 message CreateChangefeed {
   CommonChangefeedEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 
