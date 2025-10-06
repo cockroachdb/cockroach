@@ -180,6 +180,9 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
+//
+// NB: the method will panic if the datum's resolved type is not equivalent to
+// the passed-in type. Consider using safer DatumToEncDatumEx.
 func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 	ed, err := DatumToEncDatumEx(ctyp, d)
 	if err != nil {
@@ -190,8 +193,6 @@ func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 
 // DatumToEncDatumEx is the same as DatumToEncDatum that returns an error
 // instead of panicking under unexpected circumstances.
-// TODO(yuzefovich): we should probably get rid of DatumToEncDatum in favor of
-// this method altogether.
 func DatumToEncDatumEx(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 	if d == nil {
 		return EncDatum{}, errors.AssertionFailedf("cannot convert nil datum to EncDatum")

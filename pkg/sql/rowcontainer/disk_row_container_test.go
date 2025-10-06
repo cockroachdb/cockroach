@@ -281,17 +281,21 @@ func TestDiskRowContainer(t *testing.T) {
 					}
 
 					// Check sorted order.
-					sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+					err = sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+					if err != nil {
+						t.Fatal(err)
+					}
 					if cmp, err := compareEncRows(
 						ctx, types, sortedRows.scratchEncRow, row, &evalCtx, d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
-						sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+						err = sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
 						t.Fatalf(
-							"expected %s to be equal to %s",
+							"expected %s to be equal to %s (err=%v)",
 							row.String(types),
 							sortedRows.scratchEncRow.String(types),
+							err,
 						)
 					}
 					numKeysRead++
