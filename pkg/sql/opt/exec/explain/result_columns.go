@@ -167,6 +167,9 @@ func getResultColumns(
 		return tableColumns(a.Table, a.OutCols), nil
 
 	case vectorMutationSearchOp:
+		if len(inputs) == 0 {
+			return nil, nil
+		}
 		a := args.(*vectorMutationSearchArgs)
 		cols := appendColumns(inputs[0], colinfo.ResultColumn{Name: "partition-key", Typ: types.Int})
 		if a.IsIndexPut {

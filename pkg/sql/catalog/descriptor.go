@@ -515,6 +515,9 @@ type TableDescriptor interface {
 	// keys, even if they're not defined by the user.
 	HasPrimaryKey() bool
 
+	// IsExpressionIndex returns if the given index is an expression index.
+	IsExpressionIndex(idx Index) bool
+
 	// AllColumns returns a slice of Column interfaces containing the
 	// table's public columns and column mutations, in the canonical order:
 	// - all public columns in the same order as in the underlying

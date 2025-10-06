@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -505,11 +506,18 @@ func TriggerInspectJob(
 		return jobID, errors.AssertionFailedf("must have at least one secondary index")
 	}
 
-	// Create checks for all secondary indexes
-	// TODO(148365): When INSPECT is added, we want to skip unsupported indexes
-	// and return a NOTICE.
+	// Create checks for all secondary indexes, filtering out unsupported types.
+	// TODO(148365): When INSPECT is added, we want to return a NOTICE for each index skipped.
 	checks := make([]*jobspb.InspectDetails_Check, 0, len(secIndexes))
 	for _, index := range secIndexes {
+		// Skip unsupported index types.
+		if index.IsPartial() || index.IsSharded() || tableDesc.IsExpressionIndex(index) {
+			continue
+		}
+		switch index.GetType() {
+		case idxtype.INVERTED, idxtype.VECTOR:
+			continue
+		}
 		checks = append(checks, &jobspb.InspectDetails_Check{
 			Type:    jobspb.InspectCheckIndexConsistency,
 			TableID: tableDesc.GetID(),

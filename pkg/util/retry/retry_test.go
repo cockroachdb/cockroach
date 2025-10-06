@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -402,11 +401,7 @@ func TestRetryWithMaxDuration(t *testing.T) {
 		retryFunc         func(attemptNum int) error
 		preRetryFunc      func()
 		expectedTimeSpent time.Duration
-		// For cases where the amount of time spent is not deterministic, we can set
-		// an upper bound instead (e.g. for context or closer).
-		maxExpectedTimeSpent time.Duration
-		expectedErr          bool
-		skipUnderDuress      bool
+		expectedErr       bool
 	}
 
 	testCases := []testcase{
@@ -474,11 +469,8 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				cancelCtxFunc()
 			},
-			maxExpectedTimeSpent: time.Millisecond * 20,
-			expectedErr:          true,
-			// Under duress, closing a context will not necessarily stop the retry
-			// loop immediately, so we skip this test under duress.
-			skipUnderDuress: true,
+			expectedTimeSpent: 0,
+			expectedErr:       true,
 		},
 		{
 			name: "errors with opt.Closer that is closed",
@@ -494,20 +486,13 @@ func TestRetryWithMaxDuration(t *testing.T) {
 			preRetryFunc: func() {
 				close(closeCh)
 			},
-			maxExpectedTimeSpent: time.Millisecond * 20,
-			expectedErr:          true,
-			// Under duress, closing a channel will not necessarily stop the retry
-			// loop immediately, so we skip this test under duress.
-			skipUnderDuress: true,
+			expectedTimeSpent: 0,
+			expectedErr:       true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.skipUnderDuress && skip.Duress() {
-				skip.UnderDuress(t, "skipping test under duress: %s", tc.name)
-			}
-
 			timeSource := timeutil.NewManualTime(time.Now())
 			tc.opts.Clock = timeSource
 			// Disable randomization for deterministic tests.
@@ -544,18 +529,9 @@ func TestRetryWithMaxDuration(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			if tc.expectedTimeSpent != 0 {
-				require.Equal(
-					t, tc.expectedTimeSpent, timeSource.Since(start), "expected time does not match actual spent time",
-				)
-			}
-
-			if tc.maxExpectedTimeSpent != 0 {
-				require.LessOrEqual(
-					t, timeSource.Since(start), tc.maxExpectedTimeSpent,
-					"expected time spent to be less than or equal to max expected time spent",
-				)
-			}
+			require.Equal(
+				t, tc.expectedTimeSpent, timeSource.Since(start), "expected time does not match actual spent time",
+			)
 		})
 	}
 }
