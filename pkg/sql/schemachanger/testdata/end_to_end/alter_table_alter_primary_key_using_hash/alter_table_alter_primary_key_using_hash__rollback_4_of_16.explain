@@ -21,7 +21,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── WRITE_ONLY  → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 9}
-      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+      │    │    ├── DELETE_ONLY → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (t_i_j_idx-), ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 8}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (crdb_internal_i_j_shard_16), IndexID: 4 (t_i_j_idx-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (i), IndexID: 4 (t_i_j_idx-)}
       │    │    ├── PUBLIC      → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (j), IndexID: 4 (t_i_j_idx-)}
