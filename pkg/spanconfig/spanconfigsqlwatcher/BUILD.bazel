@@ -66,6 +66,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/distsql",
         "//pkg/sql/isql",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,10 +55,12 @@ func TestZonesDecoderDecodePrimaryKey(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.zones INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	sqlDB.QueryRow(
 		t,
 		fmt.Sprintf("SELECT id FROM system.namespace WHERE name='%s'", dummyTableName),
 	).Scan(&dummyTableID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	k := s.Codec().TablePrefix(dummyTableID)
 

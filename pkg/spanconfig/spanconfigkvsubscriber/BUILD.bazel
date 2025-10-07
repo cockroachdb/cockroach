@@ -65,6 +65,7 @@ go_test(
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql/isql",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",

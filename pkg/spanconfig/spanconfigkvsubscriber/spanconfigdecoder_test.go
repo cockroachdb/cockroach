@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,9 +43,11 @@ func TestDecodeSpanTargets(t *testing.T) {
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.QueryRow(t, fmt.Sprintf(
 		`SELECT table_id FROM crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 	).Scan(&dummyTableID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	key, err := ts.ScratchRange()
 	require.NoError(t, err)
@@ -118,9 +121,11 @@ func TestDecodeSystemTargets(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s", dummyTableName))
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 		var dummyTableID uint32
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t, fmt.Sprintf(
 			`SELECT id FROM system.namespace WHERE name = '%s'`, dummyTableName),
 		).Scan(&dummyTableID)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 
 		// Write the record.
 		conf := roachpb.SpanConfig{
@@ -174,9 +179,11 @@ func BenchmarkSpanConfigDecoder(b *testing.B) {
 	tdb.Exec(b, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.QueryRow(b, fmt.Sprintf(
 		`SELECT table_id from crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 	).Scan(&dummyTableID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
 	buf, err := protoutil.Marshal(&conf)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -169,6 +170,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	require.NoError(t, err)
 
 	id := ts.JobRegistry().(*jobs.Registry).MakeJobID()
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	_, err = db.Exec(
 		`INSERT INTO system.jobs (id, status) VALUES ($1, $2)`,
 		id,
@@ -182,6 +184,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 		payload,
 	)
 	require.NoError(t, err)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
@@ -460,7 +463,9 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 func waitForJobState(t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.State) {
 	testutils.SucceedsSoon(t, func() error {
 		var jobStatus string
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 
 		if jobs.State(jobStatus) != status {
 			return errors.Newf("expected jobID %d to have status %, got %s", jobID, status, jobStatus)
@@ -472,10 +477,12 @@ func waitForJobState(t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, 
 func waitForJobCheckpoint(t *testing.T, tdb *sqlutils.SQLRunner) {
 	testutils.SucceedsSoon(t, func() error {
 		var progressBytes []byte
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t, `
 SELECT progress FROM crdb_internal.system_jobs
   WHERE id = (SELECT job_id FROM [SHOW AUTOMATIC JOBS] WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION')
 `).Scan(&progressBytes)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 
 		var progress jobspb.Progress
 		if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {

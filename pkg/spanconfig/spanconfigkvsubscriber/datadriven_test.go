@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -119,9 +120,11 @@ func TestDataDriven(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 
 		var dummyTableID uint32
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t, fmt.Sprintf(
 			`SELECT table_id from crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 		).Scan(&dummyTableID)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 
 		kvAccessor := spanconfigkvaccessor.New(
 			kvDB,
