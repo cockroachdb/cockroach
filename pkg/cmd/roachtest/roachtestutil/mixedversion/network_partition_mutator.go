@@ -9,6 +9,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
@@ -21,10 +22,9 @@ type PartitionStrategy interface {
 	selectPartitions(rng *rand.Rand, protectedNodes, nodes option.NodeListOption) ([]failures.NetworkPartition, option.NodeListOption, error)
 }
 
-type partitionStrategy = PartitionStrategy
-
-// singlePartitionStrategy creates a single node-to-node partition, ensuring we never
-// partition a leaseholder/leader from the rest of its replicas (assuming RF=3).
+// singleNetworkPartitionMutator creates a single node-to-node partition.
+// With leader leases, this ensures that the cluster can always recover
+// from the partition and experiences no unavailability.
 type singlePartitionStrategy struct{}
 
 func (s singlePartitionStrategy) String() string {
@@ -55,10 +55,13 @@ func (s singlePartitionStrategy) selectPartitions(rng *rand.Rand, protectedNodes
 	}}, nil /* unavailableNodes */, nil
 }
 
-// protectedPartitionStrategy designates a random quorum of nodes as protected. These nodes
-// will never be partitioned from any other node in the cluster, and will always have pinned
-// voter replicas.
+// protectedNetworkPartitionMutator delegates a quorum of nodes as protected.
+// These protected nodes have voter replicas for all ranges pinned to them,
+// and will never be partitioned from each other. This ensures that as long as
+// we connect to a protected node, we should always have availability.
 type protectedPartitionStrategy struct {
+	// TODO(darryl): consider making replication factor configurable in the
+	// mixed version framework itself.
 	quorum int
 }
 
@@ -83,7 +86,7 @@ func (p protectedPartitionStrategy) selectPartitions(
 	rng *rand.Rand, protectedNodes, nodes option.NodeListOption,
 ) ([]failures.NetworkPartition, option.NodeListOption, error) {
 	protectedNodesMap := make(map[int]bool)
-	for _, node := range nodes[:p.quorum] {
+	for _, node := range protectedNodes {
 		protectedNodesMap[node] = true
 	}
 
@@ -107,7 +110,7 @@ func (p protectedPartitionStrategy) selectPartitions(
 	})
 
 	nodeToPartition := make(map[int]*failures.NetworkPartition)
-	unvailableNodes := make(option.NodeListOption, 0)
+	unavailableNodes := make(option.NodeListOption, 0)
 	for _, conn := range connections[:rng.Intn(len(connections))+1] {
 		if _, ok := nodeToPartition[conn[0]]; !ok {
 			nodeToPartition[conn[0]] = &failures.NetworkPartition{
@@ -121,10 +124,10 @@ func (p protectedPartitionStrategy) selectPartitions(
 		// For simplicity, we say any node that has a partition touching it is unavailable,
 		// except the protected nodes, since those will always maintain quorum.
 		if !protectedNodesMap[conn[0]] {
-			unvailableNodes = unvailableNodes.Merge(option.NodeListOption{conn[0]})
+			unavailableNodes = unavailableNodes.Merge(option.NodeListOption{conn[0]})
 		}
 		if !protectedNodesMap[conn[1]] {
-			unvailableNodes = unvailableNodes.Merge(option.NodeListOption{conn[1]})
+			unavailableNodes = unavailableNodes.Merge(option.NodeListOption{conn[1]})
 		}
 	}
 
@@ -133,15 +136,18 @@ func (p protectedPartitionStrategy) selectPartitions(
 		partitions = append(partitions, *partition)
 	}
 
-	return partitions, unvailableNodes /* unavailableNodes */, nil
+	return partitions, unavailableNodes, nil
 }
 
+// Both mutators are disabled by default, as we are still testing
+// their stability in select tests.
+// TODO(darryl): once we are confident in their stability, we should
+// enable one/both by default.
 var (
 	singleNetworkPartitionMutator = networkPartitionMutator{
 		strategy:    singlePartitionStrategy{},
-		probability: 0.3,
+		probability: 0.0,
 	}
-
 	protectedNetworkPartitionMutator = networkPartitionMutator{
 		strategy: protectedPartitionStrategy{
 			quorum: 2,
@@ -151,7 +157,7 @@ var (
 )
 
 type networkPartitionMutator struct {
-	strategy    partitionStrategy
+	strategy    PartitionStrategy
 	probability float64
 }
 
@@ -179,7 +185,7 @@ func (m networkPartitionMutator) Generate(
 		return nil, err
 	}
 	if len(protectedNodes) > 0 {
-		protectedNodesMut, err := m.createProtectedNodesMutation(plan.newStepSelector(), protectedNodes)
+		protectedNodesMut, err := m.createProtectedNodes(plan.newStepSelector(), protectedNodes)
 		if err != nil {
 			return nil, err
 		}
@@ -191,10 +197,44 @@ func (m networkPartitionMutator) Generate(
 		return nil, errors.Wrapf(err, "failed to get failer for %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	upgrades := randomUpgrades(rng, plan)
+	// N.B. we iterate over all upgrades in order (over using randomUpgrades),
+	// as we want to enable leader leases as soon as possible. We take care of
+	// random selection later.
+	upgrades := allUpgrades(plan)
 	idx := newStepIndex(plan)
 
-	for _, upgrade := range upgrades {
+	// We only want to inject partitions if leader leases are enabled. Epoch
+	// leases suffer from a known limitation where a leaseholder that is partitioned
+	// from its followers but still heart beating to node liveness may cause indefinite
+	// unavailability.
+	leaderLeasesEnabled := false
+	for i, upgrade := range upgrades {
+		// If leader leases are not yet enabled, check if we can enable them now.
+		if !leaderLeasesEnabled {
+			var leaderLeasesMut []mutation
+			// Attempt to enable leader leases if we are able to do so.
+			upgrade, leaderLeasesMut, err = m.maybeEnableLeaderLeases(upgrade)
+			if err != nil {
+				return nil, err
+			}
+
+			if leaderLeasesMut != nil {
+				mutations = append(mutations, leaderLeasesMut...)
+				leaderLeasesEnabled = true
+			} else {
+				// If the mutations are nil, that means we can't yet enable leader leases
+				// and we should skip attempting to add a partition for this upgrade.
+				continue
+			}
+		}
+
+		// For each upgrade, we inject a partition with 50% probability,
+		// except for the final upgrade. This is the most important one to
+		// test so we always inject one.
+		if i != len(upgrades)-1 && rng.Float64() < 0.5 {
+			continue
+		}
+
 		mut, err := m.generatePartition(rng, upgrade, idx, planner, protectedNodes, f)
 		if err != nil {
 			return nil, err
@@ -207,7 +247,7 @@ func (m networkPartitionMutator) Generate(
 	return mutations, nil
 }
 
-func (m networkPartitionMutator) createProtectedNodesMutation(
+func (m networkPartitionMutator) createProtectedNodes(
 	steps stepSelector, protectedNodes option.NodeListOption,
 ) ([]mutation, error) {
 	// Find the last setup step. We want to set the zone constraints
@@ -224,6 +264,68 @@ func (m networkPartitionMutator) createProtectedNodesMutation(
 	return stepSelector{lastSetupStep}.InsertAfter(
 		pinVoterReplicasStep{protectedNodes: protectedNodes},
 	), nil
+}
+
+// leaderLeasesMinVersion is the version in which leader leases were introduced.
+var leaderLeasesMinVersion = clusterupgrade.MustParseVersion("v25.1.0")
+
+// maybeEnableLeaderLeases checks if leader leases can be enabled within the given steps.
+// If so, it returns mutations to do so as soon as possible in the plan, as well as a
+// new stepSelector where all steps have leader leases enabled.
+func (m networkPartitionMutator) maybeEnableLeaderLeases(steps stepSelector) (stepSelector, []mutation, error) {
+	var stepsUnderLeaderLeases stepSelector
+	fromVersion := steps[0].context.System.FromVersion
+	toVersion := steps[0].context.System.ToVersion
+
+	var firstStep stepSelector
+
+	// If we are upgrading from >= 25.1, then leader leases can be enabled immediately.
+	if fromVersion.AtLeast(leaderLeasesMinVersion) {
+		firstStepAfterClusterStart := steps.Filter(func(s *singleStep) bool {
+			return s.context.System.Stage >= OnStartupStage
+		})
+		firstStep = stepSelector{firstStepAfterClusterStart[0]}
+		stepsUnderLeaderLeases = firstStepAfterClusterStart[1:]
+	} else if !toVersion.AtLeast(leaderLeasesMinVersion) {
+		// If we are not upgrading to >= 25.1, then we can't enable leader leases.
+		return nil, nil, nil
+	} else {
+		// If we are upgrading to 25.1, then we need to find the first step after
+		// at least one node has been restarted with the new version.
+		firstStepAfterRestart := steps.Filter(func(s *singleStep) bool {
+			_, isRestart := s.impl.(restartWithNewBinaryStep)
+			return isRestart
+		})
+
+		if len(firstStepAfterRestart) == 0 {
+			return nil, nil, nil
+		}
+		firstStep = stepSelector{firstStepAfterRestart[0]}
+		stepsUnderLeaderLeases = firstStepAfterRestart[1:]
+	}
+
+	var mutations []mutation
+	disableExpirationLeasesOnlyMutation := firstStep.InsertAfter(
+		setClusterSettingStep{
+			minVersion:         leaderLeasesMinVersion,
+			name:               "kv.expiration_leases_only.enabled",
+			value:              false,
+			virtualClusterName: install.SystemInterfaceName,
+		},
+	)
+	mutations = append(mutations, disableExpirationLeasesOnlyMutation...)
+
+	enableLeaderFortificationMutation := firstStep.InsertAfter(
+		setClusterSettingStep{
+			minVersion:         leaderLeasesMinVersion,
+			name:               "kv.raft.leader_fortification.fraction_enabled",
+			value:              1.0,
+			virtualClusterName: install.SystemInterfaceName,
+		},
+	)
+	mutations = append(mutations, enableLeaderFortificationMutation...)
+
+	return stepsUnderLeaderLeases, mutations, nil
 }
 
 func (m networkPartitionMutator) generatePartition(
@@ -250,10 +352,6 @@ func (m networkPartitionMutator) generatePartition(
 	return nil, nil
 }
 
-// A partition window is valid if:
-//  1. The inject and recovery steps are non-concurrent.
-//  2. The partition does not cause a loss of quorum, e.g. it doesn't run with other failure injection.
-//  3. The window does not contain any incompatible steps.
 func (m networkPartitionMutator) isValidPartitionWindow(
 	injectIdx, recoverIdx int, steps stepSelector, idx stepIndex, planner *testPlanner,
 ) bool {
@@ -274,7 +372,7 @@ func (m networkPartitionMutator) isValidPartitionWindow(
 		return false
 	}
 
-	// All steps in the window must be compatible with network partition
+	// All steps in the window must be compatible with a network partition.
 	for _, s := range windowSteps {
 		if !m.isCompatibleWithPartition(s, planner) {
 			return false

@@ -136,6 +136,24 @@ func randomUpgrades(rng *rand.Rand, plan *TestPlan) []stepSelector {
 	return selectors
 }
 
+// allUpgrades returns selectors for the steps of all upgrades in the plan.
+func allUpgrades(plan *TestPlan) []stepSelector {
+	allUpgrades := plan.allUpgrades()
+
+	byUpgrade := func(upgrade *upgradePlan) func(*singleStep) bool {
+		return func(s *singleStep) bool {
+			return s.context.System.FromVersion.Equal(upgrade.from)
+		}
+	}
+
+	var selectors []stepSelector
+	for _, upgrade := range allUpgrades {
+		selectors = append(selectors, plan.newStepSelector().Filter(byUpgrade(upgrade)))
+	}
+
+	return selectors
+}
+
 // ClusterSettingMutator returns the name of the mutator associated
 // with the given cluster setting name. Callers can disable a specific
 // cluster setting mutator with:

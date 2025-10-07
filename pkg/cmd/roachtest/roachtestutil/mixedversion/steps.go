@@ -898,10 +898,12 @@ func (s networkPartitionInjectStep) Description(debug bool) string {
 func (s networkPartitionInjectStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	h.runner.monitor.ExpectProcessDead(s.unavailableNodes)
-	if h.DeploymentMode() == SeparateProcessDeployment {
-		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
-		h.runner.monitor.ExpectProcessDead(s.unavailableNodes, opt)
+	if len(s.unavailableNodes) > 0 {
+		h.runner.monitor.ExpectProcessDead(s.unavailableNodes)
+		if h.DeploymentMode() == SeparateProcessDeployment {
+			opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
+			h.runner.monitor.ExpectProcessDead(s.unavailableNodes, opt)
+		}
 	}
 
 	args := failures.NetworkPartitionArgs{Partitions: s.partitions}
@@ -944,10 +946,12 @@ func (s networkPartitionRecoveryStep) Run(
 		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
 	}
 
-	h.runner.monitor.ExpectProcessAlive(s.unavailableNodes)
-	if h.DeploymentMode() == SeparateProcessDeployment {
-		opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
-		h.runner.monitor.ExpectProcessAlive(s.unavailableNodes, opt)
+	if len(s.unavailableNodes) > 0 {
+		h.runner.monitor.ExpectProcessAlive(s.unavailableNodes)
+		if h.DeploymentMode() == SeparateProcessDeployment {
+			opt := option.VirtualClusterName(h.Tenant.Descriptor.Name)
+			h.runner.monitor.ExpectProcessAlive(s.unavailableNodes, opt)
+		}
 	}
 	return s.f.Cleanup(ctx, l)
 
@@ -1010,7 +1014,7 @@ func (s pinVoterReplicasStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
 	// We build a zone constraint that requires every node in `protectedNodes`
-	// to have a voter replica.
+	// to have a voter replica of every range.
 	var constraintParts []string
 	for _, node := range s.protectedNodes {
 		constraintParts = append(constraintParts, fmt.Sprintf(`"+node%d": 1`, node))
@@ -1021,20 +1025,23 @@ func (s pinVoterReplicasStep) Run(
 	zoneConfig := fmt.Sprintf("constraints = %s, voter_constraints = %s, num_replicas = %d, num_voters = %d",
 		constraintsStr, constraintsStr, replicationFactor, replicationFactor)
 
-	// Apply the zone config for the default range and the system database.
+	// Apply the zone config for the default+system ranges and databases.
 	//
 	// N.B. If we start the cluster using fixtures, it will have additional databases such as
 	// `lotsatables` and `persistent_db`. However, these are small enough that they should be
 	// reallocated quickly.
-	stmt := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING %s", zoneConfig)
-	if err := h.System.Exec(rng, stmt); err != nil {
-		return errors.Wrap(err, "failed to set replica constraints for default range")
+	for _, rangeName := range []string{"default", "system", "timeseries", "liveness", "meta"} {
+		stmt := fmt.Sprintf("ALTER RANGE %s CONFIGURE ZONE USING %s", rangeName, zoneConfig)
+		if err := h.System.Exec(rng, stmt); err != nil {
+			return errors.Wrapf(err, "failed to set replica constraints for %s range", rangeName)
+		}
 	}
-	l.Printf("applied zone config to default range")
 
-	stmt = fmt.Sprintf("ALTER DATABASE system CONFIGURE ZONE USING %s", zoneConfig)
-	if err := h.System.Exec(rng, stmt); err != nil {
-		return errors.Wrapf(err, "failed to set replica constraints for system database")
+	for _, databaseName := range []string{"defaultdb", "system"} {
+		stmt := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING %s", databaseName, zoneConfig)
+		if err := h.System.Exec(rng, stmt); err != nil {
+			return errors.Wrapf(err, "failed to set replica constraints for system database")
+		}
 	}
 
 	retryOpts := retry.Options{
