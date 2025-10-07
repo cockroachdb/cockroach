@@ -15,8 +15,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	sf "github.com/snowflakedb/gosnowflake"
 )
 
@@ -91,7 +93,9 @@ func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 // 3. the test has not been run for a while
 // It returns all the tests. The selected tests have the value TestDetails.Selected as true
 // The tests are sorted by the last run and is used for further test selection criteria. So, the order should not be modified.
-func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, error) {
+func CategoriseTests(
+	ctx context.Context, logger *logger.Logger, req *SelectTestsReq,
+) ([]*TestDetails, error) {
 	db, err := getConnect(ctx)
 	if err != nil {
 		return nil, err
@@ -115,6 +119,12 @@ func CategoriseTests(ctx context.Context, req *SelectTestsReq) ([]*TestDetails, 
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
+
+	debugQuery := strings.ReplaceAll(PreparedQuery, "?", "%v")
+	logger.Printf(debugQuery, req.ForPastDays*-1, currentBranch,
+		fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
+		req.FirstRunOn*-1, req.LastRunOn*-1)
+
 	// All the column headers
 	colHeaders, err := rows.Columns()
 	if err != nil {

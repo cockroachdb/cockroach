@@ -307,9 +307,12 @@ func testsToRun(
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
+		err := updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
 			fmt.Fprintf(os.Stdout, format, args...)
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var notSkipped []registry.TestSpec
@@ -384,7 +387,7 @@ func updateSpecForSelectiveTests(
 	selectorLogger.Printf("This is the test selector logger")
 
 	selectedTestsCount := 0
-	allTests, err := testselector.CategoriseTests(ctx,
+	allTests, err := testselector.CategoriseTests(ctx, selectorLogger,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
 		return errors.Wrap(err, "running all tests! error selecting tests: %v")
