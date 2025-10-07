@@ -1135,6 +1135,19 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// Increase the speed of decommissioning.
 		run(db, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2GiB'`)
 
+		// Metamorphically enable the decommissioning nudger to get more test
+		// coverage on decommissioning nudger.
+		{
+			seed := timeutil.Now().UnixNano()
+			t.L().Printf("seed: %d", seed)
+			rng := rand.New(rand.NewSource(seed))
+
+			if rng.Intn(2) == 0 {
+				run(db, `SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_problem.interval = '10m'`)
+				t.L().Printf("metamorphically enabled decommissioning nudger")
+			}
+		}
+
 		// Wait for initial up-replication.
 		err := roachtestutil.WaitForReplication(ctx, t.L(), db, replicationFactor, roachprod.AtLeastReplicationFactor)
 		require.NoError(t, err)

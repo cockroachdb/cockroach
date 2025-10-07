@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -102,6 +103,21 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	const stmt = "SET CLUSTER SETTING server.time_until_store_dead = '30s'"
 	if _, err := conn.ExecContext(ctx, stmt); err != nil {
 		t.Fatal(err)
+	}
+
+	// Metamorphically enable the decommissioning nudger to get more test coverage
+	// on decommissioning nudger.
+	{
+		seed := timeutil.Now().UnixNano()
+		t.L().Printf("seed: %d", seed)
+		rng := rand.New(rand.NewSource(seed))
+
+		if rng.Intn(2) == 0 {
+			if _, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_problem.interval = '10m'`); err != nil {
+				t.Fatal(err)
+			}
+			t.L().Printf("metamorphically enabled decommissioning nudger")
+		}
 	}
 
 	// Bring down node 1.
