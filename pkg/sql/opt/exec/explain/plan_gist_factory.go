@@ -10,6 +10,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/binary"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/base64"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -684,7 +684,7 @@ func (u *unknownTable) IsRowLevelSecurityEnabled() bool { return false }
 func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
 
 // CanaryWindowSize is part of the cat.Table interface
-func (u *unknownTable) CanaryWindowSize() duration.Duration { return duration.Duration{} }
+func (u *unknownTable) CanaryWindowSize() time.Duration { return 0 }
 
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }

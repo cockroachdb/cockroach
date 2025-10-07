@@ -867,8 +867,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableSetRLSMode:
 			return pgerror.New(pgcode.FeatureNotSupported,
 				"ALTER TABLE ... ROW LEVEL SECURITY is only implemented in the declarative schema changer")
-		case *tree.AlterTableSetCanaryWindow:
-			return errors.AssertionFailedf("hello")
 		default:
 			return errors.AssertionFailedf("unsupported alter command: %T", cmd)
 		}

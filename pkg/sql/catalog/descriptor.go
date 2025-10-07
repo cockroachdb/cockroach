@@ -7,6 +7,7 @@ package catalog
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -877,7 +878,7 @@ type TableDescriptor interface {
 	IsRowLevelSecurityForced() bool
 	// TODO: better comment.
 	// CanaryWindowSize returns the size of the canary stats window.
-	GetCanaryWindowSize() string
+	GetCanaryWindowSize() time.Duration
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

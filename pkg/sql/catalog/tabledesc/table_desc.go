@@ -7,6 +7,8 @@
 package tabledesc
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -742,6 +744,6 @@ func (desc *wrapper) IsRowLevelSecurityForced() bool {
 }
 
 // GetCanaryWindowSize implements the TableDescriptor interface.
-func (desc *wrapper) GetCanaryWindowSize() string {
+func (desc *wrapper) GetCanaryWindowSize() time.Duration {
 	return desc.CanaryWindowSize
 }

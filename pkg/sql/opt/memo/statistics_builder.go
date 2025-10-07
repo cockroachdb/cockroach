@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -676,7 +675,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	var skippedCanaryCreatedAt time.Time
 CanarySkip:
 	for first < tab.StatisticCount()-1 {
-		if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
+		if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow > 0 {
 			if !useCanary {
 				stat := tab.Statistic(first)
 				if stat.IsForecast() {
@@ -689,7 +688,7 @@ CanarySkip:
 					continue CanarySkip
 				}
 				// Too young.
-				if duration.Add(stat.CreatedAt(), canaryWindow).After(time.Now()) {
+				if stat.CreatedAt().Add(canaryWindow).After(time.Now()) {
 					if skippedCanaryCreatedAt.IsZero() {
 						skippedCanaryCreatedAt = stat.CreatedAt()
 						first++
