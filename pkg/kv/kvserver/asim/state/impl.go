@@ -433,7 +433,7 @@ func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 		stores:      []StoreID{},
 		mmAllocator: mmAllocator,
 		storepool:   sp,
-		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST),
+		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST, nil),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -568,6 +568,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	// Old allocator is still needed for other queues.
 	allocator := allocatorimpl.MakeAllocator(
 		s.settings.ST,
+		node.as,
 		sp.IsDeterministic(),
 		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
 		&allocator.TestingKnobs{

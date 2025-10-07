@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"reflect"
 	"sort"
@@ -22,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -41,12 +44,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func MakeAllocatorSync(
+	sp *storepool.StorePool, st *cluster.Settings,
+) *mmaintegration.AllocatorSync {
+	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	return mmaintegration.NewAllocatorSync(sp, mmAllocator, st, nil)
+}
 
 var simpleSpanConfig = &roachpb.SpanConfig{
 	NumReplicas: 1,
@@ -2556,7 +2568,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(ctx)
@@ -2946,7 +2958,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -3015,7 +3027,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -4947,6 +4959,224 @@ func TestAllocatorRebalanceIOOverloadCheck(t *testing.T) {
 	}
 }
 
+// TestAllocatorRebalanceMMAConflict tests that the MMA conflict checking logic
+// in RebalanceVoter works correctly. It should skip MMA conflict checks for
+// critical rebalances (constraint repair, disk fullness, diversity
+// improvements) but apply them if it's just for range count based rebalancing.
+func TestAllocatorRebalanceMMAConflict(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	type testCase struct {
+		name                 string
+		mmaReturnsConflict   bool
+		stores               []*roachpb.StoreDescriptor
+		conf                 *roachpb.SpanConfig
+		existingVoters       []roachpb.ReplicaDescriptor
+		expectNoAction       bool
+		expectedRemoveTarget roachpb.StoreID
+		expectedAddTarget    roachpb.StoreID
+	}
+
+	// Stores with locality constraints for testing.
+	constraintRepairConfig := &roachpb.SpanConfig{
+		NumReplicas: 1,
+		Constraints: []roachpb.ConstraintsConjunction{{
+			Constraints: []roachpb.Constraint{{Key: "region", Value: "us-east", Type: roachpb.Constraint_REQUIRED}},
+		}},
+	}
+	constraintRepairStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "us-west"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, LogicalBytes: 100, RangeCount: 40},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "region", Value: "us-east"}, // Has required locality
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, LogicalBytes: 100, RangeCount: 50},
+		},
+	}
+
+	// Stores with disk fullness for testing.
+	diskFullnessStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 10, LogicalBytes: 990, RangeCount: 40}, // Nearly full
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50}, // Plenty of space
+		},
+	}
+
+	// Stores for testing range count rebalancing.
+	rangeCountStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 100}, // High range count
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50}, // Low range count
+		},
+	}
+
+	// Stores for testing diversity improvements - different datacenters for
+	// better diversity.
+	diversityStores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "dc1"},
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "dc2"}, // Different datacenter for better diversity
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{
+						{Key: "datacenter", Value: "dc1"}, // Same datacenter as store 1, poor diversity
+					},
+				},
+			},
+			Capacity: roachpb.StoreCapacity{Capacity: 1000, Available: 500, LogicalBytes: 500, RangeCount: 50},
+		},
+	}
+
+	tests := []testCase{
+		{
+			name:                 "constraint repair bypasses MMA conflict",
+			mmaReturnsConflict:   true, // MMA says conflict, but should be ignored
+			stores:               constraintRepairStores,
+			conf:                 constraintRepairConfig,
+			existingVoters:       replicas(1),
+			expectedRemoveTarget: 1,
+			expectedAddTarget:    2,
+		},
+		{
+			name:                 "disk fullness bypasses MMA conflict",
+			mmaReturnsConflict:   true, // MMA says conflict, but should be ignored
+			stores:               diskFullnessStores,
+			conf:                 emptySpanConfig(),
+			existingVoters:       replicas(1),
+			expectedRemoveTarget: 1,
+			expectedAddTarget:    2,
+		},
+		{
+			name:                 "diversity improvement bypasses MMA conflict",
+			mmaReturnsConflict:   true, // MMA says conflict, but should be ignored for diversity
+			stores:               diversityStores,
+			conf:                 emptySpanConfig(),
+			existingVoters:       replicas(1, 3), // Both replicas in dc1, poor diversity
+			expectedRemoveTarget: 3,              // Remove one from dc1
+			expectedAddTarget:    2,              // Add to dc2 for better diversity
+		},
+		{
+			name:               "range count rebalancing respects MMA conflict",
+			mmaReturnsConflict: true, // MMA says conflict, should be respected
+			stores:             rangeCountStores,
+			conf:               emptySpanConfig(),
+			existingVoters:     replicas(1),
+			expectNoAction:     true, // Should be blocked by MMA conflict
+		},
+		{
+			name:                 "range count rebalancing proceeds when MMA allows",
+			mmaReturnsConflict:   false, // MMA says no conflict
+			stores:               rangeCountStores,
+			conf:                 emptySpanConfig(),
+			existingVoters:       replicas(1),
+			expectedRemoveTarget: 1,
+			expectedAddTarget:    2,
+		},
+	}
+
+	var rangeUsageInfo allocator.RangeUsageInfo
+
+	for i, test := range tests {
+		t.Run(fmt.Sprintf("%d_%s", i+1, test.name), func(t *testing.T) {
+			mmaKnobs := &mmaintegration.TestingKnobs{
+				OverrideIsInConflictWithMMA: func(cand roachpb.StoreID) bool {
+					return test.mmaReturnsConflict
+				},
+			}
+			stopper, g, sp, a, _ := CreateTestAllocatorWithKnobs(
+				ctx, 5, true /* deterministic */, nil /* allocatorKnobs */, mmaKnobs)
+			defer stopper.Stop(ctx)
+			sg := gossiputil.NewStoreGossiper(g)
+			sg.GossipStores(test.stores, t)
+			add, remove, _, ok := a.RebalanceVoter(
+				ctx,
+				sp,
+				test.conf,
+				nil,
+				test.existingVoters,
+				[]roachpb.ReplicaDescriptor{},
+				rangeUsageInfo,
+				storepool.StoreFilterThrottled,
+				a.ScorerOptions(ctx),
+			)
+
+			if test.expectNoAction {
+				require.Falsef(t, ok, "expected no rebalance action but got one")
+			} else {
+				require.Truef(t, ok, "expected rebalance action but got none")
+				require.Equalf(t, test.expectedAddTarget, add.StoreID,
+					"the addition target %+v from RebalanceVoter doesn't match expectation %v",
+					add, test.expectedAddTarget)
+				require.Equalf(t, test.expectedRemoveTarget, remove.StoreID,
+					"the removal target %+v from RebalanceVoter doesn't match expectation %v",
+					remove, test.expectedRemoveTarget)
+			}
+		})
+	}
+}
+
 // TestVotersCanRebalanceToNonVoterStores ensures that rebalancing of voting
 // replicas considers stores that have non-voters as feasible candidates.
 func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
@@ -6053,7 +6283,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+			a := MakeAllocator(st, MakeAllocatorSync(storePool, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 				return c.latency[id], true
 			}, nil)
 			localitySummary := c.stats.SnapshotRatedSummary(now)
@@ -8059,7 +8289,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, MakeAllocatorSync(sp, st), false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 
@@ -8165,7 +8395,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil, false, nil, nil)
+	a := MakeAllocator(nil, MakeAllocatorSync(nil, nil), false, nil, nil)
 	action, priority := a.ComputeAction(context.Background(), nil, &roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -9114,7 +9344,7 @@ func exampleRebalancing(
 		storepool.NewMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).NodeLivenessFunc,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	alloc := MakeAllocator(st, MakeAllocatorSync(sp, st), true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, false
 	}, nil)
 

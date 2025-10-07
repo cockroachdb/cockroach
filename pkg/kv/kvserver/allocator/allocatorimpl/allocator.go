@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -619,6 +620,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
+	as            *mmaintegration.AllocatorSync
 	deterministic bool
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -658,6 +660,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 // close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
+	as *mmaintegration.AllocatorSync,
 	deterministic bool,
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -670,6 +673,7 @@ func MakeAllocator(
 	}
 	allocator := Allocator{
 		st:            st,
+		as:            as,
 		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
@@ -1868,10 +1872,75 @@ func (a Allocator) RebalanceTarget(
 	// would, we don't want to actually rebalance to that target.
 	var target, existingCandidate *candidate
 	var removeReplica roachpb.ReplicationTarget
+
+	// The loop below can iterate multiple times. This is because the
+	// (source,target) pair chosen by bestRebalanceTarget may be rejected either
+	// by the multi-metric allocator or by the check that a moved replica wouldn't
+	// immediately be removable. bestRebalanceTarget mutates the candidate slice
+	// for the given option (=source) to exclude each considered candidate. For
+	// example, the loop may proceed as follows:
+	// - initially, we may consider rebalancing from s1 to either of s2, s3, or
+	// s5, or rebalancing from s6 to either of s2 or s4: options = [s1 ->
+	// [s2,s3,s5], s6 -> [s2,s4]]. Each option here is considered as an
+	// equivalence class.
+	// - bestRebalanceTarget might pick s6->s4, and removes this choice from
+	// `options`. options now becomes [s1->[s2,s3,s5], s6 -> [s2]].
+	// - mma might reject s6->s4, so we loop around.
+	// - next, s1->s3 might be chosen, but fail the removable replica check.
+	// - so we'll begin a third loop with: options is now [s1->[s2,s5], s6 ->
+	// [s2]].
+	// - s6->s2 might be chosen and might succeed, terminating the loop and
+	// proceeding to make the change.
+	//
+	// Note that in general (and in the example) a source store can be considered
+	// multiple times (s6 is considered twice), so we cache the corresponding MMA
+	// advisor to avoid potentially expensive O(store) recomputations. The
+	// corresponding advisor is constructed only once and cached in
+	// results[bestIdx].advisor when the the source store is selected as the best
+	// rebalance target for the first time. After that, bestRebalanceTarget is
+	// free to mutate the cands set of the option. However, MMARebalancerAdvisor
+	// should use the original candidate set union the existing store to compute
+	// the load summary when calling IsInConflictWithMMA. It does so by using the
+	// computed meansLoad summary cached when this option was selected as the best
+	// rebalance target for the first time.
+	var bestIdx int
+
+	// NB: bestRebalanceTarget may modify the candidate set (cands) within each
+	// option in results. However, for each option, the associated source store,
+	// MMARebalanceAdvisor, and their index in results must remain unchanged
+	// throughout the process. This ensures that any cached MMARebalanceAdvisor
+	// continues to correspond to the original candidate set and source store,
+	// even as candidates are removed.
 	for {
-		target, existingCandidate = bestRebalanceTarget(a.randGen, results)
+		target, existingCandidate, bestIdx = bestRebalanceTarget(a.randGen, results, a.as)
 		if target == nil {
 			return zero, zero, "", false
+		}
+		if bestIdx == -1 {
+			log.KvDistribution.Fatalf(ctx, "programmer error: bestIdx is -1 when target is not nil")
+		}
+
+		// Skip mma conflict checks for critical rebalances, which repairs a bad
+		// state such as constraint violation, disk-fullness, and diversity
+		// improvements.
+		if !existingCandidate.isCriticalRebalance(target) {
+			// If the rebalance is not critical, we check if it conflicts with mma's
+			// goal. advisor for bestIdx should always be cached by
+			// bestRebalanceTarget. If mma rejects the rebalance, we will continue to
+			// the next target. Note that bestRebalanceTarget would delete this target
+			// from the candidates set when being selected, so this target will not be
+			// selected again.
+			if advisor := results[bestIdx].advisor; advisor != nil {
+				if a.as.IsInConflictWithMMA(ctx, target.store.StoreID, advisor, false) {
+					continue
+				}
+			} else {
+				if buildutil.CrdbTestBuild {
+					log.KvDistribution.Fatalf(ctx, "expected to find MMA handle for idx %d", bestIdx)
+				} else {
+					log.KvDistribution.Errorf(ctx, "expected to find MMA handle for idx %d", bestIdx)
+				}
+			}
 		}
 
 		// Add a fake new replica to our copy of the replica descriptor so that we can
