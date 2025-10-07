@@ -58,13 +58,103 @@ func (s singlePartitionStrategy) selectPartitions(
 	}}, unavailableNodes, nil
 }
 
-// Network partition mutators are disabled by default, as we are still testing
+// protectedNetworkPartitionMutator delegates a quorum of nodes as protected.
+// These protected nodes have voter replicas for all ranges pinned to them,
+// and will never be partitioned from each other. This ensures that as long as
+// we connect to a protected node, we should always have availability.
+type protectedPartitionStrategy struct {
+	// TODO(darryl): consider making replication factor configurable in the
+	// mixed version framework itself.
+	quorum int
+}
+
+func (p protectedPartitionStrategy) String() string {
+	return ProtectedNodeNetworkPartition
+}
+
+func (p protectedPartitionStrategy) selectProtectedNodes(
+	rng *rand.Rand, nodes option.NodeListOption,
+) (option.NodeListOption, error) {
+	if len(nodes) < 4 {
+		return nil, errors.New("at least four nodes are required for a protected partition")
+	}
+
+	rng.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
+	return nodes[:p.quorum], nil
+}
+
+func (p protectedPartitionStrategy) selectPartitions(
+	rng *rand.Rand, protectedNodes, nodes option.NodeListOption,
+) ([]failures.NetworkPartition, option.NodeListOption, error) {
+	protectedNodesMap := make(map[int]bool)
+	for _, node := range protectedNodes {
+		protectedNodesMap[node] = true
+	}
+
+	if len(nodes)-len(protectedNodesMap) < 2 {
+		return nil, nil, errors.New("at least two non protected nodes are required to create a partition")
+	}
+
+	// Build every possible connection between nodes, excluding ones between
+	// two protected nodes.
+	var connections [][2]int
+	for i := 0; i < len(nodes); i++ {
+		for j := i + 1; j < len(nodes); j++ {
+			if protectedNodesMap[nodes[i]] && protectedNodesMap[nodes[j]] {
+				continue
+			}
+			connections = append(connections, [2]int{nodes[i], nodes[j]})
+		}
+	}
+	rng.Shuffle(len(connections), func(i, j int) {
+		connections[i], connections[j] = connections[j], connections[i]
+	})
+
+	nodeToPartition := make(map[int]*failures.NetworkPartition)
+	unavailableNodes := make(option.NodeListOption, 0)
+	for _, conn := range connections[:rng.Intn(len(connections))+1] {
+		if _, ok := nodeToPartition[conn[0]]; !ok {
+			nodeToPartition[conn[0]] = &failures.NetworkPartition{
+				Source:      install.Nodes{install.Node(conn[0])},
+				Destination: install.Nodes{install.Node(conn[1])},
+				Type:        failures.AllPartitionTypes[rng.Intn(len(failures.AllPartitionTypes))],
+			}
+		} else {
+			nodeToPartition[conn[0]].Destination = append(nodeToPartition[conn[0]].Destination, install.Node(conn[1]))
+		}
+		// For simplicity, we say any node that has a partition touching it is unavailable,
+		// except the protected nodes, since those will always maintain quorum.
+		if !protectedNodesMap[conn[0]] {
+			unavailableNodes = unavailableNodes.Merge(option.NodeListOption{conn[0]})
+		}
+		if !protectedNodesMap[conn[1]] {
+			unavailableNodes = unavailableNodes.Merge(option.NodeListOption{conn[1]})
+		}
+	}
+
+	partitions := make([]failures.NetworkPartition, 0, len(nodeToPartition))
+	for _, partition := range nodeToPartition {
+		partitions = append(partitions, *partition)
+	}
+
+	return partitions, unavailableNodes, nil
+}
+
+// Both mutators are disabled by default, as we are still testing
 // their stability in select tests.
 // TODO(darryl): once we are confident in their stability, we should
 // enable them by default.
 var (
 	singleNetworkPartitionMutator = networkPartitionMutator{
 		strategy:    singlePartitionStrategy{},
+		probability: 0.0,
+	}
+	protectedNetworkPartitionMutator = networkPartitionMutator{
+		strategy: protectedPartitionStrategy{
+			quorum: 2,
+		},
 		probability: 0.0,
 	}
 )
@@ -96,6 +186,14 @@ func (m networkPartitionMutator) Generate(
 	protectedNodes, err := m.strategy.selectProtectedNodes(rng, planner.currentContext.System.Descriptor.Nodes)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(protectedNodes) > 0 {
+		protectedNodesMut, err := m.createProtectedNodes(plan.newStepSelector(), protectedNodes)
+		if err != nil {
+			return nil, err
+		}
+		mutations = append(mutations, protectedNodesMut...)
 	}
 
 	f, err := GetFailer(planner, failures.IPTablesNetworkPartitionName)
@@ -151,6 +249,25 @@ func (m networkPartitionMutator) Generate(
 	}
 
 	return mutations, nil
+}
+
+func (m networkPartitionMutator) createProtectedNodes(
+	steps stepSelector, protectedNodes option.NodeListOption,
+) ([]mutation, error) {
+	// Find the last system setup step. We want to set the zone constraints
+	// after the cluster is setup, but before any meaningful work is done.
+	setupSteps := steps.Filter(func(step *singleStep) bool {
+		return step.context.System.Stage == SystemSetupStage
+	})
+
+	if len(setupSteps) == 0 {
+		return nil, errors.New("no setup steps found")
+	}
+
+	lastSetupStep := setupSteps[len(setupSteps)-1]
+	return stepSelector{lastSetupStep}.InsertAfter(
+		pinVoterReplicasStep{protectedNodes: protectedNodes},
+	), nil
 }
 
 // leaderLeasesMinVersion is the version in which leader leases were introduced.
@@ -343,6 +460,7 @@ func (m networkPartitionMutator) createPartitionMutations(
 		f:                f,
 		partitions:       partitions,
 		unavailableNodes: unavailableNodes,
+		protectedNodes:   protectedNodes,
 	})
 
 	addRecoveryStep := recoverStep.InsertAfter(networkPartitionRecoveryStep{
