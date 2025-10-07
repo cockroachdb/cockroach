@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -63,10 +64,12 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 		}
 	)
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	_, err := sqlDB.Exec("SELECT 1 FROM system.transaction_diagnostics_requests LIMIT 0")
 	require.Error(t, err, "system.transaction_diagnostics_requests table should not exist")
 	_, err = sqlDB.Exec("SELECT 1 FROM system.transaction_diagnostics LIMIT 0")
 	require.Error(t, err, "system.transaction_diagnostics table should not exist")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	// Inject the old copy of the descriptor.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementDiagnosticsTable,
 		getOldStatementDiagnosticsDescriptor)
@@ -85,7 +88,9 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 	}
 	// Validate that the statement_diagnostics table has the old
 	// schema.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	validateSchemaExists(false)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	// Run the upgrade.
 	upgrades.Upgrade(
 		t,
@@ -94,12 +99,14 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 		nil,   /* done */
 		false, /* expectError */
 	)
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	_, err = sqlDB.Exec(`SELECT 1 FROM system.transaction_diagnostics_requests LIMIT 0`)
 	require.NoError(t, err, "system.transaction_diagnostics_requests table should exist")
 	_, err = sqlDB.Exec(`SELECT 1 FROM system.transaction_diagnostics LIMIT 0`)
 	require.NoError(t, err, "system.transaction_diagnostics table should exist")
 	// Validate that the table has new schema.
 	validateSchemaExists(true)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 }
 
 func getOldStatementDiagnosticsDescriptor() *descpb.TableDescriptor {

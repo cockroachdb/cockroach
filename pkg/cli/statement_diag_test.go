@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -38,7 +39,9 @@ func Example_statement_diag() {
 	}
 
 	for _, cmd := range commands {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		_, err := c.RunWithCaptureArgs([]string{"sql", "-e", cmd})
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if err != nil {
 			log.Dev.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
 		}

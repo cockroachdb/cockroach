@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1802,7 +1803,9 @@ func TestRangeFeedMetadataAutoSplit(t *testing.T) {
 		ts := srv.ApplicationLayer()
 
 		var maxTableID uint32
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		sql.QueryRow(t, "SELECT max(id) FROM system.namespace").Scan(&maxTableID)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		tenantPrefixEnd := srv.Codec().TenantPrefix().PrefixEnd()
 
 		// Create a rangefeed that listens to key updates at the highest table in

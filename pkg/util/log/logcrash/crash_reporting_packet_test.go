@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -212,9 +213,11 @@ func TestInternalErrorReporting(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	if _, err := sqlDB.Exec("SELECT crdb_internal.force_assertion_error('woo')"); !testutils.IsError(err, "internal error") {
 		t.Fatalf("expected internal error, got %v", err)
 	}
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	if len(packets) != 1 {
 		t.Fatalf("expected exactly 1 reporting packet")

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -80,7 +81,9 @@ func TestUsersLastLoginTimeTableMigration(t *testing.T) {
 	}
 	// Validate that the users table has the old
 	// schema.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	validateSchemaExists(false)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	// Run the upgrade.
 	upgrades.Upgrade(
 		t,
@@ -90,7 +93,9 @@ func TestUsersLastLoginTimeTableMigration(t *testing.T) {
 		false, /* expectError */
 	)
 	// Validate that the table has new schema.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	validateSchemaExists(true)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 }
 
 // getOldUsersDescriptor returns the

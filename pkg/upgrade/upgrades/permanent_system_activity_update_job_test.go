@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,7 +32,9 @@ func TestCreateActivityUpdateJobMigration(t *testing.T) {
 	db := tc.ServerConn(0)
 	defer db.Close()
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	row := db.QueryRow("SELECT count(*) FROM system.public.jobs WHERE id = 103")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	assert.NotNil(t, row)
 	assert.NoError(t, row.Err())
 	var count int

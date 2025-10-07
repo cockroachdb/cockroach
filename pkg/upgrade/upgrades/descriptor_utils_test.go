@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
@@ -83,6 +84,8 @@ func TestCreateSystemTable(t *testing.T) {
 
 	// Verify that the keys were not written.
 	checkEntries := func(t *testing.T) [][]string {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
+		defer func() { unsafesql.TestOverrideAllowUnsafeInternals = false }()
 		return sqlDB.QueryStr(t, `
 SELECT *
   FROM system.namespace
@@ -95,9 +98,11 @@ SELECT *
 		ctx, descDB, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table, tree.LocalityLevelGlobal,
 	))
 	require.Len(t, checkEntries(t), 1)
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	sqlDB.CheckQueryResults(t,
 		"SELECT create_statement FROM [SHOW CREATE TABLE system.fake_table]",
 		[][]string{{fakeTableSchema}})
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	// Make sure it's idempotent.
 	require.NoError(t, upgrades.CreateSystemTable(

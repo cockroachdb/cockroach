@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -228,7 +229,9 @@ func runCircuitBreakerTestForKey(
 	}
 
 	var rangeSpans []roachpb.Span
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	r, err := c.QueryContext(ctx, "select range_id, start_key, end_key from crdb_internal.ranges_no_leases order by start_key")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	require.NoError(t, err, "failed to query ranges")
 	for r.Next() {
 		var rangeID int

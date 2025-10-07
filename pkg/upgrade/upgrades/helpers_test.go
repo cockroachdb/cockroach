@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/assert"
@@ -205,6 +206,7 @@ func ValidateSystemDatabaseSchemaVersionBumped(
 	expectedSchemaVersion := expectedVersion.Version()
 
 	var actualSchemaVersionBytes []byte
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	require.NoError(t, sqlDB.QueryRow(
 		`SELECT crdb_internal.json_to_pb(
     'cockroach.roachpb.Version',
@@ -216,6 +218,7 @@ func ValidateSystemDatabaseSchemaVersionBumped(
 FROM system.descriptor WHERE id = $1`,
 		keys.SystemDatabaseID,
 	).Scan(&actualSchemaVersionBytes))
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	actualSchemaVersion := roachpb.Version{}
 	require.NoError(t, protoutil.Unmarshal(actualSchemaVersionBytes, &actualSchemaVersion))

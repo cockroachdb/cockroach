@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -322,10 +323,12 @@ func TestClusterInflightTraces(t *testing.T) {
 					// cache extra time to populate while the tenant startup process completes.
 					testutils.SucceedsSoon(t, func() error {
 						for _, db := range tc.dbs {
+							unsafesql.TestOverrideAllowUnsafeInternals = true
 							rows, err := db.Query(
 								"SELECT node_id, trace_str FROM crdb_internal.cluster_inflight_traces "+
 									"WHERE trace_id=$1 ORDER BY node_id",
 								localTraceID)
+							unsafesql.TestOverrideAllowUnsafeInternals = false
 							if err != nil {
 								return errors.Wrap(err, "failed to query crdb_internal.cluster_inflight_traces")
 							}

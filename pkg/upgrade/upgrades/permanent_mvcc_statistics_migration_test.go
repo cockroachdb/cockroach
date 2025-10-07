@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,12 +31,16 @@ func TestMVCCStatisticsMigration(t *testing.T) {
 	defer sqlDB.Close()
 
 	t.Run("mvcc_statistics_table", func(t *testing.T) {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		_, err := sqlDB.Exec("SELECT * FROM system.mvcc_statistics")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		require.NoError(t, err, "system.public.mvcc_statistics exists")
 	})
 
 	t.Run("mvcc_stats_job", func(t *testing.T) {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		row := sqlDB.QueryRow("SELECT count(*) FROM system.public.jobs WHERE id = 104")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		require.NotNil(t, row)
 		require.NoError(t, row.Err())
 		var count int

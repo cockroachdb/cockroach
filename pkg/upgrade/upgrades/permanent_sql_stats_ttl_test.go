@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -60,6 +61,7 @@ func TestSQLStatsTTLChange(t *testing.T) {
 			db := testCase.dbCon
 			var target string
 			var rawConfigSql string
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			for _, table := range tables {
 				row := db.QueryRow(fmt.Sprintf("SHOW ZONE CONFIGURATION FROM TABLE %s", table))
 				err := row.Scan(&target, &rawConfigSql)
@@ -68,6 +70,7 @@ func TestSQLStatsTTLChange(t *testing.T) {
 				assert.Equal(t, fmt.Sprintf("TABLE %s", table), target)
 				assert.Contains(t, rawConfigSql, "gc.ttlseconds = 3600")
 			}
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 		})
 	}
 }

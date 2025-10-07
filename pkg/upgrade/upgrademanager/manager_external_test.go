@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -140,6 +141,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 
 	var firstID jobspb.JobID
 	var firstPayload, firstProgress []byte
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	require.NoError(t, tc.ServerConn(0).QueryRow(`
    SELECT id, payload, progress FROM crdb_internal.system_jobs WHERE (
                     crdb_internal.pb_to_json(
@@ -148,10 +150,12 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
                     )->'migration'
                    ) IS NOT NULL AND status = 'running'
 `).Scan(&firstID, &firstPayload, &firstProgress))
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	// Inject a second job for the same upgrade and ensure that that causes
 	// an error. This is pretty gnarly.
 	var secondID jobspb.JobID
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	require.NoError(t, tc.ServerConn(0).QueryRow(`
    INSERT
      INTO system.jobs
@@ -171,6 +175,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
              WHERE id = $1
           )
 RETURNING id;`, firstID).Scan(&secondID))
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	// Insert the job payload and progress into the `system.job_info` table.
 	err := tc.Server(0).InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := jobs.InfoStorageForJob(txn, secondID)
@@ -335,13 +340,17 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 		canResume := <-upgradeStarted
 
 		var jobID jobspb.JobID
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		require.NoError(t,
 			sqlDB.QueryRow(`
 SELECT id
 FROM system.jobs WHERE job_type = 'MIGRATION' AND status = 'running'`).Scan(&jobID))
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 
 		verifyJobInfoQuery := func() {
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			rows, err := sqlDB.Query(upgrademanager.PostJobInfoTableQuery, targetCVJSON.String())
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 			require.NoError(t, err)
 			defer rows.Close()
 
@@ -351,10 +360,12 @@ FROM system.jobs WHERE job_type = 'MIGRATION' AND status = 'running'`).Scan(&job
 		}
 		verifyJobInfoQuery()
 		t.Logf("inserting row")
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		res, err := sqlDB.Exec(`
 INSERT INTO system.job_info (
 SELECT job_id, info_key, now(), value
 FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		require.NoError(t, err)
 		rowsInserted, err := res.RowsAffected()
 		require.NoError(t, err)
@@ -642,6 +653,7 @@ func TestPauseMigration(t *testing.T) {
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	var id int64
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.QueryRow(t, `
 SELECT id
   FROM crdb_internal.system_jobs
@@ -652,6 +664,7 @@ SELECT id
         )->'migration'
        ) IS NOT NULL AND status = 'running';`).
 		Scan(&id)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	tdb.Exec(t, "PAUSE JOB $1", id)
 
 	<-ev.canceled
@@ -677,9 +690,11 @@ SELECT id
 	// Wait for the job to actually be paused as opposed to waiting in
 	// pause-requested. There's a separate issue to make PAUSE wait for
 	// the job to be paused, but that's a behavior change is better than nothing.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.CheckQueryResultsRetry(t, fmt.Sprintf(
 		`SELECT status FROM crdb_internal.jobs WHERE job_id = %d`, id,
 	), [][]string{{"paused"}})
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	tdb.Exec(t, "RESUME JOB $1", id)
 	ev = <-ch
 	close(ev.unblock)

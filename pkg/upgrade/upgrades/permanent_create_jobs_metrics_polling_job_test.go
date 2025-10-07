@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,7 +32,9 @@ func TestCreateJobsMetricsPollingJob(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 	defer sqlDB.Close()
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	row := sqlDB.QueryRow("SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'POLL JOBS STATS'")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	var count int
 	err := row.Scan(&count)
 	require.NoError(t, err)

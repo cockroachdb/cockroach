@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -30,8 +31,10 @@ func TestCreateHotRangesLoggerJob(t *testing.T) {
 	defer ts.Stopper().Stop(ctx)
 	conn := sqlutils.MakeSQLRunner(db)
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	row := conn.QueryRow(t,
 		fmt.Sprintf("SELECT count(*) FROM system.public.jobs WHERE id = %d", jobs.HotRangesLoggerJobID))
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	require.NotNil(t, row)
 	var count int
 	row.Scan(&count)

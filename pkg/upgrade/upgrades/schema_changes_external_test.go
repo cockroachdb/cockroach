@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -542,9 +543,11 @@ func waitUntilState(
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		var status jobs.State
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t,
 			"SELECT status FROM system.jobs WHERE id = $1", jobID,
 		).Scan(&status)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if status == expectedStatus {
 			return nil
 		}

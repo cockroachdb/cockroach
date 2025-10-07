@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,9 +44,11 @@ func TestInspectErrorsTable(t *testing.T) {
 	s, sqlDB := tc.Server(0), tc.ServerConn(0)
 
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	_, err := sqlDB.Exec("SELECT * FROM system.inspect_errors")
 	require.Error(t, err, "system.inspect_errors rates columns should not exist")
 	upgrades.Upgrade(t, sqlDB, clusterversion.V25_4_InspectErrorsTable, nil, false)
 	_, err = sqlDB.Exec("SELECT * FROM system.inspect_errors")
 	require.NoError(t, err, "system.inspect_errors rates columns should exist")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 }

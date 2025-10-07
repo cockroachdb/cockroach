@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
@@ -80,14 +81,18 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 			routineChan <- err
 			return
 		}
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		_, err = tx.Exec("SELECT name from system.settings where name='version' FOR UPDATE")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if err != nil {
 			routineChan <- err
 			return
 		}
 		resumeBump <- struct{}{}
 		for retry := retry.Start(retry.Options{}); retry.Next(); {
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			_, err = tx.Exec("SELECT name from system.settings where name='version' FOR UPDATE")
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 			if err != nil {
 				rollbackErr := tx.Rollback()
 				routineChan <- errors.WithSecondaryError(err, rollbackErr)

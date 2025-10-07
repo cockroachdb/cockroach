@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -67,10 +68,12 @@ func TestWriter(t *testing.T) {
 			runner := sqlutils.MakeSQLRunner(conn)
 			var rows int
 			testutils.SucceedsSoon(t, func() error {
+				unsafesql.TestOverrideAllowUnsafeInternals = true
 				runner.QueryRow(t,
 					fmt.Sprintf(`SELECT count(*) from system.eventlog where "eventType" = '%s' and "reportingID"=%d`,
 						logtestutils.TestEventType, tc.instanceId),
 				).Scan(&rows)
+				unsafesql.TestOverrideAllowUnsafeInternals = false
 
 				if rows != 1 {
 					return errors.New("Event not persisted")

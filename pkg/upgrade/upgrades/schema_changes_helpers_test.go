@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -44,8 +45,10 @@ func MakeFakeMigrationForTestMigrationWithFailures() (
 	return func(
 		ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 	) error {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		row, err := d.InternalExecutor.QueryRow(ctx, "look-up-id", nil, /* txn */
 			`select id from system.namespace where name = $1`, "test_table")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if err != nil {
 			return err
 		}
@@ -99,8 +102,10 @@ func MakeFakeMigrationForTestMigrationWithFailuresMultipleAltersOnSameColumn() (
 	return func(
 		ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 	) error {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		row, err := d.InternalExecutor.QueryRow(ctx, "look-up-id", nil, /* txn */
 			`select id from system.namespace where name = $1`, "test_table")
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if err != nil {
 			return err
 		}
