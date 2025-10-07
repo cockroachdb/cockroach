@@ -558,12 +558,18 @@ func maxSupportedTPCCWarehouses(
 	return warehouses
 }
 
+type TPCCMixedHeadroomOpts struct {
+	upreplicate            bool
+	protectedNodePartition bool
+	singlePartition        bool
+}
+
 // runTPCCMixedHeadroom runs a mixed-version test that imports a large
 // `bank` dataset, and runs multiple database upgrades while a TPCC
 // workload is running. The number of database upgrades is randomized
 // by the mixed-version framework which chooses a random predecessor version
 // and upgrades until it reaches the current version.
-func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, chaos bool) {
+func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, opts TPCCMixedHeadroomOpts) {
 	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 
@@ -576,9 +582,9 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 	if c.IsLocal() {
 		bankRows = 1000
 	}
-	// If the test is a chaos test, we decrease the number of rows and warehouses
+	// If we're up-replicating, decrease the number of rows and warehouses
 	// in order to lower the time it takes to reach replication with a larger cluster.
-	if chaos {
+	if opts.upreplicate {
 		bankRows = 1000
 		headroomWarehouses = 200
 	}
@@ -593,12 +599,30 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		mixedversion.MaxNumPlanSteps(70),
 	}
 
-	// If the test is a chaos test, we want to opt for the more expansive panic
+	// If the test is an up-replicate test, we want to opt for the more expansive pani
 	// mutator, as well any other appropriate test opts for the unique test.
-	if chaos {
+	if opts.upreplicate {
 		customOpts = append([]mixedversion.CustomOption{
 			mixedversion.NeverUseFixtures,
 			mixedversion.EnableHooksDuringFailureInjection,
+		},
+			customOpts...)
+	}
+	if opts.protectedNodePartition {
+		customOpts = append([]mixedversion.CustomOption{
+			mixedversion.NeverUseFixtures,
+			mixedversion.EnableHooksDuringFailureInjection,
+			mixedversion.WithProtectedNodeNetworkPartition(),
+			mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment, mixedversion.SharedProcessDeployment),
+		},
+			customOpts...)
+	}
+	if opts.singlePartition {
+		customOpts = append([]mixedversion.CustomOption{
+			mixedversion.NeverUseFixtures,
+			mixedversion.EnableHooksDuringFailureInjection,
+			mixedversion.WithSingleNetworkPartition(),
+			mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment, mixedversion.SharedProcessDeployment),
 		},
 			customOpts...)
 	}
@@ -762,7 +786,7 @@ func registerTPCC(r registry.Registry) {
 		Monitor:           true,
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCCMixedHeadroom(ctx, t, c, true)
+			runTPCCMixedHeadroom(ctx, t, c, TPCCMixedHeadroomOpts{})
 		},
 	})
 
@@ -786,7 +810,47 @@ func registerTPCC(r registry.Registry) {
 		Monitor:           true,
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCCMixedHeadroom(ctx, t, c, false)
+			runTPCCMixedHeadroom(ctx, t, c, TPCCMixedHeadroomOpts{
+				upreplicate: true,
+			})
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:    "tpcc/mixed-headroom/single-partition/" + mixedHeadroomSpec.String(),
+		Timeout: 7 * time.Hour,
+		Owner:   registry.OwnerTestEng,
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds:  registry.AllClouds.NoAWS().NoIBM(),
+		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
+		Cluster:           mixedHeadroomSpec,
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Monitor:           true,
+		Randomized:        true,
+		NonReleaseBlocker: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCCMixedHeadroom(ctx, t, c, TPCCMixedHeadroomOpts{
+				singlePartition: true,
+			})
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:    "tpcc/mixed-headroom/protected-partition/" + mixedHeadroomSpec.String(),
+		Timeout: 7 * time.Hour,
+		Owner:   registry.OwnerTestEng,
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds:  registry.AllClouds.NoAWS().NoIBM(),
+		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
+		Cluster:           mixedHeadroomSpec,
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Monitor:           true,
+		Randomized:        true,
+		NonReleaseBlocker: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCCMixedHeadroom(ctx, t, c, TPCCMixedHeadroomOpts{
+				protectedNodePartition: true,
+			})
 		},
 	})
 
