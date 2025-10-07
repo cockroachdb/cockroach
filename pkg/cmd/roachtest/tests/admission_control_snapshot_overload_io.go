@@ -172,15 +172,15 @@ func runAdmissionControlSnapshotOverloadIO(
 
 	// Now set disk bandwidth limits
 	if cfg.limitDiskBandwidth {
-		const bandwidthLimit = 128 << 20 // 128 MiB
-		t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", bandwidthLimit))
+		const bandwidthLimitMbs = 128
+		t.Status(fmt.Sprintf("limiting disk bandwidth to %d MB/s", bandwidthLimitMbs))
 		staller := roachtestutil.MakeCgroupDiskStaller(t, c,
 			false /* readsToo */, false /* logsToo */)
 		staller.Setup(ctx)
-		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimit)
+		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimitMbs<<20 /* bytesPerSecond */)
 
 		if _, err := db.ExecContext(
-			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
+			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
 			t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 		}
 		if _, err := db.ExecContext(
