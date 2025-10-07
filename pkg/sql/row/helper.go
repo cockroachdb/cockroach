@@ -477,7 +477,7 @@ func (rh *RowHelper) CheckRowSize(
 		}
 		migrator := log.NewStructuredEventMigrator(func() bool {
 			return rh.migrateLargeRowLog
-		}, logpb.Channel_SQL_EXEC)
+		}, logpb.Channel_SQL_PERF)
 		migrator.StructuredEvent(ctx, severity.INFO, event)
 	}
 	if shouldErr {
