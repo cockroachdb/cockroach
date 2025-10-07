@@ -17,14 +17,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 16 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 16 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 16 (t_pkey+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 8 (t_i_idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 8 (t_i_idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 8 (t_i_idx+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 10 (t_j_idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 10 (t_j_idx+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 12 (idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 12 (idx+)}
  │         │    └── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 12 (idx+)}
@@ -81,14 +81,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 16 (t_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 16 (t_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 16 (t_pkey+)}
- │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 8 (t_i_idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 8 (t_i_idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 8 (t_i_idx+)}
- │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 10 (t_j_idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 10 (t_j_idx+)}
- │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 12 (idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 12 (idx+)}
  │    │    │    └── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 12 (idx+)}
@@ -116,14 +116,14 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 16 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 16 (t_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 16 (t_pkey+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 8 (t_i_idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 8 (t_i_idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 8 (t_i_idx+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 10 (t_j_idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 10 (t_j_idx+)}
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 12 (idx+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 12 (idx+)}
  │         │    └── ABSENT → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 12 (idx+)}
@@ -203,9 +203,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    ├── Stage 2 of 15 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
- │    │    │    ├── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+ │    │    │    ├── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    └── 4 Backfill operations
  │    │         ├── BackfillIndex {"IndexID":16,"SourceIndexID":1,"TableID":104}
  │    │         ├── BackfillIndex {"IndexID":8,"SourceIndexID":1,"TableID":104}
@@ -214,9 +214,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    ├── Stage 3 of 15 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILLED → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
- │    │    │    ├── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+ │    │    │    ├── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    └── 6 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":16,"TableID":104}
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":8,"TableID":104}
@@ -227,9 +227,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    ├── Stage 4 of 15 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
- │    │    │    ├── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+ │    │    │    ├── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    └── 6 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":16,"TableID":104}
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":8,"TableID":104}
@@ -240,9 +240,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    ├── Stage 5 of 15 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
- │    │    │    ├── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+ │    │    │    ├── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    └── 4 Backfill operations
  │    │         ├── MergeIndex {"BackfilledIndexID":16,"TableID":104,"TemporaryIndexID":17}
  │    │         ├── MergeIndex {"BackfilledIndexID":8,"TableID":104,"TemporaryIndexID":9}
@@ -251,9 +251,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    ├── Stage 6 of 15 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── MERGED     → WRITE_ONLY            PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
- │    │    │    ├── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
- │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+ │    │    │    ├── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+ │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 17, ConstraintID: 11, SourceIndexID: 1 (t_pkey-)}
  │    │    │    ├── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 9, ConstraintID: 3, SourceIndexID: 1 (t_pkey-)}
@@ -273,9 +273,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    ├── Stage 7 of 15 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward PUBLIC
  │    │    │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey+), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey-)}
- │    │    │    ├── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
- │    │    │    ├── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
- │    │    │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+ │    │    │    ├── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+ │    │    │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    └── 4 Validation operations
  │    │         ├── ValidateIndex {"IndexID":16,"TableID":104}
  │    │         ├── ValidateIndex {"IndexID":8,"TableID":104}
@@ -283,11 +283,11 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │         └── ValidateIndex {"IndexID":12,"TableID":104}
  │    ├── Stage 8 of 15 in PostCommitPhase
  │    │    ├── 11 elements transitioning toward PUBLIC
- │    │    │    ├── VALIDATED → PUBLIC        SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
+ │    │    │    ├── VALIDATED → PUBLIC        SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx+), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
  │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104 (t), Name: "t_i_idx", IndexID: 8 (t_i_idx+)}
- │    │    │    ├── VALIDATED → PUBLIC        SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
+ │    │    │    ├── VALIDATED → PUBLIC        SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx+), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
  │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104 (t), Name: "t_j_idx", IndexID: 10 (t_j_idx+)}
- │    │    │    ├── VALIDATED → PUBLIC        SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
+ │    │    │    ├── VALIDATED → PUBLIC        SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx+), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey-), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
  │    │    │    ├── ABSENT    → PUBLIC        IndexName:{DescID: 104 (t), Name: "idx", IndexID: 12 (idx+)}
  │    │    │    ├── ABSENT    → BACKFILL_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 14 (t_i_key+), ConstraintID: 8, TemporaryIndexID: 15, SourceIndexID: 16 (t_pkey+), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC        IndexData:{DescID: 104 (t), IndexID: 14 (t_i_key+)}
@@ -315,13 +315,13 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":14,"Kind":1,"TableID":104}
  │    │         ├── AddColumnToIndex {"ColumnID":2,"IndexID":15,"Kind":1,"TableID":104}
  │    │         ├── SetIndexName {"IndexID":14,"Name":"t_i_key","TableID":104}
- │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":8,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":16}
+ │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":8,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":1}
  │    │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":8,"TableID":104}
  │    │         ├── RefreshStats {"TableID":104}
- │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":10,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":16}
+ │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":10,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":1}
  │    │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":10,"TableID":104}
  │    │         ├── RefreshStats {"TableID":104}
- │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":12,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":16}
+ │    │         ├── MarkRecreatedIndexAsInvisible {"IndexID":12,"SetHideIndexFlag":true,"TableID":104,"TargetPrimaryIndexID":1}
  │    │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":12,"TableID":104}
  │    │         ├── RefreshStats {"TableID":104}
  │    │         ├── MarkRecreatedIndexAsVisible {"IndexID":8,"TableID":104}
