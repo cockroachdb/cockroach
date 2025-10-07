@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/google/btree"
 )
 
 var errRenewLease = errors.New("renew lease on id")
@@ -684,8 +685,13 @@ func ensureVersion(
 		return err
 	}
 
-	if s := m.findNewest(id); s != nil && s.GetVersion() < minVersion {
+	s := m.findNewest(id)
+	if s != nil && s.GetVersion() < minVersion {
 		return errors.Errorf("version %d for descriptor %s does not exist yet", minVersion, s.GetName())
+	} else if s != nil {
+		// Process any descriptor updates that will allow us to move the close timestamp
+		// forward.
+		m.processDescriptorUpdate(ctx, id, s.GetVersion(), s.GetModificationTime())
 	}
 	return nil
 }
@@ -1327,6 +1333,20 @@ const (
 	AcquireBackground
 )
 
+// descriptorTxnUpdate tracks updates to a set of descriptors in the
+// system.descriptors by a transaction, that should be made available
+// atomically.
+type descriptorTxnUpdate struct {
+	mu struct {
+		syncutil.Mutex
+		// DescriptorUpdates contains any descriptor versions that we are
+		// presently waiting for.
+		descpb.DescriptorUpdates
+	}
+	timestamp hlc.Timestamp
+	key       roachpb.Key
+}
+
 // Manager manages acquiring and releasing per-descriptor leases. It also
 // handles resolving descriptor names to descriptor IDs. The leases are managed
 // internally with a descriptor and expiration time exported by the
@@ -1365,6 +1385,14 @@ type Manager struct {
 
 		// rangeFeedRestartInProgress tracks if a range feed restart is in progress.
 		rangeFeedRestartInProgress bool
+
+		// descriptorTxnUpdatesToProcess is a list of descriptor txn updates that
+		// are waiting for new descriptor versions to be available.
+		descriptorTxnUpdatesToProcess *btree.BTreeG[*descriptorTxnUpdate]
+
+		// hasUpdatesToDelete tracks if there is data in the key space that
+		// should be cleaned up.
+		hasUpdatesToDelete bool
 	}
 
 	// closeTimeStamp for the range feed, which is the timestamp
@@ -1387,6 +1415,9 @@ type Manager struct {
 	descUpdateCh chan catalog.Descriptor
 	// descDelCh receives deleted descriptors from the range feed.
 	descDelCh chan descpb.ID
+	// descMetaDataUpdateCh receives updated transaction metadata from the
+	// range feed.
+	descMetaDataUpdateCh chan *descriptorTxnUpdate
 	// rangefeedErrCh receives any terminal errors from the rangefeed.
 	rangefeedErrCh chan error
 	// leaseGeneration increments any time a new or existing descriptor is
@@ -1523,6 +1554,10 @@ func NewLeaseManager(
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.stopper.AddCloser(stop.CloserFn(lm.AssertAllLeasesAreReleasedAfterDrain))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
+	lm.mu.descriptorTxnUpdatesToProcess = btree.NewG(2, func(a, b *descriptorTxnUpdate) bool {
+		return a.timestamp.Less(b.timestamp)
+	})
+	lm.mu.hasUpdatesToDelete = true
 	lm.waitForInit = make(chan struct{})
 	// We are going to start the range feed later when StartRefreshLeasesTask
 	// is invoked inside pre-start. So, that guarantees all range feed events
@@ -1533,6 +1568,7 @@ func NewLeaseManager(
 	lm.draining.Store(false)
 	lm.descUpdateCh = make(chan catalog.Descriptor)
 	lm.descDelCh = make(chan descpb.ID)
+	lm.descMetaDataUpdateCh = make(chan *descriptorTxnUpdate)
 	lm.rangefeedErrCh = make(chan error)
 	lm.bytesMonitor = mon.NewMonitor(mon.Options{
 		Name:       mon.MakeName("leased-descriptors"),
@@ -1948,6 +1984,131 @@ func (m *Manager) findDescriptorState(id descpb.ID, create bool) *descriptorStat
 	return t
 }
 
+// hasDescUpdateBeenApplied checks if all versions of a descriptor update are
+// present. If not, it returns a new descpb.DescriptorUpdates containing the
+// versions that are still missing.
+func (m *Manager) hasDescUpdateBeenApplied(
+	updates descpb.DescriptorUpdates,
+) (allApplied bool, remaining descpb.DescriptorUpdates) {
+	allApplied = true
+	for idx, descID := range updates.DescriptorIDs {
+		descVersionState := m.findNewest(descID)
+		requiredVersion := updates.DescriptorVersions[idx]
+		// If a descriptor is missing, we still consider it as applied, since
+		// we will lease a newer version.
+		if descVersionState != nil && descVersionState.GetVersion() < requiredVersion {
+			allApplied = allApplied && descVersionState == nil
+			remaining.DescriptorIDs = append(remaining.DescriptorIDs, descID)
+			remaining.DescriptorVersions = append(remaining.DescriptorVersions, requiredVersion)
+		}
+	}
+	return allApplied, remaining
+}
+
+// getDescriptorTxnUpdateEntry returns the descriptorTxnUpdate entry for the given timestamp,
+// if there are any pending updates.
+func (m *Manager) getDescriptorTxnUpdateEntry(timestamp hlc.Timestamp) *descriptorTxnUpdate {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := &descriptorTxnUpdate{timestamp: timestamp}
+	entry, hasTS := m.mu.descriptorTxnUpdatesToProcess.Get(key)
+	if !hasTS {
+		return nil
+	}
+	return entry
+}
+
+// processDescriptorUpdate will process this descriptor update for txn
+// consistency.
+func (m *Manager) processDescriptorUpdate(
+	ctx context.Context, id descpb.ID, version descpb.DescriptorVersion, timestamp hlc.Timestamp,
+) {
+	entry := m.getDescriptorTxnUpdateEntry(timestamp)
+	// This timestamp has no pending update.
+	if entry == nil {
+		return
+	}
+	noEntriesLeft := func() bool {
+		// Lock this specific entry
+		entry.mu.Lock()
+		defer entry.mu.Unlock()
+		// Process this descriptor version inside the entry.
+		for idx, descID := range entry.mu.DescriptorIDs {
+			if descID != id {
+				continue
+			}
+			// The target version has not arrived yet for this update.
+			if entry.mu.DescriptorVersions[idx] > version {
+				return false
+			}
+			// Otherwise, let's move this version to the end first.
+			endIdx := len(entry.mu.DescriptorIDs) - 1
+			if idx != endIdx {
+				entry.mu.DescriptorIDs[idx], entry.mu.DescriptorIDs[endIdx] =
+					entry.mu.DescriptorIDs[endIdx], entry.mu.DescriptorIDs[idx]
+				entry.mu.DescriptorVersions[idx], entry.mu.DescriptorVersions[endIdx] =
+					entry.mu.DescriptorVersions[endIdx], entry.mu.DescriptorVersions[idx]
+			}
+			// Remove one element from the end after.
+			entry.mu.DescriptorIDs = entry.mu.DescriptorIDs[:len(entry.mu.DescriptorIDs)-1]
+			entry.mu.DescriptorVersions = entry.mu.DescriptorVersions[:len(entry.mu.DescriptorIDs)-1]
+			break
+		}
+		return len(entry.mu.DescriptorIDs) == 0
+	}()
+	// Everything is processed, so we can move the timestamp forward.
+	if noEntriesLeft {
+		// If the length is zero by this point, then we can move the timestamp forward
+		// and remove this entry.
+		targetTimestamp := m.markDescriptorUpdatesAsComplete()
+		if !targetTimestamp.IsEmpty() {
+			m.advanceCloseTimestamp(targetTimestamp)
+		}
+	}
+}
+
+// markDescriptorUpdatesAsComplete will move the close timestamp forward if
+// all descriptor updates have been applied.
+func (m *Manager) markDescriptorUpdatesAsComplete() hlc.Timestamp {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	timestamp := hlc.Timestamp{}
+	for {
+		minUpdate, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
+		if !hasMin {
+			break
+		}
+		shouldRemoveEntry := func() bool {
+			minUpdate.mu.Lock()
+			defer minUpdate.mu.Unlock()
+			return len(minUpdate.mu.DescriptorIDs) == 0
+		}()
+		if !shouldRemoveEntry {
+			break
+		}
+		timestamp = minUpdate.timestamp
+		m.mu.descriptorTxnUpdatesToProcess.Delete(minUpdate)
+	}
+	return timestamp
+}
+
+// advanceCloseTimestamp advances the close timestamp atomically, if the current
+// close timestamp is smaller.
+func (m *Manager) advanceCloseTimestamp(timestamp hlc.Timestamp) {
+	for {
+		oldTimestamp := m.closeTimestamp.Load().(hlc.Timestamp)
+		// Timestamp has already been advanced.
+		if !oldTimestamp.Less(timestamp) {
+			return
+		}
+		// Otherwise, attempt to swap the timestamp, if successful we
+		// will return.
+		if m.closeTimestamp.CompareAndSwap(oldTimestamp, timestamp) {
+			return
+		}
+	}
+}
+
 // StartRefreshLeasesTask starts a goroutine that refreshes the lease manager
 // leases for descriptors received in the latest system configuration via gossip or
 // rangefeeds. This function must be passed a non-nil gossip if
@@ -2062,6 +2223,30 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
 					evFunc(desc.DescriptorProto())
 				}
+			case descUpdate := <-m.descMetaDataUpdateCh:
+				// Check if the update has been applied.
+				allApplied, remaining := m.hasDescUpdateBeenApplied(descUpdate.mu.DescriptorUpdates)
+				descUpdate.mu.DescriptorUpdates = remaining
+				advanceTimestamp := func() bool {
+					m.mu.Lock()
+					defer m.mu.Unlock()
+					m.mu.hasUpdatesToDelete = true
+					// If there are no other earlier pending updates, advance the timestamp.
+					minUpdate, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
+					if allApplied && (!hasMin ||
+						!minUpdate.timestamp.Less(descUpdate.timestamp)) {
+						return true
+					}
+					// Otherwise, insert this into the queue of pending updates
+					m.mu.descriptorTxnUpdatesToProcess.ReplaceOrInsert(descUpdate)
+					return false
+				}()
+				if advanceTimestamp {
+					if m.testingKnobs.TestingOnUpdateReadTimestamp != nil {
+						m.testingKnobs.TestingOnUpdateReadTimestamp(descUpdate.timestamp)
+					}
+					m.advanceCloseTimestamp(descUpdate.timestamp)
+				}
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -2113,13 +2298,43 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		if m.testingKnobs.DisableRangeFeedCheckpoint {
 			return
 		}
-		if len(ev.Value.RawBytes) == 0 {
+		// Check first if it is the special descriptor metadata key used to track
+		// descriptors modified by transactions.
+		if isUpdateKey, err := m.Codec().DecodeDescUpdateKey(ev.Key); err != nil || isUpdateKey {
+			if err != nil {
+				log.Dev.Warningf(ctx, "unable to decode update metadata key %v", ev.Key)
+				return
+			}
+			// Ignore deletes on this key space.
+			if len(ev.Value.RawBytes) == 0 {
+				return
+			}
+			// Otherwise, this is a descriptor update key.
+			var descUpdates descpb.DescriptorUpdates
+			err := ev.Value.GetProto(&descUpdates)
+			if err != nil {
+				log.Dev.Warningf(ctx, "unable to decode descriptor update value %v", err)
+				return
+			}
+			update := &descriptorTxnUpdate{
+				key:       ev.Key,
+				timestamp: ev.Timestamp(),
+			}
+			update.mu.DescriptorUpdates = descUpdates
+			select {
+			case <-m.stopper.ShouldQuiesce():
+			case <-ctx.Done():
+			case m.descMetaDataUpdateCh <- update:
+			}
+			return
+		} else if len(ev.Value.RawBytes) == 0 {
 			id, err := m.Codec().DecodeDescMetadataID(ev.Key)
 			if err != nil {
 				log.Dev.Infof(ctx, "unable to decode metadata key %v", ev.Key)
 				return
 			}
 			select {
+			case <-m.stopper.ShouldQuiesce():
 			case <-ctx.Done():
 			case m.descDelCh <- descpb.ID(id):
 			}
@@ -2139,14 +2354,15 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 				ev.Key, mut.GetID(), mut.GetName(), mut.GetVersion())
 		}
 		select {
+		case <-m.stopper.ShouldQuiesce():
 		case <-ctx.Done():
 		case m.descUpdateCh <- mut:
 		}
 	}
 
 	handleCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-		if m.testingKnobs.TestingOnRangeFeedCheckPoint != nil {
-			m.testingKnobs.TestingOnRangeFeedCheckPoint()
+		if m.testingKnobs.TestingOnUpdateReadTimestamp != nil {
+			m.testingKnobs.TestingOnUpdateReadTimestamp(checkpoint.ResolvedTS)
 		}
 		// Track checkpoints that occur from the rangefeed to make sure progress
 		// is always made.
@@ -2156,7 +2372,15 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 			return
 		}
 		m.mu.rangeFeedCheckpoints += 1
-		m.closeTimestamp.Store(checkpoint.ResolvedTS)
+		m.advanceCloseTimestamp(checkpoint.ResolvedTS)
+		// Clean up all entries before the resolve timestamp.
+		for {
+			minTS, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
+			if !hasMin || !minTS.timestamp.Less(checkpoint.ResolvedTS) {
+				break
+			}
+			m.mu.descriptorTxnUpdatesToProcess.Delete(minTS)
+		}
 	}
 
 	// Assert that the range feed is already terminated.
@@ -2257,6 +2481,10 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 		rangeFeedProgressWatchDogTimeout,
 			rangeFeedProgressWatchDogEnabled := m.getRangeFeedMonitorSettings()
 		rangeFeedProgressWatchDog.Reset(rangeFeedProgressWatchDogTimeout)
+		// Descriptor update clean-up timer
+		var descriptorUpdateCleanupTimer timeutil.Timer
+		descriptorUpdateCleanupTimerDuration := 30 * time.Minute
+		descriptorUpdateCleanupTimer.Reset(descriptorUpdateCleanupTimerDuration)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
@@ -2289,6 +2517,10 @@ func (m *Manager) RunBackgroundLeasingTask(ctx context.Context) {
 
 				// Clean up session based leases that have expired.
 				m.cleanupExpiredSessionLeases(ctx)
+			case <-descriptorUpdateCleanupTimer.C:
+				// Clean up the update key space.
+				m.cleanupUpdateKeys(ctx)
+				descriptorUpdateCleanupTimer.Reset(descriptorUpdateCleanupTimerDuration)
 			}
 		}
 	})
@@ -2396,6 +2628,27 @@ func (m *Manager) cleanupExpiredSessionLeases(ctx context.Context) {
 		}); err != nil {
 			log.Dev.Infof(ctx, "unable to delete leases from storage %s", err)
 		}
+	}
+}
+
+// cleanupUpdateKeys updates special keys that exist for tracking descriptor
+// updates within transactions.
+func (m *Manager) cleanupUpdateKeys(ctx context.Context) {
+	// Only clean update keys if we received any range feed updates.
+	m.mu.Lock()
+	hasUpdates := m.mu.hasUpdatesToDelete
+	m.mu.Unlock()
+	if !hasUpdates {
+		return
+	}
+	// Issue a DelRange on this key space.
+	err := m.storage.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		prefix := m.storage.codec.DescUpdatePrefix()
+		_, err := txn.KV().DelRange(ctx, prefix, prefix.PrefixEnd(), false)
+		return err
+	})
+	if err != nil {
+		log.Dev.Infof(ctx, "unable to delete descriptor update keys from storage: %v", err)
 	}
 }
 
@@ -2514,6 +2767,7 @@ func (m *Manager) DeleteOrphanedLeases(
 		retryOpts.MaxRetries = 10
 		m.deleteOrphanedLeasesFromStaleSession(ctx, retryOpts, timeThreshold, locality)
 		m.deleteOrphanedLeasesWithSameInstanceID(ctx, retryOpts, timeThreshold, instanceID)
+		m.cleanupUpdateKeys(ctx)
 	})
 }
 

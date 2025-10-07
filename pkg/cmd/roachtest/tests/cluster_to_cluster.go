@@ -2057,9 +2057,11 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		var dstNode int
 		srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
 
+		roachprodDstNode := dstNode + sp.srcNodes
+
 		disconnectDuration := sp.additionalDuration
 		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
-			dstNode, disconnectDuration.Minutes())
+			roachprodDstNode, disconnectDuration.Minutes())
 
 		// Normally, the blackholeFailer is accessed through the failer interface,
 		// at least in the failover tests. Because this test shouldn't use all the
@@ -2067,7 +2069,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		// blakholeFailer struct directly. In other words, in this test, we
 		// shouldn't treat the blackholeFailer as an abstracted api.
 		blackholeFailer := &blackholeFailer{t: rd.t, c: rd.c, input: true, output: true}
-		blackholeFailer.FailPartial(ctx, srcNode, []int{dstNode})
+		blackholeFailer.FailPartial(ctx, srcNode, []int{roachprodDstNode})
 
 		time.Sleep(disconnectDuration)
 		// Calling this will log the latest topology.
