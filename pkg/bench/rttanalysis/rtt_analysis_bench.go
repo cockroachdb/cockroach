@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -165,16 +166,40 @@ func executeRoundTripTest(
 		adminSQL.Exec(b, "SELECT 1 FROM bench.public.__dummy__")
 		adminSQL.Exec(b, "DROP TABLE bench.public.__dummy__")
 
+		// Enable unsafe internals for setup queries
+		setupNeedsUnsafe := false
+		if tc.Setup != "" {
+			unsafesql.DisableIfContains(tc.Setup)
+			if unsafesql.TestOverrideAllowUnsafeInternals {
+				setupNeedsUnsafe = true
+			}
+		}
+		for _, s := range tc.SetupEx {
+			unsafesql.DisableIfContains(s)
+			if unsafesql.TestOverrideAllowUnsafeInternals {
+				setupNeedsUnsafe = true
+			}
+		}
+		
+		if setupNeedsUnsafe {
+			unsafesql.TestOverrideAllowUnsafeInternals = true
+		}
+		
 		adminSQL.Exec(b, tc.Setup)
 		for _, s := range tc.SetupEx {
 			adminSQL.Exec(b, s)
 		}
+		
+		// Reset after all setup is done
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		for _, statement := range statements {
 			cluster.clearStatementTrace(statement.SQL)
 		}
 
 		b.StartTimer()
+		unsafesql.DisableIfContains(tc.Stmt)
 		sql.Exec(b, tc.Stmt, tc.StmtArgs...)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		b.StopTimer()
 		var ok bool
 
@@ -207,10 +232,33 @@ func executeRoundTripTest(
 		}
 
 		adminSQL.Exec(b, "DROP DATABASE bench;")
+		
+		// Enable unsafe internals for cleanup queries
+		cleanupNeedsUnsafe := false
+		if tc.Reset != "" {
+			unsafesql.DisableIfContains(tc.Reset)
+			if unsafesql.TestOverrideAllowUnsafeInternals {
+				cleanupNeedsUnsafe = true
+			}
+		}
+		for _, s := range tc.ResetEx {
+			unsafesql.DisableIfContains(s)
+			if unsafesql.TestOverrideAllowUnsafeInternals {
+				cleanupNeedsUnsafe = true
+			}
+		}
+		
+		if cleanupNeedsUnsafe {
+			unsafesql.TestOverrideAllowUnsafeInternals = true
+		}
+		
 		adminSQL.Exec(b, tc.Reset)
 		for _, s := range tc.ResetEx {
 			adminSQL.Exec(b, s)
 		}
+		
+		// Reset after all cleanup is done
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 	}
 
 	if measureRoundtrips {

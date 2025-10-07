@@ -15,6 +15,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings",
+        "//pkg/sql/unsafesql",
         "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/listenerutil",

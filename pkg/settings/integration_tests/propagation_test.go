@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -84,7 +85,9 @@ func runSettingDefaultPropagationTest(
 	defer s.Stopper().Stop(ctx)
 
 	sysDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	sysDB.Exec(t, "SELECT crdb_internal.create_tenant($1, 'test')", serverutils.TestTenantID().ToUint64())
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	// Speed up the tests.
 	sysDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
 

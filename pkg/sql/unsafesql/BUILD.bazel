@@ -10,7 +10,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlerrors",
-        "//pkg/testutils/serverutils",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/severity",

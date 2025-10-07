@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -82,7 +83,9 @@ func WaitForJobToHaveStatus(
 	const duration = 2 * time.Minute
 	err := retry.ForDuration(duration, func() error {
 		var status string
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		db.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", jobID).Scan(&status)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if jobs.State(status) == jobs.StateFailed {
 			if expectedStatus == jobs.StateFailed {
 				return nil

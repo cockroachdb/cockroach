@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,9 +44,11 @@ func TestDecodeCapabilities(t *testing.T) {
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.tenants INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.QueryRow(t, fmt.Sprintf(
 		`SELECT table_id FROM crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 	).Scan(&dummyTableID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	tenantID, err := roachpb.MakeTenantID(10)
 	require.NoError(t, err)

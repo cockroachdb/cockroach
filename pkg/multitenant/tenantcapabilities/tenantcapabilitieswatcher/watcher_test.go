@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiestestutils"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -90,9 +91,11 @@ func TestDataDriven(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.tenants INCLUDING ALL)", dummyTableName))
 
 		var dummyTableID uint32
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t, fmt.Sprintf(
 			`SELECT table_id FROM crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 		).Scan(&dummyTableID)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 
 		mu := struct {
 			syncutil.Mutex

@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime/debug"
 	"strings"
 	"time"
 
@@ -73,13 +72,18 @@ func CheckInternalsAccess(
 		return nil
 	}
 
-	qq(string(debug.Stack()))
 	qq("failing query", q)
 	// Log this access to the SENSITIVE_ACCESS channel to show where failing internals accesses are happening.
 	if deniedLogLimiter.ShouldProcess(timeutil.Now()) {
 		log.StructuredEvent(ctx, severity.WARNING, &eventpb.UnsafeInternalsDenied{Query: q})
 	}
 	return sqlerrors.ErrUnsafeTableAccess
+}
+
+func DisableIfContains(q string) {
+	if strings.Contains(q, "system.") || strings.Contains(q, "crdb_internal.") {
+		TestOverrideAllowUnsafeInternals = true
+	}
 }
 
 func qq(args ...any) {
