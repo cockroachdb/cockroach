@@ -167,10 +167,10 @@ type telemetrySpy struct {
 
 func (l *telemetrySpy) channelsToIntercept() []log.Channel {
 	if log.ShouldMigrateEvent(l.sv) {
-		return []log.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC}
+		return []log.Channel{logpb.Channel_TELEMETRY}
 	}
 
-	return []log.Channel{logpb.Channel_TELEMETRY}
+	return []log.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC}
 }
 
 func (l *telemetrySpy) Intercept(entry []byte) {

@@ -3123,7 +3123,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 			}
 			migrator := log.NewStructuredEventMigrator(func() bool {
 				return log.ShouldMigrateEvent(ex.planner.ExecCfg().SV())
-			}, logpb.Channel_SQL_EXEC)
+			}, logpb.Channel_SQL_PERF)
 			migrator.StructuredEvent(ctx, severity.INFO, event)
 			logCounter.Inc(1)
 		}
