@@ -1009,21 +1009,74 @@ func (s pinVoterReplicasStep) Description(debug bool) string {
 func (s pinVoterReplicasStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	// Build the constraints clause to pin replicas to protected nodes
-	// Format: [+node1,+node2,+node3]
-	var constraints []string
+	// We build a zone constraint that requires every node in `protectedNodes`
+	// to have a voter replica.
+	var constraintParts []string
 	for _, node := range s.protectedNodes {
-		constraints = append(constraints, fmt.Sprintf("+node%d", node))
+		constraintParts = append(constraintParts, fmt.Sprintf(`"+node%d": 1`, node))
 	}
-	constraintsStr := fmt.Sprintf("[%s]", strings.Join(constraints, ","))
+	constraintsStr := fmt.Sprintf(`'{%s}'`, strings.Join(constraintParts, ", "))
+	// Setting voter constraints forces us to also set the replication factor.
+	replicationFactor := 2*len(s.protectedNodes) - 1
+	zoneConfig := fmt.Sprintf("constraints = %s, voter_constraints = %s, num_replicas = %d, num_voters = %d",
+		constraintsStr, constraintsStr, replicationFactor, replicationFactor)
 
-	// Set both constraints and voter_constraints to ensure all replicas are on protected nodes
-	stmt := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING constraints = '%s', voter_constraints = '%s'", constraintsStr, constraintsStr)
+	// Apply the zone config for the default range and the system database.
+	//
+	// N.B. If we start the cluster using fixtures, it will have additional databases such as
+	// `lotsatables` and `persistent_db`. However, these are small enough that they should be
+	// reallocated quickly.
+	stmt := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING %s", zoneConfig)
 	if err := h.System.Exec(rng, stmt); err != nil {
-		return errors.Wrap(err, "failed to set replica constraints")
+		return errors.Wrap(err, "failed to set replica constraints for default range")
+	}
+	l.Printf("applied zone config to default range")
+
+	stmt = fmt.Sprintf("ALTER DATABASE system CONFIGURE ZONE USING %s", zoneConfig)
+	if err := h.System.Exec(rng, stmt); err != nil {
+		return errors.Wrapf(err, "failed to set replica constraints for system database")
 	}
 
-	l.Printf("set constraints and voter_constraints to pin all replicas to protected nodes %v", s.protectedNodes)
+	retryOpts := retry.Options{
+		MaxDuration:    5 * time.Minute,
+		InitialBackoff: 5 * time.Second,
+		MaxBackoff:     5 * time.Second,
+	}
+
+	// Block until all ranges have voter replicas on our protected nodes.
+	var nodeConditions []string
+	for _, node := range s.protectedNodes {
+		nodeConditions = append(nodeConditions, fmt.Sprintf("array_position(voting_replicas, %d) IS NOT NULL", node))
+	}
+	nodeFilter := strings.Join(nodeConditions, " AND ")
+
+	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		query := fmt.Sprintf(`
+			WITH ranges AS (
+				SELECT range_id, database_name, voting_replicas
+				FROM [SHOW CLUSTER RANGES WITH TABLES, DETAILS]
+			)
+			SELECT
+				COUNT(*) AS total_ranges,
+				COUNT(*) FILTER (WHERE %s) AS ranges_with_all_voters
+			FROM ranges
+		`, nodeFilter)
+
+		var totalRanges, rangesWithAllVoters int
+		row := h.QueryRow(rng, query)
+		if err := row.Scan(&totalRanges, &rangesWithAllVoters); err != nil {
+			return errors.Wrap(err, "failed to query voter replicas")
+		}
+
+		if rangesWithAllVoters != totalRanges {
+			l.Printf("protected nodes %v have voter replicas on %d/%d ranges", s.protectedNodes, rangesWithAllVoters, totalRanges)
+			return errors.Errorf("protected nodes %v have voter replicas on %d/%d ranges", s.protectedNodes, rangesWithAllVoters, totalRanges)
+		}
+		l.Printf("all protected nodes %v have voter replicas on all %d ranges", s.protectedNodes, totalRanges)
+		return nil
+	}); err != nil {
+		return err
+	}
 	return nil
 }
 

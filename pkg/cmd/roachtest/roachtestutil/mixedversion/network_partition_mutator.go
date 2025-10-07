@@ -194,13 +194,7 @@ func (m networkPartitionMutator) Generate(
 	upgrades := randomUpgrades(rng, plan)
 	idx := newStepIndex(plan)
 
-	for i, upgrade := range upgrades {
-		// Force a network partition if it's the last upgrade as it's the most important one
-		// to test. Otherwise, we inject a partition with 50% probability.
-		if i != len(upgrades)-1 && rng.Float64() < 0.5 {
-			continue
-		}
-
+	for _, upgrade := range upgrades {
 		mut, err := m.generatePartition(rng, upgrade, idx, planner, protectedNodes, f)
 		if err != nil {
 			return nil, err

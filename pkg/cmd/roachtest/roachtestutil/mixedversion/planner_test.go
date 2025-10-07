@@ -144,7 +144,7 @@ func TestTestPlanner(t *testing.T) {
 			case "after-upgrade-finalized":
 				mvt.AfterUpgradeFinalized(d.CmdArgs[0].Vals[0], dummyHook)
 			case "workload":
-				initCmd := roachtestutil.NewCommand("./cockroach workload selectProtectedNodes some-workload")
+				initCmd := roachtestutil.NewCommand("./cockroach workload init some-workload")
 				runCmd := roachtestutil.NewCommand("./cockroach workload run some-workload")
 				mvt.Workload(d.CmdArgs[0].Vals[0], nodes, initCmd, runCmd, false /* overrideBinary */)
 			case "background-command":
