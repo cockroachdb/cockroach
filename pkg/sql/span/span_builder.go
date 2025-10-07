@@ -438,7 +438,7 @@ func (s *Builder) SpansFromInvertedSpans(
 			for j := 0; j < keyLength; j++ {
 				val := span.StartKey().Value(j)
 				var err error
-				scratchRows[i][j], err = rowenc.DatumToEncDatumEx(val.ResolvedType(), val)
+				scratchRows[i][j], err = rowenc.DatumToEncDatum(val.ResolvedType(), val)
 				if err != nil {
 					return nil, err
 				}

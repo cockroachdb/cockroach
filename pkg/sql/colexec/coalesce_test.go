@@ -141,11 +141,11 @@ func TestCoalesceRandomized(t *testing.T) {
 		partitionIdx := rng.Intn(numPartitions)
 		inputRow[0].Datum = tree.NewDInt(tree.DInt(partitionIdx))
 		for j := 1; j < numInputCols; j++ {
-			inputRow[j] = rowenc.DatumToEncDatum(outputType, randgen.RandDatum(rng, outputType, true /* nullOk */))
+			inputRow[j] = rowenc.DatumToEncDatumUnsafe(outputType, randgen.RandDatum(rng, outputType, true /* nullOk */))
 		}
 		inputRows[i] = inputRow
 		if partitionIdx == numExprs {
-			expectedOutput[i] = rowenc.DatumToEncDatum(outputType, tree.DNull)
+			expectedOutput[i] = rowenc.DatumToEncDatumUnsafe(outputType, tree.DNull)
 		} else {
 			expectedOutput[i] = inputRow[partitionIdx+1]
 		}

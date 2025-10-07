@@ -180,7 +180,7 @@ func initBoundsFromAST(
 			spec.Start.OffsetType = execinfrapb.DatumInfo{Encoding: catenumpb.DatumEncoding_VALUE, Type: typ}
 			var buf []byte
 			var a tree.DatumAlloc
-			datum, err := rowenc.DatumToEncDatumEx(typ, dStartOffset)
+			datum, err := rowenc.DatumToEncDatum(typ, dStartOffset)
 			if err != nil {
 				return err
 			}
@@ -229,7 +229,7 @@ func initBoundsFromAST(
 				spec.End.OffsetType = execinfrapb.DatumInfo{Encoding: catenumpb.DatumEncoding_VALUE, Type: typ}
 				var buf []byte
 				var a tree.DatumAlloc
-				datum, err := rowenc.DatumToEncDatumEx(typ, dEndOffset)
+				datum, err := rowenc.DatumToEncDatum(typ, dEndOffset)
 				if err != nil {
 					return err
 				}

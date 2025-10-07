@@ -4478,7 +4478,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 			if err != nil {
 				return nil, err
 			}
-			encDatum, err := rowenc.DatumToEncDatumEx(resultTypes[colIdx], datum)
+			encDatum, err := rowenc.DatumToEncDatum(resultTypes[colIdx], datum)
 			if err != nil {
 				return nil, err
 			}

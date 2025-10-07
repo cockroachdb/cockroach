@@ -532,7 +532,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 				return nil, sip.DrainHelper()
 			}
 			row := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
+				rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(progressBytes))),
 			}
 			return row, nil
 		}

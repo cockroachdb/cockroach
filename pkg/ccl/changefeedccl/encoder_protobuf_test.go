@@ -158,8 +158,8 @@ func Test_ProtoEncoderAllTypes(t *testing.T) {
 
 			targets := mkTargets(tableDesc)
 			row := cdcevent.TestingMakeEventRow(tableDesc, 0, rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1)),
-				rowenc.DatumToEncDatum(tc.typ, tc.datum),
+				rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(1)),
+				rowenc.DatumToEncDatumUnsafe(tc.typ, tc.datum),
 			}, false)
 
 			opts := changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}
@@ -442,7 +442,7 @@ func Test_ProtoEncoder_Escaping(t *testing.T) {
 
 	targets := mkTargets(tableDesc)
 	row := cdcevent.TestingMakeEventRow(tableDesc, 0, rowenc.EncDatumRow{
-		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(123)),
+		rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(123)),
 	}, false)
 
 	opts := changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}
@@ -470,8 +470,8 @@ func TestProtoEncoder_BareEnvelope_WithMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	encRow := rowenc.EncDatumRow{
-		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1)),
-		rowenc.DatumToEncDatum(types.String, tree.NewDString("Alice")),
+		rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(1)),
+		rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString("Alice")),
 	}
 	row := cdcevent.TestingMakeEventRow(tableDesc, 0, encRow, false)
 

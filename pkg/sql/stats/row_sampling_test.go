@@ -39,7 +39,7 @@ func runSampleTest(
 	var sr SampleReservoir
 	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, intsets.MakeFast(0))
 	for _, r := range ranks {
-		d := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
+		d := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(r)))
 		prevCapacity := sr.Cap()
 		if err := sr.SampleRow(ctx, evalCtx, rowenc.EncDatumRow{d}, uint64(r)); err != nil {
 			t.Fatal(err)
@@ -189,7 +189,7 @@ func TestSampleReservoirMemAccounting(t *testing.T) {
 
 	getStringDatum := func(l int) rowenc.EncDatum {
 		d := tree.DString(strings.Repeat("a", l))
-		return rowenc.DatumToEncDatum(types.String, &d)
+		return rowenc.DatumToEncDatumUnsafe(types.String, &d)
 	}
 	// First two rows need 152 bytes each. The third row has the smallest rank,
 	// so it wants to replace one of the other rows, but it has a large datum

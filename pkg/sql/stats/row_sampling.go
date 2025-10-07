@@ -259,7 +259,7 @@ func (sr *SampleReservoir) copyRow(
 		}
 		beforeRowSize += int64(dst[i].Size())
 		var err error
-		sr.scratch[i], err = rowenc.DatumToEncDatumEx(sr.colTypes[i], src[i].Datum)
+		sr.scratch[i], err = rowenc.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
 		if err != nil {
 			return err
 		}

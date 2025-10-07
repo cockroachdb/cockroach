@@ -235,7 +235,7 @@ func (mc *MemRowContainer) getEncRow(encRow rowenc.EncDatumRow, idx int) error {
 	datums := mc.At(idx)
 	for i, d := range datums {
 		var err error
-		encRow[i], err = rowenc.DatumToEncDatumEx(mc.types[i], d)
+		encRow[i], err = rowenc.DatumToEncDatum(mc.types[i], d)
 		if err != nil {
 			return err
 		}
@@ -350,7 +350,7 @@ func (i *memRowIterator) EncRow() (rowenc.EncDatumRow, error) {
 	datums := i.container.At(i.curIdx)
 	for colidx, d := range datums {
 		var err error
-		i.scratchEncRow[colidx], err = rowenc.DatumToEncDatumEx(i.container.types[colidx], d)
+		i.scratchEncRow[colidx], err = rowenc.DatumToEncDatum(i.container.types[colidx], d)
 		if err != nil {
 			return nil, err
 		}
@@ -785,7 +785,7 @@ func NewDiskBackedIndexedRowContainer(
 // AddRow implements SortableRowContainer.
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
-	f.scratchEncRow[len(f.scratchEncRow)-1] = rowenc.DatumToEncDatum(
+	f.scratchEncRow[len(f.scratchEncRow)-1] = rowenc.DatumToEncDatumUnsafe(
 		types.Int,
 		tree.NewDInt(tree.DInt(f.idx)),
 	)

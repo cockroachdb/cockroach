@@ -647,10 +647,10 @@ func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) rowenc.EncDat
 		rows[i] = make(rowenc.EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
 			if groupColSet.Contains(j) {
-				rows[i][j] = rowenc.DatumToEncDatum(
+				rows[i][j] = rowenc.DatumToEncDatumUnsafe(
 					types.Int, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
 			} else {
-				rows[i][j] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i+j)))
+				rows[i][j] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i+j)))
 			}
 		}
 	}

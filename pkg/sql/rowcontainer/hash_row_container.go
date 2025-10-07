@@ -559,7 +559,7 @@ func (h *HashDiskRowContainer) Init(
 		h.scratchEncRow = make(rowenc.EncDatumRow, len(storedTypes))
 		// Initialize the last column of the scratch row we use in AddRow() to
 		// be unmarked.
-		h.scratchEncRow[len(h.scratchEncRow)-1] = rowenc.DatumToEncDatum(
+		h.scratchEncRow[len(h.scratchEncRow)-1] = rowenc.DatumToEncDatumUnsafe(
 			types.Bool,
 			tree.MakeDBool(false),
 		)

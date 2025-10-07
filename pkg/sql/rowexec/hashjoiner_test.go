@@ -46,7 +46,7 @@ type hashJoinerTestCase struct {
 func hashJoinerTestCases() []hashJoinerTestCase {
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	null := rowenc.EncDatum{Datum: tree.DNull}
 
@@ -844,7 +844,7 @@ type hashJoinerErrorTestCase struct {
 func hashJoinerErrorTestCases() []hashJoinerErrorTestCase {
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := []hashJoinerErrorTestCase{
@@ -1101,7 +1101,7 @@ func TestHashJoinerError(t *testing.T) {
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := hashJoinerErrorTestCases()
@@ -1212,7 +1212,7 @@ func TestHashJoinerDrain(t *testing.T) {
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -1322,7 +1322,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := execinfrapb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},

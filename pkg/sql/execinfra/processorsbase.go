@@ -295,7 +295,7 @@ func (h *ProcOutputHelper) ProcessRow(
 			if err != nil {
 				return nil, false, err
 			}
-			h.outputRow[i], err = rowenc.DatumToEncDatumEx(h.OutputTypes[i], datum)
+			h.outputRow[i], err = rowenc.DatumToEncDatum(h.OutputTypes[i], datum)
 			if err != nil {
 				return nil, false, err
 			}

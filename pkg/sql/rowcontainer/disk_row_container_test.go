@@ -459,7 +459,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	defer d.Close(ctx)
 
-	row := rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))}
+	row := rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
 	if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
 		t.Fatalf("unexpected error: %v", err)

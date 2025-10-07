@@ -722,7 +722,7 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 		copy(w.outputRow, inputRow[:len(w.inputTypes)])
 		for windowFnIdx, windowFn := range w.windowFns {
 			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
-			encWindowFnRes, err := rowenc.DatumToEncDatumEx(w.outputTypes[windowFn.outputColIdx], windowFnRes)
+			encWindowFnRes, err := rowenc.DatumToEncDatum(w.outputTypes[windowFn.outputColIdx], windowFnRes)
 			if err != nil {
 				return false, err
 			}

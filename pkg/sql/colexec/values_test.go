@@ -74,7 +74,7 @@ func TestValues(t *testing.T) {
 					} else {
 						expected[i][j] = convFns[j](val)
 					}
-					rows[i][j] = rowenc.DatumToEncDatum(typ, val)
+					rows[i][j] = rowenc.DatumToEncDatumUnsafe(typ, val)
 				}
 			}
 

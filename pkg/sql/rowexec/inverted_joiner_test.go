@@ -654,7 +654,7 @@ func TestInvertedJoiner(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(rowenc.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+						encRow[i] = rowenc.DatumToEncDatumUnsafe(c.inputTypes[i], d)
 					}
 					encRows[rowIdx] = encRow
 				}
