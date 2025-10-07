@@ -7,6 +7,7 @@ go_library(
         "helper.go",
         "mixedversion.go",
         "mutators.go",
+        "network_partition_mutator.go",
         "planner.go",
         "runner.go",
         "steps.go",
