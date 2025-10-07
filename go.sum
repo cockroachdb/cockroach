@@ -559,8 +559,8 @@ github.com/cockroachdb/crlib v0.0.0-20251001180057-2a49e1873587 h1:qjG2TrBrPbGRV
 github.com/cockroachdb/crlib v0.0.0-20251001180057-2a49e1873587/go.mod h1:ae57yNis2F1FThSNdPdoXfiPOVi8G1TLreCBQYPOdqo=
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
-github.com/cockroachdb/datadriven v1.0.3-0.20250911232732-d959cf14706c h1:a0m7gmtv2mzJQ4wP9BkxCmJAnjZ7fsvCi2IORGD1als=
-github.com/cockroachdb/datadriven v1.0.3-0.20250911232732-d959cf14706c/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
+github.com/cockroachdb/datadriven v1.0.3-0.20251006155849-f84f9e519edd h1:vpWCe7VvdQbQ/9wGtlH3i+Oj+9OggKci3lsASL1ydvg=
+github.com/cockroachdb/datadriven v1.0.3-0.20251006155849-f84f9e519edd/go.mod h1:jsaKMvD3RBCATk1/jbUZM8C9idWBJME9+VRZ5+Liq1g=
 github.com/cockroachdb/drpc v0.0.0-20250924114114-78d4e121902a h1:zXCfk52Hpu2IoejmDm4Bkxmb5Nh9vxwaYOCiqA6f3YA=
 github.com/cockroachdb/drpc v0.0.0-20250924114114-78d4e121902a/go.mod h1:Ag2/Yfl22WZ8ywFUasRQ2brdltpX5QvY63jnYTZ3N5U=
 github.com/cockroachdb/errors v1.12.0 h1:d7oCs6vuIMUQRVbi6jWWWEJZahLCfJpnJSVobd1/sUo=
