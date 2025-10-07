@@ -63,7 +63,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Force extra logging to diagnose flakes.
-	defer testutils.SetVModule(t, "prober=2")()
+	testutils.SetVModule(t, "prober=2")
 
 	// This test forces the SQL liveness TTL be a small number,
 	// which makes the heartbeats even more critical. Under stress and

@@ -159,7 +159,7 @@ ORDER BY name ASC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -382,7 +382,7 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderDuressWithIssue(t, 150840)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -647,7 +647,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	const numServers int = 5
 
@@ -892,7 +892,7 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// And also #148903, #148348, #144546, #141912.
 	skip.UnderDuressWithIssue(t, 149036)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1033,7 +1033,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	// Under overload, token deductions may not line up as expected, likely due
 	// to dropping streams.
 	skip.UnderDuressWithIssue(t, 148079)
-	defer setRACv2DebugVModule(t)()
+	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -4069,9 +4069,9 @@ func BenchmarkFlowControlV2Basic(b *testing.B) {
 	})
 }
 
-func setRACv2DebugVModule(t *testing.T) (reset func()) {
+func setRACv2DebugVModule(t *testing.T) {
 	t.Helper()
-	return testutils.SetVModule(t, "replica_raft=1,replica_proposal_buf=1,"+
+	testutils.SetVModule(t, "replica_raft=1,replica_proposal_buf=1,"+
 		"raft_transport=2,kvadmission=1,work_queue=1,replica_flow_control=1,"+
 		"tracker=1,client_raft_helpers_test=1,range_controller=2,"+
 		"token_counter=2,token_tracker=2,processor=2")

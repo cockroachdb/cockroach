@@ -778,7 +778,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	defer testutils.SetVModule(t, "replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3")()
+	testutils.SetVModule(t, "replica_range_lease=3,raft=4,txn=3,txn_coord_sender=3")
 	const numNodes = 2
 	var manuals []*hlc.HybridManualClock
 	var clocks []*hlc.Clock
@@ -2955,7 +2955,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Increase the verbosity of the test to help investigate failures.
-	defer testutils.SetVModule(t, "replica_range_lease=3,raft=4")()
+	testutils.SetVModule(t, "replica_range_lease=3,raft=4")
 
 	ctx := context.Background()
 	stickyVFSRegistry := fs.NewStickyRegistry()
@@ -6072,7 +6072,7 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer testutils.SetVModule(t, "cmd_lease=2")()
+	testutils.SetVModule(t, "cmd_lease=2")
 
 	// Test Setup:
 	//
@@ -6182,7 +6182,7 @@ func TestLeaseTransferDropsLocksIfLargerThanCommandSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer testutils.SetVModule(t, "cmd_lease=2")()
+	testutils.SetVModule(t, "cmd_lease=2")
 
 	// Test Plan:
 	//
@@ -6233,7 +6233,7 @@ func TestMergeDropsLocksIfLargerThanMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer testutils.SetVModule(t, "cmd_subsume=2")()
+	testutils.SetVModule(t, "cmd_subsume=2")
 
 	// Test Plan:
 	//

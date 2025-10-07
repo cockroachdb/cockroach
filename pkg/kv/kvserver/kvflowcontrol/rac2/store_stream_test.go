@@ -38,7 +38,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
 	// Causes every call to update the gauges to log.
-	defer testutils.SetVModule(t, "store_stream=2")()
+	testutils.SetVModule(t, "store_stream=2")
 	defer s.Close(t)
 
 	ctx := context.Background()
