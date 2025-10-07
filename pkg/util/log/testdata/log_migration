@@ -31,14 +31,14 @@ structured-event should_migrate=true new_channel=OPS depth=1
 DEV Channel: 
 []
 OPS Channel: 
-[{Severity:INFO Time:0 Goroutine:0 File:datadriven/datadriven.go Line:119 Message:Structured entry: {"Timestamp":1735689600000000000,"EventType":"test_event"} Tags: Counter:14 Redactable:true Channel:OPS StructuredEnd:76 StructuredStart:18 StackTraceStart:0 TenantID: TenantName:}]
+[{Severity:INFO Time:0 Goroutine:0 File:datadriven/datadriven.go Line:120 Message:Structured entry: {"Timestamp":1735689600000000000,"EventType":"test_event"} Tags: Counter:14 Redactable:true Channel:OPS StructuredEnd:76 StructuredStart:18 StackTraceStart:0 TenantID: TenantName:}]
 
 structured-event should_migrate=false new_channel=OPS depth=1
 
 log should_migrate=true old_channel=TELEMETRY new_channel=SQL_EXEC
 ----
 DEV Channel: 
-[{Severity:INFO Time:0 Goroutine:0 File:datadriven/datadriven.go Line:119 Message:Structured entry: {"Timestamp":1735689600000000000,"EventType":"test_event"} Tags: Counter:17 Redactable:true Channel:DEV StructuredEnd:76 StructuredStart:18 StackTraceStart:0 TenantID: TenantName:}]
+[{Severity:INFO Time:0 Goroutine:0 File:datadriven/datadriven.go Line:120 Message:Structured entry: {"Timestamp":1735689600000000000,"EventType":"test_event"} Tags: Counter:17 Redactable:true Channel:DEV StructuredEnd:76 StructuredStart:18 StackTraceStart:0 TenantID: TenantName:}]
 OPS Channel: 
 []
 

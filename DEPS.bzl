@@ -1760,10 +1760,10 @@ def go_deps():
         name = "com_github_cockroachdb_datadriven",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/datadriven",
-        sha256 = "417027b5ff27774000129768f79e9ae62021b95d3ac9d3181e132dbe46b44da3",
-        strip_prefix = "github.com/cockroachdb/datadriven@v1.0.3-0.20250911232732-d959cf14706c",
+        sha256 = "a7ffcef0b264d9c28c36b2f9b737ff739542f472d7614938ae507e2da269f6c2",
+        strip_prefix = "github.com/cockroachdb/datadriven@v1.0.3-0.20251006155849-f84f9e519edd",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/datadriven/com_github_cockroachdb_datadriven-v1.0.3-0.20250911232732-d959cf14706c.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/datadriven/com_github_cockroachdb_datadriven-v1.0.3-0.20251006155849-f84f9e519edd.zip",
         ],
     )
     go_repository(
