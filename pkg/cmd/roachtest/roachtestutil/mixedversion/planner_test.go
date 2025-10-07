@@ -387,6 +387,7 @@ func Test_maxNumPlanSteps(t *testing.T) {
 // - Failure recovery steps can only occur if there is an active failure injected.
 // - We can only bump the cluster version if no failures are currently injected.
 func TestNoConcurrentFailureInjections(t *testing.T) {
+	defer withTestBuildVersion("v25.2.0")()
 	const numIterations = 500
 	rngSource := rand.NewSource(randutil.NewPseudoSeed())
 	// Set all failure injection mutator probabilities to 1.
@@ -400,11 +401,17 @@ func TestNoConcurrentFailureInjections(t *testing.T) {
 	}
 
 	for range numIterations {
+		rng := rand.New(rngSource)
+		if rng.Float64() < 0.5 {
+			opts = append(opts, WithSingleNetworkPartition())
+		} else {
+			opts = append(opts, WithProtectedNodeNetworkPartition())
+		}
 		mvt := newTest(opts...)
 		mvt._getFailer = getFailer
 		mvt.InMixedVersion("test hook", dummyHook)
 		// Use different seed for each iteration
-		mvt.prng = rand.New(rngSource)
+		mvt.prng = rng
 
 		assertValidTest(mvt, t.Fatal)
 		plan, err := mvt.plan()
