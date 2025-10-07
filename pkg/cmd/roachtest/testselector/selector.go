@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -96,6 +95,24 @@ func NewDefaultSelectTestsReq(cloud spec.Cloud, suite string) *SelectTestsReq {
 func CategoriseTests(
 	ctx context.Context, logger *logger.Logger, req *SelectTestsReq,
 ) ([]*TestDetails, error) {
+	currentBranch := os.Getenv("TC_BUILD_BRANCH")
+	if currentBranch == "" {
+		currentBranch = "master"
+	}
+
+	// Can't do this because the literal `%V exists in the query bc `like `%VMs ....``
+	//debugQuery := strings.ReplaceAll(PreparedQuery, "?", "%v")
+	//logger.Printf(debugQuery)
+	//logger.Printf(debugQuery, req.ForPastDays*-1, currentBranch,
+	//	fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
+	//	req.FirstRunOn*-1, req.LastRunOn*-1)
+
+	// Print Query & Query Params
+
+	logger.Printf("Query Params:\n%d\n%s\n%s\n%d\n%d", req.ForPastDays*-1, currentBranch,
+		fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
+		req.FirstRunOn*-1, req.LastRunOn*-1)
+
 	db, err := getConnect(ctx)
 	if err != nil {
 		return nil, err
@@ -107,10 +124,10 @@ func CategoriseTests(
 	}
 	defer func() { _ = statement.Close() }()
 	// get the current branch from the teamcity environment
-	currentBranch := os.Getenv("TC_BUILD_BRANCH")
-	if currentBranch == "" {
-		currentBranch = "master"
-	}
+	//currentBranch := os.Getenv("TC_BUILD_BRANCH")
+	//if currentBranch == "" {
+	//	currentBranch = "master"
+	//}
 	// add the parameters in sequence
 	rows, err := statement.QueryContext(ctx, req.ForPastDays*-1, currentBranch,
 		fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
@@ -119,11 +136,10 @@ func CategoriseTests(
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-
-	debugQuery := strings.ReplaceAll(PreparedQuery, "?", "%v")
-	logger.Printf(debugQuery, req.ForPastDays*-1, currentBranch,
-		fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
-		req.FirstRunOn*-1, req.LastRunOn*-1)
+	//debugQuery := strings.ReplaceAll(PreparedQuery, "?", "%v")
+	//logger.Printf(debugQuery, req.ForPastDays*-1, currentBranch,
+	//	fmt.Sprintf("%%%s - %s%%", suites[req.Suite], req.Cloud),
+	//	req.FirstRunOn*-1, req.LastRunOn*-1)
 
 	// All the column headers
 	colHeaders, err := rows.Columns()
