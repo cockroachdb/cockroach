@@ -1077,7 +1077,7 @@ func (s *Server) newConn(
 // maxRepeatedErrorCount is the number of times an error can be received
 // while reading from the network connection before the server decides to give
 // up and abort the connection.
-const maxRepeatedErrorCount = 1 << 15
+const maxRepeatedErrorCount = 1 << 8
 
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
