@@ -7,17 +7,24 @@ package skip
 
 import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 
-var nightlyStress = envutil.EnvOrDefaultBool("COCKROACH_NIGHTLY_STRESS", false)
+var (
+	nightlyStress = envutil.EnvOrDefaultBool("COCKROACH_NIGHTLY_STRESS", false)
+	stress        = envutil.EnvOrDefaultBool("COCKROACH_STRESS", false)
+)
 
-var stress = envutil.EnvOrDefaultBool("COCKROACH_STRESS", false)
-
-// NightlyStress returns true iff the process is running as part of CockroachDB's
-// nightly stress tests.
+// NightlyStress returns true iff the process is running as part of
+// CockroachDB's nightly stress tests.
 func NightlyStress() bool {
 	return nightlyStress
 }
 
-// Stress returns true iff the process is running under a local _dev_ instance of the stress, i.e., ./dev test ... --stress
-func Stress() bool {
+// DevStress returns true iff the process is running under a local _dev_ instance
+// of the stress, i.e., ./dev test ... --stress
+func DevStress() bool {
 	return stress
+}
+
+// Stress returns true iff the process is running under local or nightly stress.
+func Stress() bool {
+	return DevStress() || NightlyStress()
 }

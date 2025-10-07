@@ -582,7 +582,7 @@ func (c *TenantStreamingClusters) SrcExec(exec srcInitExecFunc) {
 
 func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID) {
 	timeout := 45 * time.Second
-	if skip.Stress() || util.RaceEnabled {
+	if skip.DevStress() || util.RaceEnabled {
 		timeout *= 5
 	}
 	testutils.SucceedsWithin(t, func() error {
