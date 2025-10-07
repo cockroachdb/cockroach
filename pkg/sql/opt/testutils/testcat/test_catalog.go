@@ -1683,6 +1683,10 @@ func (ts *TableStat) HistogramType() *types.T {
 	return ts.histogramType
 }
 
+func (ts *TableStat) ID() uint64 {
+	return ts.js.ID
+}
+
 // IsPartial is part of the cat.TableStatistic interface.
 func (ts *TableStat) IsPartial() bool {
 	return ts.js.IsPartial()

@@ -290,6 +290,8 @@ type TableStatistic interface {
 
 	// IsAuto returns true if this statistic was collected automatically.
 	IsAuto() bool
+
+	ID() uint64
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note

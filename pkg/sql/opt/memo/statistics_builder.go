@@ -691,6 +691,34 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		first++
 	}
 
+	var skippedCanaryCreatedAt time.Time
+CanarySkip:
+	for first < tab.StatisticCount()-1 {
+		if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
+			if !sb.useCanary {
+				stat := tab.Statistic(first)
+				if stat.IsForecast() {
+					first++
+					continue CanarySkip
+				}
+				if stat.CreatedAt() == skippedCanaryCreatedAt && !skippedCanaryCreatedAt.IsZero() {
+					// We've already seen this canary stat, so skip it.
+					first++
+					continue CanarySkip
+				}
+				// Too young.
+				if duration.Add(stat.CreatedAt(), canaryWindow).After(time.Now()) {
+					if skippedCanaryCreatedAt.IsZero() {
+						skippedCanaryCreatedAt = stat.CreatedAt()
+						first++
+						continue CanarySkip
+					}
+				}
+			}
+		}
+		break
+	}
+
 	if first >= tab.StatisticCount() {
 		// No statistics.
 		stats.Available = false
@@ -720,17 +748,6 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
 				continue
-			}
-
-			if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
-				if !sb.useCanary {
-					// Too young.
-					if duration.Add(stat.CreatedAt(), canaryWindow).After(time.Now()) {
-						if i < tab.StatisticCount()-1 {
-							continue
-						}
-					}
-				}
 			}
 
 			var cols opt.ColSet

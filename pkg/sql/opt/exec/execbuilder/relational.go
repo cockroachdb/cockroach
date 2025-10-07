@@ -409,8 +409,8 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
-			tabID := tab.ID()
-			_ = tabID
+			tabName := tab.Name()
+			_ = tabName
 			if tab.StatisticCount() > 0 {
 				// The first stat is the most recent full one.
 				var first int

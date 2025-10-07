@@ -296,6 +296,7 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 		Alias:                        from.Alias,
 		IgnoreForeignKeys:            from.IgnoreForeignKeys,
 		IgnoreUniqueWithoutIndexKeys: from.IgnoreUniqueWithoutIndexKeys,
+		CanaryWindowSize:             from.CanaryWindowSize,
 		// Annotations are not copied.
 	}
 

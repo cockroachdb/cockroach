@@ -880,6 +880,7 @@ func (md *Metadata) DuplicateTable(
 		partialIndexPredicates:        partialIndexPredicates,
 		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
 		checkConstraintsStats:         checkConstraintsStats,
+		CanaryWindowSize:              tabMeta.CanaryWindowSize,
 	}
 	newTabMeta.indexVisibility.cached = tabMeta.indexVisibility.cached
 	newTabMeta.indexVisibility.notVisible = tabMeta.indexVisibility.notVisible
