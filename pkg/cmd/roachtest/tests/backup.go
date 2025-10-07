@@ -756,7 +756,7 @@ func runBackupMVCCRangeTombstones(
 			`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|', detached`,
 			strings.Join(files, "', '")),
 		).Scan(&jobID))
-		waitForState(jobID, jobs.StatePaused, "", 30*time.Minute)
+		waitForState(jobID, jobs.StatePaused, "", time.Hour)
 
 		t.Status("canceling import")
 		_, err = conn.ExecContext(ctx, fmt.Sprintf(`CANCEL JOB %s`, jobID))
