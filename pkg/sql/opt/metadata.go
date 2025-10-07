@@ -9,10 +9,12 @@ import (
 	"context"
 	"fmt"
 	"math/bits"
+	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -44,6 +46,22 @@ type privilegeBitmap uint64
 type routineDep struct {
 	overload        *tree.Overload
 	invocationTypes []*types.T
+}
+
+// TOOD: think about which level it should be.
+// This should not apply to internal queries.
+var canaryOdd = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.stats.canary.odd",
+	"odd of a query to use canary stats",
+	0.1,
+	settings.FloatInRange(0, 1),
+)
+
+func canaryRollDice(evalCtx *eval.Context) bool {
+	threshold := canaryOdd.Get(&evalCtx.Settings.SV)
+	actual := rand.Float64()
+	return actual < threshold
 }
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
@@ -153,12 +171,15 @@ type Metadata struct {
 		depDigest cat.DependencyDigest
 	}
 
+	// TODO: update TestMetadata.
+	useCanary bool
+
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
 }
 
 // Init prepares the metadata for use (or reuse).
-func (md *Metadata) Init() {
+func (md *Metadata) Init(evalCtx *eval.Context) {
 	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
 	schemas := md.schemas
@@ -239,6 +260,7 @@ func (md *Metadata) Init() {
 	md.objectRefsByName = objectRefsByName
 	md.privileges = privileges
 	md.builtinRefsByName = builtinRefsByName
+	md.useCanary = canaryRollDice(evalCtx)
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -337,6 +359,8 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta.Copy()
+
+	md.useCanary = from.useCanary
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
@@ -1266,4 +1290,8 @@ func (md *Metadata) checkRLSDependencies(
 	// a new version of the table descriptor is created. The metadata dependency
 	// check already accounts for changes in the table descriptor version.
 	return true, nil
+}
+
+func (md *Metadata) UseCanary() bool {
+	return md.useCanary
 }

@@ -8,12 +8,10 @@ package memo
 import (
 	"context"
 	"math"
-	"math/rand"
 	"reflect"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -95,22 +93,6 @@ const (
 	// a histogram from it.
 	maxValuesForFullHistogramFromCheckConstraint = tabledesc.MaxBucketAllowed
 )
-
-// TOOD: think about which level it should be.
-// This should not apply to internal queries.
-var canaryOdd = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"sql.stats.canary.odd",
-	"odd of a query to use canary stats",
-	0.1,
-	settings.FloatInRange(0, 1),
-)
-
-func canaryRollDice(evalCtx *eval.Context) bool {
-	threshold := canaryOdd.Get(&evalCtx.Settings.SV)
-	actual := rand.Float64()
-	return actual < threshold
-}
 
 // statisticsBuilder is responsible for building the statistics that are
 // used by the coster to estimate the cost of expressions.
@@ -251,7 +233,6 @@ type statisticsBuilder struct {
 	md                    *opt.Metadata
 	checkInputMinRowCount float64
 	minRowCount           float64
-	useCanary             bool
 }
 
 func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, mem *Memo) {
@@ -264,7 +245,6 @@ func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, me
 		md:                    mem.Metadata(),
 		checkInputMinRowCount: evalCtx.SessionData().OptimizerCheckInputMinRowCount,
 		minRowCount:           evalCtx.SessionData().OptimizerMinRowCount,
-		useCanary:             canaryRollDice(evalCtx),
 	}
 }
 
@@ -691,11 +671,13 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		first++
 	}
 
+	// TODO: nil check?
+	useCanary := sb.mem.Metadata().UseCanary()
 	var skippedCanaryCreatedAt time.Time
 CanarySkip:
 	for first < tab.StatisticCount()-1 {
 		if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
-			if !sb.useCanary {
+			if !useCanary {
 				stat := tab.Statistic(first)
 				if stat.IsForecast() {
 					first++

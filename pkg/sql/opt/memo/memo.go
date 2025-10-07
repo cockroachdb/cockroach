@@ -320,7 +320,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useImprovedHoistJoinProject:                evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
-	m.metadata.Init()
+	m.metadata.Init(evalCtx)
 	m.logPropsBuilder.init(ctx, evalCtx, m)
 }
 

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -411,6 +413,7 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 			tab := b.mem.Metadata().Table(scan.Table)
 			tabName := tab.Name()
 			_ = tabName
+			tabMeta := b.mem.Metadata().TableMeta(scan.Table)
 			if tab.StatisticCount() > 0 {
 				// The first stat is the most recent full one.
 				var first int
@@ -419,6 +422,36 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 						(tab.Statistic(first).IsMerged() && !b.evalCtx.SessionData().OptimizerUseMergedPartialStatistics) ||
 						(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts)) {
 					first++
+				}
+
+				// TODO: nil check?
+				useCanary := b.mem.Metadata().UseCanary()
+				var skippedCanaryCreatedAt time.Time
+			CanarySkip:
+				for first < tab.StatisticCount()-1 {
+					if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
+						if !useCanary {
+							stat := tab.Statistic(first)
+							if stat.IsForecast() {
+								first++
+								continue CanarySkip
+							}
+							if stat.CreatedAt() == skippedCanaryCreatedAt && !skippedCanaryCreatedAt.IsZero() {
+								// We've already seen this canary stat, so skip it.
+								first++
+								continue CanarySkip
+							}
+							// Too young.
+							if duration.Add(stat.CreatedAt(), canaryWindow).After(time.Now()) {
+								if skippedCanaryCreatedAt.IsZero() {
+									skippedCanaryCreatedAt = stat.CreatedAt()
+									first++
+									continue CanarySkip
+								}
+							}
+						}
+					}
+					break
 				}
 
 				if first < tab.StatisticCount() {
