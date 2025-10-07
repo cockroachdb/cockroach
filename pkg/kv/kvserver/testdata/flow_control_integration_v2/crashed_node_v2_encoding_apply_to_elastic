@@ -7,12 +7,12 @@ echo
 -- Flow token metrics from n1 after issuing 5 1MiB 3x replicated writes
 -- that are yet to get admitted. We see 5*1MiB*3=15MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -81,12 +81,12 @@ ORDER BY
 
 -- Flow token metrics from n1 after n2 crashed. Observe that we've returned the
 -- 5MiB previously held by n2.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;

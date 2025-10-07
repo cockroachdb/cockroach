@@ -11,12 +11,12 @@ echo
 -- that are yet to get admitted. We see 2*3*1MiB=6MiB deductions of
 -- {regular,elastic} tokens with no corresponding returns. The 2*1MiB writes
 -- happened on what is soon going to be the LHS and RHS of a range being split.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -65,12 +65,12 @@ ORDER BY
 -- post-split LHS and RHS ranges respectively. We should see 15MiB extra tokens
 -- deducted which comes from (2MiB+3MiB)*3=15MiB. So we stand at
 -- 6MiB+15MiB=21MiB now.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -131,12 +131,12 @@ ORDER BY
 -- from 4MiB*3=12MiB. So we stand at 21MiB+12MiB=33MiB tokens deducted now. The
 -- RHS of the range is gone now, and the previously 3*3MiB=9MiB of tokens
 -- deducted for it are released at the subsuming LHS leaseholder.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -189,12 +189,12 @@ ORDER BY
 -- {regular,elastic} tokens returned, including those from:
 -- - the LHS before the merge, and
 -- - the LHS and RHS before the original split.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
