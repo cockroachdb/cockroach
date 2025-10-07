@@ -41,6 +41,10 @@ func (m preserveDowngradeOptionRandomizerMutator) Name() string {
 	return PreserveDowngradeOptionRandomizer
 }
 
+func (m preserveDowngradeOptionRandomizerMutator) IsCompatible(_ *testPlanner) bool {
+	return true
+}
+
 // Most runs will have this mutator disabled, as the base upgrade
 // plan's approach of resetting the cluster setting when all nodes are
 // upgraded is the most sensible / common.
@@ -213,6 +217,10 @@ func newClusterSettingMutator[T any](
 
 func (m clusterSettingMutator) Name() string {
 	return ClusterSettingMutator(m.name)
+}
+
+func (m clusterSettingMutator) IsCompatible(_ *testPlanner) bool {
+	return true
 }
 
 func (m clusterSettingMutator) Probability() float64 {
@@ -390,11 +398,26 @@ const (
 	PanicNode = "panic_node"
 )
 
+func shouldEnableFailureInjection(p *testPlanner) bool {
+	// We disable any failure injections that would occur on clusters with
+	// less than three nodes as this can lead to uninteresting failures
+	// (e.g. a single node panic failure).
+	//
+	// We disable failure injections for local runs as some failure
+	// injections are not supported in that mode and can
+	// cause unintended behaviors (partitions using iptables).
+	return len(p.currentContext.System.Descriptor.Nodes) >= 3 && !p.isLocal
+}
+
 type panicNodeMutator struct {
 }
 
 func (m panicNodeMutator) Name() string {
 	return PanicNode
+}
+
+func (m panicNodeMutator) IsCompatible(p *testPlanner) bool {
+	return shouldEnableFailureInjection(p)
 }
 
 func (m panicNodeMutator) Probability() float64 {
@@ -541,6 +564,10 @@ func GetFailer(planner *testPlanner, name string) (*failures.Failer, error) {
 type networkPartitionMutator struct{}
 
 func (m networkPartitionMutator) Name() string { return failures.IPTablesNetworkPartitionName }
+
+func (m networkPartitionMutator) IsCompatible(p *testPlanner) bool {
+	return shouldEnableFailureInjection(p)
+}
 
 func (m networkPartitionMutator) Probability() float64 {
 	// TODO(#154547)

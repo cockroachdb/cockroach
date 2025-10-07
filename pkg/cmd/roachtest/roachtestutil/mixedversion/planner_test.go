@@ -969,8 +969,9 @@ NEXT_STEP:
 // concurrently with every user-provided hook.
 type concurrentUserHooksMutator struct{}
 
-func (concurrentUserHooksMutator) Name() string         { return "concurrent_user_hooks_mutator" }
-func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
+func (concurrentUserHooksMutator) Name() string                     { return "concurrent_user_hooks_mutator" }
+func (concurrentUserHooksMutator) IsCompatible(_ *testPlanner) bool { return true }
+func (concurrentUserHooksMutator) Probability() float64             { return 0.5 }
 
 func (concurrentUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
@@ -990,8 +991,9 @@ func (concurrentUserHooksMutator) Generate(
 // user-provided hook from the plan.
 type removeUserHooksMutator struct{}
 
-func (removeUserHooksMutator) Name() string         { return "remove_user_hooks_mutator" }
-func (removeUserHooksMutator) Probability() float64 { return 0.5 }
+func (removeUserHooksMutator) Name() string                     { return "remove_user_hooks_mutator" }
+func (removeUserHooksMutator) IsCompatible(_ *testPlanner) bool { return true }
+func (removeUserHooksMutator) Probability() float64             { return 0.5 }
 
 func (removeUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
