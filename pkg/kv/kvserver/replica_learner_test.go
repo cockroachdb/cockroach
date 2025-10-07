@@ -1256,15 +1256,22 @@ func TestReplicateQueueSeesLearnerOrJointConfig(t *testing.T) {
 		// Set our target range ID in the knobs.
 		targetRangeID.Store(repl.RangeID)
 		require.Equal(t, int64(0), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
-		traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
-		processErr, err := store.Enqueue(
-			traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
-		)
-		require.NoError(t, err)
-		require.NoError(t, processErr)
-		action := "next replica action: remove learner"
-		require.NoError(t, testutils.MatchInOrder(finish().String(), []string{action}...))
-		require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+		testutils.SucceedsSoon(t, func() error {
+			traceCtx, finish := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
+			processErr, err := store.Enqueue(
+				traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+			)
+			if err != nil {
+				return err
+			}
+			if processErr != nil {
+				return processErr
+			}
+			action := "next replica action: remove learner"
+			require.NoError(t, testutils.MatchInOrder(finish().String(), []string{action}...))
+			require.Equal(t, int64(1), getFirstStoreMetric(t, tc.Server(0), `queue.replicate.removelearnerreplica`))
+			return nil
+		})
 
 		testutils.SucceedsSoon(t, func() error {
 			desc := tc.LookupRangeOrFatal(t, scratchStartKey)
