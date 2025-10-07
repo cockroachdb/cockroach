@@ -165,7 +165,7 @@ func TestAzureFaultInjection(t *testing.T) {
 
 	// Enable cloud transport logging.
 	defer log.Scope(t).Close(t)
-	defer testutils.SetVModule(t, "cloud_logging_transport=1")()
+	testutils.SetVModule(t, "cloud_logging_transport=1")
 
 	testID := cloudtestutils.NewTestID()
 	uri := cfg.filePathImplicitAuth(fmt.Sprintf("%d-fault-injection-test", testID))

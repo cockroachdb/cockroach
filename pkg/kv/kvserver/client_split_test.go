@@ -1084,7 +1084,7 @@ func TestStoreRangeSplitWithTracing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	l := log.ScopeWithoutShowLogs(t)
 	defer l.Close(t)
-	defer testutils.SetVModule(t, "split_queue=1")()
+	testutils.SetVModule(t, "split_queue=1")
 
 	splitKey := roachpb.Key("b")
 	var targetRange atomic.Int32

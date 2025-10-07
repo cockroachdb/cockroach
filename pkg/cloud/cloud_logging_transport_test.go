@@ -22,14 +22,14 @@ import (
 // TestMaybeAddLogging tests that logging is only added when log.V(1) is true.
 func TestMaybeAddLogging(t *testing.T) {
 	t.Run("logging-disabled", func(t *testing.T) {
-		defer testutils.SetVModule(t, "")()
+		testutils.SetVModule(t, "")
 		inner := &http.Transport{}
 		result := maybeAddLogging(inner)
 		require.Equal(t, inner, result, "should return inner transport when logging is disabled")
 	})
 
 	t.Run("logging-enabled", func(t *testing.T) {
-		defer testutils.SetVModule(t, "*=1")()
+		testutils.SetVModule(t, "*=1")
 		inner := &http.Transport{}
 		result := maybeAddLogging(inner)
 		require.NotEqual(t, inner, result, "should return wrapped transport when logging is enabled")
