@@ -596,6 +596,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		WithDiff:             filters.WithDiff,
 		WithFiltering:        filters.WithFiltering,
 		WithFrontierQuantize: changefeedbase.Quantize.Get(&cfg.Settings.SV),
+		WithBulkDelivery:     changefeedbase.BulkDelivery.Get(&cfg.Settings.SV),
 		NeedsInitialScan:     needsInitialScan,
 		SchemaChangeEvents:   schemaChange.EventClass,
 		SchemaChangePolicy:   schemaChange.Policy,
