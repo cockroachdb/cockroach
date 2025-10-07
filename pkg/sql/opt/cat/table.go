@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // Table is an interface to a database table, exposing only the information
@@ -208,7 +207,7 @@ type Table interface {
 	Policies() *Policies
 
 	// CanaryWindowSize returns the canary window size for the table.
-	CanaryWindowSize() duration.Duration
+	CanaryWindowSize() time.Duration
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints

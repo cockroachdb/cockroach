@@ -1177,12 +1177,6 @@ type ForcedRowLevelSecurityMode struct {
 	Forced  bool
 }
 
-type SetCanaryWindow struct {
-	immediateMutationOp
-	TableID      descpb.ID
-	CanaryWindow string
-}
-
 // MarkRecreatedIndexAsInvisible is used to mark secondary indexes recreated
 // after a primary key swap as invisible. This is to prevent their use before
 // primary key swap is complete.

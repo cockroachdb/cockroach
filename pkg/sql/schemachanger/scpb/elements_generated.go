@@ -47,43 +47,6 @@ func (c *ElementCollection[E]) FilterAliasType() *ElementCollection[*AliasType] 
 	return (*ElementCollection[*AliasType])(ret)
 }
 
-func (e CanaryWindow) element() {}
-
-// Element implements ElementGetter.
-func (e * ElementProto_CanaryWindow) Element() Element {
-	return e.CanaryWindow
-}
-
-// ForEachCanaryWindow iterates over elements of type CanaryWindow.
-// Deprecated
-func ForEachCanaryWindow(
-	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *CanaryWindow),
-) {
-  c.FilterCanaryWindow().ForEach(fn)
-}
-
-// FindCanaryWindow finds the first element of type CanaryWindow.
-// Deprecated
-func FindCanaryWindow(
-	c *ElementCollection[Element],
-) (current Status, target TargetStatus, element *CanaryWindow) {
-	if tc := c.FilterCanaryWindow(); !tc.IsEmpty() {
-		var e Element
-		current, target, e = tc.Get(0)
-		element = e.(*CanaryWindow)
-	}
-	return current, target, element
-}
-
-// CanaryWindowElements filters elements of type CanaryWindow.
-func (c *ElementCollection[E]) FilterCanaryWindow() *ElementCollection[*CanaryWindow] {
-	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
-		_, ok := e.(*CanaryWindow)
-		return ok
-	})
-	return (*ElementCollection[*CanaryWindow])(ret)
-}
-
 func (e CheckConstraint) element() {}
 
 // Element implements ElementGetter.
@@ -3347,8 +3310,6 @@ func (e* ElementProto) SetElement(element Element) {
 
 		case *AliasType:
 			e.ElementOneOf = &ElementProto_AliasType{ AliasType: t}
-		case *CanaryWindow:
-			e.ElementOneOf = &ElementProto_CanaryWindow{ CanaryWindow: t}
 		case *CheckConstraint:
 			e.ElementOneOf = &ElementProto_CheckConstraint{ CheckConstraint: t}
 		case *CheckConstraintUnvalidated:
@@ -3532,7 +3493,6 @@ func GetElementOneOfProtos() []interface{} {
 	return []interface{} {
 
 	((*ElementProto_AliasType)(nil)),
-	((*ElementProto_CanaryWindow)(nil)),
 	((*ElementProto_CheckConstraint)(nil)),
 	((*ElementProto_CheckConstraintUnvalidated)(nil)),
 	((*ElementProto_Column)(nil)),
@@ -3629,7 +3589,6 @@ func GetElementTypes() []interface{} {
 	return []interface{} {
 
 	((*AliasType)(nil)),
-	((*CanaryWindow)(nil)),
 	((*CheckConstraint)(nil)),
 	((*CheckConstraintUnvalidated)(nil)),
 	((*Column)(nil)),

@@ -49,7 +49,7 @@ func CheckMaxSchemaObjects(
 	if err != nil {
 		return err
 	}
-	tableStats, err := tableStatsCache.GetTableStats(ctx, desc, nil)
+	tableStats, err := tableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
 	if err != nil {
 		return err
 	}

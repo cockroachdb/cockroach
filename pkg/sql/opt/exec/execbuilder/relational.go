@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -429,7 +428,7 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 				var skippedCanaryCreatedAt time.Time
 			CanarySkip:
 				for first < tab.StatisticCount()-1 {
-					if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow.Compare(duration.Duration{}) > 0 {
+					if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow > 0 {
 						if !useCanary {
 							stat := tab.Statistic(first)
 							if stat.IsForecast() {
@@ -442,7 +441,7 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 								continue CanarySkip
 							}
 							// Too young.
-							if duration.Add(stat.CreatedAt(), canaryWindow).After(time.Now()) {
+							if stat.CreatedAt().Add(canaryWindow).After(time.Now()) {
 								if skippedCanaryCreatedAt.IsZero() {
 									skippedCanaryCreatedAt = stat.CreatedAt()
 									first++

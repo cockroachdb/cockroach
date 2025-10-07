@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -946,7 +945,7 @@ type optTable struct {
 	rlsForced  bool
 	policies   cat.Policies
 
-	canaryWindow duration.Duration
+	canaryWindow time.Duration
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
@@ -1230,13 +1229,7 @@ func newOptTable(
 	ot.rlsForced = desc.IsRowLevelSecurityForced()
 	ot.policies = getOptPolicies(desc.GetPolicies())
 
-	if canaryWindowSize := desc.GetCanaryWindowSize(); canaryWindowSize != "" {
-		canaryDur, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, canaryWindowSize)
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to parse canary window size %q", desc.GetCanaryWindowSize())
-		}
-		ot.canaryWindow = canaryDur.Duration
-	}
+	ot.canaryWindow = desc.GetCanaryWindowSize()
 
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []optCheckConstraint
@@ -1645,7 +1638,7 @@ func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
 func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
 
 // CanaryWindowSize is part of the cat.Table interface.
-func (ot *optTable) CanaryWindowSize() duration.Duration {
+func (ot *optTable) CanaryWindowSize() time.Duration {
 	return ot.canaryWindow
 }
 
@@ -2802,8 +2795,8 @@ func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
 
 // CanaryWindowSize is part of the cat.Table interface.
 // TODO: think about the actual number.
-func (ot *optVirtualTable) CanaryWindowSize() duration.Duration {
-	return duration.Duration{}
+func (ot *optVirtualTable) CanaryWindowSize() time.Duration {
+	return 0
 }
 
 // Policies is part of the cat.Table interface.

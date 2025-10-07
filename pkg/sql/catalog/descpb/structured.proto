@@ -1379,7 +1379,7 @@ message TableDescriptor {
     (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
 
   // CanaryWindowSize is the size of the canary stats window.
-  optional string canary_window_size = 71 [(gogoproto.nullable) = false];
+   optional int64 canary_window_size = 71 [(gogoproto.nullable) = false, (gogoproto.casttype)="time.Duration"];
   // Next ID: 72
 }
 

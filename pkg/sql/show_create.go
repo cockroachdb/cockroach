@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -229,19 +230,26 @@ func ShowCreateTable(
 func showSetCanaryWindow(
 	tn *tree.TableName, table catalog.TableDescriptor, alterStmts *tree.DArray,
 ) error {
-	if table.GetCanaryWindowSize() == "" {
+	canaryWindow := table.GetCanaryWindowSize()
+	if canaryWindow == 0 {
 		return nil
 	}
-	canaryWindowInterval, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, table.GetCanaryWindowSize())
-	if err != nil {
-		return errors.Wrapf(err, "parsing canary window interval")
-	}
+	d := tree.NewDInterval(
+		duration.MakeDuration(
+			canaryWindow.Nanoseconds(), 0 /* days */, 0, /* months */
+		), types.DefaultIntervalTypeMetadata)
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.FormatNode(&tree.AlterTable{
 		Table: tn.ToUnresolvedObjectName(),
 		Cmds: []tree.AlterTableCmd{
-			&tree.AlterTableSetCanaryWindow{
-				CanaryWindow: canaryWindowInterval,
+			&tree.AlterTableSetStorageParams{
+				StorageParams: []tree.StorageParam{
+					{
+						// TODO: const it.
+						Key:   "canary_window",
+						Value: d,
+					},
+				},
 			},
 		},
 	})

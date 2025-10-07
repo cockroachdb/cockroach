@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -911,7 +910,7 @@ type Table struct {
 
 	rlsEnabled       bool
 	rlsForced        bool
-	canaryWindowSize duration.Duration
+	canaryWindowSize time.Duration
 	policies         cat.Policies
 	nextPolicyID     descpb.PolicyID
 }
@@ -1225,7 +1224,7 @@ func (tt *Table) IsRowLevelSecurityEnabled() bool { return tt.rlsEnabled }
 func (tt *Table) IsRowLevelSecurityForced() bool { return tt.rlsForced }
 
 // CanaryWindowSize is part of the cat.Table interface.
-func (tt *Table) CanaryWindowSize() duration.Duration { return tt.canaryWindowSize }
+func (tt *Table) CanaryWindowSize() time.Duration { return tt.canaryWindowSize }
 
 // Policies is part of the cat.Table interface.
 func (tt *Table) Policies() *cat.Policies {
