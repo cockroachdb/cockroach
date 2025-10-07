@@ -1070,7 +1070,7 @@ func (s pinVoterReplicasStep) Run(
 		`, nodeFilter)
 
 		var totalRanges, rangesWithAllVoters int
-		row := h.QueryRow(rng, query)
+		row := h.System.QueryRow(rng, query)
 		if err := row.Scan(&totalRanges, &rangesWithAllVoters); err != nil {
 			return errors.Wrap(err, "failed to query voter replicas")
 		}
