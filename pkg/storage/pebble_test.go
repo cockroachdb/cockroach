@@ -1710,9 +1710,7 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 
 	testFunc := func(t *testing.T, fileStr string) int {
 		s := log.ScopeWithoutShowLogs(t)
-		prevVModule := log.GetVModule()
-		_ = log.SetVModule(fileStr + "=2")
-		defer func() { _ = log.SetVModule(prevVModule) }()
+		testutils.SetVModule(t, fileStr+"=2")
 		defer s.Close(t)
 
 		ctx := context.Background()

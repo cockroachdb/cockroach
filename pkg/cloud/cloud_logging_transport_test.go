@@ -13,25 +13,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
+// TestMaybeAddLogging tests that logging is only added when log.V(1) is true.
 func TestMaybeAddLogging(t *testing.T) {
-	// Test that logging is only added when log.V(1) is true
-	originalVModule := log.GetVModule()
-	defer func() { _ = log.SetVModule(originalVModule) }()
-
 	t.Run("logging-disabled", func(t *testing.T) {
-		_ = log.SetVModule("")
+		testutils.SetVModule(t, "")
 		inner := &http.Transport{}
 		result := maybeAddLogging(inner)
 		require.Equal(t, inner, result, "should return inner transport when logging is disabled")
 	})
 
 	t.Run("logging-enabled", func(t *testing.T) {
-		_ = log.SetVModule("*=1")
+		testutils.SetVModule(t, "*=1")
 		inner := &http.Transport{}
 		result := maybeAddLogging(inner)
 		require.NotEqual(t, inner, result, "should return wrapped transport when logging is enabled")

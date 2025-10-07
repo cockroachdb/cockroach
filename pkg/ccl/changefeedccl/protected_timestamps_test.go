@@ -562,7 +562,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	ctx := context.Background()
 
 	// Useful for debugging.
-	require.NoError(t, log.SetVModule("spanconfigstore=2,store=2,reconciler=3,mvcc_gc_queue=2,kvaccessor=2"))
+	testutils.SetVModule(t, "spanconfigstore=2,store=2,reconciler=3,mvcc_gc_queue=2,kvaccessor=2")
 
 	settings := cluster.MakeTestingClusterSettings()
 	spanconfigjob.ReconciliationJobCheckpointInterval.Override(ctx, &settings.SV, 1*time.Second)

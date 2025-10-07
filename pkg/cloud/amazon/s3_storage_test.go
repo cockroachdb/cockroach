@@ -225,9 +225,7 @@ func TestS3FaultInjection(t *testing.T) {
 
 	// Enable cloud transport logging.
 	defer log.Scope(t).Close(t)
-	prevVModule := log.GetVModule()
-	defer func() { _ = log.SetVModule(prevVModule) }()
-	require.NoError(t, log.SetVModule("cloud_logging_transport=1"))
+	testutils.SetVModule(t, "cloud_logging_transport=1")
 
 	uri := fmt.Sprintf(
 		"s3://%s/%d-fault-injection-test?AUTH=implicit",

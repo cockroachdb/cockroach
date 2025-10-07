@@ -336,7 +336,7 @@ func TestAlterChangefeedAddTargetFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("helpers_test=1"))
+	testutils.SetVModule(t, "helpers_test=1")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -394,7 +394,7 @@ func TestAlterChangefeedSwitchFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("helpers_test=1"))
+	testutils.SetVModule(t, "helpers_test=1")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1316,7 +1316,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Set verbose log to confirm whether or not we hit the same nil row issue as in #140669
-	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
 
 	rnd, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
@@ -1984,7 +1984,7 @@ func TestAlterChangefeedRandomizedTargetChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	require.NoError(t, log.SetVModule("helpers_test=1"))
+	testutils.SetVModule(t, "helpers_test=1")
 
 	rnd, _ := randutil.NewPseudoRand()
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -37,9 +38,7 @@ func TestBlockedStreamLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
 	// Causes every call to update the gauges to log.
-	prevVModule := log.GetVModule()
-	_ = log.SetVModule("store_stream=2")
-	defer func() { _ = log.SetVModule(prevVModule) }()
+	testutils.SetVModule(t, "store_stream=2")
 	defer s.Close(t)
 
 	ctx := context.Background()

@@ -869,8 +869,8 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 func TestReplicateQueueTracingOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
-	_ = log.SetVModule("replicate_queue=2")
 	defer s.Close(t)
+	testutils.SetVModule(t, "replicate_queue=2")
 
 	// NB: This test injects a fake failure during replica rebalancing, and we use
 	// this `rejectSnapshots` variable as a flag to activate or deactivate that
@@ -2603,7 +2603,7 @@ func TestPriorityInversionRequeue(t *testing.T) {
 
 	var scratchRangeID int64
 	atomic.StoreInt64(&scratchRangeID, -1)
-	require.NoError(t, log.SetVModule("queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5"))
+	testutils.SetVModule(t, "queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5")
 
 	const newLeaseholderStoreAndNodeID = 4
 	var waitUntilLeavingJoint = func() {}
