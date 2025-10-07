@@ -2567,11 +2567,9 @@ func (a *Allocator) TransferLeaseTarget(
 			}
 			if float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
 				// Only include the candidate if it is not in conflict with mma's goals.
-				// If the lease preference is violated or the existing store is
-				// overloaded and needs to be shed (excludeLeaseRepl would be true), and
-				// no candidate is left, the best option (least lease count) will be
-				// returned. Otherwise, a random candidate will be returned from the
-				// list of good candidates.
+				// Note that even if all candidates are excluded, the len(candidates) ==
+				// 0 branch below will still return the replica with the lowest lease
+				// count if we are required to shed the lease (excludeLeaseRepl==true).
 				if !a.as.IsInConflictWithMMA(ctx, repl.StoreID, handle, true /*cpuOnly*/) {
 					candidates = append(candidates, repl)
 				}

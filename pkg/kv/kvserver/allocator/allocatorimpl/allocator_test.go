@@ -2278,9 +2278,11 @@ func TestAllocatorTransferLeaseTargetMMAConflict(t *testing.T) {
 			name:               "normal lease count convergence proceeds when MMA allows",
 			leaseholder:        1,
 			mmaReturnsConflict: false,
-			expected:           2, // Should pick store 2
-			conf:               emptySpanConfig(),
-			setupStores:        createDefaultStores,
+			// 2, 3 are both valid targets, 2 is picked since this is a random
+			// deterministic choice.
+			expected:    2,
+			conf:        emptySpanConfig(),
+			setupStores: createDefaultStores,
 		},
 		{
 			name:               "lease preferences bypass MMA conflict",
@@ -2324,7 +2326,7 @@ func TestAllocatorTransferLeaseTargetMMAConflict(t *testing.T) {
 			},
 		},
 		{
-			name:               "Transfer allowed by IO overload and mma",
+			name:               "transfer allowed by IO overload and mma",
 			leaseholder:        1,
 			mmaReturnsConflict: false,
 			// Should move to store 3. 2 is blocked by
