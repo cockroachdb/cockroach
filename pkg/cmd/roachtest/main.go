@@ -390,7 +390,7 @@ func updateSpecForSelectiveTests(
 	allTests, err := testselector.CategoriseTests(ctx, selectorLogger,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		return errors.Wrap(err, "running all tests! error selecting tests: %v")
+		return errors.Wrap(err, "running all tests! error selecting tests")
 	}
 
 	// successfulTests are the tests considered by snowflake to not run, but, part of the testSpecs.
