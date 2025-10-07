@@ -2077,6 +2077,10 @@ type optTableStat struct {
 
 var _ cat.TableStatistic = &optTableStat{}
 
+func (os *optTableStat) ID() uint64 {
+	return os.stat.StatisticID
+}
+
 func (os *optTableStat) init(
 	ctx context.Context, tab *optTable, stat *stats.TableStatistic,
 ) (ok bool, _ error) {
