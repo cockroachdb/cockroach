@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -2556,7 +2557,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, &mmaintegration.AllocatorSync{}, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(ctx)
@@ -2946,7 +2947,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, &mmaintegration.AllocatorSync{}, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -3015,7 +3016,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, true, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, &mmaintegration.AllocatorSync{}, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 	defer stopper.Stop(context.Background())
@@ -6053,7 +6054,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			a := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+			a := MakeAllocator(st, &mmaintegration.AllocatorSync{}, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 				return c.latency[id], true
 			}, nil)
 			localitySummary := c.stats.SnapshotRatedSummary(now)
@@ -8059,7 +8060,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		liveness.TestTimeUntilNodeDeadOff, false, /* deterministic */
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(st, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	a := MakeAllocator(st, &mmaintegration.AllocatorSync{}, false /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true
 	}, nil)
 
@@ -8165,7 +8166,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil, false, nil, nil)
+	a := MakeAllocator(nil, &mmaintegration.AllocatorSync{}, false, nil, nil)
 	action, priority := a.ComputeAction(context.Background(), nil, &roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -9114,7 +9115,7 @@ func exampleRebalancing(
 		storepool.NewMockNodeLiveness(livenesspb.NodeLivenessStatus_LIVE).NodeLivenessFunc,
 		/* deterministic */ true,
 	)
-	alloc := MakeAllocator(st, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
+	alloc := MakeAllocator(st, &mmaintegration.AllocatorSync{}, true /* deterministic */, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, false
 	}, nil)
 

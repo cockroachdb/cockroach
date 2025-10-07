@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -619,6 +620,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
+	as            *mmaintegration.AllocatorSync
 	deterministic bool
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -658,6 +660,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 // close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
+	as *mmaintegration.AllocatorSync,
 	deterministic bool,
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -670,6 +673,7 @@ func MakeAllocator(
 	}
 	allocator := Allocator{
 		st:            st,
+		as:            as,
 		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
@@ -2109,6 +2113,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 // method is not the Raft leader (meaning that it doesn't know whether follower
 // replicas need a snapshot or not), produces no results.
 // - It excludes replicas that are on stores which are IO overloaded.
+// - It excludes replicas that are cpu-overloaded.
 func (a *Allocator) ValidLeaseTargets(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
@@ -2220,7 +2225,7 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 ) (candidates []roachpb.ReplicaDescriptor) {
 	// We return early to avoid unnecessary work when IO overload is set to be
 	// ignored anyway.
-	if ioOverloadOptions.LeaseEnforcementLevel == IOOverloadThresholdIgnore {
+	if !a.RequiresLoadFilter() && ioOverloadOptions.LeaseEnforcementLevel == IOOverloadThresholdIgnore {
 		return existingReplicas
 	}
 
@@ -2228,6 +2233,8 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 
 	for _, replDesc := range existingReplicas {
 		store, ok := sl.FindStoreByID(replDesc.StoreID)
+		if a.RequiresLoadFilter() {
+		}
 		// If the replica is the current leaseholder, don't include it as a
 		// candidate and if it is filtered out of the store list due to being
 		// suspect; or the leaseholder store doesn't pass the leaseholder IO
@@ -2238,19 +2245,20 @@ func (a *Allocator) nonIOOverloadedLeaseTargets(
 		// same point a candidate becomes ineligible as it could lead to thrashing.
 		// Instead, we create a buffer between the two to avoid leases moving back
 		// and forth.
-		if (replDesc.StoreID == leaseStoreID) &&
-			(!ok || !ioOverloadOptions.ExistingLeaseCheck(ctx, store, sl)) {
-			continue
-		}
+		if ioOverloadOptions.LeaseEnforcementLevel != IOOverloadThresholdIgnore {
+			if (replDesc.StoreID == leaseStoreID) &&
+				(!ok || !ioOverloadOptions.ExistingLeaseCheck(ctx, store, sl)) {
+				continue
+			}
 
-		// If the replica is not the leaseholder, don't include it as a candidate
-		// if it is filtered out similar to above, or the replica store doesn't
-		// pass the lease transfer IO overload check.
-		if replDesc.StoreID != leaseStoreID &&
-			(!ok || !ioOverloadOptions.transferLeaseToCheck(ctx, store, sl)) {
-			continue
+			// If the replica is not the leaseholder, don't include it as a candidate
+			// if it is filtered out similar to above, or the replica store doesn't
+			// pass the lease transfer IO overload check.
+			if replDesc.StoreID != leaseStoreID &&
+				(!ok || !ioOverloadOptions.transferLeaseToCheck(ctx, store, sl)) {
+				continue
+			}
 		}
-
 		candidates = append(candidates, replDesc)
 	}
 
@@ -2739,6 +2747,10 @@ func (t TransferLeaseDecision) String() string {
 	default:
 		panic(fmt.Sprintf("unknown transfer lease decision %d", t))
 	}
+}
+
+func (a *Allocator) RequiresLoadFilter() bool {
+	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricAndCount
 }
 
 // CountBasedRebalancingDisabled returns true if count-based rebalancing should
