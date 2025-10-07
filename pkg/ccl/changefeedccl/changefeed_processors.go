@@ -106,11 +106,9 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	flushFrequency time.Duration // how often high watermark can be checkpointed.
-
-	// frontierFlushLimiter is a rate limiter for flushing the span frontier
-	// to the coordinator.
-	frontierFlushLimiter *saveRateLimiter
+	nextHighWaterFlush time.Time     // next time high watermark may be flushed.
+	flushFrequency     time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
 	// frontier keeps track of resolved timestamps for spans along with schema change
 	// boundary information.
@@ -281,22 +279,6 @@ func newChangeAggregatorProcessor(
 		ca.flushFrequency = *checkpointFreq
 	} else {
 		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
-	}
-
-	ca.frontierFlushLimiter, err = newSaveRateLimiter(saveRateConfig{
-		name: "frontier",
-		intervalName: func() redact.SafeValue {
-			return redact.SafeString(changefeedbase.OptMinCheckpointFrequency)
-		},
-		interval: func() time.Duration {
-			return ca.flushFrequency
-		},
-		jitter: func() float64 {
-			return aggregatorFlushJitter.Get(&ca.FlowCtx.Cfg.Settings.SV)
-		},
-	}, timeutil.DefaultTimeSource{})
-	if err != nil {
-		return nil, err
 	}
 
 	return ca, nil
@@ -479,6 +461,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	// Init heartbeat timer.
 	ca.lastPush = timeutil.Now()
+
+	// Generate expensive checkpoint only after we ran for a while.
+	ca.lastSpanFlush = timeutil.Now()
 }
 
 func (ca *changeAggregator) startKVFeed(
@@ -746,6 +731,18 @@ var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.WithPublic,
 )
 
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) (time.Time, error) {
+	if j < 0 || d < 0 {
+		return s.Now(), errors.AssertionFailedf("invalid jitter value: %f, duration: %s", j, d)
+	}
+	maxJitter := int64(j * float64(d))
+	if maxJitter == 0 {
+		return s.Now().Add(d), nil
+	}
+	nextFlush := d + time.Duration(rand.Int63n(maxJitter))
+	return s.Now().Add(nextFlush), nil
+}
+
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	shouldEmitHeartBeat := func() bool {
@@ -901,7 +898,7 @@ func (ca *changeAggregator) flushBufferedEvents(ctx context.Context) error {
 // noteResolvedSpan periodically flushes Frontier progress from the current
 // changeAggregator node to the changeFrontier node to allow the changeFrontier
 // to persist the overall changefeed's progress
-func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error {
+func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (returnErr error) {
 	ctx, sp := tracing.ChildSpan(ca.Ctx(), "changefeed.aggregator.note_resolved_span")
 	defer sp.Finish()
 
@@ -933,17 +930,38 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
-	checkpointFrontier := (advanced && forceFlush) || ca.frontierFlushLimiter.canSave(ctx)
+	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),
+	// it might be a while before frontier advances again (particularly if
+	// the number of ranges and closed timestamp settings are high).
+	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
+	//  works in the frontier where if we missed the window to checkpoint, we will attempt
+	//  the checkpoint at the next opportune moment.
+	checkpointFrontier := advanced &&
+		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
 
 	if checkpointFrontier {
-		now := timeutil.Now()
-		if err := ca.flushFrontier(ctx); err != nil {
-			return err
-		}
-		ca.frontierFlushLimiter.doneSave(timeutil.Since(now))
+		defer func() {
+			ca.nextHighWaterFlush, err = nextFlushWithJitter(
+				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
+			if err != nil {
+				returnErr = errors.CombineErrors(returnErr, err)
+			}
+		}()
+		return ca.flushFrontier(ctx)
 	}
 
-	return nil
+	// At a lower frequency, we checkpoint specific spans in the job progress
+	// either in backfills or if the highwater mark is excessively lagging behind.
+	checkpointSpans := (ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
+		canCheckpointSpans(sv, ca.lastSpanFlush)
+
+	if checkpointSpans {
+		defer func() {
+			ca.lastSpanFlush = timeutil.Now()
+		}()
+		return ca.flushFrontier(ctx)
+	}
+	return returnErr
 }
 
 // flushFrontier flushes sink and emits resolved spans to the change frontier.
@@ -1296,18 +1314,8 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	cf.frontierPersistenceLimiter, err = newSaveRateLimiter(saveRateConfig{
-		name: "frontier",
-		intervalName: func() redact.SafeValue {
-			return changefeedbase.FrontierPersistenceInterval.Name()
-		},
-		interval: func() time.Duration {
-			return changefeedbase.FrontierPersistenceInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
-		},
-	}, timeutil.DefaultTimeSource{})
-	if err != nil {
-		return nil, err
-	}
+	cf.frontierPersistenceLimiter = newSaveRateLimiter(
+		"frontier" /* name */, changefeedbase.FrontierPersistenceInterval)
 
 	encodingOpts, err := opts.GetEncodingOptions()
 	if err != nil {
@@ -1914,7 +1922,7 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 
 	if cf.spec.JobID == 0 ||
 		!cf.evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_4) ||
-		!cf.frontierPersistenceLimiter.canSave(ctx) {
+		!cf.frontierPersistenceLimiter.canSave(ctx, &cf.FlowCtx.Cfg.Settings.SV) {
 		return nil
 	}
 
@@ -2299,12 +2307,10 @@ func shouldCountUsageError(err error) bool {
 		status.Code(err) != codes.Canceled
 }
 
-// saveRateConfig is the config for a saveRateLimiter.
-type saveRateConfig struct {
-	name         redact.SafeString
-	intervalName func() redact.SafeValue
-	interval     func() time.Duration
-	jitter       func() float64 // optional
+// durationSetting is a duration cluster setting.
+type durationSetting interface {
+	Name() settings.SettingName
+	Get(sv *settings.Values) time.Duration
 }
 
 // saveRateLimiter is a rate limiter for saving a piece of progress.
@@ -2312,49 +2318,30 @@ type saveRateConfig struct {
 // It also limits saving to not be more frequent than the average
 // duration it takes to save progress.
 type saveRateLimiter struct {
-	config     saveRateConfig
-	warnEveryN util.EveryN
-
-	clock timeutil.TimeSource
+	name         redact.SafeString
+	saveInterval durationSetting
+	warnEveryN   util.EveryN
 
 	lastSave        time.Time
 	avgSaveDuration time.Duration
 }
 
 // newSaveRateLimiter returns a new saveRateLimiter.
-func newSaveRateLimiter(
-	config saveRateConfig, clock timeutil.TimeSource,
-) (*saveRateLimiter, error) {
-	if len(config.name) == 0 {
-		return nil, errors.AssertionFailedf("name is required")
-	}
-	if config.intervalName == nil {
-		return nil, errors.AssertionFailedf("interval name is required")
-	}
-	if config.interval == nil {
-		return nil, errors.AssertionFailedf("interval is required")
-	}
+func newSaveRateLimiter(name redact.SafeString, saveInterval durationSetting) *saveRateLimiter {
 	return &saveRateLimiter{
-		config:     config,
-		warnEveryN: util.Every(time.Minute),
-		clock:      clock,
-	}, nil
+		name:         name,
+		saveInterval: saveInterval,
+		warnEveryN:   util.Every(time.Minute),
+	}
 }
 
 // canSave returns whether enough time has passed to save progress again.
-func (l *saveRateLimiter) canSave(ctx context.Context) bool {
-	interval := l.config.interval()
-	if interval <= 0 {
+func (l *saveRateLimiter) canSave(ctx context.Context, sv *settings.Values) bool {
+	interval := l.saveInterval.Get(sv)
+	if interval == 0 {
 		return false
 	}
-	if l.config.jitter != nil {
-		if jitter := l.config.jitter(); jitter > 0 {
-			if maxJitter := time.Duration(jitter * float64(interval)); maxJitter > 0 {
-				interval += time.Duration(rand.Int63n(int64(maxJitter) + 1))
-			}
-		}
-	}
-	now := l.clock.Now()
+	now := timeutil.Now()
 	elapsed := now.Sub(l.lastSave)
 	if elapsed < interval {
 		return false
@@ -2364,7 +2351,8 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 			log.Changefeed.Warningf(ctx, "cannot save %s even though %s has elapsed "+
 				"since last save and %s is set to %s because average duration to save was %s "+
 				"and further saving is disabled until that much time elapses",
-				l.config.name, elapsed, l.config.intervalName(), interval, l.avgSaveDuration)
+				l.name, elapsed, l.saveInterval.Name(),
+				interval, l.avgSaveDuration)
 		}
 		return false
 	}
@@ -2374,7 +2362,7 @@ func (l *saveRateLimiter) canSave(ctx context.Context) bool {
 // doneSave must be called after each save is completed with the duration
 // it took to save progress.
 func (l *saveRateLimiter) doneSave(saveDuration time.Duration) {
-	l.lastSave = l.clock.Now()
+	l.lastSave = timeutil.Now()
 
 	// Update the average save duration using an exponential moving average.
 	if l.avgSaveDuration == 0 {
