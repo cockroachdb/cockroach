@@ -108,9 +108,10 @@ type changeAggregator struct {
 	eventConsumer eventConsumer
 
 	flushFrequency time.Duration // how often high watermark can be checkpointed.
+	lastSpanFlush  time.Time     // last time expensive, span based checkpoint was written.
 
 	// frontierFlushLimiter is a rate limiter for flushing the span frontier
-	// to the coordinator.
+	// to the coordinator because of frontier advancement.
 	frontierFlushLimiter *saveRateLimiter
 
 	// frontier keeps track of resolved timestamps for spans along with schema change
@@ -480,6 +481,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	// Init heartbeat timer.
 	ca.lastPush = timeutil.Now()
+
+	// Generate expensive checkpoint only after we ran for a while.
+	ca.lastSpanFlush = timeutil.Now()
 }
 
 func (ca *changeAggregator) startKVFeed(
@@ -932,9 +936,14 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		ca.sliMetrics.setResolved(ca.sliMetricsID, ca.frontier.Frontier())
 	}
 
+	if ca.knobs.ShouldFlushFrontier != nil && ca.knobs.ShouldFlushFrontier(resolved) {
+		return ca.flushFrontier(ctx)
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
-	checkpointFrontier := (advanced && forceFlush) || ca.frontierFlushLimiter.canSave(ctx)
+	// TODO(#155015): Re-enable periodic frontier flushing.
+	checkpointFrontier := advanced && (forceFlush || ca.frontierFlushLimiter.canSave(ctx))
 
 	if checkpointFrontier {
 		now := crtime.NowMono()
@@ -942,6 +951,19 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 			return err
 		}
 		ca.frontierFlushLimiter.doneSave(now.Elapsed())
+		return nil
+	}
+
+	// At a lower frequency, we checkpoint specific spans in the job progress
+	// either in backfills or if the highwater mark is excessively lagging behind.
+	checkpointSpans := (ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
+		canCheckpointSpans(sv, ca.lastSpanFlush)
+
+	if checkpointSpans {
+		defer func() {
+			ca.lastSpanFlush = timeutil.Now()
+		}()
+		return ca.flushFrontier(ctx)
 	}
 
 	return nil
@@ -1761,7 +1783,7 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// The feed's checkpoint is tracked in a map which is used to inform the
 		// checkpoint_progress metric which will return the lowest timestamp across
 		// all feeds in the scope.
-		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
+		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, cf.frontier.Frontier())
 
 		return cf.maybeEmitResolved(cf.Ctx(), newResolved)
 	}

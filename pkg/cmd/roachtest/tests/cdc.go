@@ -2146,6 +2146,9 @@ CONFIGURE ZONE USING
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcFrontierPersistence)
 		},
+		// TODO(#155015): Unskip this test.
+		Skip: "frontier persistence will not happen during an initial-scan only changefeed " +
+			"without periodic aggregator frontier flushes",
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/fine-grained-checkpointing",
