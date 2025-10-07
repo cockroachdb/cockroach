@@ -439,11 +439,11 @@ func (expr *BinaryExpr) TypeCheck(
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
 	if len(s.overloadIdxs) != 1 {
-		var desStr string
+		var desStr redact.RedactableString
 		if desired.Family() != types.AnyFamily {
-			desStr = fmt.Sprintf(" (returning <%s>)", desired)
+			desStr = redact.Sprintf(" (returning <%s>)", desired)
 		}
-		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
+		sig := redact.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
 		if len(s.overloadIdxs) == 0 {
 			return nil,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedBinaryOpErrFmt, sig)
@@ -805,7 +805,7 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 		semaCtx,
 		expr.Expr,
 		annotateType,
-		fmt.Sprintf(
+		redact.Sprintf(
 			"type annotation for %v as %s, found",
 			expr.Expr,
 			annotateType,
@@ -2302,13 +2302,17 @@ func typeCheckAndRequireTupleElems(
 }
 
 func typeCheckAndRequireBoolean(
-	ctx context.Context, semaCtx *SemaContext, expr Expr, op string,
+	ctx context.Context, semaCtx *SemaContext, expr Expr, op redact.RedactableString,
 ) (TypedExpr, error) {
 	return typeCheckAndRequire(ctx, semaCtx, expr, types.Bool, op)
 }
 
 func typeCheckAndRequire(
-	ctx context.Context, semaCtx *SemaContext, expr Expr, required *types.T, op string,
+	ctx context.Context,
+	semaCtx *SemaContext,
+	expr Expr,
+	required *types.T,
+	op redact.RedactableString,
 ) (TypedExpr, error) {
 	typedExpr, err := expr.TypeCheck(ctx, semaCtx, required)
 	if err != nil {
@@ -2368,7 +2372,7 @@ func typeCheckComparisonOpWithSubOperator(
 
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, types.AnyElement, sameTypeExprs...)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
+			sigWithErr := redact.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
@@ -2446,8 +2450,8 @@ func typeCheckComparisonOpWithSubOperator(
 				cmpTypeRight = rightReturn.TupleContents()[0]
 			}
 		default:
-			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
-				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
+			sigWithErr := redact.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
+				redact.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
 			return nil, nil, nil, false, pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
@@ -2480,7 +2484,7 @@ func deepCheckValidCmpOp(ops *CmpOpOverloads, leftType, rightType *types.T) bool
 }
 
 func subOpCompError(leftType, rightType *types.T, subOp, op treecmp.ComparisonOperator) error {
-	sig := fmt.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
+	sig := redact.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
 	return pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 }
 
@@ -2543,13 +2547,13 @@ func typeCheckComparisonOp(
 		disallowSwitch = true
 		typedLeft, err = foldedLeft.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			sigWithErr := redact.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 		typedRight, err = foldedRight.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			sigWithErr := redact.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
@@ -2570,14 +2574,14 @@ func typeCheckComparisonOp(
 
 		typedSubExprs, retType, err := typeCheckSameTypedExprs(ctx, semaCtx, types.AnyElement, sameTypeExprs...)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			sigWithErr := redact.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		fn, ok := ops.LookupImpl(retType, types.AnyTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.AnyTuple)
+			sig := redact.Sprintf(compSignatureFmt, retType, op, types.AnyTuple)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
@@ -2598,7 +2602,7 @@ func typeCheckComparisonOp(
 	case foldedOp.Symbol == treecmp.In && rightIsSubquery:
 		typedLeft, err = foldedLeft.TypeCheck(ctx, semaCtx, types.AnyElement)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			sigWithErr := redact.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
@@ -2606,7 +2610,7 @@ func typeCheckComparisonOp(
 		typ := typedLeft.ResolvedType()
 		fn, ok := ops.LookupImpl(typ, types.AnyTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, typ, op, types.AnyTuple)
+			sig := redact.Sprintf(compSignatureFmt, typ, op, types.AnyTuple)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
@@ -2618,7 +2622,7 @@ func typeCheckComparisonOp(
 
 		typedRight, err = foldedRight.TypeCheck(ctx, semaCtx, desired)
 		if err != nil {
-			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
+			sigWithErr := redact.Sprintf(compExprsFmt, left, op, right, err)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sigWithErr)
 		}
@@ -2633,7 +2637,7 @@ func typeCheckComparisonOp(
 	case leftIsTuple && rightIsTuple:
 		fn, ok := ops.LookupImpl(types.AnyTuple, types.AnyTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, types.AnyTuple, op, types.AnyTuple)
+			sig := redact.Sprintf(compSignatureFmt, types.AnyTuple, op, types.AnyTuple)
 			return nil, nil, nil, false,
 				pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 		}
@@ -2784,7 +2788,7 @@ func typeCheckComparisonOp(
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
 	if len(s.overloadIdxs) != 1 || typeMismatch {
-		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
+		sig := redact.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(s.overloadIdxs) == 0 || typeMismatch {
 			// For some typeMismatch errors, we want to emit a more specific error
 			// message than "unknown comparison". In particular, comparison between

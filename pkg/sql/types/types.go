@@ -2975,6 +2975,10 @@ func (t *T) String() string {
 	return t.Name()
 }
 
+// SafeValue implements redact.SafeValue.
+// SQL type names are language constructs and safe to log.
+func (*T) SafeValue() {}
+
 // MarshalText is implemented here so that gogo/protobuf know how to text marshal
 // protobuf struct directly/indirectly depends on types.T without panic.
 func (t *T) MarshalText() (text []byte, err error) {
@@ -3381,3 +3385,6 @@ func (t *T) Delimiter() string {
 		return ","
 	}
 }
+
+// Verify that T implements redact.SafeValue.
+var _ redact.SafeValue = (*T)(nil)
