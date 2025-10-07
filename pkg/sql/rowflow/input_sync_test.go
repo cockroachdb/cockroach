@@ -29,7 +29,7 @@ func TestOrderedSync(t *testing.T) {
 
 	v := [6]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -193,8 +193,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
-				b := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				a := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
+				b := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(j)))
 				row := rowenc.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
@@ -241,8 +241,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
-				b := rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
+				a := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
+				b := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(j)))
 				row := rowenc.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != execinfra.NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)

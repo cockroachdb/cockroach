@@ -199,7 +199,11 @@ func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 
 		for i, datum := range p.node.Values() {
 			if datum != nil {
-				p.row[i] = rowenc.DatumToEncDatum(p.outputTypes[i], datum)
+				p.row[i], err = rowenc.DatumToEncDatum(p.outputTypes[i], datum)
+				if err != nil {
+					p.MoveToDraining(err)
+					return nil, p.DrainHelper()
+				}
 			}
 		}
 		// ProcessRow here is required to deal with projections, which won't be

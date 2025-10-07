@@ -995,7 +995,10 @@ func (r *DataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, erro
 		if err != nil {
 			return nil, err
 		}
-		row[r.colIdxByFieldIdx[fieldIdx]] = rowenc.DatumToEncDatum(field.typ, decoded)
+		row[r.colIdxByFieldIdx[fieldIdx]], err = rowenc.DatumToEncDatum(field.typ, decoded)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return row, nil
 }

@@ -95,12 +95,12 @@ CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" 
 CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH RETENTION = '36h' -- identifiers removed
 
 parse
-CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH READ VIRTUAL CLUSTER
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RETENTION = '1h', READ VIRTUAL CLUSTER
 ----
-CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH READ VIRTUAL CLUSTER
-CREATE VIRTUAL CLUSTER ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH READ VIRTUAL CLUSTER -- fully parenthesized
-CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH READ VIRTUAL CLUSTER -- literals removed
-CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH READ VIRTUAL CLUSTER -- identifiers removed
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH RETENTION = '1h', READ VIRTUAL CLUSTER
+CREATE VIRTUAL CLUSTER ("destination-hyphen") FROM REPLICATION OF ("source-hyphen") ON ('pgurl') WITH RETENTION = ('1h'), READ VIRTUAL CLUSTER -- fully parenthesized
+CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON '_' WITH RETENTION = '_', READ VIRTUAL CLUSTER -- literals removed
+CREATE VIRTUAL CLUSTER _ FROM REPLICATION OF _ ON 'pgurl' WITH RETENTION = '1h', READ VIRTUAL CLUSTER -- identifiers removed
 
 parse
 CREATE VIRTUAL CLUSTER "destination-hyphen" FROM REPLICATION OF "source-hyphen" ON 'pgurl' WITH OPTIONS (READ VIRTUAL CLUSTER)

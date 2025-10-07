@@ -293,9 +293,9 @@ func (v *vectorMutationSearchProcessor) Next() (rowenc.EncDatumRow, *execinfrapb
 				}
 			}
 		}
-		row = append(row, rowenc.DatumToEncDatum(types.Int, partitionKey))
+		row = append(row, rowenc.DatumToEncDatumUnsafe(types.Int, partitionKey))
 		if v.isIndexPut {
-			row = append(row, rowenc.DatumToEncDatum(types.Bytes, quantizedVec))
+			row = append(row, rowenc.DatumToEncDatumUnsafe(types.Bytes, quantizedVec))
 		}
 		if outRow := v.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil

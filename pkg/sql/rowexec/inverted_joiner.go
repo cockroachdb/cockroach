@@ -586,8 +586,8 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 	return ijEmittingRows, nil
 }
 
-var trueEncDatum = rowenc.DatumToEncDatum(types.Bool, tree.DBoolTrue)
-var falseEncDatum = rowenc.DatumToEncDatum(types.Bool, tree.DBoolFalse)
+var trueEncDatum = rowenc.DatumToEncDatumUnsafe(types.Bool, tree.DBoolTrue)
+var falseEncDatum = rowenc.DatumToEncDatumUnsafe(types.Bool, tree.DBoolFalse)
 
 // emitRow returns the next row from ij.emitCursor, if present. Otherwise it
 // prepares for another input batch.

@@ -366,7 +366,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	leftRows := make(rowenc.EncDatumRows, 20)
 	for i := range leftRows {
 		leftRows[i] = rowenc.EncDatumRow{
-			rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
+			rowenc.DatumToEncDatumUnsafe(typs[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
 	leftValuesSpec, err := execinfra.GenerateValuesSpec(typs, leftRows)
@@ -380,7 +380,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		for j := 1; j <= 4*execinfra.RowChannelBufSize; j++ {
 			rightRows = append(rightRows, rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
+				rowenc.DatumToEncDatumUnsafe(typs[0], tree.NewDInt(tree.DInt(i))),
 			})
 		}
 	}
@@ -665,9 +665,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 						for j := 0; j < numRows; j++ {
 							row := make(rowenc.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
-							row[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(lastVal)))
-							row[1] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
-							row[2] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[0] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(lastVal)))
+							row[1] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[2] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
 							rows[j] = row
 						}
 						valSpec, err := execinfra.GenerateValuesSpec(types.ThreeIntCols, rows)

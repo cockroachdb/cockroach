@@ -355,9 +355,9 @@ func TestConsumerStatus(t *testing.T) {
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
 				d := tree.NewDInt(0)
-				row0 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
+				row0 = rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(colTypes[0], d)}
 				d = tree.NewDInt(math.MaxInt32)
-				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatum(colTypes[0], d)}
+				row1 = rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewTestRand()
 				vals := randgen.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)

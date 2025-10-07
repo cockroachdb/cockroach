@@ -257,15 +257,15 @@ func (p *proc) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			return nil, p.DrainHelper()
 		}
 		return rowenc.EncDatumRow{
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(p.FlowCtx.EvalCtx.NodeID.SQLInstanceID()))),
-			rowenc.DatumToEncDatum(types.String, tree.NewDString(p.FlowCtx.EvalCtx.Locality.String())),
-			rowenc.DatumToEncDatum(types.Bool, tree.MakeDBool(tree.DBool(res.ok))),
-			rowenc.DatumToEncDatum(types.String, tree.NewDString(res.error)),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.readBytes))),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.readTime))),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.wroteBytes))),
-			rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(res.wroteTime))),
-			rowenc.DatumToEncDatum(types.Bool, tree.MakeDBool(tree.DBool(res.canDelete))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(p.FlowCtx.EvalCtx.NodeID.SQLInstanceID()))),
+			rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString(p.FlowCtx.EvalCtx.Locality.String())),
+			rowenc.DatumToEncDatumUnsafe(types.Bool, tree.MakeDBool(tree.DBool(res.ok))),
+			rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString(res.error)),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.readBytes))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.readTime))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.wroteBytes))),
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(res.wroteTime))),
+			rowenc.DatumToEncDatumUnsafe(types.Bool, tree.MakeDBool(tree.DBool(res.canDelete))),
 		}, nil
 	}
 }

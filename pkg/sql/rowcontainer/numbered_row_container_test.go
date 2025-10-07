@@ -552,7 +552,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	for i := 0; i < numRows; i++ {
 		rows[i] = make([]rowenc.EncDatum, len(typs))
 		for j := range typs {
-			rows[i][j] = rowenc.DatumToEncDatum(typs[j], randgen.RandDatum(rng, typs[j], false))
+			rows[i][j] = rowenc.DatumToEncDatumUnsafe(typs[j], randgen.RandDatum(rng, typs[j], false))
 		}
 	}
 

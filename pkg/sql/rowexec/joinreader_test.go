@@ -1095,7 +1095,7 @@ func TestJoinReader(t *testing.T) {
 							for rowIdx, row := range c.input {
 								encRow := make(rowenc.EncDatumRow, len(row))
 								for i, d := range row {
-									encRow[i] = rowenc.DatumToEncDatum(c.inputTypes[i], d)
+									encRow[i] = rowenc.DatumToEncDatumUnsafe(c.inputTypes[i], d)
 								}
 								encRows[rowIdx] = encRow
 							}
@@ -1381,7 +1381,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(rowenc.EncDatumRow, 1)
-	encRow[0] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(1))
+	encRow[0] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(1))
 
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(

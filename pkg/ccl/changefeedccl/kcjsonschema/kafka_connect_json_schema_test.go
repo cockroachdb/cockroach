@@ -239,7 +239,7 @@ func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.Enc
 			if err != nil {
 				return nil, errors.Wrapf(err, "evaluating %s", typedExpr)
 			}
-			row = append(row, rowenc.DatumToEncDatum(col.GetType(), datum))
+			row = append(row, rowenc.DatumToEncDatumUnsafe(col.GetType(), datum))
 		}
 		rows = append(rows, row)
 	}

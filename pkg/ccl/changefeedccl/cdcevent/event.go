@@ -810,7 +810,7 @@ func TestingMakeEventRowFromDatums(datums tree.Datums) Row {
 	for i, d := range datums {
 		desc.cols = append(desc.cols, ResultColumn{ord: i})
 		desc.valueCols = append(desc.valueCols, i)
-		encRow = append(encRow, rowenc.DatumToEncDatum(d.ResolvedType(), d))
+		encRow = append(encRow, rowenc.DatumToEncDatumUnsafe(d.ResolvedType(), d))
 	}
 	return Row{
 		EventDescriptor: &desc,

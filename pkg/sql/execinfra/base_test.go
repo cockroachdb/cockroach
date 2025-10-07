@@ -80,7 +80,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			}
 
 			row := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1))),
+				rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(1))),
 			}
 			b.SetBytes(int64(8 * 1 * 1))
 			for i := 0; i < b.N; i++ {

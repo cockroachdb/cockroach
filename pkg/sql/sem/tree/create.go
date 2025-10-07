@@ -2369,9 +2369,9 @@ func (o *TenantReplicationOptions) CombineWith(other *TenantReplicationOptions) 
 	if o.EnableReaderTenant != nil {
 		if other.EnableReaderTenant != nil {
 			return errors.New("READ VIRTUAL CLUSTER option specified multiple times")
-		} else {
-			o.EnableReaderTenant = other.EnableReaderTenant
 		}
+	} else {
+		o.EnableReaderTenant = other.EnableReaderTenant
 	}
 
 	return nil

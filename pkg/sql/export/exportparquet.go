@@ -255,9 +255,9 @@ func (sp *parquetWriterProcessor) exportFile() (rowenc.EncDatumRow, error) {
 		return nil, err
 	}
 	return rowenc.EncDatumRow{
-		rowenc.DatumToEncDatum(types.String, tree.NewDString(filename)),
-		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(sp.rows))),
-		rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(size))),
+		rowenc.DatumToEncDatumUnsafe(types.String, tree.NewDString(filename)),
+		rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(sp.rows))),
+		rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(size))),
 	}, nil
 }
 

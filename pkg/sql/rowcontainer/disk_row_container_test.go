@@ -281,17 +281,21 @@ func TestDiskRowContainer(t *testing.T) {
 					}
 
 					// Check sorted order.
-					sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+					err = sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+					if err != nil {
+						t.Fatal(err)
+					}
 					if cmp, err := compareEncRows(
 						ctx, types, sortedRows.scratchEncRow, row, &evalCtx, d.datumAlloc, ordering,
 					); err != nil {
 						t.Fatal(err)
 					} else if cmp != 0 {
-						sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
+						err = sortedRows.getEncRow(sortedRows.scratchEncRow, numKeysRead)
 						t.Fatalf(
-							"expected %s to be equal to %s",
+							"expected %s to be equal to %s (err=%v)",
 							row.String(types),
 							sortedRows.scratchEncRow.String(types),
+							err,
 						)
 					}
 					numKeysRead++
@@ -455,7 +459,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	defer d.Close(ctx)
 
-	row := rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))}
+	row := rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
 	if code := pgerror.GetPGCode(err); code != pgcode.DiskFull {
 		t.Fatalf("unexpected error: %v", err)

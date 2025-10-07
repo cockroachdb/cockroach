@@ -180,19 +180,7 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
-func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
-	ed, err := DatumToEncDatumEx(ctyp, d)
-	if err != nil {
-		panic(err)
-	}
-	return ed
-}
-
-// DatumToEncDatumEx is the same as DatumToEncDatum that returns an error
-// instead of panicking under unexpected circumstances.
-// TODO(yuzefovich): we should probably get rid of DatumToEncDatum in favor of
-// this method altogether.
-func DatumToEncDatumEx(ctyp *types.T, d tree.Datum) (EncDatum, error) {
+func DatumToEncDatum(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 	if d == nil {
 		return EncDatum{}, errors.AssertionFailedf("cannot convert nil datum to EncDatum")
 	}
@@ -202,6 +190,21 @@ func DatumToEncDatumEx(ctyp *types.T, d tree.Datum) (EncDatum, error) {
 		return EncDatum{}, errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError())
 	}
 	return EncDatum{Datum: d}, nil
+}
+
+// DatumToEncDatumUnsafe initializes an EncDatum with the given Datum.
+//
+// NB: the method will panic if the datum's resolved type is not equivalent to
+// the passed-in type. Consider using safer DatumToEncDatum.
+//
+// An example valid use case of this method is when the datum is explicitly
+// constructed by the caller, so the types are guaranteed to match.
+func DatumToEncDatumUnsafe(ctyp *types.T, d tree.Datum) EncDatum {
+	ed, err := DatumToEncDatum(ctyp, d)
+	if err != nil {
+		panic(err)
+	}
+	return ed
 }
 
 // NullEncDatum initializes an EncDatum with the NULL value.
@@ -216,7 +219,7 @@ func (ed *EncDatum) UnsetDatum() {
 	ed.encoding = 0
 }
 
-// IsUnset returns true if EncDatumFromEncoded or DatumToEncDatum were not called.
+// IsUnset returns true if EncDatumFromEncoded or DatumToEncDatumUnsafe were not called.
 func (ed *EncDatum) IsUnset() bool {
 	return ed.encoded == nil && ed.Datum == nil
 }

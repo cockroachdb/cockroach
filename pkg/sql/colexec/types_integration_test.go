@@ -69,7 +69,7 @@ func TestSQLTypesIntegration(t *testing.T) {
 			rows := make(rowenc.EncDatumRows, numRows)
 			for i := 0; i < numRows; i++ {
 				rows[i] = make(rowenc.EncDatumRow, 1)
-				rows[i][0] = rowenc.DatumToEncDatum(typ, randgen.RandDatum(rng, typ, true /* nullOk */))
+				rows[i][0] = rowenc.DatumToEncDatumUnsafe(typ, randgen.RandDatum(rng, typ, true /* nullOk */))
 			}
 			typs := []*types.T{typ}
 			source := execinfra.NewRepeatableRowSource(typs, rows)

@@ -543,7 +543,11 @@ func (ag *aggregatorBase) getAggResults(
 			// We can't encode nil into an EncDatum, so we represent it with DNull.
 			result = tree.DNull
 		}
-		ag.row[i] = rowenc.DatumToEncDatum(ag.outputTypes[i], result)
+		ag.row[i], err = rowenc.DatumToEncDatum(ag.outputTypes[i], result)
+		if err != nil {
+			ag.MoveToDraining(err)
+			return aggStateUnknown, nil, nil
+		}
 	}
 
 	if outRow := ag.ProcessRowHelper(ag.row); outRow != nil {

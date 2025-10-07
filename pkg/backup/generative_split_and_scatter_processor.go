@@ -253,8 +253,8 @@ func routingDatumsForSQLInstance(
 	sqlInstanceID base.SQLInstanceID,
 ) (rowenc.EncDatum, rowenc.EncDatum) {
 	routingBytes := roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
-	startDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
+	startDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
+	endDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
 	return startDatum, endDatum
 }
 
@@ -399,7 +399,7 @@ func (gssp *generativeSplitAndScatterProcessor) Next() (
 
 		row := rowenc.EncDatumRow{
 			routingDatum,
-			rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(entryBytes))),
+			rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(entryBytes))),
 		}
 		return row, nil
 	}
