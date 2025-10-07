@@ -322,7 +322,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		rowSecurity:                                evalCtx.SessionData().RowSecurity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
-	m.metadata.Init()
+	m.metadata.Init(evalCtx)
 	m.logPropsBuilder.init(ctx, evalCtx, m)
 }
 
