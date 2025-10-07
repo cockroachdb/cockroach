@@ -1392,7 +1392,7 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			if res.aux.usedCompactionTokensLowerBound {
 				lowerBoundBoolStr = "(used token lower bound)"
 			}
-			p.Printf(" due to L0 growth%s", lowerBoundBoolStr)
+			p.Printf(" due to L0 growth%s", redact.SafeString(lowerBoundBoolStr))
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
