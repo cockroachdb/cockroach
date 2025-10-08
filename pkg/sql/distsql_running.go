@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -47,10 +49,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1114,6 +1118,10 @@ type DistSQLReceiver struct {
 
 	stats topLevelQueryStats
 
+	// scanStageEstimateMap maps stage IDs for logical scans to their
+	// corresponding scanStageEstimate.
+	scanStageEstimateMap map[int32]scanStageEstimate
+
 	// isTenantExplainAnalyze is used to indicate that network egress should be
 	// collected in order to estimate RU consumption for a tenant that is running
 	// a query with EXPLAIN ANALYZE.
@@ -1342,12 +1350,45 @@ func (c *CallbackResultWriter) Err() error {
 	return c.err
 }
 
+// scanStageEstimate holds the optimizer's row count estimate and table
+// statistics metadata for a logical scan. It accumulates actual rows read
+// across all distributed processors in the stage and is used for logging when
+// the estimate is significantly off.
+type scanStageEstimate struct {
+	estimatedRowCount uint64
+	statsCreatedAt    time.Time
+	tableID           descpb.ID
+	tableName         string
+	indexName         string
+
+	rowsRead uint64
+}
+
+var misestimateLogLimiter = log.Every(10 * time.Second)
+
+func (s *scanStageEstimate) logMisestimate(ctx context.Context, refresher *stats.Refresher) {
+	var suffix string
+	if !s.statsCreatedAt.IsZero() {
+		timeSinceStats := timeutil.Since(s.statsCreatedAt)
+		suffix = fmt.Sprintf("; table stats collected %s ago",
+			humanizeutil.LongDuration(timeSinceStats))
+		staleness, err := refresher.EstimateStaleness(ctx, s.tableID)
+		if err == nil {
+			suffix += fmt.Sprintf(" (estimated %.0f%% stale)", staleness*100)
+		}
+	}
+	log.Dev.Warningf(ctx, "inaccurate estimate for scan on table %q (index %q): estimated=%d actual=%d%s",
+		s.tableName, s.indexName, s.estimatedRowCount, s.rowsRead, suffix)
+}
+
 var _ execinfra.RowReceiver = &DistSQLReceiver{}
 var _ execinfra.BatchReceiver = &DistSQLReceiver{}
 
 var receiverSyncPool = sync.Pool{
 	New: func() interface{} {
-		return &DistSQLReceiver{}
+		return &DistSQLReceiver{
+			scanStageEstimateMap: make(map[int32]scanStageEstimate),
+		}
 	},
 }
 
@@ -1391,13 +1432,14 @@ func MakeDistSQLReceiver(
 		batchWriter:  batchWriter,
 		// At the time of writing, there is only one concurrent goroutine that
 		// might send at most one error.
-		concurrentErrorCh: make(chan error, 1),
-		cleanup:           cleanup,
-		rangeCache:        rangeCache,
-		txn:               txn,
-		clockUpdater:      clockUpdater,
-		stmtType:          stmtType,
-		tracing:           tracing,
+		concurrentErrorCh:    make(chan error, 1),
+		cleanup:              cleanup,
+		rangeCache:           rangeCache,
+		txn:                  txn,
+		clockUpdater:         clockUpdater,
+		stmtType:             stmtType,
+		tracing:              tracing,
+		scanStageEstimateMap: r.scanStageEstimateMap,
 	}
 	return r
 }
@@ -1416,6 +1458,9 @@ func (r *DistSQLReceiver) resetForLocalRerun(stats topLevelQueryStats) {
 	r.closed = false
 	r.stats = stats
 	r.egressCounter = nil
+	for k := range r.scanStageEstimateMap {
+		delete(r.scanStageEstimateMap, k)
+	}
 	if r.progressAtomic != nil {
 		atomic.StoreUint64(r.progressAtomic, math.Float64bits(0))
 	}
@@ -1424,7 +1469,12 @@ func (r *DistSQLReceiver) resetForLocalRerun(stats topLevelQueryStats) {
 // Release releases this DistSQLReceiver back to the pool.
 func (r *DistSQLReceiver) Release() {
 	r.cleanup()
-	*r = DistSQLReceiver{}
+	for k := range r.scanStageEstimateMap {
+		delete(r.scanStageEstimateMap, k)
+	}
+	*r = DistSQLReceiver{
+		scanStageEstimateMap: r.scanStageEstimateMap,
+	}
 	receiverSyncPool.Put(r)
 }
 
@@ -1433,14 +1483,15 @@ func (r *DistSQLReceiver) Release() {
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	ret := receiverSyncPool.Get().(*DistSQLReceiver)
 	*ret = DistSQLReceiver{
-		ctx:               r.ctx,
-		concurrentErrorCh: make(chan error, 1),
-		cleanup:           func() {},
-		rangeCache:        r.rangeCache,
-		txn:               r.txn,
-		clockUpdater:      r.clockUpdater,
-		stmtType:          tree.Rows,
-		tracing:           r.tracing,
+		ctx:                  r.ctx,
+		concurrentErrorCh:    make(chan error, 1),
+		cleanup:              func() {},
+		rangeCache:           r.rangeCache,
+		txn:                  r.txn,
+		clockUpdater:         r.clockUpdater,
+		stmtType:             tree.Rows,
+		tracing:              r.tracing,
+		scanStageEstimateMap: ret.scanStageEstimateMap,
 	}
 	return ret
 }
@@ -1544,6 +1595,12 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		r.stats.bytesRead += meta.Metrics.BytesRead
 		r.stats.rowsRead += meta.Metrics.RowsRead
 		r.stats.rowsWritten += meta.Metrics.RowsWritten
+
+		if sm, ok := r.scanStageEstimateMap[meta.Metrics.StageID]; ok {
+			sm.rowsRead += uint64(meta.Metrics.RowsRead)
+			r.scanStageEstimateMap[meta.Metrics.StageID] = sm
+		}
+
 		if r.progressAtomic != nil && r.expectedRowsRead != 0 {
 			progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
 			atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
@@ -1772,6 +1829,64 @@ func (r *DistSQLReceiver) ProducerDone() {
 	r.closed = true
 }
 
+func (r *DistSQLReceiver) makeScanEstimates(physPlan *PhysicalPlan, st *cluster.Settings) {
+	if !execinfra.LogScanRowCountMisestimate.Get(&st.SV) {
+		return
+	}
+
+	for _, p := range physPlan.Processors {
+		if p.Spec.Core.TableReader == nil {
+			continue
+		}
+		stageID := p.Spec.StageID
+		if _, exists := r.scanStageEstimateMap[stageID]; !exists {
+			r.scanStageEstimateMap[stageID] = scanStageEstimate{
+				estimatedRowCount: p.Spec.EstimatedRowCount,
+				statsCreatedAt:    p.Spec.StatsCreatedAt,
+				tableID:           p.Spec.Core.TableReader.FetchSpec.TableID,
+				tableName:         p.Spec.Core.TableReader.FetchSpec.TableName,
+				indexName:         p.Spec.Core.TableReader.FetchSpec.IndexName,
+			}
+		}
+	}
+}
+
+func (r *DistSQLReceiver) maybeLogMisestimates(ctx context.Context, planner *planner) {
+	if !execinfra.LogScanRowCountMisestimate.Get(&planner.ExecCfg().Settings.SV) {
+		return
+	}
+
+	checkedLimiter := false
+	for _, s := range r.scanStageEstimateMap {
+		actualRowCount := s.rowsRead
+		estimatedRowCount := s.estimatedRowCount
+		if estimatedRowCount == 0 {
+			continue
+		}
+
+		// Note: This is the same inaccuracy criteria as in explain/emit.go.
+		const inaccurateFactor = 2
+		const inaccurateAdditive = 100
+		inaccurateEstimate := actualRowCount*inaccurateFactor+inaccurateAdditive < estimatedRowCount ||
+			estimatedRowCount*inaccurateFactor+inaccurateAdditive < actualRowCount
+		if !inaccurateEstimate {
+			continue
+		}
+		if isSystemTable, err := planner.IsSystemTable(ctx, int64(s.tableID)); err != nil || isSystemTable {
+			continue
+		}
+
+		// Log all or none of the misestimated scans in the query.
+		if !checkedLimiter {
+			if !misestimateLogLimiter.ShouldLog() {
+				return
+			}
+			checkedLimiter = true
+		}
+		s.logMisestimate(ctx, planner.ExecCfg().StatsRefresher)
+	}
+}
+
 // getFinishedSetupFn returns a function to be passed into
 // DistSQLPlanner.PlanAndRun or DistSQLPlanner.Run when running an "outer" plan
 // that might create "inner" plans (e.g. apply join iterations). The returned
@@ -1959,6 +2074,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	// receiver, and use it and serialize the results of the subquery. The type
 	// of the results stored in the container depends on the type of the subquery.
 	subqueryRecv := recv.clone()
+	subqueryRecv.makeScanEstimates(subqueryPhysPlan, dsp.st)
 	defer subqueryRecv.Release()
 	defer recv.stats.add(&subqueryRecv.stats)
 	var typs []*types.T
@@ -2084,6 +2200,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// with many duplicate elements.
 		subqueryResultMemAcc.Shrink(ctx, alreadyAccountedFor-actualSize)
 	}
+	subqueryRecv.maybeLogMisestimates(ctx, planner)
 	return nil
 }
 
@@ -2131,6 +2248,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	} else {
 		finalizePlanWithRowCount(ctx, planCtx, physPlan, planCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(physPlan.TotalEstimatedScannedRows)
+		recv.makeScanEstimates(physPlan, dsp.st)
 		dsp.Run(ctx, planCtx, txn, physPlan, recv, &extEvalCtx.Context, finishedSetupFn)
 	}
 	if planCtx.isLocal {
@@ -2203,6 +2321,7 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		}
 		finalizePlanWithRowCount(ctx, localPlanCtx, localPhysPlan, localPlanCtx.planner.curPlan.mainRowCount)
 		recv.expectedRowsRead = int64(localPhysPlan.TotalEstimatedScannedRows)
+		recv.makeScanEstimates(localPhysPlan, dsp.st)
 		// We already called finishedSetupFn in the previous call to Run, since we
 		// only got here if we got a distributed error, not an error during setup.
 		dsp.Run(ctx, localPlanCtx, txn, localPhysPlan, recv, &extEvalCtx.Context, nil /* finishedSetupFn */)
