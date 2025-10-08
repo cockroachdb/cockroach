@@ -86,6 +86,14 @@ func (s *topLevelServer) startAttemptUpgrade(ctx context.Context) error {
 				panic(errors.AssertionFailedf("unhandled case: %d", status))
 			}
 
+			if clusterversion.AutoUpgradeSystemClusterFromMeta1Leaseholder.Get(&s.ClusterSettings().SV) {
+				isMeta1LH, err := s.sqlServer.isMeta1Leaseholder(ctx, s.clock.NowAsClockTimestamp())
+				if err != nil || !isMeta1LH {
+					log.Ops.VInfof(ctx, 2, "not upgrading since we are not the Meta1 leaseholder; err=%v", err)
+					continue
+				}
+			}
+
 			upgradeRetryOpts := retry.Options{
 				InitialBackoff: 5 * time.Second,
 				MaxBackoff:     10 * time.Second,
