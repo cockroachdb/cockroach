@@ -4438,6 +4438,10 @@ func (m *sessionDataMutator) SetOptimizerUseImprovedHoistJoinProject(val bool) {
 	m.data.OptimizerUseImprovedHoistJoinProject = val
 }
 
+func (m *sessionDataMutator) SetCanaryAsOf(val hlc.Timestamp) {
+	m.data.CanaryAsOf = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

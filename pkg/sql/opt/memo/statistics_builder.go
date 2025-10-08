@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -673,11 +674,21 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// TODO: nil check?
 	useCanary := sb.mem.Metadata().UseCanary()
 	var skippedCanaryCreatedAt time.Time
+	asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.StmtTimestamp.UnixNano()}
+	if asOf := sb.evalCtx.SessionData().CanaryAsOf; !asOf.IsEmpty() {
+		asOfTs = asOf
+	}
 CanarySkip:
 	for first < tab.StatisticCount()-1 {
 		if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow > 0 {
+			stat := tab.Statistic(first)
+			createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+			if createdAtTS.After(asOfTs) {
+				// Too new.
+				first++
+				continue CanarySkip
+			}
 			if !useCanary {
-				stat := tab.Statistic(first)
 				if stat.IsForecast() {
 					first++
 					continue CanarySkip
@@ -688,7 +699,7 @@ CanarySkip:
 					continue CanarySkip
 				}
 				// Too young.
-				if stat.CreatedAt().Add(canaryWindow).After(time.Now()) {
+				if createdAtTS.AddDuration(canaryWindow).After(asOfTs) {
 					if skippedCanaryCreatedAt.IsZero() {
 						skippedCanaryCreatedAt = stat.CreatedAt()
 						first++
