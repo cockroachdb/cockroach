@@ -1,0 +1,47 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# Sanity check that partial stats with a WHERE clause can only be collected once
+# the cluster is upgraded to 25.4.
+
+statement ok
+CREATE TABLE t (a INT, INDEX (a));
+
+statement ok
+INSERT INTO t VALUES (1), (2), (3), (4), (5);
+
+statement ok
+ANALYZE t;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pq: creating partial statistics with a WHERE clause is not yet supported
+CREATE STATISTICS pstat ON a FROM t WHERE a > 2;
+
+upgrade 0
+
+statement error pq: unimplemented: CREATE STATISTICS with a WHERE clause is not supported until v25.4
+CREATE STATISTICS pstat ON a FROM t WHERE a > 2;
+
+upgrade 1
+
+statement error pq: unimplemented: CREATE STATISTICS with a WHERE clause is not supported until v25.4
+CREATE STATISTICS pstat ON a FROM t WHERE a > 2;
+
+upgrade 2
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+statement ok
+CREATE STATISTICS pstat ON a FROM t WHERE a > 2;
+
+query TTIIIT colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE t]
+WHERE statistics_name = 'pstat'
+----
+statistics_name  column_names  row_count  distinct_count  null_count  partial_predicate
+pstat            {a}           3          3               0           a > 2
