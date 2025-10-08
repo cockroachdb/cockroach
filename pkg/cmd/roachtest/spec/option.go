@@ -53,6 +53,15 @@ func WorkloadNodeCPU(n int) Option {
 	}
 }
 
+// WorkloadRequiresDisk should be used if the workload nodes should have the
+// exact same disk configuration as the rest of the cluster. Otherwise, all
+// workload nodes only have a boot disk.
+func WorkloadRequiresDisk() Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadRequiresDisk = true
+	}
+}
+
 // Mem requests nodes with low/standard/high ratio of memory per CPU.
 func Mem(level MemPerCPU) Option {
 	return func(spec *ClusterSpec) {
