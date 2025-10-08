@@ -329,6 +329,7 @@ type ProcessorConstructor func(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
+	stageID int32,
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	inputs []RowSource,

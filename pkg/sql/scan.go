@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -66,6 +67,9 @@ type scanNode struct {
 	// output. When there are no statistics to make the estimation, it will be
 	// set to zero.
 	estimatedRowCount uint64
+
+	// statsCreatedAt is the time when the latest table statistics were collected.
+	statsCreatedAt time.Time
 
 	// localityOptimized is true if this scan is part of a locality optimized
 	// search strategy, which uses a limited UNION ALL operator to try to find a
