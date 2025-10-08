@@ -525,11 +525,8 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 	if sharedProcessMT {
 		url = fmt.Sprintf("{pgurl:1:%s}", appTenantName)
 	}
-	// Note that we use --default-vectorize flag which tells tpch workload to
-	// use the current cluster setting sql.defaults.vectorize which must have
-	// been set correctly in preQueryRunHook.
 	return fmt.Sprintf("./cockroach workload run tpch --concurrency=1 --db=tpch "+
-		"--default-vectorize --max-ops=%d --queries=%d %s --enable-checks=true",
+		"--max-ops=%d --queries=%d %s --enable-checks=true",
 		numRunsPerQuery, queryNum, url)
 }
 
