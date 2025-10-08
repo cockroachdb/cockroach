@@ -2528,6 +2528,17 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		stmt.potentialExecErrors.add(pgcode.Syntax)
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 	}
+	// Check for references to any types that are not supported in mixed version
+	// clusters.
+	ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if ltreeNotSupported &&
+		defaultDatum.ResolvedType().Family() == types.ArrayFamily &&
+		strings.HasPrefix(defaultDatum.ResolvedType().ArrayContents().SQLString(), "LTREE") {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
 	// Always use explicit type casting to ensure consistent behavior and avoid parse errors.
@@ -4147,8 +4158,8 @@ func (og *operationGenerator) randType(
 
 	typ := randgen.RandSortingType(og.params.rng)
 	for (pgVectorNotSupported && typ.Family() == types.PGVectorFamily) ||
-		(citextNotSupported && typ.Oid() == oidext.T_citext) ||
-		(ltreeNotSupported && typ.Oid() == oidext.T_ltree) {
+		(citextNotSupported && typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext) ||
+		(ltreeNotSupported && (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree)) {
 		typ = randgen.RandSortingType(og.params.rng)
 	}
 
@@ -4354,10 +4365,12 @@ FROM
 			continue
 		}
 
-		if citextNotSupported && typeVal.Oid() == oidext.T_citext {
+		if citextNotSupported &&
+			(typeVal.Oid() == oidext.T_citext || typeVal.Oid() == oidext.T__citext) {
 			continue
 		}
-		if ltreeNotSupported && typeVal.Oid() == oidext.T_ltree {
+		if ltreeNotSupported &&
+			(typeVal.Oid() == oidext.T_ltree || typeVal.Oid() == oidext.T__ltree) {
 			continue
 		}
 
