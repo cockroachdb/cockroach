@@ -153,11 +153,12 @@ func registerLiquibase(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "liquibase",
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
-		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		Name:    "liquibase",
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
+		// This test uses custom ports, which is Only supported on GCE.
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.Tool),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLiquibase(ctx, t, c)
