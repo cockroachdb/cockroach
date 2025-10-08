@@ -7,7 +7,9 @@ package inspect
 
 import (
 	"context"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -17,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -436,4 +439,183 @@ func createProcessorProgressUpdate(
 	}
 
 	return meta, nil
+}
+
+func TestInspectProgressTracker_ProgressFlushConditions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, s, _, _, cleanup := setupProgressTestInfra(t)
+	defer cleanup()
+
+	const totalChecks = 1000
+
+	testCases := []struct {
+		name                      string
+		setupFunc                 func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job)
+		expectedFraction          float32
+		expectUncheckpointedSpans bool
+	}{
+		{
+			name: "initial state - no progress updates",
+			setupFunc: func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job) {
+				require.NoError(t, tracker.initJobProgress(ctx, totalChecks, 0))
+			},
+			expectedFraction:          0.0,
+			expectUncheckpointedSpans: false,
+		},
+		{
+			name: "check count updates without spans",
+			setupFunc: func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job) {
+				require.NoError(t, tracker.initJobProgress(ctx, totalChecks, 0))
+
+				// Send progress updates with check counts but no spans.
+				meta, err := createProcessorProgressUpdate(100, false, nil)
+				require.NoError(t, err)
+				_, err = tracker.updateProgressCache(meta)
+				require.NoError(t, err)
+			},
+			expectedFraction:          0.1,
+			expectUncheckpointedSpans: false,
+		},
+		{
+			name: "span updates trigger checkpoint need",
+			setupFunc: func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job) {
+				require.NoError(t, tracker.initJobProgress(ctx, totalChecks, 0))
+
+				// Send progress with completed spans.
+				spans := []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")}}
+				meta, err := createProcessorProgressUpdate(50, false, spans)
+				require.NoError(t, err)
+				_, err = tracker.updateProgressCache(meta)
+				require.NoError(t, err)
+			},
+			expectedFraction:          0.05,
+			expectUncheckpointedSpans: true,
+		},
+		{
+			name: "automatic flush clears uncheckpointed state",
+			setupFunc: func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job) {
+				require.NoError(t, tracker.initJobProgress(ctx, totalChecks, 0))
+
+				// Send progress with completed spans.
+				spans := []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("m")}}
+				meta, err := createProcessorProgressUpdate(100, false, spans)
+				require.NoError(t, err)
+				_, err = tracker.updateProgressCache(meta)
+				require.NoError(t, err)
+
+				// Wait for automatic checkpoint flush.
+				testutils.SucceedsSoon(t, func() error {
+					if tracker.hasUncheckpointedSpans() {
+						return errors.New("still has uncheckpointed spans")
+					}
+					return nil
+				})
+			},
+			expectedFraction:          0.1,
+			expectUncheckpointedSpans: false,
+		},
+		{
+			name: "multiple span updates merge and checkpoint",
+			setupFunc: func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job) {
+				require.NoError(t, tracker.initJobProgress(ctx, totalChecks, 0))
+
+				// Send multiple progress updates with different spans.
+				spans1 := []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}}
+				meta1, err := createProcessorProgressUpdate(100, false, spans1)
+				require.NoError(t, err)
+				_, err = tracker.updateProgressCache(meta1)
+				require.NoError(t, err)
+
+				spans2 := []roachpb.Span{{Key: roachpb.Key("d"), EndKey: roachpb.Key("g")}}
+				meta2, err := createProcessorProgressUpdate(100, false, spans2)
+				require.NoError(t, err)
+				_, err = tracker.updateProgressCache(meta2)
+				require.NoError(t, err)
+
+				// Wait for checkpoint to complete.
+				testutils.SucceedsSoon(t, func() error {
+					if tracker.hasUncheckpointedSpans() {
+						return errors.New("still has uncheckpointed spans")
+					}
+					return nil
+				})
+			},
+			expectedFraction:          0.2,
+			expectUncheckpointedSpans: false,
+		},
+		{
+			name: "immediate flush on drained processor",
+			setupFunc: func(t *testing.T, tracker *inspectProgressTracker, job *jobs.Job) {
+				require.NoError(t, tracker.initJobProgress(ctx, totalChecks, 0))
+
+				// Send progress with drained=true to trigger immediate flush.
+				spans := []roachpb.Span{{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}}
+				meta, err := createProcessorProgressUpdate(500, true, spans)
+				require.NoError(t, err)
+				require.NoError(t, tracker.handleProgressUpdate(ctx, meta))
+
+				// Immediate flush should have happened, so no uncheckpointed spans.
+				require.False(t, tracker.hasUncheckpointedSpans())
+			},
+			expectedFraction:          0.5,
+			expectUncheckpointedSpans: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a fresh job for each test case.
+			record := jobs.Record{
+				Details:  jobspb.InspectDetails{},
+				Progress: jobspb.InspectProgress{},
+				Username: username.TestUserName(),
+			}
+
+			freshJob, err := s.JobRegistry().(*jobs.Registry).CreateJobWithTxn(ctx, record, s.JobRegistry().(*jobs.Registry).MakeJobID(), nil)
+			require.NoError(t, err)
+
+			freshTracker := newInspectProgressTracker(freshJob, &s.ClusterSettings().SV, s.InternalDB().(isql.DB))
+			defer freshTracker.terminateTracker()
+
+			// Override intervals for faster testing.
+			const fastCheckpointInterval = 10 * time.Millisecond
+			const fastFractionInterval = 5 * time.Millisecond
+			freshTracker.checkpointInterval = func() time.Duration { return fastCheckpointInterval }
+			freshTracker.fractionInterval = func() time.Duration { return fastFractionInterval }
+
+			// Run the test setup.
+			tc.setupFunc(t, freshTracker, freshJob)
+
+			// Verify uncheckpointed spans state.
+			require.Equal(t, tc.expectUncheckpointedSpans, freshTracker.hasUncheckpointedSpans(),
+				"unexpected uncheckpointed spans state")
+
+			// Verify fraction complete.
+			progress := freshJob.Progress()
+			fractionCompleted, ok := progress.Progress.(*jobspb.Progress_FractionCompleted)
+			require.True(t, ok, "progress should be FractionCompleted type")
+			if tc.expectedFraction == 0.0 {
+				// For zero expected fraction, check immediately.
+				require.Equal(t, tc.expectedFraction, fractionCompleted.FractionCompleted)
+			} else {
+				// For non-zero expected fraction, wait for async flush to complete.
+				testutils.SucceedsSoon(t, func() error {
+					progress = freshJob.Progress()
+					fractionCompleted, ok = progress.Progress.(*jobspb.Progress_FractionCompleted)
+					if !ok {
+						return errors.New("progress should be FractionCompleted type")
+					}
+					// Check if fraction is within epsilon (1% tolerance).
+					const epsilon = 0.01
+					if math.Abs(float64(fractionCompleted.FractionCompleted-tc.expectedFraction)) > epsilon {
+						return errors.Newf("fraction complete not within epsilon: expected %f ± %f, got %f",
+							tc.expectedFraction, epsilon, fractionCompleted.FractionCompleted)
+					}
+					return nil
+				})
+			}
+		})
+	}
 }
