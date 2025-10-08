@@ -34,14 +34,23 @@ import (
 func TestDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	doTestDrain(t)
+	testutils.RunTrueAndFalse(t, "secondaryTenants", func(t *testing.T, secondaryTenants bool) {
+		doTestDrain(t, secondaryTenants)
+	})
 }
 
 // doTestDrain runs the drain test.
-func doTestDrain(tt *testing.T) {
+func doTestDrain(tt *testing.T, secondaryTenants bool) {
 	var drainSleepCallCount = 0
 	t := newTestDrainContext(tt, &drainSleepCallCount)
 	defer t.Close()
+
+	if secondaryTenants {
+		_, err := t.tc.ServerConn(0).Exec("CREATE TENANT hello")
+		require.NoError(tt, err)
+		_, err = t.tc.ServerConn(0).Exec("ALTER TENANT hello START SERVICE SHARED")
+		require.NoError(tt, err)
+	}
 
 	// Issue a probe. We're not draining yet, so the probe should
 	// reflect that.
@@ -54,7 +63,12 @@ func doTestDrain(tt *testing.T) {
 	resp = t.sendDrainNoShutdown()
 	t.assertDraining(resp, true)
 	t.assertRemaining(resp, true)
-	t.assertEqual(1, drainSleepCallCount)
+	if !secondaryTenants {
+		// If we have secondary tenants, we might not have waited before draining
+		// the clients at this point because we might have returned early if we are
+		// still draining the serverController.
+		t.assertEqual(1, drainSleepCallCount)
+	}
 
 	// Issue another probe. This checks that the server is still running
 	// (i.e. Shutdown: false was effective), the draining status is
@@ -64,8 +78,9 @@ func doTestDrain(tt *testing.T) {
 	t.assertDraining(resp, true)
 	// probe-only has no remaining.
 	t.assertRemaining(resp, false)
-	t.assertEqual(1, drainSleepCallCount)
-
+	if !secondaryTenants {
+		t.assertEqual(1, drainSleepCallCount)
+	}
 	// Repeat drain commands until we verify that there are zero remaining leases
 	// (i.e. complete). Also validate that the server did not sleep again.
 	testutils.SucceedsSoon(t, func() error {
@@ -79,6 +94,7 @@ func doTestDrain(tt *testing.T) {
 		}
 		return nil
 	})
+
 	t.assertEqual(1, drainSleepCallCount)
 
 	// Now issue a drain request without drain but with shutdown.
@@ -190,6 +206,7 @@ func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainConte
 			// care about TLS settings for the RPC client connection.
 			ServerArgs: base.TestServerArgs{
 				DefaultDRPCOption: base.TestDRPCDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DrainSleepFn: func(time.Duration) {
