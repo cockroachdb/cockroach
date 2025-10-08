@@ -76,16 +76,6 @@ func (c *CustomFuncs) NormalizeTupleEquality(left, right memo.ScalarListExpr) op
 	return result
 }
 
-// FirstScalarListExpr returns the first ScalarExpr in the given list.
-func (c *CustomFuncs) FirstScalarListExpr(list memo.ScalarListExpr) opt.ScalarExpr {
-	return list[0]
-}
-
-// SecondScalarListExpr returns the second ScalarExpr in the given list.
-func (c *CustomFuncs) SecondScalarListExpr(list memo.ScalarListExpr) opt.ScalarExpr {
-	return list[1]
-}
-
 // MakeTimeZoneFunction constructs a new timezone() function with the given zone
 // and timestamp as arguments. The type of the function result is TIMESTAMPTZ if
 // ts is of type TIMESTAMP, or TIMESTAMP if is of type TIMESTAMPTZ.
