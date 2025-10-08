@@ -9,8 +9,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
 
 import "gogoproto/gogo.proto";
 import "sql/catalog/descpb/structured.proto";
-import "util/log/eventpb/events.proto";
-import "util/log/eventpb/sql_audit_events.proto";
 import "util/log/logpb/event.proto";
 
 // Category: Telemetry events

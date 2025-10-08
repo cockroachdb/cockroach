@@ -2137,6 +2137,11 @@ INSERT INTO t151995 (c0, c1) VALUES (
 statement ok
 ANALYZE t151995;
 
+# Clear the stat cache so that the new statistic is guaranteed to be used (which
+# are needed for the inverted join to be picked).
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
 statement error geos error: IllegalArgumentException: BufferOp::getResultGeometry distance must be a finite value
 SELECT *
   FROM t151995 AS t1
