@@ -2774,24 +2774,27 @@ Note that the measurement does not include the duration for replicating the eval
 	}
 	metaWALBytesWritten = metric.Metadata{
 		Name:        "storage.wal.bytes_written",
-		Help:        "The number of bytes the storage engine has written to the WAL",
+		Help:        "The number of bytes the storage engine has written to the Write-Ahead Log.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaWALBytesIn = metric.Metadata{
 		Name:        "storage.wal.bytes_in",
-		Help:        "The number of logical bytes the storage engine has written to the WAL",
+		Help:        "The number of logical bytes the storage engine has written to the Write-Ahead Log.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaStorageFsyncLatency = metric.Metadata{
 		Name:        "storage.wal.fsync.latency",
-		Help:        "The write ahead log fsync latency",
+		Help:        "The fsync latency to the Write-Ahead Log device.",
 		Measurement: "Fsync Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 		Essential:   true,
 		Category:    metric.Metadata_STORAGE,
-		HowToUse:    "If this value is greater than `100ms`, it is an indication of a disk stall. To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured.",
+		HowToUse: "If this value is greater than 100ms, it is an indication of a disk stall. " +
+			"To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured. " +
+			"When WAL failover is configured, the more relevant metric is storage.wal.failover_write_and_sync.latency, as " +
+			"this metric reflects the fsync latency of the primary and/or the secondary WAL device.",
 	}
 	metaStorageWALFailoverSwitchCount = metric.Metadata{
 		Name: "storage.wal.failover.switch.count",
@@ -2799,27 +2802,30 @@ Note that the measurement does not include the duration for replicating the eval
 			"and vice versa.",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
+		HowToUse: "Only populated when WAL failover is configured. A high switch count indicates that " +
+			"many disk stalls were encountered.",
 	}
 	metaStorageWALFailoverPrimaryDuration = metric.Metadata{
-		Name: "storage.wal.failover.primary.duration",
-		Help: "Cumulative time spent writing to the primary WAL directory. Only populated " +
-			"when WAL failover is configured",
+		Name:        "storage.wal.failover.primary.duration",
+		Help:        "Cumulative time spent writing to the primary WAL directory.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		HowToUse:    "Only populated when WAL failover is configured.",
 	}
 	metaStorageWALFailoverSecondaryDuration = metric.Metadata{
-		Name: "storage.wal.failover.secondary.duration",
-		Help: "Cumulative time spent writing to the secondary WAL directory. Only populated " +
-			"when WAL failover is configured",
+		Name:        "storage.wal.failover.secondary.duration",
+		Help:        "Cumulative time spent writing to the secondary WAL directory.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		HowToUse:    "Only populated when WAL failover is configured.",
 	}
 	metaStorageWALFailoverWriteAndSyncLatency = metric.Metadata{
-		Name: "storage.wal.failover.write_and_sync.latency",
-		Help: "The observed latency for writing and syncing to the write ahead log. Only populated " +
-			"when WAL failover is configured",
+		Name:        "storage.wal.failover.write_and_sync.latency",
+		Help:        "The observed latency for writing and syncing to the logical Write-Ahead Log.",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		HowToUse: "Only populated when WAL failover is configured. Without WAL failover, the relevant " +
+			"metric is storage.wal.fsync.latency.",
 	}
 	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
