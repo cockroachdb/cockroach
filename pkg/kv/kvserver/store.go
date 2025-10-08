@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
@@ -1742,6 +1743,14 @@ func NewStore(
 		updateSystemConfigUpdateQueueLimits)
 	queueAdditionOnSystemConfigUpdateBurst.SetOnChange(&cfg.Settings.SV,
 		updateSystemConfigUpdateQueueLimits)
+
+	concurrency.DefaultLockTableSize.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		newSize := concurrency.DefaultLockTableSize.Get(&cfg.Settings.SV)
+		s.VisitReplicas(func(repl *Replica) bool {
+			repl.concMgr.SetMaxLockTableSize(newSize)
+			return true // continue
+		})
+	})
 
 	if s.cfg.Gossip != nil {
 		s.storeGossip = NewStoreGossip(

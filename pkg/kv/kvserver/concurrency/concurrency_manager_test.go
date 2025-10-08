@@ -641,7 +641,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 			case "debug-set-max-locks":
 				var n int
 				d.ScanArgs(t, "n", &n)
-				m.TestingSetMaxLocks(int64(n))
+				m.SetMaxLockTableSize(int64(n))
 				return ""
 
 			case "reset":
