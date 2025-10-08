@@ -2,6 +2,8 @@
   <img src='docs/media/cockroach_db.png?raw=true' width='70%'>
 </p>
 
+
+
 ---
 
 CockroachDB is a cloud-native distributed SQL database designed to build,
