@@ -660,6 +660,22 @@ func (c *CustomFuncs) IsLeakproof(expr memo.RelExpr) bool {
 
 // ----------------------------------------------------------------------
 //
+// ScalarListExpr functions
+//   General functions related to ScalarListExpr.
+//
+// ----------------------------------------------------------------------
+
+// ScalarExprAt returns the ScalarExpr in the i-th position in the given list.
+// Returns ok=false if i is out of bounds.
+func (c *CustomFuncs) ScalarExprAt(list memo.ScalarListExpr, i int) (_ opt.ScalarExpr, ok bool) {
+	if i >= 0 && i < len(list) {
+		return list[i], true
+	}
+	return nil, false
+}
+
+// ----------------------------------------------------------------------
+//
 // Ordering functions
 //   General functions related to orderings.
 //

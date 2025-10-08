@@ -220,14 +220,13 @@
     (Function $args:* $private:(FunctionPrivate "timezone"))
     $right:(ConstValue) &
         (IsTimestampTZ $right) &
-        (IsTimestamp $ts:(SecondScalarListExpr $args)) &
-        ^(IsConstValueOrGroupOfConstValues $ts)
+        (Let ($ts $tsOk):(ScalarExprAt $args 1) $tsOk) &
+        (IsTimestamp $ts) &
+        ^(IsConstValueOrGroupOfConstValues $ts) &
+        (Let ($zone $zoneOk):(ScalarExprAt $args 0) $zoneOk)
 )
 =>
-((OpName)
-    $ts
-    (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
-)
+((OpName) $ts (MakeTimeZoneFunction $zone $right))
 
 # NormalizeCmpTimeZoneFunctionTZ normalizes timezone functions within
 # comparison operators. It only matches expressions when:
@@ -249,14 +248,13 @@
     (Function $args:* $private:(FunctionPrivate "timezone"))
     $right:(ConstValue) &
         (IsTimestamp $right) &
-        (IsTimestampTZ $tz:(SecondScalarListExpr $args)) &
-        ^(IsConstValueOrGroupOfConstValues $tz)
+        (Let ($tz $tzOk):(ScalarExprAt $args 1) $tzOk) &
+        (IsTimestampTZ $tz) &
+        ^(IsConstValueOrGroupOfConstValues $tz) &
+        (Let ($zone $zoneOk):(ScalarExprAt $args 0) $zoneOk)
 )
 =>
-((OpName)
-    $tz
-    (MakeTimeZoneFunction (FirstScalarListExpr $args) $right)
-)
+((OpName) $tz (MakeTimeZoneFunction $zone $right))
 
 # FoldEqTrue replaces x = True with x.
 [FoldEqTrue, Normalize]
