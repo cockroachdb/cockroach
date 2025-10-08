@@ -100,6 +100,7 @@ func NewProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	stageID int32,
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	inputs []execinfra.RowSource,
@@ -121,7 +122,7 @@ func NewProcessor(
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return newTableReader(ctx, flowCtx, processorID, core.TableReader, post)
+		return newTableReader(ctx, flowCtx, processorID, stageID, core.TableReader, post)
 	}
 	if core.Filterer != nil {
 		if err := checkNumIn(inputs, 1); err != nil {
