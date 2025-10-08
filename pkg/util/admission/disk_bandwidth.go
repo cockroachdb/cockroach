@@ -173,7 +173,7 @@ func (d *diskBandwidthLimiter) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("diskBandwidthLimiter%s (tokenUtilization %.2f, tokensUsed (elastic %s, "+
 		"snapshot %s, regular %s) tokens (write %s (prev %s), read %s (prev %s)), writeBW %s/s, "+
 		"readBW %s/s, provisioned %s/s)",
-		unlimitedPrefix,
+		redact.SafeString(unlimitedPrefix),
 		d.state.diskBWUtil,
 		ib(d.state.usedTokens[admissionpb.ElasticStoreWorkType].writeByteTokens),
 		ib(d.state.usedTokens[admissionpb.SnapshotIngestStoreWorkType].writeByteTokens),
