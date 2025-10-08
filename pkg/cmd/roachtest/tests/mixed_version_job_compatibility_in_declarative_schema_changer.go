@@ -118,7 +118,7 @@ func executeSupportedDDLs(
 		`TRUNCATE testdb.testsc.t3`,
 		`ALTER TABLE testdb.testsc.t2 RENAME TO t2_renamed`,
 		`ALTER TABLE testdb.testsc.t2_renamed RENAME TO t2`,
-		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET ON UPDATE j + 1`,
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET ON UPDATE 1`,
 		`ALTER TABLE testdb.testsc.t2 RENAME COLUMN k TO k_renamed`,
 		`ALTER TABLE testdb.testsc.t2 RENAME COLUMN k_renamed TO k`,
 	}
