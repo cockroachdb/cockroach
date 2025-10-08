@@ -359,6 +359,9 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
+			// Release the event's allocation since we're not processing it.
+			a := ev.DetachAlloc()
+			a.Release(ctx)
 			return nil
 		}
 		return err
@@ -375,6 +378,9 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		// Column families are stored contiguously, so we'll get
 		// events for each one even if we're not watching them all.
 		if errors.Is(err, cdcevent.ErrUnwatchedFamily) {
+			// Release the event's allocation since we're not processing it.
+			a := ev.DetachAlloc()
+			a.Release(ctx)
 			return nil
 		}
 		return err
