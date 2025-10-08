@@ -104,12 +104,12 @@ ORDER BY
 -- Send queue metrics from n1, a send queue should have formed for one of the
 -- replica send streams, while the other (non-leader stream) should have been
 -- prevented from forming. It should be 1024*4KiB=4MiB in size.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY
@@ -147,12 +147,12 @@ ORDER BY
 
 
 -- Send queue and flow token metrics from n1. All tokens should be returned.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%send_queue%'
   AND name != 'kvflowcontrol.send_queue.count'
 ORDER BY

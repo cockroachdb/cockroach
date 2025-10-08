@@ -10,12 +10,12 @@ echo
 -- Flow token metrics from n1 after issuing + admitting the 1MiB 3x
 -- replicated write to the pre-split range. There should be 3MiB of
 -- {regular,elastic} tokens {deducted,returned}.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -64,12 +64,12 @@ ORDER BY
 -- post-split LHS and RHS ranges respectively. We should see 15MiB extra tokens
 -- {deducted,returned}, which comes from (2MiB+3MiB)*3=15MiB. So we stand at
 -- 3MiB+15MiB=18MiB now.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -128,12 +128,12 @@ ORDER BY
 -- Flow token metrics from n1 after issuing 4MiB of replicated writes to
 -- the post-merged range. We should see 12MiB extra tokens {deducted,returned},
 -- which comes from 4MiB*3=12MiB. So we stand at 18MiB+12MiB=30MiB now.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;

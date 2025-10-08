@@ -7,12 +7,12 @@ echo
 -- Flow token metrics from n1 after issuing 1x1MiB elastic 3x replicated write
 -- that's not admitted. We see 1*1MiB*3=3MiB deductions of elastic tokens with
 -- no corresponding returns.
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -45,12 +45,12 @@ ORDER BY
 -- (Allow below-raft admission to proceed. We've disabled the piggybacked token
 -- return mechanism so no tokens are returned via this path. But the tokens will
 -- be returned anyway because the range is not quiesced and keeps pinging.)
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -81,12 +81,12 @@ ORDER BY
 
 
 -- (Issuing another 1x1MiB 3x elastic write.)
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
@@ -119,12 +119,12 @@ ORDER BY
 -- (Allow below-raft admission to proceed. We've enabled the piggybacked token
 -- return mechanism so tokens are returned either via this path, or the normal
 -- MsgAppResp flow, depending on which is exercised first.)
-SELECT 
+SELECT
   name,
   crdb_internal.humanize_bytes(value::INT8)
-FROM 
+FROM
   crdb_internal.node_metrics
-WHERE 
+WHERE
   name LIKE '%kvflowcontrol%tokens%'
 ORDER BY
   name ASC;
