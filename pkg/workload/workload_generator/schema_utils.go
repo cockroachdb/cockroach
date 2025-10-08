@@ -492,11 +492,17 @@ func mapSQLType(sql string, col *Column, rng *rand.Rand) (GeneratorType, map[str
 	return GenTypeString, args
 }
 
-func mapIntegerType(_ string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapIntegerType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
 	if col.IsPrimaryKey || col.IsUnique {
 		return GenTypeSequence, map[string]any{"start": 1, "seed": args["seed"]}
 	}
-	setArgsRange(args, -(1 << 31), (1<<31)-1)
+	if sql == "smallint" || sql == "int2" {
+		setArgsRange(args, -(1 << 15), (1<<15)-1)
+	} else {
+		// default is regular INT
+		// INT is 32-bit in CockroachDB even on 64-bit platforms
+		setArgsRange(args, -(1 << 31), (1<<31)-1)
+	}
 	return GenTypeInteger, args
 }
 
