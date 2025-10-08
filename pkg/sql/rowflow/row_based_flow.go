@@ -255,6 +255,7 @@ func (f *rowBasedFlow) makeProcessorAndOutput(
 		ctx,
 		&f.FlowCtx,
 		ps.ProcessorID,
+		ps.StageID,
 		&ps.Core,
 		&ps.Post,
 		inputs,
