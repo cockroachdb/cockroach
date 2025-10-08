@@ -389,10 +389,13 @@ func (s *drainServer) drainInner(
 	return s.drainNode(ctx, reporter, verbose)
 }
 
-// isDraining returns true if either SQL client connections are being drained
-// or if one of the stores on the node is not accepting replicas.
+// isDraining returns true if the SQL client connections are being drained,
+// if one of the stores on the node is not accepting replicas, or if the
+// server controller is being drained.
 func (s *drainServer) isDraining() bool {
-	return s.sqlServer.pgServer.IsDraining() || (s.kvServer.node != nil && s.kvServer.node.IsDraining())
+	return s.sqlServer.pgServer.IsDraining() ||
+		(s.kvServer.node != nil && s.kvServer.node.IsDraining()) ||
+		(s.serverCtl != nil && s.serverCtl.IsDraining())
 }
 
 // drainClients starts draining the SQL layer.
@@ -410,7 +413,10 @@ func (s *drainServer) drainClientsInternal(
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
-	shouldDelayDraining := !s.isDraining()
+
+	// If this is the first time we are draining the clients, we delay draining
+	// to allow health probes to notice that the node is not ready.
+	shouldDelayDraining := !s.sqlServer.pgServer.IsDraining()
 
 	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
 	// Probes to /health?ready=1 will now notice the change in the node's readiness.
