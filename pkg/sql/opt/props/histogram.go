@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/datumrange"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
@@ -75,6 +76,15 @@ func (h *Histogram) numEq(i int) float64 {
 // selectivity applied. i must be greater than or equal to 0 and less than
 // bucketCount.
 func (h *Histogram) numRange(i int) float64 {
+	// The first bucket always has a zero value for NumRange, so the lower bound
+	// of the histogram is the upper bound of the first bucket. We only check this
+	// in test builds.
+	if i == 0 && h.buckets[i].NumRange != 0 {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
+		}
+		return 0
+	}
 	return h.buckets[i].NumRange * h.selectivity
 }
 
@@ -84,6 +94,13 @@ func (h *Histogram) numRange(i int) float64 {
 func (h *Histogram) distinctRange(i int) float64 {
 	n := h.buckets[i].NumRange
 	d := h.buckets[i].DistinctRange
+
+	if i == 0 && d != 0 {
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("the first bucket should have DistinctRange=0"))
+		}
+		return 0
+	}
 
 	if d == 0 {
 		return 0
@@ -203,11 +220,6 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 		return 0
 	}
 
-	// The first bucket always has a zero value for NumRange, so the lower bound
-	// of the histogram is the upper bound of the first bucket.
-	if h.numRange(0) != 0 {
-		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
-	}
 	previousUpperBound := h.upperBound(0)
 
 	var count float64
@@ -320,12 +332,6 @@ func (h *Histogram) filter(
 	}
 	if bucketCount == 0 {
 		return filtered
-	}
-
-	// The first bucket always has a zero value for NumRange, so the lower bound
-	// of the histogram is the upper bound of the first bucket.
-	if h.numRange(0) != 0 {
-		panic(errors.AssertionFailedf("the first bucket should have NumRange=0"))
 	}
 
 	var iter histogramIter
