@@ -26,6 +26,7 @@ func TestSplitColumnDefsAndTableConstraints(t *testing.T) {
 		id INT PRIMARY KEY,
 		name TEXT NOT NULL,
 		age INT DEFAULT 30,
+		checksum BYTES DEFAULT 30,
 		CONSTRAINT user_pk PRIMARY KEY (id),
 		UNIQUE (name),
 		FOREIGN KEY (age) REFERENCES other(age),
@@ -36,6 +37,7 @@ func TestSplitColumnDefsAndTableConstraints(t *testing.T) {
 		"id INT PRIMARY KEY",
 		"name TEXT NOT NULL",
 		"age INT DEFAULT 30",
+		"checksum BYTES DEFAULT 30",
 	}
 	wantConstraints := []string{
 		"CONSTRAINT user_pk PRIMARY KEY (id)",

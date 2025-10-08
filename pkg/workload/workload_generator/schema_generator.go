@@ -353,6 +353,7 @@ func generateDDLFromCSV(
 // foreign keys, and check constraints) from the DDL statement and returns a structured
 // representation of the table schema.
 func ParseDDL(ddl string) (*TableSchema, error) {
+	// TODO: use sql parser instead of regexes.
 	tableMatch := tablePattern.FindStringSubmatch(ddl)
 	if tableMatch == nil {
 		return nil, errors.New("no table name")
@@ -439,7 +440,8 @@ func hasConstrainingPrefix(up string) bool {
 		sqlFamily,
 	}
 	for _, p := range prefixes {
-		if strings.HasPrefix(up, p) {
+		// a space is added after the prefix to avoid matches like "checksum" as a field name.
+		if strings.HasPrefix(up, p+" ") {
 			return true
 		}
 	}
