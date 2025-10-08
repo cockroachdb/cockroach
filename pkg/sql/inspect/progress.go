@@ -48,6 +48,11 @@ type inspectProgressTracker struct {
 		cachedProgress *jobspb.Progress
 		// completedSpans tracks all completed spans with automatic deduplication.
 		completedSpans roachpb.SpanGroup
+		// receivedSpanCount tracks the total number of spans received from metadata.
+		// This is used to determine if we have new spans to checkpoint.
+		receivedSpanCount int
+		// lastCheckpointedSpanCount tracks the span count at the last checkpoint write.
+		lastCheckpointedSpanCount int
 	}
 
 	// Goroutine management.
@@ -208,6 +213,7 @@ func (t *inspectProgressTracker) updateProgressCache(
 	// automatic deduplication and merging.
 	if len(meta.BulkProcessorProgress.CompletedSpans) > 0 {
 		t.mu.completedSpans.Add(meta.BulkProcessorProgress.CompletedSpans...)
+		t.mu.receivedSpanCount += len(meta.BulkProcessorProgress.CompletedSpans)
 	}
 
 	// Update check count.
@@ -299,13 +305,22 @@ func (t *inspectProgressTracker) flushProgress(ctx context.Context) error {
 		cachedInspectProgress = t.mu.cachedProgress.GetInspect()
 	}()
 
-	// Calculate fraction complete based on check counts from cached progress.
-	var fractionComplete float32
-	if cachedInspectProgress.JobTotalCheckCount > 0 {
-		fractionComplete = float32(cachedInspectProgress.JobCompletedCheckCount) / float32(cachedInspectProgress.JobTotalCheckCount)
-	}
-
 	return t.job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		// Only write if any part of the inspect progress has changed.
+		currentInspectProgress := md.Progress.GetInspect()
+		if currentInspectProgress != nil &&
+			currentInspectProgress.JobTotalCheckCount == cachedInspectProgress.JobTotalCheckCount &&
+			currentInspectProgress.JobCompletedCheckCount == cachedInspectProgress.JobCompletedCheckCount &&
+			md.Progress.GetProgress() != nil { // Ensure fraction complete has been initialized.
+			return nil
+		}
+
+		// Calculate fraction complete based on check counts from cached progress.
+		var fractionComplete float32
+		if cachedInspectProgress.JobTotalCheckCount > 0 {
+			fractionComplete = float32(cachedInspectProgress.JobCompletedCheckCount) / float32(cachedInspectProgress.JobTotalCheckCount)
+		}
+
 		newProgress := &jobspb.Progress{
 			Details: &jobspb.Progress_Inspect{
 				Inspect: cachedInspectProgress,
@@ -322,11 +337,17 @@ func (t *inspectProgressTracker) flushProgress(ctx context.Context) error {
 // flushCheckpointUpdate performs a progress update to include completed spans.
 // The completed spans are stored via jobfrontier.
 func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) error {
+	if !t.hasUncheckpointedSpans() {
+		return nil
+	}
+
 	var completedSpans []roachpb.Span
+	var capturedReceivedCount int
 	func() {
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		completedSpans = t.mu.completedSpans.Slice()
+		capturedReceivedCount = t.mu.receivedSpanCount
 	}()
 
 	// If no completed spans, nothing to store.
@@ -334,7 +355,7 @@ func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) erro
 		return nil
 	}
 
-	return t.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	err := t.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Create a frontier for the spans (using zero timestamps since INSPECT doesn't need timing).
 		frontier, err := span.MakeFrontier(completedSpans...)
 		if err != nil {
@@ -343,6 +364,20 @@ func (t *inspectProgressTracker) flushCheckpointUpdate(ctx context.Context) erro
 		defer frontier.Release()
 		return jobfrontier.Store(ctx, txn, t.jobID, inspectCompletedSpansKey, frontier)
 	})
+
+	// If the checkpoint write succeeded, update the last checkpointed span count.
+	// This prevents unnecessary future writes when no new spans have been completed.
+	if err == nil {
+		func() {
+			t.mu.Lock()
+			defer t.mu.Unlock()
+			if capturedReceivedCount > t.mu.lastCheckpointedSpanCount {
+				t.mu.lastCheckpointedSpanCount = capturedReceivedCount
+			}
+		}()
+	}
+
+	return err
 }
 
 // getCachedCheckCounts returns the current cached check counts (total and completed).
@@ -361,6 +396,14 @@ func (t *inspectProgressTracker) getCachedCheckCounts() (totalChecks int64, comp
 	}
 
 	return inspectProgress.JobTotalCheckCount, inspectProgress.JobCompletedCheckCount
+}
+
+// hasUncheckpointedSpans returns true if there are completed spans that have not been
+// checkpointed yet. This is used to determine if a checkpoint flush is needed.
+func (t *inspectProgressTracker) hasUncheckpointedSpans() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.mu.receivedSpanCount > t.mu.lastCheckpointedSpanCount
 }
 
 // countApplicableChecks determines how many checks will actually run across all spans.
