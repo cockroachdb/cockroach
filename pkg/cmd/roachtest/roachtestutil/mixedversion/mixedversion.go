@@ -355,6 +355,7 @@ type (
 		overriddenMutatorProbabilities map[string]float64
 		hooksSupportFailureInjection   bool
 		workloadNodes                  option.NodeListOption
+		enableUpReplication            bool
 	}
 
 	CustomOption func(*testOptions)
@@ -411,6 +412,12 @@ type (
 // `NewTest` to enable the use of mixed-version hooks during failure injections.
 func EnableHooksDuringFailureInjection(opts *testOptions) {
 	opts.hooksSupportFailureInjection = true
+}
+
+// EnableUpReplication is an option that can be passed to `NewTest` to enable
+// up-replication to 5X before panicking a node during failure injection tests.
+func EnableUpReplication(opts *testOptions) {
+	opts.enableUpReplication = true
 }
 
 // NeverUseFixtures is an option that can be passed to `NewTest` to

@@ -600,6 +600,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, c
 		customOpts = append([]mixedversion.CustomOption{
 			mixedversion.NeverUseFixtures,
 			mixedversion.EnableHooksDuringFailureInjection,
+			mixedversion.EnableUpReplication,
 		},
 			customOpts...)
 	}
