@@ -436,6 +436,36 @@ func (tc *Collection) maybeMarkVersionBumpOnly(
 			isVersionBumpOnly
 }
 
+// EmitDescriptorUpdatesKey writes a special key that helps the lease manager
+// know which descriptors were updated by this transaction. This allows it to
+// transactionally make these descriptors available.
+func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn) error {
+	// This key is only emitted for 25.4 and above. Additionally, PCR
+	// reader catalog can update a large number of descriptors in a transaction,
+	// and are exempt from this logic.
+	if !tc.settings.Version.IsActive(ctx, clusterversion.V25_4) ||
+		tc.readerCatalogSetup ||
+		tc.uncommitted.uncommitted.Len() == 0 ||
+		!lease.LockedLeaseTimestamp.Get(&tc.settings.SV) {
+		return nil
+	}
+	updates := &descpb.DescriptorUpdates{}
+	descUpdateID := descpb.InvalidID
+	// Add all the descriptors that have been modified in this transaction.
+	if err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		updates.DescriptorIDs = append(updates.DescriptorIDs, desc.GetID())
+		updates.DescriptorVersions = append(updates.DescriptorVersions, desc.GetVersion())
+		if descUpdateID < desc.GetID() {
+			descUpdateID = desc.GetID()
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	descUpdateKey := catalogkeys.MakeDescUpdateKey(tc.codec(), descUpdateID)
+	return txn.Put(ctx, descUpdateKey, updates)
+}
+
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
 // collection as an uncommitted descriptor, and writes it into b.
 func (tc *Collection) WriteDescToBatch(

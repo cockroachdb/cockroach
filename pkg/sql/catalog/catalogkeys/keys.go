@@ -287,6 +287,11 @@ func MakeDescMetadataKey(codec keys.SQLCodec, descID descpb.ID) roachpb.Key {
 	return codec.DescMetadataKey(uint32(descID))
 }
 
+// MakeDescUpdateKey returns the key for the descriptor.
+func MakeDescUpdateKey(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
+	return codec.DescMetadataUpdateKey(uint32(id))
+}
+
 // CommentsMetadataPrefix returns the key prefix for all comments in the
 // system.comments table.
 func CommentsMetadataPrefix(codec keys.SQLCodec) roachpb.Key {
