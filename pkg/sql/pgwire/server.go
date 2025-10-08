@@ -309,6 +309,8 @@ type Server struct {
 		// destinations tracks the metrics for each destination.
 		destinations map[string]*destinationMetrics
 	}
+	// limit the number of rejectNewConnection errors
+	connectionErrorLogEveryN log.EveryN
 
 	auth struct {
 		syncutil.RWMutex
@@ -490,6 +492,7 @@ func MakeServer(
 	server.mu.drainCh = make(chan struct{})
 	server.mu.destinations = make(map[string]*destinationMetrics)
 	server.mu.Unlock()
+	server.connectionErrorLogEveryN = log.Every(10 * time.Second)
 	executorConfig.CidrLookup.SetOnChange(server.onCidrChange)
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -931,7 +934,9 @@ func (s *Server) ServeConn(
 	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
-		log.Ops.Info(ctx, "rejecting new connection while server is draining")
+		if s.connectionErrorLogEveryN.ShouldLog() {
+			log.Ops.Info(ctx, "rejecting new connection while server is draining")
+		}
 		return s.sendErr(ctx, st, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
