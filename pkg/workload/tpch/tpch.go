@@ -56,10 +56,8 @@ type tpch struct {
 	scaleFactor int
 	fks         bool
 
-	enableChecks               bool
-	vectorize                  string
-	useClusterVectorizeSetting bool
-	verbose                    bool
+	enableChecks bool
+	verbose      bool
 
 	queriesRaw      string
 	selectedQueries []int
@@ -87,9 +85,7 @@ var tpchMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`queries`:       {RuntimeOnly: true},
-			`dist-sql`:      {RuntimeOnly: true},
 			`enable-checks`: {RuntimeOnly: true},
-			`vectorize`:     {RuntimeOnly: true},
 		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed.`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
@@ -102,10 +98,6 @@ var tpchMeta = workload.Meta{
 			"Enable checking the output against the expected rows (default false). "+
 				"Note that the checks are only supported for scale factor 1 of the backup "+
 				"stored at 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup'.")
-		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
-			`Set vectorize session variable.`)
-		g.flags.BoolVar(&g.useClusterVectorizeSetting, `default-vectorize`, false,
-			`Ignore vectorize option and use the current cluster setting sql.defaults.vectorize.`)
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -342,13 +334,8 @@ type worker struct {
 
 func (w *worker) run(ctx context.Context) error {
 	queryNum := w.config.selectedQueries[w.ops%len(w.config.selectedQueries)]
+	query := w.queries[queryNum]
 	w.ops++
-
-	var prefix string
-	if !w.config.useClusterVectorizeSetting {
-		prefix = fmt.Sprintf("SET vectorize = '%s';", w.config.vectorize)
-	}
-	query := fmt.Sprintf("%s %s", prefix, w.queries[queryNum])
 
 	vals := make([]interface{}, maxCols)
 	for i := range vals {
