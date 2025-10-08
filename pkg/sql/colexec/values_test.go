@@ -150,7 +150,8 @@ func BenchmarkValues(b *testing.B) {
 					var core execinfrapb.ProcessorCoreUnion
 					core.Values = spec
 					proc, err := rowexec.NewProcessor(
-						ctx, &flowCtx, 0 /* processorID */, &core, &post, nil /* inputs */, nil, /* localProcessors */
+						ctx, &flowCtx, 0 /* processorID */, 0 /* stageID */, &core, &post,
+						nil /* inputs */, nil, /* localProcessors */
 					)
 					if err != nil {
 						b.Fatal(err)
