@@ -267,6 +267,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			meta := execinfrapb.GetProducerMeta()
 			meta.Metrics = execinfrapb.GetMetricsMeta()
 			meta.Metrics.RowsRead = tr.rowsRead
+			meta.Metrics.StageID = tr.stageID
 			tr.rowsRead = 0
 			return nil, meta
 		}
@@ -347,6 +348,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = tr.rowsRead
+	meta.Metrics.StageID = tr.stageID
 	return append(trailingMeta, *meta)
 }
 

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -662,7 +663,11 @@ func (b *Builder) indexConstraintMaxResults(
 
 // scanParams populates ScanParams and the output column mapping.
 func (b *Builder) scanParams(
-	tab cat.Table, scan *memo.ScanPrivate, relProps *props.Relational, reqProps *physical.Required,
+	tab cat.Table,
+	scan *memo.ScanPrivate,
+	relProps *props.Relational,
+	reqProps *physical.Required,
+	statsCreatedAt time.Time,
 ) (exec.ScanParams, colOrdMap, error) {
 	// Check if we tried to force a specific index but there was no Scan with that
 	// index in the memo.
@@ -814,6 +819,7 @@ func (b *Builder) scanParams(
 		Parallelize:        parallelize,
 		Locking:            locking,
 		EstimatedRowCount:  rowCount,
+		StatsCreatedAt:     statsCreatedAt,
 		LocalityOptimized:  scan.LocalityOptimized,
 	}, outputMap, nil
 }
@@ -885,6 +891,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		}
 	}
 
+	var statsCreatedAt time.Time
 	// Save some instrumentation info.
 	b.ScanCounts[exec.ScanCount]++
 	if stats.Available {
@@ -933,11 +940,13 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 				rowCountWithoutForecast = float64(minCardinality)
 			}
 			b.TotalScanRowsWithoutForecasts += rowCountWithoutForecast
+			statsCreatedAt = tabStat.CreatedAt()
 		}
 	}
 
 	var params exec.ScanParams
-	params, outputCols, err = b.scanParams(tab, &scan.ScanPrivate, scan.Relational(), scan.RequiredPhysical())
+	params, outputCols, err = b.scanParams(tab, &scan.ScanPrivate,
+		scan.Relational(), scan.RequiredPhysical(), statsCreatedAt)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -1018,7 +1027,8 @@ func (b *Builder) buildPlaceholderScan(
 	private.SetConstraint(b.ctx, b.evalCtx, &c)
 
 	var params exec.ScanParams
-	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(), scan.RequiredPhysical())
+	params, outputCols, err = b.scanParams(tab, &private, scan.Relational(),
+		scan.RequiredPhysical(), time.Time{} /* statsCreatedAt */)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
