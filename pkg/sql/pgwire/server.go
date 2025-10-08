@@ -305,6 +305,8 @@ type Server struct {
 		// SQL connections, e.g. when the draining process enters the phase whose
 		// duration is specified by the server.shutdown.connections.timeout.
 		rejectNewConnections bool
+		// limit the number of rejectNewConnection errors
+		connectionErrorLogEveryN log.EveryN
 
 		// destinations tracks the metrics for each destination.
 		destinations map[string]*destinationMetrics
@@ -489,6 +491,7 @@ func MakeServer(
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.drainCh = make(chan struct{})
 	server.mu.destinations = make(map[string]*destinationMetrics)
+	server.mu.connectionErrorLogEveryN = log.Every(10 * time.Second)
 	server.mu.Unlock()
 	executorConfig.CidrLookup.SetOnChange(server.onCidrChange)
 
@@ -891,7 +894,7 @@ func (s *Server) ServeConn(
 		}
 	}()
 
-	ctx, rejectNewConnections, onCloseFn := s.registerConn(ctx)
+	ctx, rejectNewConnections, shouldLog, onCloseFn := s.registerConn(ctx)
 	defer onCloseFn()
 
 	sessionID := s.execCfg.GenerateID()
@@ -931,7 +934,9 @@ func (s *Server) ServeConn(
 	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
-		log.Ops.Info(ctx, "rejecting new connection while server is draining")
+		if shouldLog {
+			log.Ops.Info(ctx, "rejecting new connection while server is draining")
+		}
 		return s.sendErr(ctx, st, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
@@ -1588,7 +1593,7 @@ func finalizeClientParameters(
 // connection by the caller.
 func (s *Server) registerConn(
 	ctx context.Context,
-) (newCtx context.Context, rejectNewConnections bool, onCloseFn func()) {
+) (newCtx context.Context, rejectNewConnections bool, shouldLog bool, onCloseFn func()) {
 	onCloseFn = func() {}
 	newCtx = ctx
 	s.mu.Lock()
@@ -1605,6 +1610,8 @@ func (s *Server) registerConn(
 			delete(s.mu.connCancelMap, done)
 			s.mu.Unlock()
 		}
+	} else {
+		shouldLog = s.mu.connectionErrorLogEveryN.ShouldLog()
 	}
 	s.mu.Unlock()
 
