@@ -84,7 +84,7 @@ func TestLeaseCommandLearnerReplica(t *testing.T) {
 	_, err = RequestLease(ctx, nil, cArgs, nil)
 
 	const expForLearner = `cannot replace lease <empty> ` +
-		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 exp=<nil> pro=0,0 acq=Request: ` +
+		`with repl=(n2,s2):2LEARNER seq=0 start=0,0 type=LeaseExpiration exp=<nil> pro=0,0 acq=Request: ` +
 		`lease target replica cannot hold lease`
 	require.EqualError(t, err, expForLearner)
 }
