@@ -225,7 +225,7 @@ func (s *httpServer) setupRoutes(
 		s.mux.Handle(authserver.DemoLoginPath, http.HandlerFunc(authnServer.DemoLogin))
 	}
 
-	s.mux.Handle(apiconstants.AdminPrefix, authenticatedGWMux)
+	s.mux.Handle(apiconstants.AdminPrefix, authenticatedAPIInternalServer)
 
 	// Handlers for statement diagnostic bundle download. These are special
 	// because they return zip files, not protobufs or JSON.
@@ -233,11 +233,11 @@ func (s *httpServer) setupRoutes(
 	s.mux.Handle(apiconstants.AdminTxnBundle, txnBundleHandlerFunc)
 
 	// The timeseries endpoint, used to produce graphs.
-	s.mux.Handle(ts.URLPrefix, authenticatedGWMux)
+	s.mux.Handle(ts.URLPrefix, authenticatedAPIInternalServer)
 
 	// Exempt the 2nd health check endpoint from authentication.
 	// (This simply mirrors /health and exists for backward compatibility.)
-	s.mux.Handle(apiconstants.AdminHealth, unauthenticatedGWMux)
+	s.mux.Handle(apiconstants.AdminHealth, authenticatedAPIInternalServer)
 	// The /_status/vars and /metrics endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, false /* useStaticLabels */}.handleVars))
 	s.mux.Handle(apiconstants.MetricsPath, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, true /* useStaticLabels */}.handleVars))

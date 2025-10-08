@@ -4,7 +4,9 @@ go_library(
     name = "apiinternal",
     srcs = [
         "api_internal.go",
+        "api_internal_admin.go",
         "api_internal_status.go",
+        "api_internal_ts.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/apiinternal",
     visibility = ["//visibility:public"],
@@ -16,6 +18,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/server/srverrors",
         "//pkg/settings/cluster",
+        "//pkg/ts/tspb",
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/protoutil",
