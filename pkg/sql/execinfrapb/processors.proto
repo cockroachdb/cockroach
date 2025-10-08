@@ -25,6 +25,7 @@ import "sql/execinfrapb/processors_export.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 
 // Each processor has the following components:
 //  - one or more input synchronizers; each one merges rows between one or more
@@ -82,6 +83,10 @@ message ProcessorSpec {
   // estimated_row_count contains the number of rows that the optimizer expects
   // will be emitted from this processor, or 0 if the estimate wasn't populated.
   optional uint64 estimated_row_count = 8 [(gogoproto.nullable) = false];
+
+  // stats_created_at, if set, is the time when the latest table statistics were
+  // collected for the table that this processor is operating on.
+  optional google.protobuf.Timestamp stats_created_at = 9 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 message ProcessorCoreUnion {
