@@ -2847,6 +2847,39 @@ deprules
     - $index-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: column name is dropped before same name is used by different column
+  from: old-column-name-Node
+  kind: Precedence
+  to: new-column-name-Node
+  query:
+    - $old-column-name[Type] = '*scpb.ColumnName'
+    - $new-column-name[Type] = '*scpb.ColumnName'
+    - joinOnDescID($old-column-name, $new-column-name, $table-id)
+    - $old-column-name[Name] = $name
+    - $new-column-name[Name] = $name
+    - $old-column-name-Target[TargetStatus] = ABSENT
+    - $old-column-name-Node[CurrentStatus] = ABSENT
+    - $new-column-name-Target[TargetStatus] = PUBLIC
+    - $new-column-name-Node[CurrentStatus] = PUBLIC
+    - DifferentColumnIDs(*scpb.ColumnName, *scpb.ColumnName)($old-column-name, $new-column-name)
+    - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
+    - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
+- name: column name is public before compute expression referencing it
+  from: column-name-Node
+  kind: Precedence
+  to: compute-expression-Node
+  query:
+    - $column-name[Type] = '*scpb.ColumnName'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - $column-name[ColumnID] = $columnID
+    - $compute-expression[ReferencedColumnIDs] CONTAINS $columnID
+    - joinOnDescID($column-name, $compute-expression, $table-id)
+    - $column-name-Target[TargetStatus] = PUBLIC
+    - ToPublicOrTransient($column-name-Target, $compute-expression-Target)
+    - $column-name-Node[CurrentStatus] = PUBLIC
+    - $compute-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($column-name, $column-name-Target, $column-name-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
 - name: column name set right after column existence, except for alter column type
   from: column-Node
   kind: SameStagePrecedence
@@ -2958,6 +2991,11 @@ deprules
     - $column-type-Target[TargetStatus] = PUBLIC
     - $transient-check-constraint-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - $column-type-Node[CurrentStatus] = PUBLIC
+    - $old-column-type[Type] = '*scpb.ColumnType'
+    - $old-column-type[DescID] = $table-id
+    - $old-column-type[ColumnID] = $columnID
+    - $old-column-type-Target[TargetStatus] = ABSENT
+    - joinTargetNode($old-column-type, $old-column-type-Target, $old-column-type-Node)
     - joinTargetNode($transient-check-constraint, $transient-check-constraint-Target, $transient-check-constraint-Node)
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
 - name: column type removed before column family
@@ -4238,68 +4276,6 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - toAbsent($constraint-Target, $referenced-column-name-Target)
-    - $constraint-Node[CurrentStatus] = ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - transient($constraint-Target, $referenced-column-name-Target)
-    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - $referenced-column-name-Target[TargetStatus] = ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - $constraint-Target[TargetStatus] = ABSENT
-    - $constraint-Node[CurrentStatus] = ABSENT
-    - $referenced-column-name-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
 - name: old column name is dropped before new column name is added
   from: old-column-name-Node
   kind: Precedence
@@ -5133,6 +5109,68 @@ deprules
     - $dependents-Node[CurrentStatus] = TRANSIENT_PUBLIC
     - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
     - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - toAbsent($constraint-Target, $referenced-column-name-Target)
+    - $constraint-Node[CurrentStatus] = ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - transient($constraint-Target, $referenced-column-name-Target)
+    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $referenced-column-name-Target[TargetStatus] = ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - $constraint-Target[TargetStatus] = ABSENT
+    - $constraint-Node[CurrentStatus] = ABSENT
+    - $referenced-column-name-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
 
 deprules
 ----
@@ -7983,6 +8021,39 @@ deprules
     - $index-Node[CurrentStatus] = WRITE_ONLY
     - joinTargetNode($column, $column-Target, $column-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: column name is dropped before same name is used by different column
+  from: old-column-name-Node
+  kind: Precedence
+  to: new-column-name-Node
+  query:
+    - $old-column-name[Type] = '*scpb.ColumnName'
+    - $new-column-name[Type] = '*scpb.ColumnName'
+    - joinOnDescID($old-column-name, $new-column-name, $table-id)
+    - $old-column-name[Name] = $name
+    - $new-column-name[Name] = $name
+    - $old-column-name-Target[TargetStatus] = ABSENT
+    - $old-column-name-Node[CurrentStatus] = ABSENT
+    - $new-column-name-Target[TargetStatus] = PUBLIC
+    - $new-column-name-Node[CurrentStatus] = PUBLIC
+    - DifferentColumnIDs(*scpb.ColumnName, *scpb.ColumnName)($old-column-name, $new-column-name)
+    - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
+    - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
+- name: column name is public before compute expression referencing it
+  from: column-name-Node
+  kind: Precedence
+  to: compute-expression-Node
+  query:
+    - $column-name[Type] = '*scpb.ColumnName'
+    - $compute-expression[Type] = '*scpb.ColumnComputeExpression'
+    - $column-name[ColumnID] = $columnID
+    - $compute-expression[ReferencedColumnIDs] CONTAINS $columnID
+    - joinOnDescID($column-name, $compute-expression, $table-id)
+    - $column-name-Target[TargetStatus] = PUBLIC
+    - ToPublicOrTransient($column-name-Target, $compute-expression-Target)
+    - $column-name-Node[CurrentStatus] = PUBLIC
+    - $compute-expression-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($column-name, $column-name-Target, $column-name-Node)
+    - joinTargetNode($compute-expression, $compute-expression-Target, $compute-expression-Node)
 - name: column name set right after column existence, except for alter column type
   from: column-Node
   kind: SameStagePrecedence
@@ -8094,6 +8165,11 @@ deprules
     - $column-type-Target[TargetStatus] = PUBLIC
     - $transient-check-constraint-Node[CurrentStatus] = TRANSIENT_VALIDATED
     - $column-type-Node[CurrentStatus] = PUBLIC
+    - $old-column-type[Type] = '*scpb.ColumnType'
+    - $old-column-type[DescID] = $table-id
+    - $old-column-type[ColumnID] = $columnID
+    - $old-column-type-Target[TargetStatus] = ABSENT
+    - joinTargetNode($old-column-type, $old-column-type-Target, $old-column-type-Node)
     - joinTargetNode($transient-check-constraint, $transient-check-constraint-Target, $transient-check-constraint-Node)
     - joinTargetNode($column-type, $column-type-Target, $column-type-Node)
 - name: column type removed before column family
@@ -9374,68 +9450,6 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - toAbsent($constraint-Target, $referenced-column-name-Target)
-    - $constraint-Node[CurrentStatus] = ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - transient($constraint-Target, $referenced-column-name-Target)
-    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - $referenced-column-name-Target[TargetStatus] = ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
-- name: non-indexed backed constraint should be cleaned up before column name references
-  from: constraint-Node
-  kind: Precedence
-  to: referenced-column-name-Node
-  query:
-    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.CheckConstraintUnvalidated', '*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
-    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
-    - $referenced-column-name[Type] = '*scpb.ColumnName'
-    - $referenced-column-name[ColumnID] = $fromColumnID
-    - joinOnDescID($constraint, $referenced-column-name, $table-id)
-    - $constraint-Target[TargetStatus] = ABSENT
-    - $constraint-Node[CurrentStatus] = ABSENT
-    - $referenced-column-name-Target[TargetStatus] = TRANSIENT_ABSENT
-    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
-    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
-    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
 - name: old column name is dropped before new column name is added
   from: old-column-name-Node
   kind: Precedence
@@ -10269,3 +10283,65 @@ deprules
     - $dependents-Node[CurrentStatus] = TRANSIENT_PUBLIC
     - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
     - joinTargetNode($dependents, $dependents-Target, $dependents-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - toAbsent($constraint-Target, $referenced-column-name-Target)
+    - $constraint-Node[CurrentStatus] = ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - transient($constraint-Target, $referenced-column-name-Target)
+    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - $constraint-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $constraint-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $referenced-column-name-Target[TargetStatus] = ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
+- name: unique without index constraint should be cleaned up before column name references
+  from: constraint-Node
+  kind: Precedence
+  to: referenced-column-name-Node
+  query:
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $constraint[ReferencedColumnIDs] CONTAINS $fromColumnID
+    - $referenced-column-name[Type] = '*scpb.ColumnName'
+    - $referenced-column-name[ColumnID] = $fromColumnID
+    - joinOnDescID($constraint, $referenced-column-name, $table-id)
+    - $constraint-Target[TargetStatus] = ABSENT
+    - $constraint-Node[CurrentStatus] = ABSENT
+    - $referenced-column-name-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $referenced-column-name-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - joinTargetNode($constraint, $constraint-Target, $constraint-Node)
+    - joinTargetNode($referenced-column-name, $referenced-column-name-Target, $referenced-column-name-Node)
