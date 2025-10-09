@@ -28,7 +28,7 @@ type Cost struct {
 // member will have a lower cost.
 var MaxCost = Cost{
 	C:         math.Inf(+1),
-	Penalties: HugeCostPenalty | FullScanPenalty | UnboundedCardinality,
+	Penalties: HugeCostPenalty | FullScanPenalty | UnboundedCardinalityPenalty,
 }
 
 // Less returns true if this cost is lower than the given cost.
@@ -95,10 +95,10 @@ const (
 	// plan is possible.
 	FullScanPenalty
 
-	// UnboundedCardinality is true if the operator or any of its descendants
-	// have no guaranteed upperbound on the number of rows that they can
-	// produce. See props.AnyCardinality.
-	UnboundedCardinality
+	// UnboundedCardinalityPenalty is true if the operator or any of its
+	// descendants have no guaranteed upperbound on the number of rows that they
+	// can produce. See props.AnyCardinality.
+	UnboundedCardinalityPenalty
 
 	// NoPenalties represents no penalties.
 	NoPenalties Penalties = 0

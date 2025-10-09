@@ -35,8 +35,8 @@ func TestCostLess(t *testing.T) {
 		{MaxCost, MaxCost, false},
 		{MaxCost, Cost{C: 1.0, Penalties: FullScanPenalty}, false},
 		{Cost{C: 1.0, Penalties: HugeCostPenalty}, MaxCost, true},
-		{Cost{C: 2.0}, Cost{C: 1.0, Penalties: UnboundedCardinality}, true},
-		{Cost{C: 1.0, Penalties: UnboundedCardinality}, Cost{C: 2.0}, false},
+		{Cost{C: 2.0}, Cost{C: 1.0, Penalties: UnboundedCardinalityPenalty}, true},
+		{Cost{C: 1.0, Penalties: UnboundedCardinalityPenalty}, Cost{C: 2.0}, false},
 		// Auxiliary information should not affect the comparison.
 		{Cost{C: 1.0, aux: testAux{0}}, Cost{C: 1.0, aux: testAux{1}}, false},
 	}
@@ -57,7 +57,7 @@ func TestCostAdd(t *testing.T) {
 		{Cost{C: 1.5}, Cost{C: 2.5}, Cost{C: 4.0}},
 		{Cost{C: 1.0, Penalties: FullScanPenalty}, Cost{C: 2.0}, Cost{C: 3.0, Penalties: FullScanPenalty}},
 		{Cost{C: 1.0}, Cost{C: 2.0, Penalties: HugeCostPenalty}, Cost{C: 3.0, Penalties: HugeCostPenalty}},
-		{Cost{C: 1.0, Penalties: UnboundedCardinality}, Cost{C: 2.0, Penalties: HugeCostPenalty}, Cost{C: 3.0, Penalties: HugeCostPenalty | UnboundedCardinality}},
+		{Cost{C: 1.0, Penalties: UnboundedCardinalityPenalty}, Cost{C: 2.0, Penalties: HugeCostPenalty}, Cost{C: 3.0, Penalties: HugeCostPenalty | UnboundedCardinalityPenalty}},
 		{Cost{C: 1.0, aux: testAux{1}}, Cost{C: 1.0, aux: testAux{2}}, Cost{C: 2.0, aux: testAux{3}}},
 		{Cost{C: 1.0, aux: testAux{200}}, Cost{C: 1.0, aux: testAux{100}}, Cost{C: 2.0, aux: testAux{255}}},
 	}
