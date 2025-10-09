@@ -27,18 +27,14 @@ type Cost struct {
 // group members during testing, by setting their cost so high that any other
 // member will have a lower cost.
 var MaxCost = Cost{
-	C: math.Inf(+1),
-	Flags: CostFlags{
-		FullScanPenalty:      true,
-		HugeCostPenalty:      true,
-		UnboundedCardinality: true,
-	},
+	C:     math.Inf(+1),
+	Flags: HugeCostPenalty | FullScanPenalty | UnboundedCardinality,
 }
 
 // Less returns true if this cost is lower than the given cost.
 func (c Cost) Less(other Cost) bool {
 	if c.Flags != other.Flags {
-		return c.Flags.Less(other.Flags)
+		return c.Flags < other.Flags
 	}
 	// Two plans with the same cost can have slightly different floating point
 	// results (e.g. same subcosts being added up in a different order). So we
@@ -56,7 +52,7 @@ func (c Cost) Less(other Cost) bool {
 // Add adds the other cost to this cost.
 func (c *Cost) Add(other Cost) {
 	c.C += other.C
-	c.Flags.Add(other.Flags)
+	c.Flags |= other.Flags
 	if c.aux.fullScanCount > math.MaxUint8-other.aux.fullScanCount {
 		// Avoid overflow.
 		c.aux.fullScanCount = math.MaxUint8
@@ -79,48 +75,31 @@ func (c *Cost) IncrFullScanCount() {
 	c.aux.fullScanCount++
 }
 
-// CostFlags contains flags that penalize the cost of an operator.
-type CostFlags struct {
-	// FullScanPenalty is true if the cost of a full table or index scan is
-	// penalized, indicating that a full scan should only be used if no other plan
-	// is possible.
-	FullScanPenalty bool
+// CostFlags is an ordered bitmask where each bit indicates a cost penalty. The
+// penalties are ordered by precedence, with the highest precedence penalty
+// using the highest-order bit. This allows CostFlags to be easily compared with
+// built-in comparison operators (>, <, =, etc.). For example, CostFlags with
+// HugeCostPenalty will always be greater than CostFlags without.
+type CostFlags uint8
+
+const (
 	// HugeCostPenalty is true if a plan should be avoided at all costs. This is
-	// used when the optimizer is forced to use a particular plan, and will error
-	// if it cannot be used.
-	HugeCostPenalty bool
+	// used when the optimizer is forced to use a particular plan, and will
+	// error if it cannot be used. It takes precedence over other penalties,
+	// since it indicates that a plan is being forced with a hint, and will
+	// error if we cannot comply with the hint.
+	HugeCostPenalty CostFlags = 1 << (7 - iota)
+
+	// FullScanPenalty is true if the cost of a full table or index scan is
+	// penalized, indicating that a full scan should only be used if no other
+	// plan is possible.
+	FullScanPenalty
+
 	// UnboundedCardinality is true if the operator or any of its descendants
 	// have no guaranteed upperbound on the number of rows that they can
 	// produce. See props.AnyCardinality.
-	UnboundedCardinality bool
-}
+	UnboundedCardinality
 
-// Less returns true if these flags indicate a lower penalty than the other
-// CostFlags.
-func (c CostFlags) Less(other CostFlags) bool {
-	// HugeCostPenalty takes precedence over other penalties, since it indicates
-	// that a plan is being forced with a hint, and will error if we cannot comply
-	// with the hint.
-	if c.HugeCostPenalty != other.HugeCostPenalty {
-		return !c.HugeCostPenalty
-	}
-	if c.FullScanPenalty != other.FullScanPenalty {
-		return !c.FullScanPenalty
-	}
-	if c.UnboundedCardinality != other.UnboundedCardinality {
-		return !c.UnboundedCardinality
-	}
-	return false
-}
-
-// Add adds the other flags to these flags.
-func (c *CostFlags) Add(other CostFlags) {
-	c.FullScanPenalty = c.FullScanPenalty || other.FullScanPenalty
-	c.HugeCostPenalty = c.HugeCostPenalty || other.HugeCostPenalty
-	c.UnboundedCardinality = c.UnboundedCardinality || other.UnboundedCardinality
-}
-
-// Empty returns true if these flags are empty.
-func (c CostFlags) Empty() bool {
-	return !c.FullScanPenalty && !c.HugeCostPenalty && !c.UnboundedCardinality
-}
+	// NoPenalties represents no penalties.
+	NoPenalties CostFlags = 0
+)

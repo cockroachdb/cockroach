@@ -919,16 +919,16 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if cost.C != 0 {
 			tp.Childf("cost: %.9g", cost.C)
 		}
-		if !cost.Flags.Empty() {
+		if cost.Flags != NoPenalties {
 			var b strings.Builder
 			b.WriteString("cost-flags:")
-			if cost.Flags.FullScanPenalty {
+			if cost.Flags&FullScanPenalty != 0 {
 				b.WriteString(" full-scan-penalty")
 			}
-			if cost.Flags.HugeCostPenalty {
+			if cost.Flags&HugeCostPenalty != 0 {
 				b.WriteString(" huge-cost-penalty")
 			}
-			if cost.Flags.UnboundedCardinality {
+			if cost.Flags&UnboundedCardinality != 0 {
 				b.WriteString(" unbounded-cardinality")
 			}
 			tp.Child(b.String())
