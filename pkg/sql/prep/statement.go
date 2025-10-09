@@ -187,9 +187,9 @@ func (p *planCosts) NumCustom() int {
 // average cost of the custom plans.
 func (p *planCosts) IsGenericOptimal() bool {
 	// Check cost flags and full scan counts.
-	if gc := p.generic.FullScanCount(); gc > 0 || p.generic.Flags != memo.NoPenalties {
+	if gc := p.generic.FullScanCount(); gc > 0 || p.generic.Penalties != memo.NoPenalties {
 		for i := 0; i < p.custom.length; i++ {
-			if p.custom.costs[i].Flags < p.generic.Flags || gc > p.custom.costs[i].FullScanCount() {
+			if p.custom.costs[i].Penalties < p.generic.Penalties || gc > p.custom.costs[i].FullScanCount() {
 				return false
 			}
 		}

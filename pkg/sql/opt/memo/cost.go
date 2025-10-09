@@ -11,8 +11,8 @@ import "math"
 // particular operator tree.
 // TODO: Need more details about what one "unit" of cost means.
 type Cost struct {
-	C     float64
-	Flags CostFlags
+	C float64
+	Penalties
 
 	// aux is auxiliary information within a cost that does not affect how the
 	// cost is compared to other costs with Less.
@@ -27,14 +27,14 @@ type Cost struct {
 // group members during testing, by setting their cost so high that any other
 // member will have a lower cost.
 var MaxCost = Cost{
-	C:     math.Inf(+1),
-	Flags: HugeCostPenalty | FullScanPenalty | UnboundedCardinality,
+	C:         math.Inf(+1),
+	Penalties: HugeCostPenalty | FullScanPenalty | UnboundedCardinality,
 }
 
 // Less returns true if this cost is lower than the given cost.
 func (c Cost) Less(other Cost) bool {
-	if c.Flags != other.Flags {
-		return c.Flags < other.Flags
+	if c.Penalties != other.Penalties {
+		return c.Penalties < other.Penalties
 	}
 	// Two plans with the same cost can have slightly different floating point
 	// results (e.g. same subcosts being added up in a different order). So we
@@ -52,7 +52,7 @@ func (c Cost) Less(other Cost) bool {
 // Add adds the other cost to this cost.
 func (c *Cost) Add(other Cost) {
 	c.C += other.C
-	c.Flags |= other.Flags
+	c.Penalties |= other.Penalties
 	if c.aux.fullScanCount > math.MaxUint8-other.aux.fullScanCount {
 		// Avoid overflow.
 		c.aux.fullScanCount = math.MaxUint8
@@ -75,12 +75,12 @@ func (c *Cost) IncrFullScanCount() {
 	c.aux.fullScanCount++
 }
 
-// CostFlags is an ordered bitmask where each bit indicates a cost penalty. The
+// Penalties is an ordered bitmask where each bit indicates a cost penalty. The
 // penalties are ordered by precedence, with the highest precedence penalty
-// using the highest-order bit. This allows CostFlags to be easily compared with
-// built-in comparison operators (>, <, =, etc.). For example, CostFlags with
-// HugeCostPenalty will always be greater than CostFlags without.
-type CostFlags uint8
+// using the highest-order bit. This allows Penalties to be easily compared with
+// built-in comparison operators (>, <, =, etc.). For example, Penalties with
+// HugeCostPenalty will always be greater than Penalties without.
+type Penalties uint8
 
 const (
 	// HugeCostPenalty is true if a plan should be avoided at all costs. This is
@@ -88,7 +88,7 @@ const (
 	// error if it cannot be used. It takes precedence over other penalties,
 	// since it indicates that a plan is being forced with a hint, and will
 	// error if we cannot comply with the hint.
-	HugeCostPenalty CostFlags = 1 << (7 - iota)
+	HugeCostPenalty Penalties = 1 << (7 - iota)
 
 	// FullScanPenalty is true if the cost of a full table or index scan is
 	// penalized, indicating that a full scan should only be used if no other
@@ -101,5 +101,5 @@ const (
 	UnboundedCardinality
 
 	// NoPenalties represents no penalties.
-	NoPenalties CostFlags = 0
+	NoPenalties Penalties = 0
 )
