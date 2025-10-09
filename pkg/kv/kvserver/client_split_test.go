@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -4376,7 +4377,9 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			tdb.QueryRow(t, "SELECT count(k) FROM t").Scan(&keyCount)
 			require.Equal(t, len(tc.existingKeys), keyCount)
 			var tableID uint32
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.leases where name = 't'").Scan(&tableID)
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 
 			// Split off the table range for the test, otherwise the range may
 			// contain multiple tables with existing values.

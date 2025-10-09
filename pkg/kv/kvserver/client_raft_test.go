@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -3518,7 +3519,9 @@ GROUP BY
 HAVING
 	count(t) > $3;
 `
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	matrix := db.QueryStr(t, q, rangeID, start, repFactor)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	if len(matrix) > 0 {
 		t.Fatalf("more than %d voting replicas: %s", repFactor, sqlutils.MatrixToStr(matrix))
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -3889,6 +3890,13 @@ func (h *flowControlTestHelper) query(runner *sqlutils.SQLRunner, sql string, he
 	sql = strings.TrimSpace(sql)
 	h.log(sql)
 	h.buf.WriteString(fmt.Sprintf("%s\n\n", sql))
+
+	// Enable unsafe access for queries that access crdb_internal or system tables
+	needsUnsafeAccess := strings.Contains(sql, "crdb_internal") || strings.Contains(sql, "system.")
+	if needsUnsafeAccess {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
+		defer func() { unsafesql.TestOverrideAllowUnsafeInternals = false }()
+	}
 
 	rows := runner.Query(h.t, sql)
 	tbl := tablewriter.NewWriter(h.buf)

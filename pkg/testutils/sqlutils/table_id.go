@@ -8,6 +8,8 @@ package sqlutils
 import (
 	"context"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 )
 
 // QueryDatabaseID returns the database ID of the specified database using the
@@ -18,8 +20,11 @@ func QueryDatabaseID(t testing.TB, sqlDB DBHandle, dbName string) uint32 {
 		WHERE name = $1 AND "parentSchemaID" = 0 AND "parentID" = 0
 	`
 	var dbID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	result := sqlDB.QueryRowContext(context.Background(), dbIDQuery, dbName)
-	if err := result.Scan(&dbID); err != nil {
+	err := result.Scan(&dbID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
+	if err != nil {
 		t.Fatal(err)
 	}
 	return dbID
@@ -34,12 +39,15 @@ func QuerySchemaID(t testing.TB, sqlDB DBHandle, dbName, schemaName string) uint
    WHERE dbs.name = $1 AND schemas.name = $2
  `
 	var schemaID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	result := sqlDB.QueryRowContext(
 		context.Background(),
 		tableIDQuery, dbName,
 		schemaName,
 	)
-	if err := result.Scan(&schemaID); err != nil {
+	err := result.Scan(&schemaID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
+	if err != nil {
 		t.Fatal(err)
 	}
 	return schemaID
@@ -57,13 +65,16 @@ func QueryTableID(
    WHERE dbs.name = $1 AND schemas.name = $2 AND tables.name = $3
  `
 	var tableID uint32
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	result := sqlDB.QueryRowContext(
 		context.Background(),
 		tableIDQuery, dbName,
 		schemaName,
 		tableName,
 	)
-	if err := result.Scan(&tableID); err != nil {
+	err := result.Scan(&tableID)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
+	if err != nil {
 		t.Fatal(err)
 	}
 	return tableID

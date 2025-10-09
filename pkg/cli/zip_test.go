@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -548,9 +549,11 @@ func TestUnavailableZip(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	// Sanity test: check that a simple SQL operation works against node 1.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	if _, err := tc.ServerConn(0).Exec("SELECT * FROM system.users"); err != nil {
 		t.Fatal(err)
 	}
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	// Block querying table data from node 1.
 	// Block all replica requests from node 2.
@@ -1032,7 +1035,9 @@ func TestToHex(t *testing.T) {
 	defer c.Cleanup()
 
 	// Create a job to have non-empty system.jobs table.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	c.RunWithArgs([]string{"sql", "-e", "CREATE STATISTICS foo FROM system.namespace"})
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	_, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + dir + "/debug.zip")
 	if err != nil {

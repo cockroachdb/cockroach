@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,6 +36,7 @@ func TestStreamerDisabledWithInternalExecutorQuery(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, "COMMENT ON DATABASE defaultdb IS 'foo'")
 	runner.Exec(t, "SET tracing = on")
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	runner.Exec(t, `
 SELECT
     c.*
@@ -44,6 +46,7 @@ FROM
 WHERE
     j.coordinator_id = 1;
 `)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	runner.Exec(t, "SET tracing = off")
 
 	// Ensure that no streamer spans were created (meaning that the streamer

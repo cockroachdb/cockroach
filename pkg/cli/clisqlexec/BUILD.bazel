@@ -54,6 +54,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",

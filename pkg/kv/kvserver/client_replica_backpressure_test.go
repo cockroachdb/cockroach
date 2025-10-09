@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -113,7 +114,9 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		tdb.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES NOT NULL)")
 
 		var tableID int
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = 'foo'").Scan(&tableID)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		require.NotEqual(t, 0, tableID)
 		tablePrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 		tc.SplitRangeOrFatal(t, tablePrefix)

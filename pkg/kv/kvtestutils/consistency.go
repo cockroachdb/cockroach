@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,12 +27,14 @@ type querier interface {
 // as a list of errors. RANGE_CONSISTENT_STATS_ESTIMATED is considered a
 // success, since stats estimates are fine (if unfortunate).
 func CheckConsistency(ctx context.Context, db querier, span roachpb.Span) []error {
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
 		SELECT range_id, start_key_pretty, status, detail
 		FROM crdb_internal.check_consistency(false, b'\x%x', b'\x%x')
 		ORDER BY range_id ASC`,
 		span.Key, span.EndKey,
 	))
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	if err != nil {
 		return []error{err}
 	}

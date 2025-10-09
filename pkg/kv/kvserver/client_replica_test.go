@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -4620,8 +4621,10 @@ func TestStrictGCEnforcement(t *testing.T) {
 	var (
 		db         = tc.Server(0).DB()
 		getTableID = func() (tableID uint32) {
+			unsafesql.TestOverrideAllowUnsafeInternals = true
 			sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
 				` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID)
+			unsafesql.TestOverrideAllowUnsafeInternals = false
 			return tableID
 		}
 		tableID       = getTableID()

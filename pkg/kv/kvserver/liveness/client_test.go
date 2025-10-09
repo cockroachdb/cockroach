@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -397,8 +398,11 @@ func TestLivenessRangeGetsPeriodicallyCompacted(t *testing.T) {
 	sqlDB := tc.ApplicationLayer(0).SQLConn(t)
 	var original_file_num string
 	testutils.SucceedsSoon(t, func() error {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		rows := sqlDB.QueryRow(livenessFileNumberQuery)
-		if err := rows.Scan(&original_file_num); err != nil {
+		err := rows.Scan(&original_file_num)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
+		if err != nil {
 			return err
 		}
 		return nil
@@ -407,7 +411,9 @@ func TestLivenessRangeGetsPeriodicallyCompacted(t *testing.T) {
 	// Expect that the liveness file number changes.
 	testutils.SucceedsSoon(t, func() error {
 		var current_file_num string
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		rows := sqlDB.QueryRow(livenessFileNumberQuery)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if err := rows.Scan(&current_file_num); err != nil {
 			return err
 		}

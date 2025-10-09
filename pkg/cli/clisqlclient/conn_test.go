@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -143,7 +144,9 @@ func TestTransactionRetry(t *testing.T) {
 		}
 
 		// Force a client-side retry.
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		rows, err = conn.Query(ctx, `SELECT crdb_internal.force_retry('1h')`)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		if err != nil {
 			return err
 		}

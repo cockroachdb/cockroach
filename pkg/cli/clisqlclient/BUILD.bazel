@@ -52,6 +52,7 @@ go_test(
         "//pkg/cli",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",

@@ -102,6 +102,7 @@ go_test(
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
+        "//pkg/sql/unsafesql",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",

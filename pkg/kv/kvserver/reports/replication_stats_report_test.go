@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,20 +125,28 @@ func TestRangeReport(t *testing.T) {
 
 	time3 := time.Date(2001, 1, 1, 11, 30, 0, 0, time.UTC)
 	// If some other server takes over and does an update.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	rows, err := con.Exec(ctx, "another-updater", nil, "update system.reports_meta set generated=$1 where id=3", time3)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	rows, err = con.Exec(ctx, "another-updater", nil, "update system.replication_stats "+
 		"set total_ranges=3 where zone_id=1 and subzone_id=3")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	rows, err = con.Exec(ctx, "another-updater", nil, "delete from system.replication_stats "+
 		"where zone_id=2 and subzone_id=3")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	rows, err = con.Exec(ctx, "another-updater", nil, "insert into system.replication_stats("+
 		"zone_id, subzone_id, report_id, total_ranges, unavailable_ranges, under_replicated_ranges, "+
 		"over_replicated_ranges) values(16, 16, 3, 6, 0, 1, 2)")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
 

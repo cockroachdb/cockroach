@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,10 +53,13 @@ func (sbt *splitBurstTest) NumRaftSnaps(t *testing.T) int {
 	for i := range sbt.Servers {
 		var n int // num rows (sanity check against test rotting)
 		var c int // num Raft snapshots
-		if err := sbt.ServerConn(i).QueryRow(`
+		unsafesql.TestOverrideAllowUnsafeInternals = true
+		err := sbt.ServerConn(i).QueryRow(`
 SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
 	name = 'range.snapshots.applied-voter'
-`).Scan(&n, &c); err != nil {
+`).Scan(&n, &c)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
+		if err != nil {
 			t.Fatal(err)
 		}
 		require.EqualValues(t, 1, n)

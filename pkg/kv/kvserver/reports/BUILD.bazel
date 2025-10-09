@@ -81,6 +81,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/isql",
         "//pkg/sql/types",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/keysutils",
         "//pkg/testutils/serverutils",

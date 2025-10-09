@@ -84,6 +84,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings",
         "//pkg/sql",
+        "//pkg/sql/unsafesql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

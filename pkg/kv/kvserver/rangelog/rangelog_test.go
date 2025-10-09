@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,9 +94,11 @@ func TestRangeLog(t *testing.T) {
 SELECT crdb_internal.pretty_key(key, 1), 
        substring(encode(val, 'hex') from 9) -- strip the checksum
   FROM crdb_internal.scan(crdb_internal.index_span($1, 1)) as t(key, val)`
-	require.Equal(t,
-		tdb.QueryStr(t, rawKVsWithoutPrefix, td2.GetID()),
-		tdb.QueryStr(t, rawKVsWithoutPrefix, td1.GetID()))
+	unsafesql.TestOverrideAllowUnsafeInternals = true
+	result1 := tdb.QueryStr(t, rawKVsWithoutPrefix, td2.GetID())
+	result2 := tdb.QueryStr(t, rawKVsWithoutPrefix, td1.GetID())
+	unsafesql.TestOverrideAllowUnsafeInternals = false
+	require.Equal(t, result1, result2)
 
 	// Validate that the data can be read from SQL.
 	checkDataRoundTrips := func(tn tree.TableName) {
@@ -181,6 +184,7 @@ func injectRangelogTable(
 	clone.Version++
 	clone.Name = tn.Object()
 	var modTimeStr string
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.QueryRow(t, `
   WITH db_id AS (
                 SELECT id
@@ -202,6 +206,7 @@ SELECT "parentID", "parentSchemaID", id, crdb_internal_mvcc_timestamp
 		tn.Catalog(), tn.Schema(), tn.Object()).
 		Scan(&clone.ParentID, &clone.UnexposedParentSchemaID, &clone.ID,
 			&modTimeStr)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	modTime, err := hlc.ParseHLC(modTimeStr)
 	require.NoError(t, err)
 	clone.ModificationTime = modTime
@@ -214,8 +219,10 @@ SELECT "parentID", "parentSchemaID", id, crdb_internal_mvcc_timestamp
 	// protobuf.
 	data, err := protoutil.Marshal(clone.DescriptorProto())
 	require.NoError(t, err)
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	tdb.Exec(t, "SELECT crdb_internal.unsafe_upsert_descriptor($1, $2)",
 		clone.ID, data)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	return clone.ImmutableCopy().(catalog.TableDescriptor)
 }
 

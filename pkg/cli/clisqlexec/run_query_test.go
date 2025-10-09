@@ -72,12 +72,14 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	cols, rows, err := testExecCtx.RunQuery(
 		context.Background(),
 		conn,
 		clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`),
 		false, /* showMoreChars */
 	)
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,10 +107,12 @@ SET
 		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
 	}
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	if err := runQueryAndFormatResults(conn, &b,
 		clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`)); err != nil {
 		t.Fatal(err)
 	}
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	expected = `
    column_name   | data_type | is_nullable | column_default | generation_expression |  indices  | is_hidden
@@ -126,10 +130,12 @@ SET
 	b.Reset()
 
 	// Test placeholders.
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	if err := runQueryAndFormatResults(conn, &b,
 		clisqlclient.MakeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")); err != nil {
 		t.Fatal(err)
 	}
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 
 	expected = `
   parentID | parentSchemaID |    name    | id

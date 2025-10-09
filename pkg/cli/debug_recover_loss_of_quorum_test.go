@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -123,7 +124,9 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.NoError(t, tc.WaitForFullReplication())
 	tc.ToggleReplicateQueues(false)
 
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	var totalRanges int
 	require.NoError(t, r.Scan(&totalRanges), "failed to query range count")
 
@@ -299,15 +302,19 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// As a validation step we will just pick one range and get its replicas to see
 	// if they were up-replicated to the new nodes.
 	s = sqlutils.MakeSQLRunner(tcAfter.Conns[0])
+	unsafesql.TestOverrideAllowUnsafeInternals = true
 	r := s.QueryRow(t, "select replicas from crdb_internal.ranges limit 1")
+	unsafesql.TestOverrideAllowUnsafeInternals = false
 	var replicas string
 	r.Scan(&replicas)
 	require.Equal(t, "{1,4,5}", replicas, "Replicas after loss of quorum recovery")
 
 	// Validate that rangelog is updated by recovery records after cluster restarts.
 	testutils.SucceedsSoon(t, func() error {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		r := s.QueryRow(t,
 			`select count(*) from system.rangelog where "eventType" = 'unsafe_quorum_recovery'`)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		var recoveries int
 		r.Scan(&recoveries)
 		if recoveries != len(plan.Updates) {
@@ -618,8 +625,10 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 
 	// Validate that rangelog is updated by recovery records after cluster restarts.
 	testutils.SucceedsSoon(t, func() error {
+		unsafesql.TestOverrideAllowUnsafeInternals = true
 		r := s.QueryRow(t,
 			`select count(*) from system.rangelog where "eventType" = 'unsafe_quorum_recovery'`)
+		unsafesql.TestOverrideAllowUnsafeInternals = false
 		var recoveries int
 		r.Scan(&recoveries)
 		if recoveries != len(plan.Updates) {

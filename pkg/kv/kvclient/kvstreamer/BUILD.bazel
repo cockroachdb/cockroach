@@ -74,6 +74,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/rowcontainer",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/unsafesql",
         "//pkg/storage",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

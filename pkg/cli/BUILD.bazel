@@ -441,6 +441,7 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/catconstants",
+        "//pkg/sql/unsafesql",
         "//pkg/storage",
         "//pkg/storage/fs",
         "//pkg/storage/storageconfig",
