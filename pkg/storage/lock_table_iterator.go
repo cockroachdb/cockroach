@@ -110,9 +110,10 @@ func (opts LockTableIteratorOptions) validate() error {
 // toIterOptions converts the LockTableIteratorOptions to IterOptions.
 func (opts LockTableIteratorOptions) toIterOptions() IterOptions {
 	return IterOptions{
-		Prefix:     opts.Prefix,
-		LowerBound: opts.LowerBound,
-		UpperBound: opts.UpperBound,
+		Prefix:       opts.Prefix,
+		LowerBound:   opts.LowerBound,
+		UpperBound:   opts.UpperBound,
+		ReadCategory: opts.ReadCategory,
 	}
 }
 

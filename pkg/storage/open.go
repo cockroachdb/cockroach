@@ -78,6 +78,14 @@ func Attributes(attrs roachpb.Attributes) ConfigOption {
 	}
 }
 
+// TestingLogger overrides the logger.
+func TestingLogger(logger pebble.LoggerAndTracer) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.opts.LoggerAndTracer = logger
+		return nil
+	}
+}
+
 // storeSize configures the maximum allowable size for a store.
 // Can be specified either as a percentage of total capacity or
 // an absolute byte size; if both are specified, the percentage takes

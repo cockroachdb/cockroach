@@ -44,6 +44,8 @@ const (
 	IntentResolutionReadCategory
 	// BackupReadCategory are reads for backups.
 	BackupReadCategory
+	// AbortSpanReadCategory are reads used to check if a txn was aborted.
+	AbortSpanReadCategory
 )
 
 var readCategoryMap = [...]block.Category{
@@ -59,6 +61,7 @@ var readCategoryMap = [...]block.Category{
 	ReplicationReadCategory:             block.RegisterCategory("replication", block.LatencySensitiveQoSLevel),
 	IntentResolutionReadCategory:        block.RegisterCategory("intent-resolution", block.LatencySensitiveQoSLevel),
 	BackupReadCategory:                  block.RegisterCategory("backup", block.NonLatencySensitiveQoSLevel),
+	AbortSpanReadCategory:               block.RegisterCategory("abort-span", block.LatencySensitiveQoSLevel),
 }
 
 // PebbleCategory returns the block.Category associated with the given ReadCategory.
