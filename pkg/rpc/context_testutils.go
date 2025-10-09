@@ -56,11 +56,16 @@ type ContextTestingKnobs struct {
 	// this value if non-nil at construction time.
 	StorageClusterID *uuid.UUID
 
-	// NoLoopbackDialer, when set, indicates that a test does not care
-	// about the special loopback dial semantics.
-	// If this is left unset, the test is responsible for ensuring
-	// SetLoopbackDialer() has been called on the rpc.Context.
-	// (This is done automatically by server.Server/server.SQLServerWrapper.)
+	// NoLoopbackDialer, when true, indicates that a test does not care about the
+	// special loopback dial semantics. In this case, an error results from use of
+	// the loopbackTransport or loopbackDialerFn (which would indicate a
+	// programming error in RPCContext, since NoLoopbackDialer is consulted when
+	// determining whether to use those).
+	//
+	// When false, SetLoopbackDialer() must have been called on the rpc.Context In
+	// productino code, this is done automatically by
+	// server.Server/server.SQLServerWrapper, but some lower-level tests may have
+	// to do it manually.
 	NoLoopbackDialer bool
 }
 
