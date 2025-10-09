@@ -292,6 +292,11 @@ func (d *datadrivenTestState) getSQLDBForVC(
 		t.Fatal(err)
 	}
 	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		// Skip all "waiting for job(s) to complete" notices, since they include
+		// non-deterministic jobIDs.
+		if strings.HasPrefix(notice.Message, "waiting for job") {
+			return
+		}
 		d.noticeBuffer = append(d.noticeBuffer, notice.Severity+": "+notice.Message)
 		if notice.Detail != "" {
 			d.noticeBuffer = append(d.noticeBuffer, "DETAIL: "+notice.Detail)

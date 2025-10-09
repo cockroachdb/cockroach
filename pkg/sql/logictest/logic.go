@@ -1303,6 +1303,11 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	}
 
 	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		// Skip all "waiting for job(s) to complete" notices, since they include
+		// non-deterministic jobIDs.
+		if strings.HasPrefix(notice.Message, "waiting for job") {
+			return
+		}
 		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
 		if notice.Detail != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
