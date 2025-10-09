@@ -30,7 +30,7 @@ type TransportMetrics struct {
 	MessagesReceiveDropped *metric.Counter
 
 	BatchesSent      *metric.Counter
-	MessagesPerBatch metric.IHistogram
+	MessagesPerBatch *metric.Counter
 	BatchSizeBytes   metric.IHistogram
 	BatchDuration    metric.IHistogram
 }
@@ -45,14 +45,7 @@ func newTransportMetrics() *TransportMetrics {
 		MessagesSendDropped:    metric.NewCounter(metaMessagesSendDropped),
 		MessagesReceiveDropped: metric.NewCounter(metaMessagesReceiveDropped),
 		BatchesSent:            metric.NewCounter(metaBatchesSent),
-		MessagesPerBatch: metric.NewHistogram(
-			metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     metaMessagesPerBatch,
-				Duration:     base.DefaultHistogramWindowInterval(),
-				BucketConfig: metric.Count1KBuckets,
-			},
-		),
+		MessagesPerBatch:       metric.NewCounter(metaMessagesPerBatch),
 		BatchSizeBytes: metric.NewHistogram(
 			metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,

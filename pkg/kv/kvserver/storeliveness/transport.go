@@ -407,9 +407,9 @@ func (t *Transport) processQueue(
 				return err
 			}
 
-			numMessages := int64(len(batch.Messages))
 			t.metrics.BatchesSent.Inc(1)
-			t.metrics.MessagesPerBatch.RecordValue(numMessages)
+			numMessages := int64(len(batch.Messages))
+			t.metrics.MessagesPerBatch.Inc(numMessages)
 			t.metrics.BatchSizeBytes.RecordValue(batchSizeBytes)
 			t.metrics.MessagesSent.Inc(numMessages)
 

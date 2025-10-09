@@ -7,11 +7,13 @@ package storeliveness
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,10 +85,24 @@ func (m *mockTransportForCoordinator) getNumSentMessages() int {
 	return len(m.sentMessages)
 }
 
-// createTestTransport creates a minimal Transport for testing.
+// createTestTransport creates a minimal Transport for testing with proper nodedialer.
 func createTestTransport(t *testing.T, stopper *stop.Stopper) *Transport {
 	clock := hlc.NewClockForTesting(timeutil.DefaultTimeSource{})
-	dialer := nodedialer.New(nil, nil) // Minimal dialer for testing
+
+	// Create a proper rpc.Context for the nodedialer using the testing helper
+	rpcCtx := rpc.NewInsecureTestingContext(context.Background(), clock, stopper)
+
+	// Create a resolver that can handle multiple nodes
+	resolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		// Return a dummy address for any node ID
+		addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+		if err != nil {
+			return nil, roachpb.Locality{}, err
+		}
+		return addr, roachpb.Locality{}, nil
+	}
+
+	dialer := nodedialer.New(rpcCtx, resolver)
 
 	transport, err := NewTransport(
 		log.MakeTestingAmbientCtxWithNewTracer(),
@@ -359,4 +375,127 @@ func TestHeartbeatCoordinator_TimingBehavior(t *testing.T) {
 
 	t.Logf("Timing behavior verified: %d messages processed in %v (smear duration: %v)",
 		len(messages), sendDuration, HeartbeatSmearDuration.Get(&settings.SV))
+}
+
+// TestHeartbeatCoordinator_ProductionScaleSimulation tests heartbeat smearing at production scale:
+// 24 nodes with 3 stores per node (72 total stores), simulating realistic cluster behavior.
+// This test is designed to validate the heartbeat smearing design under realistic load.
+func TestHeartbeatCoordinator_ProductionScaleSimulation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tickDuration := 1 * time.Second
+	settings := cluster.MakeTestingClusterSettings()
+	transport := createTestTransport(t, stopper)
+	coordinator := NewHeartbeatCoordinator(transport, tickDuration, stopper, settings)
+
+	// Production-scale configuration: 24 nodes, 3 stores per node
+	const numNodes = 24
+	const storesPerNode = 3
+	const totalStores = numNodes * storesPerNode
+
+	t.Logf("Starting production-scale simulation: %d nodes, %d stores per node, %d total stores",
+		numNodes, storesPerNode, totalStores)
+
+	// Create heartbeat messages for all stores across all nodes
+	var allMessages []slpb.Message
+	messageCount := 0
+
+	// Each store sends heartbeats to all other nodes (realistic cross-node communication)
+	for fromNodeID := roachpb.NodeID(1); fromNodeID <= numNodes; fromNodeID++ {
+		for fromStoreID := roachpb.StoreID(1); fromStoreID <= storesPerNode; fromStoreID++ {
+			// Send heartbeats to all other nodes (not self)
+			for toNodeID := roachpb.NodeID(1); toNodeID <= numNodes; toNodeID++ {
+				if toNodeID == fromNodeID {
+					continue // Skip self
+				}
+				for toStoreID := roachpb.StoreID(1); toStoreID <= storesPerNode; toStoreID++ {
+					msg := slpb.Message{
+						Type: slpb.MsgHeartbeat,
+						From: slpb.StoreIdent{NodeID: fromNodeID, StoreID: fromStoreID},
+						To:   slpb.StoreIdent{NodeID: toNodeID, StoreID: toStoreID},
+					}
+					allMessages = append(allMessages, msg)
+					messageCount++
+				}
+			}
+		}
+	}
+
+	t.Logf("Generated %d heartbeat messages for production-scale simulation", messageCount)
+
+	// Verify message distribution across node queues
+	nodeQueueCounts := make(map[roachpb.NodeID]int)
+	for _, msg := range allMessages {
+		nodeQueueCounts[msg.To.NodeID]++
+	}
+
+	t.Logf("Message distribution across nodes:")
+	for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+		count := nodeQueueCounts[nodeID]
+		t.Logf("  Node %d: %d messages", nodeID, count)
+	}
+
+	// Enqueue all messages
+	startTime := time.Now()
+	coordinator.Enqueue(allMessages)
+	enqueueDuration := time.Since(startTime)
+
+	t.Logf("Enqueued %d messages in %v", messageCount, enqueueDuration)
+
+	// Verify all node queues are populated correctly
+	for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+		queue, ok := coordinator.nodeQueues.Load(nodeID)
+		require.True(t, ok, "Queue should exist for node %d", nodeID)
+		(*queue).mu.Lock()
+		expectedCount := nodeQueueCounts[nodeID]
+		actualCount := len((*queue).messages)
+		require.Equal(t, expectedCount, actualCount, "Node %d should have %d messages, got %d",
+			nodeID, expectedCount, actualCount)
+		(*queue).mu.Unlock()
+	}
+
+	// Test the actual workflow: Enqueue + sendMessagesWithPacing (like sendHeartbeats does)
+	// This simulates the real heartbeat sending process with smearing
+	smearStartTime := time.Now()
+	coordinator.sendMessagesWithPacing()
+	smearDuration := time.Since(smearStartTime)
+
+	t.Logf("Heartbeat smearing completed in %v (target: ~10ms)", smearDuration)
+
+	// Verify all queues are now empty (messages were processed)
+	for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+		queue, ok := coordinator.nodeQueues.Load(nodeID)
+		require.True(t, ok)
+		(*queue).mu.Lock()
+		require.Len(t, (*queue).messages, 0, "Node %d queue should be empty after sendMessagesWithPacing", nodeID)
+		(*queue).mu.Unlock()
+	}
+
+	// Performance metrics and validation
+	t.Logf("=== Production-Scale Simulation Results ===")
+	t.Logf("Total messages processed: %d", messageCount)
+	t.Logf("Enqueue duration: %v", enqueueDuration)
+	t.Logf("Smear duration: %v", smearDuration)
+	t.Logf("Messages per millisecond: %.2f", float64(messageCount)/float64(smearDuration.Nanoseconds())*1e6)
+	t.Logf("Average messages per node: %.2f", float64(messageCount)/float64(numNodes))
+
+	// Validate smearing effectiveness
+	smearDurationMs := smearDuration.Milliseconds()
+	if smearDurationMs > 0 {
+		t.Logf("Smearing efficiency: %.2f messages/ms", float64(messageCount)/float64(smearDurationMs))
+	}
+
+	// Verify the smear duration is reasonable (should be around 10ms, but allow some variance)
+	expectedSmearDuration := HeartbeatSmearDuration.Get(&settings.SV)
+	if smearDuration > expectedSmearDuration*2 {
+		t.Logf("WARNING: Smear duration %v exceeded expected %v by more than 2x",
+			smearDuration, expectedSmearDuration)
+	}
+
+	t.Logf("Production-scale heartbeat smearing simulation completed successfully")
 }

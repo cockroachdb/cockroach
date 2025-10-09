@@ -274,6 +274,7 @@ func (c *HeartbeatCoordinator) processNodeQueue(nodeID roachpb.NodeID) {
 	// Send messages for this node
 	messagesSent := 0
 	for _, msg := range nodeMessages {
+		log.KvExec.Infof(context.Background(), "HeartbeatCoordinator sending message from node %d to node %d", msg.From.NodeID, nodeID)
 		success := c.transport.SendAsync(context.Background(), msg)
 		if success {
 			c.metrics.MessagesSent.Inc(1)
