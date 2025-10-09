@@ -19,6 +19,9 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-nightly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
+export ROACHPROD_CENTRALIZED_API_ENABLED=true
+export ROACHPROD_CENTRALIZED_API_BASE_URL=https://ludo-test-rp.roachprod.testeng.crdb.io/api
+
 arch=amd64
 if [[ ${CLOUD} == "ibm" ]]; then
   arch=s390x
