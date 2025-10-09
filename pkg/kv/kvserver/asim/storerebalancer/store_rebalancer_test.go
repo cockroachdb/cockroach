@@ -172,7 +172,7 @@ func TestStoreRebalancer(t *testing.T) {
 			resultsPhase := []storeRebalancerPhase{}
 			for _, tick := range tc.ticks {
 				s.TickClock(state.OffsetTick(start, tick))
-				changer.Tick(state.OffsetTick(start, tick), s)
+				changer.Tick(ctx, state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
 				src.Tick(ctx, state.OffsetTick(start, tick), s)
 				resultsPhase = append(resultsPhase, src.rebalancerState.phase)
@@ -283,7 +283,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			results := []map[state.StoreID]float64{}
 			for _, tick := range tc.ticks {
 				s.TickClock(state.OffsetTick(start, tick))
-				changer.Tick(state.OffsetTick(start, tick), s)
+				changer.Tick(ctx, state.OffsetTick(start, tick), s)
 				controller.Tick(ctx, state.OffsetTick(start, tick), s)
 				gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 				src.Tick(ctx, state.OffsetTick(start, tick), s)

@@ -90,7 +90,7 @@ func Example_leaseTransfer() {
 		Author:         1,
 		Wait:           0,
 	})
-	changer.Tick(state.TestingStartTime(), s)
+	changer.Tick(ctx, state.TestingStartTime(), s)
 	m.Tick(ctx, start, s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
@@ -120,7 +120,7 @@ func Example_rebalance() {
 		})...),
 		Wait: 0,
 	}
-	c.Apply(s)
+	c.Apply(ctx, s)
 
 	m.Tick(ctx, start, s)
 	// Output:
