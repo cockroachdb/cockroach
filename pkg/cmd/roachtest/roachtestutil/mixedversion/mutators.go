@@ -411,7 +411,7 @@ func (m panicNodeMutator) Generate(
 
 	// If we have at least 5 nodes, we can safely upreplicate to 5X before panicking a node.
 	// This allows for a longer panic duration before recovery.
-	supportsUpReplication := len(nodeList) >= 5
+	supportsUpReplication := planner.options.enableUpReplication && len(nodeList) >= 5
 
 	for _, upgrade := range upgrades {
 		possiblePointsInTime := upgrade.
