@@ -190,7 +190,7 @@ var (
 	// that "violate" a hint like forcing a specific index or join algorithm.
 	// If the final expression has this cost or larger, it means that there was no
 	// plan that could satisfy the hints.
-	hugeCost = memo.Cost{C: 1e100, Flags: memo.CostFlags{HugeCostPenalty: true}}
+	hugeCost = memo.Cost{C: 1e100, Flags: memo.HugeCostPenalty}
 
 	// SmallDistributeCost is the per-operation cost overhead for scans which may
 	// access remote regions, but the scanned table is unpartitioned with no lease
@@ -218,7 +218,7 @@ var (
 	//               the correct plan is found?
 	LargeDistributeCostWithHomeRegion = memo.Cost{
 		C:     LargeDistributeCost.C / 2,
-		Flags: memo.CostFlags{HugeCostPenalty: true},
+		Flags: memo.HugeCostPenalty,
 	}
 )
 
@@ -645,7 +645,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
 		if c.evalCtx.SessionData().OptimizerPreferBoundedCardinality {
-			cost.Flags.UnboundedCardinality = true
+			cost.Flags |= memo.UnboundedCardinality
 		}
 	}
 
@@ -909,7 +909,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 		cost.IncrFullScanCount()
 		if scan.Flags.AvoidFullScan {
 			// Apply a penalty for a full scan if needed.
-			cost.Flags.FullScanPenalty = true
+			cost.Flags |= memo.FullScanPenalty
 		}
 	}
 
