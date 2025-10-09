@@ -280,6 +280,9 @@ func (h *txnInstrumentationHelper) ShouldRedact() bool {
 func (h *txnInstrumentationHelper) Finalize(ctx context.Context, executionDuration time.Duration) {
 	defer h.Reset()
 	collector := h.diagnosticsCollector
+	if collector.InProgress() {
+		collector.UpdateState(txnDiagnosticsReadyToFinalize)
+	}
 	if collector.ShouldCollect(executionDuration) {
 		collector.collectTrace()
 		buf, err := collector.z.Finalize()
