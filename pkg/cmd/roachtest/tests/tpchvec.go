@@ -526,7 +526,7 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 		url = fmt.Sprintf("{pgurl:1:%s}", appTenantName)
 	}
 	return fmt.Sprintf("./cockroach workload run tpch --concurrency=1 --db=tpch "+
-		"--max-ops=%d --queries=%d %s --enable-checks=true",
+		"--max-ops=%d --queries=%d %s",
 		numRunsPerQuery, queryNum, url)
 }
 
