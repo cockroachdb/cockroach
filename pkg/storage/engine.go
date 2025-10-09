@@ -1443,6 +1443,10 @@ func GetIntent(ctx context.Context, reader Reader, key roachpb.Key) (*roachpb.In
 		Prefix: true,
 		// Ignore Exclusive and Shared locks. We only care about intents.
 		MatchMinStr: lock.Intent,
+		// This is eventually called from the QueryIntent request, so this isn't
+		// quite "intent resolution", but we don't want too many categories, and
+		// this does relate to intents, so we use this existing category.
+		ReadCategory: fs.IntentResolutionReadCategory,
 	}
 	iter, err := NewLockTableIterator(ctx, reader, opts)
 	if err != nil {

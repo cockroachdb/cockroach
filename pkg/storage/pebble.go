@@ -582,6 +582,10 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
+	// Every 5 minutes, log iterators that have been open for more than 1 minute.
+	opts.Experimental.IteratorTracking.PollInterval = 5 * time.Minute
+	opts.Experimental.IteratorTracking.MaxAge = time.Minute
+
 	opts.Levels[0] = pebble.LevelOptions{
 		BlockSize:      32 << 10,  // 32 KB
 		IndexBlockSize: 256 << 10, // 256 KB
@@ -2782,11 +2786,8 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 // PinEngineStateForIterators implements the Engine interface.
 func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory fs.ReadCategory) error {
 	if p.iter == nil {
-		o := &pebble.IterOptions{Category: readCategory.PebbleCategory()}
-		if p.durability == GuaranteedDurability {
-			o.OnlyReadGuaranteedDurable = true
-		}
-		iter, err := p.parent.db.NewIter(o)
+		o := makeIterOptions(readCategory, p.durability)
+		iter, err := p.parent.db.NewIter(&o)
 		if err != nil {
 			return err
 		}
