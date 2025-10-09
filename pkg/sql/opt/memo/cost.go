@@ -5,7 +5,11 @@
 
 package memo
 
-import "math"
+import (
+	"fmt"
+	"math"
+	"strings"
+)
 
 // Cost is the best-effort approximation of the actual cost of executing a
 // particular operator tree.
@@ -128,3 +132,37 @@ const (
 	// NoPenalties represents no penalties.
 	NoPenalties Penalties = 0
 )
+
+// Summary returns a short string describing the cost. The format is:
+//
+//	<Cost>:<Penalties>:<aux>
+//
+// Where:
+//
+//	<Cost> is the floating point cost value.
+//	<Penalties> contains "H", "F", or "U" for HugeCostPenalty, FullScanPenalty,
+//	  and UnboundedCardinalityPenalty, respectively.
+//	<aux> contains a number for full scan count and "u" for
+//	  unboundedCardinality.
+//
+// For example, the summary "1.23:HF:5u" indicates a cost of 1.23 with the
+// HugeCostPenalty and FullScanPenalty penalties, 5 full scans, and the
+// unboundedCardinality flag set.
+func (c Cost) Summary() string {
+	var sb strings.Builder
+	_, _ = fmt.Fprintf(&sb, "%.9g:", c.C)
+	if c.Penalties&HugeCostPenalty != 0 {
+		sb.WriteByte('H')
+	}
+	if c.Penalties&FullScanPenalty != 0 {
+		sb.WriteByte('F')
+	}
+	if c.Penalties&UnboundedCardinalityPenalty != 0 {
+		sb.WriteByte('U')
+	}
+	_, _ = fmt.Fprintf(&sb, ":%d", c.aux.fullScanCount)
+	if c.aux.unboundedCardinality {
+		sb.WriteByte('u')
+	}
+	return sb.String()
+}

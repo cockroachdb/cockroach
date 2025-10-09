@@ -70,3 +70,28 @@ func TestCostAdd(t *testing.T) {
 		}
 	}
 }
+
+func TestCostSummary(t *testing.T) {
+	testCases := []struct {
+		c        Cost
+		expected string
+	}{
+		{Cost{C: 1.0}, "1::0"},
+		{Cost{C: 1.23}, "1.23::0"},
+		{Cost{C: 1.23456}, "1.23456::0"},
+		{Cost{C: 1.23, Penalties: HugeCostPenalty}, "1.23:H:0"},
+		{Cost{C: 1.23, Penalties: FullScanPenalty}, "1.23:F:0"},
+		{Cost{C: 1.23, Penalties: UnboundedCardinalityPenalty}, "1.23:U:0"},
+		{Cost{C: 1.23, Penalties: HugeCostPenalty | FullScanPenalty | UnboundedCardinalityPenalty}, "1.23:HFU:0"},
+		{Cost{C: 1.23, Penalties: HugeCostPenalty | FullScanPenalty | UnboundedCardinalityPenalty}, "1.23:HFU:0"},
+		{Cost{C: 1.23, aux: testAux{5, false}}, "1.23::5"},
+		{Cost{C: 1.23, aux: testAux{0, true}}, "1.23::0u"},
+		{Cost{C: 1.23, aux: testAux{5, true}}, "1.23::5u"},
+		{Cost{C: 1.23, Penalties: HugeCostPenalty | FullScanPenalty, aux: testAux{5, true}}, "1.23:HF:5u"},
+	}
+	for _, tc := range testCases {
+		if r := tc.c.Summary(); r != tc.expected {
+			t.Errorf("expected %q, got %q", tc.expected, r)
+		}
+	}
+}
