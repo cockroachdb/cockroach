@@ -5728,3 +5728,206 @@ statement ok
 SET allow_view_with_security_invoker_clause = off
 
 subtest end
+
+subtest row_security_off
+
+statement ok
+CREATE USER alice;
+
+statement ok
+CREATE TABLE accounts (
+    id INT PRIMARY KEY,
+    owner TEXT,
+    balance INT
+);
+
+statement ok
+INSERT INTO accounts VALUES
+  (1, 'alice', 100),
+  (2, 'bob', 200);
+
+statement ok
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+
+statement ok
+GRANT ALL ON accounts TO alice;
+
+statement ok
+SET ROLE alice;
+
+# RLS enabled but no policies (deny all) - row_security='off' should fail.
+query ITI
+SELECT * FROM accounts;
+----
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+SELECT * FROM accounts;
+
+statement ok
+RESET row_security;
+
+statement ok
+SET ROLE root;
+
+# Add policy and test with alice as non-owner.
+statement ok
+CREATE POLICY user_is_owner ON accounts
+  USING (owner = current_user());
+
+statement ok
+SET ROLE alice;
+
+query ITI
+SELECT * FROM accounts;
+----
+1  alice  100
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+SELECT * FROM accounts;
+
+statement ok
+RESET row_security;
+
+# Test INSERT and UPDATE.
+statement ok
+INSERT INTO accounts VALUES (3, 'alice', 300);
+
+statement ok
+UPDATE accounts SET balance = balance + 50 WHERE id = 3;
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+INSERT INTO accounts VALUES (5, 'alice', 500);
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+UPDATE accounts SET balance = balance + 50 WHERE id = 3;
+
+statement ok
+RESET row_security;
+
+# Test DELETE and UPSERT.
+statement ok
+DELETE FROM accounts WHERE id = 1;
+
+statement ok
+UPSERT INTO accounts VALUES (3, 'alice', 400);
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+DELETE FROM accounts WHERE id = 3;
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+UPSERT INTO accounts VALUES (6, 'alice', 600);
+
+statement ok
+RESET row_security;
+
+statement ok
+SET ROLE root;
+
+# Table owner bypasses RLS without FORCE.
+statement ok
+ALTER TABLE accounts OWNER TO alice;
+
+statement ok
+SET ROLE alice;
+
+statement ok
+DROP POLICY user_is_owner ON accounts;
+
+statement ok
+CREATE POLICY deny_all ON accounts USING (false);
+
+query ITI rowsort
+SELECT * FROM accounts;
+----
+2  bob    200
+3  alice  400
+
+statement ok
+SET SESSION row_security = 'off';
+
+query ITI rowsort
+SELECT * FROM accounts;
+----
+2  bob    200
+3  alice  400
+
+statement ok
+RESET row_security;
+
+# With FORCE, table owner is restricted.
+statement ok
+ALTER TABLE accounts FORCE ROW LEVEL SECURITY;
+
+query ITI
+SELECT * FROM accounts;
+----
+
+statement ok
+SET SESSION row_security = 'off';
+
+statement error pgcode 42501 pq: query would be affected by row-level security policy for table "accounts"
+SELECT * FROM accounts;
+
+statement ok
+RESET row_security;
+
+statement ok
+SET ROLE root;
+
+# Verify setting doesn't apply to admin.
+statement ok
+SET SESSION row_security = 'off';
+
+query ITI rowsort
+SELECT * FROM accounts;
+----
+2  bob    200
+3  alice  400
+
+statement ok
+RESET row_security;
+
+# Non-RLS table allows row_security='off'.
+statement ok
+CREATE TABLE non_rls (id INT PRIMARY KEY);
+
+statement ok
+INSERT INTO non_rls VALUES (1), (2);
+
+statement ok
+GRANT ALL ON non_rls TO alice;
+
+statement ok
+SET ROLE alice;
+
+statement ok
+SET SESSION row_security = 'off';
+
+query I rowsort
+SELECT * FROM non_rls;
+----
+1
+2
+
+statement ok
+SET ROLE root;
+
+statement ok
+DROP TABLE accounts, non_rls;
+
+statement ok
+DROP USER alice;
+
+subtest end
