@@ -115,6 +115,13 @@ func TestLogic_mixed_version_ltree(
 	runLogicTest(t, "mixed_version_ltree")
 }
 
+func TestLogic_mixed_version_partial_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_partial_stats")
+}
+
 func TestLogic_mixed_version_stats(
 	t *testing.T,
 ) {
