@@ -7,6 +7,9 @@ inputs:
   pkg:
     description: "test package to build"
     required: true
+  base_offset:
+    description: "offset base by this many commits"
+    required: false
 outputs:
   merge_base:
     description: "merge base"
@@ -33,7 +36,7 @@ runs:
       if: inputs.ref == 'base'
       run: |
         set -e
-        NUM_COMMITS=${{ github.event.pull_request.commits }}          
+        NUM_COMMITS=$(( ${{ github.event.pull_request.commits }} - ${{ inputs.base_offset || 0 }} ))          
         MERGE_BASE=$(git rev-parse HEAD~${NUM_COMMITS})
         echo "merge_base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
       shell: bash
