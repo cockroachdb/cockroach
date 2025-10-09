@@ -188,13 +188,17 @@ func newTestCluster(
 			DisableLeaseQueue: true,
 		},
 	}
-	return serverutils.StartCluster(b, nodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings:  st,
 			CacheSize: cacheSize,
 			Knobs:     knobs,
 		}},
 	)
+	if nodes > 1 {
+		try0(tc.WaitForFullReplication())
+	}
+	return tc
 }
 
 // sysbenchSQL is SQL-based implementation of sysbenchDriver. It runs SQL
@@ -211,7 +215,6 @@ func newSysbenchSQL(nodes int, localRPCFastPath bool) sysbenchDriverConstructor 
 		for i := 0; i < nodes; i++ {
 			tc.Server(i).SQLServer().(*sql.Server).GetExecutorConfig().LicenseEnforcer.Disable(ctx)
 		}
-		try0(tc.WaitForFullReplication())
 		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(sysbenchDB))
 		cleanup := func() {
 			cleanupURL()
