@@ -56,10 +56,22 @@ const redactionPolicyManagedEnvVar = "COCKROACH_REDACTION_POLICY_MANAGED"
 
 var RedactionPolicyManaged = envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false)
 
+// testLogConfigEnvVar is the env var used to specify a custom YAML log configuration
+// for tests. This can be overridden by the -test-log-config command-line flag.
+//
+// Example: To show all log channels (including HEALTH, STORAGE, KV_DISTRIBUTION)
+// inline with -show-logs:
+//
+//	export COCKROACH_TEST_LOG_CONFIG='sinks: {stderr: {channels: all, filter: INFO}}'
+const testLogConfigEnvVar = "COCKROACH_TEST_LOG_CONFIG"
+
+var envTestLogConfig = envutil.EnvOrDefaultString(testLogConfigEnvVar, "")
+
 func init() {
 	logflags.InitFlags(
 		&logging.showLogs,
 		&logging.testLogConfig,
+		envTestLogConfig, // default value
 		&logging.vmoduleConfig.mu.vmodule,
 	)
 
