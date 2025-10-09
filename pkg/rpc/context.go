@@ -1409,7 +1409,7 @@ func (rpcCtx *Context) GRPCDialOptions(
 	ctx context.Context, target string, class rpcbase.ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly && !rpcCtx.Knobs.NoLoopbackDialer {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
@@ -2042,7 +2042,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	additionalOpts ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly && !rpcCtx.Knobs.NoLoopbackDialer {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}

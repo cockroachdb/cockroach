@@ -14,6 +14,10 @@ env:
   HEAD: ${{ github.event.pull_request.head.sha }}
   BUCKET: "cockroach-microbench-ci"
   PACKAGE: "pkg/sql/tests"
+  # Base offset: increases the base commit by the given offset, so benchmarks run
+  # against a later commit in the PR. Use only for testing; always reset to
+  # default before merging.
+  BASE_OFFSET: 1
 jobs:
   base:
     name: build merge base
@@ -31,6 +35,7 @@ jobs:
         with:
           ref: base
           pkg: ${{ env.PACKAGE }}
+          base_offset: ${{ env.BASE_OFFSET }}
   head:
     name: build head
     runs-on: [self-hosted, ubuntu_2004]
