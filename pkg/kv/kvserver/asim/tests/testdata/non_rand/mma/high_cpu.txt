@@ -34,7 +34,33 @@ gen_load rate=1000 rw_ratio=0.99 min_block=128 max_block=128 request_cpu_per_acc
 ----
 10.00 access-vcpus, 0.20 raft-vcpus, 1.3 KiB/s goodput
 
-eval duration=20m samples=1 seed=42 cfgs=(mma-count) metrics=(cpu,cpu_util,replicas,leases)
+# Assert that:
+# - CPU is balanced across stores and doesn't fluctuate.
+# - replicas and leases are balanced and don't fluctuate.
+# We don't assert on replica count being balanced, even though
+# we do expect it to be the case in mma-count, because it won't
+# hold in mma-only. Ideally we could vary the assertions based
+# on the configuration or split up the configurations into
+# separate runs without needing to duplicate much of the test
+# setup.
+
+assertion type=balance stat=cpu upper_bound=1.1 ticks=100
+----
+asserting: max_{stores}(cpu)/mean_{stores}(cpu) ≤ 1.10 at each of last 100 ticks
+
+assertion type=steady stat=cpu upper_bound=0.1 ticks=100
+----
+asserting: |cpu(t)/mean_{T}(cpu) - 1| ≤ 0.10 ∀ t∈T and each store (T=last 100 ticks)
+
+assertion type=steady stat=replicas upper_bound=0.1 ticks=100
+----
+asserting: |replicas(t)/mean_{T}(replicas) - 1| ≤ 0.10 ∀ t∈T and each store (T=last 100 ticks)
+
+assertion type=steady stat=leases upper_bound=0.1 ticks=100
+----
+asserting: |leases(t)/mean_{T}(leases) - 1| ≤ 0.10 ∀ t∈T and each store (T=last 100 ticks)
+
+eval duration=20m samples=1 seed=42 cfgs=(mma-count,mma-only) metrics=(cpu,cpu_util,replicas,leases)
 ----
 cpu#1: last:  [s1=1541887030, s2=1713235417, s3=1580118619, s4=1618283496, s5=1563312037, s6=1657951235, s7=1307364950, s8=1552531971, s9=1561935680, s10=1645749580] (stddev=103163155.55, mean=1574237001.50, sum=15742370015)
 cpu#1: thrash_pct: [s1=25%, s2=29%, s3=18%, s4=29%, s5=28%, s6=16%, s7=19%, s8=27%, s9=30%, s10=18%]  (sum=238%)
@@ -47,4 +73,16 @@ replicas#1: first: [s1=80, s2=70, s3=51, s4=42, s5=37, s6=35, s7=34, s8=33, s9=3
 replicas#1: last:  [s1=45, s2=44, s3=45, s4=46, s5=43, s6=45, s7=47, s8=45, s9=45, s10=45] (stddev=1.00, mean=45.00, sum=450)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=5%, s6=0%, s7=0%, s8=0%, s9=6%, s10=0%]  (sum=11%)
 artifacts[mma-count]: 2e50737f44fc4950
+==========================
+cpu#1: last:  [s1=1706498399, s2=1615687783, s3=1677746697, s4=1624652238, s5=1648924305, s6=1640076380, s7=1135947134, s8=1438619020, s9=1699568316, s10=1553238061] (stddev=164018033.83, mean=1574095833.30, sum=15740958333)
+cpu#1: thrash_pct: [s1=32%, s2=85%, s3=84%, s4=36%, s5=17%, s6=37%, s7=15%, s8=16%, s9=22%, s10=20%]  (sum=364%)
+cpu_util#1: last:  [s1=0.21, s2=0.20, s3=0.21, s4=0.20, s5=0.21, s6=0.21, s7=0.14, s8=0.18, s9=0.21, s10=0.19] (stddev=0.02, mean=0.20, sum=2)
+cpu_util#1: thrash_pct: [s1=32%, s2=85%, s3=84%, s4=36%, s5=17%, s6=37%, s7=15%, s8=16%, s9=22%, s10=20%]  (sum=364%)
+leases#1: first: [s1=37, s2=22, s3=14, s4=13, s5=11, s6=11, s7=10, s8=11, s9=10, s10=11] (stddev=8.07, mean=15.00, sum=150)
+leases#1: last:  [s1=15, s2=9, s3=17, s4=10, s5=23, s6=17, s7=13, s8=16, s9=15, s10=15] (stddev=3.71, mean=15.00, sum=150)
+leases#1: thrash_pct: [s1=0%, s2=41%, s3=66%, s4=37%, s5=0%, s6=39%, s7=0%, s8=0%, s9=0%, s10=0%]  (sum=183%)
+replicas#1: first: [s1=80, s2=70, s3=51, s4=42, s5=37, s6=35, s7=34, s8=33, s9=34, s10=34] (stddev=16.02, mean=45.00, sum=450)
+replicas#1: last:  [s1=80, s2=58, s3=46, s4=45, s5=38, s6=37, s7=35, s8=36, s9=37, s10=38] (stddev=13.42, mean=45.00, sum=450)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=5%, s4=0%, s5=0%, s6=5%, s7=0%, s8=0%, s9=0%, s10=0%]  (sum=10%)
+artifacts[mma-only]: 7478cadb8f2e4145
 ==========================
