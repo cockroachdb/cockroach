@@ -1,6 +1,6 @@
 [submodule "c-deps/jemalloc"]
 	path = c-deps/jemalloc
-	url = https://github.com/cockroachdb/jemalloc.git
+	url = https://github.com/meta/jemalloc.git
 [submodule "c-deps/krb5"]
 	path = c-deps/krb5
 	url = https://github.com/cockroachdb/krb5.git
