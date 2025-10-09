@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math"
 	"math/rand/v2"
 	"strconv"
 	"strings"
@@ -56,8 +55,7 @@ type tpch struct {
 	scaleFactor int
 	fks         bool
 
-	enableChecks bool
-	verbose      bool
+	verbose bool
 
 	queriesRaw      string
 	selectedQueries []int
@@ -84,8 +82,7 @@ var tpchMeta = workload.Meta{
 		g := &tpch{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpch`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`queries`:       {RuntimeOnly: true},
-			`enable-checks`: {RuntimeOnly: true},
+			`queries`: {RuntimeOnly: true},
 		}
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed.`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
@@ -94,10 +91,6 @@ var tpchMeta = workload.Meta{
 		g.flags.StringVar(&g.queriesRaw, `queries`,
 			`1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers.`)
-		g.flags.BoolVar(&g.enableChecks, `enable-checks`, false,
-			"Enable checking the output against the expected rows (default false). "+
-				"Note that the checks are only supported for scale factor 1 of the backup "+
-				"stored at 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup'.")
 		g.flags.BoolVar(&g.verbose, `verbose`, false,
 			`Prints out the queries being run as well as histograms.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -118,11 +111,6 @@ func (w *tpch) ConnFlags() *workload.ConnFlags { return w.connFlags }
 func (w *tpch) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.scaleFactor != 1 {
-				fmt.Printf("check for expected rows is only supported with " +
-					"scale factor 1, so it was disabled\n")
-				w.enableChecks = false
-			}
 			for _, queryName := range strings.Split(w.queriesRaw, `,`) {
 				queryNum, err := strconv.Atoi(queryName)
 				if err != nil {
@@ -324,6 +312,36 @@ func (w *tpch) Ops(
 	return ql, nil
 }
 
+// numExpectedRowsByQueryNumber is a mapping from query number to the number of
+// expected rows the query should return. Queries that can return different
+// number of rows depending on the fixture seed and / or scale factor are
+// excluded from this map (namely, queries 11, 13, 16, 18, 20 aren't in this
+// map).
+//
+// Note that earlier we tried to also check against the expected set of results
+// for "golden" TPCH dataset, but that proved too onerous too maintain. Doing
+// just the row count check is often meaningless (e.g. 5 queries have LIMIT
+// specified), but it's better than nothing.
+var numExpectedRowsByQueryNumber = map[int]int{
+	1:  4,
+	2:  100,
+	3:  10,
+	4:  4,
+	5:  5,
+	6:  1,
+	7:  4,
+	8:  2,
+	9:  175,
+	10: 20,
+	12: 2,
+	14: 1,
+	15: 1,
+	17: 1,
+	19: 1,
+	21: 100,
+	22: 7,
+}
+
 type worker struct {
 	config  *tpch
 	hists   *histogram.Histograms
@@ -337,11 +355,6 @@ func (w *worker) run(ctx context.Context) error {
 	query := w.queries[queryNum]
 	w.ops++
 
-	vals := make([]interface{}, maxCols)
-	for i := range vals {
-		vals[i] = new(interface{})
-	}
-
 	start := timeutil.Now()
 	rows, err := w.db.Query(query)
 	if rows != nil {
@@ -351,94 +364,8 @@ func (w *worker) run(ctx context.Context) error {
 		return errors.Wrapf(err, "[q%d]", queryNum)
 	}
 	var numRows int
-	// NOTE: we should *NOT* return an error from this function right away
-	// because we might get another, more meaningful error from rows.Err() which
-	// can only be accessed after we fully consumed the rows.
-	checkExpectedOutput := func() error {
-		for rows.Next() {
-			if w.config.enableChecks {
-				if _, checkOnlyRowCount := numExpectedRowsByQueryNumber[queryNum]; !checkOnlyRowCount {
-					if err = rows.Scan(vals[:numColsByQueryNumber[queryNum]]...); err != nil {
-						return errors.Wrapf(err, "[q%d]", queryNum)
-					}
-
-					expectedRow := expectedRowsByQueryNumber[queryNum][numRows]
-					for i, expectedValue := range expectedRow {
-						if val := *vals[i].(*interface{}); val != nil {
-							var actualValue string
-							// Currently, lib/pq for query 12 in the second and third columns
-							// (which are decimals) returns []byte. In order to compare it
-							// against our expected string value, we have this special case.
-							if byteArray, ok := val.([]byte); ok {
-								actualValue = string(byteArray)
-							} else {
-								actualValue = fmt.Sprint(val)
-							}
-							if strings.Compare(expectedValue, actualValue) != 0 {
-								var expectedFloat, actualFloat float64
-								var expectedFloatRounded, actualFloatRounded float64
-								expectedFloat, err = strconv.ParseFloat(expectedValue, 64)
-								if err != nil {
-									return errors.Errorf("[q%d] failed parsing expected value as float64 with %s\n"+
-										"wrong result in row %d in column %d: got %q, expected %q",
-										queryNum, err, numRows, i, actualValue, expectedValue)
-								}
-								actualFloat, err = strconv.ParseFloat(actualValue, 64)
-								if err != nil {
-									return errors.Errorf("[q%d] failed parsing actual value as float64 with %s\n"+
-										"wrong result in row %d in column %d: got %q, expected %q",
-										queryNum, err, numRows, i, actualValue, expectedValue)
-								}
-								// TPC-H spec requires 0.01 precision for DECIMALs, so we will
-								// first round the values to use in the comparison. Note that we
-								// round to a thousandth so that values like 0.601 and 0.609 were
-								// always considered to differ by less than 0.01 (due to the
-								// nature of representation of floats, it is possible that those
-								// two values when rounded to a hundredth would be represented as
-								// something like 0.59999 and 0.610001 which differ by more than
-								// 0.01).
-								expectedFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", expectedFloat), 64)
-								if err != nil {
-									return errors.Errorf("[q%d] failed parsing rounded expected value as float64 with %s\n"+
-										"wrong result in row %d in column %d: got %q, expected %q",
-										queryNum, err, numRows, i, actualValue, expectedValue)
-								}
-								actualFloatRounded, err = strconv.ParseFloat(fmt.Sprintf("%.3f", actualFloat), 64)
-								if err != nil {
-									return errors.Errorf("[q%d] failed parsing rounded actual value as float64 with %s\n"+
-										"wrong result in row %d in column %d: got %q, expected %q",
-										queryNum, err, numRows, i, actualValue, expectedValue)
-								}
-								if math.Abs(expectedFloatRounded-actualFloatRounded) > 0.02 {
-									// We only fail the check if the difference is more than 0.02
-									// although TPC-H spec requires 0.01 precision for DECIMALs. We
-									// are using the expected value that might not be "precisely
-									// correct." It is possible for the following situation to
-									// occur:
-									//   expected < "ideal" < actual
-									//   "ideal" - expected < 0.01 && actual - "ideal" < 0.01
-									// so in the worst case, actual and expected might differ by
-									// 0.02 and still be considered correct.
-									return errors.Errorf("[q%d] %f and %f differ by more than 0.02\n"+
-										"wrong result in row %d in column %d: got %q, expected %q",
-										queryNum, actualFloatRounded, expectedFloatRounded,
-										numRows, i, actualValue, expectedValue)
-								}
-							}
-						}
-					}
-				}
-			}
-			numRows++
-		}
-		return nil
-	}
-
-	expectedOutputError := checkExpectedOutput()
-
-	// In order to definitely get the error below, we need to fully consume the
-	// result set.
 	for rows.Next() {
+		numRows++
 	}
 
 	// We first check whether there is any error that came from the server (for
@@ -446,19 +373,13 @@ func (w *worker) run(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return errors.Wrapf(err, "[q%d]", queryNum)
 	}
-	// Now we check whether there was an error while consuming the rows.
-	if expectedOutputError != nil {
-		return wrongOutputError{error: expectedOutputError}
-	}
-	if w.config.enableChecks {
-		numRowsExpected, checkOnlyRowCount := numExpectedRowsByQueryNumber[queryNum]
-		if checkOnlyRowCount && numRows != numRowsExpected {
-			return wrongOutputError{
-				error: errors.Errorf(
-					"[q%d] returned wrong number of rows: got %d, expected %d",
-					queryNum, numRows, numRowsExpected,
-				)}
-		}
+	numRowsExpected, checkRowCount := numExpectedRowsByQueryNumber[queryNum]
+	if checkRowCount && numRows != numRowsExpected {
+		return wrongOutputError{
+			error: errors.Errorf(
+				"[q%d] returned wrong number of rows: got %d, expected %d",
+				queryNum, numRows, numRowsExpected,
+			)}
 	}
 	elapsed := timeutil.Since(start)
 	if w.config.verbose {
