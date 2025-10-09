@@ -89,6 +89,12 @@ type decommissionBenchSpec struct {
 	// instead of a random node.
 	decommissionNode int
 
+	// When true, the decommissioning nudger
+	// (kv.enqueue_in_replicate_queue_on_problem.interval) will be used to
+	// periodically enqueue decommissioning ranges at its leaseholders every 5
+	// minutes.
+	useDecommissioningNudger bool
+
 	skip string
 }
 
@@ -199,6 +205,16 @@ func registerDecommissionBench(r registry.Registry) {
 			decommissionNode:   2,
 		},
 		{
+			// Same as above but using the decommissioning nudger.
+			nodes:                    6,
+			warehouses:               1000,
+			whileUpreplicating:       true,
+			drainFirst:               true,
+			multiregion:              true,
+			decommissionNode:         2,
+			useDecommissioningNudger: true,
+		},
+		{
 			// Multiregion decommission, and add a new node in a different region.
 			nodes:              6,
 			warehouses:         1000,
@@ -206,6 +222,16 @@ func registerDecommissionBench(r registry.Registry) {
 			drainFirst:         true,
 			multiregion:        true,
 			decommissionNode:   3,
+		},
+		{
+			// Same as above but using the decommissioning nudger.
+			nodes:                    6,
+			warehouses:               1000,
+			whileUpreplicating:       true,
+			drainFirst:               true,
+			multiregion:              true,
+			decommissionNode:         3,
+			useDecommissioningNudger: true,
 		},
 	} {
 		registerDecommissionBenchSpec(r, benchSpec)
@@ -274,6 +300,10 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		extraNameParts = append(extraNameParts, "multi-region")
 	}
 
+	if benchSpec.useDecommissioningNudger {
+		extraNameParts = append(extraNameParts, "use-nudger")
+	}
+
 	// Save some money and CPU quota by using a smaller workload CPU. Only
 	// do this for cluster of size 3 or smaller to avoid regressions.
 	specOptions = append(specOptions, spec.WorkloadNode())
@@ -299,7 +329,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 			specOptions...,
 		),
 		CompatibleClouds:    registry.OnlyGCE,
-		Suites:              registry.Suites(registry.Nightly),
+		Suites:              registry.Suites(registry.Weekly),
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
@@ -426,6 +456,15 @@ func setupDecommissionBench(
 	{
 		db := c.Conn(ctx, t.L(), pinnedNode)
 		defer db.Close()
+
+		// Metamorphically enable the decommissioning nudger to get more test
+		// coverage on decommissioning nudger.
+		if benchSpec.useDecommissioningNudger {
+			if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.enqueue_in_replicate_queue_on_problem.interval = '5m'`); err != nil {
+				t.Fatal(err)
+			}
+			t.L().Printf("enabled decommissioning nudger")
+		}
 
 		// Note that we are waiting for 3 replicas only. We can't assume 5 replicas
 		// here because 5 only applies to system ranges so we will never reach this
