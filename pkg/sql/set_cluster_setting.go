@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -701,7 +702,12 @@ func waitForSettingUpdate(
 	}
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
 	var observed string
-	err := retry.ForDuration(10*time.Second, func() error {
+	defaultDuration := 10 * time.Second
+	// Bench tests maybe more prone to flaking, so use a longer time limit for them.
+	if buildutil.CrdbBenchBuild {
+		defaultDuration *= 3
+	}
+	err := retry.ForDuration(defaultDuration, func() error {
 		observed = setting.Encoded(&execCfg.Settings.SV)
 		if observed != expectedEncodedValue {
 			return errNotReady
