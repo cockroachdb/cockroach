@@ -3836,6 +3836,10 @@ func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 	m.data.AllowPrepareAsOptPlan = val
 }
 
+func (m *sessionDataMutator) SetRowSecurity(val bool) {
+	m.data.RowSecurity = val
+}
+
 func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
 	m.data.SaveTablesPrefix = prefix
 }

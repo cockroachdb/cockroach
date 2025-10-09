@@ -1684,15 +1684,21 @@ var varGen = map[string]sessionVar{
 	// results received by clients, we accept both values.
 	`synchronize_seqscans`: makeCompatBoolVar(`synchronize_seqscans`, true, true /* anyAllowed */),
 
-	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-ROW-SECURITY
-	// The default in pg is "on" but row security is not supported in CockroachDB.
-	// We blindly accept both values because as long as there are now row security policies defined,
-	// either value produces the same query results in PostgreSQL. That is, as long as CockroachDB
-	// does not support row security, accepting either "on" and "off" but ignoring the result
-	// is postgres-compatible.
-	// If/when CockroachDB is extended to support row security, the default and allowed values
-	// should be modified accordingly.
-	`row_security`: makeCompatBoolVar(`row_security`, false, true /* anyAllowed */),
+	`row_security`: {
+		GetStringVal: makePostgresBoolGetStringValFn("row_security"),
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().RowSecurity), nil
+		},
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("row_security", s)
+			if err != nil {
+				return err
+			}
+			m.SetRowSecurity(b)
+			return nil
+		},
+		GlobalDefault: globalTrue,
+	},
 
 	`statement_timeout`: {
 		GetStringVal: makeTimeoutVarGetter(`statement_timeout`),

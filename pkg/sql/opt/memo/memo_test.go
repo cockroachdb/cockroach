@@ -674,6 +674,12 @@ func TestMemoIsStale(t *testing.T) {
 	notStale()
 	o.Memo().Metadata().ClearRLSEnabled()
 	notStale()
+
+	// Stale row_security.
+	evalCtx.SessionData().RowSecurity = true
+	stale()
+	evalCtx.SessionData().RowSecurity = false
+	notStale()
 }
 
 // TestStatsAvailable tests that the statisticsBuilder correctly identifies
