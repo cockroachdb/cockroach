@@ -47,7 +47,7 @@ jobs:
           pkg: ${{ env.PACKAGE }}
   run-group-1:
     runs-on: [self-hosted, ubuntu_2004_microbench]
-    timeout-minutes: 60
+    timeout-minutes: 90
     needs: [base, head]
     steps:
       - name: Checkout
@@ -60,7 +60,7 @@ jobs:
           group: 1
   run-group-2:
     runs-on: [self-hosted, ubuntu_2004_microbench]
-    timeout-minutes: 60
+    timeout-minutes: 90
     needs: [base, head]
     steps:
       - name: Checkout
