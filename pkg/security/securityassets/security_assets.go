@@ -6,7 +6,7 @@
 package securityassets
 
 import (
-	"io/ioutil"
+	"io/fs"
 	"os"
 
 	"github.com/cockroachdb/errors/oserror"
@@ -21,7 +21,7 @@ type Loader struct {
 
 // defaultLoader uses real filesystem calls.
 var defaultLoader = Loader{
-	ReadDir:  ioutil.ReadDir,
+	ReadDir:  readDir,
 	ReadFile: os.ReadFile,
 	Stat:     os.Stat,
 }
@@ -54,4 +54,24 @@ func (al Loader) FileExists(filename string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// readDir reads the directory named by dirname and returns a list of
+// fs.FileInfo for the directory's contents, sorted by filename. If an error
+// occurs reading the directory, ReadDir returns no directory entries along with
+// the error.
+func readDir(dirname string) ([]os.FileInfo, error) {
+	entries, err := os.ReadDir(dirname)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]fs.FileInfo, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
 }

@@ -8,7 +8,7 @@ package dumpstore
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -187,9 +187,17 @@ func populate(t *testing.T, dirName string, fileNames []string, sizes []int64) [
 	}
 
 	// Retrieve the file list for the remainder of the test.
-	files, err := ioutil.ReadDir(dirName)
+	entries, err := os.ReadDir(dirName)
 	if err != nil {
 		t.Fatal(err)
+	}
+	files := make([]fs.FileInfo, 0, len(entries))
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, info)
 	}
 	return files
 }
