@@ -1949,7 +1949,7 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("<empty>")
 		return
 	}
-	w.Printf("repl=%s seq=%d start=%s", l.Replica, l.Sequence, l.Start)
+	w.Printf("repl=%s seq=%d start=%s type=%s", l.Replica, l.Sequence, l.Start, l.Type())
 	switch l.Type() {
 	case LeaseExpiration:
 		w.Printf(" exp=%s", l.Expiration)
@@ -1991,6 +1991,10 @@ const (
 	// to be the range's raft leader.
 	LeaseLeader
 )
+
+func (t LeaseType) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s", redact.SafeString(t.String()))
+}
 
 // TestingAllLeaseTypes returns a list of all lease types to test against.
 func TestingAllLeaseTypes() []LeaseType {
