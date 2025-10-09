@@ -1,5 +1,18 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+genrule(
+    name = "cockroachdb_metrics",
+    srcs = [
+        "//docs/generated/metrics:metrics.yaml",
+        "cockroachdb_metrics_base.yaml",
+        "@datadog_cockroachdb_metrics//:metrics.py",
+    ],
+    outs = ["cockroachdb_metrics.go"],
+    cmd = "$(location //build/tools/gen-cockroachdb-metrics) $(location //docs/generated/metrics:metrics.yaml) $@ $(location @datadog_cockroachdb_metrics//:metrics.py) $(location cockroachdb_metrics_base.yaml)",
+    tools = ["//build/tools/gen-cockroachdb-metrics"],
+    visibility = ["//pkg/gen:__pkg__"],
+)
+
 go_library(
     name = "opentelemetry",
     srcs = [

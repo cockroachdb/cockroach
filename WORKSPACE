@@ -628,6 +628,16 @@ http_archive(
     ],
 )
 
+# Datadog metrics mapping file for CockroachDB OpenTelemetry integration
+http_archive(
+    name = "datadog_cockroachdb_metrics",
+    build_file_content = """exports_files(["metrics.py"])""",
+    sha256 = "05f2a1c459ed247a031ce5f026b2098687657c8ab30214222261f2fe180ae2fc",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/metrics-f37c7837771cf0df7771d2017fd05d55eb521994.tar.gz",
+    ],
+)
+
 # Cockroach binaries for use by mixed-version logictests.
 load("//pkg/sql/logictest:REPOSITORIES.bzl", "cockroach_binaries_for_testing")
 
