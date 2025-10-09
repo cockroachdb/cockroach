@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -52,87 +51,76 @@ func splitPreApply(
 	// raftMu is locked.
 	//
 	// In the less common case, the ReplicaID is already removed from this Store,
-	// and rightRepl is either nil or an uninitialized replica with a higher
+	// and rightRepl is either nil (though the replica may still be in the process
+	// of being created concurrently), or an uninitialized replica with a higher
 	// ReplicaID. Its raftMu is not locked.
+	//
+	// Note that in any case, the RHS, if exists, is uninitialized. Such replicas
+	// may only have non-empty RaftReplicaID and RaftHardState keys in storage.
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
+
+	rsl := stateloader.Make(split.RightDesc.RangeID)
+	// After PR #149620, The split trigger batch may only contain replicated state
+	// machine keys, and never contains unreplicated / raft keys. One exception:
+	// there can still be historical split proposals that write the initial
+	// RaftTruncatedState of the RHS. Remove this key (if exists), and set it
+	// below only if necessary.
+	//
+	// Note that if the RHS range is already present or being created concurrently
+	// on this Store, it doesn't have a RaftTruncatedState, so this write will not
+	// conflict with or corrupt it.
+	//
+	// TODO(#152847): remove this line when there are no historical proposals with
+	// RaftTruncatedState, e.g. after a below-raft migration.
+	if err := rsl.ClearRaftTruncatedState(readWriter); err != nil {
+		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
+	}
+
 	// Check to see if we know that the RHS has already been removed from this
 	// store at the replica ID implied by the split.
 	if rightRepl == nil || rightRepl.isNewerThanSplit(&split) {
-		// We're in the rare case where we know that the RHS has been removed
-		// and re-added with a higher replica ID (and then maybe removed again).
+		// We're in the rare case where we know that the RHS has been removed and
+		// re-added with a higher replica ID (and then maybe removed again).
 		//
 		// If rightRepl is not nil, we are *not* holding raftMu.
 		//
 		// To apply the split, we need to "throw away" the data that would belong to
 		// the RHS, i.e. we clear the user data the RHS would have inherited from
-		// the LHS due to the split and additionally clear all of the range ID local
-		// state that the split trigger writes into the RHS. At the time of writing,
-		// unfortunately that means that we'll also delete any data that might
-		// already be present in the RHS: the HardState and RaftReplicaID. It is
-		// important to preserve the HardState because we might however have already
-		// voted at a higher term. In general this shouldn't happen because we add
-		// learners and then promote them only after they apply a snapshot but we're
-		// going to be extra careful in case future versions of cockroach somehow
-		// promote replicas without ensuring that a snapshot has been received. So
-		// we write it back (and the RaftReplicaID too, since it's an invariant that
-		// it's always present).
-		var hs raftpb.HardState
+		// the LHS due to the split.
+		//
+		// Leave the rangeID-local state intact, since it belongs to a newer replica
+		// or does not exist. At the time of writing, it can be a non-empty
+		// HardState and RaftReplicaID. It is important to preserve the HardState
+		// because we might have already voted at a higher term. In general this
+		// shouldn't happen because we add learners and then promote them only after
+		// they apply a snapshot, but we're going to be extra careful in case future
+		// versions of cockroach somehow promote replicas without ensuring that a
+		// snapshot has been received.
+		//
+		// NB: the rightRepl == nil condition is flaky, in a sense that the RHS
+		// replica can be created concurrently here. But we only use it for an
+		// assertion, so this is not critical at the moment.
 		if rightRepl != nil {
-			// TODO(pav-kv): rightRepl could have been destroyed by the time we get to
-			// lock it here. The HardState read-then-write appears risky in this case.
-			rightRepl.raftMu.Lock()
-			defer rightRepl.raftMu.Unlock()
 			// Assert that the rightRepl is not initialized. We're about to clear out
 			// the data of the RHS of the split; we cannot have already accepted a
 			// snapshot to initialize this newer RHS.
 			if rightRepl.IsInitialized() {
 				log.KvExec.Fatalf(ctx, "unexpectedly found initialized newer RHS of split: %v", rightRepl.Desc())
 			}
-			var err error
-			hs, err = rightRepl.raftMu.stateLoader.LoadHardState(ctx, readWriter)
-			if err != nil {
-				log.KvExec.Fatalf(ctx, "failed to load hard state for removed rhs: %v", err)
-			}
 		}
-		// TODO(#152199): the rightRepl == nil condition is flaky. There can be a
-		// racing replica creation for a higher ReplicaID, and it can subsequently
-		// update its HardState. Here, we can accidentally clear the HardState of
-		// that new replica.
 		if err := kvstorage.ClearRangeData(ctx, split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
 			// We know there isn't anything in these two replicated spans below in the
 			// right-hand side (before the current batch), so setting these options
-			// will in effect only clear the writes to the RHS replicated state we have
-			// staged in this batch, which is what we're after.
+			// will in effect only clear the writes to the RHS replicated state we
+			// have staged in this batch, which is what we're after.
 			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
 			ClearReplicatedByRangeID: true,
-			// See the HardState write-back dance above and below.
-			//
-			// TODO(tbg): we don't actually want to touch the raft state of the RHS
-			// replica since it's absent or a more recent one than in the split. Now
-			// that we have a bool targeting unreplicated RangeID-local keys, we can
-			// set it to false and remove the HardState+ReplicaID write-back. However,
-			// there can be historical split proposals with the RaftTruncatedState key
-			// set in splitTriggerHelper[^1]. We must first make sure that such
-			// proposals no longer exist, e.g. with a below-raft migration.
-			//
-			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
-			//
-			// See also: https://github.com/cockroachdb/cockroach/issues/94933
-			ClearUnreplicatedByRangeID: true,
+			// The only unreplicated key that can be present in the split trigger
+			// batch is the RaftTruncatedState, from historical proposals. It is
+			// unconditionally cleared above.
+			ClearUnreplicatedByRangeID: false,
 		}); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
-		}
-		if rightRepl != nil {
-			// Cleared the HardState and RaftReplicaID, so rewrite them to the current
-			// values. NB: rightRepl.raftMu is still locked since HardState was read,
-			// so it can't have been rewritten in the meantime (fixed in #75918).
-			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
-				log.KvExec.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
-			}
-			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
-				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
-				log.KvExec.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
-			}
 		}
 		return
 	}
@@ -146,7 +134,6 @@ func splitPreApply(
 	//
 	// [*] Note that uninitialized replicas may cast votes, and if they have, we
 	// can't load the default Term and Vote values.
-	rsl := stateloader.Make(split.RightDesc.RangeID)
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
