@@ -3391,7 +3391,7 @@ ALTER TABLE stale INJECT STATISTICS '[
 # When optimizer_always_use_histograms and optimizer_prefer_bounded_cardinality
 # are disabled, and optimizer_min_row_count=0, we may choose the non-unique
 # index.
-opt set=(optimizer_always_use_histograms=false,optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
+opt set=(optimizer_always_use_histograms=false,optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0,optimizer_avoid_suboptimal_unordered_scans=false)
 SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
 ----
 limit
@@ -3466,3 +3466,562 @@ index-join stale
       ├── stats: [rows=4.4e-08]
       ├── key: ()
       └── fd: ()-->(1-3)
+
+# When optimizer_avoid_suboptimal_unordered_scans is enabled, we should choose the unique
+# index.
+opt set=(optimizer_avoid_suboptimal_unordered_scans=true,optimizer_always_use_histograms=false,optimizer_prefer_bounded_cardinality=false,optimizer_min_row_count=0)
+SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
+----
+index-join stale
+ ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── scan stale@stale_x_y_key
+      ├── columns: w:1(string!null) x:2(string!null) y:3(string!null)
+      ├── constraint: /2/3
+      │    ├── [/'bar1'/'bar1000' - /'bar1'/'bar1000']
+      │    └── [/'bar1'/'bar1001' - /'bar1'/'bar1001']
+      ├── limit: 1
+      ├── stats: [rows=1]
+      ├── key: ()
+      └── fd: ()-->(1-3)
+
+
+# ----------------------------------------------------------
+# Tests for optimizer_avoid_suboptimal_unordered_scans.
+# ----------------------------------------------------------
+
+exec-ddl
+CREATE TABLE t_suboptimal (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  f INT,
+  s STRING,
+  INDEX a_b_idx (a, b) STORING (c),
+  INDEX a_c_idx (a, c) STORING (b),
+  INDEX a_d_idx (a, d) STORING (f, c)
+)
+----
+
+# Add a huge cost to scans over a_b_idx nor a_d_idx because they would only
+# constrain a.
+# NOTE: GenerateIndexScans is disabled to avoid generating full scans over
+# secondary indexes which make the output bigger and more confusing to read.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_suboptimal WHERE a = 1 AND c = 2
+----
+memo (optimized, ~11KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (select G6 G7) (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained) (select G8 G7)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4))
+ │         └── cost: 1139.12
+ ├── G5: (filters G9 G10)
+ ├── G6: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (filters G10)
+ ├── G8: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G9: (eq G11 G12)
+ ├── G10: (eq G13 G14)
+ ├── G11: (variable a)
+ ├── G12: (const 1)
+ ├── G13: (variable c)
+ └── G14: (const 2)
+
+# Similar case as above, but when all the indexes are non-covering.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=GenerateIndexScans
+SELECT k, e FROM t_suboptimal WHERE a = 1 AND c = 2
+----
+memo (optimized, ~15KB, required=[presentation: k:1,e:6])
+ ├── G1: (project G2 G3 k e)
+ │    └── [presentation: k:1,e:6]
+ │         ├── best: (project G2 G3 k e)
+ │         └── cost: 25.24
+ ├── G2: (select G4 G5) (index-join G6 t_suboptimal,cols=(1,2,4,6)) (index-join G7 t_suboptimal,cols=(1,2,4,6)) (index-join G8 t_suboptimal,cols=(1,2,4,6))
+ │    └── []
+ │         ├── best: (index-join G7 t_suboptimal,cols=(1,2,4,6))
+ │         └── cost: 25.21
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4,6))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4,6))
+ │         └── cost: 1149.22
+ ├── G5: (filters G9 G10)
+ ├── G6: (select G11 G12)
+ │    └── []
+ │         ├── best: (select G11 G12)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G8: (select G13 G12)
+ │    └── []
+ │         ├── best: (select G13 G12)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G9: (eq G14 G15)
+ ├── G10: (eq G16 G17)
+ ├── G11: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G12: (filters G10)
+ ├── G13: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G14: (variable a)
+ ├── G15: (const 1)
+ ├── G16: (variable c)
+ └── G17: (const 2)
+
+# Do not add a huge cost for the scan over a_d_idx because it is covering and no
+# narrower constraints are covering.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=GenerateIndexScans
+SELECT k, f FROM t_suboptimal WHERE a = 1 AND c = 2
+----
+memo (optimized, ~14KB, required=[presentation: k:1,f:7])
+ ├── G1: (project G2 G3 k f)
+ │    └── [presentation: k:1,f:7]
+ │         ├── best: (project G2 G3 k f)
+ │         └── cost: 25.24
+ ├── G2: (select G4 G5) (index-join G6 t_suboptimal,cols=(1,2,4,7)) (index-join G7 t_suboptimal,cols=(1,2,4,7)) (select G8 G9)
+ │    └── []
+ │         ├── best: (index-join G7 t_suboptimal,cols=(1,2,4,7))
+ │         └── cost: 25.21
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4,7))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4,7))
+ │         └── cost: 1149.22
+ ├── G5: (filters G10 G11)
+ ├── G6: (select G12 G9)
+ │    └── []
+ │         ├── best: (select G12 G9)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G8: (scan t_suboptimal@a_d_idx,cols=(1,2,4,7),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_d_idx,cols=(1,2,4,7),constrained)
+ │         └── cost: 28.92
+ ├── G9: (filters G11)
+ ├── G10: (eq G13 G14)
+ ├── G11: (eq G15 G16)
+ ├── G12: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G13: (variable a)
+ ├── G14: (const 1)
+ ├── G15: (variable c)
+ └── G16: (const 2)
+
+# Do not add a huge cost for either the scan over a_b_idx or a_c_idx because
+# they constrain the same number of columns.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_suboptimal WHERE a = 1 AND b = 2 AND c = 3
+----
+memo (optimized, ~18KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.17
+ ├── G2: (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (zigzag-join G5 t_suboptimal@a_b_idx t_suboptimal@a_c_idx)
+ │    └── []
+ │         ├── best: (select G6 G7)
+ │         └── cost: 19.14
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1-4))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1-4))
+ │         └── cost: 1149.22
+ ├── G5: (filters G11 G12 G13)
+ ├── G6: (scan t_suboptimal@a_b_idx,cols=(1-4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_idx,cols=(1-4),constrained)
+ │         └── cost: 19.10
+ ├── G7: (filters G13)
+ ├── G8: (scan t_suboptimal@a_c_idx,cols=(1-4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1-4),constrained)
+ │         └── cost: 19.10
+ ├── G9: (filters G12)
+ ├── G10: (index-join G14 t_suboptimal,cols=(1-4))
+ │    └── []
+ │         ├── best: (index-join G14 t_suboptimal,cols=(1-4))
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G11: (eq G15 G16)
+ ├── G12: (eq G17 G18)
+ ├── G13: (eq G19 G20)
+ ├── G14: (select G21 G7)
+ │    └── []
+ │         ├── best: (select G21 G7)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G15: (variable a)
+ ├── G16: (const 1)
+ ├── G17: (variable b)
+ ├── G18: (const 2)
+ ├── G19: (variable c)
+ ├── G20: (const 3)
+ └── G21: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+      └── []
+           ├── best: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+           └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+
+# Do not add a huge cost for the scan over a_b_idx because it can provide the
+# required ordering.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_suboptimal WHERE a = 1 AND c = 2 ORDER BY b
+----
+memo (optimized, ~13KB, required=[presentation: k:1] [ordering: +3])
+ ├── G1: (project G2 G3 k b)
+ │    ├── [presentation: k:1] [ordering: +3]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 19.19
+ │    └── []
+ │         ├── best: (project G2 G3 k b)
+ │         └── cost: 19.13
+ ├── G2: (select G4 G5) (select G6 G7) (scan t_suboptimal@a_c_idx,cols=(1-4),constrained) (index-join G8 t_suboptimal,cols=(1-4))
+ │    ├── [ordering: +3 opt(2,4)]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 19.18
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1-4),constrained)
+ │         └── cost: 19.10
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1-4))
+ │    ├── [ordering: +2,+3]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1419.67
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1-4))
+ │         └── cost: 1149.22
+ ├── G5: (filters G9 G10)
+ ├── G6: (scan t_suboptimal@a_b_idx,cols=(1-4),constrained)
+ │    ├── [ordering: +3 opt(2)]
+ │    │    ├── best: (scan t_suboptimal@a_b_idx,cols=(1-4),constrained)
+ │    │    └── cost: 28.82
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_idx,cols=(1-4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (filters G10)
+ ├── G8: (select G11 G7)
+ │    └── []
+ │         ├── best: (select G11 G7)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G9: (eq G12 G13)
+ ├── G10: (eq G14 G15)
+ ├── G11: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_d_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G12: (variable a)
+ ├── G13: (const 1)
+ ├── G14: (variable c)
+ └── G15: (const 2)
+
+# Do not add a huge cost for hinted index scans.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=GenerateIndexScans
+SELECT k FROM t_suboptimal@a_b_idx WHERE a = 1 AND c = 2
+----
+memo (optimized, ~9KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 28.88
+ ├── G2: (select G4 G5) (select G6 G7)
+ │    └── []
+ │         ├── best: (select G6 G7)
+ │         └── cost: 28.85
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4))
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_idx,cols=(1,2,4),constrained)
+ │         └── cost: 28.72
+ ├── G7: (filters G9)
+ ├── G8: (eq G10 G11)
+ ├── G9: (eq G12 G13)
+ ├── G10: (variable a)
+ ├── G11: (const 1)
+ ├── G12: (variable c)
+ └── G13: (const 2)
+
+exec-ddl
+DROP INDEX a_b_idx
+----
+
+exec-ddl
+DROP INDEX a_d_idx
+----
+
+exec-ddl
+CREATE INDEX a_s_idx ON t_suboptimal (a, s)
+----
+
+exec-ddl
+CREATE INDEX a_f_idx ON t_suboptimal (a, f) STORING (s)
+----
+
+# Scans over a_s_idx and a_f_idx have the same number of remaining filters, but
+# the scan over a_f_idx does not constrain s, so it has a huge cost.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_suboptimal WHERE a = 1 AND s LIKE 'ab_'
+----
+memo (optimized, ~14KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 27.85
+ ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7)
+ │    └── []
+ │         ├── best: (select G8 G7)
+ │         └── cost: 27.80
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,8))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,8))
+ │         └── cost: 1139.12
+ ├── G5: (filters G10 G11)
+ ├── G6: (index-join G12 t_suboptimal,cols=(1,2,8))
+ │    └── []
+ │         ├── best: (index-join G12 t_suboptimal,cols=(1,2,8))
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (filters G11)
+ ├── G8: (scan t_suboptimal@a_s_idx,cols=(1,2,8),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_s_idx,cols=(1,2,8),constrained)
+ │         └── cost: 27.68
+ ├── G9: (scan t_suboptimal@a_f_idx,cols=(1,2,8),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_f_idx,cols=(1,2,8),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G10: (eq G13 G14)
+ ├── G11: (like G15 G16)
+ ├── G12: (scan t_suboptimal@a_c_idx,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G13: (variable a)
+ ├── G14: (const 1)
+ ├── G15: (variable s)
+ └── G16: (const 'ab_')
+
+exec-ddl
+DROP INDEX a_f_idx
+----
+
+exec-ddl
+DROP INDEX a_s_idx
+----
+
+exec-ddl
+CREATE INDEX a_c_partial_idx ON t_suboptimal (a) WHERE c = 2
+----
+
+# Do not add a huge cost to a partial index scan if it eliminate the same number
+# of remaining filters and constrains the same columns as another constrained
+# scan.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_suboptimal WHERE a = 1 AND c = 2
+----
+memo (optimized, ~12KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained) (project G6 G7 k a)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4))
+ │         └── cost: 1139.12
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan t_suboptimal@a_c_partial_idx,partial,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_partial_idx,partial,cols=(1,2),constrained)
+ │         └── cost: 19.06
+ ├── G7: (projections G10)
+ ├── G8: (eq G11 G12)
+ ├── G9: (eq G13 G10)
+ ├── G10: (const 2)
+ ├── G11: (variable a)
+ ├── G12: (const 1)
+ └── G13: (variable c)
+
+exec-ddl
+DROP INDEX a_c_partial_idx
+----
+
+exec-ddl
+CREATE INDEX a_c_partial_idx ON t_suboptimal (a) WHERE c > 0
+----
+
+# Add a huge cost to a partial index scan if it does not eliminate the same
+# number of filters as another constrained scan.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_suboptimal WHERE a = 1 AND c = 2
+----
+memo (optimized, ~14KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained) (select G6 G7)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4))
+ │         └── cost: 1139.12
+ ├── G5: (filters G8 G9)
+ ├── G6: (index-join G10 t_suboptimal,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (index-join G10 t_suboptimal,cols=(1,2,4))
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (filters G9)
+ ├── G8: (eq G11 G12)
+ ├── G9: (eq G13 G14)
+ ├── G10: (scan t_suboptimal@a_c_partial_idx,partial,cols=(1,2),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_partial_idx,partial,cols=(1,2),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G11: (variable a)
+ ├── G12: (const 1)
+ ├── G13: (variable c)
+ └── G14: (const 2)
+
+exec-ddl
+DROP INDEX a_c_partial_idx
+----
+
+exec-ddl
+CREATE INDEX a_b_c_partial_idx ON t_suboptimal (a) STORING (c) WHERE b = 1 OR c = 2
+----
+
+# Add a huge cost to a partial index scan if it does not eliminate the same
+# number of filters as another constrained scan.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_suboptimal WHERE a = 1 AND c = 2
+----
+memo (optimized, ~12KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.12
+ ├── G2: (select G4 G5) (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained) (select G6 G7)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 19.09
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4))
+ │         └── cost: 1139.12
+ ├── G5: (filters G8 G9)
+ ├── G6: (scan t_suboptimal@a_b_c_partial_idx,partial,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_b_c_partial_idx,partial,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (filters G9)
+ ├── G8: (eq G10 G11)
+ ├── G9: (eq G12 G13)
+ ├── G10: (variable a)
+ ├── G11: (const 1)
+ ├── G12: (variable c)
+ └── G13: (const 2)
+
+exec-ddl
+DROP INDEX a_b_c_partial_idx
+----
+
+exec-ddl
+CREATE INDEX a_s_c_partial_idx ON t_suboptimal (a, s) WHERE c = 2
+----
+
+exec-ddl
+CREATE INDEX a_c_s_idx ON t_suboptimal (a, c) STORING (s)
+----
+
+# Only the partial index constrains a, c, and s, so all other scans have a huge
+# cost.
+memo set=(optimizer_avoid_suboptimal_unordered_scans=true) disable=(GenerateIndexScans,GeneratePartialIndexScans)
+SELECT k FROM t_suboptimal WHERE a = 1 AND c = 2 AND S LIKE 'ab_'
+----
+memo (optimized, ~18KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G2 G3 k)
+ │         └── cost: 19.19
+ ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7)
+ │    └── []
+ │         ├── best: (select G8 G7)
+ │         └── cost: 19.16
+ ├── G3: (projections)
+ ├── G4: (scan t_suboptimal,cols=(1,2,4,8))
+ │    └── []
+ │         ├── best: (scan t_suboptimal,cols=(1,2,4,8))
+ │         └── cost: 1149.22
+ ├── G5: (filters G10 G11 G12)
+ ├── G6: (index-join G13 t_suboptimal,cols=(1,2,4,8))
+ │    └── []
+ │         ├── best: (index-join G13 t_suboptimal,cols=(1,2,4,8))
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G7: (filters G12)
+ ├── G8: (project G14 G15 k a s)
+ │    └── []
+ │         ├── best: (project G14 G15 k a s)
+ │         └── cost: 19.12
+ ├── G9: (scan t_suboptimal@a_c_s_idx,cols=(1,2,4,8),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_s_idx,cols=(1,2,4,8),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G10: (eq G16 G17)
+ ├── G11: (eq G18 G19)
+ ├── G12: (like G20 G21)
+ ├── G13: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_c_idx,cols=(1,2,4),constrained)
+ │         └── cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+ ├── G14: (scan t_suboptimal@a_s_c_partial_idx,partial,cols=(1,2,8),constrained)
+ │    └── []
+ │         ├── best: (scan t_suboptimal@a_s_c_partial_idx,partial,cols=(1,2,8),constrained)
+ │         └── cost: 19.08
+ ├── G15: (projections G19)
+ ├── G16: (variable a)
+ ├── G17: (const 1)
+ ├── G18: (variable c)
+ ├── G19: (const 2)
+ ├── G20: (variable s)
+ └── G21: (const 'ab_')
