@@ -352,7 +352,7 @@ func TestVectorIndexMergingDuringBackfillWithPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "too slow")
+	skip.UnderDuress(t, "too slow")
 
 	// Channel to block the backfill process
 	blockBackfill := make(chan struct{})
