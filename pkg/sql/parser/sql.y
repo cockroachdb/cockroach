@@ -3107,6 +3107,7 @@ alter_table_cmd:
     }
   }
 
+
 audit_mode:
   READ WRITE { $$.val = tree.AuditModeReadWrite }
 | OFF        { $$.val = tree.AuditModeDisable }

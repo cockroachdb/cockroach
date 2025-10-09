@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -410,6 +411,9 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 		}
 		if scan, ok := e.(*memo.ScanExpr); ok {
 			tab := b.mem.Metadata().Table(scan.Table)
+			tabName := tab.Name()
+			_ = tabName
+			tabMeta := b.mem.Metadata().TableMeta(scan.Table)
 			if tab.StatisticCount() > 0 {
 				// The first stat is the most recent full one.
 				var first int
@@ -418,6 +422,47 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 						(tab.Statistic(first).IsMerged() && !b.evalCtx.SessionData().OptimizerUseMergedPartialStatistics) ||
 						(tab.Statistic(first).IsForecast() && !b.evalCtx.SessionData().OptimizerUseForecasts)) {
 					first++
+				}
+
+				asOfTs := hlc.Timestamp{WallTime: b.evalCtx.StmtTimestamp.UnixNano()}
+				if asOf := b.evalCtx.SessionData().CanaryAsOf; !asOf.IsEmpty() {
+					asOfTs = asOf
+				}
+
+				// TODO: nil check?
+				useCanary := b.mem.Metadata().UseCanary()
+				var skippedCanaryCreatedAt time.Time
+			CanarySkip:
+				for first < tab.StatisticCount()-1 {
+					if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow > 0 {
+						stat := tab.Statistic(first)
+						createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+						if createdAtTS.After(asOfTs) {
+							// Too new.
+							first++
+							continue CanarySkip
+						}
+						if !useCanary {
+							if stat.IsForecast() {
+								first++
+								continue CanarySkip
+							}
+							if stat.CreatedAt() == skippedCanaryCreatedAt && !skippedCanaryCreatedAt.IsZero() {
+								// We've already seen this canary stat, so skip it.
+								first++
+								continue CanarySkip
+							}
+							// Too young.
+							if createdAtTS.AddDuration(canaryWindow).After(asOfTs) {
+								if skippedCanaryCreatedAt.IsZero() {
+									skippedCanaryCreatedAt = stat.CreatedAt()
+									first++
+									continue CanarySkip
+								}
+							}
+						}
+					}
+					break
 				}
 
 				if first < tab.StatisticCount() {

@@ -143,6 +143,13 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 	}
+
+	if memo := params.p.optPlanningCtx.optimizer.Memo(); memo != nil {
+		if memoMeta := memo.Metadata(); memoMeta != nil && memoMeta.UseCanary() {
+			rows = append(rows, "", "Note: the optimizer used canary stats to find this plan.")
+		}
+	}
+
 	// Add index recommendations to output, if they exist.
 	if recs := params.p.instrumentation.explainIndexRecs; recs != nil {
 		// First add empty row.

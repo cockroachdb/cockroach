@@ -741,6 +741,10 @@ message LocalOnlySessionData {
   bool optimizer_use_improved_hoist_join_project = 186;
   // EnableInspectCommand controls use of the INSPECT command.
   bool enable_inspect_command = 187;
+  // CanaryAsOf is an optional timestamp that, when set, canary stats selection
+  // will be based on the age gap between the stats creation timestamp and
+  // the CanaryAsOf timestamp, rather than the current time.
+  util.hlc.Timestamp canary_as_of = 188 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
