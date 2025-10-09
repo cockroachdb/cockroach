@@ -645,7 +645,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
 		if c.evalCtx.SessionData().OptimizerPreferBoundedCardinality {
-			cost.Penalties |= memo.UnboundedCardinality
+			cost.Penalties |= memo.UnboundedCardinalityPenalty
 		}
 	}
 
