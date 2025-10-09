@@ -533,9 +533,11 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tpchVecTestCase) {
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 
+	var virtualClusterName string
 	var conn *gosql.DB
 	var disableMergeQueue bool
 	if testCase.sharedProcessMT() {
+		virtualClusterName = appTenantName
 		singleTenantConn := c.Conn(ctx, t.L(), 1)
 		// Disable merge queue in the system tenant.
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
@@ -549,9 +551,10 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		disableMergeQueue = true
 	}
 
-	t.Status("restoring TPCH dataset for Scale Factor 1")
-	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx), c.All(), disableMergeQueue,
+	t.Status("importing TPCH dataset for Scale Factor 1")
+	if err := importTPCHDataset(
+		ctx, t, c, virtualClusterName, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx),
+		c.All(), disableMergeQueue, true, /* smallRanges */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -597,7 +600,6 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.defaults.vectorize", /* settingName */
@@ -615,7 +617,6 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecDiskTest{})
 		},
@@ -630,7 +631,6 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.use_streamer.enabled", /* settingName */
@@ -649,7 +649,6 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */
@@ -668,7 +667,6 @@ func registerTPCHVec(r registry.Registry) {
 		// https://github.com/cockroachdb/cockroach/issues/105968
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
-		Skip:             "153489. uses ancient tpch fixture",
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			p := newTpchVecPerfTest(
 				"sql.distsql.direct_columnar_scans.enabled", /* settingName */

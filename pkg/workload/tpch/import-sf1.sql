@@ -7,12 +7,12 @@
 --
 -- For faster import, the TPCH database can be restored from backup:
 --
---   RESTORE DATABASE tpch FROM 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup';
+--   RESTORE DATABASE tpch FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup_25_3?AUTH=implicit';
 --
 -- When re-generating all data (say after a schema change), a fresh backup can
 -- be created via:
 --
---   BACKUP DATABASE tpch TO 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup';
+--   BACKUP DATABASE tpch INTO 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup_25_3?AUTH=implicit';
 --
 
 CREATE TABLE region (
