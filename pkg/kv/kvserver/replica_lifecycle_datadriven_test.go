@@ -13,10 +13,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -24,11 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 // TestReplicaLifecycleDataDriven is intended to test the behaviour of various
 // replica lifecycle events, such as splits, merges, replica destruction, etc.
-// The test uses the following format:
+// The test has a single storage engine that corresponds to n1/s1, and all batch
+// operations to storage are printed out. It uses the following format:
 //
 // create-descriptor start=<key> end=<key> [replicas=[<int>,<int>,...]]
 // ----
@@ -70,11 +78,17 @@ import (
 // run-split-trigger range-id=<int>
 // ----
 //
-//	Executes the split trigger for the specified range. The output shows all
-//	keys and values written to the batch as part of this.
+//	Executes the split trigger for the specified range on n1.
+//
+// destroy-replica range-id=<int>
+// ----
+//
+//	Destroys the replica on n1 for the specified range. The replica's state
+//	must have already been created via create-descriptor.
 func TestReplicaLifecycleDataDriven(t *testing.T) {
 	datadriven.Walk(t, "testdata/replica_lifecycle", func(t *testing.T, path string) {
 		tc := newTestCtx()
+		defer tc.close()
 		ctx := context.Background()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -82,17 +96,17 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				var startKey, endKey string
 				d.ScanArgs(t, "start", &startKey)
 				d.ScanArgs(t, "end", &endKey)
-				var replicaIDs []int
+				var replicaNodeIDs []int
 				if d.HasArg("replicas") {
 					var replicasStr string
 					d.ScanArgs(t, "replicas", &replicasStr)
-					replicaIDs = parseReplicas(replicasStr)
+					replicaNodeIDs = parseReplicas(t, replicasStr)
 				}
 
 				rangeID := tc.nextRangeID
 				tc.nextRangeID++
 				var internalReplicas []roachpb.ReplicaDescriptor
-				for i, id := range replicaIDs {
+				for i, id := range replicaNodeIDs {
 					internalReplicas = append(internalReplicas, roachpb.ReplicaDescriptor{
 						ReplicaID: roachpb.ReplicaID(i + 1),
 						NodeID:    roachpb.NodeID(id),
@@ -118,8 +132,29 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					}
 				}
 
-				tc.ranges[rangeID] = newRangeState(desc)
-				return fmt.Sprintf("created descriptor: %v", desc)
+				batch := tc.storage.NewBatch()
+				defer batch.Close()
+
+				rs := newRangeState(ctx, t, batch, desc)
+				tc.ranges[rangeID] = rs
+
+				// Print the descriptor and batch output.
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("created descriptor: %v", desc))
+				output, err := print.DecodeWriteBatch(batch.Repr())
+				if err != nil {
+					return fmt.Sprintf("error decoding batch: %v", err)
+				}
+				batchOutput := maybeScrubBatchOutput(output)
+				if batchOutput != "" {
+					sb.WriteString("\n")
+					sb.WriteString(batchOutput)
+				}
+				// Commit the batch to persist the replica state.
+				if err := batch.Commit(true); err != nil {
+					return fmt.Sprintf("error committing batch: %v", err)
+				}
+				return sb.String()
 
 			case "create-split":
 				var rangeID int
@@ -247,9 +282,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 				rs := tc.mustGetRangeState(t, rangeID)
 				desc := rs.desc
-				db := storage.NewDefaultInMemForTesting()
-				defer db.Close()
-				batch := db.NewBatch()
+				batch := tc.storage.NewBatch()
 				defer batch.Close()
 
 				rec := (&batcheval.MockEvalCtx{
@@ -268,9 +301,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					ReplicaVersion: rs.version,
 				}
 				// Actually run the split trigger.
-				_, _, err := batcheval.TestingSplitTrigger(ctx, rec, batch /* bothDeltaMS */, enginepb.MVCCStats{}, split, in, hlc.Timestamp{})
+				_, _, err := batcheval.TestingSplitTrigger(
+					ctx, rec, batch /* bothDeltaMS */, enginepb.MVCCStats{}, split, in, hlc.Timestamp{},
+				)
 				if err != nil {
-					return fmt.Sprintf("splitTrigger error: %v", err)
+					return err.Error()
 				}
 				// Update the test context's notion of the range state after the
 				// split.
@@ -279,7 +314,48 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// of the split trigger).
 				output, err := print.DecodeWriteBatch(batch.Repr())
 				if err != nil {
-					return fmt.Sprintf("error decoding batch: %v", err)
+					return err.Error()
+				}
+				return maybeScrubBatchOutput(output)
+
+			case "destroy-replica":
+				var rangeID int
+				d.ScanArgs(t, "range-id", &rangeID)
+				rs := tc.mustGetRangeState(t, rangeID)
+
+				// Find the replica on n1 (NodeID=1).
+				var targetReplica *replicaInfo
+				for _, replDesc := range rs.desc.InternalReplicas {
+					if replDesc.NodeID == roachpb.NodeID(1) {
+						repl, ok := rs.replicas[replDesc.ReplicaID]
+						if !ok {
+							return fmt.Sprintf("replica on n1 not found in replicas map for range %d", rangeID)
+						}
+						targetReplica = repl
+						break
+					}
+				}
+				if targetReplica == nil {
+					return fmt.Sprintf("no replica on n1 found in range %d", rangeID)
+				}
+
+				batch := tc.storage.NewBatch()
+				defer batch.Close()
+
+				// Destroy the replica.
+				err := kvstorage.DestroyReplica(ctx, targetReplica.id, batch, batch, targetReplica.id.ReplicaID+1, kvstorage.ClearRangeDataOptions{
+					ClearUnreplicatedByRangeID: true,
+					ClearReplicatedByRangeID:   true,
+					ClearReplicatedBySpan:      targetReplica.keys,
+				})
+				if err != nil {
+					return err.Error()
+				}
+				// Print the state of the batch (all keys/values written as part
+				// of the destroy operation).
+				output, err := print.DecodeWriteBatch(batch.Repr())
+				if err != nil {
+					return err.Error()
 				}
 				return maybeScrubBatchOutput(output)
 
@@ -299,6 +375,42 @@ type rangeState struct {
 	version         roachpb.Version
 	abortspan       *abortspan.AbortSpan
 	lastGCTimestamp hlc.Timestamp
+	replicas        map[roachpb.ReplicaID]*replicaInfo
+}
+
+// replicaInfo contains the basic info about a replica, used for managing
+// its storage state.
+type replicaInfo struct {
+	id      roachpb.FullReplicaID
+	hs      raftpb.HardState
+	ts      kvserverpb.RaftTruncatedState
+	keys    roachpb.RSpan
+	last    kvpb.RaftIndex
+	applied kvpb.RaftIndex
+}
+
+// createRaftState creates the raft state for this replica.
+func (r *replicaInfo) createRaftState(ctx context.Context, t *testing.T, w storage.Writer) {
+	sl := logstore.NewStateLoader(r.id.RangeID)
+	require.NoError(t, sl.SetHardState(ctx, w, r.hs))
+	require.NoError(t, sl.SetRaftTruncatedState(ctx, w, &r.ts))
+	for i := r.ts.Index + 1; i <= r.last; i++ {
+		require.NoError(t, storage.MVCCBlindPutProto(
+			ctx, w,
+			sl.RaftLogKey(i), hlc.Timestamp{}, /* timestamp */
+			&raftpb.Entry{Index: uint64(i), Term: 5},
+			storage.MVCCWriteOptions{},
+		))
+	}
+}
+
+// createStateMachine creates the state machine state for this replica.
+func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, rw storage.ReadWriter) {
+	sl := stateloader.Make(r.id.RangeID)
+	require.NoError(t, sl.SetRangeTombstone(ctx, rw, kvserverpb.RangeTombstone{
+		NextReplicaID: r.id.ReplicaID,
+	}))
+	require.NoError(t, sl.SetRaftReplicaID(ctx, rw, r.id.ReplicaID))
 }
 
 // testCtx is a single test's context. It tracks the state of all ranges and any
@@ -310,6 +422,8 @@ type testCtx struct {
 	st                 *cluster.Settings
 	clock              *hlc.Clock
 	rangeLeaseDuration time.Duration
+	// The storage engine corresponds to a single store, (n1, s1).
+	storage storage.Engine
 }
 
 // newTestCtx constructs and returns a new testCtx.
@@ -324,13 +438,50 @@ func newTestCtx() *testCtx {
 		st:                 st,
 		clock:              clock,
 		rangeLeaseDuration: 99 * time.Nanosecond,
+		storage:            storage.NewDefaultInMemForTesting(),
 	}
 }
 
-// newRangeState constructs and returns a new rangeState.
-func newRangeState(desc roachpb.RangeDescriptor) *rangeState {
+// close closes the test context's storage engine.
+func (tc *testCtx) close() {
+	tc.storage.Close()
+}
+
+// newRangeState constructs a new rangeState and writes the replica state
+// to the provided batch. Only writes state for the replica on n1 (since the
+// storage engine corresponds to n1/s1).
+func newRangeState(
+	ctx context.Context, t *testing.T, batch storage.Batch, desc roachpb.RangeDescriptor,
+) *rangeState {
 	gcThreshold := hlc.Timestamp{WallTime: 4}
 	gcHint := roachpb.GCHint{GCTimestamp: gcThreshold}
+
+	// Create replicaInfo for each replica in the descriptor.
+	replicas := make(map[roachpb.ReplicaID]*replicaInfo)
+	for _, repl := range desc.InternalReplicas {
+		replicas[repl.ReplicaID] = &replicaInfo{
+			id: roachpb.FullReplicaID{
+				RangeID:   desc.RangeID,
+				ReplicaID: repl.ReplicaID,
+			},
+			hs:      raftpb.HardState{Term: 5, Commit: 14},
+			ts:      kvserverpb.RaftTruncatedState{Index: 10, Term: 5},
+			keys:    roachpb.RSpan{Key: desc.StartKey, EndKey: desc.EndKey},
+			last:    15,
+			applied: 12,
+		}
+	}
+
+	// Only write replica state for the replica on n1.
+	for _, replDesc := range desc.InternalReplicas {
+		if replDesc.NodeID == roachpb.NodeID(1) {
+			repl := replicas[replDesc.ReplicaID]
+			repl.createRaftState(ctx, t, batch)
+			repl.createStateMachine(ctx, t, batch)
+			break
+		}
+	}
+
 	return &rangeState{
 		desc:            desc,
 		gcThreshold:     gcThreshold,
@@ -338,6 +489,7 @@ func newRangeState(desc roachpb.RangeDescriptor) *rangeState {
 		version:         cluster.MakeTestingClusterSettings().Version.LatestVersion(),
 		abortspan:       abortspan.New(desc.RangeID),
 		lastGCTimestamp: hlc.Timestamp{},
+		replicas:        replicas,
 	}
 }
 
@@ -369,8 +521,10 @@ func (tc *testCtx) updatePostSplitRangeState(
 	// Update LHS by just updating the descriptor.
 	originalRangeState.desc = split.LeftDesc
 	tc.ranges[int(split.LeftDesc.RangeID)] = originalRangeState
+	// HACK: TODO(arul): explaiain.
+	b := tc.storage.NewBatch()
+	rhsRangeState := newRangeState(ctx, t, b, split.RightDesc)
 	// Create RHS range state by reading from the batch.
-	rhsRangeState := newRangeState(split.RightDesc)
 	rhsSl := stateloader.Make(split.RightDesc.RangeID)
 	rhsLease, err := rhsSl.LoadLease(ctx, batch)
 	if err == nil {
@@ -392,19 +546,24 @@ func (tc *testCtx) updatePostSplitRangeState(
 	tc.ranges[int(split.RightDesc.RangeID)] = rhsRangeState
 }
 
-func parseReplicas(val string) []int {
-	var replicaIDs []int
+func parseReplicas(t *testing.T, val string) []int {
+	var replicaNodeIDs []int
 	if len(val) >= 2 && val[0] == '[' && val[len(val)-1] == ']' {
 		val = val[1 : len(val)-1]
 		if val != "" {
 			for _, s := range strings.Split(val, ",") {
 				var id int
 				fmt.Sscanf(strings.TrimSpace(s), "%d", &id)
-				replicaIDs = append(replicaIDs, id)
+				replicaNodeIDs = append(replicaNodeIDs, id)
 			}
 		}
 	}
-	return replicaIDs
+	// The test is written from the perspective of n1/s1, so not having n1 in
+	// this list should return an error.
+	if !slices.Contains(replicaNodeIDs, 1) {
+		t.Fatalf("n1 not found in replica list")
+	}
+	return replicaNodeIDs
 }
 
 // maybeScrubBatchOutput scrubs values for certain keys that we don't want to

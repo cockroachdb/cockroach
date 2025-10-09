@@ -1,6 +1,15 @@
 create-descriptor start=a end=z replicas=[1,2,3]
 ----
 created descriptor: r1:{a-z} [(n1,s0):1, (n2,s0):2, (n3,s0):3, next=0, gen=0]
+Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:14 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:11 (0x016989757266746c000000000000000b00): Term:5 Index:11 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:12 (0x016989757266746c000000000000000c00): Term:5 Index:12 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:13 (0x016989757266746c000000000000000d00): Term:5 Index:13 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:14 (0x016989757266746c000000000000000e00): Term:5 Index:14 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:15 (0x016989757266746c000000000000000f00): Term:5 Index:15 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RangeTombstone (0x016989757266746200): next_replica_id:1 
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
 
 # Set the range's lease to be a leader lease. Then, post-split, ensure the RHS
 # gets the correct lease type -- an expiration based lease. This is because
@@ -19,9 +28,9 @@ Put: 0,0 /Local/RangeID/2/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 
 Put: 0,0 /Local/Range"m"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
 Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): repl=(n1,s0):1 seq=0 start=0,0 exp=0.000000109,0 pro=0,0 acq=Unspecified
 Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004,0
-Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<>
+Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): ***
-Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5
+Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:200 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
 
 print-range-state
 ----
@@ -50,13 +59,13 @@ set lease for range 1 replica 1: epoch
 
 run-split-trigger range-id=1
 ----
-Put: 0,0 /Local/RangeID/3/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 0,0
-Put: 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
-Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698a72726c6c2d00): repl=(n1,s0):1 seq=0 start=0,0 epo=20 pro=0,0 acq=Unspecified
-Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004,0
-Put: 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<>
-Put: 0,0 /Local/RangeID/3/r/RangeVersion (0x01698a727276657200): ***
-Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5
+Put: 0,0 /Local/RangeID/3/u/RangeLastReplicaGCTimestamp (0x01698b75726c727400): 0,0
+Put: 0,0 /Local/Range"f"/QueueLastProcessed/"consistencyChecker" (0x016b12660001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+Put: 0,0 /Local/RangeID/3/r/RangeLease (0x01698b72726c6c2d00): repl=(n1,s0):1 seq=0 start=0,0 epo=20 min-exp=0,0 pro=0,0 acq=Unspecified
+Put: 0,0 /Local/RangeID/3/r/RangeGCThreshold (0x01698b726c67632d00): 0.000000004,0
+Put: 0,0 /Local/RangeID/3/r/RangeGCHint (0x01698b727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/3/r/RangeVersion (0x01698b727276657200): ***
+Put: 0,0 /Local/RangeID/3/r/RangeAppliedState (0x01698b727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:198 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
 
 create-split range-id=2 split-key=v
 ----
@@ -68,13 +77,13 @@ set lease for range 2 replica 3: expiration
 
 run-split-trigger range-id=2
 ----
-Put: 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698a75726c727400): 0,0
-Put: 0,0 /Local/Range"v"/QueueLastProcessed/"consistencyChecker" (0x016b126d0001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
-Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698a72726c6c2d00): repl=(n1,s0):1 seq=0 start=0,0 exp=0.000000300,0 pro=0,0 acq=Unspecified
-Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698a726c67632d00): 0.000000004,0
-Put: 0,0 /Local/RangeID/4/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<>
-Put: 0,0 /Local/RangeID/4/r/RangeVersion (0x01698a727276657200): ***
-Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:201 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5
+Put: 0,0 /Local/RangeID/4/u/RangeLastReplicaGCTimestamp (0x01698c75726c727400): 0,0
+Put: 0,0 /Local/Range"v"/QueueLastProcessed/"consistencyChecker" (0x016b12760001716c7074636f6e73697374656e6379436865636b657200): meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0
+Put: 0,0 /Local/RangeID/4/r/RangeLease (0x01698c72726c6c2d00): repl=(n1,s0):1 seq=0 start=0,0 exp=0.000000300,0 pro=0,0 acq=Unspecified
+Put: 0,0 /Local/RangeID/4/r/RangeGCThreshold (0x01698c726c67632d00): 0.000000004,0
+Put: 0,0 /Local/RangeID/4/r/RangeGCHint (0x01698c727267636800): latest_range_delete_timestamp:<> gc_timestamp:<wall_time:4 > gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/4/r/RangeVersion (0x01698c727276657200): ***
+Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:201 sys_count:5 > raft_closed_timestamp:<> raft_applied_index_term:5 
 
 print-range-state
 ----
