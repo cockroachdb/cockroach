@@ -80,7 +80,7 @@ func TestCompare(t *testing.T) {
 	configs := map[string]testConfig{
 		"mutators": {
 			setup:           sqlsmith.Setups[sqlsmith.RandTableSetupName],
-			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode()},
+			opts:            []sqlsmith.SmitherOption{sqlsmith.CompareMode(), sqlsmith.DisableDoBlocks()},
 			ignoreSQLErrors: true,
 			conns: []testConn{
 				{
