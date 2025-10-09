@@ -50,7 +50,13 @@ func alterTableAddColumn(
 		RequiredPrivilege:   privilege.CREATE,
 	})
 	_, colTargetStatus, col := scpb.FindColumn(elts)
-	columnAlreadyExists := col != nil && colTargetStatus != scpb.ToAbsent
+	_, colNameTargetStatus, colName := scpb.FindColumnName(elts)
+	// A column name already exists if both the Column and ColumnName elements exist
+	// and are not transitioning to ABSENT. When a column is being renamed, the
+	// Column remains but the old ColumnName transitions to ABSENT, freeing up the
+	// name for reuse.
+	columnAlreadyExists := col != nil && colTargetStatus != scpb.ToAbsent &&
+		colName != nil && colNameTargetStatus != scpb.ToAbsent
 	// If the column exists and IF NOT EXISTS is specified, continue parsing
 	// to ensure there are no other errors before treating the operation as a no-op.
 	if columnAlreadyExists && !t.IfNotExists {
@@ -118,6 +124,9 @@ func alterTableAddColumn(
 		},
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
+	}
+	if spec.unique {
+		b.IncrementSchemaChangeAddColumnQualificationCounter("unique")
 	}
 
 	idx := cdd.PrimaryKeyOrUniqueIndexDescriptor

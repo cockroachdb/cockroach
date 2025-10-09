@@ -1,0 +1,819 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT);
+----
+...
++object {100 101 t} -> 104
+
+/* test */
+ALTER TABLE t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT AS (j + 1) STORED;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.rename_column
+increment telemetry for sql.schema.alter_table.rename_column
+increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.qualifcation.computed
+increment telemetry for sql.schema.new_column_type.int8
+write *eventpb.AlterTable to event log:
+  mutationId: 1
+  sql:
+    descriptorId: 104
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› RENAME COLUMN ‹j› TO ‹j_old›, RENAME COLUMN ‹k› TO ‹j›, ADD COLUMN ‹k› INT8 AS (‹j› + ‹1›) STORED
+    tag: ALTER TABLE
+    user: root
+  tableName: defaultdb.public.t
+## StatementPhase stage 1 of 1 with 20 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    - 3
+  +    constraintId: 2
+  +    expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+         width: 64
+     - id: 2
+  -    name: j
+  +    name: j_old
+       nullable: true
+       type:
+  ...
+         width: 64
+     - id: 3
+  -    name: k
+  +    name: j
+       nullable: true
+       type:
+  ...
+       - 2
+       - 3
+  +    - 4
+       columnNames:
+       - i
+  +    - j_old
+       - j
+       - k
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        - 3
+  +        constraintId: 2
+  +        expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: j + 1:::INT8
+  +      id: 4
+  +      name: k
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      - 4
+  +      storeColumnNames:
+  +      - j_old
+  +      - j
+  +      - k
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 4
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      - 4
+  +      storeColumnNames:
+  +      - j_old
+  +      - j
+  +      - k
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+  -  nextColumnId: 4
+  -  nextConstraintId: 2
+  +  nextColumnId: 5
+  +  nextConstraintId: 5
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 100
+  ...
+       - 3
+       storeColumnNames:
+  +    - j_old
+       - j
+  -    - k
+       unique: true
+       vecConfig: {}
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 24 MutationType ops
+upsert descriptor #104
+   table:
+  +  checks:
+  +  - columnIds:
+  +    - 1
+  +    - 2
+  +    - 3
+  +    constraintId: 2
+  +    expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  +    name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Validating
+     columns:
+     - id: 1
+  ...
+         width: 64
+     - id: 2
+  -    name: j
+  +    name: j_old
+       nullable: true
+       type:
+  ...
+         width: 64
+     - id: 3
+  -    name: k
+  +    name: j
+       nullable: true
+       type:
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j_old
+  +        "3": j
+  +        "4": k
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "2": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› RENAME COLUMN ‹j› TO ‹j_old›, RENAME COLUMN ‹k› TO ‹j›, ADD COLUMN ‹k› INT8 AS (‹j› + ‹1›) STORED
+  +        statement: ALTER TABLE t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT8 AS (j + 1) STORED
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+       - 2
+       - 3
+  +    - 4
+       columnNames:
+       - i
+  +    - j_old
+       - j
+       - k
+  ...
+     id: 104
+     modificationTime: {}
+  +  mutations:
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        - 3
+  +        constraintId: 2
+  +        expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Validating
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+  +  - column:
+  +      computeExpr: j + 1:::INT8
+  +      id: 4
+  +      name: k
+  +      nullable: true
+  +      type:
+  +        family: IntFamily
+  +        oid: 20
+  +        width: 64
+  +    direction: ADD
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 3
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_2_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      - 4
+  +      storeColumnNames:
+  +      - j_old
+  +      - j
+  +      - k
+  +      unique: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: BACKFILLING
+  +  - direction: ADD
+  +    index:
+  +      constraintId: 4
+  +      createdExplicitly: true
+  +      encodingType: 1
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 3
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 1
+  +      keyColumnNames:
+  +      - i
+  +      name: crdb_internal_index_3_name_placeholder
+  +      partitioning: {}
+  +      sharded: {}
+  +      storeColumnIds:
+  +      - 2
+  +      - 3
+  +      - 4
+  +      storeColumnNames:
+  +      - j_old
+  +      - j
+  +      - k
+  +      unique: true
+  +      useDeletePreservingEncoding: true
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: DELETE_ONLY
+     name: t
+  -  nextColumnId: 4
+  -  nextConstraintId: 2
+  +  nextColumnId: 5
+  +  nextConstraintId: 5
+     nextFamilyId: 1
+  -  nextIndexId: 2
+  +  nextIndexId: 4
+     nextMutationId: 1
+     parentId: 100
+  ...
+       - 3
+       storeColumnNames:
+  +    - j_old
+       - j
+  -    - k
+       unique: true
+       vecConfig: {}
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT8 AS (j + 1) STORED"
+  descriptor IDs: [104]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 7 with 4 MutationType ops
+upsert descriptor #104
+  ...
+       direction: ADD
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     - direction: ADD
+       index:
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 2 of 7)."
+commit transaction #3
+begin transaction #4
+## PostCommitPhase stage 2 of 7 with 1 BackfillType op
+backfill indexes [2] from index #1 in table #104
+commit transaction #4
+begin transaction #5
+## PostCommitPhase stage 3 of 7 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: BACKFILLING
+  +    state: DELETE_ONLY
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 4 of 7)."
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 7 with 3 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: MERGING
+     - direction: ADD
+       index:
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 5 of 7)."
+commit transaction #6
+begin transaction #7
+## PostCommitPhase stage 5 of 7 with 1 BackfillType op
+merge temporary indexes [3] into backfilled indexes [2] in table #104
+commit transaction #7
+begin transaction #8
+## PostCommitPhase stage 6 of 7 with 4 MutationType ops
+upsert descriptor #104
+  ...
+         version: 4
+       mutationId: 1
+  -    state: MERGING
+  -  - direction: ADD
+  +    state: WRITE_ONLY
+  +  - direction: DROP
+       index:
+         constraintId: 4
+  ...
+         version: 4
+       mutationId: 1
+  -    state: WRITE_ONLY
+  +    state: DELETE_ONLY
+     name: t
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Validating CHECK constraint (1 operation); Validating index (1 operation) — PostCommit phase (stage 7 of 7)."
+commit transaction #8
+begin transaction #9
+## PostCommitPhase stage 7 of 7 with 2 ValidationType ops
+validate forward indexes [2] in table #104
+validate CHECK constraint crdb_internal_constraint_2_name_placeholder in table #104
+commit transaction #9
+begin transaction #10
+## PostCommitNonRevertiblePhase stage 1 of 4 with 14 MutationType ops
+upsert descriptor #104
+  ...
+       expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+       name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Validating
+     columns:
+     - id: 1
+  ...
+         oid: 20
+         width: 64
+  +  - computeExpr: j + 1:::INT8
+  +    id: 4
+  +    name: k
+  +    nullable: true
+  +    type:
+  +      family: IntFamily
+  +      oid: 20
+  +      width: 64
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  ...
+           statement: ALTER TABLE t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT8 AS (j + 1) STORED
+           statementTag: ALTER TABLE
+  -    revertible: true
+       targetRanks: <redacted>
+       targets: <redacted>
+  ...
+     modificationTime: {}
+     mutations:
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        - 2
+  -        - 3
+  -        constraintId: 2
+  -        expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Validating
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - column:
+  -      computeExpr: j + 1:::INT8
+  -      id: 4
+  -      name: k
+  -      nullable: true
+  -      type:
+  -        family: IntFamily
+  -        oid: 20
+  -        width: 64
+  -    direction: ADD
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  -  - direction: ADD
+  -    index:
+  -      constraintId: 3
+  -      createdExplicitly: true
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      - 3
+  -      - 4
+  -      storeColumnNames:
+  -      - j_old
+  -      - j
+  -      - k
+  -      unique: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+     - direction: DROP
+       index:
+  -      constraintId: 4
+  -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
+         encodingType: 1
+         foreignKey: {}
+         geoConfig: {}
+  -      id: 3
+  +      id: 1
+         interleave: {}
+         keyColumnDirections:
+  ...
+         keyColumnNames:
+         - i
+  -      name: crdb_internal_index_3_name_placeholder
+  +      name: crdb_internal_index_1_name_placeholder
+         partitioning: {}
+         sharded: {}
+  ...
+         - 2
+         - 3
+  -      - 4
+         storeColumnNames:
+         - j_old
+         - j
+  -      - k
+         unique: true
+  -      useDeletePreservingEncoding: true
+         vecConfig: {}
+         version: 4
+       mutationId: 1
+  -    state: DELETE_ONLY
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 5
+  ...
+     parentId: 100
+     primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 3
+  +    createdExplicitly: true
+       encodingType: 1
+       foreignKey: {}
+       geoConfig: {}
+  -    id: 1
+  +    id: 2
+       interleave: {}
+       keyColumnDirections:
+  ...
+       - 2
+       - 3
+  +    - 4
+       storeColumnNames:
+       - j_old
+       - j
+  +    - k
+       unique: true
+       vecConfig: {}
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "6"
+  +  version: "7"
+persist all catalog changes to storage
+adding table for stats refresh: 104
+update progress of schema change job #1: "Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 2 of 4)."
+set schema change job #1 to non-cancellable
+commit transaction #10
+begin transaction #11
+## PostCommitNonRevertiblePhase stage 2 of 4 with 7 MutationType ops
+upsert descriptor #104
+  ...
+       expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+       name: crdb_internal_constraint_2_name_placeholder
+  +    validity: Dropping
+     columns:
+     - id: 1
+  ...
+         version: 4
+       mutationId: 1
+  +    state: DELETE_ONLY
+  +  - constraint:
+  +      check:
+  +        columnIds:
+  +        - 1
+  +        - 2
+  +        - 3
+  +        constraintId: 2
+  +        expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  +        name: crdb_internal_constraint_2_name_placeholder
+  +        validity: Dropping
+  +      foreignKey: {}
+  +      name: crdb_internal_constraint_2_name_placeholder
+  +      uniqueWithoutIndexConstraint: {}
+  +    direction: DROP
+  +    mutationId: 1
+       state: WRITE_ONLY
+     name: t
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "7"
+  +  version: "8"
+persist all catalog changes to storage
+update progress of schema change job #1: "Pending: Updating schema metadata (4 operations) — PostCommitNonRevertible phase (stage 3 of 4)."
+commit transaction #11
+begin transaction #12
+## PostCommitNonRevertiblePhase stage 3 of 4 with 6 MutationType ops
+upsert descriptor #104
+   table:
+  -  checks:
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    - 3
+  -    constraintId: 2
+  -    expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  -    name: crdb_internal_constraint_2_name_placeholder
+  -    validity: Dropping
+  +  checks: []
+     columns:
+     - id: 1
+  ...
+     id: 104
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
+  -      encodingType: 1
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 1
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 1
+  -      keyColumnNames:
+  -      - i
+  -      name: crdb_internal_index_1_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      storeColumnIds:
+  -      - 2
+  -      - 3
+  -      storeColumnNames:
+  -      - j_old
+  -      - j
+  -      unique: true
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - constraint:
+  -      check:
+  -        columnIds:
+  -        - 1
+  -        - 2
+  -        - 3
+  -        constraintId: 2
+  -        expr: CASE WHEN (crdb_internal.assignment_cast(j_old + 1:::INT8, NULL::INT8)) IS NULL THEN true ELSE true END
+  -        name: crdb_internal_constraint_2_name_placeholder
+  -        validity: Dropping
+  -      foreignKey: {}
+  -      name: crdb_internal_constraint_2_name_placeholder
+  -      uniqueWithoutIndexConstraint: {}
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: WRITE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 5
+  ...
+       time: {}
+     unexposedParentSchemaId: 101
+  -  version: "8"
+  +  version: "9"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT8 AS (j + 1) STORED"
+  descriptor IDs: [104]
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 4 of 4)."
+commit transaction #12
+notified job registry to adopt jobs: [2]
+begin transaction #13
+## PostCommitNonRevertiblePhase stage 4 of 4 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j_old
+  -        "3": j
+  -        "4": k
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "2": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› RENAME COLUMN ‹j› TO ‹j_old›, RENAME COLUMN ‹k› TO ‹j›, ADD COLUMN ‹k› INT8 AS (‹j› + ‹1›) STORED
+  -        statement: ALTER TABLE t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT8 AS (j + 1) STORED
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "9"
+  +  version: "10"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #13
+# end PostCommitPhase

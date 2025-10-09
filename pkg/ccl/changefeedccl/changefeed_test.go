@@ -10242,23 +10242,19 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 	}
 
 	type testCase struct {
-		name                string
-		disableSchemaLocked bool
-		createFeedStmt      string   // Create changefeed statement.
-		initialPayload      []string // Expected payload after create.
-		alterStmt           string   // Alter statement to execute.
-		afterAlterStmt      string   // Execute after alter statement.
-		expectErr           string   // Alter may result in changefeed terminating with error.
-		payload             []string // Expect the following payload after executing afterAlterStmt.
+		name           string
+		createFeedStmt string   // Create changefeed statement.
+		initialPayload []string // Expected payload after create.
+		alterStmt      string   // Alter statement to execute.
+		afterAlterStmt string   // Execute after alter statement.
+		expectErr      string   // Alter may result in changefeed terminating with error.
+		payload        []string // Expect the following payload after executing afterAlterStmt.
 	}
 
 	testFn := func(tc testCase) cdcTestFn {
 		return func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 			sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
-			if tc.disableSchemaLocked {
-				sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
-			}
 			sqlDB.ExecMultiple(t, setupSQL...)
 			foo := feed(t, f, tc.createFeedStmt)
 			feedJob := foo.(cdctest.EnterpriseTestFeed)
@@ -10364,7 +10360,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			},
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "c" does not exist`,
+			expectErr:      `(column "c" does not exist|could not identify column "c")`,
 		},
 		{
 			name:           "alter enum",
@@ -10402,11 +10398,10 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		{
 			// Alter and rename a column. The changefeed expression does not
 			// explicitly involve the column in question (c) -- so, schema change works
-			// fine. Note: we get 2 backfill events -- one for each logical change
-			// (rename column, then add column).
-			name:                "add and rename column",
-			disableSchemaLocked: true, // legacy schema change
-			createFeedStmt:      "CREATE CHANGEFEED AS SELECT *, (cdc_prev).e as old_e FROM foo",
+			// fine. With the declarative schema changer, both operations are processed
+			// atomically, resulting in a single backfill event per row with the final state.
+			name:           "add and rename column",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT *, (cdc_prev).e as old_e FROM foo",
 			initialPayload: []string{
 				`foo: [1, "one"]->{"a": 1, "b": "one", "c": null, "e": "inactive", "old_e": null}`,
 				`foo: [2, "two"]->{"a": 2, "b": "two", "c": "c string", "e": "open", "old_e": null}`,
@@ -10414,9 +10409,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
 			payload: []string{
 				`foo: [1, "one"]->{"a": 1, "b": "one", "c": 42, "c_old": null, "e": "inactive", "old_e": "inactive"}`,
-				`foo: [1, "one"]->{"a": 1, "b": "one", "c_old": null, "e": "inactive", "old_e": "inactive"}`,
 				`foo: [2, "two"]->{"a": 2, "b": "two", "c": 42, "c_old": "c string", "e": "open", "old_e": "open"}`,
-				`foo: [2, "two"]->{"a": 2, "b": "two", "c_old": "c string", "e": "open", "old_e": "open"}`,
 			},
 		},
 		{
@@ -10424,15 +10417,14 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			// explicitly involve the column in question (c) -- so we expect
 			// to get an error because as soon as the first rename goes through, column
 			// no longer exists.
-			name:                "add and rename column error",
-			disableSchemaLocked: true, // legacy schema change
-			createFeedStmt:      "CREATE CHANGEFEED AS SELECT c, (cdc_prev).c AS prev_c FROM foo",
+			name:           "add and rename column error",
+			createFeedStmt: "CREATE CHANGEFEED AS SELECT c, (cdc_prev).c AS prev_c FROM foo",
 			initialPayload: []string{
 				`foo: [1, "one"]->{"c": null, "prev_c": null}`,
 				`foo: [2, "two"]->{"c": "c string", "prev_c": null}`,
 			},
 			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
-			expectErr: `column "c" does not exist`,
+			expectErr: `(column "c" does not exist|could not identify column "c")`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
