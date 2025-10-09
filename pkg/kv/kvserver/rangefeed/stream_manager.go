@@ -76,7 +76,13 @@ type sender interface {
 	// all streams in StreamManager.
 	run(ctx context.Context, stopper *stop.Stopper, onError func(int64)) error
 
-	// Remove stream is called when an individual stream is being removed.
+	// TODO(ssd): These two methods call into question whether StreamManager and
+	// sender can really be separate. We might consider combining the two for
+	// simplicity.
+	//
+	// addStream is called when an individual stream is being added.
+	addStream(streamID int64)
+	// removeStream is called when an individual stream is being removed.
 	removeStream(streamID int64)
 
 	// cleanup is called when the sender is stopped. It is expected to clean up
@@ -137,6 +143,12 @@ func (sm *StreamManager) DisconnectStream(streamID int64, err *kvpb.Error) {
 		// Fine to skip nil checking here since that would be a programming error.
 		disconnector.Disconnect(err)
 	}
+}
+
+// RegisteringStream is called once a stream will be registered. After this
+// point, the stream may start to see event.
+func (sm *StreamManager) RegisteringStream(streamID int64) {
+	sm.sender.addStream(streamID)
 }
 
 // AddStream adds a streamID with its disconnector to the StreamManager.

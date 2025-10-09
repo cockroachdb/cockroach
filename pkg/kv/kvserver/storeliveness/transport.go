@@ -375,6 +375,7 @@ func (t *Transport) processQueue(
 			return nil
 
 		case msg := <-q.messages:
+			batchStartTime := timeutil.Now()
 			batch.Messages = append(batch.Messages, msg)
 			t.metrics.SendQueueSize.Dec(1)
 			t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
@@ -392,12 +393,25 @@ func (t *Transport) processQueue(
 				}
 			}
 
+			batchCollectionDuration := timeutil.Since(batchStartTime)
+			t.metrics.BatchDuration.RecordValue(batchCollectionDuration.Nanoseconds())
+
+			var batchSizeBytes int64
+			for _, msg := range batch.Messages {
+				batchSizeBytes += int64(msg.Size())
+			}
+
 			batch.Now = t.clock.NowAsClockTimestamp()
 			if err = stream.Send(batch); err != nil {
 				t.metrics.MessagesSendDropped.Inc(int64(len(batch.Messages)))
 				return err
 			}
-			t.metrics.MessagesSent.Inc(int64(len(batch.Messages)))
+
+			numMessages := int64(len(batch.Messages))
+			t.metrics.BatchesSent.Inc(1)
+			t.metrics.MessagesPerBatch.RecordValue(numMessages)
+			t.metrics.BatchSizeBytes.RecordValue(batchSizeBytes)
+			t.metrics.MessagesSent.Inc(numMessages)
 
 			// Reuse the Messages slice, but zero out the contents to avoid delaying
 			// GC of memory referenced from within.

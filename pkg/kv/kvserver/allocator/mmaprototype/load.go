@@ -525,17 +525,6 @@ func loadSummaryForDimension(
 	if capacity != UnknownCapacity {
 		fractionUsed = float64(load) / float64(capacity)
 	}
-	defer func() {
-		if log.V(2) {
-			if storeID == 0 {
-				log.KvDistribution.Infof(ctx, "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
-					nodeID, dim, load, meanLoad, fractionAbove, summary)
-			} else {
-				log.KvDistribution.Infof(ctx, "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
-					storeID, dim, load, meanLoad, fractionAbove, summary)
-			}
-		}
-	}()
 
 	summaryUpperBound := overloadUrgent
 	// Be less aggressive about the ByteSize dimension when the fractionUsed is

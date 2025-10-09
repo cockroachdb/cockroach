@@ -1099,7 +1099,7 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 				Sequence:        3,
 				AcquisitionType: LeaseAcquisitionType_Request,
 			},
-			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 exp=0.000000002,1 pro=0.000000001,0 acq=Request",
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 type=LeaseExpiration exp=0.000000002,1 pro=0.000000001,0 acq=Request",
 		},
 		{
 			name: "epoch",
@@ -1116,7 +1116,7 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 				MinExpiration:   makeTS(2, 1),
 				AcquisitionType: LeaseAcquisitionType_Transfer,
 			},
-			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 epo=4 min-exp=0.000000002,1 pro=0.000000001,0 acq=Transfer",
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 type=LeaseEpoch epo=4 min-exp=0.000000002,1 pro=0.000000001,0 acq=Transfer",
 		},
 		{
 			name: "leader",
@@ -1133,7 +1133,7 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 				Term:            5,
 				AcquisitionType: LeaseAcquisitionType_Transfer,
 			},
-			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 term=5 min-exp=0.000000002,1 pro=0.000000001,0 acq=Transfer",
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 type=LeaseLeader term=5 min-exp=0.000000002,1 pro=0.000000001,0 acq=Transfer",
 		},
 		{
 			name: "leader",
@@ -1150,7 +1150,7 @@ func TestLeaseStringAndSafeFormat(t *testing.T) {
 				Term:            5,
 				AcquisitionType: LeaseAcquisitionType_Request,
 			},
-			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 term=5 min-exp=0.000000002,1 pro=0.000000001,0 acq=Request",
+			exp: "repl=(n1,s1):1 seq=3 start=0.000000001,1 type=LeaseLeader term=5 min-exp=0.000000002,1 pro=0.000000001,0 acq=Request",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
