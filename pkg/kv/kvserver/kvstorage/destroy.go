@@ -199,9 +199,6 @@ func SubsumeReplica(
 // is used in a situation when the RHS replica is already known to have been
 // removed from our store, so any pending writes that were supposed to
 // initialize the RHS replica should be dropped from the write batch.
-//
-// TODO(#152199): do not remove the unreplicated state which can belong to a
-// newer (uninitialized) replica.
 func RemoveStaleRHSFromSplit(
 	ctx context.Context,
 	reader storage.Reader,
@@ -216,19 +213,10 @@ func RemoveStaleRHSFromSplit(
 		// staged in the batch.
 		ReplicatedByRangeID: true,
 		Ranged:              rditer.SelectAllRanged(keys),
-		// TODO(tbg): we don't actually want to touch the raft state of the RHS
-		// replica since it's absent or a more recent one than in the split. Now
-		// that we have a bool targeting unreplicated RangeID-local keys, we can set
-		// it to false and remove the HardState+ReplicaID write-back in the caller.
-		// However, there can be historical split proposals with the
-		// RaftTruncatedState key set in splitTriggerHelper[^1]. We must first make
-		// sure that such proposals no longer exist, e.g. with a below-raft
-		// migration.
-		//
-		// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
-		//
-		// See also: https://github.com/cockroachdb/cockroach/issues/94933
-		UnreplicatedByRangeID: true,
+		// Leave the unreplicated keys intact. The unreplicated space belongs to a
+		// newer (uninitialized) replica, or is empty and only contains a
+		// RangeTombstone with a higher ReplicaID than the RHS in the split trigger.
+		UnreplicatedByRangeID: false,
 	}) {
 		if err := storage.ClearRangeWithHeuristic(
 			ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
