@@ -1,0 +1,17 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT AS (j + 1) STORED;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› RENAME COLUMN ‹j› TO ‹j_old›, RENAME COLUMN ‹k› TO ‹j›, ADD COLUMN ‹k› INT8 AS (‹j› + ‹1›) STORED;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey+ (i; j-j_old+, k-j+, k+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[3] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate non-index-backed constraint t.[constraint 2] in relation t
+ └── execute 4 system table mutations transactions

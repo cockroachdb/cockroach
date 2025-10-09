@@ -10362,7 +10362,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			},
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "c" does not exist`,
+			expectErr:      `(column "c" does not exist|could not identify column "c")`,
 		},
 		{
 			name:           "alter enum",
@@ -10430,7 +10430,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 				`foo: [2, "two"]->{"c": "c string", "prev_c": null}`,
 			},
 			alterStmt: "ALTER TABLE foo RENAME COLUMN c to c_old, ADD COLUMN c int DEFAULT 42",
-			expectErr: `column "c" does not exist`,
+			expectErr: `(column "c" does not exist|could not identify column "c")`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
