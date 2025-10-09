@@ -29,17 +29,19 @@ import (
 
 func registerSQLSmith(r registry.Registry) {
 	const numNodes = 4
+	const tpchName = "tpch-sf1"
+	const tpccName = "tpcc"
 	setups := map[string]sqlsmith.Setup{
 		"empty":                     sqlsmith.Setups["empty"],
 		"seed":                      sqlsmith.Setups["seed"],
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
-		"tpch-sf1": func(r *rand.Rand) []string {
+		tpchName: func(r *rand.Rand) []string {
 			return []string{`
 RESTORE TABLE tpch.* FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
-		"tpcc": func(r *rand.Rand) []string {
+		tpccName: func(r *rand.Rand) []string {
 			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
 			var stmts []string
 			for _, t := range []string{
@@ -310,6 +312,11 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 	}
 
 	register := func(setup, setting string) {
+		var skip string
+		switch setup {
+		case tpchName, tpccName:
+			skip = "153489. uses ancient fixture"
+		}
 		var clusterSpec spec.ClusterSpec
 		if strings.Contains(setting, "multi-region") {
 			clusterSpec = r.MakeClusterSpec(numNodes, spec.Geo())
@@ -328,7 +335,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
-			Skip:             "153489. uses ancient fixture",
+			Skip:             skip,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
