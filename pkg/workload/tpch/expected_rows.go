@@ -21,7 +21,6 @@ var (
 func init() {
 	for queryNumber, expectedRows := range expectedRowsByQueryNumber {
 		numColsByQueryNumber[queryNumber] = len(expectedRows[0])
-		numExpectedRowsByQueryNumber[queryNumber] = len(expectedRows)
 		if len(expectedRows[0]) > maxCols {
 			maxCols = len(expectedRows[0])
 		}
