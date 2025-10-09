@@ -406,7 +406,7 @@ func (txn *Txn) TestingSetPriority(priority enginepb.TxnPriority) {
 	// non-randomized, priority for the transaction.
 	txn.mu.userPriority = roachpb.UserPriority(-priority)
 	if err := txn.mu.sender.SetUserPriority(txn.mu.userPriority); err != nil {
-		log.Dev.Fatalf(context.TODO(), "%+v", err)
+		log.KvExec.Fatalf(context.TODO(), "%+v", err)
 	}
 	txn.mu.Unlock()
 }
@@ -1056,7 +1056,7 @@ func (txn *Txn) rollback(ctx context.Context) *kvpb.Error {
 						// already committed. We don't spam the logs with those.
 						log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
 					} else {
-						log.Dev.Infof(ctx, "async rollback failed: %s", pErr)
+						log.KvExec.Infof(ctx, "async rollback failed: %s", pErr)
 					}
 				}
 				return nil
@@ -1172,7 +1172,7 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					// We sent transactional requests, so the TxnCoordSender was supposed to
 					// turn retryable errors into TransactionRetryWithProtoRefreshError. Note that this
 					// applies only in the case where this is the root transaction.
-					log.Dev.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
+					log.KvExec.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 				}
 			} else if t := (*kvpb.TransactionRetryWithProtoRefreshError)(nil); errors.As(err, &t) {
 				if txn.ID() != t.PrevTxnID {
@@ -1219,13 +1219,13 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 					txn.DebugName(), attempt, err, maxRetries, rollbackErr,
 				),
 				ErrAutoRetryLimitExhausted)
-			log.Dev.Warningf(ctx, "%v", err)
+			log.KvExec.Warningf(ctx, "%v", err)
 			break
 		}
 
 		const warnEvery = 10
 		if attempt%warnEvery == 0 {
-			log.Dev.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
+			log.KvExec.Warningf(ctx, "have retried transaction: %s %d times, most recently because of the "+
 				"retryable error: %s. Is the transaction stuck in a retry loop?", txn.DebugName(), attempt, err)
 		}
 
@@ -1395,7 +1395,7 @@ func (txn *Txn) Send(
 		if requestTxnID != retryErr.PrevTxnID {
 			// KV should not return errors for transactions other than the one that sent
 			// the request.
-			log.Dev.Fatalf(ctx, "retryable error for the wrong txn. "+
+			log.KvExec.Fatalf(ctx, "retryable error for the wrong txn. "+
 				"requestTxnID: %s, retryErr.PrevTxnID: %s. retryErr: %s",
 				requestTxnID, retryErr.PrevTxnID, retryErr)
 		}
@@ -1629,7 +1629,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *kvpb.
 	defer txn.mu.Unlock()
 
 	if pErr.TransactionRestart() == kvpb.TransactionRestart_NONE {
-		log.Dev.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
+		log.KvExec.Fatalf(ctx, "unexpected non-retryable error: %s", pErr)
 	}
 
 	// If the transaction has been reset since this request was sent,
