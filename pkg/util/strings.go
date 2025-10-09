@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/tabwriter"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -161,4 +162,91 @@ func RandString(rng *rand.Rand, length int, alphabet string) string {
 		buf[i] = alphabet[rng.Intn(len(alphabet))]
 	}
 	return string(buf)
+}
+
+// CollapseRepeatedRune will collapse repeated, adjacent target runes in the
+// input string into a single target rune. If there are no repeated, adjacent
+// target runes, the input will be returned, unmodified.
+func CollapseRepeatedRune(input string, target rune) string {
+	targetSize := utf8.RuneLen(target)
+
+	// First, remove repeated target runes in the prefix and suffix of the
+	// string.
+	start := strings.IndexFunc(input, func(r rune) bool { return r != target })
+	if start > 0 {
+		// Remove the prefix.
+		input = input[start-targetSize:]
+	}
+	end := strings.LastIndexFunc(input, func(r rune) bool { return r != target })
+	if end >= 0 && end < len(input)-targetSize {
+		// Remove the suffix.
+		_, endSize := utf8.DecodeRuneInString(input[end:])
+		input = input[:end+endSize+targetSize]
+	}
+
+	// findRepeatedT finds the next occurrence of repeated, adjacent target
+	// runes in s and returns the byte index of the start and the byte index of
+	// the character following the repeated target runes. If there are no
+	// repeated target runes in s, then ok=false is returned.
+	findRepeatedTarget := func(s string) (start int, end int, ok bool) {
+		rest := s
+		searched := 0
+		for ; len(rest) > 0; rest = s[searched:] {
+			start = strings.IndexRune(rest, target)
+			if start < 0 || start == len(rest)-targetSize {
+				// There are no more target runes in the string, or there is a
+				// single target rune at the end of the string.
+				return -1, -1, false
+			}
+			end = strings.IndexFunc(rest[start+targetSize:], func(r rune) bool { return r != target })
+			switch end {
+			case 0:
+				// We found a single occurrence of the target rune. Continue the
+				// search.
+				searched += start + targetSize
+				continue
+			case -1:
+				// There are no more non-target runes, so the suffix of the
+				// string must be repeated target runes.
+				return start + searched, len(s), true
+			default:
+				// We found repeated target runes.
+				start += searched
+				end += start + targetSize
+				return start, end, true
+			}
+		}
+		return -1, -1, false
+	}
+
+	rest := input
+	var buf []byte
+	n := 0
+	for len(rest) > 0 {
+		start, end, ok := findRepeatedTarget(rest)
+		if !ok {
+			// There are no repeated target runes in the rest of the string.
+			if buf == nil {
+				// If no repeated target runes were found previously, we can
+				// return the input string as-is (with the prefix and suffix
+				// possibly sliced off above).
+				return input
+			}
+			// If repeated target runes were found previously, copy the rest of
+			// the string to the buffer.
+			n += copy(buf[n:], rest)
+			break
+		}
+		if buf == nil {
+			// Lazily allocate the buffer.
+			buf = make([]byte, len(input))
+		}
+		// Copy up to "start" and including the first target rune.
+		n += copy(buf[n:], rest[:start+targetSize])
+		// Skip over the repeated target runes.
+		rest = rest[end:]
+	}
+
+	buf = buf[:n]
+	return *(*string)(unsafe.Pointer(&buf))
 }
