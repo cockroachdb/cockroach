@@ -745,6 +745,17 @@ func TestDataDriven(t *testing.T) {
 								Value:            rebalanceMode,
 							}})
 					}
+
+					var rebalanceObjective int64
+					if scanIfExists(t, d, "rebalance_objective", &rebalanceObjective) {
+						events = append(events, scheduled.ScheduledEvent{
+							At: settingsGen.Settings.StartTime.Add(delay),
+							TargetEvent: event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingObjective",
+								Value:            rebalanceObjective,
+							}})
+					}
 					return ""
 				default:
 					return fmt.Sprintf("unknown command: %s", d.Cmd)
