@@ -194,6 +194,36 @@
       background: #f0f8ff;
       color: #333;
     }
+    
+    .metric-checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: grab;
+      padding: 0.5rem;
+      border-radius: 4px;
+      transition: background 0.2s;
+      user-select: none;
+    }
+    
+    .metric-checkbox-label:hover {
+      background: #f0f0f0;
+    }
+    
+    .metric-checkbox-label.dragging {
+      opacity: 0.5;
+      cursor: grabbing;
+    }
+    
+    .metric-checkbox-label.drag-over-left {
+      background: #e0e0e0;
+      border-left: 3px solid #007acc;
+    }
+    
+    .metric-checkbox-label.drag-over-right {
+      background: #e0e0e0;
+      border-right: 3px solid #007acc;
+    }
   </style>
 </head>
 <body>
@@ -222,7 +252,7 @@
   </div>
   
   <div class="file-selector" id="metricSelector" style="display: none;">
-    <h3>Select Metrics to Display</h3>
+    <h3>Select Metrics to Display <span style="font-size: 0.8em; font-weight: normal; color: #666;">(drag to reorder)</span></h3>
     <div id="metricCheckboxes" style="display: flex; flex-wrap: wrap; gap: 1rem;"></div>
   </div>
   
@@ -240,6 +270,7 @@
     // Default metrics to show (in order)
     const defaultMetrics = ['cpu', 'qps', 'write_bytes_per_second', 'replicas', 'leases'];
     let selectedMetrics = new Set();
+    let metricOrder = []; // Custom order for metrics
     
     // Clean Zoom State Manager - Option 1: Plugin for input only
     const ZoomManager = {
@@ -459,6 +490,23 @@
       localStorage.setItem('asimview-selected-metrics', JSON.stringify([...selectedMetrics]));
     }
     
+    // Load metric order from localStorage
+    function loadMetricOrder() {
+      const saved = localStorage.getItem('asimview-metric-order');
+      if (saved) {
+        try {
+          metricOrder = JSON.parse(saved);
+        } catch (e) {
+          metricOrder = [];
+        }
+      }
+    }
+    
+    // Save metric order to localStorage
+    function saveMetricOrder() {
+      localStorage.setItem('asimview-metric-order', JSON.stringify(metricOrder));
+    }
+    
     // Load file selection from localStorage
     function loadFileSelection() {
       const saved = localStorage.getItem('asimview-selected-files');
@@ -480,6 +528,7 @@
     // Fetch available files on page load
     window.addEventListener('DOMContentLoaded', async () => {
       loadMetricPreferences();
+      loadMetricOrder();
       await fetchAvailableFiles();
       
       // Restore saved file selection if any files match
@@ -877,26 +926,19 @@
           }
         });
         
-        // Update metric selector checkboxes
+        // Update metric selector checkboxes (this also updates metricOrder)
         updateMetricSelector(allMetrics);
         
-        // Sort metrics according to defaultMetrics order, then alphabetically for others
-        const sortedMetrics = Array.from(allMetrics).sort((a, b) => {
-          const aIndex = defaultMetrics.indexOf(a);
-          const bIndex = defaultMetrics.indexOf(b);
-          if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-          if (aIndex !== -1) return -1;
-          if (bIndex !== -1) return 1;
-          return a.localeCompare(b);
-        });
+        // Use metricOrder for rendering charts
+        const orderedMetrics = metricOrder.filter(m => allMetrics.has(m));
         
         // Filter to only selected metrics
-        const metricsToRender = sortedMetrics.filter(m => selectedMetrics.has(m));
+        const metricsToRender = orderedMetrics.filter(m => selectedMetrics.has(m));
         
         // Pre-calculate all Y-axis ranges once (for all metrics, not just selected)
         const metricRanges = new Map();
         
-        sortedMetrics.forEach(metricName => {
+        orderedMetrics.forEach(metricName => {
           let globalMin = Infinity;
           let globalMax = -Infinity;
           
@@ -925,7 +967,7 @@
         });
         
         // Now create sections for ALL metrics (we'll hide/show them based on selection)
-        sortedMetrics.forEach(metricName => {
+        orderedMetrics.forEach(metricName => {
           const section = document.createElement('div');
           section.className = 'metric-section';
           section.dataset.metric = metricName;
@@ -1069,22 +1111,31 @@
       selectorDiv.style.display = 'block';
       checkboxContainer.innerHTML = '';
       
-      // Sort metrics according to defaultMetrics order, then alphabetically
-      const sortedMetrics = Array.from(availableMetrics).sort((a, b) => {
-        const aIndex = defaultMetrics.indexOf(a);
-        const bIndex = defaultMetrics.indexOf(b);
-        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-        if (aIndex !== -1) return -1;
-        if (bIndex !== -1) return 1;
-        return a.localeCompare(b);
-      });
+      // Update metric order: add new metrics, remove unavailable ones
+      const metricsArray = Array.from(availableMetrics);
+      const newMetrics = metricsArray.filter(m => !metricOrder.includes(m));
+      metricOrder = metricOrder.filter(m => availableMetrics.has(m));
       
-      sortedMetrics.forEach(metric => {
+      // Add new metrics in default order
+      if (newMetrics.length > 0) {
+        const sortedNew = newMetrics.sort((a, b) => {
+          const aIndex = defaultMetrics.indexOf(a);
+          const bIndex = defaultMetrics.indexOf(b);
+          if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+          if (aIndex !== -1) return -1;
+          if (bIndex !== -1) return 1;
+          return a.localeCompare(b);
+        });
+        metricOrder.push(...sortedNew);
+      }
+      
+      // Create draggable checkbox labels
+      metricOrder.forEach((metric, index) => {
         const label = document.createElement('label');
-        label.style.display = 'flex';
-        label.style.alignItems = 'center';
-        label.style.gap = '0.5rem';
-        label.style.cursor = 'pointer';
+        label.className = 'metric-checkbox-label';
+        label.draggable = true;
+        label.dataset.metric = metric;
+        label.dataset.index = index;
         
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -1113,6 +1164,104 @@
         label.appendChild(checkbox);
         label.appendChild(text);
         checkboxContainer.appendChild(label);
+        
+        // Drag and drop handlers
+        label.addEventListener('dragstart', (e) => {
+          label.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', metric);
+        });
+        
+        label.addEventListener('dragend', (e) => {
+          label.classList.remove('dragging');
+          document.querySelectorAll('.metric-checkbox-label').forEach(l => {
+            l.classList.remove('drag-over-left', 'drag-over-right');
+          });
+        });
+        
+        label.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          
+          const dragging = document.querySelector('.dragging');
+          if (dragging && dragging !== label) {
+            // Determine which side of the target we're hovering over
+            const rect = label.getBoundingClientRect();
+            const midpoint = rect.left + rect.width / 2;
+            const isLeftSide = e.clientX < midpoint;
+            
+            // Remove both classes first
+            label.classList.remove('drag-over-left', 'drag-over-right');
+            
+            // Add the appropriate class
+            if (isLeftSide) {
+              label.classList.add('drag-over-left');
+              label.dataset.dropSide = 'left';
+            } else {
+              label.classList.add('drag-over-right');
+              label.dataset.dropSide = 'right';
+            }
+          }
+        });
+        
+        label.addEventListener('dragleave', (e) => {
+          label.classList.remove('drag-over-left', 'drag-over-right');
+          delete label.dataset.dropSide;
+        });
+        
+        label.addEventListener('drop', (e) => {
+          e.preventDefault();
+          const dropSide = label.dataset.dropSide || 'right';
+          label.classList.remove('drag-over-left', 'drag-over-right');
+          delete label.dataset.dropSide;
+          
+          const draggedMetric = e.dataTransfer.getData('text/plain');
+          if (draggedMetric && draggedMetric !== metric) {
+            // Reorder the metrics
+            const oldIndex = metricOrder.indexOf(draggedMetric);
+            const targetIndex = metricOrder.indexOf(metric);
+            
+            if (oldIndex !== -1 && targetIndex !== -1) {
+              // Remove the dragged item
+              metricOrder.splice(oldIndex, 1);
+              
+              // Calculate new insert position
+              let insertIndex = metricOrder.indexOf(metric);
+              if (dropSide === 'right') {
+                insertIndex += 1;
+              }
+              
+              // Insert at the new position
+              metricOrder.splice(insertIndex, 0, draggedMetric);
+              
+              saveMetricOrder();
+              
+              // Re-render checkboxes and charts
+              updateMetricSelector(availableMetrics);
+              reorderChartSections();
+            }
+          }
+        });
+      });
+    }
+    
+    // Reorder chart sections to match metricOrder
+    function reorderChartSections() {
+      const chartsDiv = document.getElementById('charts');
+      const sections = Array.from(chartsDiv.querySelectorAll('.metric-section'));
+      
+      // Sort sections based on metricOrder
+      sections.sort((a, b) => {
+        const aMetric = a.dataset.metric;
+        const bMetric = b.dataset.metric;
+        const aIndex = metricOrder.indexOf(aMetric);
+        const bIndex = metricOrder.indexOf(bMetric);
+        return aIndex - bIndex;
+      });
+      
+      // Re-append in correct order
+      sections.forEach(section => {
+        chartsDiv.appendChild(section);
       });
     }
     
