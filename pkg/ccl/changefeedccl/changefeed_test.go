@@ -10362,7 +10362,7 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 			},
 			alterStmt:      "ALTER TABLE foo RENAME COLUMN c TO c_new",
 			afterAlterStmt: "INSERT INTO foo (a, b) VALUES (3, 'tres')",
-			expectErr:      `column "c" does not exist`,
+			expectErr:      `(column "c" does not exist|could not identify column "c")`,
 		},
 		{
 			name:           "alter enum",

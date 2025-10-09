@@ -204,6 +204,24 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"column name is public before compute expression referencing it",
+		scgraph.Precedence,
+		"column-name", "compute-expression",
+		func(from, to NodeVars) rel.Clauses {
+			colID := rel.Var("columnID")
+			return rel.Clauses{
+				from.Type((*scpb.ColumnName)(nil)),
+				to.Type((*scpb.ColumnComputeExpression)(nil)),
+				from.El.AttrEqVar(screl.ColumnID, colID),
+				to.ReferencedColumnIDsContains(colID),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToPublic),
+				StatusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
 }
 
 // This rule ensures that columns depend on each other in increasing order.

@@ -1,0 +1,272 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, j INT);
+----
+
+ops
+ALTER TABLE defaultdb.foo RENAME COLUMN j TO k
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: k, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: k
+      TableID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 104, Name: k, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 104, Name: k, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 104
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: k
+      TableID: 104
+
+setup
+CREATE TABLE defaultdb.bar (x INT PRIMARY KEY, y INT, z INT, INDEX idx_y (y));
+----
+
+ops
+ALTER TABLE defaultdb.bar RENAME COLUMN y TO y_new
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 105, Name: y, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: y_new, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 105
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: y_new
+      TableID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnName:{DescID: 105, Name: y, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 105, Name: y_new, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 105, Name: y, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: y_new, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 105
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: y_new
+      TableID: 105
+
+setup
+CREATE TABLE defaultdb.multi (a INT PRIMARY KEY, b INT, c INT);
+----
+
+ops
+ALTER TABLE defaultdb.multi RENAME COLUMN b TO b_renamed, RENAME COLUMN c TO c_renamed
+----
+StatementPhase stage 1 of 1 with 4 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 106, Name: b, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 106, Name: c, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 106, Name: b_renamed, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 106, Name: c_renamed, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 106
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 106
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: b_renamed
+      TableID: 106
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: c_renamed
+      TableID: 106
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnName:{DescID: 106, Name: b, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 106, Name: c, ColumnID: 3}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 106, Name: b_renamed, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 106, Name: c_renamed, ColumnID: 3}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 4 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 106, Name: b, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 106, Name: c, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 106, Name: b_renamed, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 106, Name: c_renamed, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 106
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: crdb_internal_column_3_name_placeholder
+      TableID: 106
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: b_renamed
+      TableID: 106
+    *scop.SetColumnName
+      ColumnID: 3
+      Name: c_renamed
+      TableID: 106
+
+setup
+CREATE TABLE defaultdb.with_constraints (
+  id INT PRIMARY KEY,
+  email TEXT UNIQUE,
+  age INT CHECK (age > 0)
+);
+----
+
+ops
+ALTER TABLE defaultdb.with_constraints RENAME COLUMN email TO email_address
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 107, Name: email, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 107, Name: email_address, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 107
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: email_address
+      TableID: 107
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnName:{DescID: 107, Name: email, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 107, Name: email_address, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 107, Name: email, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 107, Name: email_address, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 107
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: email_address
+      TableID: 107
+
+setup
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.schema_table (col1 INT PRIMARY KEY, col2 TEXT);
+----
+
+ops
+ALTER TABLE sc1.schema_table RENAME COLUMN col2 TO column_two
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 109, Name: col2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: column_two, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: column_two
+      TableID: 109
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnName:{DescID: 109, Name: col2, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 109, Name: column_two, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 109, Name: col2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 109, Name: column_two, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 109
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: column_two
+      TableID: 109
+
+setup
+CREATE TABLE defaultdb.computed_col (i INT PRIMARY KEY, j INT, k INT AS (i + j) STORED);
+----
+
+ops
+ALTER TABLE defaultdb.computed_col RENAME COLUMN j TO j_new
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 110, Name: j, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: j_new, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: j_new
+      TableID: 110
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnName:{DescID: 110, Name: j, ColumnID: 2}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 110, Name: j_new, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ColumnName:{DescID: 110, Name: j, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 110, Name: j_new, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: crdb_internal_column_2_name_placeholder
+      TableID: 110
+    *scop.SetColumnName
+      ColumnID: 2
+      Name: j_new
+      TableID: 110
