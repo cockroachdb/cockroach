@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -147,47 +148,50 @@ func (bs *BufferedSender) sendBuffered(
 	// registration. This error should be the next event that is sent to
 	// stream.
 	//
-	// NB: The zero-value of streamStatus is the valid state of a newly seen
-	// stream.
-	status := bs.queueMu.byStream[ev.StreamID]
-	switch status.state {
-	case streamActive:
-		if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
-			if ev.Error != nil {
-				// If _this_ event is an error, no use sending another error. This stream
-				// is going down. Admit this error and mark the stream as overflowed.
-				status.state = streamOverflowed
-			} else {
-				// This stream is at capacity, return an error to the registration that it
-				// should send back to us after cleaning up.
-				status.state = streamOverflowing
-				return newRetryErrBufferCapacityExceeded()
+	// NB: We don't error if the stream status is not found as this may be an
+	// event for an already closed stream. Such events are possible while the
+	// registration publishes the catch up scan buffer.
+	status, ok := bs.queueMu.byStream[ev.StreamID]
+	if ok {
+		switch status.state {
+		case streamActive:
+			if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
+				if ev.Error != nil {
+					// If _this_ event is an error, no use sending another error. This stream
+					// is going down. Admit this error and mark the stream as overflowed.
+					status.state = streamOverflowed
+				} else {
+					// This stream is at capacity, return an error to the registration that it
+					// should send back to us after cleaning up.
+					status.state = streamOverflowing
+					return newRetryErrBufferCapacityExceeded()
+				}
 			}
+		case streamOverflowing:
+			// The unbufferedRegistration is the only component that sends non-error
+			// events to our stream. In response to the error we return when moving to
+			// stateOverflowing, it should immediately send us an error and mark itself
+			// as disconnected.
+			//
+			// The only unfortunate exception is if we get disconnected while flushing
+			// the catch-up scan buffer.
+			if ev.Error != nil {
+				status.state = streamOverflowed
+			}
+		case streamOverflowed:
+			// If we are overflowed, we don't expect any further events because the
+			// registration should have disconnected in response to the error.
+			//
+			// TODO(ssd): Consider adding an assertion here.
+			return nil
+		default:
+			panic(fmt.Sprintf("unhandled stream state: %v", status.state))
 		}
-	case streamOverflowing:
-		// The unbufferedRegistration is the only component that sends non-error
-		// events to our stream. In response to the error we return when moving to
-		// stateOverflowing, it should immediately send us an error and mark itself
-		// as disconnected.
-		//
-		// The only unfortunate exception is if we get disconnected while flushing
-		// the catch-up scan buffer.
-		if ev.Error != nil {
-			status.state = streamOverflowed
-		}
-	case streamOverflowed:
-		// If we are overflowed, we don't expect any further events because the
-		// registration should have disconnected in response to the error.
-		//
-		// TODO(ssd): Consider adding an assertion here.
-		return nil
-	default:
-		panic(fmt.Sprintf("unhandled stream state: %v", status.state))
-	}
+		// We are admitting this event.
+		status.queueItems++
+		bs.queueMu.byStream[ev.StreamID] = status
 
-	// We are admitting this event.
-	status.queueItems++
-	bs.queueMu.byStream[ev.StreamID] = status
+	}
 
 	// TODO(wenyihu6): pass an actual context here
 	alloc.Use(context.Background())
@@ -257,6 +261,18 @@ func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
 		}
 	}
 	return event, ok
+}
+
+func (bs *BufferedSender) addStream(streamID int64) {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+	if _, ok := bs.queueMu.byStream[streamID]; !ok {
+		bs.queueMu.byStream[streamID] = streamStatus{}
+	} else {
+		if buildutil.CrdbTestBuild {
+			panic(fmt.Sprintf("stream %d already exists in buffered sender", streamID))
+		}
+	}
 }
 
 func (bs *BufferedSender) removeStream(streamID int64) {
