@@ -55,7 +55,6 @@ import (
 	"google.golang.org/grpc/stats"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
-	"storj.io/drpc/drpcmigrate"
 )
 
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
@@ -608,12 +607,12 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	if opts.Knobs.NoLoopbackDialer {
 		// The test has decided it doesn't need/want a loopback dialer.
 		// Ensure we still have a working dial function in that case.
+		var errAttemptToLoopbackDial = errors.AssertionFailedf("loopback dialer called but NoLoopbackDialer was set")
 		rpcCtx.loopbackDialFn = func(ctx context.Context) (net.Conn, error) {
-			d := onlyOnceDialer{}
-			return d.dial(ctx, opts.AdvertiseAddr)
+			return nil, errAttemptToLoopbackDial
 		}
 		rpcCtx.loopbackDRPCDialFn = func(ctx context.Context) (net.Conn, error) {
-			return drpcmigrate.DialWithHeader(ctx, "tcp", opts.AdvertiseAddr, drpcmigrate.DRPCHeader)
+			return nil, errAttemptToLoopbackDial
 		}
 	}
 
@@ -1403,13 +1402,17 @@ const (
 	tcpTransport transportType = true
 )
 
+func (rpcCtx *Context) canLoopbackDial() bool {
+	return !rpcCtx.ClientOnly && !rpcCtx.Knobs.NoLoopbackDialer
+}
+
 // GRPCDialOptions returns the minimal `grpc.DialOption`s necessary to connect
 // to a server.
 func (rpcCtx *Context) GRPCDialOptions(
 	ctx context.Context, target string, class rpcbase.ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
@@ -2042,7 +2045,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	additionalOpts ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	transport := tcpTransport
-	if rpcCtx.ContextOptions.AdvertiseAddr == target && !rpcCtx.ClientOnly {
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
