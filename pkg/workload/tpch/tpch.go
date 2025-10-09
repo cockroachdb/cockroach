@@ -146,7 +146,7 @@ func (w *tpch) Hooks() workload.Hooks {
 					if _, err := db.Exec(fkStmt); err != nil {
 						// If the statement failed because the fk already exists, ignore it.
 						// Return the error for any other reason.
-						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+						const duplFKErr = "duplicate constraint name"
 						if !strings.Contains(err.Error(), duplFKErr) {
 							return errors.Wrapf(err, "while executing %s", fkStmt)
 						}
