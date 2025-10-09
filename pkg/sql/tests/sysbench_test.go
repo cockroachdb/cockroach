@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -174,6 +175,17 @@ func newTestCluster(
 			ContextTestingKnobs: rpc.ContextTestingKnobs{
 				NoLoopbackDialer: !localRPCFastPath,
 			},
+		},
+		Store: &kvserver.StoreTestingKnobs{
+			// Disable the lease queue to keep leases on s1 (otherwise, lease
+			// count rebalancing might move one lease, and splits might copy
+			// that lease to a number of additional ranges). Communication
+			// between the gateway node (always n1) and the KV servers always
+			// goes through TCP regardless of whether the gateway node equals
+			// the KV node, but there are still subtle (and not well understood)
+			// performance differences between then n1->n1 and n1->n[23] cases,
+			// which add variance to the results.
+			DisableLeaseQueue: true,
 		},
 	}
 	return serverutils.StartCluster(b, nodes, base.TestClusterArgs{
