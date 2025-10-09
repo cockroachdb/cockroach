@@ -282,7 +282,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	var spans roachpb.Spans
 	var err error
 	if params.InvertedConstraint != nil {
-		spans, err = sb.SpansFromInvertedSpans(e.ctx, params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
+		spans, err = sb.SpansFromInvertedSpans(e.ctx, params.InvertedConstraint, params.IndexConstraint, false /* prefixIncludedInKeys */, nil /* scratch */)
 	} else {
 		splitter := span.MakeSplitter(tabDesc, idx, params.NeededCols)
 		spans, err = sb.SpansFromConstraint(params.IndexConstraint, splitter)
