@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -175,14 +176,29 @@ func newTestCluster(
 				NoLoopbackDialer: !localRPCFastPath,
 			},
 		},
+		Store: &kvserver.StoreTestingKnobs{
+			// Disable the lease queue to keep leases on s1 (otherwise, lease
+			// count rebalancing might move one lease, and splits might copy
+			// that lease to a number of additional ranges). Communication
+			// between the gateway node (always n1) and the KV servers always
+			// goes through TCP regardless of whether the gateway node equals
+			// the KV node, but there are still subtle (and not well understood)
+			// performance differences between then n1->n1 and n1->n[23] cases,
+			// which add variance to the results.
+			DisableLeaseQueue: true,
+		},
 	}
-	return serverutils.StartCluster(b, nodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(b, nodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings:  st,
 			CacheSize: cacheSize,
 			Knobs:     knobs,
 		}},
 	)
+	if nodes > 1 {
+		try0(tc.WaitForFullReplication())
+	}
+	return tc
 }
 
 // sysbenchSQL is SQL-based implementation of sysbenchDriver. It runs SQL
@@ -199,7 +215,6 @@ func newSysbenchSQL(nodes int, localRPCFastPath bool) sysbenchDriverConstructor 
 		for i := 0; i < nodes; i++ {
 			tc.Server(i).SQLServer().(*sql.Server).GetExecutorConfig().LicenseEnforcer.Disable(ctx)
 		}
-		try0(tc.WaitForFullReplication())
 		pgURL, cleanupURL := tc.ApplicationLayer(0).PGUrl(b, serverutils.DBName(sysbenchDB))
 		cleanup := func() {
 			cleanupURL()
