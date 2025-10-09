@@ -125,30 +125,23 @@ func (w *tpch) Hooks() workload.Hooks {
 		},
 		PostLoad: func(_ context.Context, db *gosql.DB) error {
 			if w.fks {
-				// We avoid validating foreign keys because we just generated the data
-				// set and don't want to scan over the entire thing again.
-				// Unfortunately, this means that we leave the foreign keys unvalidated
-				// for the duration of the test, so the SQL optimizer can't use them.
-				//
-				// TODO(lucy-zhang): expose an internal knob to validate fk relations
-				// without performing full validation. See #38833.
 				fkStmts := []string{
-					`ALTER TABLE nation ADD CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES region (r_regionkey) NOT VALID`,
-					`ALTER TABLE supplier ADD CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES nation (n_nationkey) NOT VALID`,
-					`ALTER TABLE partsupp ADD CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES part (p_partkey) NOT VALID`,
-					`ALTER TABLE partsupp ADD CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES supplier (s_suppkey) NOT VALID`,
-					`ALTER TABLE customer ADD CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES nation (n_nationkey) NOT VALID`,
-					`ALTER TABLE orders ADD CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES customer (c_custkey) NOT VALID`,
-					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders (o_orderkey) NOT VALID`,
-					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES part (p_partkey) NOT VALID`,
-					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES supplier (s_suppkey) NOT VALID`,
-					// TODO(andyk): This fails with `pq: column "l_partkey" cannot be used
-					// by multiple foreign key constraints`. This limitation would appear
-					// to violate TPCH rules, as all foreign keys must be defined, or none
-					// at all.
-					// `ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) REFERENCES partsupp (ps_partkey, ps_suppkey) NOT VALID`,
+					`ALTER TABLE nation ADD CONSTRAINT nation_fkey_region FOREIGN KEY (n_regionkey) REFERENCES region (r_regionkey)`,
+					`ALTER TABLE supplier ADD CONSTRAINT supplier_fkey_nation FOREIGN KEY (s_nationkey) REFERENCES nation (n_nationkey)`,
+					`ALTER TABLE partsupp ADD CONSTRAINT partsupp_fkey_part FOREIGN KEY (ps_partkey) REFERENCES part (p_partkey)`,
+					`ALTER TABLE partsupp ADD CONSTRAINT partsupp_fkey_supplier FOREIGN KEY (ps_suppkey) REFERENCES supplier (s_suppkey)`,
+					`ALTER TABLE customer ADD CONSTRAINT customer_fkey_nation FOREIGN KEY (c_nationkey) REFERENCES nation (n_nationkey)`,
+					`ALTER TABLE orders ADD CONSTRAINT orders_fkey_customer FOREIGN KEY (o_custkey) REFERENCES customer (c_custkey)`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) REFERENCES orders (o_orderkey)`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) REFERENCES part (p_partkey)`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) REFERENCES supplier (s_suppkey)`,
+					`ALTER TABLE lineitem ADD CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) REFERENCES partsupp (ps_partkey, ps_suppkey)`,
 				}
-
+				start := timeutil.Now()
+				log.Dev.Infof(context.Background(), "adding %d validated foreign keys", len(fkStmts))
+				defer func() {
+					log.Dev.Infof(context.Background(), "adding foreign keys took %s", timeutil.Since(start))
+				}()
 				for _, fkStmt := range fkStmts {
 					if _, err := db.Exec(fkStmt); err != nil {
 						// If the statement failed because the fk already exists, ignore it.
