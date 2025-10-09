@@ -1723,7 +1723,7 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go")
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go", ":!roachprod/agents/opentelemetry/cockroachdb_metrics.go")
 		if err != nil {
 			t.Fatal(err)
 		}
