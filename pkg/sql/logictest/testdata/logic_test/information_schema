@@ -4243,7 +4243,7 @@ reorder_joins_limit                                              8
 require_explicit_primary_keys                                    off
 results_buffer_size                                              524288
 role                                                             none
-row_security                                                     off
+row_security                                                     on
 search_path                                                      "$user", public
 serial_normalization                                             rowid
 server_encoding                                                  UTF8
