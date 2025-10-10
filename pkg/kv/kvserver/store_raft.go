@@ -43,25 +43,60 @@ type raftRequestInfo struct {
 }
 
 type raftReceiveQueue struct {
-	mu struct { // not to be locked directly
+	rangeID roachpb.RangeID
+	decider *storeRaftQDecider
+	mu      struct { // not to be locked directly
 		destroyed bool
 		syncutil.Mutex
-		infos         []raftRequestInfo
-		enforceMaxLen bool
+		msgAppInfos                    []raftRequestInfo
+		numMsgAppEntries               int64
+		numLowPriOverrideMsgAppEntries int64
+		otherInfos                     []raftRequestInfo
+		enforceMaxLen                  bool
+		lastDrainedFromOther           bool
+		// When the queue is non-empty, someone must be responsible for draining
+		// it. This happens either by the (a) range being queued for processing at
+		// the raft scheduler, or (b) qDecision==raftDequeueOther, in which case
+		// the storeRaftQDecider is responsible for eventually transitioning to
+		// raftDequeueAll, and queuing the range for processing at the raft
+		// scheduler. Both (a) and (b) can be true at the same time, since when
+		// qDecision==raftDequeueOther, the drain will only drain the otherInfos.
+		queuedAtRaftScheduler bool
+		// The transition to raftDequeueOther only happens when the queue had no
+		// MsgApp entries, and then adds MsgApp entries that have the
+		// low-pri-override set. This also causes the decider to start monitoring
+		// to transition back to raftDequeueAll.
+		qDecision storeRaftQDecision
 	}
-	maxLen int
-	acc    mon.BoundAccount
+	maxLen    int
+	msgAppAcc mon.BoundAccount
+	otherAcc  mon.BoundAccount
+}
+
+func newRaftReceiveQueue(
+	rangeID roachpb.RangeID, decider *storeRaftQDecider, monitor *mon.BytesMonitor, maxLen int,
+) *raftReceiveQueue {
+	q := &raftReceiveQueue{rangeID: rangeID, decider: decider, maxLen: maxLen}
+	q.msgAppAcc.Init(context.Background(), monitor)
+	q.otherAcc.Init(context.Background(), monitor)
+	return q
 }
 
 // Len returns the number of requests in the queue.
 func (q *raftReceiveQueue) Len() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	return len(q.mu.infos)
+	return q.lenLocked()
 }
 
-// Drain moves the stored requests out of the queue, returning them to
-// the caller. Returns true if the returned slice was not empty.
+func (q *raftReceiveQueue) lenLocked() int {
+	return len(q.mu.msgAppInfos) + len(q.mu.otherInfos)
+}
+
+// Drain moves the stored requests out of the queue, returning them to the
+// caller. Returns true if the returned slice was not empty. It will always
+// drain the non-MsgApp requests, and will also drain the MsgApp requests if
+// the (internal) storeRaftQDecision permits.
 func (q *raftReceiveQueue) Drain() ([]raftRequestInfo, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -69,20 +104,51 @@ func (q *raftReceiveQueue) Drain() ([]raftRequestInfo, bool) {
 }
 
 func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
-	if len(q.mu.infos) == 0 {
-		return nil, false
+	var infos []raftRequestInfo
+	if len(q.mu.otherInfos) == 0 {
+		if len(q.mu.msgAppInfos) == 0 || q.mu.qDecision == raftQDequeueOther {
+			return nil, false
+		}
+		// Common case on followers: only MsgApps in the queue.
+		infos = q.mu.msgAppInfos
+		q.mu.msgAppInfos = nil
+		q.mu.lastDrainedFromOther = false
+		q.mu.numMsgAppEntries = 0
+		q.mu.numLowPriOverrideMsgAppEntries = 0
+		q.msgAppAcc.Clear(context.Background())
+	} else {
+		infos = q.mu.otherInfos
+		q.mu.otherInfos = nil
+		q.mu.lastDrainedFromOther = true
+		q.otherAcc.Clear(context.Background())
+		if len(q.mu.msgAppInfos) != 0 && q.mu.qDecision == raftQDequeueAll {
+			infos = append(infos, q.mu.msgAppInfos...)
+			q.mu.msgAppInfos = q.mu.msgAppInfos[:0]
+			q.mu.numMsgAppEntries = 0
+			q.mu.numLowPriOverrideMsgAppEntries = 0
+			q.msgAppAcc.Clear(context.Background())
+		}
+		// Else, common case on leader: only non-MsgApps in the queue.
 	}
-	infos := q.mu.infos
-	q.mu.infos = nil
-	q.acc.Clear(context.Background())
+	q.mu.queuedAtRaftScheduler = false
 	return infos, true
 }
 
 func (q *raftReceiveQueue) Delete() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.mu.qDecision == raftQDequeueOther {
+		// Ensure everything is drained.
+		q.mu.qDecision = raftQDequeueAll
+		q.decider.deregisterLocked(q)
+	}
 	q.drainLocked()
-	if err := q.acc.ResizeTo(context.Background(), 0); err != nil {
+	q.mu.msgAppInfos = nil
+	q.mu.otherInfos = nil
+	if err := q.msgAppAcc.ResizeTo(context.Background(), 0); err != nil {
+		panic(err) // ResizeTo(., 0) always returns nil
+	}
+	if err := q.otherAcc.ResizeTo(context.Background(), 0); err != nil {
 		panic(err) // ResizeTo(., 0) always returns nil
 	}
 	q.mu.destroyed = true
@@ -91,39 +157,92 @@ func (q *raftReceiveQueue) Delete() {
 // Recycle makes a slice that the caller knows will no longer be accessed
 // available for reuse.
 func (q *raftReceiveQueue) Recycle(processed []raftRequestInfo) {
-	if cap(processed) > 4 {
+	if cap(processed) > 8 {
 		return // cap recycled slice lengths
 	}
+	// Optimistically set it up for reuse.
+	for i := range processed {
+		processed[i] = raftRequestInfo{}
+	}
+	processed = processed[:0]
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.infos == nil {
-		for i := range processed {
-			processed[i] = raftRequestInfo{}
+	if q.mu.lastDrainedFromOther {
+		if q.mu.otherInfos == nil {
+			q.mu.otherInfos = processed
 		}
-		q.mu.infos = processed[:0]
+	} else if q.mu.msgAppInfos == nil {
+		q.mu.msgAppInfos = processed
 	}
 }
 
+// Append adds the request to the queue. The return value
+// shouldQueueAtRaftScheduler is true if the range should be enqueued in the
+// raftScheduler.
 func (q *raftReceiveQueue) Append(
 	req *kvserverpb.RaftMessageRequest, s RaftMessageResponseStream,
-) (shouldQueue bool, size int64, appended bool) {
+) (shouldQueueAtRaftScheduler bool, size int64, appended bool) {
 	size = int64(req.Size())
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.destroyed || (q.mu.enforceMaxLen && len(q.mu.infos) >= q.maxLen) {
+	if q.mu.destroyed || (q.mu.enforceMaxLen && q.lenLocked() >= q.maxLen) {
 		return false, size, false
 	}
-	if q.acc.Grow(context.Background(), size) != nil {
+	// Do the append.
+	isOther := req.Message.Type != raftpb.MsgApp
+	var acc *mon.BoundAccount
+	var infos *[]raftRequestInfo
+	if isOther {
+		acc = &q.otherAcc
+		infos = &q.mu.otherInfos
+	} else {
+		acc = &q.msgAppAcc
+		infos = &q.mu.msgAppInfos
+	}
+	if acc.Grow(context.Background(), size) != nil {
 		return false, size, false
 	}
-	q.mu.infos = append(q.mu.infos, raftRequestInfo{
+	*infos = append(*infos, raftRequestInfo{
 		req:        req,
 		respStream: s,
 		size:       size,
 	})
-	// The operation that enqueues the first message will
-	// be put in charge of triggering a drain of the queue.
-	return len(q.mu.infos) == 1, size, true
+	// Update state related to deciding on how the drain should happen, and
+	// make the decision.
+	if isOther {
+		if !q.mu.queuedAtRaftScheduler {
+			q.mu.queuedAtRaftScheduler = true
+			shouldQueueAtRaftScheduler = true
+		}
+		return shouldQueueAtRaftScheduler, size, true
+	}
+	n := int64(len(req.Message.Entries))
+	if n > 0 {
+		wasEmpty := q.mu.numMsgAppEntries == 0
+		q.mu.numMsgAppEntries += n
+		if req.LowPriorityOverride {
+			q.mu.numLowPriOverrideMsgAppEntries += n
+		}
+		if req.LowPriorityOverride {
+			if wasEmpty {
+				// Transitioned from empty MsgApp entries to non-empty with
+				// low-pri-override.
+				q.decider.updateDecisionLocked(q)
+			}
+			// Else use the current decision.
+		} else {
+			// Adding non low-pri-override MsgApp entries. We need
+			// to dequeue.
+			q.mu.qDecision = raftQDequeueAll
+		}
+	}
+	// Else n == 0, a MsgApp ping. It does not affect qDecision.
+
+	if q.mu.qDecision == raftQDequeueAll && !q.mu.queuedAtRaftScheduler {
+		shouldQueueAtRaftScheduler = true
+		q.mu.queuedAtRaftScheduler = true
+	}
+	return shouldQueueAtRaftScheduler, size, true
 }
 
 func (q *raftReceiveQueue) SetEnforceMaxLen(enforceMaxLen bool) {
@@ -138,10 +257,15 @@ func (q *raftReceiveQueue) getEnforceMaxLenForTesting() bool {
 	return q.mu.enforceMaxLen
 }
 
+func (q *raftReceiveQueue) bytesUsedForTesting() int64 {
+	return q.msgAppAcc.Used() + q.otherAcc.Used()
+}
+
 type raftReceiveQueues struct {
 	mon           *mon.BytesMonitor
 	m             syncutil.Map[roachpb.RangeID, raftReceiveQueue]
 	enforceMaxLen atomic.Bool
+	qDecider      *storeRaftQDecider
 }
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
@@ -154,8 +278,7 @@ func (qs *raftReceiveQueues) LoadOrCreate(
 	if q, ok := qs.Load(rangeID); ok {
 		return q, ok // fast path
 	}
-	q := &raftReceiveQueue{maxLen: maxLen}
-	q.acc.Init(context.Background(), qs.mon)
+	q := newRaftReceiveQueue(rangeID, qs.qDecider, qs.mon, maxLen)
 	q, loaded = qs.m.LoadOrStore(rangeID, q)
 	if loaded {
 		return q, true
@@ -1138,3 +1261,28 @@ func (s *Store) updateCapacityGauges(ctx context.Context) error {
 
 	return nil
 }
+
+type raftSchedulerForStoreRaftQDecider interface {
+	EnqueueRaftRequest(id roachpb.RangeID)
+}
+
+// Concurrency: mutex is ordered after raftReceiveQueue.mu.
+type storeRaftQDecider struct {
+	// TODO:
+	scheduler raftSchedulerForStoreRaftQDecider
+}
+
+func (w *storeRaftQDecider) updateDecisionLocked(q *raftReceiveQueue) {
+	// TODO:
+}
+
+func (w *storeRaftQDecider) deregisterLocked(q *raftReceiveQueue) {
+	// TODO:
+}
+
+type storeRaftQDecision uint8
+
+const (
+	raftQDequeueAll storeRaftQDecision = iota
+	raftQDequeueOther
+)
