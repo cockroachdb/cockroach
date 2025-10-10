@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -155,6 +156,20 @@ func (p *planner) EvalRoutineExpr(
 		}
 		ctx = context.WithValue(ctx, triggerDepthKey{}, triggerDepth+1)
 	}
+	if buildutil.CrdbTestBuild && !tailCallOptimizationEnabled {
+		// In test builds when we disable tail-call optimization, we might hit
+		// stack overflow with infinite loops.
+		var routineDepth int
+		if routineDepthValue := ctx.Value(routineDepthKey{}); routineDepthValue != nil {
+			routineDepth = routineDepthValue.(int)
+		}
+		const maxDepth = 10000
+		if routineDepth > maxDepth {
+			return nil, pgerror.Newf(pgcode.ProgramLimitExceeded,
+				"routine reached recursion depth limit: %d (probably infinite loop)", maxDepth)
+		}
+		ctx = context.WithValue(ctx, routineDepthKey{}, routineDepth+1)
+	}
 
 	var g routineGenerator
 	g.init(p, expr, args)
@@ -192,6 +207,8 @@ func (p *planner) EvalRoutineExpr(
 }
 
 type triggerDepthKey struct{}
+
+type routineDepthKey struct{}
 
 // RoutineExprGenerator returns an eval.ValueGenerator that produces the results
 // of a routine.
