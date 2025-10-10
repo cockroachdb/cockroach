@@ -6,7 +6,7 @@
 # Except this specific directory (relative to .gitignore)
 # Note that this intentionally does not include subdirectories (such as traces)
 # which are not deterministic.
-!sma/rebalancing/**
+!sma/rebalancing_qps/**
 **/traces
 # And the readme file.
 !README.md
