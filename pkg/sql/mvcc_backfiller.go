@@ -58,7 +58,7 @@ func (im *IndexBackfillerMergePlanner) MergeIndexes(
 		g.Add(sourceIndexSpan)
 		g.Sub(progress.CompletedSpans[i]...)
 		spansToDo[i] = g.Slice()
-		if len(spansToDo) > 0 {
+		if len(spansToDo[i]) > 0 {
 			hasToDo = true
 		}
 	}
