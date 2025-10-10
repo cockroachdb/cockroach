@@ -1,5 +1,50 @@
+diff --git a/src/archive/tar/common.go b/src/archive/tar/common.go
+index 4910908f81..ec1b866854 100644
+--- a/src/archive/tar/common.go
++++ b/src/archive/tar/common.go
+@@ -38,6 +38,7 @@ var (
+ 	errMissData        = errors.New("archive/tar: sparse file references non-existent data")
+ 	errUnrefData       = errors.New("archive/tar: sparse file contains unreferenced data")
+ 	errWriteHole       = errors.New("archive/tar: write non-NUL byte in sparse hole")
++	errSparseTooLong   = errors.New("archive/tar: sparse map too long")
+ )
+ 
+ type headerError []string
+diff --git a/src/archive/tar/reader.go b/src/archive/tar/reader.go
+index 0811779add..71d0b20b76 100644
+--- a/src/archive/tar/reader.go
++++ b/src/archive/tar/reader.go
+@@ -531,12 +531,17 @@ func readGNUSparseMap1x0(r io.Reader) (sparseDatas, error) {
+ 		cntNewline int64
+ 		buf        bytes.Buffer
+ 		blk        block
++		totalSize  int
+ 	)
+ 
+ 	// feedTokens copies data in blocks from r into buf until there are
+ 	// at least cnt newlines in buf. It will not read more blocks than needed.
+ 	feedTokens := func(n int64) error {
+ 		for cntNewline < n {
++			totalSize += len(blk)
++			if totalSize > maxSpecialFileSize {
++				return errSparseTooLong
++			}
+ 			if _, err := mustReadFull(r, blk[:]); err != nil {
+ 				return err
+ 			}
+@@ -569,8 +574,8 @@ func readGNUSparseMap1x0(r io.Reader) (sparseDatas, error) {
+ 	}
+ 
+ 	// Parse for all member entries.
+-	// numEntries is trusted after this since a potential attacker must have
+-	// committed resources proportional to what this library used.
++	// numEntries is trusted after this since feedTokens limits the number of
++	// tokens based on maxSpecialFileSize.
+ 	if err := feedTokens(2 * numEntries); err != nil {
+ 		return nil, err
+ 	}
 diff --git a/src/context/context.go b/src/context/context.go
-index 80e1787..9dbf2a5 100644
+index 80e1787576..9dbf2a5464 100644
 --- a/src/context/context.go
 +++ b/src/context/context.go
 @@ -477,17 +477,7 @@ func (c *cancelCtx) propagateCancel(parent Context, child canceler) {
@@ -79,7 +124,7 @@ index 80e1787..9dbf2a5 100644
 +	return true
 +}
 diff --git a/src/crypto/md5/md5.go b/src/crypto/md5/md5.go
-index 83e9e4c..c7a80ea 100644
+index 83e9e4c07a..c7a80ea994 100644
 --- a/src/crypto/md5/md5.go
 +++ b/src/crypto/md5/md5.go
 @@ -27,6 +27,10 @@ const Size = 16
@@ -106,7 +151,7 @@ index 83e9e4c..c7a80ea 100644
  		} else {
  			blockGeneric(d, p[:n])
 diff --git a/src/crypto/md5/md5_test.go b/src/crypto/md5/md5_test.go
-index 851e7fb..e120be3 100644
+index 851e7fb10d..e120be3718 100644
 --- a/src/crypto/md5/md5_test.go
 +++ b/src/crypto/md5/md5_test.go
 @@ -120,10 +120,11 @@ func TestGoldenMarshal(t *testing.T) {
@@ -156,7 +201,7 @@ index 851e7fb..e120be3 100644
  func TestBlockGeneric(t *testing.T) {
  	gen, asm := New().(*digest), New().(*digest)
 diff --git a/src/crypto/sha256/sha256.go b/src/crypto/sha256/sha256.go
-index 0cc7fca..a315bbe 100644
+index 0cc7fca0a6..a315bbed61 100644
 --- a/src/crypto/sha256/sha256.go
 +++ b/src/crypto/sha256/sha256.go
 @@ -28,6 +28,10 @@ const Size224 = 28
@@ -183,7 +228,7 @@ index 0cc7fca..a315bbe 100644
  		p = p[n:]
  	}
 diff --git a/src/crypto/sha256/sha256_test.go b/src/crypto/sha256/sha256_test.go
-index 7304678..4d5e8bc 100644
+index 7304678346..4d5e8bcd55 100644
 --- a/src/crypto/sha256/sha256_test.go
 +++ b/src/crypto/sha256/sha256_test.go
 @@ -183,6 +183,56 @@ func TestGoldenMarshal(t *testing.T) {
@@ -243,8 +288,734 @@ index 7304678..4d5e8bc 100644
  func TestMarshalTypeMismatch(t *testing.T) {
  	h1 := New()
  	h2 := New224()
+diff --git a/src/crypto/tls/handshake_server.go b/src/crypto/tls/handshake_server.go
+index 4e84aa9d8f..17b6891783 100644
+--- a/src/crypto/tls/handshake_server.go
++++ b/src/crypto/tls/handshake_server.go
+@@ -312,7 +312,7 @@ func negotiateALPN(serverProtos, clientProtos []string, quic bool) (string, erro
+ 	if http11fallback {
+ 		return "", nil
+ 	}
+-	return "", fmt.Errorf("tls: client requested unsupported application protocols (%s)", clientProtos)
++	return "", fmt.Errorf("tls: client requested unsupported application protocols (%q)", clientProtos)
+ }
+ 
+ // supportsECDHE returns whether ECDHE key exchanges can be used with this
+diff --git a/src/crypto/x509/name_constraints_test.go b/src/crypto/x509/name_constraints_test.go
+index 78263fc0b2..831fcbc8d2 100644
+--- a/src/crypto/x509/name_constraints_test.go
++++ b/src/crypto/x509/name_constraints_test.go
+@@ -1456,63 +1456,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+ 		expectedError: "incompatible key usage",
+ 	},
+ 
+-	// An invalid DNS SAN should be detected only at validation time so
+-	// that we can process CA certificates in the wild that have invalid SANs.
+-	// See https://github.com/golang/go/issues/23995
+-
+-	// #77: an invalid DNS or mail SAN will not be detected if name constraint
+-	// checking is not triggered.
+-	{
+-		roots: make([]constraintsSpec, 1),
+-		intermediates: [][]constraintsSpec{
+-			{
+-				{},
+-			},
+-		},
+-		leaf: leafSpec{
+-			sans: []string{"dns:this is invalid", "email:this @ is invalid"},
+-		},
+-	},
+-
+-	// #78: an invalid DNS SAN will be detected if any name constraint checking
+-	// is triggered.
+-	{
+-		roots: []constraintsSpec{
+-			{
+-				bad: []string{"uri:"},
+-			},
+-		},
+-		intermediates: [][]constraintsSpec{
+-			{
+-				{},
+-			},
+-		},
+-		leaf: leafSpec{
+-			sans: []string{"dns:this is invalid"},
+-		},
+-		expectedError: "cannot parse dnsName",
+-	},
+-
+-	// #79: an invalid email SAN will be detected if any name constraint
+-	// checking is triggered.
+-	{
+-		roots: []constraintsSpec{
+-			{
+-				bad: []string{"uri:"},
+-			},
+-		},
+-		intermediates: [][]constraintsSpec{
+-			{
+-				{},
+-			},
+-		},
+-		leaf: leafSpec{
+-			sans: []string{"email:this @ is invalid"},
+-		},
+-		expectedError: "cannot parse rfc822Name",
+-	},
+-
+-	// #80: if several EKUs are requested, satisfying any of them is sufficient.
++	// #77: if several EKUs are requested, satisfying any of them is sufficient.
+ 	{
+ 		roots: make([]constraintsSpec, 1),
+ 		intermediates: [][]constraintsSpec{
+@@ -1527,7 +1471,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+ 		requestedEKUs: []ExtKeyUsage{ExtKeyUsageClientAuth, ExtKeyUsageEmailProtection},
+ 	},
+ 
+-	// #81: EKUs that are not asserted in VerifyOpts are not required to be
++	// #78: EKUs that are not asserted in VerifyOpts are not required to be
+ 	// nested.
+ 	{
+ 		roots: make([]constraintsSpec, 1),
+@@ -1546,7 +1490,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+ 		},
+ 	},
+ 
+-	// #82: a certificate without SANs and CN is accepted in a constrained chain.
++	// #79: a certificate without SANs and CN is accepted in a constrained chain.
+ 	{
+ 		roots: []constraintsSpec{
+ 			{
+@@ -1563,7 +1507,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+ 		},
+ 	},
+ 
+-	// #83: a certificate without SANs and with a CN that does not parse as a
++	// #80: a certificate without SANs and with a CN that does not parse as a
+ 	// hostname is accepted in a constrained chain.
+ 	{
+ 		roots: []constraintsSpec{
+@@ -1582,7 +1526,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+ 		},
+ 	},
+ 
+-	// #84: a certificate with SANs and CN is accepted in a constrained chain.
++	// #81: a certificate with SANs and CN is accepted in a constrained chain.
+ 	{
+ 		roots: []constraintsSpec{
+ 			{
+@@ -1600,7 +1544,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+ 		},
+ 	},
+ 
+-	// #86: URIs with IPv6 addresses with zones and ports are rejected
++	// #82: URIs with IPv6 addresses with zones and ports are rejected
+ 	{
+ 		roots: []constraintsSpec{
+ 			{
+diff --git a/src/crypto/x509/parser.go b/src/crypto/x509/parser.go
+index 812b0d2d28..9a3bcd6da0 100644
+--- a/src/crypto/x509/parser.go
++++ b/src/crypto/x509/parser.go
+@@ -378,10 +378,14 @@ func parseSANExtension(der cryptobyte.String) (dnsNames, emailAddresses []string
+ 			if err := isIA5String(email); err != nil {
+ 				return errors.New("x509: SAN rfc822Name is malformed")
+ 			}
++			parsed, ok := parseRFC2821Mailbox(email)
++			if !ok || (ok && !domainNameValid(parsed.domain, false)) {
++				return errors.New("x509: SAN rfc822Name is malformed")
++			}
+ 			emailAddresses = append(emailAddresses, email)
+ 		case nameTypeDNS:
+ 			name := string(data)
+-			if err := isIA5String(name); err != nil {
++			if err := isIA5String(name); err != nil || (err == nil && !domainNameValid(name, false)) {
+ 				return errors.New("x509: SAN dNSName is malformed")
+ 			}
+ 			dnsNames = append(dnsNames, string(name))
+@@ -391,14 +395,9 @@ func parseSANExtension(der cryptobyte.String) (dnsNames, emailAddresses []string
+ 				return errors.New("x509: SAN uniformResourceIdentifier is malformed")
+ 			}
+ 			uri, err := url.Parse(uriStr)
+-			if err != nil {
++			if err != nil || (err == nil && uri.Host != "" && !domainNameValid(uri.Host, false)) {
+ 				return fmt.Errorf("x509: cannot parse URI %q: %s", uriStr, err)
+ 			}
+-			if len(uri.Host) > 0 {
+-				if _, ok := domainToReverseLabels(uri.Host); !ok {
+-					return fmt.Errorf("x509: cannot parse URI %q: invalid domain", uriStr)
+-				}
+-			}
+ 			uris = append(uris, uri)
+ 		case nameTypeIP:
+ 			switch len(data) {
+@@ -538,15 +537,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
+ 					return nil, nil, nil, nil, errors.New("x509: invalid constraint value: " + err.Error())
+ 				}
+ 
+-				trimmedDomain := domain
+-				if len(trimmedDomain) > 0 && trimmedDomain[0] == '.' {
+-					// constraints can have a leading
+-					// period to exclude the domain
+-					// itself, but that's not valid in a
+-					// normal domain name.
+-					trimmedDomain = trimmedDomain[1:]
+-				}
+-				if _, ok := domainToReverseLabels(trimmedDomain); !ok {
++				if !domainNameValid(domain, true) {
+ 					return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse dnsName constraint %q", domain)
+ 				}
+ 				dnsNames = append(dnsNames, domain)
+@@ -587,12 +578,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
+ 						return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse rfc822Name constraint %q", constraint)
+ 					}
+ 				} else {
+-					// Otherwise it's a domain name.
+-					domain := constraint
+-					if len(domain) > 0 && domain[0] == '.' {
+-						domain = domain[1:]
+-					}
+-					if _, ok := domainToReverseLabels(domain); !ok {
++					if !domainNameValid(constraint, true) {
+ 						return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse rfc822Name constraint %q", constraint)
+ 					}
+ 				}
+@@ -608,15 +594,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
+ 					return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse URI constraint %q: cannot be IP address", domain)
+ 				}
+ 
+-				trimmedDomain := domain
+-				if len(trimmedDomain) > 0 && trimmedDomain[0] == '.' {
+-					// constraints can have a leading
+-					// period to exclude the domain itself,
+-					// but that's not valid in a normal
+-					// domain name.
+-					trimmedDomain = trimmedDomain[1:]
+-				}
+-				if _, ok := domainToReverseLabels(trimmedDomain); !ok {
++				if !domainNameValid(domain, true) {
+ 					return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse URI constraint %q", domain)
+ 				}
+ 				uriDomains = append(uriDomains, domain)
+@@ -1197,3 +1175,40 @@ func ParseRevocationList(der []byte) (*RevocationList, error) {
+ 
+ 	return rl, nil
+ }
++
++// domainNameValid does minimal domain name validity checking. In particular it
++// enforces the following properties:
++//   - names cannot have the trailing period
++//   - names can only have a leading period if constraint is true
++//   - names must be <= 253 characters
++//   - names cannot have empty labels
++//   - names cannot labels that are longer than 63 characters
++//
++// Note that this does not enforce the LDH requirements for domain names.
++func domainNameValid(s string, constraint bool) bool {
++	if len(s) == 0 && constraint {
++		return true
++	}
++	if len(s) == 0 || (!constraint && s[0] == '.') || s[len(s)-1] == '.' || len(s) > 253 {
++		return false
++	}
++	lastDot := -1
++	if constraint && s[0] == '.' {
++		s = s[1:]
++	}
++
++	for i := 0; i <= len(s); i++ {
++		if i == len(s) || s[i] == '.' {
++			labelLen := i
++			if lastDot >= 0 {
++				labelLen -= lastDot + 1
++			}
++			if labelLen == 0 || labelLen > 63 {
++				return false
++			}
++			lastDot = i
++		}
++	}
++
++	return true
++}
+diff --git a/src/crypto/x509/verify.go b/src/crypto/x509/verify.go
+index 2d2a271d53..14cd23f6e6 100644
+--- a/src/crypto/x509/verify.go
++++ b/src/crypto/x509/verify.go
+@@ -360,6 +360,7 @@ func parseRFC2821Mailbox(in string) (mailbox rfc2821Mailbox, ok bool) {
+ // domainToReverseLabels converts a textual domain name like foo.example.com to
+ // the list of labels in reverse order, e.g. ["com", "example", "foo"].
+ func domainToReverseLabels(domain string) (reverseLabels []string, ok bool) {
++	reverseLabels = make([]string, 0, strings.Count(domain, ".")+1)
+ 	for len(domain) > 0 {
+ 		if i := strings.LastIndexByte(domain, '.'); i == -1 {
+ 			reverseLabels = append(reverseLabels, domain)
+@@ -867,7 +868,10 @@ func alreadyInChain(candidate *Certificate, chain []*Certificate) bool {
+ 		if !bytes.Equal(candidate.RawSubject, cert.RawSubject) {
+ 			continue
+ 		}
+-		if !candidate.PublicKey.(pubKeyEqual).Equal(cert.PublicKey) {
++		// We enforce the canonical encoding of SPKI (by only allowing the
++		// correct AI paremeter encodings in parseCertificate), so it's safe to
++		// directly compare the raw bytes.
++		if !bytes.Equal(candidate.RawSubjectPublicKeyInfo, cert.RawSubjectPublicKeyInfo) {
+ 			continue
+ 		}
+ 		var certSAN *pkix.Extension
+diff --git a/src/encoding/asn1/asn1.go b/src/encoding/asn1/asn1.go
+index 781ab87691..16c7138022 100644
+--- a/src/encoding/asn1/asn1.go
++++ b/src/encoding/asn1/asn1.go
+@@ -22,6 +22,7 @@ package asn1
+ import (
+ 	"errors"
+ 	"fmt"
++	"internal/saferio"
+ 	"math"
+ 	"math/big"
+ 	"reflect"
+@@ -643,10 +644,17 @@ func parseSequenceOf(bytes []byte, sliceType reflect.Type, elemType reflect.Type
+ 		offset += t.length
+ 		numElements++
+ 	}
+-	ret = reflect.MakeSlice(sliceType, numElements, numElements)
++	elemSize := uint64(elemType.Size())
++	safeCap := saferio.SliceCapWithSize(elemSize, uint64(numElements))
++	if safeCap < 0 {
++		err = SyntaxError{fmt.Sprintf("%s slice too big: %d elements of %d bytes", elemType.Kind(), numElements, elemSize)}
++		return
++	}
++	ret = reflect.MakeSlice(sliceType, 0, safeCap)
+ 	params := fieldParameters{}
+ 	offset := 0
+ 	for i := 0; i < numElements; i++ {
++		ret = reflect.Append(ret, reflect.Zero(elemType))
+ 		offset, err = parseField(ret.Index(i), bytes, offset, params)
+ 		if err != nil {
+ 			return
+diff --git a/src/encoding/asn1/asn1_test.go b/src/encoding/asn1/asn1_test.go
+index 9a605e245c..249d4e44cb 100644
+--- a/src/encoding/asn1/asn1_test.go
++++ b/src/encoding/asn1/asn1_test.go
+@@ -7,10 +7,12 @@ package asn1
+ import (
+ 	"bytes"
+ 	"encoding/hex"
++	"errors"
+ 	"fmt"
+ 	"math"
+ 	"math/big"
+ 	"reflect"
++	"runtime"
+ 	"strings"
+ 	"testing"
+ 	"time"
+@@ -1175,3 +1177,39 @@ func BenchmarkObjectIdentifierString(b *testing.B) {
+ 		_ = oidPublicKeyRSA.String()
+ 	}
+ }
++
++func TestParsingMemoryConsumption(t *testing.T) {
++	// Craft a syntatically valid, but empty, ~10 MB DER bomb. A successful
++	// unmarshal of this bomb should yield ~280 MB. However, the parsing should
++	// fail due to the empty content; and, in such cases, we want to make sure
++	// that we do not unnecessarily allocate memories.
++	derBomb := make([]byte, 10_000_000)
++	for i := range derBomb {
++		derBomb[i] = 0x30
++	}
++	derBomb = append([]byte{0x30, 0x83, 0x98, 0x96, 0x80}, derBomb...)
++
++	var m runtime.MemStats
++	runtime.GC()
++	runtime.ReadMemStats(&m)
++	memBefore := m.TotalAlloc
++
++	var out []struct {
++		Id       []int
++		Critical bool `asn1:"optional"`
++		Value    []byte
++	}
++	_, err := Unmarshal(derBomb, &out)
++	if !errors.As(err, &SyntaxError{}) {
++		t.Fatalf("Incorrect error result: want (%v), but got (%v) instead", &SyntaxError{}, err)
++	}
++
++	runtime.ReadMemStats(&m)
++	memDiff := m.TotalAlloc - memBefore
++
++	// Ensure that the memory allocated does not exceed 10<<21 (~20 MB) when
++	// the parsing fails.
++	if memDiff > 10<<21 {
++		t.Errorf("Too much memory allocated while parsing DER: %v MiB", memDiff/1024/1024)
++	}
++}
+diff --git a/src/encoding/pem/pem.go b/src/encoding/pem/pem.go
+index 4b4f749021..d36501208d 100644
+--- a/src/encoding/pem/pem.go
++++ b/src/encoding/pem/pem.go
+@@ -37,7 +37,7 @@ type Block struct {
+ // line bytes. The remainder of the byte array (also not including the new line
+ // bytes) is also returned and this will always be smaller than the original
+ // argument.
+-func getLine(data []byte) (line, rest []byte) {
++func getLine(data []byte) (line, rest []byte, consumed int) {
+ 	i := bytes.IndexByte(data, '\n')
+ 	var j int
+ 	if i < 0 {
+@@ -49,7 +49,7 @@ func getLine(data []byte) (line, rest []byte) {
+ 			i--
+ 		}
+ 	}
+-	return bytes.TrimRight(data[0:i], " \t"), data[j:]
++	return bytes.TrimRight(data[0:i], " \t"), data[j:], j
+ }
+ 
+ // removeSpacesAndTabs returns a copy of its input with all spaces and tabs
+@@ -90,20 +90,32 @@ func Decode(data []byte) (p *Block, rest []byte) {
+ 	// pemStart begins with a newline. However, at the very beginning of
+ 	// the byte array, we'll accept the start string without it.
+ 	rest = data
++
+ 	for {
+-		if bytes.HasPrefix(rest, pemStart[1:]) {
+-			rest = rest[len(pemStart)-1:]
+-		} else if _, after, ok := bytes.Cut(rest, pemStart); ok {
+-			rest = after
+-		} else {
++		// Find the first END line, and then find the last BEGIN line before
++		// the end line. This lets us skip any repeated BEGIN lines that don't
++		// have a matching END.
++		endIndex := bytes.Index(rest, pemEnd)
++		if endIndex < 0 {
++			return nil, data
++		}
++		endTrailerIndex := endIndex + len(pemEnd)
++		beginIndex := bytes.LastIndex(rest[:endIndex], pemStart[1:])
++		if beginIndex < 0 || beginIndex > 0 && rest[beginIndex-1] != '\n' {
+ 			return nil, data
+ 		}
++		rest = rest[beginIndex+len(pemStart)-1:]
++		endIndex -= beginIndex + len(pemStart) - 1
++		endTrailerIndex -= beginIndex + len(pemStart) - 1
+ 
+ 		var typeLine []byte
+-		typeLine, rest = getLine(rest)
++		var consumed int
++		typeLine, rest, consumed = getLine(rest)
+ 		if !bytes.HasSuffix(typeLine, pemEndOfLine) {
+ 			continue
+ 		}
++		endIndex -= consumed
++		endTrailerIndex -= consumed
+ 		typeLine = typeLine[0 : len(typeLine)-len(pemEndOfLine)]
+ 
+ 		p = &Block{
+@@ -117,7 +129,7 @@ func Decode(data []byte) (p *Block, rest []byte) {
+ 			if len(rest) == 0 {
+ 				return nil, data
+ 			}
+-			line, next := getLine(rest)
++			line, next, consumed := getLine(rest)
+ 
+ 			key, val, ok := bytes.Cut(line, colon)
+ 			if !ok {
+@@ -129,21 +141,13 @@ func Decode(data []byte) (p *Block, rest []byte) {
+ 			val = bytes.TrimSpace(val)
+ 			p.Headers[string(key)] = string(val)
+ 			rest = next
++			endIndex -= consumed
++			endTrailerIndex -= consumed
+ 		}
+ 
+-		var endIndex, endTrailerIndex int
+-
+-		// If there were no headers, the END line might occur
+-		// immediately, without a leading newline.
+-		if len(p.Headers) == 0 && bytes.HasPrefix(rest, pemEnd[1:]) {
+-			endIndex = 0
+-			endTrailerIndex = len(pemEnd) - 1
+-		} else {
+-			endIndex = bytes.Index(rest, pemEnd)
+-			endTrailerIndex = endIndex + len(pemEnd)
+-		}
+-
+-		if endIndex < 0 {
++		// If there were headers, there must be a newline between the headers
++		// and the END line, so endIndex should be >= 0.
++		if len(p.Headers) > 0 && endIndex < 0 {
+ 			continue
+ 		}
+ 
+@@ -163,21 +167,24 @@ func Decode(data []byte) (p *Block, rest []byte) {
+ 		}
+ 
+ 		// The line must end with only whitespace.
+-		if s, _ := getLine(restOfEndLine); len(s) != 0 {
++		if s, _, _ := getLine(restOfEndLine); len(s) != 0 {
+ 			continue
+ 		}
+ 
+-		base64Data := removeSpacesAndTabs(rest[:endIndex])
+-		p.Bytes = make([]byte, base64.StdEncoding.DecodedLen(len(base64Data)))
+-		n, err := base64.StdEncoding.Decode(p.Bytes, base64Data)
+-		if err != nil {
+-			continue
++		p.Bytes = []byte{}
++		if endIndex > 0 {
++			base64Data := removeSpacesAndTabs(rest[:endIndex])
++			p.Bytes = make([]byte, base64.StdEncoding.DecodedLen(len(base64Data)))
++			n, err := base64.StdEncoding.Decode(p.Bytes, base64Data)
++			if err != nil {
++				continue
++			}
++			p.Bytes = p.Bytes[:n]
+ 		}
+-		p.Bytes = p.Bytes[:n]
+ 
+ 		// the -1 is because we might have only matched pemEnd without the
+ 		// leading newline if the PEM block was empty.
+-		_, rest = getLine(rest[endIndex+len(pemEnd)-1:])
++		_, rest, _ = getLine(rest[endIndex+len(pemEnd)-1:])
+ 		return p, rest
+ 	}
+ }
+diff --git a/src/encoding/pem/pem_test.go b/src/encoding/pem/pem_test.go
+index 56a7754b22..7025277c0d 100644
+--- a/src/encoding/pem/pem_test.go
++++ b/src/encoding/pem/pem_test.go
+@@ -34,7 +34,7 @@ var getLineTests = []GetLineTest{
+ 
+ func TestGetLine(t *testing.T) {
+ 	for i, test := range getLineTests {
+-		x, y := getLine([]byte(test.in))
++		x, y, _ := getLine([]byte(test.in))
+ 		if string(x) != test.out1 || string(y) != test.out2 {
+ 			t.Errorf("#%d got:%+v,%+v want:%s,%s", i, x, y, test.out1, test.out2)
+ 		}
+@@ -46,6 +46,7 @@ func TestDecode(t *testing.T) {
+ 	if !reflect.DeepEqual(result, certificate) {
+ 		t.Errorf("#0 got:%#v want:%#v", result, certificate)
+ 	}
++
+ 	result, remainder = Decode(remainder)
+ 	if !reflect.DeepEqual(result, privateKey) {
+ 		t.Errorf("#1 got:%#v want:%#v", result, privateKey)
+@@ -68,7 +69,7 @@ func TestDecode(t *testing.T) {
+ 	}
+ 
+ 	result, remainder = Decode(remainder)
+-	if result == nil || result.Type != "HEADERS" || len(result.Headers) != 1 {
++	if result == nil || result.Type != "VALID HEADERS" || len(result.Headers) != 1 {
+ 		t.Errorf("#5 expected single header block but got :%v", result)
+ 	}
+ 
+@@ -381,15 +382,15 @@ ZWAaUoVtWIQ52aKS0p19G99hhb+IVANC4akkdHV4SP8i7MVNZhfUmg==
+ 
+ # This shouldn't be recognised because of the missing newline after the
+ headers.
+------BEGIN HEADERS-----
++-----BEGIN INVALID HEADERS-----
+ Header: 1
+------END HEADERS-----
++-----END INVALID HEADERS-----
+ 
+ # This should be valid, however.
+------BEGIN HEADERS-----
++-----BEGIN VALID HEADERS-----
+ Header: 1
+ 
+------END HEADERS-----`)
++-----END VALID HEADERS-----`)
+ 
+ var certificate = &Block{Type: "CERTIFICATE",
+ 	Headers: map[string]string{},
+diff --git a/src/net/textproto/reader.go b/src/net/textproto/reader.go
+index 793021101b..0027efe3ca 100644
+--- a/src/net/textproto/reader.go
++++ b/src/net/textproto/reader.go
+@@ -283,8 +283,10 @@ func (r *Reader) ReadCodeLine(expectCode int) (code int, message string, err err
+ //
+ // An expectCode <= 0 disables the check of the status code.
+ func (r *Reader) ReadResponse(expectCode int) (code int, message string, err error) {
+-	code, continued, message, err := r.readCodeLine(expectCode)
++	code, continued, first, err := r.readCodeLine(expectCode)
+ 	multi := continued
++	var messageBuilder strings.Builder
++	messageBuilder.WriteString(first)
+ 	for continued {
+ 		line, err := r.ReadLine()
+ 		if err != nil {
+@@ -295,12 +297,15 @@ func (r *Reader) ReadResponse(expectCode int) (code int, message string, err err
+ 		var moreMessage string
+ 		code2, continued, moreMessage, err = parseCodeLine(line, 0)
+ 		if err != nil || code2 != code {
+-			message += "\n" + strings.TrimRight(line, "\r\n")
++			messageBuilder.WriteByte('\n')
++			messageBuilder.WriteString(strings.TrimRight(line, "\r\n"))
+ 			continued = true
+ 			continue
+ 		}
+-		message += "\n" + moreMessage
++		messageBuilder.WriteByte('\n')
++		messageBuilder.WriteString(moreMessage)
+ 	}
++	message = messageBuilder.String()
+ 	if err != nil && multi && message != "" {
+ 		// replace one line error message with all lines (full message)
+ 		err = &Error{code, message}
+diff --git a/src/net/url/url.go b/src/net/url/url.go
+index f362958edd..d2ae03232f 100644
+--- a/src/net/url/url.go
++++ b/src/net/url/url.go
+@@ -13,6 +13,7 @@ package url
+ import (
+ 	"errors"
+ 	"fmt"
++	"net/netip"
+ 	"path"
+ 	"sort"
+ 	"strconv"
+@@ -621,40 +622,61 @@ func parseAuthority(authority string) (user *Userinfo, host string, err error) {
+ // parseHost parses host as an authority without user
+ // information. That is, as host[:port].
+ func parseHost(host string) (string, error) {
+-	if strings.HasPrefix(host, "[") {
++	if openBracketIdx := strings.LastIndex(host, "["); openBracketIdx != -1 {
+ 		// Parse an IP-Literal in RFC 3986 and RFC 6874.
+ 		// E.g., "[fe80::1]", "[fe80::1%25en0]", "[fe80::1]:80".
+-		i := strings.LastIndex(host, "]")
+-		if i < 0 {
++		closeBracketIdx := strings.LastIndex(host, "]")
++		if closeBracketIdx < 0 {
+ 			return "", errors.New("missing ']' in host")
+ 		}
+-		colonPort := host[i+1:]
++
++		colonPort := host[closeBracketIdx+1:]
+ 		if !validOptionalPort(colonPort) {
+ 			return "", fmt.Errorf("invalid port %q after host", colonPort)
+ 		}
++		unescapedColonPort, err := unescape(colonPort, encodeHost)
++		if err != nil {
++			return "", err
++		}
+ 
++		hostname := host[openBracketIdx+1 : closeBracketIdx]
++		var unescapedHostname string
+ 		// RFC 6874 defines that %25 (%-encoded percent) introduces
+ 		// the zone identifier, and the zone identifier can use basically
+ 		// any %-encoding it likes. That's different from the host, which
+ 		// can only %-encode non-ASCII bytes.
+ 		// We do impose some restrictions on the zone, to avoid stupidity
+ 		// like newlines.
+-		zone := strings.Index(host[:i], "%25")
+-		if zone >= 0 {
+-			host1, err := unescape(host[:zone], encodeHost)
++		zoneIdx := strings.Index(hostname, "%25")
++		if zoneIdx >= 0 {
++			hostPart, err := unescape(hostname[:zoneIdx], encodeHost)
+ 			if err != nil {
+ 				return "", err
+ 			}
+-			host2, err := unescape(host[zone:i], encodeZone)
++			zonePart, err := unescape(hostname[zoneIdx:], encodeZone)
+ 			if err != nil {
+ 				return "", err
+ 			}
+-			host3, err := unescape(host[i:], encodeHost)
++			unescapedHostname = hostPart + zonePart
++		} else {
++			var err error
++			unescapedHostname, err = unescape(hostname, encodeHost)
+ 			if err != nil {
+ 				return "", err
+ 			}
+-			return host1 + host2 + host3, nil
+ 		}
++
++		// Per RFC 3986, only a host identified by a valid
++		// IPv6 address can be enclosed by square brackets.
++		// This excludes any IPv4 or IPv4-mapped addresses.
++		addr, err := netip.ParseAddr(unescapedHostname)
++		if err != nil {
++			return "", fmt.Errorf("invalid host: %w", err)
++		}
++		if addr.Is4() || addr.Is4In6() {
++			return "", errors.New("invalid IPv6 host")
++		}
++		return "[" + unescapedHostname + "]" + unescapedColonPort, nil
+ 	} else if i := strings.LastIndex(host, ":"); i != -1 {
+ 		colonPort := host[i:]
+ 		if !validOptionalPort(colonPort) {
+diff --git a/src/net/url/url_test.go b/src/net/url/url_test.go
+index 4aa20bb95f..fef236e40a 100644
+--- a/src/net/url/url_test.go
++++ b/src/net/url/url_test.go
+@@ -383,6 +383,16 @@ var urltests = []URLTest{
+ 		},
+ 		"",
+ 	},
++	// valid IPv6 host with port and path
++	{
++		"https://[2001:db8::1]:8443/test/path",
++		&URL{
++			Scheme: "https",
++			Host:   "[2001:db8::1]:8443",
++			Path:   "/test/path",
++		},
++		"",
++	},
+ 	// host subcomponent; IPv6 address with zone identifier in RFC 6874
+ 	{
+ 		"http://[fe80::1%25en0]/", // alphanum zone identifier
+@@ -707,6 +717,24 @@ var parseRequestURLTests = []struct {
+ 	// RFC 6874.
+ 	{"http://[fe80::1%en0]/", false},
+ 	{"http://[fe80::1%en0]:8080/", false},
++
++	// Tests exercising RFC 3986 compliance
++	{"https://[1:2:3:4:5:6:7:8]", true},             // full IPv6 address
++	{"https://[2001:db8::a:b:c:d]", true},           // compressed IPv6 address
++	{"https://[fe80::1%25eth0]", true},              // link-local address with zone ID (interface name)
++	{"https://[fe80::abc:def%254]", true},           // link-local address with zone ID (interface index)
++	{"https://[2001:db8::1]/path", true},            // compressed IPv6 address with path
++	{"https://[fe80::1%25eth0]/path?query=1", true}, // link-local with zone, path, and query
++
++	{"https://[::ffff:192.0.2.1]", false},
++	{"https://[:1] ", false},
++	{"https://[1:2:3:4:5:6:7:8:9]", false},
++	{"https://[1::1::1]", false},
++	{"https://[1:2:3:]", false},
++	{"https://[ffff::127.0.0.4000]", false},
++	{"https://[0:0::test.com]:80", false},
++	{"https://[2001:db8::test.com]", false},
++	{"https://[test.com]", false},
+ }
+ 
+ func TestParseRequestURI(t *testing.T) {
+@@ -1635,6 +1663,17 @@ func TestParseErrors(t *testing.T) {
+ 		{"cache_object:foo", true},
+ 		{"cache_object:foo/bar", true},
+ 		{"cache_object/:foo/bar", false},
++
++		{"http://[192.168.0.1]/", true},             // IPv4 in brackets
++		{"http://[192.168.0.1]:8080/", true},        // IPv4 in brackets with port
++		{"http://[::ffff:192.168.0.1]/", true},      // IPv4-mapped IPv6 in brackets
++		{"http://[::ffff:192.168.0.1]:8080/", true}, // IPv4-mapped IPv6 in brackets with port
++		{"http://[::ffff:c0a8:1]/", true},           // IPv4-mapped IPv6 in brackets (hex)
++		{"http://[not-an-ip]/", true},               // invalid IP string in brackets
++		{"http://[fe80::1%foo]/", true},             // invalid zone format in brackets
++		{"http://[fe80::1", true},                   // missing closing bracket
++		{"http://fe80::1]/", true},                  // missing opening bracket
++		{"http://[test.com]/", true},                // domain name in brackets
+ 	}
+ 	for _, tt := range tests {
+ 		u, err := Parse(tt.in)
 diff --git a/src/runtime/extern.go b/src/runtime/extern.go
-index e42122f..cb019fd 100644
+index e42122fd3a..cb019fdc15 100644
 --- a/src/runtime/extern.go
 +++ b/src/runtime/extern.go
 @@ -92,6 +92,10 @@ It is a comma-separated list of name=val pairs setting these named variables:
@@ -259,7 +1030,7 @@ index e42122f..cb019fd 100644
  	error at each collection, summarizing the amount of memory collected and the
  	length of the pause. The format of this line is subject to change. Included in
 diff --git a/src/runtime/malloc.go b/src/runtime/malloc.go
-index e2cb2e4..75bb0b1 100644
+index e2cb2e456e..75bb0b1473 100644
 --- a/src/runtime/malloc.go
 +++ b/src/runtime/malloc.go
 @@ -1336,7 +1336,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
@@ -272,7 +1043,7 @@ index e2cb2e4..75bb0b1 100644
  		assistG = getg()
  		if assistG.m.curg != nil {
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 0616731..88950ff 100644
+index f9803d514b..949e524a2d 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
 @@ -1067,6 +1067,11 @@ func casfrom_Gscanstatus(gp *g, oldval, newval uint32) {
@@ -382,7 +1153,7 @@ index 0616731..88950ff 100644
  	if gcBlackenEnabled != 0 && gp.gcAssistBytes > 0 {
  		// Flush assist credit to the global pool. This gives
 diff --git a/src/runtime/runtime1.go b/src/runtime/runtime1.go
-index afe1bdd..1070b6b 100644
+index afe1bdd298..1070b6bf84 100644
 --- a/src/runtime/runtime1.go
 +++ b/src/runtime/runtime1.go
 @@ -316,6 +316,7 @@ var debug struct {
@@ -402,7 +1173,7 @@ index afe1bdd..1070b6b 100644
  	{name: "invalidptr", value: &debug.invalidptr},
  	{name: "madvdontneed", value: &debug.madvdontneed},
 diff --git a/src/runtime/runtime2.go b/src/runtime/runtime2.go
-index 63320d4..6569dc3 100644
+index 63320d4a8a..6569dc35d2 100644
 --- a/src/runtime/runtime2.go
 +++ b/src/runtime/runtime2.go
 @@ -492,7 +492,6 @@ type g struct {
@@ -424,7 +1195,7 @@ index 63320d4..6569dc3 100644
  	coroarg *coro // argument during coroutine transfers
  
 diff --git a/src/runtime/sizeof_test.go b/src/runtime/sizeof_test.go
-index aa8caaa..7916bde 100644
+index aa8caaadda..7916bde1f8 100644
 --- a/src/runtime/sizeof_test.go
 +++ b/src/runtime/sizeof_test.go
 @@ -27,7 +27,7 @@ func TestSizeof(t *testing.T) {
