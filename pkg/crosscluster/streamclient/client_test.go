@@ -387,6 +387,23 @@ SXy25ZnLdt1xMg==
 		require.NoError(t, err)
 	})
 
+	t.Run("all valid certs but disabled", func(t *testing.T) {
+		query := url.Values{}
+		query.Add(SslInlineURLParam, "true")
+		query.Add(sslCertURLParam, validCert)
+		query.Add(sslKeyURLParam, validKey)
+		query.Add(sslRootCertURLParam, validCert)
+		query.Add(sslModeURLParam, "disable")
+
+		remote := url.URL{
+			Scheme:   "postgresql",
+			Host:     "localhost:26257",
+			RawQuery: query.Encode(),
+		}
+		_, err := setupPGXConfig(remote, options{})
+		require.NoError(t, err)
+	})
+
 	t.Run("invalid cert", func(t *testing.T) {
 		query := url.Values{}
 		query.Add(SslInlineURLParam, "true")
