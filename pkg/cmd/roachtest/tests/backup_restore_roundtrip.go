@@ -218,7 +218,10 @@ func backupRestoreRoundTrip(
 
 			t.L().Printf("verifying backup %d", i+1)
 			// Verify content in backups.
-			err = d.verifyBackupCollection(ctx, t.L(), testRNG, collection, true /* checkFiles */, true /* internalSystemJobs */)
+			err = d.verifyBackupCollection(
+				ctx, t.L(), testRNG, collection,
+				true /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
+			)
 			if err != nil {
 				return err
 			}
@@ -535,7 +538,8 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 		t.L().Printf("performing online restore of backup")
 		if _, _, err := d.runRestore(
-			ctx, t.L(), testRNG, collection, false /* checkFiles */, true, /* internalSystemJobs */
+			ctx, t.L(), testRNG, collection,
+			false /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
 		); err != nil {
 			return err
 		}
