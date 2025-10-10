@@ -60,6 +60,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SettingName": {},
 						"ValueOrigin": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent": {
+						"bufferType": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/crosscluster/logical": {
 						"processorType": {},
 					},

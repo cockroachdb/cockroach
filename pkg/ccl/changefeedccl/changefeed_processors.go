@@ -2252,7 +2252,7 @@ func frontierIsBehind(frontier hlc.Timestamp, sv *settings.Values) bool {
 // frontier is behind
 func maybeLogBehindSpan(
 	ctx context.Context,
-	description string,
+	description redact.SafeString,
 	frontier span.Frontier,
 	frontierChanged bool,
 	sv *settings.Values,
@@ -2272,12 +2272,12 @@ func maybeLogBehindSpan(
 
 	if frontierChanged && slowLogEveryN.ShouldProcess(now) {
 		log.Changefeed.Infof(ctx, "%s new resolved timestamp %s is behind by %s",
-			redact.Safe(description), frontierTS, resolvedBehind)
+			description, frontierTS, resolvedBehind)
 	}
 
 	if slowLogEveryN.ShouldProcess(now) {
 		s := frontier.PeekFrontierSpan()
-		log.Changefeed.Infof(ctx, "%s span %s is behind by %s", redact.Safe(description), s, resolvedBehind)
+		log.Changefeed.Infof(ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 	}
 }
 
