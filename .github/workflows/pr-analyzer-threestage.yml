@@ -67,9 +67,13 @@ jobs:
         id: stage1_result
         if: steps.stage1.conclusion == 'success'
         run: |
-          RESULT=$(cat "${{ steps.stage1.outputs.execution_file }}" | jq -r '.result' | tail -1)
-          echo "result=$RESULT" >> $GITHUB_OUTPUT
-          echo "Stage 1 result: $RESULT"
+          RESULT=$(jq -r 'select(.type == "result") | .result' "${{ steps.stage1.outputs.execution_file }}")
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Stage 1 result extracted (${#RESULT} characters)"
 
       - name: Stage 2 - Database Expert Review
         id: stage2
@@ -114,9 +118,13 @@ jobs:
         id: stage2_result
         if: steps.stage2.conclusion == 'success'
         run: |
-          RESULT=$(cat "${{ steps.stage2.outputs.execution_file }}" | jq -r '.result' | tail -1)
-          echo "result=$RESULT" >> $GITHUB_OUTPUT
-          echo "Stage 2 result: $RESULT"
+          RESULT=$(jq -r 'select(.type == "result") | .result' "${{ steps.stage2.outputs.execution_file }}")
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Stage 2 result extracted (${#RESULT} characters)"
 
       - name: Stage 3 - Principal Engineer Final Review
         id: stage3
@@ -176,9 +184,13 @@ jobs:
         id: stage3_result
         if: steps.stage3.conclusion == 'success'
         run: |
-          RESULT=$(cat "${{ steps.stage3.outputs.execution_file }}" | jq -r '.result' | tail -1)
-          echo "result=$RESULT" >> $GITHUB_OUTPUT
-          echo "Stage 3 result: $RESULT"
+          RESULT=$(jq -r 'select(.type == "result") | .result' "${{ steps.stage3.outputs.execution_file }}")
+          {
+            echo 'result<<EOF'
+            echo "$RESULT"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Stage 3 result extracted (${#RESULT} characters)"
 
       - name: Final Analysis Report
         if: always()
@@ -224,11 +236,6 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} --body "## Potential Bug(s) Detected
 
           The three-stage Claude Code analysis has identified potential bug(s) in this PR that may warrant investigation.
-
-          **Analysis Results:**
-          - ⚠️ Stage 1 (Initial Screening): Potential bugs detected
-          - ⚠️ Stage 2 (Database Expert Review): Potential bugs not ruled out
-          - ⚠️ Stage 3 (Principal Engineer Review): Potential bugs not ruled out
 
           **Next Steps:**
           Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
