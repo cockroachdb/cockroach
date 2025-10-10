@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 const (
@@ -1267,8 +1268,9 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 	bc *backupCollection,
 	checkFiles bool,
 	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
 ) error {
-	restoredTables, _, err := d.runRestore(ctx, l, rng, bc, checkFiles, internalSystemJobs)
+	restoredTables, _, err := d.runRestore(ctx, l, rng, bc, checkFiles, internalSystemJobs, mvHelper)
 	if err != nil {
 		return fmt.Errorf("error restoring backup: %w", err)
 	}
@@ -1306,6 +1308,7 @@ func (d *BackupRestoreTestDriver) runRestore(
 	bc *backupCollection,
 	checkFiles bool,
 	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
 ) ([]string, string, error) {
 	restoreStmt, restoredTables, restoreDB := d.buildRestoreStatement(bc)
 	if _, isTableBackup := bc.btype.(*tableBackup); isTableBackup {
@@ -1327,9 +1330,34 @@ func (d *BackupRestoreTestDriver) runRestore(
 	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
 		return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
 	}
-	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
-		return nil, "", err
+	if jobErr := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
+		if mvHelper == nil {
+			return nil, "", jobErr
+		}
+		v25_4 := version.MajorVersion{Year: 25, Ordinal: 4}
+		isUpgradeTo25_4 := mvHelper.System.ToVersion.Major().Equals(v25_4) &&
+			mvHelper.System.FromVersion.Major().LessThan(v25_4)
+		if !isUpgradeTo25_4 {
+			return nil, "", jobErr
+		}
+		// In the 25.4 upgrade, all descriptors are rewritten in the migration to use
+		// the new serialization format. If this upgrade occurs in the middle of the
+		// restore, we may encounter a version mismatch error. As a short-term fix for
+		// this test flake, we retry the restore if we encounter this error.
+		if !strings.Contains(jobErr.Error(), "version mismatch for descriptor") {
+			return nil, "", jobErr
+		}
+		l.Printf(
+			"encountered version mismatch error due to mixed-version upgrade, retrying restore: %v", jobErr,
+		)
+		if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
+			return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
+		}
+		if jobErr = d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
+			return nil, "", jobErr
+		}
 	}
+
 	return restoredTables, restoreDB, nil
 }
 
@@ -2748,7 +2776,9 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 
 	for _, collection := range toBeRestored {
 		l.Printf("mixed-version: verifying %s", collection.name)
-		if err := mvb.backupRestoreTestDriver.verifyBackupCollection(ctx, l, rng, collection, checkFiles, internalSystemJobs); err != nil {
+		if err := mvb.backupRestoreTestDriver.verifyBackupCollection(
+			ctx, l, rng, collection, checkFiles, internalSystemJobs, h,
+		); err != nil {
 			return errors.Wrap(err, "mixed-version")
 		}
 	}
@@ -2828,7 +2858,9 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 				return
 			}
 
-			if err := mvb.backupRestoreTestDriver.verifyBackupCollection(ctx, l, rng, collection, checkFiles, internalSystemJobs); err != nil {
+			if err := mvb.backupRestoreTestDriver.verifyBackupCollection(
+				ctx, l, rng, collection, checkFiles, internalSystemJobs, h,
+			); err != nil {
 				err := errors.Wrapf(err, "%s", v)
 				l.Printf("restore error: %v", err)
 				// Attempt to collect logs and debug.zip at the time of this
