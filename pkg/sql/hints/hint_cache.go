@@ -9,6 +9,7 @@ import (
 	"context"
 	"hash/fnv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -87,6 +88,10 @@ type StatementHintsCache struct {
 
 	// Used to read hints from the database when they are not in the cache.
 	db descs.DB
+
+	// generation is incremented any time the hint cache is updated by the
+	// rangefeed.
+	generation atomic.Int64
 }
 
 // cacheSize is the size of the entries to store in the cache.
@@ -214,6 +219,7 @@ func (c *StatementHintsCache) onUpdate(
 // handleInitialScan builds the hintedHashes map and adds it to
 // StatementHintsCache after the initial scan completes.
 func (c *StatementHintsCache) handleInitialScan(update rangefeedcache.Update[*bufferEvent]) {
+	defer c.generation.Add(1)
 	hintedHashes := make(map[int64]hlc.Timestamp)
 	for _, ev := range update.Events {
 		if ev.del {
@@ -246,6 +252,7 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 		// Avoid synchronization when we're just bumping the resolved timestamp.
 		return
 	}
+	defer c.generation.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, ev := range update.Events {
@@ -309,8 +316,6 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 					// Unset the timestamp to indicate that the refresh is done.
 					c.mu.hintedHashes[hash] = hlc.Timestamp{}
 				} else {
-					// There may be a hintCache entry with no hints; drop it.
-					c.mu.hintCache.Del(hash)
 					delete(c.mu.hintedHashes, hash)
 				}
 				return true
@@ -377,6 +382,12 @@ var _ rangefeedbuffer.Event = &bufferEvent{}
 // ============================================================================
 // Reading from the cache.
 // ============================================================================
+
+// GetGeneration returns the current generation, which will change if any
+// modifications happen to the cache.
+func (c *StatementHintsCache) GetGeneration() int64 {
+	return c.generation.Load()
+}
 
 // MaybeGetStatementHints attempts to retrieve the hints for the given statement
 // fingerprint. It returns nil if the statement has no hints, or there was an
