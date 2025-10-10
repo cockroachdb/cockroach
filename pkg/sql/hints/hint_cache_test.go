@@ -9,6 +9,7 @@ import (
 	"context"
 	"hash/fnv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -370,6 +372,98 @@ func TestHintCacheMultiTenant(t *testing.T) {
 	require.False(t, hc2.TestingHashHasHints(computeHash(t, fingerprintShared)))
 	require.Len(t, hc1.MaybeGetStatementHints(ctx, fingerprintShared), 1)
 	require.Nil(t, hc2.MaybeGetStatementHints(ctx, fingerprintShared))
+}
+
+// TestHintCacheGeneration tests that the cache generation is incremented
+// correctly when hints are added and removed, and that the generation is not
+// incremented when there are no updates.
+func TestHintCacheGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rnd, _ := randutil.NewTestRand()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	r := sqlutils.MakeSQLRunner(db)
+	setTestDefaults(t, srv)
+
+	// Create a hints cache.
+	hc := createHintsCache(t, ctx, ts)
+
+	// Helper that retrieves the generation and verifies that it doesn't change
+	// over a short period.
+	getGenerationAssertNoChange := func() int64 {
+		t.Helper()
+		startGeneration := hc.GetGeneration()
+		time.Sleep(time.Duration(rnd.Intn(int(time.Millisecond))))
+		require.Equal(t, startGeneration, hc.GetGeneration())
+		return startGeneration
+	}
+	// Helper that waits until the generation increments from the given start
+	// point.
+	waitForGenerationInc := func(prevGeneration int64) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			t.Helper()
+			if gen := hc.GetGeneration(); gen <= prevGeneration {
+				return errors.Errorf("expected generation >= %d, got %d", prevGeneration, gen)
+			}
+			return nil
+		})
+	}
+
+	// The initial scan should increment the generation.
+	waitForGenerationInc(0)
+	generationAfterInitialScan := getGenerationAssertNoChange()
+
+	// Insert a hint - generation should increment.
+	fingerprint1 := "SELECT a FROM t WHERE b = $1"
+	insertStatementHint(t, r, fingerprint1)
+	waitForGenerationInc(generationAfterInitialScan)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 1)
+	generationAfterInsert := getGenerationAssertNoChange()
+
+	// Insert another hint for the same fingerprint - generation should increment
+	// again.
+	insertStatementHint(t, r, fingerprint1)
+	waitForGenerationInc(generationAfterInsert)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 2)
+	generationAfterSecondInsert := getGenerationAssertNoChange()
+
+	// Add a hint for a different fingerprint - generation should increment.
+	fingerprint2 := "SELECT c FROM t WHERE d = $1"
+	insertStatementHint(t, r, fingerprint2)
+	waitForGenerationInc(generationAfterSecondInsert)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint2, 1)
+	generationAfterDifferentFingerprint := getGenerationAssertNoChange()
+
+	// Delete one hint - generation should increment.
+	deleteStatementHints(t, r, fingerprint1, 1)
+	waitForGenerationInc(generationAfterDifferentFingerprint)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 1)
+	generationAfterDelete := getGenerationAssertNoChange()
+
+	// Delete all remaining hints for fingerprint1 - generation should increment.
+	deleteStatementHints(t, r, fingerprint1, 0)
+	waitForGenerationInc(generationAfterDelete)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 0)
+	generationAfterDeleteAll := getGenerationAssertNoChange()
+
+	// Query for hints (cache access) should NOT increment generation.
+	hc.MaybeGetStatementHints(ctx, fingerprint2)
+	getGenerationAssertNoChange()
+
+	// Accessing a non-existent fingerprint should also NOT increment generation.
+	hc.MaybeGetStatementHints(ctx, "SELECT nonexistent FROM t")
+	getGenerationAssertNoChange()
+
+	// Delete all remaining hints.
+	deleteStatementHints(t, r, fingerprint2, 0)
+	waitForGenerationInc(generationAfterDeleteAll)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint2, 0)
+	getGenerationAssertNoChange()
 }
 
 func setTestDefaults(t *testing.T, srv serverutils.TestServerInterface) {

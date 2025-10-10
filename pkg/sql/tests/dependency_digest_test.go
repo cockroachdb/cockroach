@@ -21,6 +21,7 @@ import (
 
 // TestDependencyDigestOptimization validates that dependency digest information
 // is properly invalidated in the face of modifications for prepared queries.
+// TODO(drewk,michae2): Once statement hints are hooked up, add a case for them.
 func TestDependencyDigestOptimization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
