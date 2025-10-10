@@ -1889,6 +1889,12 @@ func runCDCMultiTablePTSBenchmark(
 }
 
 func configureDBForMultiTablePTSBenchmark(db *gosql.DB) error {
+	// Multi-table PTS benchmarking should be able to test with more tables
+	// than the default limit set here. Setting this to 0 disables the limit.
+	if _, err := db.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0"); err != nil {
+		return err
+	}
+
 	// This is used to trigger frequent garbage collection and
 	// protected timestamp updates.
 	if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
