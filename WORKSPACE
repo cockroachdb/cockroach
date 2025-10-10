@@ -167,14 +167,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.23.12.darwin-amd64.tar.gz", "25b853b77448c6f196475c1ab44d4a617b719db34e9e072c72c927a905bdbce6"),
-        "darwin_arm64": ("go1.23.12.darwin-arm64.tar.gz", "fae1c6d45f72d559b9fe52224918321e7642cb75cd6a71186c7ccdf577189a4f"),
-        "linux_amd64": ("go1.23.12.linux-amd64.tar.gz", "03ac2c00dfde86a4beb3e94f063edffe1d2c089dfbbe1ec2776d1531c58e196b"),
-        "linux_arm64": ("go1.23.12.linux-arm64.tar.gz", "442f8d3510d141d6f479f05f7de00560aa1df59e0a5e1d02ca58ed9e4757d0d7"),
-        "linux_s390x": ("go1.23.12.linux-s390x.tar.gz", "6e3c09786b434bdd8d44de714656bef7c4fe484d2a2e6f8c98a797385e5f280e"),
-        "windows_amd64": ("go1.23.12.windows-amd64.tar.gz", "513af02afaa1c64501f1ec0a9c9445dbf88ea55c0b7a5a86e0b7fc94f0c59b39"),
+        "darwin_amd64": ("go1.23.12.darwin-amd64.tar.gz", "9df769f3d442ee435b192563d40b9989c07ab17b61d291a430c8b7bbb79d7d0a"),
+        "darwin_arm64": ("go1.23.12.darwin-arm64.tar.gz", "fd712f39537fbd282b5a3462abb5ee416e65ca315113f76a21366dcb0436b276"),
+        "linux_amd64": ("go1.23.12.linux-amd64.tar.gz", "8c36b5e049f10dd5c2c2455335603ff3872157f2a362e2f1abdb0cbad6d9ea17"),
+        "linux_arm64": ("go1.23.12.linux-arm64.tar.gz", "0a3742233760695d06de4f6e32e97c355b74dab01085d912bf228b6a51345bbc"),
+        "linux_s390x": ("go1.23.12.linux-s390x.tar.gz", "ffac7269c730700d50855c3b3dbd45c349d4ff8aba85b8996de5ccdb7a6bedaf"),
+        "windows_amd64": ("go1.23.12.windows-amd64.tar.gz", "ba36f3322807a84864b453f34bd61f3ccda33f76bceafccaf3e9e8d069d10ebf"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250930-204932/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251009-220233/{}"],
     version = "1.23.12",
 )
 
@@ -659,8 +659,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.23.12fips.linux-amd64.tar.gz", "ae2d57fa43ef68aa70e6c0c1def065bd2806411acfc0d59591ddff81168be095"),
+        "linux_amd64": ("go1.23.12fips.linux-amd64.tar.gz", "ca51c0e51ee0794dc7e0f058db672789eccfa887eb3bce47da6cf9a00a0df8f3"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250930-204932/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251009-220233/{}"],
     version = "1.23.12fips",
 )
