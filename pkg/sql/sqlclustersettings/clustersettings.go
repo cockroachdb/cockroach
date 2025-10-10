@@ -152,3 +152,12 @@ var LDRImmediateModeWriter = settings.RegisterStringSetting(
 		return nil
 	}),
 )
+
+// TestingAllowUnsafeInternalsDefault is a test-only cluster setting that
+// allows changing the default value for the allow_unsafe_internals session variable.
+var TestingAllowUnsafeInternalsDefault = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.testing.unsafe_internals_default.enabled",
+	"test-only setting that controls the default value for allow_unsafe_internals session variable",
+	true,
+)
