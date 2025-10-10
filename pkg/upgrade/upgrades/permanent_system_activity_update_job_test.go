@@ -32,9 +32,9 @@ func TestCreateActivityUpdateJobMigration(t *testing.T) {
 	db := tc.ServerConn(0)
 	defer db.Close()
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	row := db.QueryRow("SELECT count(*) FROM system.public.jobs WHERE id = 103")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	assert.NotNil(t, row)
 	assert.NoError(t, row.Err())
 	var count int

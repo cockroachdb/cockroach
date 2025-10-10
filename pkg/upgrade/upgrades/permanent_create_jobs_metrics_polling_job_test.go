@@ -32,9 +32,9 @@ func TestCreateJobsMetricsPollingJob(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 	defer sqlDB.Close()
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	row := sqlDB.QueryRow("SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'POLL JOBS STATS'")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	var count int
 	err := row.Scan(&count)
 	require.NoError(t, err)

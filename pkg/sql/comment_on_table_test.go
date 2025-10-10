@@ -9,6 +9,7 @@ import (
 	gosql "database/sql"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -87,7 +88,9 @@ func TestCommentOnTableWhenDrop(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		unsafesql.T = true
 		row := db.QueryRow(`SELECT comment FROM system.comments LIMIT 1`)
+		unsafesql.T = false
 		var comment string
 		err := row.Scan(&comment)
 		if !errors.Is(err, gosql.ErrNoRows) {

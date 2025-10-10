@@ -113,21 +113,21 @@ RETURNING id;
 	}
 	for i, s := range terminalStates {
 		terminalClaims[i] = mkSessionID() // bogus claim
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t, insertQuery, s, terminalClaims[i], 42).Scan(&terminalIDs[i])
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 	}
 	var nonTerminalID jobspb.JobID
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.QueryRow(t, insertQuery, jobs.StateRunning, mkSessionID(), 42).Scan(&nonTerminalID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	checkClaimEqual := func(id jobspb.JobID, exp []byte) error {
 		const getClaimQuery = `SELECT claim_session_id FROM system.jobs WHERE id = $1`
 		var claim []byte
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t, getClaimQuery, id).Scan(&claim)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if !bytes.Equal(claim, exp) {
 			return errors.Errorf("expected nil, got %s", hex.EncodeToString(exp))
 		}
@@ -137,9 +137,9 @@ RETURNING id;
 	getClaimCount := func(id jobspb.JobID) int {
 		const getClaimQuery = `SELECT count(claim_session_id) FROM system.jobs WHERE id = $1`
 		count := 0
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t, getClaimQuery, id).Scan(&count)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		return count
 	}
 	// Validate the claims were not cleaned up.
@@ -158,9 +158,9 @@ RETURNING id;
 	}
 	// Update the terminal jobs to set them to have a NULL claim.
 	for _, id := range terminalIDs {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.Exec(t, `UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`, id)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 	}
 	// At this point, all of the jobs should have a NULL claim.
 	// Assert that.
@@ -409,7 +409,7 @@ func TestGCDurationControl(t *testing.T) {
 	progressHistoryExistsQuery := fmt.Sprintf("SELECT count(*) > 0 FROM system.job_progress_history WHERE job_id = %d", id)
 
 	// Make sure the job exists even though it has completed.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.CheckQueryResults(t, existsQuery, [][]string{{"true"}})
 	tdb.CheckQueryResults(t, infoExistsQuery, [][]string{{"true"}})
 	tdb.CheckQueryResults(t, messageExistsQuery, [][]string{{"true"}})
@@ -418,7 +418,7 @@ func TestGCDurationControl(t *testing.T) {
 	tdb.Exec(t, fmt.Sprintf("INSERT INTO system.job_status (job_id, status) VALUES (%d, 'bogus')", id))
 	tdb.Exec(t, fmt.Sprintf("INSERT INTO system.job_progress (job_id, fraction) VALUES (%d, 0.5)", id))
 	tdb.Exec(t, fmt.Sprintf("INSERT INTO system.job_progress_history (job_id, fraction) VALUES (%d, 0.5)", id))
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	// Shorten the GC interval to try deleting the job.
 	tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '5ms'", jobs.GcIntervalSettingKey))
@@ -434,20 +434,20 @@ func TestGCDurationControl(t *testing.T) {
 			moreThan, counted)
 	})
 	// Make sure the job still exists.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.CheckQueryResults(t, existsQuery, [][]string{{"true"}})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	// Shorten the retention duration.
 	tdb.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '1ms'", jobs.RetentionTimeSettingKey))
 	// Wait for the job to be deleted.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.CheckQueryResultsRetry(t, existsQuery, [][]string{{"false"}})
 	tdb.CheckQueryResultsRetry(t, infoExistsQuery, [][]string{{"false"}})
 	tdb.CheckQueryResultsRetry(t, messageExistsQuery, [][]string{{"false"}})
 	tdb.CheckQueryResultsRetry(t, statusExistsQuery, [][]string{{"false"}})
 	tdb.CheckQueryResultsRetry(t, progressExistsQuery, [][]string{{"false"}})
 	tdb.CheckQueryResultsRetry(t, progressHistoryExistsQuery, [][]string{{"false"}})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 }
 
 // TestWaitWithRetryableError tests retryable errors when querying

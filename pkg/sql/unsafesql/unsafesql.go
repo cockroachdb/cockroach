@@ -41,7 +41,7 @@ func TestRemoveLimiters() func() {
 	}
 }
 
-var TestOverrideAllowUnsafeInternals bool
+var T bool
 
 // CheckInternalsAccess checks if the current session has permission to access
 // unsafe internal tables and functionality. This includes system tables and
@@ -58,7 +58,7 @@ func CheckInternalsAccess(
 		return nil
 	}
 
-	if TestOverrideAllowUnsafeInternals {
+	if T {
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func CheckInternalsAccess(
 
 func DisableIfContains(q string) {
 	if strings.Contains(q, "system.") || strings.Contains(q, "crdb_internal.") {
-		TestOverrideAllowUnsafeInternals = true
+		T = true
 	}
 }
 

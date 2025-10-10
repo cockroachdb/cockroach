@@ -229,9 +229,9 @@ func runCircuitBreakerTestForKey(
 	}
 
 	var rangeSpans []roachpb.Span
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	r, err := c.QueryContext(ctx, "select range_id, start_key, end_key from crdb_internal.ranges_no_leases order by start_key")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err, "failed to query ranges")
 	for r.Next() {
 		var rangeID int

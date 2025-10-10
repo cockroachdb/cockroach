@@ -206,7 +206,7 @@ func ValidateSystemDatabaseSchemaVersionBumped(
 	expectedSchemaVersion := expectedVersion.Version()
 
 	var actualSchemaVersionBytes []byte
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	require.NoError(t, sqlDB.QueryRow(
 		`SELECT crdb_internal.json_to_pb(
     'cockroach.roachpb.Version',
@@ -218,7 +218,7 @@ func ValidateSystemDatabaseSchemaVersionBumped(
 FROM system.descriptor WHERE id = $1`,
 		keys.SystemDatabaseID,
 	).Scan(&actualSchemaVersionBytes))
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	actualSchemaVersion := roachpb.Version{}
 	require.NoError(t, protoutil.Unmarshal(actualSchemaVersionBytes, &actualSchemaVersion))

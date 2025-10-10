@@ -159,9 +159,9 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	// Query the range log to see if anything unexpected happened. Concretely,
 	// we'll make sure that our tracked ranges never had >3 replicas.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 	for _, info := range infos {
 		if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
@@ -366,9 +366,9 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 
 			// Query the range log to see if anything unexpected happened. Concretely,
 			// we'll make sure that our tracked ranges never had >3 replicas.
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			infos, err := queryRangeLog(tc.Conns[0], `SELECT info FROM system.rangelog ORDER BY timestamp DESC`)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			require.NoError(t, err)
 			for _, info := range infos {
 				if _, ok := trackedRanges[info.UpdatedDesc.RangeID]; !ok || len(info.UpdatedDesc.Replicas().VoterDescriptors()) <= 3 {
@@ -456,11 +456,11 @@ func TestReplicateQueueUpReplicateOddVoters(t *testing.T) {
 		return nil
 	})
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	infos, err := filterRangeLog(
 		tc.Conns[0], desc.RangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated,
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,11 +528,11 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	desc := tc.LookupRangeOrFatal(t, testKey)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	infos, err := filterRangeLog(
 		tc.Conns[0], desc.RangeID, kvserverpb.RangeLogEventType_remove_voter, kvserverpb.ReasonRangeOverReplicated,
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 	require.Truef(t, len(infos) >= 1, "found no down replication due to over-replication in the range logs")
 }
@@ -550,12 +550,12 @@ func scanAndGetNumNonVoters(
 		}))
 	}
 	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	row := tc.ServerConn(0).QueryRow(
 		`SELECT coalesce(max(array_length(non_voting_replicas, 1)),0) FROM crdb_internal.ranges_no_leases WHERE range_id=$1`,
 		scratchRange.GetRangeID())
 	require.NoError(t, row.Scan(&numNonVoters))
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	return numNonVoters
 }
 
@@ -2008,13 +2008,13 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 	var rangeID roachpb.RangeID
 	var leaseHolderNodeID uint64
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	s.Exec(t, "INSERT INTO system.comments VALUES(0,0,0,'abc')")
 	s.QueryRow(t,
 		"SELECT range_id, lease_holder FROM "+
 			"[SHOW RANGES FROM TABLE system.comments WITH DETAILS] LIMIT 1",
 	).Scan(&rangeID, &leaseHolderNodeID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	remoteNodeID := uint64(1)
 	if leaseHolderNodeID == 1 {
 		remoteNodeID = 2
@@ -2046,10 +2046,10 @@ func TestTransferLeaseToLaggingNode(t *testing.T) {
 		s = sqlutils.MakeSQLRunner(tc.Conns[remoteNodeID-1])
 		workerReady <- true
 		for {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			s.Exec(t, fmt.Sprintf("update system.comments set comment='abc' "+
 				"where type=0 and object_id=0 and sub_id=0"))
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 
 			select {
 			case <-ctx.Done():
@@ -2247,7 +2247,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 		if err := forceScanOnAllReplicationQueues(tc); err != nil {
 			return err
 		}
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		s, err := sqlutils.RowsToDataDrivenOutput(sqlutils.MakeSQLRunner(tc.Conns[0]).Query(t, `
 SELECT * FROM (
     SELECT
@@ -2257,7 +2257,7 @@ SELECT * FROM (
     FROM crdb_internal.ranges_no_leases
 ) WHERE vc != 7 OR nvc > 0 ORDER BY range_id ASC LIMIT 1
 `))
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		require.NoError(t, err)
 		if len(s) > 0 {
 			return errors.Errorf("still upreplicating:\n%s", s)
@@ -2317,9 +2317,9 @@ SELECT * FROM (
 	log.KvDistribution.Infof(ctx, "test setting REGION survival configuration")
 	// Clear the rangelog so that we can rest assured to only pick up events
 	// resulting from the zone config change.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_, err = tc.Conns[0].ExecContext(ctx, `DELETE FROM system.rangelog WHERE TRUE`)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 	setConstraintFn("TABLE t", 5, 5,
 		", constraints = '{}', voter_constraints = '{\"+region=1\": 2, \"+region=2\": 2, \"+region=3\": 1}'")
@@ -2342,10 +2342,10 @@ SELECT * FROM (
 	var rangeID roachpb.RangeID
 	err = db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID)
 	require.NoError(t, err)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	addVoterEvents, err := filterRangeLog(tc.Conns[0],
 		rangeID, kvserverpb.RangeLogEventType_add_voter, kvserverpb.ReasonRangeUnderReplicated)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 
 	// If there are more than 2 add voter events, it implies that we ran into an

@@ -122,10 +122,10 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 
 	getTableID := func() descpb.ID {
 		var tableID descpb.ID
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		require.NoError(t,
 			conn.QueryRow(`SELECT id FROM system.namespace WHERE name = 'foo'`).Scan(&tableID))
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		return tableID
 	}
 

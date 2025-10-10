@@ -36,7 +36,7 @@ func TestStreamerDisabledWithInternalExecutorQuery(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, "COMMENT ON DATABASE defaultdb IS 'foo'")
 	runner.Exec(t, "SET tracing = on")
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	runner.Exec(t, `
 SELECT
     c.*
@@ -46,7 +46,7 @@ FROM
 WHERE
     j.coordinator_id = 1;
 `)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	runner.Exec(t, "SET tracing = off")
 
 	// Ensure that no streamer spans were created (meaning that the streamer

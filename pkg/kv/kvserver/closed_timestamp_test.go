@@ -444,10 +444,10 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 }
 
 func getTableID(db *gosql.DB, dbName, tableName string) (tableID descpb.ID, err error) {
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	err = db.QueryRow(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $1 AND name = $2`,
 		dbName, tableName).Scan(&tableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	return
 }
 

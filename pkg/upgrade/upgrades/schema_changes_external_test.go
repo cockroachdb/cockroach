@@ -543,11 +543,11 @@ func waitUntilState(
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		var status jobs.State
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t,
 			"SELECT status FROM system.jobs WHERE id = $1", jobID,
 		).Scan(&status)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if status == expectedStatus {
 			return nil
 		}

@@ -1510,10 +1510,10 @@ func TestAlterRangeRelocate(t *testing.T) {
 		return nil
 	})
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	// Move lease 3 -> 5.
 	_, err = db.Exec("ALTER RANGE RELOCATE FROM $1 TO $2 FOR (SELECT range_id from crdb_internal.ranges_no_leases where range_id = $3)", 3, 5, rhsDesc.RangeID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 	require.NoError(t, tc.WaitForVoters(rhsDesc.StartKey.AsRawKey(), tc.Targets(0, 3, 4)...))
 }

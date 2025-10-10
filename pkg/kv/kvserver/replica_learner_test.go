@@ -176,12 +176,12 @@ func TestAddReplicaViaLearner(t *testing.T) {
 	require.Len(t, desc.Replicas().LearnerDescriptors(), 1)
 
 	var voters, nonVoters string
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.QueryRow(t,
 		`SELECT array_to_string(replicas, ','), array_to_string(learner_replicas, ',') FROM crdb_internal.ranges_no_leases WHERE range_id = $1`,
 		desc.RangeID,
 	).Scan(&voters, &nonVoters)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.Equal(t, `1`, voters)
 	require.Equal(t, `2`, nonVoters)
 

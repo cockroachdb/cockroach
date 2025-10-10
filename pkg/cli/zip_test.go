@@ -549,11 +549,11 @@ func TestUnavailableZip(t *testing.T) {
 	defer tc.Stopper().Stop(context.Background())
 
 	// Sanity test: check that a simple SQL operation works against node 1.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	if _, err := tc.ServerConn(0).Exec("SELECT * FROM system.users"); err != nil {
 		t.Fatal(err)
 	}
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	// Block querying table data from node 1.
 	// Block all replica requests from node 2.
@@ -1035,9 +1035,9 @@ func TestToHex(t *testing.T) {
 	defer c.Cleanup()
 
 	// Create a job to have non-empty system.jobs table.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	c.RunWithArgs([]string{"sql", "-e", "CREATE STATISTICS foo FROM system.namespace"})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	_, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=0 " + dir + "/debug.zip")
 	if err != nil {

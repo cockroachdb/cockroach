@@ -100,20 +100,20 @@ func TestUpdaterUpdatesJobInfo(t *testing.T) {
 		t.Run("verify against system.jobs", func(t *testing.T) {
 			require.NoError(t, ief.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				countSystemJobs := `SELECT count(*)  FROM system.jobs`
-				unsafesql.TestOverrideAllowUnsafeInternals = true
+				unsafesql.T = true
 				row, err := txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
 					sessiondata.NodeUserSessionDataOverride, countSystemJobs)
-				unsafesql.TestOverrideAllowUnsafeInternals = false
+				unsafesql.T = false
 				if err != nil {
 					return err
 				}
 				jobsCount := tree.MustBeDInt(row[0])
 
 				countSystemJobInfo := `SELECT count(*)  FROM system.job_info;`
-				unsafesql.TestOverrideAllowUnsafeInternals = true
+				unsafesql.T = true
 				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
 					sessiondata.NodeUserSessionDataOverride, countSystemJobInfo)
-				unsafesql.TestOverrideAllowUnsafeInternals = false
+				unsafesql.T = false
 				if err != nil {
 					return err
 				}

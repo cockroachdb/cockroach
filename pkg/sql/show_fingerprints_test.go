@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -243,7 +244,9 @@ func TestShowTenantFingerprintsProtectsTimestamp(t *testing.T) {
 		row.Scan(&rangeID)
 		refreshPTSReaderCache(tenantApp.Clock().Now())
 		t.Logf("enqueuing range %d for mvccGC", rangeID)
+		unsafesql.T = true
 		systemSQL.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
+		unsafesql.T = false
 	}
 
 	errCh := make(chan error)

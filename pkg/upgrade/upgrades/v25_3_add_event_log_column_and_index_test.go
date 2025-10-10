@@ -84,9 +84,9 @@ func TestEventLogTableMigration(t *testing.T) {
 	}
 	// Validate that the eventlog table has the old
 	// schema.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	validateSchemaExists(false)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	// Run the upgrade.
 	upgrades.Upgrade(
 		t,
@@ -96,9 +96,9 @@ func TestEventLogTableMigration(t *testing.T) {
 		false, /* expectError */
 	)
 	// Validate that the table has new schema.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	validateSchemaExists(true)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 }
 
 // getOldEventLogDescriptor returns the

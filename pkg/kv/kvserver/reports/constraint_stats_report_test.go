@@ -804,7 +804,7 @@ func TestConstraintReport(t *testing.T) {
 
 	time3 := time.Date(2001, 1, 1, 11, 30, 0, 0, time.UTC)
 	// If some other server takes over and does an update.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err := con.Exec(ctx, "another-updater", nil, "update system.reports_meta set generated=$1 where id=1", time3)
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
@@ -820,7 +820,7 @@ func TestConstraintReport(t *testing.T) {
 		"where zone_id=7 and subzone_id=8")
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	// Add new set of replication constraint statuses to the existing report and verify the everything is good.
 	report.AddViolation(MakeZoneKey(1, 3), "constraint", "+country=CH")

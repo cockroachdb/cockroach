@@ -144,9 +144,9 @@ func TestTransactionRetry(t *testing.T) {
 		}
 
 		// Force a client-side retry.
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		rows, err = conn.Query(ctx, `SELECT crdb_internal.force_retry('1h')`)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			return err
 		}

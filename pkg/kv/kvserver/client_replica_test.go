@@ -4621,10 +4621,10 @@ func TestStrictGCEnforcement(t *testing.T) {
 	var (
 		db         = tc.Server(0).DB()
 		getTableID = func() (tableID uint32) {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
 				` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			return tableID
 		}
 		tableID       = getTableID()

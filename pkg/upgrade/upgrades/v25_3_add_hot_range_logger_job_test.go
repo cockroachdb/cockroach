@@ -31,10 +31,10 @@ func TestCreateHotRangesLoggerJob(t *testing.T) {
 	defer ts.Stopper().Stop(ctx)
 	conn := sqlutils.MakeSQLRunner(db)
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	row := conn.QueryRow(t,
 		fmt.Sprintf("SELECT count(*) FROM system.public.jobs WHERE id = %d", jobs.HotRangesLoggerJobID))
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NotNil(t, row)
 	var count int
 	row.Scan(&count)

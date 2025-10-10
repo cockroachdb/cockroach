@@ -43,11 +43,11 @@ func TestDecodeSpanTargets(t *testing.T) {
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.QueryRow(t, fmt.Sprintf(
 		`SELECT table_id FROM crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 	).Scan(&dummyTableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	key, err := ts.ScratchRange()
 	require.NoError(t, err)
@@ -121,11 +121,11 @@ func TestDecodeSystemTargets(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s", dummyTableName))
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 		var dummyTableID uint32
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t, fmt.Sprintf(
 			`SELECT id FROM system.namespace WHERE name = '%s'`, dummyTableName),
 		).Scan(&dummyTableID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 
 		// Write the record.
 		conf := roachpb.SpanConfig{
@@ -179,11 +179,11 @@ func BenchmarkSpanConfigDecoder(b *testing.B) {
 	tdb.Exec(b, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.QueryRow(b, fmt.Sprintf(
 		`SELECT table_id from crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 	).Scan(&dummyTableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	conf := roachpb.SpanConfig{NumReplicas: 5, NumVoters: 3}
 	buf, err := protoutil.Marshal(&conf)

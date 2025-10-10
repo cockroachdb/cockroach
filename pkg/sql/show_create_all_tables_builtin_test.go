@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,9 +43,11 @@ func TestRecreateTables(t *testing.T) {
 			f STRING COLLATE en_US ON UPDATE ('f' COLLATE en_US))`)
 
 	var recreateTablesStmts []string
+	unsafesql.T = true
 	for _, r := range sqlRunner.QueryStr(t, "SELECT crdb_internal.show_create_all_tables('test')") {
 		recreateTablesStmts = append(recreateTablesStmts, r[0])
 	}
+	unsafesql.T = false
 
 	// Use the recreateTablesStmt to recreate the tables, perform another
 	// show_create_all_tables and compare that the output is the same.

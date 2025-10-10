@@ -33,11 +33,11 @@ func countEvents(
 	ctx context.Context, db *gosql.DB, eventType kvserverpb.RangeLogEventType,
 ) (int, error) {
 	var count int
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	err := db.QueryRowContext(ctx,
 		`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
 		eventType.String()).Scan(&count)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	return count, err
 }
 
@@ -76,12 +76,12 @@ func TestLogSplits(t *testing.T) {
 
 	// verify that RangeID always increases (a good way to see that the splits
 	// are logged correctly)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		kvserverpb.RangeLogEventType_split.String(),
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,10 +136,10 @@ func TestLogSplits(t *testing.T) {
 		// using internal knowledge of the structure of uniqueIDs that the node ID
 		// is embedded in the lower 15 bits. See #17560.
 		var count int
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		err := db.QueryRowContext(ctx,
 			`SELECT count(*) FROM system.rangelog WHERE ("uniqueID" & 0x7fff) = 0`).Scan(&count)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -210,12 +210,12 @@ func TestLogMerges(t *testing.T) {
 		return nil
 	})
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		kvserverpb.RangeLogEventType_merge.String(),
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,12 +307,12 @@ func TestLogRebalances(t *testing.T) {
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// verify that two add replica events have been logged.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		kvserverpb.RangeLogEventType_add_voter.String(),
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,12 +361,12 @@ func TestLogRebalances(t *testing.T) {
 	}
 
 	// verify that one remove replica event was logged.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err = sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
 		kvserverpb.RangeLogEventType_remove_voter.String(),
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}

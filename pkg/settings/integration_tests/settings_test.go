@@ -91,10 +91,10 @@ func TestSettingsRefresh(t *testing.T) {
 	}
 
 	// Inserting a new setting is reflected in cache.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, insertQ, strKey, "foo", "s")
 	db.Exec(t, insertQ, intKey, settings.EncodeInt(2), "i")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	// Wait until we observe the gossip-driven update propagating to cache.
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "foo", strA.Get(&st.SV); expected != actual {
@@ -107,9 +107,9 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// Setting to empty also works.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, insertQ, strKey, "", "s")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)
@@ -118,10 +118,10 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// An unknown value doesn't block updates to a known one.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, insertQ, "dne", "???", "s")
 	db.Exec(t, insertQ, strKey, "qux", "s")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "qux", strA.Get(&st.SV); expected != actual {
@@ -134,11 +134,11 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// A malformed value doesn't revert previous set or block other changes.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, deleteQ, "dne")
 	db.Exec(t, insertQ, intKey, "invalid", "i")
 	db.Exec(t, insertQ, strKey, "after-invalid", "s")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
@@ -151,10 +151,10 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// A mis-typed value doesn't revert a previous set or block other changes.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, insertQ, intKey, settings.EncodeInt(7), "b")
 	db.Exec(t, insertQ, strKey, "after-mistype", "s")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := int64(2), intA.Get(&st.SV); expected != actual {
@@ -171,12 +171,12 @@ func TestSettingsRefresh(t *testing.T) {
 	prevIntA := intA.Get(&st.SV)
 	prevDurationA := durationA.Get(&st.SV)
 	prevByteSizeA := byteSizeA.Get(&st.SV)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, insertQ, strKey, "this is too big for this setting", "s")
 	db.Exec(t, insertQ, intKey, settings.EncodeInt(-1), "i")
 	db.Exec(t, insertQ, durationKey, settings.EncodeDuration(-time.Minute), "d")
 	db.Exec(t, insertQ, byteSizeKey, settings.EncodeInt(-1), "z")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := prevStrA, strA.Get(&st.SV); expected != actual {
@@ -195,9 +195,9 @@ func TestSettingsRefresh(t *testing.T) {
 	})
 
 	// Deleting a value reverts to default.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	db.Exec(t, deleteQ, strKey)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	testutils.SucceedsSoon(t, func() error {
 		if expected, actual := "<default>", strA.Get(&st.SV); expected != actual {
 			return errors.Errorf("expected %v, got %v", expected, actual)

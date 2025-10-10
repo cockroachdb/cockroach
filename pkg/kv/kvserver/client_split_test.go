@@ -4377,9 +4377,9 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			tdb.QueryRow(t, "SELECT count(k) FROM t").Scan(&keyCount)
 			require.Equal(t, len(tc.existingKeys), keyCount)
 			var tableID uint32
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.leases where name = 't'").Scan(&tableID)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 
 			// Split off the table range for the test, otherwise the range may
 			// contain multiple tables with existing values.

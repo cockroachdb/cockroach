@@ -3519,9 +3519,9 @@ GROUP BY
 HAVING
 	count(t) > $3;
 `
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	matrix := db.QueryStr(t, q, rangeID, start, repFactor)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if len(matrix) > 0 {
 		t.Fatalf("more than %d voting replicas: %s", repFactor, sqlutils.MatrixToStr(matrix))
 	}

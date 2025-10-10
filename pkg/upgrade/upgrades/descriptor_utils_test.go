@@ -84,8 +84,8 @@ func TestCreateSystemTable(t *testing.T) {
 
 	// Verify that the keys were not written.
 	checkEntries := func(t *testing.T) [][]string {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
-		defer func() { unsafesql.TestOverrideAllowUnsafeInternals = false }()
+		unsafesql.T = true
+		defer func() { unsafesql.T = false }()
 		return sqlDB.QueryStr(t, `
 SELECT *
   FROM system.namespace
@@ -98,11 +98,11 @@ SELECT *
 		ctx, descDB, tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table, tree.LocalityLevelGlobal,
 	))
 	require.Len(t, checkEntries(t), 1)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	sqlDB.CheckQueryResults(t,
 		"SELECT create_statement FROM [SHOW CREATE TABLE system.fake_table]",
 		[][]string{{fakeTableSchema}})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	// Make sure it's idempotent.
 	require.NoError(t, upgrades.CreateSystemTable(

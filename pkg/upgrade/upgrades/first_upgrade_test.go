@@ -201,7 +201,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		}
 	}
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	execStmts(t,
 		"CREATE DATABASE test",
 		"USE test",
@@ -217,7 +217,7 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		// Insert an invalid object into the system.comments table
 		"INSERT INTO system.comments VALUES(0, 4124323, 0, 'comment for dead object')",
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "test")
 	tblDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "bar")
@@ -287,14 +287,14 @@ func TestFirstUpgradeRepair(t *testing.T) {
 
 	// Check that the corruption is detected by invalid_objects.
 	const qDetectCorruption = `SELECT count(*) FROM "".crdb_internal.invalid_objects`
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"3"}})
 
 	// Check that the corruption is detected by kv_repairable_catalog_corruptions.
 	const qDetectRepairableCorruption = `
 		SELECT count(*) FROM "".crdb_internal.kv_repairable_catalog_corruptions`
 	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"3"}})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	// Wait long enough for precondition check to be effective.
 	tdb.Exec(t, "CREATE DATABASE test2")
@@ -312,9 +312,9 @@ func TestFirstUpgradeRepair(t *testing.T) {
 			return err
 		}
 		for _, corruptDesc := range corruptDescs {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			_, err = tx.Exec("SELECT crdb_internal.unsafe_upsert_descriptor($1, descriptor, true) FROM system.descriptor WHERE id=$1", corruptDesc.GetID())
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			if err != nil {
 				return err
 			}
@@ -342,11 +342,11 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	// Precondition check should repair all corruptions and upgrade should succeed.
 	const qUpgrade = "SET CLUSTER SETTING version = crdb_internal.node_executable_version()"
 	<-locksHeld
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	tdb.Exec(t, qUpgrade)
 	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"0"}})
 	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"0"}})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	close(upgradeCompleted)
 	require.NoError(t, grp.Wait())
 	// Assert that a version upgrade is reflected for repaired descriptors (stricly one version upgrade).
@@ -477,7 +477,7 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 
 	// Confirm the repairable descriptors exist, we will avoid scanning all of
 	// them avoid hitting the memory limit in testing.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	require.Equal(t,
 		[][]string{{"true"}},
 		sqlRunner.QueryStr(t, "SELECT count(*)>0 FROM \"\".crdb_internal.kv_repairable_catalog_corruptions"))
@@ -488,6 +488,6 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 		[][]string{{"0"}},
 		sqlRunner.QueryStr(t, "SELECT count(*) FROM \"\".crdb_internal.kv_repairable_catalog_corruptions"),
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 }

@@ -81,18 +81,18 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 			routineChan <- err
 			return
 		}
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		_, err = tx.Exec("SELECT name from system.settings where name='version' FOR UPDATE")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			routineChan <- err
 			return
 		}
 		resumeBump <- struct{}{}
 		for retry := retry.Start(retry.Options{}); retry.Next(); {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			_, err = tx.Exec("SELECT name from system.settings where name='version' FOR UPDATE")
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			if err != nil {
 				rollbackErr := tx.Rollback()
 				routineChan <- errors.WithSecondaryError(err, rollbackErr)

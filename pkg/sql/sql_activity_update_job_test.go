@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,6 +47,8 @@ import (
 // TestSqlActivityUpdateJob verifies that the
 // job is created.
 func TestSqlActivityUpdateJob(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -122,6 +125,8 @@ func TestSqlActivityUpdateJob(t *testing.T) {
 // SQL statements to verify the data.
 // Note(xinhaoz): This test should really be a sql data driven test.
 func TestMergeFunctionLogic(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -249,6 +254,8 @@ func TestMergeFunctionLogic(t *testing.T) {
 // TestSqlActivityUpdateTopLimitJob verifies that the
 // job is created.
 func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -503,6 +510,8 @@ func TestSqlActivityUpdateTopLimitJob(t *testing.T) {
 // correct data is updated on current and prior hour when new stats are
 // added to either or both of them.
 func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -560,6 +569,8 @@ func TestSqlActivityJobRunsAfterStatsFlush(t *testing.T) {
 // TestTransactionActivityMetadata verifies the metadata JSON column of system.transaction_activity are
 // what we expect it to be. This test was added to address #103618.
 func TestTransactionActivityMetadata(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -633,6 +644,8 @@ func TestTransactionActivityMetadata(t *testing.T) {
 // 5. Disable cluster setting
 // 6. Verify original app name in result from statistics table
 func TestActivityStatusCombineAPI(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -767,6 +780,8 @@ func (mu *timeMutex) setStubTime(time time.Time) {
 }
 
 func TestSqlActivityUpdaterDataDriven(t *testing.T) {
+	unsafesql.T = true
+	defer func() { unsafesql.T = false }()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

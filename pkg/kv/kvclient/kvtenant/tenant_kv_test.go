@@ -58,12 +58,12 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(hostDB)
 
 	var rangeID int
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	stmt := fmt.Sprintf(
 		"SELECT range_id FROM crdb_internal.ranges WHERE start_pretty='/Tenant/%s'",
 		serverutils.TestTenantID(),
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	sqlDB.QueryRow(t, stmt).Scan(&rangeID)
 	require.NotEqualf(t, 0, rangeID, "Unable to determine test table range id")
 

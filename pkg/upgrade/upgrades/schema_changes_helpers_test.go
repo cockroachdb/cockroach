@@ -45,10 +45,10 @@ func MakeFakeMigrationForTestMigrationWithFailures() (
 	return func(
 		ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 	) error {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		row, err := d.InternalExecutor.QueryRow(ctx, "look-up-id", nil, /* txn */
 			`select id from system.namespace where name = $1`, "test_table")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			return err
 		}
@@ -102,10 +102,10 @@ func MakeFakeMigrationForTestMigrationWithFailuresMultipleAltersOnSameColumn() (
 	return func(
 		ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 	) error {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		row, err := d.InternalExecutor.QueryRow(ctx, "look-up-id", nil, /* txn */
 			`select id from system.namespace where name = $1`, "test_table")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			return err
 		}

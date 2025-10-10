@@ -35,9 +35,9 @@ func intentCountForTable(ctx context.Context, t *testing.T, db *gosql.DB, table 
 		from [show ranges from table %s with keys]`,
 		table)
 	var count int
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	err := db.QueryRowContext(ctx, q).Scan(&count)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 	return count
 }
@@ -48,9 +48,9 @@ func lockCountForTable(ctx context.Context, t *testing.T, db *gosql.DB, table st
 		from crdb_internal.cluster_locks
 		where table_name = '%s'`,
 		table)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err := db.QueryContext(ctx, q)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 	defer rows.Close()
 	var count int

@@ -68,12 +68,12 @@ func TestWriter(t *testing.T) {
 			runner := sqlutils.MakeSQLRunner(conn)
 			var rows int
 			testutils.SucceedsSoon(t, func() error {
-				unsafesql.TestOverrideAllowUnsafeInternals = true
+				unsafesql.T = true
 				runner.QueryRow(t,
 					fmt.Sprintf(`SELECT count(*) from system.eventlog where "eventType" = '%s' and "reportingID"=%d`,
 						logtestutils.TestEventType, tc.instanceId),
 				).Scan(&rows)
-				unsafesql.TestOverrideAllowUnsafeInternals = false
+				unsafesql.T = false
 
 				if rows != 1 {
 					return errors.New("Event not persisted")

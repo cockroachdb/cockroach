@@ -44,13 +44,13 @@ func TestStatementHintsTable(t *testing.T) {
 	s, sqlDB := tc.Server(0), tc.ServerConn(0)
 
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_, err := sqlDB.Exec("SELECT * FROM system.statement_hints")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.Error(t, err, "system.statement_hints should not exist")
 	upgrades.Upgrade(t, sqlDB, clusterversion.V25_4_AddSystemStatementHintsTable, nil, false)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_, err = sqlDB.Exec("SELECT * FROM system.statement_hints")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err, "system.statement_hints should exist")
 }

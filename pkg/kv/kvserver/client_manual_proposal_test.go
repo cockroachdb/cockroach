@@ -98,9 +98,9 @@ LIMIT
 			}
 			tc := testcluster.StartTestCluster(t, 1, args)
 			defer tc.Stopper().Stop(ctx)
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			require.NoError(t, tc.ServerConn(0).QueryRow(`SELECT count(1) FROM system.settings`).Err())
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			t.Log("read system.settings")
 		}()
 

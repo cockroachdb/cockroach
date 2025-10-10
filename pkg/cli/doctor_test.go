@@ -154,7 +154,7 @@ func TestDoctorCluster(t *testing.T) {
 
 	// Introduce a corruption in the descriptor table by adding a table and
 	// removing its parent.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
 		"CREATE TABLE to_drop (id INT)",
 		"DROP TABLE to_drop",
@@ -165,7 +165,7 @@ func TestDoctorCluster(t *testing.T) {
 		"SELECT pg_catalog.pg_sleep(1)",
 	}, ";\n"),
 	})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	t.Run("examine", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug doctor examine cluster")
@@ -192,7 +192,7 @@ func TestDoctorClusterBroken(t *testing.T) {
 	// Introduce a descriptor with an attached job mutation (along with other issues). We want to ensure that the number of
 	// jobs created is deterministic (auto table stats will be collected due to the "schema change" on foo); therefore,
 	// we should disable automatic stats collection and instead create our own.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
 		"CREATE TABLE foo (i INT)",
 		desc,
@@ -200,7 +200,7 @@ func TestDoctorClusterBroken(t *testing.T) {
 		"SELECT pg_catalog.pg_sleep(1)",
 	}, ";\n"),
 	})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	t.Run("examine", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug doctor examine cluster")
@@ -224,7 +224,7 @@ func TestDoctorClusterDropped(t *testing.T) {
 	desc := fmt.Sprintf("SELECT crdb_internal.unsafe_upsert_descriptor('foo'::regclass::oid::int,"+
 		"crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', %s::jsonb), true)", descriptorWithFKMutation(true /* isDropped */))
 	// Introduce a dropped descriptor with an attached job mutation (along with other issues).
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
 		"CREATE TABLE foo (i INT)",
 		desc,
@@ -234,7 +234,7 @@ func TestDoctorClusterDropped(t *testing.T) {
 		"SELECT pg_catalog.pg_sleep(1)",
 	}, ";\n"),
 	})
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	t.Run("examine", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug doctor examine cluster")

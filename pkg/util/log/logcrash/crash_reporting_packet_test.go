@@ -213,11 +213,11 @@ func TestInternalErrorReporting(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	if _, err := sqlDB.Exec("SELECT crdb_internal.force_assertion_error('woo')"); !testutils.IsError(err, "internal error") {
 		t.Fatalf("expected internal error, got %v", err)
 	}
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	if len(packets) != 1 {
 		t.Fatalf("expected exactly 1 reporting packet")

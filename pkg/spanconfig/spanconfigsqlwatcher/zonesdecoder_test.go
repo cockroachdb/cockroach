@@ -55,12 +55,12 @@ func TestZonesDecoderDecodePrimaryKey(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.zones INCLUDING ALL)", dummyTableName))
 
 	var dummyTableID uint32
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	sqlDB.QueryRow(
 		t,
 		fmt.Sprintf("SELECT id FROM system.namespace WHERE name='%s'", dummyTableName),
 	).Scan(&dummyTableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	k := s.Codec().TablePrefix(dummyTableID)
 

@@ -158,12 +158,12 @@ WHERE 'kv' IN (
 
 				getRangeInfo := func(t *testing.T, rangeID int64, db *gosql.DB) (startKey, endKey []byte) {
 					t.Helper()
-					unsafesql.TestOverrideAllowUnsafeInternals = true
+					unsafesql.T = true
 					row := db.QueryRow("SELECT start_key, end_key FROM crdb_internal.ranges_no_leases WHERE range_id=$1",
 						rangeID)
 					err1 := row.Err()
 					err2 := row.Scan(&startKey, &endKey)
-					unsafesql.TestOverrideAllowUnsafeInternals = false
+					unsafesql.T = false
 					require.NoError(t, err1, "failed to query range info")
 					require.NoError(t, err2, "failed to scan range info")
 					return startKey, endKey
@@ -284,9 +284,9 @@ WHERE 'kv' IN (
 					t.Logf("pushing kv table ranges through mvcc gc queue: %s", tableRangeIDs)
 
 					for _, id := range tableRangeIDs {
-						unsafesql.TestOverrideAllowUnsafeInternals = true
+						unsafesql.T = true
 						_, err := systemSqlDb.Exec(`SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, id)
-						unsafesql.TestOverrideAllowUnsafeInternals = false
+						unsafesql.T = false
 						if err != nil {
 							t.Logf("failed to enqueue range to mvcc gc queue: %s", err)
 						}

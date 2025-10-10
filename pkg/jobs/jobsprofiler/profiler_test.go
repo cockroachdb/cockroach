@@ -57,11 +57,11 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 		jobsprofiler.StorePlanDiagram(ctx, s.ApplicationLayer().AppStopper(), plan, db, fakeJobID)
 		testutils.SucceedsSoon(t, func() error {
 			var count int
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			err := sqlDB.QueryRow(
 				`SELECT count(*) FROM system.job_info WHERE job_id = $1`, fakeJobID,
 			).Scan(&count)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			if err != nil {
 				return err
 			}
@@ -111,10 +111,10 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 			require.NoError(t, err)
 
 			var jobID jobspb.JobID
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			err = sqlDB.QueryRow(
 				`SELECT id FROM crdb_internal.system_jobs WHERE job_type = $1`, tc.typ.String()).Scan(&jobID)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			require.NoError(t, err)
 
 			execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)

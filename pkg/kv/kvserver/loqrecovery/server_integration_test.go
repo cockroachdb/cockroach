@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -74,11 +74,11 @@ func TestReplicaCollection(t *testing.T) {
 	require.NoError(t, tc.WaitForFullReplication())
 	tc.ToggleReplicateQueues(false)
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
 	var totalRanges int
 	err := r.Scan(&totalRanges)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err, "failed to query range count")
 	adm := tc.GetAdminClient(t, 2)
 
@@ -153,11 +153,11 @@ func TestStreamRestart(t *testing.T) {
 	require.NoError(t, tc.WaitForFullReplication())
 	tc.ToggleReplicateQueues(false)
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	r := tc.ServerConn(0).QueryRow("select count(*) from crdb_internal.ranges_no_leases")
 	var totalRanges int
 	err := r.Scan(&totalRanges)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err, "failed to query range count")
 	adm := tc.GetAdminClient(t, 2)
 

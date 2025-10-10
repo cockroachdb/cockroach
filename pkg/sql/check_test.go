@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -115,7 +116,9 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 
 			tc.setup(t, sqlDB, kvDB, s, tableDesc, scheduleID)
 
+			unsafesql.T = true
 			_, err = sqlDB.Exec(`SELECT crdb_internal.validate_ttl_scheduled_jobs()`)
+			unsafesql.T = false
 			require.Error(t, err)
 			require.Regexp(t, tc.expectedErrRe(tableDesc.GetID(), scheduleID), err)
 			var pgxErr *pq.Error
@@ -129,10 +132,12 @@ func TestValidateTTLScheduledJobs(t *testing.T) {
 			// Repair and check jobs are valid.
 			_, err = sqlDB.Exec(`DROP SCHEDULE $1`, scheduleID)
 			require.NoError(t, err)
+			unsafesql.T = true
 			_, err = sqlDB.Exec(`SELECT crdb_internal.repair_ttl_table_scheduled_job($1)`, tableDesc.GetID())
 			require.NoError(t, err)
 			_, err = sqlDB.Exec(`SELECT crdb_internal.validate_ttl_scheduled_jobs()`)
 			require.NoError(t, err)
+			unsafesql.T = false
 		})
 	}
 }

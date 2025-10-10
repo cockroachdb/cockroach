@@ -398,10 +398,10 @@ func TestLivenessRangeGetsPeriodicallyCompacted(t *testing.T) {
 	sqlDB := tc.ApplicationLayer(0).SQLConn(t)
 	var original_file_num string
 	testutils.SucceedsSoon(t, func() error {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		rows := sqlDB.QueryRow(livenessFileNumberQuery)
 		err := rows.Scan(&original_file_num)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			return err
 		}
@@ -411,9 +411,9 @@ func TestLivenessRangeGetsPeriodicallyCompacted(t *testing.T) {
 	// Expect that the liveness file number changes.
 	testutils.SucceedsSoon(t, func() error {
 		var current_file_num string
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		rows := sqlDB.QueryRow(livenessFileNumberQuery)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err := rows.Scan(&current_file_num); err != nil {
 			return err
 		}

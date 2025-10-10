@@ -64,12 +64,12 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 		}
 	)
 
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_, err := sqlDB.Exec("SELECT 1 FROM system.transaction_diagnostics_requests LIMIT 0")
 	require.Error(t, err, "system.transaction_diagnostics_requests table should not exist")
 	_, err = sqlDB.Exec("SELECT 1 FROM system.transaction_diagnostics LIMIT 0")
 	require.Error(t, err, "system.transaction_diagnostics table should not exist")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	// Inject the old copy of the descriptor.
 	upgrades.InjectLegacyTable(ctx, t, s, systemschema.StatementDiagnosticsTable,
 		getOldStatementDiagnosticsDescriptor)
@@ -88,9 +88,9 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 	}
 	// Validate that the statement_diagnostics table has the old
 	// schema.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	validateSchemaExists(false)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	// Run the upgrade.
 	upgrades.Upgrade(
 		t,
@@ -99,14 +99,14 @@ func TestTransactionDiagnosticsTableMigration(t *testing.T) {
 		nil,   /* done */
 		false, /* expectError */
 	)
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_, err = sqlDB.Exec(`SELECT 1 FROM system.transaction_diagnostics_requests LIMIT 0`)
 	require.NoError(t, err, "system.transaction_diagnostics_requests table should exist")
 	_, err = sqlDB.Exec(`SELECT 1 FROM system.transaction_diagnostics LIMIT 0`)
 	require.NoError(t, err, "system.transaction_diagnostics table should exist")
 	// Validate that the table has new schema.
 	validateSchemaExists(true)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 }
 
 func getOldStatementDiagnosticsDescriptor() *descpb.TableDescriptor {

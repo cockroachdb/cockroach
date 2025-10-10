@@ -20,10 +20,10 @@ func QueryDatabaseID(t testing.TB, sqlDB DBHandle, dbName string) uint32 {
 		WHERE name = $1 AND "parentSchemaID" = 0 AND "parentID" = 0
 	`
 	var dbID uint32
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	result := sqlDB.QueryRowContext(context.Background(), dbIDQuery, dbName)
 	err := result.Scan(&dbID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,14 +39,14 @@ func QuerySchemaID(t testing.TB, sqlDB DBHandle, dbName, schemaName string) uint
    WHERE dbs.name = $1 AND schemas.name = $2
  `
 	var schemaID uint32
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	result := sqlDB.QueryRowContext(
 		context.Background(),
 		tableIDQuery, dbName,
 		schemaName,
 	)
 	err := result.Scan(&schemaID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func QueryTableID(
    WHERE dbs.name = $1 AND schemas.name = $2 AND tables.name = $3
  `
 	var tableID uint32
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	result := sqlDB.QueryRowContext(
 		context.Background(),
 		tableIDQuery, dbName,
@@ -73,7 +73,7 @@ func QueryTableID(
 		tableName,
 	)
 	err := result.Scan(&tableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		t.Fatal(err)
 	}

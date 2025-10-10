@@ -114,9 +114,9 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		tdb.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v BYTES NOT NULL)")
 
 		var tableID int
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = 'foo'").Scan(&tableID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		require.NotEqual(t, 0, tableID)
 		tablePrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 		tc.SplitRangeOrFatal(t, tablePrefix)

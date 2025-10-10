@@ -91,11 +91,11 @@ func TestDataDriven(t *testing.T) {
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.tenants INCLUDING ALL)", dummyTableName))
 
 		var dummyTableID uint32
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		tdb.QueryRow(t, fmt.Sprintf(
 			`SELECT table_id FROM crdb_internal.tables WHERE name = '%s'`, dummyTableName),
 		).Scan(&dummyTableID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 
 		mu := struct {
 			syncutil.Mutex

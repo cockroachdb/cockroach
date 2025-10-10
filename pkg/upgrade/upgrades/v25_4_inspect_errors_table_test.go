@@ -44,11 +44,11 @@ func TestInspectErrorsTable(t *testing.T) {
 	s, sqlDB := tc.Server(0), tc.ServerConn(0)
 
 	require.True(t, s.ExecutorConfig().(sql.ExecutorConfig).Codec.ForSystemTenant())
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_, err := sqlDB.Exec("SELECT * FROM system.inspect_errors")
 	require.Error(t, err, "system.inspect_errors rates columns should not exist")
 	upgrades.Upgrade(t, sqlDB, clusterversion.V25_4_InspectErrorsTable, nil, false)
 	_, err = sqlDB.Exec("SELECT * FROM system.inspect_errors")
 	require.NoError(t, err, "system.inspect_errors rates columns should exist")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 }

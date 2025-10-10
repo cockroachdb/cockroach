@@ -230,7 +230,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 
 	time3 := time.Date(2001, 1, 1, 11, 30, 0, 0, time.UTC)
 	// If some other server takes over and does an update.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	rows, err := con.Exec(ctx, "another-updater", nil, "update system.reports_meta set generated=$1 where id=2", time3)
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
@@ -246,7 +246,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 		"zone_id, subzone_id, locality, report_id, at_risk_ranges) values(16,16,'region=EU',2,6)")
 	require.NoError(t, err)
 	require.Equal(t, 1, rows)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	// Add new set of localities and verify the old ones are deleted
 	report.CountRangeAtRisk(MakeZoneKey(5, 6), "dc=A")
@@ -291,10 +291,10 @@ func TableData(ctx context.Context, tableName string, executor isql.Executor) []
 	// Enable unsafe access for system tables
 	needsUnsafeAccess := strings.HasPrefix(tableName, "system.") || strings.HasPrefix(tableName, "crdb_internal.")
 	if needsUnsafeAccess {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
-		defer func() { unsafesql.TestOverrideAllowUnsafeInternals = false }()
+		unsafesql.T = true
+		defer func() { unsafesql.T = false }()
 	}
-	
+
 	if it, err := executor.QueryIterator(
 		ctx, redact.Sprintf("test-select-%s", tableName), nil /* txn */, "select * from "+tableName,
 	); err == nil {

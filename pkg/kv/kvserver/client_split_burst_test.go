@@ -53,12 +53,12 @@ func (sbt *splitBurstTest) NumRaftSnaps(t *testing.T) int {
 	for i := range sbt.Servers {
 		var n int // num rows (sanity check against test rotting)
 		var c int // num Raft snapshots
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		err := sbt.ServerConn(i).QueryRow(`
 SELECT count(*), sum(value) FROM crdb_internal.node_metrics WHERE
 	name = 'range.snapshots.applied-voter'
 `).Scan(&n, &c)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			t.Fatal(err)
 		}

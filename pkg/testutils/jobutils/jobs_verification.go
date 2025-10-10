@@ -83,9 +83,9 @@ func WaitForJobToHaveStatus(
 	const duration = 2 * time.Minute
 	err := retry.ForDuration(duration, func() error {
 		var status string
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		db.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", jobID).Scan(&status)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if jobs.State(status) == jobs.StateFailed {
 			if expectedStatus == jobs.StateFailed {
 				return nil

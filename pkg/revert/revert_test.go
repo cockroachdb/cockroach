@@ -70,9 +70,9 @@ func TestRevertSpansFanout(t *testing.T) {
 	db.Exec(t, "INSERT INTO test (k) SELECT generate_series(1, $1)", initRows)
 	db.Exec(t, "UPDATE test SET rev = 1 WHERE k % 3 = 0")
 	db.Exec(t, "DELETE FROM test WHERE k % 10 = 0")
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	before, ts := fingerprintTableNoHistory(t, db, tableID, "")
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	targetTime, err := hlc.ParseHLC(ts)
 	require.NoError(t, err)
 
@@ -106,9 +106,9 @@ func TestRevertSpansFanout(t *testing.T) {
 	defer close()
 
 	verifyRevert := func() {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		reverted, _ := fingerprintTableNoHistory(t, db, tableID, "")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		require.Equal(t, before, reverted, "expected reverted table after edits to match before")
 		db.CheckQueryResults(t, "SELECT count(*) FROM test", beforeNumRows)
 	}

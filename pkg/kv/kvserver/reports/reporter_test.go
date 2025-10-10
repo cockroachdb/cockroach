@@ -70,20 +70,20 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 		"alter table t configure zone using constraints='[+region=r1]'")
 
 	// Get the id of the newly created zone.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	r := db.QueryRow("select zone_id from crdb_internal.zones where table_name = 't'")
 	var zoneID int
 	err := r.Scan(&zoneID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 
 	// Wait for the violation to be detected.
 	testutils.SucceedsSoon(t, func() error {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		r := db.QueryRow(
 			"select violating_ranges from system.replication_constraint_stats where zone_id = $1",
 			zoneID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		var numViolations int
 		if err := r.Scan(&numViolations); err != nil {
 			return err
@@ -107,11 +107,11 @@ func TestConstraintConformanceReportIntegration(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		r := db.QueryRow(
 			"select violating_ranges from system.replication_constraint_stats where zone_id = $1",
 			zoneID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		var numViolations int
 		if err := r.Scan(&numViolations); err != nil {
 			return err
@@ -189,9 +189,9 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	systemZoneIDs := make([]int, 0, 10)
 	systemZones := make([]zonepb.ZoneConfig, 0, 10)
 	{
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		rows, err := db.Query("select id, config from system.zones")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		require.NoError(t, err)
 		for rows.Next() {
 			var zoneID int
@@ -221,10 +221,10 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	{
 		var rowCount int
 		testutils.SucceedsSoon(t, func() error {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			r := db.QueryRow("select count(1) from system.replication_critical_localities")
 			err := r.Scan(&rowCount)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			require.NoError(t, err)
 			if rowCount == 0 {
 				return fmt.Errorf("no report yet")
@@ -237,12 +237,12 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 	// Check that we have all the expected rows.
 	for _, zid := range systemZoneIDs {
 		for _, s := range expCritLoc {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 			r := db.QueryRow(
 				"select at_risk_ranges from system.replication_critical_localities "+
 					"where zone_id=$1 and locality=$2",
 				zid, s)
-			unsafesql.TestOverrideAllowUnsafeInternals = false
+			unsafesql.T = false
 			var numRanges int
 			msg := fmt.Sprintf("zone_id: %d, locality: %s", zid, s)
 			require.NoError(t, r.Scan(&numRanges), msg)
@@ -261,11 +261,11 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 		"alter table t configure zone using num_replicas=3; "+
 		"alter table t split at values (0);")
 	// Get the id of the newly created zone.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	r := db.QueryRow("select zone_id from crdb_internal.zones where table_name = 't'")
 	var zoneID int
 	err := r.Scan(&zoneID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 
 	// Check initial conditions.
@@ -287,11 +287,11 @@ func TestCriticalLocalitiesReportIntegration(t *testing.T) {
 
 func checkCritical(db *gosql.DB, zoneID int, locs ...string) error {
 	return testutils.SucceedsSoonError(func() error {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		rows, err := db.Query(
 			"select locality, at_risk_ranges from system.replication_critical_localities "+
 				"where zone_id=$1", zoneID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			return err
 		}
@@ -351,11 +351,11 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 		"alter table t configure zone using num_replicas=3; "+
 		"alter table t split at values (0);")
 	// Get the id of the newly created zone.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	r := db.QueryRow("select zone_id from crdb_internal.zones where table_name = 't'")
 	var zoneID int
 	err := r.Scan(&zoneID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NoError(t, err)
 
 	// Upreplicate the range.
@@ -382,12 +382,12 @@ func TestReplicationStatusReportIntegration(t *testing.T) {
 
 func checkZoneReplication(db *gosql.DB, zoneID, total, under, over, unavailable int) error {
 	return testutils.SucceedsSoonError(func() error {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		r := db.QueryRow(
 			"select total_ranges, under_replicated_ranges, over_replicated_ranges, "+
 				"unavailable_ranges from system.replication_stats where zone_id=$1",
 			zoneID)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		var gotTotal, gotUnder, gotOver, gotUnavailable int
 		if err := r.Scan(&gotTotal, &gotUnder, &gotOver, &gotUnavailable); err != nil {
 			return err

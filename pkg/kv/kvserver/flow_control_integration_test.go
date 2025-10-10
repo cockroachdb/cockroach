@@ -3894,8 +3894,8 @@ func (h *flowControlTestHelper) query(runner *sqlutils.SQLRunner, sql string, he
 	// Enable unsafe access for queries that access crdb_internal or system tables
 	needsUnsafeAccess := strings.Contains(sql, "crdb_internal") || strings.Contains(sql, "system.")
 	if needsUnsafeAccess {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
-		defer func() { unsafesql.TestOverrideAllowUnsafeInternals = false }()
+		unsafesql.T = true
+		defer func() { unsafesql.T = false }()
 	}
 
 	rows := runner.Query(h.t, sql)

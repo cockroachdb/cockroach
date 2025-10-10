@@ -37,9 +37,9 @@ func TestJobsTableClaimFamily(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	var table, schema string
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	sqlDB.QueryRow(t, `SHOW CREATE system.jobs`).Scan(&table, &schema)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if !strings.Contains(
 		schema, `FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)`,
 	) {
@@ -47,18 +47,18 @@ func TestJobsTableClaimFamily(t *testing.T) {
 	}
 
 	now := timeutil.Now()
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	_ = sqlDB.Query(t, `
 INSERT INTO system.jobs (id, status, claim_session_id, claim_instance_id, num_runs, last_run)
 VALUES (1, 'running', 'foo', 101, 100, $1)`, now)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	var state, sessionID string
 	var instanceID, numRuns int64
 	var lastRun time.Time
 	const stmt = "SELECT status, claim_session_id, claim_instance_id, num_runs, last_run FROM system.jobs WHERE id = $1"
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	sqlDB.QueryRow(t, stmt, 1).Scan(&state, &sessionID, &instanceID, &numRuns, &lastRun)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 
 	require.Equal(t, "running", state)
 	require.Equal(t, "foo", sessionID)

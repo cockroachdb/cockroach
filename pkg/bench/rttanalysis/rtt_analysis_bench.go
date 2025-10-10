@@ -170,28 +170,28 @@ func executeRoundTripTest(
 		setupNeedsUnsafe := false
 		if tc.Setup != "" {
 			unsafesql.DisableIfContains(tc.Setup)
-			if unsafesql.TestOverrideAllowUnsafeInternals {
+			if unsafesql.T {
 				setupNeedsUnsafe = true
 			}
 		}
 		for _, s := range tc.SetupEx {
 			unsafesql.DisableIfContains(s)
-			if unsafesql.TestOverrideAllowUnsafeInternals {
+			if unsafesql.T {
 				setupNeedsUnsafe = true
 			}
 		}
-		
+
 		if setupNeedsUnsafe {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 		}
-		
+
 		adminSQL.Exec(b, tc.Setup)
 		for _, s := range tc.SetupEx {
 			adminSQL.Exec(b, s)
 		}
-		
+
 		// Reset after all setup is done
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		for _, statement := range statements {
 			cluster.clearStatementTrace(statement.SQL)
 		}
@@ -199,7 +199,7 @@ func executeRoundTripTest(
 		b.StartTimer()
 		unsafesql.DisableIfContains(tc.Stmt)
 		sql.Exec(b, tc.Stmt, tc.StmtArgs...)
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		b.StopTimer()
 		var ok bool
 
@@ -232,33 +232,33 @@ func executeRoundTripTest(
 		}
 
 		adminSQL.Exec(b, "DROP DATABASE bench;")
-		
+
 		// Enable unsafe internals for cleanup queries
 		cleanupNeedsUnsafe := false
 		if tc.Reset != "" {
 			unsafesql.DisableIfContains(tc.Reset)
-			if unsafesql.TestOverrideAllowUnsafeInternals {
+			if unsafesql.T {
 				cleanupNeedsUnsafe = true
 			}
 		}
 		for _, s := range tc.ResetEx {
 			unsafesql.DisableIfContains(s)
-			if unsafesql.TestOverrideAllowUnsafeInternals {
+			if unsafesql.T {
 				cleanupNeedsUnsafe = true
 			}
 		}
-		
+
 		if cleanupNeedsUnsafe {
-			unsafesql.TestOverrideAllowUnsafeInternals = true
+			unsafesql.T = true
 		}
-		
+
 		adminSQL.Exec(b, tc.Reset)
 		for _, s := range tc.ResetEx {
 			adminSQL.Exec(b, s)
 		}
-		
+
 		// Reset after all cleanup is done
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 	}
 
 	if measureRoundtrips {

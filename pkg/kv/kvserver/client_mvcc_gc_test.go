@@ -145,9 +145,9 @@ func TestSystemSpanConfigProtectionPoliciesApplyAfterGC(t *testing.T) {
 	runner.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
 
 	var tableID int
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	runner.QueryRow(t, "SELECT table_id FROM crdb_internal.tables WHERE name = 'foo'").Scan(&tableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	require.NotEqual(t, 0, tableID)
 	tablePrefix := tc.ApplicationLayer(0).Codec().TablePrefix(uint32(tableID))
 	tc.SplitRangeOrFatal(t, tablePrefix)
@@ -280,9 +280,9 @@ SELECT count(*)
 		}
 		return nil
 	})
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	runner.Exec(t,
 		fmt.Sprintf(`SELECT * FROM crdb_internal.scan(crdb_internal.table_span($1)) AS OF SYSTEM TIME '%d'`,
 			protectedTime), tableID)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 }

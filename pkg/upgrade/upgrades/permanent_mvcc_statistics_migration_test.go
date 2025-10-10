@@ -31,16 +31,16 @@ func TestMVCCStatisticsMigration(t *testing.T) {
 	defer sqlDB.Close()
 
 	t.Run("mvcc_statistics_table", func(t *testing.T) {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		_, err := sqlDB.Exec("SELECT * FROM system.mvcc_statistics")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		require.NoError(t, err, "system.public.mvcc_statistics exists")
 	})
 
 	t.Run("mvcc_stats_job", func(t *testing.T) {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		row := sqlDB.QueryRow("SELECT count(*) FROM system.public.jobs WHERE id = 104")
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		require.NotNil(t, row)
 		require.NoError(t, row.Err())
 		var count int

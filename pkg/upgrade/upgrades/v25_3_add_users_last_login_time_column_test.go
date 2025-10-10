@@ -81,9 +81,9 @@ func TestUsersLastLoginTimeTableMigration(t *testing.T) {
 	}
 	// Validate that the users table has the old
 	// schema.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	validateSchemaExists(false)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	// Run the upgrade.
 	upgrades.Upgrade(
 		t,
@@ -93,9 +93,9 @@ func TestUsersLastLoginTimeTableMigration(t *testing.T) {
 		false, /* expectError */
 	)
 	// Validate that the table has new schema.
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	validateSchemaExists(true)
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 }
 
 // getOldUsersDescriptor returns the

@@ -39,9 +39,9 @@ func Example_statement_diag() {
 	}
 
 	for _, cmd := range commands {
-		unsafesql.TestOverrideAllowUnsafeInternals = true
+		unsafesql.T = true
 		_, err := c.RunWithCaptureArgs([]string{"sql", "-e", cmd})
-		unsafesql.TestOverrideAllowUnsafeInternals = false
+		unsafesql.T = false
 		if err != nil {
 			log.Dev.Fatalf(context.Background(), "Couldn't execute sql: %s", err)
 		}

@@ -71,9 +71,9 @@ func (j *Job) Succeeded(ctx context.Context) error {
 func (j *Job) TestingCurrentState(ctx context.Context) (State, error) {
 	var stateString tree.DString
 	const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
-	unsafesql.TestOverrideAllowUnsafeInternals = true
+	unsafesql.T = true
 	row, err := j.registry.db.Executor().QueryRow(ctx, "job-status", nil, selectStmt, j.ID())
-	unsafesql.TestOverrideAllowUnsafeInternals = false
+	unsafesql.T = false
 	if err != nil {
 		return "", errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
 	}
