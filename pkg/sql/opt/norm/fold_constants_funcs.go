@@ -195,6 +195,37 @@ func (c *CustomFuncs) IsConstValueOrGroupOfConstValues(input opt.ScalarExpr) boo
 	return memo.CanExtractConstDatum(input)
 }
 
+func (c *CustomFuncs) FoldComparisonWithAny(cmp opt.Operator, left, right opt.ScalarExpr) (opt.ScalarExpr, bool) {
+	if !c.IsConstValueOrGroupOfConstValues(left) {
+		return nil, false
+	}
+	rightTuple, ok := right.(*memo.TupleExpr)
+	if !ok {
+		return nil, false
+	}
+	allconst := true
+	for _, expr := range rightTuple.Elems {
+		if !c.IsConstValueOrGroupOfConstValues(expr) {
+			allconst = false
+			continue
+		}
+		folded, ok := c.FoldComparison(cmp, left, expr)
+		if !ok {
+			continue
+		}
+		if _, ok := folded.(*memo.TrueExpr); !ok {
+			continue
+		}
+		return folded, true
+	}
+	if allconst {
+		// In case every element in rightTuple is a constant but none of them
+		// made the comparison return TrueExpr, we can safely fold expression to FalseExpr.
+		return c.f.ConstructFalse(), true
+	}
+	return nil, false
+}
+
 // IsNeverNull returns true if the input is a non-null constant value,
 // any tuple, or any array.
 func (c *CustomFuncs) IsNeverNull(input opt.ScalarExpr) bool {
