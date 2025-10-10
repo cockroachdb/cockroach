@@ -9,6 +9,7 @@ Cluster Set Up
 Key Space
 	[0,10000): 7(rf=3), 0MiB, [s1:(7,4*),s2:(6,2*),s3:(3,0*),s4:(2,0*),s5:(1,0*),s6:(1,1*),s7:(1,0*)]
 Event
+	set LBRebalancingObjective to 0
 	set LBRebalancingMode to 2
 Workload Set Up
 	[0,10000): 95%r large-block [128-256B/op, 7000ops/s]
