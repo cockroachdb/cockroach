@@ -5,7 +5,12 @@
 
 package tree
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
 
 // InspectType describes the INSPECT statement operation.
 type InspectType int
@@ -56,6 +61,78 @@ func (n *Inspect) Format(ctx *FmtCtx) {
 // InspectOptions corresponds to a comma-delimited list of inspect options.
 type InspectOptions []InspectOption
 
+// NamedIndexes flattens the indexes named by option.
+func (n *InspectOptions) NamedIndexes() TableIndexNames {
+	var names TableIndexNames
+	for _, option := range *n {
+		if opt, ok := option.(*InspectOptionIndex); ok {
+			names = append(names, opt.IndexNames...)
+		}
+	}
+
+	return names
+}
+
+// HasIndexAll checks if the options include an INDEX ALL option.
+func (n *InspectOptions) HasIndexAll() bool {
+	for _, option := range *n {
+		if _, ok := option.(*InspectOptionIndexAll); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Validate checks for internal consistency of the INSPECT command.
+func (n *Inspect) Validate() error {
+	if err := n.Options.validate(); err != nil {
+		return err
+	}
+
+	// TODO(155056): Better validate index names from the options with the name
+	// of the database or table from the command.
+	// TODO(148365): Check for duplicated index names (including the name of the
+	// database or table from the command).
+	for _, index := range n.Options.NamedIndexes() {
+		switch n.Typ {
+		case InspectTable:
+			if index.Table.ObjectName != "" && n.Table.Object() != index.Table.Object() {
+				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", index.String(), n.Table.String())
+			}
+		case InspectDatabase:
+			if index.Table.ExplicitCatalog && n.Database.Object() != index.Table.Catalog() {
+				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to database %q", index.String(), n.Database.String())
+			}
+		}
+	}
+
+	return nil
+}
+
+// validate checks for internal consistency of options on the INSPECT command.
+func (n *InspectOptions) validate() error {
+	var hasOptionIndex, hasOptionIndexAll bool
+
+	for _, option := range *n {
+		switch option.(type) {
+		case *InspectOptionIndex:
+			hasOptionIndex = true
+		case *InspectOptionIndexAll:
+			hasOptionIndexAll = true
+		default:
+			return fmt.Errorf("unknown inspect option: %T", option)
+		}
+	}
+
+	// INDEX and INDEX ALL are mutually exclusive.
+	if hasOptionIndex && hasOptionIndexAll {
+		return pgerror.Newf(pgcode.Syntax,
+			"conflicting INSPECT options: INDEX and INDEX ALL cannot be used together")
+	}
+
+	return nil
+}
+
 // Format implements the NodeFormatter interface.
 func (n *InspectOptions) Format(ctx *FmtCtx) {
 	for i, option := range *n {
@@ -78,8 +155,7 @@ type InspectOption interface {
 
 // InspectOptionIndex implements the InspectOption interface
 func (*InspectOptionIndex) inspectOptionType() {}
-
-func (n *InspectOptionIndex) String() string { return AsString(n) }
+func (n *InspectOptionIndex) String() string   { return AsString(n) }
 
 // InspectOptionIndex represents an INDEX inspect check.
 type InspectOptionIndex struct {
@@ -88,12 +164,19 @@ type InspectOptionIndex struct {
 
 // Format implements the NodeFormatter interface.
 func (n *InspectOptionIndex) Format(ctx *FmtCtx) {
-	ctx.WriteString("INDEX ")
-	if n.IndexNames != nil {
-		ctx.WriteByte('(')
-		ctx.FormatNode(&n.IndexNames)
-		ctx.WriteByte(')')
-	} else {
-		ctx.WriteString("ALL")
-	}
+	ctx.WriteString("INDEX (")
+	ctx.FormatNode(&n.IndexNames)
+	ctx.WriteByte(')')
+}
+
+// InspectOptionIndexAll implements the InspectOption interface
+func (*InspectOptionIndexAll) inspectOptionType() {}
+func (n *InspectOptionIndexAll) String() string   { return AsString(n) }
+
+// InspectOptionIndexAll represents an `INDEX ALL` inspect option.
+type InspectOptionIndexAll struct{}
+
+// Format implements the NodeFormatter interface.
+func (n *InspectOptionIndexAll) Format(ctx *FmtCtx) {
+	ctx.WriteString("INDEX ALL")
 }

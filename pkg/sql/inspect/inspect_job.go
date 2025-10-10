@@ -400,6 +400,19 @@ func (c *inspectResumer) maybeCleanupProtectedTimestamp(
 	}
 }
 
+// ReportResults implements the JobResultsReporter interface.
+func (r *inspectResumer) ReportResults(ctx context.Context, resultsCh chan<- tree.Datums) error {
+	select {
+	case resultsCh <- tree.Datums{
+		tree.NewDInt(tree.DInt(r.job.ID())),
+		tree.NewDString(string(r.job.State())),
+	}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func init() {
 	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &inspectResumer{job: job}

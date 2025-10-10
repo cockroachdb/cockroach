@@ -341,7 +341,7 @@ type DatabaseDescriptor interface {
 type TableDescriptor interface {
 	Descriptor
 
-	// TableDesc returns the backing protobuf for this database.
+	// TableDesc returns the backing protobuf for this table.
 	TableDesc() *descpb.TableDescriptor
 
 	// GetState returns the raw state of this descriptor. This information is
