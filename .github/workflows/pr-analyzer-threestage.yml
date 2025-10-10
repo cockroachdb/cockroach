@@ -215,3 +215,20 @@ jobs:
             3. If bugs were found, what actions are recommended
 
             **If all three stages detected bugs**, this indicates a potential issue that warrants investigation.
+
+      - name: Comment on PR if bugs confirmed
+        if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT: POTENTIAL_BUG_CONFIRMED')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "## Potential Bug(s) Detected
+
+          The three-stage Claude Code analysis has identified potential bug(s) in this PR that may warrant investigation.
+
+          **Analysis Results:**
+          - ⚠️ Stage 1 (Initial Screening): Potential bugs detected
+          - ⚠️ Stage 2 (Database Expert Review): Potential bugs not ruled out
+          - ⚠️ Stage 3 (Principal Engineer Review): Potential bugs not ruled out
+
+          **Next Steps:**
+          Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
