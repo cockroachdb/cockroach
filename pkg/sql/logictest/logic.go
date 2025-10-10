@@ -1857,6 +1857,14 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
+		// Set allow_unsafe_internals to default to false for logic tests to catch
+		// unintended access to crdb_internal/system schemas.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.testing.unsafe_internals_default.enabled = true",
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		// Update the default AS OF time for querying the system.table_statistics
 		// table to create the crdb_internal.table_row_statistics table.
 		if _, err := conn.Exec(
@@ -3746,7 +3754,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	}
 
 	ctx := context.Background()
-	conn, cleanup := t.getTestConn(t.db, query.logicStatement)
+	conn, cleanup := t.getTestConn(db, query.logicStatement)
 	defer cleanup()
 
 	if query.expectAsync {
@@ -4906,6 +4914,7 @@ func locateCockroachPredecessor(version string) (string, error) {
 // test explicitly attempts to query them. It does not do that
 // for all queries to catch unexpected, indirect access to these objects.
 func (t *logicTest) getTestConn(db *gosql.DB, stmt logicStatement) (*gosql.Conn, func()) {
+	t.t().Log("getting connection for statement:", stmt.sql)
 	conn, err := db.Conn(context.Background())
 	if err != nil {
 		t.t().Fatal(err)
