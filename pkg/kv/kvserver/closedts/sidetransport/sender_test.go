@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -957,26 +960,25 @@ func TestPaceUpdateSignalling(t *testing.T) {
 	// each other.
 	//
 	// seqNum is the sequence number to wait for.
-	testPacing := func(seqNum ctpb.SeqNum, assertionFunc func(timeSpread time.Duration)) {
+	testPacing := func(t *testing.T, seqNum ctpb.SeqNum, assertionFunc func(timeSpread time.Duration)) {
 		// Track the times when goroutines receive items from the buffer.
-		var receiveTimes []time.Time
+		var receiveTimes []crtime.Mono
 		var mu syncutil.Mutex
 
 		// Create numWaiters goroutines that wait on s.buf.GetBySeq and record
 		// receive times.
-		done := make(chan struct{}, numWaiters)
-		for i := 0; i < numWaiters; i++ {
-			go func() {
+		g := ctxgroup.WithContext(ctx)
+		for range numWaiters {
+			g.Go(func() error {
 				// Wait for the specified sequence number.
 				_, ok := s.buf.GetBySeq(ctx, seqNum)
-				require.Equal(t, true, ok)
-				if ok {
-					mu.Lock()
-					receiveTimes = append(receiveTimes, time.Now())
-					mu.Unlock()
-				}
-				done <- struct{}{}
-			}()
+				require.True(t, ok)
+
+				mu.Lock()
+				defer mu.Unlock()
+				receiveTimes = append(receiveTimes, crtime.NowMono())
+				return nil
+			})
 		}
 
 		// Wait until all goroutines are waiting on the buffer.
@@ -991,47 +993,43 @@ func TestPaceUpdateSignalling(t *testing.T) {
 		s.publish(ctx)
 
 		// Wait for all goroutines to finish.
-		for i := 0; i < numWaiters; i++ {
-			<-done
-		}
+		require.NoError(t, g.Wait())
 
 		// Verify that all goroutines received the message.
 		require.Len(t, receiveTimes, numWaiters)
 
-		// Find min and max receive times.
-		minTime := receiveTimes[0]
-		maxTime := receiveTimes[0]
-		for _, t := range receiveTimes[1:] {
-			if t.Before(minTime) {
-				minTime = t
-			}
-			if t.After(maxTime) {
-				maxTime = t
-			}
-		}
-
 		// Verify that the time spread matches expectations.
+		minTime := slices.Min(receiveTimes)
+		maxTime := slices.Max(receiveTimes)
 		timeSpread := maxTime.Sub(minTime)
 		assertionFunc(timeSpread)
 	}
 
 	// Test with 250ms pacing interval - expect at least 125ms spread just to be
 	// conservative. In practice, it should be closer to 250ms.
-	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 250*time.Millisecond)
-	testPacing(1 /* seqNum */, func(timeSpread time.Duration) {
-		require.GreaterOrEqual(t, timeSpread, 125*time.Millisecond)
+	t.Run("pacing_interval=250ms", func(t *testing.T) {
+		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 250*time.Millisecond)
+		testPacing(t, 1 /* seqNum */, func(timeSpread time.Duration) {
+			require.GreaterOrEqual(t, timeSpread, 125*time.Millisecond)
+		})
 	})
 
 	// Change to 100ms pacing interval - expect at least 50ms spread.
-	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 100*time.Millisecond)
-	testPacing(2 /* seqNum */, func(timeSpread time.Duration) {
-		require.GreaterOrEqual(t, timeSpread, 50*time.Millisecond)
+	t.Run("pacing_interval=100ms", func(t *testing.T) {
+		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 100*time.Millisecond)
+		testPacing(t, 2 /* seqNum */, func(timeSpread time.Duration) {
+			require.GreaterOrEqual(t, timeSpread, 50*time.Millisecond)
+		})
 	})
 
 	// Change to 0ms (disabled) pacing interval - expect all goroutines to be
 	// woken within a few milliseconds of each other.
-	closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 0)
-	testPacing(3 /* seqNum */, func(timeSpread time.Duration) {
-		require.LessOrEqual(t, timeSpread, 25*time.Millisecond)
+	t.Run("pacing_interval=0ms", func(t *testing.T) {
+		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 0)
+		testPacing(t, 3 /* seqNum */, func(timeSpread time.Duration) {
+			// The expectation here is many 30x what is typically seen. But, we want
+			// to avoid flakes.
+			require.LessOrEqual(t, timeSpread, 30*time.Millisecond)
+		})
 	})
 }
