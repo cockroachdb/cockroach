@@ -1780,10 +1780,10 @@ def go_deps():
         ],
         build_file_proto_mode = "default",
         importpath = "github.com/cockroachdb/errors",
-        sha256 = "f73d8a5f4d8fcbc4ed61db2b47f17e2601d8b32e9a49c0665667489d9d9d6e7c",
-        strip_prefix = "github.com/cockroachdb/errors@v1.12.0",
+        sha256 = "4df66cc44791d4290071696abf179dc6df7b94b4cb5d29a20f39c6bf522c60ee",
+        strip_prefix = "github.com/cockroachdb/errors@v1.12.1-0.20251010171200-64801262cd6f",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.12.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/errors/com_github_cockroachdb_errors-v1.12.1-0.20251010171200-64801262cd6f.zip",
         ],
     )
     go_repository(
