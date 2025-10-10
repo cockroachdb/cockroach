@@ -1253,3 +1253,109 @@ insert t133329
                      └── filters
                           ├── a = t133329.a
                           └── k != t133329.k
+
+# Regression test for #154672. Do not set target columns when re-projecting
+# computed columns after a BEFORE trigger.
+exec-ddl
+CREATE TABLE t154672 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT AS (a + 1) STORED
+)
+----
+
+exec-ddl
+CREATE FUNCTION f154672() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN COALESCE(NEW, OLD);
+  END
+$$
+----
+
+exec-ddl
+CREATE TRIGGER tr154672 BEFORE INSERT OR UPDATE OR DELETE ON t154672 FOR EACH ROW EXECUTE FUNCTION f154672()
+----
+
+norm
+INSERT INTO t154672 (k, a) VALUES (1, 2) ON CONFLICT (k) DO UPDATE SET a = 3
+----
+upsert t154672
+ ├── arbiter indexes: t154672_pkey
+ ├── columns: <none>
+ ├── canary column: k:9
+ ├── fetch columns: k:9 a:10 b:11
+ ├── insert-mapping:
+ │    ├── k_new:29 => k:1
+ │    ├── a_new:30 => a:2
+ │    └── b_comp:31 => b:3
+ ├── update-mapping:
+ │    ├── upsert_k:40 => k:1
+ │    ├── upsert_a:41 => a:2
+ │    └── upsert_b:42 => b:3
+ ├── before-triggers
+ │    └── tr154672
+ └── project
+      ├── columns: upsert_k:40 upsert_a:41 upsert_b:42 k:9 a:10 b:11 k_new:29 a_new:30 b_comp:31
+      ├── project
+      │    ├── columns: k_new:37 a_new:38 k:9 a:10 b:11 k_new:29 a_new:30 b_comp:31
+      │    ├── barrier
+      │    │    ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null k_new:29 a_new:30 b_comp:31 a_new:32!null b_comp:33!null old:34 new:35 f154672:36!null
+      │    │    └── select
+      │    │         ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null k_new:29 a_new:30 b_comp:31 a_new:32!null b_comp:33!null old:34 new:35 f154672:36!null
+      │    │         ├── project
+      │    │         │    ├── columns: f154672:36 column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null k_new:29 a_new:30 b_comp:31 a_new:32!null b_comp:33!null old:34 new:35
+      │    │         │    ├── barrier
+      │    │         │    │    ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null k_new:29 a_new:30 b_comp:31 a_new:32!null b_comp:33!null old:34 new:35
+      │    │         │    │    └── project
+      │    │         │    │         ├── columns: new:35 old:34 b_comp:33!null a_new:32!null b_comp:31 k_new:29 a_new:30 column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null
+      │    │         │    │         ├── barrier
+      │    │         │    │         │    ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null
+      │    │         │    │         │    └── select
+      │    │         │    │         │         ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14 f154672:28!null
+      │    │         │    │         │         ├── project
+      │    │         │    │         │         │    ├── columns: f154672:28 column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14
+      │    │         │    │         │         │    ├── barrier
+      │    │         │    │         │         │    │    ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13 new:14
+      │    │         │    │         │         │    │    └── project
+      │    │         │    │         │         │    │         ├── columns: new:14 column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │         │    │         │         │    │         ├── left-join (cross)
+      │    │         │    │         │         │    │         │    ├── columns: column1:6!null column2:7!null b_comp:8!null k:9 a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │         │    │         │         │    │         │    ├── values
+      │    │         │    │         │         │    │         │    │    ├── columns: column1:6!null column2:7!null b_comp:8!null
+      │    │         │    │         │         │    │         │    │    └── (1, 2, 3)
+      │    │         │    │         │         │    │         │    ├── select
+      │    │         │    │         │         │    │         │    │    ├── columns: k:9!null a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │         │    │         │         │    │         │    │    ├── scan t154672
+      │    │         │    │         │         │    │         │    │    │    ├── columns: k:9!null a:10 b:11 crdb_internal_mvcc_timestamp:12 tableoid:13
+      │    │         │    │         │         │    │         │    │    │    ├── computed column expressions
+      │    │         │    │         │         │    │         │    │    │    │    └── b:11
+      │    │         │    │         │         │    │         │    │    │    │         └── a:10 + 1
+      │    │         │    │         │         │    │         │    │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    │         │    │         │         │    │         │    │    └── filters
+      │    │         │    │         │         │    │         │    │         └── k:9 = 1
+      │    │         │    │         │         │    │         │    └── filters (true)
+      │    │         │    │         │         │    │         └── projections
+      │    │         │    │         │         │    │              └── ((column1:6, column2:7, CAST(NULL AS INT8)) AS k, a, b) [as=new:14]
+      │    │         │    │         │         │    └── projections
+      │    │         │    │         │         │         └── f154672(new:14, NULL, 'tr154672', 'BEFORE', 'ROW', 'INSERT', 61, 't154672', 't154672', 'public', 0, ARRAY[]) [as=f154672:28]
+      │    │         │    │         │         └── filters
+      │    │         │    │         │              └── f154672:28 IS DISTINCT FROM NULL
+      │    │         │    │         └── projections
+      │    │         │    │              ├── ((k:9, 3, CAST(NULL AS INT8)) AS k, a, b) [as=new:35]
+      │    │         │    │              ├── ((k:9, a:10, CAST(NULL AS INT8)) AS k, a, b) [as=old:34]
+      │    │         │    │              ├── 4 [as=b_comp:33]
+      │    │         │    │              ├── 3 [as=a_new:32]
+      │    │         │    │              ├── a:10 + 1 [as=b_comp:31]
+      │    │         │    │              ├── (f154672:28).k [as=k_new:29]
+      │    │         │    │              └── (f154672:28).a [as=a_new:30]
+      │    │         │    └── projections
+      │    │         │         └── CASE WHEN k:9 IS NOT NULL THEN f154672(new:35, old:34, 'tr154672', 'BEFORE', 'ROW', 'UPDATE', 61, 't154672', 't154672', 'public', 0, ARRAY[]) ELSE new:35 END [as=f154672:36]
+      │    │         └── filters
+      │    │              └── f154672:36 IS DISTINCT FROM NULL
+      │    └── projections
+      │         ├── (f154672:36).k [as=k_new:37]
+      │         └── (f154672:36).a [as=a_new:38]
+      └── projections
+           ├── CASE WHEN k:9 IS NULL THEN k_new:29 ELSE k_new:37 END [as=upsert_k:40]
+           ├── CASE WHEN k:9 IS NULL THEN a_new:30 ELSE a_new:38 END [as=upsert_a:41]
+           └── CASE WHEN k:9 IS NULL THEN b_comp:31 ELSE a_new:38 + 1 END [as=upsert_b:42]
