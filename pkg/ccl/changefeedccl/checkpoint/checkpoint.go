@@ -78,11 +78,11 @@ type SpanForwarder interface {
 func Restore(sf SpanForwarder, checkpoint *jobspb.TimestampSpansMap) error {
 	for ts, spans := range checkpoint.All() {
 		if ts.IsEmpty() {
-			return errors.New("checkpoint timestamp is empty")
+			return errors.AssertionFailedf("checkpoint timestamp is empty")
 		}
 		for _, sp := range spans {
 			if _, err := sf.Forward(sp, ts); err != nil {
-				return err
+				return errors.Wrapf(err, "forwarding span %v to %v", sp, ts)
 			}
 		}
 	}
