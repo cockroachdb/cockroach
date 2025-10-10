@@ -3503,9 +3503,9 @@ var retryableMinTimestampBoundUnsatisfiableError = errors.Newf(
 	"retryable MinTimestampBoundUnsatisfiableError",
 )
 
-// errIsRetryable is true if the error is a client-visible retry error
+// ErrIsRetryable is true if the error is a client-visible retry error
 // or the error is a special error that is handled internally and retried.
-func errIsRetryable(err error) bool {
+func ErrIsRetryable(err error) bool {
 	return errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) ||
 		errors.Is(err, retryableMinTimestampBoundUnsatisfiableError) ||
 		descs.IsTwoVersionInvariantViolationError(err)
@@ -3563,7 +3563,7 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 		}
 	}
 
-	retryable := errIsRetryable(err)
+	retryable := ErrIsRetryable(err)
 	if retryable {
 		var rc rewindCapability
 		var canAutoRetry bool

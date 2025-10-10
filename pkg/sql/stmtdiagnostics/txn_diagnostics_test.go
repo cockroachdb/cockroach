@@ -464,6 +464,12 @@ func (n noopDb) Executor(option ...isql.ExecutorOption) isql.Executor {
 	return nil
 }
 
+func (n noopDb) Session(
+	ctx context.Context, name string, options ...isql.ExecutorOption,
+) (isql.Session, error) {
+	return nil, nil
+}
+
 var _ isql.DB = noopDb{}
 
 func toUint64(t *testing.T, bytes []byte) uint64 {

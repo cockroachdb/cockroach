@@ -70,6 +70,7 @@
 /pkg/sql/execute.go                    @cockroachdb/sql-queries-prs
 /pkg/sql/executor_statement_metrics.go @cockroachdb/obs-prs
 /pkg/sql/flowinfra/          @cockroachdb/sql-queries-prs
+/pkg/sql/hints/              @cockroachdb/sql-queries-prs
 /pkg/sql/physicalplan/       @cockroachdb/sql-queries-prs
 /pkg/sql/row*                @cockroachdb/sql-queries-prs
 /pkg/sql/control_job*        @cockroachdb/sql-queries-prs @cockroachdb/jobs-prs

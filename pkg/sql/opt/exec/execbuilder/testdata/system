@@ -139,3 +139,17 @@ delete statement_hints
       │    └── distribution: test
       └── filters
            └── fingerprint:12 = 'SELECT * FROM t WHERE x = _' [outer=(12), constraints=(/12: [/'SELECT * FROM t WHERE x = _' - /'SELECT * FROM t WHERE x = _']; tight), fd=()-->(12)]
+
+# Query used by the cache to check for hint existence.
+query T
+EXPLAIN (OPT, VERBOSE) SELECT hash FROM system.statement_hints WHERE hash = 123456 LIMIT 1
+----
+scan statement_hints@hash_idx
+ ├── columns: hash:2
+ ├── constraint: /2/1: [/123456 - /123456]
+ ├── limit: 1
+ ├── stats: [rows=1]
+ ├── cost: 9.07
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── distribution: test
