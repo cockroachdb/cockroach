@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
@@ -36,6 +37,8 @@ func TestStoreRebalancer(t *testing.T) {
 	start := testSettings.StartTime
 	testSettings.ReplicaChangeBaseDelay = 5 * time.Second
 	testSettings.StateExchangeDelay = 0
+	ctx := context.Background()
+	kvserver.LoadBasedRebalancingObjective.Override(ctx, &testSettings.ST.SV, kvserver.LBRebalancingQueries)
 
 	clusterInfo := state.ClusterInfoWithStoreCount(6, 1 /* storesPerNode */)
 
@@ -195,6 +198,8 @@ func TestStoreRebalancerBalances(t *testing.T) {
 	testSettings.ReplicaChangeBaseDelay = 1 * time.Second
 	testSettings.StateExchangeInterval = 1 * time.Second
 	testSettings.StateExchangeDelay = 0
+	ctx := context.Background()
+	kvserver.LoadBasedRebalancingObjective.Override(ctx, &testSettings.ST.SV, kvserver.LBRebalancingQueries)
 
 	distributeQPS := func(s state.State, qpsCounts map[state.StoreID]float64) {
 		dist := make([]float64, len(qpsCounts))
