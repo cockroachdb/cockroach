@@ -16,7 +16,7 @@ upgrade all
 # Verify that the cluster version upgrades have begun by asserting we're no
 # longer on the previous version. Note that the first cluster upgrade is the
 # one that repairs all descriptors.
-query B retry
+query B retry retry_duration 90s
 SELECT version != '$initial_version' FROM [SHOW CLUSTER SETTING version]
 ----
 true
