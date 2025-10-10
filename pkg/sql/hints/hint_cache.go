@@ -390,17 +390,18 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 }
 
 // MaybeGetStatementHints attempts to retrieve the hints for the given statement
-// fingerprint. It returns nil if the statement has no hints, or there was an
-// error retrieving them.
+// fingerprint, along with the unique ID of each hint (for invalidating cached
+// plans). It returns nil if the statement has no hints, or there was an error
+// retrieving them.
 func (c *StatementHintsCache) MaybeGetStatementHints(
 	ctx context.Context, statementFingerprint string,
-) (hints []StatementHint) {
+) (hints []StatementHint, ids []int64) {
 	hash := fnv.New64()
 	_, err := hash.Write([]byte(statementFingerprint))
 	if err != nil {
 		// This should never happen for 64-bit FNV-1.
 		log.Dev.Errorf(ctx, "failed to compute hash for statement fingerprint: %v", err)
-		return nil
+		return nil, nil
 	}
 	statementHash := int64(hash.Sum64())
 	c.mu.Lock()
@@ -410,7 +411,7 @@ func (c *StatementHintsCache) MaybeGetStatementHints(
 		// unconditionally check hintCache.
 		if _, ok := c.mu.hintedHashes[statementHash]; !ok {
 			// There are no plan hints for this query.
-			return nil
+			return nil, nil
 		}
 	}
 	e, ok := c.mu.hintCache.Get(statementHash)
@@ -452,7 +453,7 @@ func (c *StatementHintsCache) maybeWaitForRefreshLocked(
 // released while reading from the db, and then reacquired.
 func (c *StatementHintsCache) addCacheEntryLocked(
 	ctx context.Context, statementHash int64, statementFingerprint string,
-) []StatementHint {
+) (hints []StatementHint, ids []int64) {
 	c.mu.AssertHeld()
 
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -481,7 +482,7 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		// Remove the cache entry so that the next caller retries the query.
 		c.mu.hintCache.Del(statementHash)
 		log.VEventf(ctx, 1, "encountered error while reading hints for query %s", statementFingerprint)
-		return nil
+		return nil, nil
 	}
 	return entry.getMatchingHints(statementFingerprint)
 }
@@ -489,12 +490,16 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 // getStatementHintsFromDB queries the system.statement_hints table for hints
 // matching the given fingerprint hash. It is able to handle the case when
 // multiple fingerprints match the hash, as well as the case when there are no
-// hints for the fingerprint.
+// hints for the fingerprint. Results are ordered by row ID.
 func (c *StatementHintsCache) getStatementHintsFromDB(
 	ctx context.Context, statementHash int64, entry *cacheEntry,
 ) (retErr error) {
 	const opName = "get-plan-hints"
-	const getHintsStmt = `SELECT "fingerprint", "hint" FROM system.statement_hints WHERE "hash" = $1`
+	const getHintsStmt = `
+    SELECT "row_id", "fingerprint", "hint"
+    FROM system.statement_hints
+    WHERE "hash" = $1
+    ORDER BY "row_id" ASC`
 	it, err := c.db.Executor().QueryIteratorEx(
 		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
 		getHintsStmt, statementHash,
@@ -511,11 +516,13 @@ func (c *StatementHintsCache) getStatementHintsFromDB(
 			return err
 		}
 		datums := it.Cur()
-		fingerprint := string(tree.MustBeDString(datums[0]))
-		hint, err := NewStatementHint([]byte(tree.MustBeDBytes(datums[1])))
+		rowID := int64(tree.MustBeDInt(datums[0]))
+		fingerprint := string(tree.MustBeDString(datums[1]))
+		hint, err := NewStatementHint([]byte(tree.MustBeDBytes(datums[2])))
 		if err != nil {
 			return err
 		}
+		entry.ids = append(entry.ids, rowID)
 		entry.fingerprints = append(entry.fingerprints, fingerprint)
 		entry.hints = append(entry.hints, hint)
 	}
@@ -528,30 +535,33 @@ type cacheEntry struct {
 	mustWait bool
 	waitCond sync.Cond
 
-	// fingerprints and hints have the same length. fingerprints[i] is the
-	// statement fingerprint to which hints[i] applies. We have to keep track of
-	// the fingerprints to resolve hash collisions. Note that a single fingerprint
-	// can have multiple hints, in which case there will be duplicate entries in
-	// the fingerprints slice.
+	// hints, fingerprints, and ids have the same length. fingerprints[i] is the
+	// statement fingerprint to which hints[i] applies, while ids[i] uniquely
+	// identifies a hint in the system table. They are kept in order of id.
+	//
+	// We track the hint ID for invalidating cached query plans after a hint is
+	// added or removed. We track the fingerprint to resolve hash collisions. Note
+	// that a single fingerprint can have multiple hints, in which case there will
+	// be duplicate entries in the fingerprints slice.
 	// TODO(drewk): consider de-duplicating the fingerprint strings to reduce
 	// memory usage.
-	fingerprints []string
 	hints        []StatementHint
+	fingerprints []string
+	ids          []int64
 }
 
-// getMatchingHints returns the plan hints for the given fingerprint, or nil if
-// they don't exist.
-func (entry *cacheEntry) getMatchingHints(statementFingerprint string) []StatementHint {
-	var res []StatementHint
+// getMatchingHints returns the plan hints and row IDs for the given
+// fingerprint, or nil if they don't exist. The results are in order of row ID.
+func (entry *cacheEntry) getMatchingHints(
+	statementFingerprint string,
+) (hints []StatementHint, ids []int64) {
 	for i := range entry.hints {
 		if entry.fingerprints[i] == statementFingerprint {
-			// TODO(drewk,michae2): we could do something smarter here to avoid
-			// allocations. For example, order by fingerprint in the original query
-			// so that we can return a slice here.
-			res = append(res, entry.hints[i])
+			hints = append(hints, entry.hints[i])
+			ids = append(ids, entry.ids[i])
 		}
 	}
-	return res
+	return hints, ids
 }
 
 // ============================================================================
