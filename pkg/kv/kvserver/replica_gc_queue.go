@@ -306,15 +306,9 @@ func (rgcq *replicaGCQueue) process(
 		log.VEventf(ctx, 1, "destroying local data")
 
 		nextReplicaID := replyDesc.NextReplicaID
-		// Note that this seems racy - we didn't hold any locks between reading
-		// the range descriptor above and deciding to remove the replica - but
-		// we pass in the NextReplicaID to detect situations in which the
-		// replica became "non-gc'able" in the meantime by checking (with raftMu
-		// held throughout) whether the replicaID is still smaller than the
-		// NextReplicaID. Given non-zero replica IDs don't change, this is only
-		// possible if we currently think we're processing a pre-emptive snapshot
-		// but discover in RemoveReplica that this range has since been added and
-		// knows that.
+		// NB: since we didn't hold any locks between reading the range descriptor
+		// above and deciding to remove the replica, it could have been removed
+		// concurrently. RemoveReplica gracefully returns nil in this case.
 		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "replica GC queue"); err != nil {
 			// Should never get an error from RemoveReplica.
 			const format = "error during replicaGC: %v"
