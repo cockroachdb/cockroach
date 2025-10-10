@@ -179,19 +179,12 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 			if firstRecord.Public {
 				zone = n.publicZone
 			}
-			args := []string{"--project", n.dnsProject, "dns", "record-sets", command, name,
-				"--type", string(firstRecord.Type),
-				"--ttl", strconv.Itoa(firstRecord.TTL),
-				"--zone", zone,
-				"--rrdatas", strings.Join(data, ","),
-			}
-			cmd := exec.CommandContext(ctx, "gcloud", args...)
-			out, err := n.execFn(cmd)
+
+			// Execute create/update with automatic retry on 409 conflict
+			err = n.executeRecordSetCommand(ctx, command, name, firstRecord.Type, firstRecord.TTL, zone, data)
 			if err != nil {
-				// Clear the cache entry if the operation failed, as the records may
-				// have been partially updated.
 				n.clearCacheEntry(name)
-				return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
+				return err
 			}
 			// If fastDNS is enabled, we need to wait for the SRV records to become available
 			// on the Google DNS servers.
@@ -250,6 +243,10 @@ func (n *dnsProvider) deleteRecords(
 			// have been partially deleted.
 			n.clearCacheEntry(name)
 			if err != nil {
+				// Treat 404/not found as success - record is already gone (idempotent)
+				if strings.Contains(string(out), "HTTPError 404") {
+					return nil
+				}
 				return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
 			}
 			return nil
@@ -445,6 +442,63 @@ func (n *dnsProvider) clearCacheEntry(name string) {
 // may or may not have a trailing dot.
 func (n *dnsProvider) normaliseName(name string) string {
 	return strings.TrimSuffix(name, ".")
+}
+
+// executeRecordSetCommand executes a gcloud dns record-sets command (create or update).
+// If a 409 conflict occurs during create (race condition), it automatically retries with update.
+func (n *dnsProvider) executeRecordSetCommand(
+	ctx context.Context,
+	command string,
+	name string,
+	recordType vm.DNSType,
+	ttl int,
+	zone string,
+	data []string,
+) error {
+	args := []string{"--project", n.dnsProject, "dns", "record-sets", command, name,
+		"--type", string(recordType),
+		"--ttl", strconv.Itoa(ttl),
+		"--zone", zone,
+		"--rrdatas", strings.Join(data, ","),
+	}
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
+	out, err := n.execFn(cmd)
+
+	if err != nil {
+		// Handle race condition: record was created between lookup and create
+		// (most likely by a full DNS sync after a clusters sync)
+		switch command {
+		case "create":
+			if strings.Contains(string(out), "HTTPError 409") {
+				// Retry with 'update' command - rebuild args with correct command
+				retryArgs := []string{"--project", n.dnsProject, "dns", "record-sets", "update", name,
+					"--type", string(recordType),
+					"--ttl", strconv.Itoa(ttl),
+					"--zone", zone,
+					"--rrdatas", strings.Join(data, ","),
+				}
+				cmd = exec.CommandContext(ctx, "gcloud", retryArgs...)
+				out, err = n.execFn(cmd)
+			}
+		case "update":
+			if strings.Contains(string(out), "HTTPError 404") {
+				// Retry with 'update' command - rebuild args with correct command
+				retryArgs := []string{"--project", n.dnsProject, "dns", "record-sets", "create", name,
+					"--type", string(recordType),
+					"--ttl", strconv.Itoa(ttl),
+					"--zone", zone,
+					"--rrdatas", strings.Join(data, ","),
+				}
+				cmd = exec.CommandContext(ctx, "gcloud", retryArgs...)
+				out, err = n.execFn(cmd)
+			}
+		}
+	}
+
+	if err != nil {
+		return rperrors.TransientFailure(errors.Wrapf(err, "output: %s", out), dnsProblemLabel)
+	}
+	return nil
 }
 
 // syncPublicDNS syncs the public DNS zone with the given list of VMs.
