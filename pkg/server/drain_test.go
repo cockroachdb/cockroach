@@ -7,6 +7,7 @@ package server_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"io"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -34,14 +36,38 @@ import (
 func TestDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	doTestDrain(t)
+	testutils.RunTrueAndFalse(t, "secondaryTenants", func(t *testing.T, secondaryTenants bool) {
+		doTestDrain(t, secondaryTenants)
+	})
 }
 
 // doTestDrain runs the drain test.
-func doTestDrain(tt *testing.T) {
+func doTestDrain(tt *testing.T, secondaryTenants bool) {
+	if secondaryTenants {
+		// Draining the tenant server takes a long time under stress. See #155229.
+		skip.UnderRace(tt)
+	}
 	var drainSleepCallCount = 0
 	t := newTestDrainContext(tt, &drainSleepCallCount)
 	defer t.Close()
+
+	var tenantConn *gosql.DB
+	if secondaryTenants {
+		_, err := t.tc.ServerConn(0).Exec("CREATE TENANT hello")
+		require.NoError(tt, err)
+		_, err = t.tc.ServerConn(0).Exec("ALTER TENANT hello START SERVICE SHARED")
+		require.NoError(tt, err)
+
+		// Wait for the tenant to be ready by establishing a test connection.
+		testutils.SucceedsSoon(tt, func() error {
+			tenantConn, err = t.tc.Server(0).SystemLayer().SQLConnE(
+				serverutils.DBName("cluster:hello/defaultdb"))
+			if err != nil {
+				return err
+			}
+			return tenantConn.Ping()
+		})
+	}
 
 	// Issue a probe. We're not draining yet, so the probe should
 	// reflect that.
@@ -54,7 +80,12 @@ func doTestDrain(tt *testing.T) {
 	resp = t.sendDrainNoShutdown()
 	t.assertDraining(resp, true)
 	t.assertRemaining(resp, true)
-	t.assertEqual(1, drainSleepCallCount)
+	if !secondaryTenants {
+		// If we have secondary tenants, we might not have waited before draining
+		// the clients at this point because we might have returned early if we are
+		// still draining the serverController.
+		t.assertEqual(1, drainSleepCallCount)
+	}
 
 	// Issue another probe. This checks that the server is still running
 	// (i.e. Shutdown: false was effective), the draining status is
@@ -64,12 +95,14 @@ func doTestDrain(tt *testing.T) {
 	t.assertDraining(resp, true)
 	// probe-only has no remaining.
 	t.assertRemaining(resp, false)
-	t.assertEqual(1, drainSleepCallCount)
-
+	if !secondaryTenants {
+		t.assertEqual(1, drainSleepCallCount)
+	}
 	// Repeat drain commands until we verify that there are zero remaining leases
 	// (i.e. complete). Also validate that the server did not sleep again.
 	testutils.SucceedsSoon(t, func() error {
 		resp = t.sendDrainNoShutdown()
+		t.Logf("drain response: %+v", resp)
 		if !resp.IsDraining {
 			return errors.Newf("expected draining")
 		}
@@ -79,6 +112,7 @@ func doTestDrain(tt *testing.T) {
 		}
 		return nil
 	})
+
 	t.assertEqual(1, drainSleepCallCount)
 
 	// Now issue a drain request without drain but with shutdown.
@@ -190,6 +224,7 @@ func newTestDrainContext(t *testing.T, drainSleepCallCount *int) *testDrainConte
 			// care about TLS settings for the RPC client connection.
 			ServerArgs: base.TestServerArgs{
 				DefaultDRPCOption: base.TestDRPCDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DrainSleepFn: func(time.Duration) {
