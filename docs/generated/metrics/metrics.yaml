@@ -10553,13 +10553,13 @@ layers:
       essential: true
     - name: storage.wal.fsync.latency
       exported_name: storage_wal_fsync_latency
-      description: The write ahead log fsync latency
+      description: The fsync latency to the Write-Ahead Log device.
       y_axis_label: Fsync Latency
       type: HISTOGRAM
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
-      how_to_use: If this value is greater than `100ms`, it is an indication of a disk stall. To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured.
+      how_to_use: If this value is greater than 100ms, it is an indication of a disk stall. To mitigate the effects of disk stalls, consider deploying your cluster with WAL failover configured. When WAL failover is configured, the more relevant metric is storage.wal.failover_write_and_sync.latency, as this metric reflects the fsync latency of the primary and/or the secondary WAL device.
       essential: true
     - name: storage.write-stalls
       exported_name: storage_write_stalls
@@ -17311,7 +17311,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.wal.bytes_in
       exported_name: storage_wal_bytes_in
-      description: The number of logical bytes the storage engine has written to the WAL
+      description: The number of logical bytes the storage engine has written to the Write-Ahead Log.
       y_axis_label: Events
       type: COUNTER
       unit: COUNT
@@ -17319,7 +17319,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.wal.bytes_written
       exported_name: storage_wal_bytes_written
-      description: The number of bytes the storage engine has written to the WAL
+      description: The number of bytes the storage engine has written to the Write-Ahead Log.
       y_axis_label: Events
       type: COUNTER
       unit: COUNT
@@ -17327,20 +17327,22 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: storage.wal.failover.primary.duration
       exported_name: storage_wal_failover_primary_duration
-      description: Cumulative time spent writing to the primary WAL directory. Only populated when WAL failover is configured
+      description: Cumulative time spent writing to the primary WAL directory.
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: Only populated when WAL failover is configured.
     - name: storage.wal.failover.secondary.duration
       exported_name: storage_wal_failover_secondary_duration
-      description: Cumulative time spent writing to the secondary WAL directory. Only populated when WAL failover is configured
+      description: Cumulative time spent writing to the secondary WAL directory.
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: Only populated when WAL failover is configured.
     - name: storage.wal.failover.switch.count
       exported_name: storage_wal_failover_switch_count
       description: Count of the number of times WAL writing has switched from primary to secondary and vice versa.
@@ -17349,14 +17351,16 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: Only populated when WAL failover is configured. A high switch count indicates that many disk stalls were encountered.
     - name: storage.wal.failover.write_and_sync.latency
       exported_name: storage_wal_failover_write_and_sync_latency
-      description: The observed latency for writing and syncing to the write ahead log. Only populated when WAL failover is configured
+      description: The observed latency for writing and syncing to the logical Write-Ahead Log.
       y_axis_label: Nanoseconds
       type: HISTOGRAM
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NONE
+      how_to_use: Only populated when WAL failover is configured. Without WAL failover, the relevant metric is storage.wal.fsync.latency.
     - name: storage.write-amplification
       exported_name: storage_write_amplification
       description: |-
