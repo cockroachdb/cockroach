@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/crlib/crtime"
@@ -291,11 +292,53 @@ func (ubr *unbufferedRegistration) drainAllocations(ctx context.Context) {
 // drainAllocations should never be called concurrently with this function.
 // Caller is responsible for draining it again if error is returned.
 func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) error {
-	publish := func() error {
+
+	// We use the unbuffered sender until we have sent a non-empty checkpoint. The
+	// goal is to inform the stream of its successful catch-up scan promptly.
+	//
+	// When under lock we always use the buffered sender to avoid blocking for
+	// too long.
+	//
+	// Once we've set shouldSendBuffered to true, we should never send an
+	// unbuffered event.
+	shouldSendBuffered := false
+
+	// Because the checkpoint is typically the first event in the buffer, we also
+	// only send a limited number of events before moving to the buffered sender.
+	//
+	// TODO(ssd): We are considering using the buffered sender during the catch up
+	// scan. If we do that, we must remove use of the unbuffered sender here.
+	maxUnbufferedSends := min(len(ubr.mu.catchUpBuf), 1024)
+	unbufferedSendCount := 0
+
+	publish := func(underLock bool) error {
+		shouldSendBuffered = shouldSendBuffered || underLock
 		for {
+			// Prioritize checking ctx.Done() so that we respond to context
+			// cancellation quickly even in the presence of a long queue.
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
 			select {
 			case e := <-ubr.mu.catchUpBuf:
-				err := ubr.stream.SendBuffered(e.event, e.alloc)
+				var err error
+				if shouldSendBuffered {
+					err = ubr.stream.SendBuffered(e.event, e.alloc)
+				} else {
+					unbufferedSendCount++
+					foundCheckpoint := e.event.Checkpoint != nil && !e.event.Checkpoint.ResolvedTS.IsEmpty()
+					if foundCheckpoint || unbufferedSendCount >= maxUnbufferedSends {
+						shouldSendBuffered = true
+						if !foundCheckpoint {
+							log.KvExec.Warningf(ctx, "no non-empty checkpoint found before transitioning to buffered sender")
+						}
+					}
+					err = ubr.stream.SendUnbuffered(e.event)
+				}
+
 				e.alloc.Release(ctx)
 				putPooledSharedEvent(e)
 				if err != nil {
@@ -311,7 +354,12 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 	}
 
 	// Drain without holding locks first to avoid unnecessary blocking on publish().
-	if err := publish(); err != nil {
+	//
+	// TODO(ssd): An unfortunate side-effect of this is that we are not
+	// coordinated with the disconnected bool. This represents what I believe is
+	// the only place where we could end up sending events to the buffered sender
+	// _after_ an error has already been delivered.
+	if err := publish(false); err != nil {
 		return err
 	}
 
@@ -320,7 +368,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 
 	// Drain again with lock held to ensure that events added to the buffer while
 	// draining took place are also published.
-	if err := publish(); err != nil {
+	if err := publish(true); err != nil {
 		return err
 	}
 
