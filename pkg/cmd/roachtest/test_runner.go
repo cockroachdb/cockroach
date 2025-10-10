@@ -1814,7 +1814,7 @@ func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error)
 func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 	ctx context.Context, t *testImpl, c *clusterImpl,
 ) {
-	if len(c.Nodes()) == 0 {
+	if len(c.All()) == 0 {
 		return // test only
 	}
 	dets, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(c.All()),
