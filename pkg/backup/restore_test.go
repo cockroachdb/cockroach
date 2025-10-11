@@ -107,7 +107,7 @@ func TestRestoreRetryFastFails(t *testing.T) {
 	// runtime does not exceed the max duration of the retry policy, or
 	// else very few attempts will be made.
 	maxDuration := 500 * time.Millisecond
-	if skip.Stress() {
+	if skip.DevStress() {
 		// Under stress, the restore will take longer to complete, so we need to
 		// increase max duration accordingly.
 		maxDuration = 1500 * time.Millisecond
