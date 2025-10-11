@@ -246,6 +246,19 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		if opts.skipCleanup {
 			runOptions.skipCleanup = opts.skipCleanup
 		}
+
+		// Enable buffered writes.
+		{
+			db := c.Conn(ctx, t.L(), 1)
+			defer db.Close()
+			if _, err := db.ExecContext(
+				ctx, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+			t.Status("enabled buffered writes")
+		}
+
 		result, err := tpceSpec.run(ctx, t, c, runOptions)
 		if err != nil {
 			t.Fatal(err.Error())
