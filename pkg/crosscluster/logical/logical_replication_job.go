@@ -456,9 +456,11 @@ type logicalReplicationPlanner struct {
 }
 
 type logicalReplicationPlanInfo struct {
-	sourceSpans         []roachpb.Span
-	partitionPgUrls     []string
-	destTableBySrcID    map[descpb.ID]dstTableMetadata
+	sourceSpans      []roachpb.Span
+	partitionPgUrls  []string
+	destTableBySrcID map[descpb.ID]dstTableMetadata
+	// Number of processors writing data on the destination cluster (offline or
+	// otherwise).
 	writeProcessorCount int
 }
 
@@ -738,6 +740,7 @@ func (p *logicalReplicationPlanner) planOfflineInitialScan(
 				SQLInstanceID: instanceID,
 				Core:          execinfrapb.ProcessorCoreUnion{LogicalReplicationOfflineScan: &spec},
 			})
+			info.writeProcessorCount++
 		}
 	}
 
