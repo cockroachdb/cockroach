@@ -76,9 +76,9 @@ var debugTimeSeriesDumpOpts = struct {
 var hostNameOverride string
 
 // datadogSeriesThreshold holds the threshold for the number of series
-// that will be uploaded to Datadog in a single request. We have capped it to 100
+// that will be uploaded to Datadog in a single request. We have capped it to 50
 // to avoid hitting the Datadog API limits.
-var datadogSeriesThreshold = 100
+var datadogSeriesThreshold = 50
 
 const uploadWorkerErrorMessage = "--upload-workers is set to an invalid value." +
 	" please select a value which between 1 and 100."

@@ -830,3 +830,68 @@ func TestDatadogInit(t *testing.T) {
 		require.Contains(t, receivedMetrics, expectedMetric, "expected metric %s should be present", expectedMetric)
 	}
 }
+
+// TestGapFillProcessor30MinTo10s tests the gap-filling functionality for 30-minute counter metrics.
+// It verifies that 30-minute resolution counter metrics are correctly interpolated to 10-second resolution
+// with zero-filled gaps between original data points.
+func TestGapFillProcessor30MinTo10s(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	// Create a mock 30-minute resolution counter metric with 2 data points
+	series := &datadogV2.MetricSeries{
+		Metric:   "cr.node.test-counter-count",
+		Tags:     []string{"node_id:1"},
+		Type:     datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+		Interval: datadog.PtrInt64(1800), // 30 minutes in seconds
+		Points: []datadogV2.MetricPoint{
+			{
+				Timestamp: datadog.PtrInt64(1000), // t=1000
+				Value:     datadog.PtrFloat64(50), // first 30-min point
+			},
+			{
+				Timestamp: datadog.PtrInt64(2800), // t=2800 (1800 seconds later)
+				Value:     datadog.PtrFloat64(55), // second 30-min point
+			},
+		},
+	}
+
+	// Process the series
+	err := processor.processCounterMetric(series)
+	require.NoError(t, err)
+
+	// Verify the interval was updated to 10 seconds
+	require.NotNil(t, series.Interval)
+	require.Equal(t, int64(10), *series.Interval)
+
+	// Verify we have the correct number of points
+	// Original: 2 points
+	// These 2 points are uniformly distributed in 180 data points.
+	// So expected data points would be 2 * 180 = 360.
+	expectedPoints := 360
+	require.Len(t, series.Points, expectedPoints)
+
+	// Verify the first original point is preserved
+	require.Equal(t, int64(1000), *series.Points[0].Timestamp)
+	require.Equal(t, 50.0/180, *series.Points[0].Value)
+
+	// Verify the first & last interpolated points are zeros with correct timestamps
+	// for first data point
+	require.Equal(t, int64(1010), *series.Points[1].Timestamp)
+	require.Equal(t, 0.0, *series.Points[1].Value)
+
+	require.Equal(t, int64(2790), *series.Points[179].Timestamp)
+	require.Equal(t, 0.0, *series.Points[179].Value)
+
+	// Verify the first & last interpolated points are zeros with correct timestamps
+	index := 180
+	require.Equal(t, int64(2800), *series.Points[index].Timestamp)
+	require.Equal(t, 55.0/180, *series.Points[index].Value)
+
+	// Verify a point near the end has zero value (gap-filled)
+	lastIndex := len(series.Points) - 1
+	require.Equal(t, int64(4590), *series.Points[lastIndex].Timestamp)
+	require.Equal(t, 0.0, *series.Points[lastIndex].Value)
+}
