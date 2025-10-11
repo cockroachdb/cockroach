@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
@@ -89,6 +90,20 @@ type Transport struct {
 
 var _ MessageSender = (*Transport)(nil)
 
+type pacerConfig struct {
+}
+
+// TODO: Make these configurable.
+// GetRefresh implements the taskpacer.Config interface
+func (c pacerConfig) GetRefresh() time.Duration {
+	return 10 * time.Millisecond
+}
+
+// TODO: Make these configurable.
+func (c pacerConfig) GetSmear() time.Duration {
+	return 1 * time.Millisecond
+}
+
 // NewTransport creates a new Store Liveness Transport.
 func NewTransport(
 	ambient log.AmbientContext,
@@ -120,13 +135,19 @@ func NewTransport(
 		}
 	}
 
-	// Start background goroutine to act as the transport coordinator. It is
-	// responsible for instructing the sendQueues to send their messages.
+	// Start background goroutine to act as the transport sender coordinator. It
+	// is responsible for instructing the sendQueues to send their messages.
 	if err := stopper.RunAsyncTask(
-		context.Background(), "storeliveness transport coordinator",
+		context.Background(), "storeliveness transport send coordinator",
 		func(ctx context.Context) {
 			var batchTimer timeutil.Timer
 			defer batchTimer.Stop()
+
+			conf := pacerConfig{}
+			pacer := taskpacer.New(conf)
+
+			// This will hold the channels we need to signal to send messages.
+			toSignal := make([]chan struct{}, 0)
 
 			for {
 				select {
@@ -152,24 +173,57 @@ func NewTransport(
 
 					// At this point, we have waited for a short duration. We now need
 					// to signal all queues to send their messages.
-					//
-					// TODO: Hook the task pacer here. The way to do it is to first count
-					// how many node queues (ideally with messages to send) we have, and
-					// then use the task pacer to pace signaling those queues to send
-					// their messages.
+
+					// Get all the sendQueues that have messages to send. Note that the
+					// atomicity here is per sendQueue, and not across all sendQueues.
 					t.queues.Range(func(nodeID roachpb.NodeID, q *sendQueue) bool {
 						if len(q.messages) == 0 {
 							// Nothing to send.
 							return true
 						}
-						select {
-						case q.sendMessages <- struct{}{}:
-						default:
-						}
-						// TODO: Hook the task pacer here.
-						time.Sleep(1 * time.Millisecond)
+
+						toSignal = append(toSignal, q.sendMessages)
 						return true
 					})
+
+					// There is a benign race condition here, and it happens in two cases:
+					// 1. If after we inserted the toSignal channels, a new message is
+					// enqueued to a new queue that we haven't added. In this case, the
+					// t.sendAllMessages should be set, and we will pick it up in the next
+					// iteration of the for loop.
+					// 2. If after we inserted the toSignal channels, a new message is
+					// added to a queue that we have already added. In this case, in the
+					// next iteration t.sendAllMessages might be valid, but the queues
+					// could be empty. This is not a problem because we won't wake up
+					// any sendQueue goroutine unnecessarily.
+
+					// Pace the signaling of the channels.
+					pacer.StartTask(timeutil.Now())
+					workLeft := len(toSignal)
+					for workLeft > 0 {
+						todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
+						// Pop todo items off the toSignal slice and signal them.
+						for i := 0; i < todo && workLeft > 0; i++ {
+							ch := toSignal[len(toSignal)-1]
+							toSignal = toSignal[:len(toSignal)-1]
+							select {
+							case ch <- struct{}{}:
+							default:
+							}
+							workLeft--
+						}
+
+						if workLeft > 0 && timeutil.Now().Before(by) {
+							time.Sleep(by.Sub(timeutil.Now()))
+						}
+					}
+					// test assert that toSignal is empty.
+					// TODO: Remove this assertion. I just wanted to make sure no tests
+					// failed because of this.
+					if len(toSignal) != 0 {
+						log.KvExec.Fatalf(ctx, "toSignal is not empty")
+					}
 				}
 			}
 
@@ -480,7 +534,8 @@ func (t *Transport) processQueue(
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Messages)))
 
-			log.KvExec.Infof(context.Background(), "!!! IBRAHIM !!! Sent batch of %d messages from node %d to node %d", len(batch.Messages), batch.Messages[0].From.NodeID, batch.Messages[0].To.NodeID)
+			//log.KvExec.Infof(context.Background(), "!!! IBRAHIM !!! Sent batch of %d messages from node %d to node %d", len(batch.Messages), batch.Messages[0].From.NodeID, batch.Messages[0].To.NodeID)
+
 			// Reuse the Messages slice, but zero out the contents to avoid delaying
 			// GC of memory referenced from within.
 			for i := range batch.Messages {

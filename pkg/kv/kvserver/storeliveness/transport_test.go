@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -393,20 +394,24 @@ func TestTransportSendToMissingStore(t *testing.T) {
 	tt.transports[sender.NodeID].SendAllMessages(ctx)
 
 	// Wait for the message to the existing store to be received.
-	testutils.SucceedsSoon(
-		t, func() error {
-			select {
-			case received := <-handler.messages:
-				require.Equal(t, existingMsg, *received)
-				require.Equal(
-					t, int64(1), tt.transports[existingRcv.NodeID].metrics.MessagesReceived.Count(),
-				)
+	// Create a timer for 45s, if the message is not received by then, fail the test.
+	var testTimeout timeutil.Timer
+	defer testTimeout.Stop()
+	testTimeout.Reset(45 * time.Second)
+	select {
+	case received := <-handler.messages:
+		require.Equal(t, existingMsg, *received)
+		testutils.SucceedsSoon(
+			t, func() error {
+				if tt.transports[existingRcv.NodeID].metrics.MessagesReceived.Count() != 1 {
+					return errors.Errorf("expected 1 message received, got %d", tt.transports[existingRcv.NodeID].metrics.MessagesReceived.Count())
+				}
 				return nil
-			default:
-			}
-			return errors.New("still waiting to receive message")
-		},
-	)
+			})
+	case <-testTimeout.C:
+		t.Fatal("timed out waiting for message to be received")
+	}
+
 	require.Equal(t, int64(2), tt.transports[sender.NodeID].metrics.MessagesSent.Count())
 }
 
