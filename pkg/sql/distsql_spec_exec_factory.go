@@ -362,6 +362,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			reverse:           params.Reverse,
 			parallelize:       params.Parallelize,
 			estimatedRowCount: params.EstimatedRowCount,
+			statsCreatedAt:    params.StatsCreatedAt,
 			reqOrdering:       ReqOrdering(reqOrdering),
 		},
 	)

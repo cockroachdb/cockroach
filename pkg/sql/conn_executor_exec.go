@@ -3359,6 +3359,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		}
 		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)
 	}
+
+	if err == nil && res.Err() == nil {
+		recv.maybeLogMisestimates(ctx, planner)
+	}
 	return recv.stats, err
 }
 

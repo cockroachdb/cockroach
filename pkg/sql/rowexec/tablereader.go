@@ -54,6 +54,8 @@ type tableReader struct {
 	contentionEventsListener  execstats.ContentionEventsListener
 	scanStatsListener         execstats.ScanStatsListener
 	tenantConsumptionListener execstats.TenantConsumptionListener
+
+	stageID int32
 }
 
 var _ execinfra.Processor = &tableReader{}
@@ -74,6 +76,7 @@ func newTableReader(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	stageID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 ) (*tableReader, error) {
@@ -93,6 +96,7 @@ func newTableReader(
 	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	tr.parallelize = spec.Parallelize
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
+	tr.stageID = stageID
 
 	// Make sure the key column types are hydrated. The fetched column types
 	// will be hydrated in ProcessorBase.Init below.
@@ -263,6 +267,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			meta := execinfrapb.GetProducerMeta()
 			meta.Metrics = execinfrapb.GetMetricsMeta()
 			meta.Metrics.RowsRead = tr.rowsRead
+			meta.Metrics.StageID = tr.stageID
 			tr.rowsRead = 0
 			return nil, meta
 		}
@@ -343,6 +348,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = tr.rowsRead
+	meta.Metrics.StageID = tr.stageID
 	return append(trailingMeta, *meta)
 }
 
