@@ -15,7 +15,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -56,7 +56,7 @@ func TestServicePorts(t *testing.T) {
 	require.NoError(t, err)
 
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: clusterName,
 			VMs: vm.List{
 				vm.VM{
@@ -140,7 +140,7 @@ func (t *serviceRegistryTest) makeVM(clusterName string, i int) vm.VM {
 func (t *serviceRegistryTest) newCluster(nodeCount int) *SyncedCluster {
 	clusterName := fmt.Sprintf("cluster-%d", t.rng.Uint32())
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: clusterName,
 		},
 	}

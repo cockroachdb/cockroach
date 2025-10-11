@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -29,7 +29,7 @@ func TestMonitorDataDriven(t *testing.T) {
 		sessionChan := make([]chan []byte, 0)
 		ctx := context.Background()
 		c := &SyncedCluster{
-			Cluster: cloud.Cluster{
+			Cluster: cloudcluster.Cluster{
 				Name: "test-cluster",
 			},
 			sessionProvider: func(node Node, cmd string) session {
@@ -110,7 +110,7 @@ func TestMonitorDataDriven(t *testing.T) {
 func TestMonitorCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: "test-cluster",
 		},
 		Nodes: []Node{1},
@@ -132,7 +132,7 @@ func TestMonitorEOF(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := NewMockSession(DefaultMockSessionOptions())
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: "test-cluster",
 		},
 		Nodes: []Node{1},
@@ -158,7 +158,7 @@ func TestMonitorOneShot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := NewMockSession(DefaultMockSessionOptions())
 	c := &SyncedCluster{
-		Cluster: cloud.Cluster{
+		Cluster: cloudcluster.Cluster{
 			Name: "test-cluster",
 		},
 		Nodes: []Node{1},

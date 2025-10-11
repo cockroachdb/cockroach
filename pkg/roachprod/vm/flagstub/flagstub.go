@@ -28,6 +28,11 @@ type provider struct {
 	unimplemented string
 }
 
+// IsLocalProvider returns true because it is a local provider.
+func (p *provider) IsLocalProvider() bool {
+	return true
+}
+
 // ConfigureProviderFlags implements vm.Provider.
 func (p *provider) ConfigureProviderFlags(*pflag.FlagSet, vm.MultipleProjectsOption) {
 }
@@ -187,4 +192,9 @@ func (p *provider) ProjectActive(project string) bool {
 // CreateProviderFlags is part of the vm.Provider interface.
 func (p *provider) CreateProviderOpts() vm.ProviderOpts {
 	return nil
+}
+
+// String is part of the vm.Provider interface.
+func (p *provider) String() string {
+	return "stub"
 }
