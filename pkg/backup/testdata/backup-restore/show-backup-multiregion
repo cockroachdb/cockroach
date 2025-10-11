@@ -61,3 +61,33 @@ d database incremental
 public schema incremental
 crdb_internal_region type incremental
 _crdb_internal_region type incremental
+
+
+query-sql
+SELECT object_name, regions FROM [SHOW BACKUP LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1')] where object_type='database' limit 1;
+----
+d ALTER DATABASE d SET PRIMARY REGION "us-east-1"; ALTER DATABASE d ADD REGION "eu-central-1"; ALTER DATABASE d ADD REGION "us-west-1";
+
+# Try backing up a table in the database
+exec-sql
+CREATE TABLE d.t (x INT);
+----
+
+exec-sql
+BACKUP TABLE d.t INTO ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1');
+----
+
+query-sql
+SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1')];
+----
+d database full
+public schema full
+t table full
+
+exec-sql
+drop table d.t
+----
+
+exec-sql
+RESTORE TABLE d.t FROM LATEST IN ('nodelocal://1/database_backup_locality_aware_default?COCKROACH_LOCALITY=default', 'nodelocal://1/database_backup_locality_aware_west?COCKROACH_LOCALITY=region=us-west-1', 'nodelocal://1/database_backup_locality_aware_central?COCKROACH_LOCALITY=region=eu-central-1');
+----

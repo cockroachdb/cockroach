@@ -736,11 +736,16 @@ func backupShowerDefault(
 					case catalog.DatabaseDescriptor:
 						descriptorType = "database"
 						if desc.IsMultiRegion() {
-							regions, err := showRegions(typeIDToTypeDescriptor[desc.GetRegionConfig().RegionEnumID], desc.GetName())
-							if err != nil {
-								return nil, errors.Wrapf(err, "cannot generate regions column")
+							if mrEnum := typeIDToTypeDescriptor[desc.GetRegionConfig().RegionEnumID]; mrEnum != nil {
+								// The enum may not be in the backup, for example in a table
+								// level backup. Jury is out for whether databases should be
+								// shown in table level backups.
+								regions, err := showRegions(mrEnum, desc.GetName())
+								if err != nil {
+									return nil, errors.Wrapf(err, "cannot generate regions column")
+								}
+								regionsDatum = nullIfEmpty(regions)
 							}
-							regionsDatum = nullIfEmpty(regions)
 						}
 					case catalog.SchemaDescriptor:
 						descriptorType = "schema"
