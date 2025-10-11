@@ -179,6 +179,9 @@ func (bt bufferType) alterMeta(meta metric.Metadata) metric.Metadata {
 	return meta
 }
 
+// SafeValue implements redact.SafeValue.
+func (bt bufferType) SafeValue() {}
+
 // MakeMetrics constructs a Metrics struct with the provided histogram window.
 func MakeMetrics(histogramWindow time.Duration) Metrics {
 	eventTypeMeta := func(et Type) metric.Metadata {

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // blockingBuffer is an implementation of Buffer which allocates memory
@@ -524,15 +523,13 @@ func logSlowAcquisition(
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
 			log.Changefeed.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)",
-				timeutil.Since(start),
-				redact.SafeString(bufType))
+				timeutil.Since(start), bufType)
 		}
 
 		return func() {
 			if shouldLog {
 				log.Changefeed.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)",
-					timeutil.Since(start),
-					redact.SafeString(bufType))
+					timeutil.Since(start), bufType)
 			}
 		}
 	}
