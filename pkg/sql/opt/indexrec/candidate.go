@@ -67,6 +67,22 @@ type indexCandidateSet struct {
 	joinCandidates     map[cat.Table][][]cat.IndexColumn
 	invertedCandidates map[cat.Table][][]cat.IndexColumn
 	overallCandidates  map[cat.Table][][]cat.IndexColumn
+	finalCandidates    map[cat.Table][]IndexCandidate
+}
+
+// Wraper type that can maintain the predicate associated with an index candidate.
+type IndexCandidate struct {
+	columns   []cat.IndexColumn
+	predicate string
+}
+
+func (ic *IndexCandidate) Columns() []cat.IndexColumn {
+	return ic.columns
+}
+
+// Predicate returns the predicate string.
+func (ic *IndexCandidate) Predicate() string {
+	return ic.predicate
 }
 
 // init allocates memory for the maps in the set.
@@ -78,6 +94,7 @@ func (ics *indexCandidateSet) init(md *opt.Metadata) {
 	ics.joinCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.invertedCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.overallCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
+	ics.finalCandidates = make(map[cat.Table][]IndexCandidate, numTables)
 }
 
 // combineIndexCandidates adds index candidates that are combinations of
@@ -447,7 +464,7 @@ func (ics *indexCandidateSet) addGeoSpatialIndexes(
 	if ok {
 		// Add arguments of the spatial function to inverted indexes.
 		for i, n := 0, expr.Args.ChildCount(); i < n; i++ {
-			var child = expr.Args.Child(i)
+			child := expr.Args.Child(i)
 			// Spatial Indexes should be added to inverted candidates group in
 			// addVariableExprIndex.
 			ics.addVariableExprIndex(child, indexCandidates)
