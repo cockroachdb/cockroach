@@ -315,7 +315,11 @@ func (rgcq *replicaGCQueue) process(
 		// possible if we currently think we're processing a pre-emptive snapshot
 		// but discover in RemoveReplica that this range has since been added and
 		// knows that.
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "MVCC GC queue"); err != nil {
+		//
+		// We expect RemoveReplica to run to completion, so we construct a context
+		// that can't be cancelled from above.
+		noCancelCtx := context.WithoutCancel(ctx)
+		if err := repl.store.RemoveReplica(noCancelCtx, repl, nextReplicaID, "MVCC GC queue"); err != nil {
 			// Should never get an error from RemoveReplica.
 			const format = "error during replicaGC: %v"
 			logcrash.ReportOrPanic(ctx, &repl.store.ClusterSettings().SV, format, err)
