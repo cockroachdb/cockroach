@@ -135,11 +135,12 @@ statement ok
 SELECT 1;
 
 statement async fk_delete
-WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
+WITH sleep AS (SELECT pg_sleep(2)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
 
 user testuser
 
 statement ok
+SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -174,11 +175,12 @@ statement ok
 SELECT 1;
 
 statement async fk_update
-WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
+WITH sleep AS (SELECT pg_sleep(2)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
 
 user testuser
 
 statement ok
+SET lock_timeout = '10s';
 SET enable_implicit_fk_locking_for_serializable = on;
 SET enable_shared_locking_for_serializable = on;
 SET enable_durable_locking_for_serializable = on;
@@ -320,7 +322,7 @@ user root
 
 # Give the delete a moment to wait on the p=3 lock by testuser2.
 statement ok
-SELECT pg_sleep(1)
+SELECT pg_sleep(2)
 
 # The serializable insert needs this locking to properly sychronize with the
 # read committed delete.
@@ -339,7 +341,7 @@ user testuser
 
 # Give the insert a moment to wait on the p=2 update by testuser.
 statement ok
-SELECT pg_sleep(1)
+SELECT pg_sleep(2)
 
 statement ok
 ROLLBACK
@@ -348,7 +350,7 @@ user testuser2
 
 # Give the insert a moment to lock p=1.
 statement ok
-SELECT pg_sleep(1)
+SELECT pg_sleep(2)
 
 statement ok
 ROLLBACK
