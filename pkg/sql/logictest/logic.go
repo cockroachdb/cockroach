@@ -1857,6 +1857,14 @@ func (t *logicTest) newCluster(
 			t.Fatal(err)
 		}
 
+		// Set allow_unsafe_internals to default to false for logic tests to catch
+		// unintended access to crdb_internal/system schemas.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.testing.unsafe_internals_default.enabled = true",
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		// Update the default AS OF time for querying the system.table_statistics
 		// table to create the crdb_internal.table_row_statistics table.
 		if _, err := conn.Exec(
@@ -3607,7 +3615,10 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
-	db := t.db
+	ctx := context.Background()
+	conn, cleanup := t.getTestConn(t.db, stmt)
+	defer cleanup()
+
 	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
@@ -3643,7 +3654,7 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 		startedChan := make(chan struct{})
 		go func() {
 			startedChan <- struct{}{}
-			res, err := db.Exec(execSQL)
+			res, err := conn.ExecContext(ctx, execSQL)
 			pending.resultChan <- pendingExecResult{execSQL, res, err}
 		}()
 
@@ -3660,11 +3671,11 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 		if err != nil {
 			// In this case, just give up and send the whole statement to the server
 			// as normal. Probably, the test is expecting a parse error.
-			res, execErr = t.db.Exec(stmt.sql)
+			res, execErr = conn.ExecContext(ctx, stmt.sql)
 		} else {
 			for _, p := range parsed {
 				var prep *gosql.Stmt
-				prep, execErr = t.db.Prepare(p.SQL)
+				prep, execErr = conn.PrepareContext(ctx, p.SQL)
 				if execErr == nil {
 					res, execErr = prep.Exec()
 				}
@@ -3676,7 +3687,7 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 			}
 		}
 	} else {
-		res, execErr = t.db.Exec(execSQL)
+		res, execErr = conn.ExecContext(ctx, execSQL)
 	}
 	return t.finishExecStatement(stmt, execSQL, res, execErr)
 }
@@ -3730,6 +3741,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -3740,6 +3752,10 @@ func (t *logicTest) execQuery(query logicQuery) error {
 	if query.nodeIdx != t.nodeIdx {
 		db = t.getOrOpenClient(t.user, query.nodeIdx, false /* newSession */)
 	}
+
+	ctx := context.Background()
+	conn, cleanup := t.getTestConn(db, query.logicStatement)
+	defer cleanup()
 
 	if query.expectAsync {
 		if _, ok := t.pendingQueries[query.statementName]; ok {
@@ -3759,7 +3775,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		startedChan := make(chan struct{})
 		go func() {
 			startedChan <- struct{}{}
-			rows, err := db.Query(query.sql)
+			rows, err := conn.QueryContext(ctx, query.sql)
 			pending.resultChan <- pendingQueryResult{rows, err}
 		}()
 
@@ -3777,7 +3793,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 			// In this case, just give up and send the whole statement to the server
 			// as normal. Probably, the test is expecting a parse error.
 			var rows *gosql.Rows
-			rows, execErr = db.Query(query.sql)
+			rows, execErr = conn.QueryContext(ctx, query.sql)
 			rowses = []*gosql.Rows{rows}
 		}
 		for _, p := range parsed {
@@ -3796,7 +3812,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				}
 			}
 
-			prep, execErr = t.db.Prepare(ast.String())
+			prep, execErr = conn.PrepareContext(ctx, ast.String())
 
 			if execErr != nil {
 				// Sometimes, it's impossible to prepare/execute a query with scalars
@@ -3812,13 +3828,13 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				// As a result, we choose to check the string of the error rather than
 				// the code.
 				if strings.Contains(execErr.Error(), "could not determine data type of placeholder") {
-					prep, execErr = t.db.Prepare(p.SQL)
+					prep, execErr = conn.PrepareContext(ctx, p.SQL)
 					args = []interface{}{}
 				} else if pgErr := (*pq.Error)(nil); errors.As(execErr, &pgErr) &&
 					(pgcode.MakeCode(string(pgErr.Code)) == pgcode.Syntax ||
 						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidParameterValue ||
 						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidTextRepresentation) {
-					prep, execErr = t.db.Prepare(p.SQL)
+					prep, execErr = conn.PrepareContext(ctx, p.SQL)
 					args = []interface{}{}
 				}
 
@@ -3836,7 +3852,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 	} else {
 		var res *gosql.Rows
-		res, execErr = db.Query(query.sql)
+		res, execErr = conn.QueryContext(ctx, query.sql)
 		rowses = []*gosql.Rows{res}
 	}
 	return t.finishExecQuery(query, rowses, execErr)
@@ -4891,4 +4907,21 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// getTestConn returns a single connection to the test cluster.
+// it notably disables the unsafe internals access gate if the
+// test explicitly attempts to query them. It does not do that
+// for all queries to catch unexpected, indirect access to these objects.
+func (t *logicTest) getTestConn(db *gosql.DB, stmt logicStatement) (*gosql.Conn, func()) {
+	t.t().Log("getting connection for statement:", stmt.sql)
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.t().Fatal(err)
+	}
+	return conn, func() {
+		if err := conn.Close(); err != nil {
+			t.t().Fatal(err)
+		}
+	}
 }
