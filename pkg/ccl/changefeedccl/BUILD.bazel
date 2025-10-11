@@ -146,6 +146,7 @@ go_library(
         "//pkg/util/httputil",
         "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
+        "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/log/channel",
