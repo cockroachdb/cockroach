@@ -12867,7 +12867,8 @@ CREATE TABLE public.lineitem
     INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC),
     CONSTRAINT lineitem_fkey_orders FOREIGN KEY (l_orderkey) references public.orders (o_orderkey),
     CONSTRAINT lineitem_fkey_part FOREIGN KEY (l_partkey) references public.part (p_partkey),
-    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey)
+    CONSTRAINT lineitem_fkey_supplier FOREIGN KEY (l_suppkey) references public.supplier (s_suppkey),
+    CONSTRAINT lineitem_fkey_partsupp FOREIGN KEY (l_partkey, l_suppkey) references partsupp (ps_partkey, ps_suppkey)
 )
 
 statement ok

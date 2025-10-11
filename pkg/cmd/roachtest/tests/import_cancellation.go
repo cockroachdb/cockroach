@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -139,29 +138,11 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// the TPCH workload should observe it.
 	m.Go(func(ctx context.Context) error {
 		t.WorkerStatus(`running tpch workload`)
-		// --enable-checks flag verifies the results against the expected output
-		// for Scale Factor 1, so since we're using Scale Factor 100 some TPCH
-		// queries are expected to return different results - skip those.
-		var queries string
-		var numQueries int
-		for i := 1; i <= tpch.NumQueries; i++ {
-			switch i {
-			case 11, 13, 16, 18, 20:
-				// These five queries return different results on SF1 and SF100.
-			default:
-				if len(queries) > 0 {
-					queries += ","
-				}
-				queries += strconv.Itoa(i)
-				numQueries++
-			}
-		}
 		// maxOps flag will allow us to exit the workload once all the queries
 		// were run 2 times.
-		maxOps := 2 * numQueries
+		maxOps := 2 * tpch.NumQueries
 		cmd := fmt.Sprintf(
-			"./cockroach workload run tpch --db=csv --concurrency=1 --queries=%s --max-ops=%d {pgurl%s} "+
-				"--enable-checks=true", queries, maxOps, c.All())
+			"./cockroach workload run tpch --db=csv --concurrency=1 --max-ops=%d {pgurl%s} ", maxOps, c.All())
 		if err := c.RunE(ctx, option.WithNodes(c.Node(1)), cmd); err != nil {
 			t.Fatal(err)
 		}
