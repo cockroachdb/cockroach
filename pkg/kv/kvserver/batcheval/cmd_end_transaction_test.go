@@ -2203,11 +2203,11 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	err = sl.SetVersion(ctx, batch, nil, &version)
 	require.NoError(t, err)
 
-	in := splitTriggerHelperInput{
-		leftLease:      lease,
-		gcThreshold:    &gcThreshold,
-		gcHint:         &gcHint,
-		replicaVersion: version,
+	in := SplitTriggerHelperInput{
+		LeftLease:      lease,
+		GCThreshold:    &gcThreshold,
+		GCHint:         &gcHint,
+		ReplicaVersion: version,
 	}
 
 	// Run the split trigger, which is normally run as a subset of EndTxn request

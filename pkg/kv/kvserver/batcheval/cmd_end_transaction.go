@@ -930,11 +930,11 @@ func RunCommitTrigger(
 				ctx, errors.Wrap(err, "unable to load replica version"),
 			)
 		}
-		in := splitTriggerHelperInput{
-			leftLease:      lhsLease,
-			gcThreshold:    gcThreshold,
-			gcHint:         gcHint,
-			replicaVersion: replicaVersion,
+		in := SplitTriggerHelperInput{
+			LeftLease:      lhsLease,
+			GCThreshold:    gcThreshold,
+			GCHint:         gcHint,
+			ReplicaVersion: replicaVersion,
 		}
 
 		newMS, res, err := splitTrigger(
@@ -1164,7 +1164,7 @@ func splitTrigger(
 	batch storage.Batch,
 	bothDeltaMS enginepb.MVCCStats,
 	split *roachpb.SplitTrigger,
-	in splitTriggerHelperInput,
+	in SplitTriggerHelperInput,
 	ts hlc.Timestamp,
 ) (enginepb.MVCCStats, result.Result, error) {
 	desc := rec.Desc()
@@ -1243,6 +1243,20 @@ func splitTrigger(
 	return splitTriggerHelper(ctx, rec, batch, in, h, split, ts)
 }
 
+// TestingSplitTrigger is a wrapper around splitTrigger that is exported for
+// testing purposes.
+func TestingSplitTrigger(
+	ctx context.Context,
+	rec EvalContext,
+	batch storage.Batch,
+	bothDeltaMS enginepb.MVCCStats,
+	split *roachpb.SplitTrigger,
+	in SplitTriggerHelperInput,
+	ts hlc.Timestamp,
+) (enginepb.MVCCStats, result.Result, error) {
+	return splitTrigger(ctx, rec, batch, bothDeltaMS, split, in, ts)
+}
+
 // splitScansRightForStatsFirst controls whether the left hand side or the right
 // hand side of the split is scanned first on the leaseholder when evaluating
 // the split trigger. In practice, the splitQueue wants to scan the left hand
@@ -1276,13 +1290,13 @@ func makeScanStatsFn(
 	}
 }
 
-// splitTriggerHelperInput contains metadata needed by the RHS when running the
+// SplitTriggerHelperInput contains metadata needed by the RHS when running the
 // splitTriggerHelper.
-type splitTriggerHelperInput struct {
-	leftLease      roachpb.Lease
-	gcThreshold    *hlc.Timestamp
-	gcHint         *roachpb.GCHint
-	replicaVersion roachpb.Version
+type SplitTriggerHelperInput struct {
+	LeftLease      roachpb.Lease
+	GCThreshold    *hlc.Timestamp
+	GCHint         *roachpb.GCHint
+	ReplicaVersion roachpb.Version
 }
 
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
@@ -1292,7 +1306,7 @@ func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
 	batch storage.Batch,
-	in splitTriggerHelperInput,
+	in SplitTriggerHelperInput,
 	statsInput splitStatsHelperInput,
 	split *roachpb.SplitTrigger,
 	ts hlc.Timestamp,
@@ -1434,22 +1448,22 @@ func splitTriggerHelper(
 		// - node two becomes the lease holder for [c,e). Its timestamp cache does
 		//   not know about the read at 'd' which happened at the beginning.
 		// - node two can illegally propose a write to 'd' at a lower timestamp.
-		if in.leftLease.Empty() {
+		if in.LeftLease.Empty() {
 			log.KvExec.Fatalf(ctx, "LHS of split has no lease")
 		}
 
 		// Copy the lease from the left-hand side of the split over to the
 		// right-hand side so that it can immediately start serving requests.
 		// When doing so, we need to make a few modifications.
-		rightLease := in.leftLease
+		rightLease := in.LeftLease
 		// Rebind the lease to the existing leaseholder store's replica from the
 		// right-hand side's descriptor.
 		var ok bool
-		rightLease.Replica, ok = split.RightDesc.GetReplicaDescriptor(in.leftLease.Replica.StoreID)
+		rightLease.Replica, ok = split.RightDesc.GetReplicaDescriptor(in.LeftLease.Replica.StoreID)
 		if !ok {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Errorf(
 				"pre-split lease holder %+v not found in post-split descriptor %+v",
-				in.leftLease.Replica, split.RightDesc,
+				in.LeftLease.Replica, split.RightDesc,
 			)
 		}
 		// Convert leader leases into expiration-based leases. A leader lease is
@@ -1464,7 +1478,7 @@ func splitTriggerHelper(
 			rightLease.Term = 0
 			rightLease.MinExpiration = hlc.Timestamp{}
 		}
-		if in.gcThreshold.IsEmpty() {
+		if in.GCThreshold.IsEmpty() {
 			log.VEventf(ctx, 1, "LHS's GCThreshold of split is not set")
 		}
 
@@ -1499,7 +1513,7 @@ func splitTriggerHelper(
 		// only.
 		if *h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*in.gcThreshold, *in.gcHint, in.replicaVersion,
+			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
