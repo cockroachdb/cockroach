@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"context"
-	"net"
 	"net/url"
 	"strings"
 
@@ -95,7 +94,7 @@ func newEnrichedSourceData(
 	sink sinkType,
 	schemaInfo map[descpb.ID]tableSchemaInfo,
 ) (enrichedSourceData, error) {
-	var sourceNodeLocality, nodeName, nodeID string
+	var sourceNodeLocality, nodeID string
 	tiers := cfg.Locality.Tiers
 
 	nodeLocalities := make([]string, 0, len(tiers))
@@ -114,10 +113,6 @@ func newEnrichedSourceData(
 	if err != nil {
 		return enrichedSourceData{}, err
 	}
-	host, _, err := net.SplitHostPort(parsedUrl.Host)
-	if err == nil {
-		nodeName = host
-	}
 
 	if optionalNodeID, ok := nodeInfo.NodeID.OptionalNodeID(); ok {
 		nodeID = optionalNodeID.String()
@@ -130,7 +125,7 @@ func newEnrichedSourceData(
 		clusterName:        cfg.ExecutorConfig.(*sql.ExecutorConfig).RPCContext.ClusterName(),
 		clusterID:          nodeInfo.LogicalClusterID().String(),
 		sourceNodeLocality: sourceNodeLocality,
-		nodeName:           nodeName,
+		nodeName:           parsedUrl.Hostname(),
 		nodeID:             nodeID,
 		tableSchemaInfo:    schemaInfo,
 	}, nil
