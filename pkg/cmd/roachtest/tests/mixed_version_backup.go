@@ -1327,9 +1327,27 @@ func (d *BackupRestoreTestDriver) runRestore(
 	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
 		return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
 	}
-	if err := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); err != nil {
-		return nil, "", err
+	if jobErr := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
+		if !strings.Contains(jobErr.Error(), "version mismatch for descriptor") {
+			return nil, "", jobErr
+		}
+		// In the 25.4 upgrade, all descriptors are rewritten in the migration to use
+		// the new serialization format. If this upgrade occurs in the middle of the
+		// restore, we may encounter a version mismatch error. As a short-term fix for
+		// this test flake, we retry the restore if we encounter this error.
+		// TODO (kev-cao): Remove after 25.4 migrations are no longer run or if
+		// another solution for accounting for the descriptor upgrades is found.
+		l.Printf(
+			"encountered version mismatch error due to mixed-version upgrade, retrying restore: %w", jobErr,
+		)
+		if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
+			return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
+		}
+		if jobErr = d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
+			return nil, "", jobErr
+		}
 	}
+
 	return restoredTables, restoreDB, nil
 }
 
