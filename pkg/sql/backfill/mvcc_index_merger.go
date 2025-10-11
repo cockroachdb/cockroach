@@ -47,6 +47,17 @@ var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt, /* validateFn */
 )
 
+// indexBackfillVectorMergeBatchSize is the maximum number of vectors we attempt to merge
+// in a single transaction during the merging process. This is a much smaller number because
+// fixups create a lot of conflicts with big batches.
+var indexBackfillVectorMergeBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.vector_merge_batch_size",
+	"the number of vectors we merge between temporary and adding indexes in a single batch",
+	3,
+	settings.NonNegativeInt, /* validateFn */
+)
+
 // indexBackfillMergeBatchBytes is the maximum number of bytes we attempt to
 // merge from the temporary index in a single transaction during the merging
 // process.
@@ -315,7 +326,12 @@ func (ibm *IndexBackfillMerger) scan(
 			}
 		}
 	}
-	chunkSize := indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	var chunkSize int64
+	if _, ok := ibm.VectorIndexes[ibm.spec.AddedIndexes[spanIdx]]; ok {
+		chunkSize = indexBackfillVectorMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	} else {
+		chunkSize = indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	}
 	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.flowCtx.Cfg.Settings.SV)
 
 	var br *kvpb.BatchResponse
