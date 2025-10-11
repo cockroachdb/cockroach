@@ -16,8 +16,10 @@ const (
 
 // InitFlags creates logging flags which update the given variables. The passed mutex is
 // locked while the boolean variables are accessed during flag updates.
-func InitFlags(showLogs *bool, testLogConfig *string, vmodule flag.Value) {
+func InitFlags(
+	showLogs *bool, testLogConfig *string, testLogConfigDefault string, vmodule flag.Value,
+) {
 	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging (significantly hurts performance)")
-	flag.StringVar(testLogConfig, TestLogConfigName, "", "YAML log configuration for tests")
+	flag.StringVar(testLogConfig, TestLogConfigName, testLogConfigDefault, "YAML log configuration for tests")
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
 }
