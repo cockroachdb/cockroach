@@ -480,6 +480,119 @@ func (rdt *rangeDistributionTester) balancedDistributionUpperBound(numNodes int)
 	return int(math.Ceil((1 + rebalanceThreshold.Get(&rdt.lastNode.ClusterSettings().SV) + 0.1) * 64 / float64(numNodes)))
 }
 
+// Additional helper function
+func anyGreaterThanThirty(counts []int) bool {
+	for _, count := range counts {
+		if count > 30 {
+			return true
+		}
+	}
+	return false
+}
+
+func TestChangefeedDistributionStrategyOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	noLocality := func(i int) []roachpb.Tier {
+		return nil
+	}
+
+	t.Run("default distribution strategy specified for changefeed", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. No load balancing is performed afterwards. Thus, the distribution of
+		// ranges assigned to nodes is the same as the distribution of leaseholders on nodes.
+		tester := newRangeDistributionTester(t, noLocality)
+		defer tester.cleanup()
+
+		serverutils.SetClusterSetting(t, tester.tc, "changefeed.random_replica_selection.enabled", false)
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', range_distribution_strategy='default'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
+		require.True(t, reflect.DeepEqual(counts, []int{2, 2, 4, 8, 16, 32, 0, 0}),
+			"unexpected counts %v, partitions: %v", counts, partitions)
+		require.True(t, anyGreaterThanThirty(counts))
+	})
+
+	t.Run("default distribution strategy specified for cluster", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. No load balancing is performed afterwards. Thus, the distribution of
+		// ranges assigned to nodes is the same as the distribution of leaseholders on nodes.
+		tester := newRangeDistributionTester(t, noLocality)
+		defer tester.cleanup()
+
+		serverutils.SetClusterSetting(t, tester.tc, "changefeed.random_replica_selection.enabled", false)
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
+		require.True(t, reflect.DeepEqual(counts, []int{2, 2, 4, 8, 16, 32, 0, 0}),
+			"unexpected counts %v, partitions: %v", counts, partitions)
+		require.True(t, anyGreaterThanThirty(counts))
+	})
+
+	t.Run("default distribution strategy specified over cluster setting", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. No load balancing is performed afterwards. Thus, the distribution of
+		// ranges assigned to nodes is the same as the distribution of leaseholders on nodes.
+		tester := newRangeDistributionTester(t, noLocality)
+		defer tester.cleanup()
+
+		serverutils.SetClusterSetting(t, tester.tc, "changefeed.random_replica_selection.enabled", false)
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', range_distribution_strategy='default'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
+		require.True(t, reflect.DeepEqual(counts, []int{2, 2, 4, 8, 16, 32, 0, 0}),
+			"unexpected counts %v, partitions: %v", counts, partitions)
+		require.True(t, anyGreaterThanThirty(counts))
+	})
+
+	t.Run("balanced simple distribution strategy specified for cluster", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. Afterwards, load balancing is performed to attempt an even distribution.
+		// Check that we roughly assign (64 ranges / 6 nodes) ranges to each node.
+		tester := newRangeDistributionTester(t, noLocality)
+		defer tester.cleanup()
+		// We need to disable the bulk oracle in order to ensure the leaseholder is selected.
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
+		upper := int(math.Ceil((1 + rebalanceThreshold.Get(&tester.lastNode.ClusterSettings().SV)) * 64 / 6))
+		for _, count := range counts {
+			require.LessOrEqual(t, count, upper, "counts %v contains value greater than upper bound %d",
+				counts, upper)
+		}
+		require.True(t, !anyGreaterThanThirty(counts))
+	})
+
+	t.Run("balanced simple distribution strategy specified for changefeed over cluster setting", func(t *testing.T) {
+		// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
+		// to the same node which stores it. Afterwards, load balancing is performed to attempt an even distribution.
+		// Check that we roughly assign (64 ranges / 6 nodes) ranges to each node.
+		tester := newRangeDistributionTester(t, noLocality)
+		defer tester.cleanup()
+		// We need to disable the bulk oracle in order to ensure the leaseholder is selected.
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.random_replica_selection.enabled = false")
+		tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
+		tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', range_distribution_strategy='balanced_simple'")
+		partitions := tester.getPartitions()
+		counts := tester.countRangesPerNode(partitions)
+		upper := int(math.Ceil((1 + rebalanceThreshold.Get(&tester.lastNode.ClusterSettings().SV)) * 64 / 6))
+		for _, count := range counts {
+			require.LessOrEqual(t, count, upper, "counts %v contains value greater than upper bound %d",
+				counts, upper)
+		}
+		require.True(t, !anyGreaterThanThirty(counts))
+	})
+}
+
 func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
