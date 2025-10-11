@@ -470,3 +470,73 @@ query T match(plan\stype)
 EXPLAIN ANALYZE EXECUTE p(1, 2);
 ----
 plan type: custom
+
+statement ok
+DEALLOCATE p
+
+# Regression test for #155159. Do not choose a generic query plan with unbounded
+# cardinality when the custom plans have bounded cardinality.
+statement ok
+CREATE TABLE t155159 (
+  id INT PRIMARY KEY,
+  a INT,
+  b INT,
+  INDEX (a, b)
+)
+
+statement ok
+SET plan_cache_mode = auto
+
+statement ok
+SET optimizer_prefer_bounded_cardinality = false
+
+statement ok
+PREPARE p AS SELECT id FROM t155159 WHERE a = $1 AND b >= $2 ORDER BY b, id LIMIT 250
+
+statement ok
+EXECUTE p (33, 44)
+
+statement ok
+EXECUTE p (33, 44)
+
+statement ok
+EXECUTE p (33, 44)
+
+statement ok
+EXECUTE p (33, 44)
+
+statement ok
+EXECUTE p (33, 44)
+
+query T
+EXPLAIN ANALYZE EXECUTE p (33, 44)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  actual row count: 0
+  KV time: 0µs
+  KV rows decoded: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  missing stats
+  table: t155159@t155159_a_b_idx
+  spans: [/33/44 - /33]
+  limit: 250
+
+statement ok
+DEALLOCATE p
