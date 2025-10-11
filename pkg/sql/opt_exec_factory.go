@@ -179,7 +179,7 @@ func generateScanSpans(
 	var sb span.Builder
 	sb.InitAllowingExternalRowData(evalCtx, codec, tabDesc, index)
 	if params.InvertedConstraint != nil {
-		return sb.SpansFromInvertedSpans(ctx, params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
+		return sb.SpansFromInvertedSpans(ctx, params.InvertedConstraint, params.IndexConstraint, false /* prefixIncludedInKeys */, nil /* scratch */)
 	}
 	var splitter span.Splitter
 	if params.Locking.MustLockAllRequestedColumnFamilies() {
