@@ -9,6 +9,7 @@ import (
 	"context"
 	"hash/fnv"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +59,7 @@ func TestHintCacheBasic(t *testing.T) {
 	// Query for hints on a statement that has no hints.
 	nonHintedFingerprint := "SELECT x FROM t WHERE y = $1"
 	require.False(t, hc.TestingHashHasHints(computeHash(t, nonHintedFingerprint)))
-	require.Nil(t, hc.MaybeGetStatementHints(ctx, nonHintedFingerprint))
+	requireHintsCount(t, hc, ctx, nonHintedFingerprint, 0)
 
 	// Add a hint for another statement.
 	fingerprint2 := "SELECT c FROM t WHERE d = $1"
@@ -120,43 +122,43 @@ func TestHintCacheLRU(t *testing.T) {
 
 	// Access the first two fingerprints to populate the cache.
 	// This should result in 2 table reads.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[0]))
+	requireHintsCount(t, hc, ctx, fingerprints[0], 1)
 	require.Equal(t, 1, hc.TestingNumTableReads())
 
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[1]))
+	requireHintsCount(t, hc, ctx, fingerprints[1], 1)
 	require.Equal(t, 2, hc.TestingNumTableReads())
 
 	// Access the same fingerprints again - should be served from cache with no
 	// additional reads.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[0]))
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[1]))
+	requireHintsCount(t, hc, ctx, fingerprints[0], 1)
+	requireHintsCount(t, hc, ctx, fingerprints[1], 1)
 	require.Equal(t, 2, hc.TestingNumTableReads())
 
 	// Access the third fingerprint. This should evict the first (LRU) due to
 	// cache size limit of 2, resulting in one more table read.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[2]))
+	requireHintsCount(t, hc, ctx, fingerprints[2], 1)
 	require.Equal(t, 3, hc.TestingNumTableReads())
 
 	// Access the first fingerprint again. Since it was evicted, this should
 	// result in another table read on the first access.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[0]))
+	requireHintsCount(t, hc, ctx, fingerprints[0], 1)
 	require.Equal(t, 4, hc.TestingNumTableReads())
 
 	// Access the second fingerprint. It should have been evicted by now, so
 	// another table read on the first access.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[1]))
+	requireHintsCount(t, hc, ctx, fingerprints[1], 1)
 	require.Equal(t, 5, hc.TestingNumTableReads())
 
 	// The first and second fingerprint should now be cached, so accessing them
 	// again should not increase table reads.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[0]))
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[1]))
+	requireHintsCount(t, hc, ctx, fingerprints[0], 1)
+	requireHintsCount(t, hc, ctx, fingerprints[1], 1)
 	require.Equal(t, 5, hc.TestingNumTableReads())
 
 	// Access the third fingerprint again - should have been evicted, so the first
 	// access should cause a table read.
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[2]))
-	require.NotNil(t, hc.MaybeGetStatementHints(ctx, fingerprints[2]))
+	requireHintsCount(t, hc, ctx, fingerprints[2], 1)
+	requireHintsCount(t, hc, ctx, fingerprints[2], 1)
 	require.Equal(t, 6, hc.TestingNumTableReads())
 }
 
@@ -202,15 +204,15 @@ func TestHintCacheInitialScan(t *testing.T) {
 	require.True(t, hc.TestingHashHasHints(hashes[0]))
 	require.True(t, hc.TestingHashHasHints(hashes[1]))
 	require.True(t, hc.TestingHashHasHints(hashes[2]))
-	require.Len(t, hc.MaybeGetStatementHints(ctx, fingerprints[0]), 2)
-	require.Len(t, hc.MaybeGetStatementHints(ctx, fingerprints[1]), 1)
-	require.Len(t, hc.MaybeGetStatementHints(ctx, fingerprints[2]), 1)
+	requireHintsCount(t, hc, ctx, fingerprints[0], 2)
+	requireHintsCount(t, hc, ctx, fingerprints[1], 1)
+	requireHintsCount(t, hc, ctx, fingerprints[2], 1)
 
 	// Query for a fingerprint with no hints.
 	nonHintedFingerprint := "SELECT x FROM t WHERE y = $1"
 	nonHintedHash := computeHash(t, nonHintedFingerprint)
 	require.False(t, hc.TestingHashHasHints(nonHintedHash))
-	require.Nil(t, hc.MaybeGetStatementHints(ctx, nonHintedFingerprint))
+	requireHintsCount(t, hc, ctx, nonHintedFingerprint, 0)
 
 	// After the initial scan, new hints should still be detected via rangefeed.
 	fingerprint4 := "SELECT g FROM t WHERE h = $1"
@@ -272,8 +274,8 @@ func TestHintCacheMultiNode(t *testing.T) {
 	require.Equal(t, 1, hc.TestingHashCount())
 
 	// Verify that fingerprint1 still has hints but fingerprint2 doesn't.
-	require.Len(t, hc.MaybeGetStatementHints(ctx, fingerprint1), 1)
-	require.Nil(t, hc.MaybeGetStatementHints(ctx, fingerprint2))
+	requireHintsCount(t, hc, ctx, fingerprint1, 1)
+	requireHintsCount(t, hc, ctx, fingerprint2, 0)
 }
 
 // TestHintCacheMultiTenant tests that hint caches for different tenants are
@@ -315,24 +317,24 @@ func TestHintCacheMultiTenant(t *testing.T) {
 	insertStatementHint(t, r1, fingerprint1)
 	waitForUpdateOnFingerprintHash(t, ctx, hc1, fingerprint1, 1)
 	require.Equal(t, 1, hc1.TestingHashCount())
-	require.Len(t, hc1.MaybeGetStatementHints(ctx, fingerprint1), 1)
+	requireHintsCount(t, hc1, ctx, fingerprint1, 1)
 
 	// Tenant2's cache should remain empty.
 	require.Equal(t, 0, hc2.TestingHashCount())
 	require.False(t, hc2.TestingHashHasHints(computeHash(t, fingerprint1)))
-	require.Nil(t, hc2.MaybeGetStatementHints(ctx, fingerprint1))
+	requireHintsCount(t, hc2, ctx, fingerprint1, 0)
 
 	// Insert a different hint for tenant2.
 	fingerprint2 := "SELECT c FROM t WHERE d = $1"
 	insertStatementHint(t, r2, fingerprint2)
 	waitForUpdateOnFingerprintHash(t, ctx, hc2, fingerprint2, 1)
 	require.Equal(t, 1, hc2.TestingHashCount())
-	require.Len(t, hc2.MaybeGetStatementHints(ctx, fingerprint2), 1)
+	requireHintsCount(t, hc2, ctx, fingerprint2, 1)
 
 	// Tenant1's cache should still only have its original hint.
 	require.Equal(t, 1, hc1.TestingHashCount())
 	require.False(t, hc1.TestingHashHasHints(computeHash(t, fingerprint2)))
-	require.Nil(t, hc1.MaybeGetStatementHints(ctx, fingerprint2))
+	requireHintsCount(t, hc1, ctx, fingerprint2, 0)
 
 	// Insert the same fingerprint in both tenants - they should be independent.
 	fingerprintShared := "SELECT x FROM t WHERE y = $1"
@@ -350,8 +352,8 @@ func TestHintCacheMultiTenant(t *testing.T) {
 	// Verify that the shared fingerprint has different counts in each tenant.
 	require.True(t, hc1.TestingHashHasHints(computeHash(t, fingerprintShared)))
 	require.True(t, hc2.TestingHashHasHints(computeHash(t, fingerprintShared)))
-	require.Len(t, hc1.MaybeGetStatementHints(ctx, fingerprintShared), 2)
-	require.Len(t, hc2.MaybeGetStatementHints(ctx, fingerprintShared), 1)
+	requireHintsCount(t, hc1, ctx, fingerprintShared, 2)
+	requireHintsCount(t, hc2, ctx, fingerprintShared, 1)
 
 	// Delete one hint from tenant1's shared fingerprint.
 	deleteStatementHints(t, r1, fingerprintShared, 1)
@@ -368,8 +370,100 @@ func TestHintCacheMultiTenant(t *testing.T) {
 	// Tenant1 should still have the hint, but tenant2 should not.
 	require.True(t, hc1.TestingHashHasHints(computeHash(t, fingerprintShared)))
 	require.False(t, hc2.TestingHashHasHints(computeHash(t, fingerprintShared)))
-	require.Len(t, hc1.MaybeGetStatementHints(ctx, fingerprintShared), 1)
-	require.Nil(t, hc2.MaybeGetStatementHints(ctx, fingerprintShared))
+	requireHintsCount(t, hc1, ctx, fingerprintShared, 1)
+	requireHintsCount(t, hc2, ctx, fingerprintShared, 0)
+}
+
+// TestHintCacheGeneration tests that the cache generation is incremented
+// correctly when hints are added and removed, and that the generation is not
+// incremented when there are no updates.
+func TestHintCacheGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rnd, _ := randutil.NewTestRand()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	r := sqlutils.MakeSQLRunner(db)
+	setTestDefaults(t, srv)
+
+	// Create a hints cache.
+	hc := createHintsCache(t, ctx, ts)
+
+	// Helper that retrieves the generation and verifies that it doesn't change
+	// over a short period.
+	getGenerationAssertNoChange := func() int64 {
+		t.Helper()
+		startGeneration := hc.GetGeneration()
+		time.Sleep(time.Duration(rnd.Intn(int(time.Millisecond))))
+		require.Equal(t, startGeneration, hc.GetGeneration())
+		return startGeneration
+	}
+	// Helper that waits until the generation increments from the given start
+	// point.
+	waitForGenerationInc := func(prevGeneration int64) {
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			t.Helper()
+			if gen := hc.GetGeneration(); gen <= prevGeneration {
+				return errors.Errorf("expected generation >= %d, got %d", prevGeneration, gen)
+			}
+			return nil
+		})
+	}
+
+	// The initial scan should increment the generation.
+	waitForGenerationInc(0)
+	generationAfterInitialScan := getGenerationAssertNoChange()
+
+	// Insert a hint - generation should increment.
+	fingerprint1 := "SELECT a FROM t WHERE b = $1"
+	insertStatementHint(t, r, fingerprint1)
+	waitForGenerationInc(generationAfterInitialScan)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 1)
+	generationAfterInsert := getGenerationAssertNoChange()
+
+	// Insert another hint for the same fingerprint - generation should increment
+	// again.
+	insertStatementHint(t, r, fingerprint1)
+	waitForGenerationInc(generationAfterInsert)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 2)
+	generationAfterSecondInsert := getGenerationAssertNoChange()
+
+	// Add a hint for a different fingerprint - generation should increment.
+	fingerprint2 := "SELECT c FROM t WHERE d = $1"
+	insertStatementHint(t, r, fingerprint2)
+	waitForGenerationInc(generationAfterSecondInsert)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint2, 1)
+	generationAfterDifferentFingerprint := getGenerationAssertNoChange()
+
+	// Delete one hint - generation should increment.
+	deleteStatementHints(t, r, fingerprint1, 1)
+	waitForGenerationInc(generationAfterDifferentFingerprint)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 1)
+	generationAfterDelete := getGenerationAssertNoChange()
+
+	// Delete all remaining hints for fingerprint1 - generation should increment.
+	deleteStatementHints(t, r, fingerprint1, 0)
+	waitForGenerationInc(generationAfterDelete)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, 0)
+	generationAfterDeleteAll := getGenerationAssertNoChange()
+
+	// Query for hints (cache access) should NOT increment generation.
+	hc.MaybeGetStatementHints(ctx, fingerprint2)
+	getGenerationAssertNoChange()
+
+	// Accessing a non-existent fingerprint should also NOT increment generation.
+	hc.MaybeGetStatementHints(ctx, "SELECT nonexistent FROM t")
+	getGenerationAssertNoChange()
+
+	// Delete all remaining hints.
+	deleteStatementHints(t, r, fingerprint2, 0)
+	waitForGenerationInc(generationAfterDeleteAll)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint2, 0)
+	getGenerationAssertNoChange()
 }
 
 func setTestDefaults(t *testing.T, srv serverutils.TestServerInterface) {
@@ -411,12 +505,37 @@ func waitForUpdateOnFingerprintHash(
 		if hasHints := hc.TestingHashHasHints(hash); (expected > 0) != hasHints {
 			return errors.Errorf("expected hash %d with hasHints=%t, got hasHints=%t", hash, expected > 0, hasHints)
 		}
-		hints := hc.MaybeGetStatementHints(ctx, fingerprint)
+		hints, ids := hc.MaybeGetStatementHints(ctx, fingerprint)
 		if len(hints) != expected {
 			return errors.Errorf("expected %d hints for fingerprint %q, got %d", expected, fingerprint, len(hints))
 		}
+		checkIDOrder(t, ids)
 		return nil
 	})
+}
+
+// requireHintsCount verifies that MaybeGetStatementHints returns the expected number of hints and IDs.
+func requireHintsCount(
+	t *testing.T,
+	hc *hints.StatementHintsCache,
+	ctx context.Context,
+	fingerprint string,
+	expectedCount int,
+) {
+	hints, ids := hc.MaybeGetStatementHints(ctx, fingerprint)
+	require.Len(t, hints, expectedCount)
+	require.Len(t, ids, expectedCount)
+	checkIDOrder(t, ids)
+}
+
+// checkIDOrder verifies that the row IDs are in ascending order.
+func checkIDOrder(t *testing.T, ids []int64) {
+	t.Helper()
+	for i := 1; i < len(ids); i++ {
+		if ids[i] <= ids[i-1] {
+			t.Fatalf("expected IDs to be in ascending order, got %v", ids)
+		}
+	}
 }
 
 // insertStatementHint inserts an empty statement hint into the
