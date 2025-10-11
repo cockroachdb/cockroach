@@ -28,6 +28,11 @@ type TransportMetrics struct {
 	MessagesReceived       *metric.Counter
 	MessagesSendDropped    *metric.Counter
 	MessagesReceiveDropped *metric.Counter
+
+	BatchesSent      *metric.Counter
+	MessagesPerBatch *metric.Counter
+	BatchSizeBytes   metric.IHistogram
+	BatchDuration    metric.IHistogram
 }
 
 func newTransportMetrics() *TransportMetrics {
@@ -39,6 +44,24 @@ func newTransportMetrics() *TransportMetrics {
 		MessagesReceived:       metric.NewCounter(metaMessagesReceived),
 		MessagesSendDropped:    metric.NewCounter(metaMessagesSendDropped),
 		MessagesReceiveDropped: metric.NewCounter(metaMessagesReceiveDropped),
+		BatchesSent:            metric.NewCounter(metaBatchesSent),
+		MessagesPerBatch:       metric.NewCounter(metaMessagesPerBatch),
+		BatchSizeBytes: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaBatchSizeBytes,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.DataSize16MBBuckets,
+			},
+		),
+		BatchDuration: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaBatchDuration,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+			},
+		),
 	}
 }
 
@@ -205,6 +228,31 @@ var (
 	metaCallbacksProcessingDuration = metric.Metadata{
 		Name:        "storeliveness.callbacks.processing_duration",
 		Help:        "Duration of support withdrawal callback processing",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	metaBatchesSent = metric.Metadata{
+		Name:        "storeliveness.transport.batches-sent",
+		Help:        "Number of message batches sent by the Store Liveness Transport",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMessagesPerBatch = metric.Metadata{
+		Name:        "storeliveness.transport.messages-per-batch",
+		Help:        "Number of messages per batch sent by the Store Liveness Transport",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBatchSizeBytes = metric.Metadata{
+		Name:        "storeliveness.transport.batch-size-bytes",
+		Help:        "Size in bytes of batches sent by the Store Liveness Transport",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBatchDuration = metric.Metadata{
+		Name:        "storeliveness.transport.batch-duration",
+		Help:        "Duration spent collecting messages into batches by the Store Liveness Transport",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
