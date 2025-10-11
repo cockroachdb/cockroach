@@ -48,6 +48,7 @@ type CreateDatabase struct {
 	Owner           RoleSpec
 	SuperRegion     SuperRegion
 	SecondaryRegion Name
+	StorageParams   StorageParams
 }
 
 // Format implements the NodeFormatter interface.
@@ -127,6 +128,12 @@ func (node *CreateDatabase) Format(ctx *FmtCtx) {
 	if node.SecondaryRegion != "" {
 		ctx.WriteString(" SECONDARY REGION ")
 		ctx.FormatNode(&node.SecondaryRegion)
+	}
+
+	if node.StorageParams != nil {
+		ctx.WriteString(" WITH (")
+		ctx.FormatNode(&node.StorageParams)
+		ctx.WriteString(")")
 	}
 }
 
