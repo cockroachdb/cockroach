@@ -79,7 +79,7 @@ var (
 	// for an internal query (i.e., performed by the framework) to
 	// complete. These queries are typically associated with gathering
 	// upgrade state data to be displayed during execution.
-	internalQueryTimeout = 30 * time.Second
+	internalQueryTimeout = 90 * time.Second
 )
 
 func newServiceRuntime(desc *ServiceDescriptor) *serviceRuntime {
@@ -527,7 +527,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 	group := ctxgroup.WithContext(connectionCtx)
 	for j, node := range tr.getAvailableNodes(service.descriptor) {
 		group.GoCtx(func(ctx context.Context) error {
-			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
+			bv, err := clusterupgrade.BinaryVersion(ctx, tr.logger, tr.conn(node, service.descriptor.Name))
 			if err != nil {
 				return fmt.Errorf(
 					"failed to get binary version for node %d (%s): %w",
@@ -558,7 +558,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	group := ctxgroup.WithContext(connectionCtx)
 	for j, node := range tr.getAvailableNodes(service.descriptor) {
 		group.GoCtx(func(ctx context.Context) error {
-			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
+			cv, err := clusterupgrade.ClusterVersion(ctx, tr.logger, tr.conn(node, service.descriptor.Name))
 			if err != nil {
 				return fmt.Errorf(
 					"failed to get cluster version for node %d (%s): %w",
