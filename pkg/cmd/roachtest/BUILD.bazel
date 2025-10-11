@@ -46,6 +46,7 @@ go_library(
         "//pkg/internal/team",
         "//pkg/roachprod",
         "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/failureinjection/failures",

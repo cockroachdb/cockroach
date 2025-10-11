@@ -30,7 +30,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/utilccl/licenseccl",
-        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
         "//pkg/roachprod/logger",
@@ -74,7 +74,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [
-        "//pkg/roachprod/cloud",
+        "//pkg/roachprod/cloud/types",
         "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",

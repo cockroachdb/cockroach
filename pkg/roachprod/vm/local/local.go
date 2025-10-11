@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -53,7 +53,7 @@ func VMDir(clusterName string, nodeIdx int) string {
 // Init initializes the Local provider and registers it into vm.Providers.
 func Init(storage VMStorage) error {
 	vm.Providers[ProviderName] = &Provider{
-		clusters:    make(cloud.Clusters),
+		clusters:    make(cloudcluster.Clusters),
 		storage:     storage,
 		DNSProvider: NewDNSProvider(config.DNSDir, "local-zone"),
 	}
@@ -62,7 +62,7 @@ func Init(storage VMStorage) error {
 
 // AddCluster adds the metadata of a local cluster; used when loading the saved
 // metadata for local clusters.
-func AddCluster(cluster *cloud.Cluster) {
+func AddCluster(cluster *cloudcluster.Cluster) {
 	p := vm.Providers[ProviderName].(*Provider)
 	p.clusters[cluster.Name] = cluster
 }
@@ -107,7 +107,7 @@ type VMStorage interface {
 	// SaveCluster saves the metadata for a local cluster. It is expected that
 	// when the program runs again, this same metadata will be reported via
 	// AddCluster.
-	SaveCluster(l *logger.Logger, cluster *cloud.Cluster) error
+	SaveCluster(l *logger.Logger, cluster *cloudcluster.Cluster) error
 
 	// DeleteCluster deletes the metadata for a local cluster.
 	DeleteCluster(l *logger.Logger, name string) error
@@ -115,9 +115,14 @@ type VMStorage interface {
 
 // A Provider is used to create stub VM objects.
 type Provider struct {
-	clusters cloud.Clusters
+	clusters cloudcluster.Clusters
 	storage  VMStorage
 	vm.DNSProvider
+}
+
+// IsLocalProvider returns true because it is a local provider.
+func (p *Provider) IsLocalProvider() bool {
+	return true
 }
 
 func (p *Provider) DefaultZones(_ string, _ bool) []string {
@@ -258,7 +263,7 @@ func (p *Provider) Create(
 	l *logger.Logger, names []string, opts vm.CreateOpts, unusedProviderOpts vm.ProviderOpts,
 ) (vm.List, error) {
 	now := timeutil.Now()
-	c := &cloud.Cluster{
+	c := &cloudcluster.Cluster{
 		Name:      opts.ClusterName,
 		CreatedAt: now,
 		Lifetime:  time.Hour,
@@ -363,4 +368,9 @@ func (p *Provider) Active() bool {
 // ProjectActive is part of the vm.Provider interface.
 func (p *Provider) ProjectActive(project string) bool {
 	return project == ""
+}
+
+// String is part of the vm.Provider interface.
+func (p *Provider) String() string {
+	return ProviderName
 }

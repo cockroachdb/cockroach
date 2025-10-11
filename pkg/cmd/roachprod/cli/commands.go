@@ -439,9 +439,15 @@ hosts file.
 				}
 			} else {
 				machineType := func(clusterVMs vm.List) string {
+					if len(clusterVMs) == 0 {
+						return ""
+					}
 					return clusterVMs[0].MachineType
 				}
 				cpuArch := func(clusterVMs vm.List) string {
+					if len(clusterVMs) == 0 {
+						return ""
+					}
 					// Display CPU architecture and family.
 					if clusterVMs[0].CPUArch == "" {
 						// N.B. Either a local cluster or unsupported cloud provider.
@@ -501,6 +507,9 @@ hosts file.
 							}
 							timeRemaining := c.LifetimeRemaining().Round(time.Second)
 							formatTTL := func(ttl time.Duration) string {
+								if len(c.VMs) == 0 {
+									return color.HiRedString("")
+								}
 								if c.VMs[0].Preemptible {
 									return color.HiMagentaString(ttl.String())
 								} else {
@@ -528,7 +537,12 @@ hosts file.
 									color.HiGreenString(""))
 							}
 						} else {
-							fmt.Fprintf(tw, "\t(-)")
+							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
+								color.HiGreenString(""),
+								color.HiGreenString(""),
+								color.HiWhiteString(""),
+								color.HiWhiteString(""),
+								color.HiGreenString(""))
 						}
 						fmt.Fprintf(tw, "\n")
 					}
