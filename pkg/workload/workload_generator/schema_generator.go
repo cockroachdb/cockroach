@@ -352,6 +352,7 @@ func generateDDLFromCSV(
 // It parses the table name, columns, and constraints (primary keys, unique constraints,
 // foreign keys, and check constraints) from the DDL statement and returns a structured
 // representation of the table schema.
+// TODO: (@nameisbhaskar) use sql parser instead of regexes - https://github.com/cockroachdb/cockroach/issues/155173
 func ParseDDL(ddl string) (*TableSchema, error) {
 	tableMatch := tablePattern.FindStringSubmatch(ddl)
 	if tableMatch == nil {
@@ -439,7 +440,8 @@ func hasConstrainingPrefix(up string) bool {
 		sqlFamily,
 	}
 	for _, p := range prefixes {
-		if strings.HasPrefix(up, p) {
+		// a space is added after the prefix to avoid matches like "checksum" as a field name.
+		if strings.HasPrefix(up, p+" ") {
 			return true
 		}
 	}
