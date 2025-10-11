@@ -1814,7 +1814,7 @@ func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error)
 func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 	ctx context.Context, t *testImpl, c *clusterImpl,
 ) {
-	if len(c.Nodes()) == 0 {
+	if len(c.All()) == 0 {
 		return // test only
 	}
 	dets, err := c.RunWithDetails(ctx, t.L(), option.WithNodes(c.All()),
@@ -1834,8 +1834,11 @@ func (r *testRunner) maybeSaveClusterDueToInvariantProblems(
 	for _, det := range dets {
 		if det.Stdout != "" {
 			_ = c.Extend(ctx, 7*24*time.Hour, t.L())
-			timestamp := timeutil.Now().Format("20060102_150405")
-			snapName := fmt.Sprintf("invariant-problem-%s-%s", c.Name(), timestamp)
+			timestamp := timeutil.Now().UnixMilli()
+			// We take the risk that two tests could attempt to create a snapshot
+			// at the same exact millisecond, as we have a 63 character limit on
+			// the name and the cluster name usually exceeds this by itself.
+			snapName := fmt.Sprintf("invariant-problem-%d", timestamp)
 			if _, err := c.CreateSnapshot(ctx, snapName); err != nil {
 				t.L().Printf("failed to create snapshot %q: %s", snapName, err)
 				snapName = "<failed>"
