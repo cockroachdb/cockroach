@@ -182,7 +182,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					}
 					obs := &stats.TableStatistic{TableStatisticProto: *stat}
 					if obs.HistogramData != nil && !obs.HistogramData.ColumnType.UserDefined() {
-						if err := stats.DecodeHistogramBuckets(obs); err != nil {
+						if err := stats.DecodeHistogramBuckets(ctx, obs); err != nil {
 							return nil, err
 						}
 					}
