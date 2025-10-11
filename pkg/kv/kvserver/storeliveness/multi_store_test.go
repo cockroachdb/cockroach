@@ -40,8 +40,8 @@ import (
 // stall, or a partial partition), and ensure that only the affected stores lose
 // support.
 
-const numNodes = 3
-const numStoresPerNode = 2
+const numNodes = 5
+const numStoresPerNode = 3
 
 func checkSupportFrom(
 	t *testing.T, sm *storeliveness.SupportManager, storeID slpb.StoreIdent, supportExpected bool,

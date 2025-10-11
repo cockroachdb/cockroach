@@ -54,7 +54,10 @@ type MessageHandler interface {
 
 // sendQueue is a queue of outgoing Messages.
 type sendQueue struct {
-	messages chan slpb.Message
+	// When sendMessages channel has anything, the sender will attempt to send
+	// messages.
+	sendMessages chan struct{}
+	messages     chan slpb.Message
 }
 
 // Transport handles the RPC messages for Store Liveness.
@@ -79,6 +82,9 @@ type Transport struct {
 
 	// TransportKnobs includes all knobs for testing.
 	knobs *TransportKnobs
+
+	// Once signaled, we will signal to all sendQueues to send all messages.
+	sendAllMessages chan struct{}
 }
 
 var _ MessageSender = (*Transport)(nil)
@@ -97,12 +103,13 @@ func NewTransport(
 		knobs = &TransportKnobs{}
 	}
 	t := &Transport{
-		AmbientContext: ambient,
-		stopper:        stopper,
-		clock:          clock,
-		dialer:         dialer,
-		metrics:        newTransportMetrics(),
-		knobs:          knobs,
+		AmbientContext:  ambient,
+		stopper:         stopper,
+		clock:           clock,
+		dialer:          dialer,
+		metrics:         newTransportMetrics(),
+		knobs:           knobs,
+		sendAllMessages: make(chan struct{}, 1),
 	}
 	if grpcServer != nil {
 		slpb.RegisterStoreLivenessServer(grpcServer, t)
@@ -112,6 +119,65 @@ func NewTransport(
 			return nil, err
 		}
 	}
+
+	// Start background goroutine to act as the transport coordinator. It is
+	// responsible for instructing the sendQueues to send their messages.
+	if err := stopper.RunAsyncTask(
+		context.Background(), "storeliveness transport coordinator",
+		func(ctx context.Context) {
+			var batchTimer timeutil.Timer
+			defer batchTimer.Stop()
+
+			for {
+				select {
+				case <-stopper.ShouldQuiesce():
+					return
+
+				case <-t.sendAllMessages:
+					// We received a signal to send all messages. Before we do that, let's
+					// wait for a short duration to give other stores a chance to
+					// enqueue messages which will increase batching opportunities.
+					// TODO: Make this configurable.
+					batchTimer.Reset(batchDuration)
+					for done := false; !done; {
+						select {
+						case <-t.sendAllMessages:
+							// Consume any additional signals to send all messages.
+
+						case <-batchTimer.C:
+							// We have waited to batch messages
+							done = true
+						}
+					}
+
+					// At this point, we have waited for a short duration. We now need
+					// to signal all queues to send their messages.
+					//
+					// TODO: Hook the task pacer here. The way to do it is to first count
+					// how many node queues (ideally with messages to send) we have, and
+					// then use the task pacer to pace signaling those queues to send
+					// their messages.
+					t.queues.Range(func(nodeID roachpb.NodeID, q *sendQueue) bool {
+						if len(q.messages) == 0 {
+							// Nothing to send.
+							return true
+						}
+						select {
+						case q.sendMessages <- struct{}{}:
+						default:
+						}
+						// TODO: Hook the task pacer here.
+						time.Sleep(1 * time.Millisecond)
+						return true
+					})
+				}
+			}
+
+		},
+	); err != nil {
+		return nil, err
+	}
+
 	return t, nil
 }
 
@@ -219,6 +285,7 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 // The returned bool may be a false positive but will never be a false negative;
 // if sent is true the message may or may not actually be sent but if it's false
 // the message definitely was not sent.
+// TODO: Change the name of this function to better describe it.
 func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (enqueued bool) {
 	toNodeID := msg.To.NodeID
 	fromNodeID := msg.From.NodeID
@@ -264,12 +331,22 @@ func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (enqueued b
 	}
 }
 
+// SendAllMessages signals all queues to send all their messages.
+func (t *Transport) SendAllMessages(ctx context.Context) {
+	select {
+	case t.sendAllMessages <- struct{}{}:
+	default:
+	}
+}
+
 // getQueue returns the queue for the specified node ID and a boolean
 // indicating whether the queue already exists (true) or was created (false).
 func (t *Transport) getQueue(nodeID roachpb.NodeID) (*sendQueue, bool) {
 	queue, ok := t.queues.Load(nodeID)
 	if !ok {
-		q := sendQueue{messages: make(chan slpb.Message, sendBufferSize)}
+		q := sendQueue{sendMessages: make(chan struct{}, 1),
+			messages: make(chan slpb.Message, sendBufferSize),
+		}
 		queue, ok = t.queues.LoadOrStore(nodeID, &q)
 	}
 	return queue, ok
@@ -361,9 +438,8 @@ func (t *Transport) processQueue(
 	}
 	var idleTimer timeutil.Timer
 	defer idleTimer.Stop()
-	var batchTimer timeutil.Timer
-	defer batchTimer.Stop()
 	batch := &slpb.MessageBatch{}
+
 	for {
 		idleTimer.Reset(getIdleTimeout())
 		select {
@@ -374,24 +450,29 @@ func (t *Transport) processQueue(
 			t.metrics.SendQueueIdle.Inc(1)
 			return nil
 
-		case msg := <-q.messages:
-			batch.Messages = append(batch.Messages, msg)
-			t.metrics.SendQueueSize.Dec(1)
-			t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
+		case <-q.sendMessages:
+			// We need to send all the messages in our queue.
 
-			// Pull off as many queued requests as possible within batchDuration.
-			batchTimer.Reset(batchDuration)
-			for done := false; !done; {
+			queueHasItems := true
+			for queueHasItems {
 				select {
-				case msg = <-q.messages:
+				case msg := <-q.messages:
 					batch.Messages = append(batch.Messages, msg)
 					t.metrics.SendQueueSize.Dec(1)
 					t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
-				case <-batchTimer.C:
-					done = true
+
+				default:
+					// We have sent all messages in the queue. Exit the for loop.
+					queueHasItems = false
 				}
 			}
 
+			if len(batch.Messages) == 0 {
+				// Nothing to send.
+				continue
+			}
+
+			// At this point, we have drained the queue. Send the batch.
 			batch.Now = t.clock.NowAsClockTimestamp()
 			if err = stream.Send(batch); err != nil {
 				t.metrics.MessagesSendDropped.Inc(int64(len(batch.Messages)))
@@ -399,11 +480,13 @@ func (t *Transport) processQueue(
 			}
 			t.metrics.MessagesSent.Inc(int64(len(batch.Messages)))
 
+			log.KvExec.Infof(context.Background(), "!!! IBRAHIM !!! Sent batch of %d messages from node %d to node %d", len(batch.Messages), batch.Messages[0].From.NodeID, batch.Messages[0].To.NodeID)
 			// Reuse the Messages slice, but zero out the contents to avoid delaying
 			// GC of memory referenced from within.
 			for i := range batch.Messages {
 				batch.Messages[i] = slpb.Message{}
 			}
+
 			batch.Messages = batch.Messages[:0]
 			batch.Now = hlc.ClockTimestamp{}
 		}

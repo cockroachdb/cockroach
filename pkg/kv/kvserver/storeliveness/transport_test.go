@@ -203,6 +203,10 @@ func TestTransportSendAndReceive(t *testing.T) {
 		}
 	}
 
+	for _, from := range stores {
+		tt.transports[from.NodeID].SendAllMessages(ctx)
+	}
+
 	// Assert that each store received messages from all other stores.
 	for recipient, handler := range handlers {
 		var senders []slpb.StoreIdent
@@ -262,6 +266,7 @@ func TestTransportRestartedNode(t *testing.T) {
 		testutils.SucceedsSoon(
 			t, func() error {
 				enqueued := tt.transports[sender.NodeID].SendAsync(ctx, msg)
+				tt.transports[sender.NodeID].SendAllMessages(ctx)
 				if enqueued != expectedEnqueued {
 					return errors.Newf("enqueue success is still %v", enqueued)
 				}
@@ -275,6 +280,7 @@ func TestTransportRestartedNode(t *testing.T) {
 		testutils.SucceedsSoon(
 			t, func() error {
 				tt.transports[sender.NodeID].SendAsync(ctx, msg)
+				tt.transports[sender.NodeID].SendAllMessages(ctx)
 				sent := tt.transports[sender.NodeID].metrics.MessagesSent.Count()
 				if initialSent >= sent {
 					return errors.Newf("message not sent yet; initial %d, current %d", initialSent, sent)
@@ -289,6 +295,7 @@ func TestTransportRestartedNode(t *testing.T) {
 		testutils.SucceedsSoon(
 			t, func() error {
 				tt.transports[sender.NodeID].SendAsync(ctx, msg)
+				tt.transports[sender.NodeID].SendAllMessages(ctx)
 				dropped := tt.transports[sender.NodeID].metrics.MessagesSendDropped.Count()
 				if initialDropped >= dropped {
 					return errors.Newf(
@@ -312,6 +319,7 @@ func TestTransportRestartedNode(t *testing.T) {
 					// out. Even after SendAsync returns true, messages may still not be
 					// delivered (e.g. if the receiver node is not up yet).
 					tt.transports[sender.NodeID].SendAsync(ctx, msg)
+					tt.transports[sender.NodeID].SendAllMessages(ctx)
 				}
 				return errors.New("still waiting to receive message")
 			},
@@ -382,6 +390,7 @@ func TestTransportSendToMissingStore(t *testing.T) {
 	// receipt of the message to the existing store.
 	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, missingMsg))
 	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, existingMsg))
+	tt.transports[sender.NodeID].SendAllMessages(ctx)
 
 	// Wait for the message to the existing store to be received.
 	testutils.SucceedsSoon(
@@ -439,6 +448,7 @@ func TestTransportClockPropagation(t *testing.T) {
 	// Send a message from the sender to the receiver.
 	msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
 	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, msg))
+	tt.transports[sender.NodeID].SendAllMessages(ctx)
 
 	// Wait for the message to be received.
 	testutils.SucceedsSoon(
@@ -488,6 +498,7 @@ func TestTransportShortCircuit(t *testing.T) {
 	tt.transports[store1.NodeID].SendAsync(
 		ctx, slpb.Message{Type: slpb.MsgHeartbeat, From: store1, To: store2},
 	)
+	tt.transports[store1.NodeID].SendAllMessages(ctx)
 	// The message is received.
 	testutils.SucceedsSoon(
 		t, func() error {
@@ -509,6 +520,7 @@ func TestTransportShortCircuit(t *testing.T) {
 			tt.transports[store1.NodeID].SendAsync(
 				ctx, slpb.Message{Type: slpb.MsgHeartbeat, From: store1, To: store3},
 			)
+			tt.transports[store1.NodeID].SendAllMessages(ctx)
 		}, "sending message to a remote store with a nil dialer",
 	)
 }
@@ -532,11 +544,14 @@ func TestTransportIdleSendQueue(t *testing.T) {
 	handler := tt.AddStore(receiver)
 
 	tt.transports[sender.NodeID].knobs.OverrideIdleTimeout = func() time.Duration {
-		return time.Millisecond
+		// Set the idle timeout larger than the batch wait. Otherwise, we won't
+		// be able to send any message.
+		return 100 * time.Millisecond
 	}
 
 	// Send and receive a message.
 	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, msg))
+	tt.transports[sender.NodeID].SendAllMessages(ctx)
 	testutils.SucceedsSoon(
 		t, func() error {
 			select {
@@ -589,6 +604,7 @@ func TestTransportFullReceiveQueue(t *testing.T) {
 					sendDropped++
 					return errors.New("still waiting to enqueue message")
 				}
+				tt.transports[sender.NodeID].SendAllMessages(ctx)
 				return nil
 			},
 		)
@@ -615,6 +631,7 @@ func TestTransportFullReceiveQueue(t *testing.T) {
 	)
 	// The receiver queue is full but the enqueue to the sender queue succeeds.
 	require.True(t, tt.transports[sender.NodeID].SendAsync(ctx, msg))
+	tt.transports[sender.NodeID].SendAllMessages(ctx)
 	testutils.SucceedsSoon(
 		t, func() error {
 			if tt.transports[receiver.NodeID].metrics.MessagesReceiveDropped.Count() != int64(1) {
