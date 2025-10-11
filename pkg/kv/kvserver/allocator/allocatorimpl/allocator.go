@@ -79,11 +79,14 @@ var MinLeaseTransferStatsDuration = 30 * time.Second
 // EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 // via the new heuristic based on request load and latency or via the simpler
 // approach that purely seeks to balance the number of leases per node evenly.
+//
+// NB: this feature is in the process of being removed, see:
+// https://github.com/cockroachdb/cockroach/issues/96051
 var EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_lease_rebalancing.enabled",
 	"set to enable rebalancing of range leases based on load and latency",
-	true,
+	false,
 	settings.WithPublic)
 
 // leaseRebalancingAggressiveness enables users to tweak how aggressive their
