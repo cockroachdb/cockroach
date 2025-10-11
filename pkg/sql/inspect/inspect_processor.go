@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -57,7 +58,24 @@ var (
 		30*time.Second,
 		settings.DurationWithMinimum(1*time.Millisecond),
 	)
+
+	admissionControlEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"sql.inspect.admission_control.enabled",
+		"when enabled, INSPECT operations are throttled to minimize impact on foreground query performance; "+
+			"when disabled, INSPECT runs faster but may slow down foreground queries",
+		true,
+	)
 )
+
+// getInspectQoS returns the QoS level to use for INSPECT operations based on
+// the cluster setting sql.inspect.admission_control.enabled.
+func getInspectQoS(sv *settings.Values) sessiondatapb.QoSLevel {
+	if admissionControlEnabled.Get(sv) {
+		return sessiondatapb.BulkLowQoS
+	}
+	return sessiondatapb.Normal
+}
 
 type inspectCheckFactory func(asOf hlc.Timestamp) inspectCheck
 
@@ -206,6 +224,7 @@ func getInspectLogger(flowCtx *execinfra.FlowCtx, jobID jobspb.JobID) inspectLog
 		&tableSink{
 			db:    flowCtx.Cfg.DB,
 			jobID: jobID,
+			sv:    &flowCtx.Cfg.Settings.SV,
 		},
 		&metricsLogger{
 			issuesFoundCtr: metrics.IssuesFound,

@@ -12,9 +12,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
 // tableSink will report any inspect errors directly to system.inspect_errors.
@@ -22,6 +22,7 @@ type tableSink struct {
 	foundIssue atomic.Bool
 	db         descs.DB
 	jobID      jobspb.JobID
+	sv         *settings.Values
 }
 
 var _ inspectLogger = &tableSink{}
@@ -37,13 +38,14 @@ func (c *tableSink) logIssue(ctx context.Context, issue *inspectIssue) error {
 
 	executor := c.db.Executor()
 
+	qos := getInspectQoS(c.sv)
 	if _, err = executor.ExecEx(
 		ctx,
 		"insert-inspect-error",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             username.NodeUserName(),
-			QualityOfService: &sessiondatapb.BulkLowQoS,
+			QualityOfService: &qos,
 		},
 		`INSERT INTO system.inspect_errors
 			(job_id, error_type, aost, database_id, schema_id, id, primary_key, details)
