@@ -9285,6 +9285,10 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 		})
 		defer closeFeed(t, cf)
 
+		// We need to ensure that the reason the user doesn't see the table
+		// is not because the rangefeed hasn't started yet.
+		waitForHighwater(t, cf.(cdctest.EnterpriseTestFeed), s.Server.JobRegistry().(*jobs.Registry))
+
 		for _, c := range cases {
 			testutils.SucceedsSoon(t, func() error {
 				asUser(t, f, c.user, func(userDB *sqlutils.SQLRunner) {
