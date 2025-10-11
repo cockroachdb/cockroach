@@ -13314,6 +13314,10 @@ target_object_type:
   {
     $$.val = privilege.Routines
   }
+| DATABASES
+  {
+    $$.val = privilege.Databases
+  }
 
 opt_for_roles:
  FOR role_or_group_or_user role_spec_list
