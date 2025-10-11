@@ -1,14 +1,46 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "hints",
-    srcs = ["statement_hint.go"],
+    srcs = [
+        "hint_cache.go",
+        "statement_hint.go",
+    ],
     embed = [":hints_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/hints",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/protoutil"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvclient/rangefeed",
+        "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/types",
+        "//pkg/util/buildutil",
+        "//pkg/util/cache",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/metamorphic",
+        "//pkg/util/protoutil",
+        "//pkg/util/retry",
+        "//pkg/util/startup",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_proto_library(
@@ -26,4 +58,33 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_test(
+    name = "hints_test",
+    srcs = [
+        "hint_cache_test.go",
+        "main_test.go",
+    ],
+    deps = [
+        ":hints",
+        "//pkg/base",
+        "//pkg/kv/kvclient/rangefeed",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/randgen",
+        "//pkg/sql/stats",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
 )

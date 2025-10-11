@@ -603,15 +603,17 @@ func (oc *optCatalog) LeaseByStableID(ctx context.Context, stableID cat.StableID
 
 // GetDependencyDigest is part of the cat.Catalog interface.
 func (oc *optCatalog) GetDependencyDigest() cat.DependencyDigest {
-	// The stats cache may not be setup in some tests like
+	// The stats and hints caches may not be setup in some tests like
 	// TestPortalsDestroyedOnTxnFinish. In which case always
 	// return the empty digest.
-	if oc.planner.ExecCfg().TableStatsCache == nil {
+	if oc.planner.ExecCfg().TableStatsCache == nil ||
+		oc.planner.ExecCfg().StatementHintsCache == nil {
 		return cat.DependencyDigest{}
 	}
 	return cat.DependencyDigest{
 		LeaseGeneration: oc.planner.Descriptors().GetLeaseGeneration(),
 		StatsGeneration: oc.planner.execCfg.TableStatsCache.GetGeneration(),
+		HintsGeneration: oc.planner.execCfg.StatementHintsCache.GetGeneration(),
 		SystemConfig:    oc.planner.execCfg.SystemConfig.GetSystemConfig(),
 		CurrentDatabase: oc.planner.CurrentDatabase(),
 		SearchPath:      oc.planner.SessionData().SearchPath,
