@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -24,9 +23,6 @@ func alterTableRenameColumn(
 	n *tree.AlterTable,
 	t *tree.AlterTableRenameColumn,
 ) {
-	if len(n.Cmds) > 1 {
-		panic(scerrors.NotImplementedError(n))
-	}
 	alterColumnPreChecks(b, tn, tbl, t.Column)
 
 	// 1. Resolve the column by current name.
@@ -123,15 +119,9 @@ func checkNewColumnNameConflicts(b BuildCtx, tableID catid.DescID, oldName, newN
 					"column name %q conflicts with a system column name",
 					tree.ErrString(&newName)))
 			}
-			if current == scpb.Status_PUBLIC {
-				if target == scpb.ToAbsent {
-					panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "column %q being dropped, try again later", tree.ErrString(&newName)))
-				}
+			if current == scpb.Status_PUBLIC && target != scpb.ToAbsent {
 				tableName := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 				panic(sqlerrors.NewColumnAlreadyExistsInRelationError(tree.ErrString(&newName), tableName.Name))
-			}
-			if current == scpb.Status_ABSENT && target == scpb.ToPublic {
-				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "column %q being dropped, try again later", tree.ErrString(&newName)))
 			}
 		}
 	})
