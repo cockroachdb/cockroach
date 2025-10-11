@@ -56,6 +56,10 @@ message Metadata {
   // the metric. Please ensure that it is unique across the codebase even if a
   // labeled_name is provided.
   required string name = 1 [(gogoproto.nullable) = false];
+  // help is a short description of what the metric measures. This field is
+  // exported in the Prometheus scrape endpoint and should be concise enough
+  // to fit in a tooltip. It should describe what is being measured and end
+  // with a period. All metrics must have a help text.
   required string help = 2 [(gogoproto.nullable) = false];
   required string measurement = 3 [(gogoproto.nullable) = false];
   required Unit unit = 4 [(gogoproto.nullable) = false];
@@ -101,8 +105,17 @@ message Metadata {
   // category is the dashboard category of this metric. This is
   // required if `essential` is true.
   required Category category = 11 [(gogoproto.nullable) = false];
-  // how_to_use is an extended description of how to use this metric
-  // with a running cluster. This is required if `essential` is true.
+  // how_to_use provides extended information about how to interpret this
+  // metric's values in a running cluster. It should include guidance on:
+  // - How to interpret anomalous values
+  // - Where to follow up an investigation
+  // - Related cluster settings or other metrics
+  // This field is required if `essential` is true. It is NOT exported
+  // to the Prometheus scrape endpoint, so it can be significantly
+  // longer than the help text and may contain multiple paragraphs.
+  // Paragraphs should wrap at 100 chars, same as code. Currently this
+  // field is only output to metrics.yaml for documentation purposes,
+  // with plans for future use in automated dashboard generation.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
 
   // Next ID: 10 (then 13).
