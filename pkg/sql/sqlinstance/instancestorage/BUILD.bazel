@@ -87,6 +87,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
