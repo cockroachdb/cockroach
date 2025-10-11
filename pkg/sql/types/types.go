@@ -2794,11 +2794,6 @@ func (t *T) upgradeType() error {
 			t.InternalType.Oid = CalcArrayOid(t.ArrayContents())
 		}
 
-		// Marshaling/unmarshaling nested arrays is not yet supported.
-		if t.ArrayContents().Family() == ArrayFamily {
-			return errors.AssertionFailedf("nested array should never be unmarshaled")
-		}
-
 		// Zero out fields that may have been used to store information about
 		// the array element type, or which are no longer in use.
 		t.InternalType.Width = 0
