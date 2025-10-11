@@ -6,6 +6,7 @@ go_library(
         "config.go",
         "doc.go",
         "fabric.go",
+        "heartbeat_coordinator.go",
         "metrics.go",
         "node_manager.go",
         "persist.go",
@@ -34,6 +35,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/taskpacer",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
@@ -47,6 +49,7 @@ go_test(
     name = "storeliveness_test",
     size = "large",
     srcs = [
+        "heartbeat_coordinator_test.go",
         "main_test.go",
         "multi_store_test.go",
         "persist_test.go",
