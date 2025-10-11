@@ -67,8 +67,24 @@ type indexCandidateSet struct {
 	joinCandidates     map[cat.Table][][]cat.IndexColumn
 	invertedCandidates map[cat.Table][][]cat.IndexColumn
 	overallCandidates  map[cat.Table][][]cat.IndexColumn
+	finalCandidates    map[cat.Table][]IndexCandidates
 }
 
+// Wraper type that can maintain the predicate associated with an index candidate.
+type IndexCandidates struct {
+	columns   []cat.IndexColumn
+	predicate string
+}
+
+func (ic *IndexCandidates) Columns() []cat.IndexColumn {
+	return ic.columns
+}
+
+func (ic *IndexCandidates) Predicate() string {
+	return ic.predicate
+}
+
+// Predicate returns the predicate string.
 // init allocates memory for the maps in the set.
 func (ics *indexCandidateSet) init(md *opt.Metadata) {
 	numTables := len(md.AllTables())
@@ -78,6 +94,7 @@ func (ics *indexCandidateSet) init(md *opt.Metadata) {
 	ics.joinCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.invertedCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
 	ics.overallCandidates = make(map[cat.Table][][]cat.IndexColumn, numTables)
+	ics.finalCandidates = make(map[cat.Table][]IndexCandidates, numTables)
 }
 
 // combineIndexCandidates adds index candidates that are combinations of
