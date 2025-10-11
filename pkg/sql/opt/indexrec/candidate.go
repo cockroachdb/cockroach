@@ -50,12 +50,57 @@ import (
 // RFC for inspiration: https://github.com/cockroachdb/cockroach/pull/71784. We
 // may also consider matching more types of SQL expressions, including LIKE
 // expressions.
-func FindIndexCandidateSet(rootExpr opt.Expr, md *opt.Metadata) map[cat.Table][][]cat.IndexColumn {
+func FindIndexCandidateSet(
+	rootExpr opt.Expr, md *opt.Metadata,
+) map[cat.Table][]IndexCandidate {
 	var candidateSet indexCandidateSet
 	candidateSet.init(md)
 	candidateSet.categorizeIndexCandidates(rootExpr)
 	candidateSet.combineIndexCandidates()
-	return candidateSet.overallCandidates
+	candidateSet.collectCandidatesWithPredicate(md)
+	return candidateSet.finalCandidates
+}
+
+// For each table in overallCandidates, we find the predicates of all partial
+// indexes that already exist on the table, and add them to the predicates field
+// of the indexCandidateSet struct. We then create an IndexCandidate struct for
+// each index in overallCandidates, with each predicate found as well as one
+// without any predicate.
+func (ics *indexCandidateSet) collectCandidatesWithPredicate(md *opt.Metadata) {
+	tablesToPredicates := findExistingPredicates(md)
+	for t, indexes := range ics.overallCandidates {
+		for _, index := range indexes {
+			// Always add the index without any predicate first
+			ics.finalCandidates[t] = append(ics.finalCandidates[t], IndexCandidate{
+				columns:   index,
+				predicate: "",
+			})
+
+			predicates := tablesToPredicates[t]
+			for _, predicate := range predicates {
+				ics.finalCandidates[t] = append(ics.finalCandidates[t], IndexCandidate{
+					columns:   index,
+					predicate: predicate,
+				})
+			}
+		}
+	}
+}
+
+// Collects the indexes that already exist on the tables in the query, and stores
+// them in the predicates field of the indexCandidateSet struct.
+func findExistingPredicates(md *opt.Metadata) map[cat.Table][]string {
+	tableToPredicates := make(map[cat.Table][]string)
+	for _, table := range md.AllTables() {
+		for i := 0; i < table.Table.IndexCount(); i++ {
+			index := table.Table.Index(i)
+			pred, ok := index.Predicate()
+			if ok && pred != "" {
+				tableToPredicates[table.Table] = append(tableToPredicates[table.Table], pred)
+			}
+		}
+	}
+	return tableToPredicates
 }
 
 // indexCandidateSet stores potential indexes that could be recommended for a
