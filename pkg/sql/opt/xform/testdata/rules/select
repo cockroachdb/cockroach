@@ -13617,7 +13617,7 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G4: (inverted-filter G7 j_inverted_key)
  │    └── []
  │         ├── best: (inverted-filter G7 j_inverted_key)
- │         └── cost: 111663.19
+ │         └── cost: 111663.18
  ├── G5: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
@@ -13626,7 +13626,7 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G7: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
  │    └── []
  │         ├── best: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
- │         └── cost: 110696.58
+ │         └── cost: 110696.57
  ├── G8: (function G9 jsonb_path_exists)
  ├── G9: (scalar-list G10 G11)
  ├── G10: (variable j)

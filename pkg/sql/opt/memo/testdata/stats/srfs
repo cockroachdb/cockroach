@@ -269,7 +269,7 @@ distinct-on
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string!null)
       ├── immutable
-      ├── stats: [rows=9.9, distinct(1)=9.85601, null(1)=0, distinct(4)=1e-10, null(4)=0, distinct(15)=1e-10, null(15)=0]
+      ├── stats: [rows=9.9, distinct(1)=9.85601, null(1)=0, distinct(4)=1, null(4)=0, distinct(15)=1, null(15)=0]
       ├── fd: (1)-->(4,6), (4)==(15), (15)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string)
