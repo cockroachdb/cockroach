@@ -235,9 +235,13 @@ func (l *raftLog) match(s LeadSlice) (uint64, bool) {
 //
 // The second returned value is the term(guessIndex), or 0 if it is unknown.
 //
-// This function is used by a follower and leader to resolve log conflicts after
-// an unsuccessful append to a follower, and ultimately restore the steady flow
-// of appends.
+
+// This function is used by:
+//  1. a follower and leader to resolve log conflicts after an unsuccessful
+//     append to a follower, and ultimately restore the steady flow of appends.
+//  2. a voter and candidate, for the same purpose as above but during election.
+//     If the candidate wins election, it can enter the steady flow of appends
+//     faster (usually directly).
 func (l *raftLog) findConflictByTerm(index uint64, term uint64) (uint64, uint64) {
 	// Entry terms in a log are monotonic. A specific entry being (index, term)
 	// means term(i) <= term for all i <= index in that log. That is, we know the

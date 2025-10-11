@@ -30,6 +30,13 @@ stabilize 3
 ----
 ok
 
+# The leader has to rely on the n2's vote to become the leader. Otherwise it
+# will become leader when receiving n3's vote, which disables the purpose of
+# this test due to VoteHintPipelining.
+deliver-msgs drop=(1) type=MsgVoteResp
+----
+ok
+
 stabilize 1 2
 ----
 ok
@@ -37,6 +44,7 @@ ok
 log-level debug
 ----
 ok
+
 
 # We now have a leader at index 11 (it appended an empty entry when elected). 3
 # is still at index 5, and has not received any MsgApp from the leader yet.
@@ -102,7 +110,7 @@ process-ready 3
 Ready:
 HardState Term:1 Vote:1 Commit:5 Lead:1 LeadEpoch:0
 OnSync:
-3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
+3->1 MsgAppResp Term:1 Log:1/10 Rejected Hint:1/5 Commit:5
 
 # 3 receives and applies the snapshot, but doesn't respond with MsgAppResp yet.
 deliver-msgs 3
@@ -121,7 +129,7 @@ INFO 3 [commit: 11] restored snapshot [index: 11, term: 1]
 stabilize 1
 ----
 > 1 receiving messages
-  3->1 MsgAppResp Term:1 Log:1/10 Rejected (Hint: 5) Commit:5
+  3->1 MsgAppResp Term:1 Log:1/10 Rejected Hint:1/5 Commit:5
   DEBUG 1 received MsgAppResp(rejected, hint: (index 5, term 1)) from 3 for index 10
   DEBUG 1 decreased progress of 3 to [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
   DEBUG 1 [firstindex: 11, commit: 12] sent snapshot[index: 12, term: 1] to 3 [StateProbe match=0 next=6 sentCommit=5 matchCommit=5]
