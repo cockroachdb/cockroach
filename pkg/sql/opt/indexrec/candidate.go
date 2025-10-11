@@ -11,6 +11,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
@@ -50,12 +54,142 @@ import (
 // RFC for inspiration: https://github.com/cockroachdb/cockroach/pull/71784. We
 // may also consider matching more types of SQL expressions, including LIKE
 // expressions.
-func FindIndexCandidateSet(rootExpr opt.Expr, md *opt.Metadata) map[cat.Table][][]cat.IndexColumn {
+func FindIndexCandidateSet(
+	rootExpr opt.Expr, md *opt.Metadata,
+) (map[cat.Table][]IndexCandidates, error) {
 	var candidateSet indexCandidateSet
 	candidateSet.init(md)
 	candidateSet.categorizeIndexCandidates(rootExpr)
 	candidateSet.combineIndexCandidates()
-	return candidateSet.overallCandidates
+	err := candidateSet.collectCandidatesWithPredicate(md)
+	if err != nil {
+		return nil, err
+	}
+
+	return candidateSet.finalCandidates, nil
+}
+
+// For each table in overallCandidates, we find the predicates of all partial
+// indexes that already exist on the table, and add them to the predicates field
+// of the indexCandidateSet struct. We then create an IndexCandidates struct for
+// each index in overallCandidates, with each predicate found as well as one
+// without any predicate.
+func (ics *indexCandidateSet) collectCandidatesWithPredicate(md *opt.Metadata) error {
+	tablesToPredicates := findExistingPredicates(md)
+	for t, indexes := range ics.overallCandidates {
+		for _, index := range indexes {
+			// Always add the index without any predicate first
+			ics.finalCandidates[t] = append(ics.finalCandidates[t], IndexCandidates{
+				columns:   index,
+				predicate: "",
+			})
+
+			predicates := tablesToPredicates[t]
+			for _, predicate := range predicates {
+				if shouldAdd, err := shouldAddPredicate(t, index, predicate); err != nil {
+					return err
+				} else if shouldAdd {
+					ics.finalCandidates[t] = append(ics.finalCandidates[t], IndexCandidates{
+						columns:   index,
+						predicate: predicate,
+					})
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// A helper function that checks a predicate against the columns of an index.
+// If every column used in the predicate is present in the index columns, it is a valid index and should be evaluated as a candidate.
+func shouldAddPredicate(table cat.Table, index []cat.IndexColumn, predicate string) (bool, error) {
+	expr, err := parser.ParseExpr(predicate)
+	if err != nil {
+		return false, err
+	}
+
+	colIDs, err := extractColumnIDs(table, expr)
+	if err != nil {
+		return false, err
+	}
+	indexCols := make(map[cat.StableID]tree.Name, len(index))
+	for _, column := range index {
+		indexCols[column.ColID()] = column.ColName()
+	}
+
+	for _, colID := range colIDs {
+		// All columnIDs found in the predicate should match, otherwise the added predicate
+		// will never be provide performance benefits on the index.
+		if _, ok := indexCols[colID]; !ok {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// Helper function that gets all the column IDs of used in a expression.
+func extractColumnIDs(table cat.Table, rootExpr tree.Expr) ([]cat.StableID, error) {
+	var colIDs []cat.StableID
+
+	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			return true, expr, nil
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return false, nil, err
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return true, expr, nil
+		}
+
+		col, err := mustFindColumnByTreeName(table, c.ColumnName)
+		if err != nil {
+			return false, nil, err
+		}
+
+		colIDs = append(colIDs, col.ColID())
+		return false, expr, nil
+	})
+
+	return colIDs, err
+}
+
+func mustFindColumnByTreeName(tbl cat.Table, name tree.Name) (*cat.Column, error) {
+	if col := findColumnByTreeName(tbl, name); col != nil {
+		return col, nil
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", name)
+}
+
+func findColumnByTreeName(tbl cat.Table, name tree.Name) *cat.Column {
+	for i := 0; i < tbl.ColumnCount(); i++ {
+		col := tbl.Column(i)
+		if col.ColName() == name {
+			return col
+		}
+	}
+	return nil
+}
+
+// Collects the indexes that already exist on the tables in the query, and stores
+// them in the predicates field of the indexCandidateSet struct.
+func findExistingPredicates(md *opt.Metadata) map[cat.Table][]string {
+	tableToPredicates := make(map[cat.Table][]string)
+	for _, table := range md.AllTables() {
+		for i := 0; i < table.Table.IndexCount(); i++ {
+			index := table.Table.Index(i)
+			pred, ok := index.Predicate()
+			if ok && pred != "" {
+				tableToPredicates[table.Table] = append(tableToPredicates[table.Table], pred)
+			}
+		}
+	}
+	return tableToPredicates
 }
 
 // indexCandidateSet stores potential indexes that could be recommended for a
