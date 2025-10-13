@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"net/url"
 	"os"
@@ -29,14 +30,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1007,4 +1014,175 @@ func (n *mockSinkStorage) Delete(_ context.Context, _ string) error {
 
 func (n *mockSinkStorage) Size(_ context.Context, _ string) (int64, error) {
 	return 0, nil
+}
+
+// copied from TestChangefeedLaggingSpanCheckpointing
+func TestCloudStorageWTF(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, stopServer := startTestFullServer(t, makeOptions(t, feedTestNoTenants))
+	defer stopServer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	knobs := s.TestingKnobs().
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+
+	// Initialize table with 20 ranges.
+	sqlDB.Exec(t, `
+	  CREATE TABLE foo (key INT PRIMARY KEY);
+	  INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+	  ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
+	  `)
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "d", "foo")
+	tableSpan := fooDesc.PrimaryIndexSpan(s.Codec())
+
+	// Checkpoint progress frequently, allow a large enough checkpoint, and
+	// reduce the lag threshold to allow lag checkpointing to trigger
+	changefeedbase.SpanCheckpointInterval.Override(
+		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
+	changefeedbase.SpanCheckpointMaxBytes.Override(
+		context.Background(), &s.ClusterSettings().SV, 100<<20 /* 100 MiB */)
+	changefeedbase.SpanCheckpointLagThreshold.Override(
+		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
+
+	// We'll start the changefeed with the cursor set to the current time (not insert time).
+	// NB: The changefeed created in this test doesn't actually send any message events.
+	var tsStr string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp() from foo`).Scan(&tsStr)
+	cursor := parseTimeToHLC(t, tsStr)
+	t.Logf("cursor: %v", cursor)
+
+	// Rangefeed will skip some of the checkpoints to simulate lagging spans.
+	var laggingSpans roachpb.SpanGroup
+	nonLaggingSpans := make(map[string]int)
+	var numSpans int
+	knobs.FeedKnobs.ShouldSkipCheckpoint = func(checkpoint *kvpb.RangeFeedCheckpoint) (skip bool) {
+		// Skip spans for the whole table.
+		if checkpoint.Span.Equal(tableSpan) {
+			return true
+		}
+		// Skip spans that we already picked to be lagging.
+		if laggingSpans.Encloses(checkpoint.Span) {
+			return true
+		}
+		// Skip additional updates for every 3rd non-lagging span so that we have
+		// a few spans lagging at a second timestamp above the cursor.
+		if i, ok := nonLaggingSpans[checkpoint.Span.String()]; ok {
+			return i%3 == 0
+		}
+		numSpans++
+		// Skip updates for every 3rd span so that we have a few spans lagging
+		// at the cursor.
+		if numSpans%3 == 0 {
+			laggingSpans.Add(checkpoint.Span)
+			return true
+		}
+		nonLaggingSpans[checkpoint.Span.String()] = len(nonLaggingSpans) + 1
+		return false
+	}
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t,
+		`CREATE CHANGEFEED FOR foo INTO 'null://'
+	WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$1`, tsStr,
+	).Scan(&jobID)
+
+	// Helper to read job progress
+	jobRegistry := s.JobRegistry().(*jobs.Registry)
+	loadProgress := func() jobspb.Progress {
+		job, err := jobRegistry.LoadJob(context.Background(), jobID)
+		require.NoError(t, err)
+		return job.Progress()
+	}
+
+	// We should eventually checkpoint some spans that are ahead of the highwater.
+	// We'll wait until we have two unique timestamps.
+	testutils.SucceedsSoon(t, func() error {
+		progress := loadProgress()
+		cp := maps.Collect(loadCheckpoint(t, progress).All())
+		if len(cp) >= 2 {
+			return nil
+		}
+		return errors.New("waiting for checkpoint with two different timestamps")
+	})
+
+	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
+	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
+
+	// We expect highwater to be 0 (because we skipped some spans) or exactly cursor
+	// (this is mostly due to racy updates sent from aggregators to the frontier).
+	// However, the checkpoint timestamp should be at least at the cursor.
+	progress := loadProgress()
+	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().Equal(cursor),
+		"expected empty highwater or %s, found %s", cursor, progress.GetHighWater())
+	spanLevelCheckpoint := loadCheckpoint(t, progress)
+	require.NotNil(t, spanLevelCheckpoint)
+	require.True(t, cursor.LessEq(spanLevelCheckpoint.MinTimestamp()))
+
+	// Construct a reverse index from spans to timestamps.
+	spanTimestamps := make(map[string]hlc.Timestamp)
+	for ts, spans := range spanLevelCheckpoint.All() {
+		for _, s := range spans {
+			spanTimestamps[s.String()] = ts
+		}
+	}
+
+	var rangefeedStartedOnce bool
+	var incorrectCheckpointErr error
+	knobs.FeedKnobs.OnRangeFeedStart = func(spans []kvcoord.SpanTimePair) {
+		// We only need to check the first rangefeed restart since
+		// any additional restarts (likely due to transient errors)
+		// may be using newer span-level checkpoints than the one
+		// we saved after the last pause.
+		if rangefeedStartedOnce {
+			return
+		}
+
+		setErr := func(stp kvcoord.SpanTimePair, expectedTS hlc.Timestamp) {
+			incorrectCheckpointErr = errors.Newf(
+				"rangefeed for span %s expected to start @%s, started @%s instead",
+				stp.Span, expectedTS, stp.StartAfter)
+		}
+
+		// Verify that the start time for each span is correct.
+		for _, sp := range spans {
+			if checkpointTS := spanTimestamps[sp.Span.String()]; checkpointTS.IsSet() {
+				// Any span in the checkpoint should be resumed at its checkpoint timestamp.
+				if !sp.StartAfter.Equal(checkpointTS) {
+					setErr(sp, checkpointTS)
+				}
+			} else {
+				// Any spans not in the checkpoint should be at the cursor.
+				if !sp.StartAfter.Equal(cursor) {
+					setErr(sp, cursor)
+				}
+			}
+		}
+
+		rangefeedStartedOnce = true
+	}
+	knobs.FeedKnobs.ShouldSkipCheckpoint = nil
+
+	sqlDB.Exec(t, "RESUME JOB $1", jobID)
+	waitForJobState(sqlDB, t, jobID, jobs.StateRunning)
+
+	// Wait until highwater advances past cursor.
+	testutils.SucceedsSoon(t, func() error {
+		progress := loadProgress()
+		if hw := progress.GetHighWater(); hw != nil && cursor.Less(*hw) {
+			return nil
+		}
+		return errors.New("waiting for checkpoint advance")
+	})
+
+	sqlDB.Exec(t, "PAUSE JOB $1", jobID)
+	waitForJobState(sqlDB, t, jobID, jobs.StatePaused)
+	// Verify the rangefeed started. This guards against the testing knob
+	// not being called, which was happening in earlier versions of the code.
+	require.True(t, rangefeedStartedOnce)
+	// Verify we didn't see incorrect timestamps when resuming.
+	require.NoError(t, incorrectCheckpointErr)
 }
