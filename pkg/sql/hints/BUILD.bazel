@@ -62,10 +62,15 @@ proto_library(
 
 go_test(
     name = "hints_test",
+    size = "medium",
     srcs = [
         "hint_cache_test.go",
         "main_test.go",
     ],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
     deps = [
         ":hints",
         "//pkg/base",
