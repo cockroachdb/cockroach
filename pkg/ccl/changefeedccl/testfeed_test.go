@@ -1109,13 +1109,14 @@ func feedSubDir() string {
 
 type cloudFeedFactory struct {
 	enterpriseFeedFactory
-	dir string
+	dir      string
+	fileSize int64
 }
 
 // makeCloudFeedFactory returns a TestFeedFactory implementation using the cloud
 // storage uri.
 func makeCloudFeedFactory(
-	srvOrCluster interface{}, rootDB *gosql.DB, dir string,
+	srvOrCluster interface{}, rootDB *gosql.DB, dir string, fileSize int64,
 ) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	return &cloudFeedFactory{
@@ -1125,7 +1126,8 @@ func makeCloudFeedFactory(
 			db:     rootDB,
 			rootDB: rootDB,
 		},
-		dir: dir,
+		dir:      dir,
+		fileSize: fileSize,
 	}
 }
 
@@ -1192,6 +1194,9 @@ func (f *cloudFeedFactory) Feed(
 	// TODO(dan): This is a pretty unsatisfying way to test that the uri passes
 	// through params it doesn't understand to ExternalStorage.
 	sinkURI += `?should_be=ignored`
+	if f.fileSize > 0 {
+		sinkURI += `&file_size=` + strconv.FormatInt(f.fileSize, 10)
+	}
 	if err := setURI(createStmt, sinkURI, false, &args); err != nil {
 		return nil, err
 	}
