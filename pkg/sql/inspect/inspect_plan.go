@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -34,6 +35,11 @@ func inspectTypeCheck(
 
 // inspectRun represents the runtime state of an execution of INSPECT.
 type inspectRun struct {
+	table catalog.TableDescriptor
+	db    catalog.DatabaseDescriptor
+
+	namedIndexes tree.TableIndexNames
+
 	checks        []*jobspb.InspectDetails_Check
 	asOfTimestamp hlc.Timestamp
 }
@@ -43,40 +49,77 @@ func newInspectRun(
 ) (inspectRun, error) {
 	var run inspectRun
 
+	switch stmt.Typ {
+	case tree.InspectTable:
+		if table, err := p.ResolveExistingObjectEx(ctx, stmt.Table, true /* required */, tree.ResolveRequireTableDesc); err != nil {
+			return inspectRun{}, err
+		} else {
+			run.table = table
+		}
+
+		if db, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Database(ctx, run.table.GetParentID()); err != nil {
+			return inspectRun{}, err
+		} else {
+			run.db = db
+		}
+	case tree.InspectDatabase:
+		if db, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Database(ctx, stmt.Database.ToUnresolvedName().String()); err != nil {
+			return inspectRun{}, err
+		} else {
+			run.db = db
+		}
+	default:
+		return inspectRun{}, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", stmt.Typ)
+	}
+
 	if len(stmt.Options) == 0 || stmt.Options.HasIndexAll() {
 		// No options or INDEX ALL specified - inspect all indexes.
-
 		switch stmt.Typ {
 		case tree.InspectTable:
-			table, err := p.ResolveExistingObjectEx(ctx, stmt.Table, true /* required */, tree.ResolveRequireTableDesc)
+			checks, err := sql.InspectChecksForTable(ctx, p, run.table)
 			if err != nil {
 				return inspectRun{}, err
 			}
-
-			run.checks, err = sql.InspectChecksForTable(ctx, p, table)
-			if err != nil {
-				return inspectRun{}, err
-			}
+			run.checks = checks
 		case tree.InspectDatabase:
-			db, err := p.Descriptors().ByName(p.Txn()).Get().Database(ctx, stmt.Database.ToUnresolvedName().String())
-			if err != nil {
+			if checks, err := sql.InspectChecksForDatabase(ctx, p, run.db); err != nil {
 				return inspectRun{}, err
-			}
-
-			run.checks, err = sql.InspectChecksForDatabase(ctx, p, db)
-			if err != nil {
-				return inspectRun{}, err
+			} else {
+				run.checks = checks
 			}
 		default:
 			return inspectRun{}, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", stmt.Typ)
 		}
 	} else {
 		// Named indexes specified.
-		checks, err := sql.InspectChecksByIndexNames(ctx, p, stmt.Options.NamedIndexes())
-		if err != nil {
-			return inspectRun{}, err
+		switch stmt.Typ {
+		case tree.InspectTable:
+			schema, err := p.Descriptors().ByIDWithLeased(p.Txn()).Get().Schema(ctx, run.table.GetParentSchemaID())
+			if err != nil {
+				return inspectRun{}, err
+			}
+
+			tableName := tree.MakeTableNameWithSchema(
+				tree.Name(run.db.GetName()), tree.Name(schema.GetName()), tree.Name(run.table.GetName()),
+			)
+			if namedIndexes, err := stmt.Options.WithNamedIndexesOnTable(&tableName); err != nil {
+				return inspectRun{}, err
+			} else {
+				run.namedIndexes = namedIndexes
+			}
+		case tree.InspectDatabase:
+			if namedIndexes, err := stmt.Options.WithNamedIndexesInDatabase(run.db.GetName()); err != nil {
+				return inspectRun{}, err
+			} else {
+				run.namedIndexes = namedIndexes
+			}
 		}
-		run.checks = checks
+
+		if checks, err := sql.InspectChecksByIndexNames(ctx, p, run.namedIndexes); err != nil {
+			return inspectRun{}, err
+		} else {
+			run.checks = checks
+		}
 	}
 
 	if stmt.AsOf.Expr != nil {
