@@ -1023,6 +1023,8 @@ func TestCloudStorageWTF(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		// Speed up checkpointing to force periodic span-level checkpoints.
 		changefeedbase.SpanCheckpointInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
@@ -1057,7 +1059,7 @@ func TestCloudStorageWTF(t *testing.T) {
 
 		// Start a cloudstorage changefeed (cdcTest configures the sink for us).
 		// Force frequent resolved and checkpoint writes; no initial scan so we control emitted rows.
-		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, updated`
+		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', initial_scan='no', updated, format='json'`
 		cf := feed(t, f, feedStmt)
 		defer closeFeed(t, cf)
 
@@ -1094,6 +1096,8 @@ func TestCloudStorageWTF(t *testing.T) {
 		require.NotZero(t, chkTS)
 		require.True(t, hwm.Less(chkTS))
 
+		t.Logf("got our checkpoint. hwm: %s, chkTS: %s", hwm, chkTS)
+
 		// idea:
 		// - hwm = 1
 		// - emit F1 with K@1 and K@2
@@ -1108,35 +1112,52 @@ func TestCloudStorageWTF(t *testing.T) {
 
 		// wait for checkpoint after T1
 		testutils.SucceedsSoon(t, func() error {
-			_, chkTS := getHwmAndChkpt()
+			hwm, chkTS := getHwmAndChkpt()
 			if T1Ts.Less(chkTS) {
+				require.True(t, hwm.Less(chkTS))
+				t.Logf("got our checkpoint after T1. hwm: %s, chkTS: %s", hwm, chkTS)
 				return nil
 			}
 			return errors.Newf("waiting for checkpoint after T1: %s < %s", T1Ts, chkTS)
 		})
 
-		// make checkpoints not happen
-		// TODO
+		// make subsequent checkpoints not happen
+		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
 
 		T2TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T2' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
 		T2Ts, err := hlc.ParseHLC(T2TsStr)
 		require.NoError(t, err)
 
+		t.Logf("sent t2; T2Ts=%s", T2Ts)
+
 		// Pause
 		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+		t.Logf("paused")
 
 		// Make sure we didn't checkpoint >= T2
 		_, chkTS = getHwmAndChkpt()
 		require.False(t, T2Ts.LessEq(chkTS))
+		t.Logf("got our checkpoint after T2. hwm: %s, chkTS: %s", hwm, chkTS)
+
+		// Make sure we saw k@ T1
+		assertPayloads(t, cf, []string{
+			`foo: [1]->{"after": {"v": "T1"}}`,
+		})
 
 		// Resume (with a lower session id)
 		sessionID = "1_after"
 		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Resume())
+		t.Logf("resumed")
 
-		// TODO wait for T2 to be emitted
+		// wait for k@T2 to be emitted
+		assertPayloads(t, cf, []string{
+			`foo: [1]->{"after": {"v": "T2"}}`,
+		})
+		t.Logf("saw k@T2")
 
-		// pause again and validate
+		// stop and validate results
 		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+		t.Logf("done with setup; validating results")
 
 		// wait for no .tmp files
 		testutils.SucceedsSoon(t, func() error {
@@ -1153,6 +1174,7 @@ func TestCloudStorageWTF(t *testing.T) {
 				return nil
 			})
 		})
+		t.Logf("no tmp files left")
 
 		validator := cdctest.NewOrderValidator("foo")
 		require.NoError(t, filepath.Walk(cf.(*cloudFeed).dir, func(path string, d os.FileInfo, err error) error {
@@ -1192,6 +1214,7 @@ func TestCloudStorageWTF(t *testing.T) {
 				}
 				require.NoError(t, validator.NoteRow(cloudFeedPartition, string(row.Key), row.Topic, updated, "foo"))
 				nl++
+				t.Logf("file %s: %s", path, line)
 			}
 			return nil
 		}))
