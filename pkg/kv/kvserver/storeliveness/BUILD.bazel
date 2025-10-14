@@ -6,6 +6,7 @@ go_library(
         "config.go",
         "doc.go",
         "fabric.go",
+        "heartbeat_coodinator.go",
         "metrics.go",
         "node_manager.go",
         "persist.go",
@@ -47,6 +48,7 @@ go_test(
     name = "storeliveness_test",
     size = "large",
     srcs = [
+        "heartbeat_coodinator_test.go",
         "main_test.go",
         "multi_store_test.go",
         "persist_test.go",

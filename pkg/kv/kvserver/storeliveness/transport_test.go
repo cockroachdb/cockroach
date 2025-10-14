@@ -624,3 +624,240 @@ func TestTransportFullReceiveQueue(t *testing.T) {
 		},
 	)
 }
+
+// TestTransportSendBatchDirectLocal tests that SendBatchDirect short-circuits
+// and delivers messages locally without using RPC when the target node is the
+// same as the sender's node.
+func TestTransportSendBatchDirectLocal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	node1 := roachpb.NodeID(1)
+	store1 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	store2 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(2)}
+
+	tt.AddNode(node1)
+	h1 := tt.AddStore(store1)
+	h2 := tt.AddStore(store2)
+
+	msgs := []slpb.Message{
+		{Type: slpb.MsgHeartbeat, From: store1, To: store2},
+		{Type: slpb.MsgHeartbeat, From: store2, To: store1},
+	}
+
+	require.True(t, tt.transports[node1].SendBatchDirect(ctx, node1, msgs))
+
+	// Both messages should be delivered locally.
+	for i := 0; i < len(msgs); i++ {
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case m := <-h1.messages:
+				require.Equal(t, store2, m.From)
+				require.Equal(t, store1, m.To)
+				return nil
+			case m := <-h2.messages:
+				require.Equal(t, store1, m.From)
+				require.Equal(t, store2, m.To)
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive batched local message")
+		})
+	}
+
+	require.Equal(t, int64(len(msgs)), tt.transports[node1].metrics.MessagesSent.Count())
+}
+
+// TestTransportSendBatchDirectRemote tests that SendBatchDirect enqueues a batch
+// to a remote node and all messages are received.
+func TestTransportSendBatchDirectRemote(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
+	s1 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	s2 := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(2)}
+	s3 := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(3)}
+
+	tt.AddNode(node1)
+	tt.AddNode(node2)
+	_ = tt.AddStore(s1)
+	h2 := tt.AddStore(s2)
+	h3 := tt.AddStore(s3)
+
+	msgs := []slpb.Message{
+		{Type: slpb.MsgHeartbeat, From: s1, To: s2},
+		{Type: slpb.MsgHeartbeat, From: s1, To: s3},
+		{Type: slpb.MsgHeartbeat, From: s1, To: s2},
+	}
+
+	require.True(t, tt.transports[node1].SendBatchDirect(ctx, node2, msgs))
+
+	received := 0
+	for received < len(msgs) {
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case m := <-h2.messages:
+				require.Equal(t, s2, m.To)
+				require.Equal(t, s1, m.From)
+				received++
+				return nil
+			case m := <-h3.messages:
+				require.Equal(t, s3, m.To)
+				require.Equal(t, s1, m.From)
+				received++
+				return nil
+			default:
+			}
+			return errors.New("still waiting to receive batched remote message")
+		})
+	}
+
+	require.Equal(t, int64(1), tt.transports[node1].metrics.BatchesSent.Count())
+	require.Equal(t, int64(len(msgs)), tt.transports[node1].metrics.MessagesSent.Count())
+}
+
+// TestTransportSendBatchDirectCircuitBreaker simulates a crashed receiver and
+// verifies that SendBatchDirect is rejected while the circuit breaker is tripped.
+func TestTransportSendBatchDirectCircuitBreaker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	sender := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
+	tt.AddNode(sender.NodeID)
+	_ = tt.AddStore(sender)
+
+	receiver := slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
+	receiverStopper := stop.NewStopper()
+	addr := tt.AddNodeWithoutGossip(receiver.NodeID, receiverStopper)
+	_ = tt.AddStore(receiver)
+
+	msgs := []slpb.Message{{Type: slpb.MsgHeartbeat, From: sender, To: receiver}}
+
+	// Before gossiping the address, the first attempt may race, but once gossiped,
+	// it should work until the receiver stops and the breaker trips.
+	tt.UpdateGossip(receiver.NodeID, addr)
+	require.True(t, tt.transports[sender.NodeID].SendBatchDirect(ctx, receiver.NodeID, msgs))
+
+	// Stop the receiver and wait until the breaker trips, then expect rejection.
+	receiverStopper.Stop(context.Background())
+	testutils.SucceedsSoon(t, func() error {
+		if tt.transports[sender.NodeID].SendBatchDirect(ctx, receiver.NodeID, msgs) {
+			return errors.New("batch enqueue unexpectedly succeeded; waiting for breaker to trip")
+		}
+		return nil
+	})
+}
+
+// TestTransportBatchClockPropagation verifies that the HLC clock timestamps are
+// propagated via batched messages as well.
+func TestTransportBatchClockPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	sender := slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
+	receiver := slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
+
+	tt.AddNode(sender.NodeID)
+	_ = tt.AddStore(sender)
+	tt.AddNode(receiver.NodeID)
+	h := tt.AddStore(receiver)
+
+	senderClock := tt.clocks[sender.NodeID]
+	receiverClock := tt.clocks[receiver.NodeID]
+
+	// Pause both clocks and advance sender beyond receiver.
+	senderClock.manual.Pause()
+	receiverClock.manual.Pause()
+	receiverTime := receiverClock.clock.Now()
+	var senderTime hlc.Timestamp
+	for senderTime.LessEq(receiverTime) {
+		senderClock.manual.Increment(1_000_000)
+		senderTime = senderClock.clock.Now()
+	}
+	require.NotEqual(t, senderClock.clock.Now(), receiverClock.clock.Now())
+
+	msgs := []slpb.Message{{Type: slpb.MsgHeartbeat, From: sender, To: receiver}}
+	require.True(t, tt.transports[sender.NodeID].SendBatchDirect(ctx, receiver.NodeID, msgs))
+
+	// Wait for delivery so that receiver updates its clock from batch.Now.
+	testutils.SucceedsSoon(t, func() error {
+		select {
+		case m := <-h.messages:
+			require.Equal(t, msgs[0], *m)
+			return nil
+		default:
+		}
+		return errors.New("still waiting to receive batched message")
+	})
+
+	require.Equal(t, senderClock.clock.Now(), receiverClock.clock.Now())
+}
+
+// TestTransportIdleBatchQueue tests that the batch queue idles out and that
+// subsequent batches still deliver correctly after the idle period, without
+// asserting on internal metrics.
+func TestTransportIdleBatchQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
+	defer tt.Stop()
+
+	senderNode, receiverNode := roachpb.NodeID(1), roachpb.NodeID(2)
+	sender := slpb.StoreIdent{NodeID: senderNode, StoreID: roachpb.StoreID(1)}
+	receiver := slpb.StoreIdent{NodeID: receiverNode, StoreID: roachpb.StoreID(2)}
+
+	tt.AddNode(senderNode)
+	tt.AddNode(receiverNode)
+	_ = tt.AddStore(sender)
+	h := tt.AddStore(receiver)
+
+	// Set a very short idle timeout so the batch sender idles quickly between sends.
+	tt.transports[senderNode].knobs.OverrideIdleTimeout = func() time.Duration {
+		return time.Millisecond
+	}
+
+	firstBatch := []slpb.Message{{Type: slpb.MsgHeartbeat, From: sender, To: receiver}}
+	require.True(t, tt.transports[senderNode].SendBatchDirect(ctx, receiverNode, firstBatch))
+
+	// Verify receipt of the first batch.
+	testutils.SucceedsSoon(t, func() error {
+		select {
+		case m := <-h.messages:
+			require.Equal(t, firstBatch[0], *m)
+			return nil
+		default:
+		}
+		return errors.New("still waiting for first batch delivery")
+	})
+
+	// Wait long enough for the batch queue sender to idle out.
+	time.Sleep(10 * time.Millisecond)
+
+	secondBatch := []slpb.Message{{Type: slpb.MsgHeartbeat, From: sender, To: receiver}}
+	require.True(t, tt.transports[senderNode].SendBatchDirect(ctx, receiverNode, secondBatch))
+
+	// Verify receipt of the second batch as well.
+	testutils.SucceedsSoon(t, func() error {
+		select {
+		case m := <-h.messages:
+			require.Equal(t, secondBatch[0], *m)
+			return nil
+		default:
+		}
+		return errors.New("still waiting for second batch delivery")
+	})
+}
