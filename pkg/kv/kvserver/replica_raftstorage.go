@@ -312,8 +312,8 @@ type IncomingSnapshot struct {
 	placeholder      *ReplicaPlaceholder
 	raftAppliedIndex kvpb.RaftIndex      // logging only
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs       []pebble.SharedSSTMeta
-	externalSSTs     []pebble.ExternalFile
+	sharedSSTs       []kvserverpb.SnapshotRequest_SharedTable
+	externalSSTs     []kvserverpb.SnapshotRequest_ExternalTable
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
@@ -642,8 +642,8 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// Ingest the SSTs if the snapshot is applied using a Pebble ingestion.
 	ingestStats, err := sw.commit(ctx, snapIngestion{
 		paths:      inSnap.SSTStorageScratch.SSTs(),
-		shared:     inSnap.sharedSSTs,
-		external:   inSnap.externalSSTs,
+		shared:     convertSharedSSTs(inSnap.sharedSSTs),
+		external:   convertExternalSSTs(inSnap.externalSSTs),
 		exciseSpan: desc.KeySpan().AsRawSpanWithNoLocals(),
 	})
 	if err != nil {

@@ -131,8 +131,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	log.Event(ctx, "waiting for snapshot batches to begin")
 
-	var sharedSSTs []pebble.SharedSSTMeta
-	var externalSSTs []pebble.ExternalFile
+	var sharedSSTs []kvserverpb.SnapshotRequest_SharedTable
+	var externalSSTs []kvserverpb.SnapshotRequest_ExternalTable
 	var prevBytesEstimate int64
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
@@ -238,8 +238,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			timingTag.stop("sst")
 		}
 
-		sharedSSTs = append(sharedSSTs, convertSharedSSTs(req.SharedTables)...)
-		externalSSTs = append(externalSSTs, convertExternalSSTs(req.ExternalTables)...)
+		sharedSSTs = append(sharedSSTs, req.SharedTables...)
+		externalSSTs = append(externalSSTs, req.ExternalTables...)
 
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
@@ -262,7 +262,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			log.Eventf(ctx, "all data received from snapshot and all SSTs were finalized")
 			var sharedSize int64
 			for i := range sharedSSTs {
-				sharedSize += int64(sharedSSTs[i].Size)
+				sharedSize += int64(sharedSSTs[i].Size_)
 			}
 
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
