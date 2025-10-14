@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -166,69 +165,62 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, stopServer := makeServer(t)
-	defer stopServer()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-	knobs := s.TestingKnobs.
-		DistSQL.(*execinfra.TestingKnobs).
-		Changefeed.(*TestingKnobs)
-	knobs.WrapSink = func(s Sink, _ jobspb.JobID) Sink {
-		if _, ok := s.(*externalConnectionKafkaSink); ok {
-			return s
+		const apiSecret = "bar"
+		const certSecret = "Zm9v"
+		for _, tc := range []struct {
+			name                string
+			uri                 string
+			expectedSinkURI     string
+			expectedDescription string
+		}{
+			{
+				name: "api_secret",
+				uri:  fmt.Sprintf("confluent-cloud://nope?api_key=fee&api_secret=%s", apiSecret),
+			},
+			{
+				name: "sasl_password",
+				uri:  fmt.Sprintf("kafka://nope/?sasl_enabled=true&sasl_handshake=false&sasl_password=%s&sasl_user=aa", apiSecret),
+			},
+			{
+				name: "ca_cert",
+				uri:  fmt.Sprintf("kafka://nope?ca_cert=%s&tls_enabled=true", certSecret),
+			},
+			{
+				name: "shared_access_key",
+				uri:  fmt.Sprintf("azure-event-hub://nope?shared_access_key=%s&shared_access_key_name=plain", apiSecret),
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri))
+				defer closeFeed(t, foo)
+
+				efoo, ok := foo.(cdctest.EnterpriseTestFeed)
+				require.True(t, ok)
+				jobID := efoo.JobID()
+
+				var sinkURI, description string
+				sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
+				replacer := strings.NewReplacer(apiSecret, "redacted", certSecret, "redacted")
+				expectedSinkURI := replacer.Replace(tc.uri)
+				expectedDescription := replacer.Replace(fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri))
+				require.Equal(t, expectedSinkURI, sinkURI)
+				require.Equal(t, expectedDescription, description)
+			})
 		}
-		return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
-	}
-
-	sqlDB := sqlutils.MakeSQLRunner(s.DB)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-
-	const apiSecret = "bar"
-	const certSecret = "Zm9v"
-	for _, tc := range []struct {
-		name                string
-		uri                 string
-		expectedSinkURI     string
-		expectedDescription string
-	}{
-		{
-			name: "api_secret",
-			uri:  fmt.Sprintf("confluent-cloud://nope?api_key=fee&api_secret=%s", apiSecret),
-		},
-		{
-			name: "sasl_password",
-			uri:  fmt.Sprintf("kafka://nope/?sasl_enabled=true&sasl_handshake=false&sasl_password=%s&sasl_user=aa", apiSecret),
-		},
-		{
-			name: "ca_cert",
-			uri:  fmt.Sprintf("kafka://nope?ca_cert=%s&tls_enabled=true", certSecret),
-		},
-		{
-			name: "shared_access_key",
-			uri:  fmt.Sprintf("azure-event-hub://nope?shared_access_key=%s&shared_access_key_name=plain", apiSecret),
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri)
-			var jobID jobspb.JobID
-			sqlDB.QueryRow(t, createStmt).Scan(&jobID)
-			var sinkURI, description string
-			sqlDB.QueryRow(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOB $1]", jobID).Scan(&sinkURI, &description)
-			replacer := strings.NewReplacer(apiSecret, "redacted", certSecret, "redacted")
-			expectedSinkURI := replacer.Replace(tc.uri)
-			expectedDescription := replacer.Replace(createStmt)
-			require.Equal(t, expectedSinkURI, sinkURI)
-			require.Equal(t, expectedDescription, description)
+		t.Run("jobs", func(t *testing.T) {
+			queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
+			require.NotContains(t, queryStr, apiSecret)
+			require.NotContains(t, queryStr, certSecret)
+			queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
+			require.NotContains(t, queryStr, apiSecret)
+			require.NotContains(t, queryStr, certSecret)
 		})
 	}
-
-	t.Run("jobs", func(t *testing.T) {
-		queryStr := sqlDB.QueryStr(t, "SELECT description from [SHOW JOBS]")
-		require.NotContains(t, queryStr, apiSecret)
-		require.NotContains(t, queryStr, certSecret)
-		queryStr = sqlDB.QueryStr(t, "SELECT sink_uri, description from [SHOW CHANGEFEED JOBS]")
-		require.NotContains(t, queryStr, apiSecret)
-		require.NotContains(t, queryStr, certSecret)
-	})
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 }
 
 func TestShowChangefeedJobs(t *testing.T) {
