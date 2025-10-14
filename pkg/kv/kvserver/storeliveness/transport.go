@@ -28,6 +28,9 @@ const (
 	// Outgoing messages are queued per-node on a channel of this size.
 	sendBufferSize = 1000
 
+	//
+	batchSendBufferSize = 1000
+
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
 	idleTimeout = time.Minute
@@ -57,6 +60,11 @@ type sendQueue struct {
 	messages chan slpb.Message
 }
 
+// batchQueue is a queue of outgoing batches of Messages.
+type batchQueue struct {
+	messages chan []slpb.Message
+}
+
 // Transport handles the RPC messages for Store Liveness.
 //
 // Each node maintains a single instance of Transport that handles sending and
@@ -77,11 +85,14 @@ type Transport struct {
 	// handlers stores the MessageHandler for each store on the node.
 	handlers syncutil.Map[roachpb.StoreID, MessageHandler]
 
+	batchQueues syncutil.Map[roachpb.NodeID, batchQueue]
+
 	// TransportKnobs includes all knobs for testing.
 	knobs *TransportKnobs
 }
 
 var _ MessageSender = (*Transport)(nil)
+var _ BatchMessageSender = (*Transport)(nil)
 
 // NewTransport creates a new Store Liveness Transport.
 func NewTransport(
@@ -275,6 +286,35 @@ func (t *Transport) getQueue(nodeID roachpb.NodeID) (*sendQueue, bool) {
 	return queue, ok
 }
 
+// getBatchQueue returns the batch queue for the specified node ID and a boolean
+// indicating whether the queue already exists (true) or was created (false).
+func (t *Transport) getBatchQueue(nodeID roachpb.NodeID) (*batchQueue, bool) {
+	queue, ok := t.batchQueues.Load(nodeID)
+	if !ok {
+		bq := batchQueue{messages: make(chan []slpb.Message, batchSendBufferSize)}
+		queue, ok = t.batchQueues.LoadOrStore(nodeID, &bq)
+	}
+	return queue, ok
+}
+
+// createStreamForNode establishes a stream connection to the specified node.
+// This is shared by both the regular queue and batch queue systems.
+func (t *Transport) createStreamForNode(
+	ctx context.Context, nodeID roachpb.NodeID,
+) (slpb.RPCStoreLiveness_StreamClient, context.CancelFunc, error) {
+	client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, nodeID, connClass)
+	if err != nil {
+		return nil, nil, err
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := client.Stream(streamCtx)
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	return stream, cancel, nil
+}
+
 // startProcessNewQueue connects to the node and launches a worker goroutine
 // that processes the queue for the given node ID (which must exist) until
 // the underlying connection is closed or an error occurs. This method
@@ -309,19 +349,12 @@ func (t *Transport) startProcessNewQueue(
 			log.KvExec.Fatalf(ctx, "queue for n%d does not exist", toNodeID)
 		}
 		defer cleanup()
-		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, toNodeID, connClass)
+		stream, cancel, err := t.createStreamForNode(ctx, toNodeID)
 		if err != nil {
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
-		streamCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-
-		stream, err := client.Stream(streamCtx) // closed via cancellation
-		if err != nil {
-			log.KvExec.Warningf(ctx, "creating stream client for node %d failed: %s", toNodeID, err)
-			return
-		}
 
 		if err = t.processQueue(q, stream); err != nil {
 			log.KvExec.Warningf(ctx, "processing outgoing queue to node %d failed: %s:", toNodeID, err)
@@ -338,6 +371,171 @@ func (t *Transport) startProcessNewQueue(
 		return false
 	}
 	return true
+}
+
+// startProcessNewBatchQueue connects to the node and launches a worker goroutine
+// that processes the batch queue for the given node ID (which must exist) until
+// the underlying connection is closed or an error occurs. This method
+// takes on the responsibility of deleting the queue when the worker shuts down.
+//
+// Returns whether the worker was started (the queue is deleted either way).
+func (t *Transport) startProcessNewBatchQueue(
+	ctx context.Context, toNodeID roachpb.NodeID,
+) (started bool) {
+	cleanup := func() {
+		bq, ok := t.getBatchQueue(toNodeID)
+		t.batchQueues.Delete(toNodeID)
+		// Account for all remaining batches in the queue. SendBatchDirect may be
+		// writing to the queue concurrently, so it's possible that we won't
+		// account for a few batches below.
+		if ok {
+			for {
+				select {
+				case batch := <-bq.messages:
+					t.metrics.MessagesSendDropped.Inc(int64(len(batch)))
+				default:
+					return
+				}
+			}
+		}
+	}
+	worker := func(ctx context.Context) {
+		bq, existingQueue := t.getBatchQueue(toNodeID)
+		if !existingQueue {
+			log.KvExec.Fatalf(ctx, "batch queue for n%d does not exist", toNodeID)
+		}
+		defer cleanup()
+		stream, cancel, err := t.createStreamForNode(ctx, toNodeID)
+		if err != nil {
+			// DialNode already logs sufficiently, so just return.
+			return
+		}
+		defer cancel()
+
+		if err = t.processBatchQueue(bq, stream); err != nil {
+			log.KvExec.Warningf(ctx, "processing outgoing batch queue to node %d failed: %s:", toNodeID, err)
+		}
+	}
+	err := t.stopper.RunAsyncTask(
+		ctx, "storeliveness.Transport: sending batches",
+		func(ctx context.Context) {
+			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
+		},
+	)
+	if err != nil {
+		cleanup()
+		return false
+	}
+	return true
+}
+
+// SendBatchDirect sends a pre-formed batch of messages to a node asynchronously.
+// Used by HeartbeatCoordinator for smeared batch sending.
+// This uses a dedicated batch queue with persistent RPC connection reuse.
+// Returns true if the batch was successfully enqueued, false otherwise.
+func (t *Transport) SendBatchDirect(
+	ctx context.Context, nodeID roachpb.NodeID, messages []slpb.Message,
+) bool {
+	if len(messages) == 0 {
+		return true
+	}
+
+	// If this is a batch to the local node, handle all messages directly
+	// without going through GRPC.
+	if len(messages) > 0 && messages[0].From.NodeID == nodeID {
+		for i := range messages {
+			t.handleMessage(ctx, &messages[i])
+		}
+		t.metrics.MessagesSent.Inc(int64(len(messages)))
+		return true
+	}
+
+	if b, ok := t.dialer.GetCircuitBreaker(nodeID, connClass); ok && b.Signal().Err() != nil {
+		t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+		return false
+	}
+
+	bq, existingQueue := t.getBatchQueue(nodeID)
+	if !existingQueue {
+		// Note that startProcessNewBatchQueue is in charge of deleting the queue.
+		ctx := t.AnnotateCtx(context.Background())
+		if !t.startProcessNewBatchQueue(ctx, nodeID) {
+			return false
+		}
+	}
+
+	select {
+	case bq.messages <- messages:
+		// Successfully enqueued the batch
+		return true
+	default:
+		if logQueueFullEvery.ShouldLog() {
+			log.KvExec.Warningf(
+				t.AnnotateCtx(context.Background()),
+				"store liveness batch queue to n%d is full", nodeID,
+			)
+		}
+		t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+		return false
+	}
+}
+
+// processBatchQueue opens a Store Liveness client stream and sends pre-formed
+// batches from the designated queue via that stream, exiting when an error is
+// received or when it idles out. All batches remaining in the queue at that
+// point are lost and a new instance of processBatchQueue will be started by
+// the next batch to be sent.
+func (t *Transport) processBatchQueue(
+	bq *batchQueue, stream slpb.RPCStoreLiveness_StreamClient,
+) (err error) {
+	defer func() {
+		_, closeErr := stream.CloseAndRecv()
+		err = errors.Join(err, closeErr)
+	}()
+
+	getIdleTimeout := func() time.Duration {
+		if overrideFn := t.knobs.OverrideIdleTimeout; overrideFn != nil {
+			return overrideFn()
+		} else {
+			return idleTimeout
+		}
+	}
+	var idleTimer timeutil.Timer
+	defer idleTimer.Stop()
+
+	for {
+		idleTimer.Reset(getIdleTimeout())
+		select {
+		case <-t.stopper.ShouldQuiesce():
+			return nil
+
+		case <-idleTimer.C:
+			// No batches for idle timeout period - shut down
+			return nil
+
+		case messages := <-bq.messages:
+			// Send the pre-formed batch
+			batch := &slpb.MessageBatch{
+				Messages: messages,
+				Now:      t.clock.NowAsClockTimestamp(),
+			}
+
+			if err = stream.Send(batch); err != nil {
+				t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+				return err
+			}
+
+			t.metrics.BatchesSent.Inc(1)
+			t.metrics.MessagesSent.Inc(int64(len(messages)))
+			t.metrics.MessagesPerBatch.Inc(int64(len(messages)))
+
+			var batchSizeBytes int64
+			for _, msg := range messages {
+				batchSizeBytes += int64(msg.Size())
+			}
+			t.metrics.BatchSizeBytes.RecordValue(batchSizeBytes)
+		}
+	}
 }
 
 // processQueue opens a Store Liveness client stream and sends messages from the

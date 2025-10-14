@@ -41,8 +41,9 @@ func TestStoreLiveness(t *testing.T) {
 			defer stopper.Stop(ctx)
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
-			sender := testMessageSender{}
-			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, &sender, nil)
+			sender := &mockBatchTransport{}
+			heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, heartbeatCoordinator, nil)
 			require.NoError(t, sm.onRestart(ctx))
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -67,13 +68,18 @@ func TestStoreLiveness(t *testing.T) {
 						sm.options.SupportDuration = parseDuration(t, d, "support-duration")
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
-						heartbeats := sender.drainSentMessages()
+
+						time.Sleep(20 * time.Millisecond)
+
+						heartbeats := sender.getBatchMessages()
+						sender.clearBatchMessages()
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
 					case "handle-messages":
 						msgs := parseMsgs(t, d, storeID)
 						sm.handleMessages(ctx, msgs)
-						responses := sender.drainSentMessages()
+						responses := sender.getAsyncMessages()
+						sender.clearAsyncMessages()
 						if len(responses) > 0 {
 							return fmt.Sprintf("responses:\n%s", printMsgs(responses))
 						} else {
@@ -90,8 +96,9 @@ func TestStoreLiveness(t *testing.T) {
 						now := parseTimestamp(t, d, "now")
 						gracePeriod := parseDuration(t, d, "grace-period")
 						o := Options{SupportWithdrawalGracePeriod: gracePeriod}
+						heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
 						sm = NewSupportManager(
-							storeID, engine, o, settings, stopper, clock, nil, &sender, nil,
+							storeID, engine, o, settings, stopper, clock, nil, heartbeatCoordinator, nil,
 						)
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
