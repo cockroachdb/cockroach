@@ -22,7 +22,7 @@ true
 
 # Ditto, but implicit start key \x03
 query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x04')
+SELECT count(*) = 2 FROM crdb_internal.check_consistency(true, '', '\x04')
 ----
 true
 

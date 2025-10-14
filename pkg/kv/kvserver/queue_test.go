@@ -721,7 +721,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 		},
 		stopper)
 
-	maxWontSplitAddr, err := keys.Addr(keys.SystemPrefix)
+	maxWontSplitAddr, err := keys.Addr(keys.Meta1KeyMax)
 	require.NoError(t, err)
 
 	minWillSplitAddr, err := keys.Addr(keys.TableDataMin)
