@@ -26,7 +26,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		// schemachange/mixed-versions tests random schema changes (via the schemachange workload)
 		// in a mixed version state, validating that the cluster is still healthy (via debug doctor examine).
-		Name:    "schemachange/mixed-versions",
+		Name:    "schemachange/mixed-versions/will",
 		Owner:   registry.OwnerSQLFoundations,
 		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
 		// Disabled on IBM because s390x is only built on master and mixed-version
@@ -62,6 +62,7 @@ func runSchemaChangeMixedVersions(
 		// appear in the latest patch of the predecessor version.
 		// See: https://github.com/cockroachdb/cockroach/issues/121411.
 		mixedversion.AlwaysUseLatestPredecessors,
+		mixedversion.WithWorkloadNodesWithDedicatedWorkloadBinary(c.WorkloadNode()),
 	)
 	tester := newSchemaChangeMixedVersionTester(t, c, maxOps, concurrency)
 
@@ -103,6 +104,7 @@ func newSchemaChangeMixedVersionTester(
 func (t schemaChangeMixedVersionTester) initWorkload(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	// Just a util to get the binary path, this shouldn't upload a binary because we front loaded that work
 	binaryPath, _, err := clusterupgrade.UploadWorkload(
 		ctx, t.t, l, t.c, t.c.WorkloadNode(), h.System.FromVersion)
 	if err != nil {
@@ -119,6 +121,7 @@ func (t schemaChangeMixedVersionTester) schemaChangeAndValidationStep(
 	t.numFeatureRuns += 1
 	l.Printf("Workload step run: %d", t.numFeatureRuns)
 	workloadSeed := r.Int63()
+	// Just a util to get the binary path, this shouldn't upload a binary because we front loaded that work
 	binaryPath, _, err := clusterupgrade.UploadWorkload(
 		ctx, t.t, l, t.c, t.c.WorkloadNode(), h.System.FromVersion)
 	if err != nil {

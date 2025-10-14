@@ -1051,3 +1051,44 @@ func (s stageAllWorkloadBinariesStep) Run(
 func (s stageAllWorkloadBinariesStep) ConcurrencyDisabled() bool {
 	return true
 }
+
+// stageAllDedicatedWorkloadBinariesStep stages new dedicated workload binaries
+// on workload node(s)
+type stageAllDedicatedWorkloadBinariesStep struct {
+	versions      []*clusterupgrade.Version
+	rt            test.Test
+	workloadNodes option.NodeListOption
+}
+
+func (s stageAllDedicatedWorkloadBinariesStep) Background() shouldStop { return nil }
+func (s stageAllDedicatedWorkloadBinariesStep) Description(debug bool) string {
+	versionStrings := make([]string, len(s.versions))
+	for i, v := range s.versions {
+		versionStrings[i] = v.String()
+	}
+	return fmt.Sprintf("stage dedicated workload binary on workload node(s) %s for version(s) %s",
+		s.workloadNodes.String(), strings.Join(versionStrings, ", "))
+}
+
+// Run stages all the dedicated workload binaries needed for workload for this test
+// on the workload node(s) to keep the workload binary version in sync with the
+// cluster version
+func (s stageAllDedicatedWorkloadBinariesStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+
+	for _, version := range s.versions {
+		_, installed, err := clusterupgrade.UploadWorkload(
+			ctx, s.rt, l, h.runner.cluster, s.workloadNodes, version)
+		if err != nil {
+			return err
+		}
+		if !installed {
+			return errors.Errorf("workload binary not installed on %s (bc the version passed (%s) is too old and no binary is available)", s.workloadNodes, version.String())
+		}
+	}
+	return nil
+}
+func (s stageAllDedicatedWorkloadBinariesStep) ConcurrencyDisabled() bool {
+	return true
+}
