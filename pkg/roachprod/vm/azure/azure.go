@@ -236,14 +236,15 @@ func (p *Provider) GetVMSpecs(
 		if err != nil {
 			return nil, err
 		}
+		l.Printf("Getting VM Specs for VM: %s", vmInstance.Name)
 		azureVm, err := client.Get(ctx, azureVmId.resourceGroup, azureVmId.resourceName, "")
 		if err != nil {
-			return nil, errors.Errorf("failed to get vm information for vm: %s", vmInstance.Name)
+			return nil, errors.Wrapf(err, "failed to get vm information for vm %s", vmInstance.Name)
 		}
 		// Marshaling & unmarshalling struct to match interface method return type
 		rawJSON, err := azureVm.MarshalJSON()
 		if err != nil {
-			return nil, errors.Errorf("failed to marshal vm information for vm: %s", vmInstance.Name)
+			return nil, errors.Wrapf(err, "failed to marshal vm information for vm %s", vmInstance.Name)
 		}
 		var vmSpec map[string]interface{}
 		if err := json.Unmarshal(rawJSON, &vmSpec); err != nil {
