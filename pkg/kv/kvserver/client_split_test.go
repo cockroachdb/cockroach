@@ -1945,15 +1945,19 @@ func runSetupSplitSnapshotRace(
 	// are up to date.
 	tc.WaitForValues(t, rightKey, []int64{0, 0, 0, 0 /* stopped */, 5, 5})
 
-	// Scan the meta ranges to resolve all intents
-	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender),
-		&kvpb.ScanRequest{
+	// Scan the meta ranges to resolve all intents.
+	if err := tc.Server(0).DB().Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+		ba := &kvpb.BatchRequest{}
+		ba.Add(&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key:    keys.MetaMin,
 				EndKey: keys.MetaMax,
 			},
-		}); pErr != nil {
-		t.Fatal(pErr)
+		})
+		_, pErr := txn.Send(ctx, ba)
+		return pErr.GoError()
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Stop the remaining data stores.

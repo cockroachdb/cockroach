@@ -91,10 +91,15 @@ func TestReplicaCollection(t *testing.T) {
 
 		// Check counters on retrieved replica info.
 		cnt := getInfoCounters(replicas)
+
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
 		if expectRangeMeta {
-			require.Equal(t, totalRanges, cnt.descriptors,
+			// The number of range descriptors is counted by iterating over meta2
+			// keys. Since meta1 and meta2 ranges are split, the number of range
+			// descriptors is going to be one less than the number of ranges as meta1
+			// is a range but its descriptor isn't stored in meta2.
+			require.Equal(t, totalRanges, cnt.descriptors+1,
 				"number of collected descriptors from metadata")
 		}
 		require.Equal(t, totalRanges*liveNodes, cnt.replicas, "number of collected replicas")
@@ -102,7 +107,7 @@ func TestReplicaCollection(t *testing.T) {
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
 		if expectRangeMeta {
-			require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
+			require.Equal(t, totalRanges, stats.Descriptors+1, "range descriptor counter stats")
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
 		require.Equal(t, replicas.Version,
@@ -166,14 +171,18 @@ func TestStreamRestart(t *testing.T) {
 		cnt := getInfoCounters(replicas)
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
-		require.Equal(t, totalRanges, cnt.descriptors,
+		// The number of range descriptors is counted by iterating over meta2
+		// keys. Since meta1 and meta2 ranges are split, the number of range
+		// descriptors is going to be one less than the number of ranges as meta1
+		// is a range but its descriptor isn't stored in meta2.
+		require.Equal(t, totalRanges, cnt.descriptors+1,
 			"number of collected descriptors from metadata")
 		require.Equal(t, totalRanges*liveNodes, cnt.replicas,
 			"number of collected replicas")
 		// Check stats counters as well.
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
-		require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
+		require.Equal(t, totalRanges, stats.Descriptors+1, "range descriptor counter stats")
 	}
 
 	assertReplicas(3)

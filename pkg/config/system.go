@@ -458,6 +458,7 @@ func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry
 }
 
 var staticSplits = []roachpb.RKey{
+	roachpb.RKey(keys.Meta2Prefix),                  // start of meta2 span
 	roachpb.RKey(keys.NodeLivenessPrefix),           // end of meta records / start of node liveness span
 	roachpb.RKey(keys.NodeLivenessKeyMax),           // end of node liveness span
 	roachpb.RKey(keys.TimeseriesPrefix),             // start of timeseries span

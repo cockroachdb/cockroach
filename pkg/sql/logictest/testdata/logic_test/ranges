@@ -169,7 +169,8 @@ query TTTTTI colnames,rowsort
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, crdb_internal.lease_holder(start_key) FROM crdb_internal.ranges_no_leases;
 ----
 encode                  start_pretty             encode                  end_pretty               replicas  crdb_internal.lease_holder
-·                       /Min                     04006c6976656e6573732d  /System/NodeLiveness     {1}       1
+·                       /Min                     03                      /Meta2/""                {1}       1
+03                      /Meta2/""                04006c6976656e6573732d  /System/NodeLiveness     {1}       1
 04006c6976656e6573732d  /System/NodeLiveness     04006c6976656e6573732e  /System/NodeLivenessMax  {1}       1
 04006c6976656e6573732e  /System/NodeLivenessMax  04747364                /System/tsd              {1}       1
 04747364                /System/tsd              04747365                /System/"tse"            {1}       1
@@ -268,7 +269,8 @@ query TTTTTI colnames,rowsort
 SELECT encode(start_key, 'hex'), start_pretty, encode(end_key, 'hex'), end_pretty, replicas, lease_holder FROM crdb_internal.ranges
 ----
 encode                  start_pretty             encode                  end_pretty               replicas  lease_holder
-·                       /Min                     04006c6976656e6573732d  /System/NodeLiveness     {1}       1
+·                       /Min                     03                      /Meta2/""                {1}       1
+03                      /Meta2/""                04006c6976656e6573732d  /System/NodeLiveness     {1}       1
 04006c6976656e6573732d  /System/NodeLiveness     04006c6976656e6573732e  /System/NodeLivenessMax  {1}       1
 04006c6976656e6573732e  /System/NodeLivenessMax  04747364                /System/tsd              {1}       1
 04747364                /System/tsd              04747365                /System/"tse"            {1}       1
