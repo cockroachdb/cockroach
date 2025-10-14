@@ -359,19 +359,17 @@ func TestUnbufferedRegOnCatchUpSwitchOver(t *testing.T) {
 			defer wg.Done()
 			r.runOutputLoop(ctx, 0)
 		}()
-		capOfBuf := cap(r.mu.catchUpBuf)
-		r.publish(ctx, ev1, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev2, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev3, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev4, &SharedBudgetAllocation{refCount: 1})
-		r.publish(ctx, ev5, &SharedBudgetAllocation{refCount: 1})
+		postCatchUpEvents := []*kvpb.RangeFeedEvent{ev1, ev2, ev3, ev4, ev5}
+		for _, ev := range postCatchUpEvents {
+			r.publish(ctx, ev, &SharedBudgetAllocation{refCount: 1})
+		}
 		catchUpEvents := expEvents(false)
 		wg.Wait()
 
 		require.False(t, r.getOverflowed())
 		require.Nil(t, r.getBuf())
-		s.waitForEventCount(t, capOfBuf+len(catchUpEvents))
+		s.waitForEventCount(t, len(postCatchUpEvents)+len(catchUpEvents))
 		require.Equal(t,
-			[]*kvpb.RangeFeedEvent{ev1, ev2, ev3, ev4, ev5}, s.mu.events[len(catchUpEvents):])
+			postCatchUpEvents, s.mu.events[len(catchUpEvents):])
 	})
 }
