@@ -123,7 +123,7 @@ func alterTableAddCheck(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tbl.TableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tbl.TableID, columnName)
 		},
 	)
@@ -522,7 +522,7 @@ func alterTableAddUniqueWithoutIndex(
 			func() colinfo.ResultColumns {
 				return getNonDropResultColumns(b, tbl.TableID)
 			},
-			func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+			func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 				return columnLookupFn(b, tbl.TableID, columnName)
 			},
 		)
@@ -681,15 +681,16 @@ func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.Resu
 // It should be exclusively used in DequalifyAndValidateExprImpl.
 func columnLookupFn(
 	b BuildCtx, tableID catid.DescID, columnName tree.Name,
-) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
 	if columnID == 0 {
-		return false, false, 0, nil
+		return false, false, false, 0, nil
 	}
 
 	colElem := mustRetrieveColumnElem(b, tableID, columnID)
 	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
-	return true, !colElem.IsInaccessible, columnID, colTypeElem.Type
+	computeExpr := retrieveColumnComputeExpression(b, tableID, columnID)
+	return true, !colElem.IsInaccessible, computeExpr != nil, columnID, colTypeElem.Type
 }
 
 // generateUniqueCheckConstraintName generates a unique name for check constraint.
