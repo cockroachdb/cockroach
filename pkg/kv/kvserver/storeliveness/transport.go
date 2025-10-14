@@ -28,7 +28,7 @@ const (
 	// Outgoing messages are queued per-node on a channel of this size.
 	sendBufferSize = 1000
 
-	//
+	// Outgoing batches are queued per-node on a channel of this size.
 	batchSendBufferSize = 1000
 
 	// When no message has been queued for this duration, the corresponding
@@ -466,7 +466,6 @@ func (t *Transport) SendBatchDirect(
 
 	select {
 	case bq.messages <- messages:
-		// Successfully enqueued the batch
 		return true
 	default:
 		if logQueueFullEvery.ShouldLog() {
@@ -510,11 +509,9 @@ func (t *Transport) processBatchQueue(
 			return nil
 
 		case <-idleTimer.C:
-			// No batches for idle timeout period - shut down
 			return nil
 
 		case messages := <-bq.messages:
-			// Send the pre-formed batch
 			batch := &slpb.MessageBatch{
 				Messages: messages,
 				Now:      t.clock.NowAsClockTimestamp(),
