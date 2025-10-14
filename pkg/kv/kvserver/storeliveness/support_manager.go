@@ -39,10 +39,24 @@ var HeartbeatSmearDuration = settings.RegisterDurationSetting(
 	10*time.Millisecond,
 )
 
+var HeartbeatBatchingDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_batching_duration",
+	"duration over which heartbeat messages are batched to per-node destination queues;",
+	10*time.Millisecond,
+)
+
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
 	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
+}
+
+// BatchMessageSender extends MessageSender with the ability to send batches directly.
+// This is used by HeartbeatCoordinator to send smeared batches.
+type BatchMessageSender interface {
+	MessageSender
+	SendBatchDirect(ctx context.Context, nodeID roachpb.NodeID, messages []slpb.Message) bool
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.

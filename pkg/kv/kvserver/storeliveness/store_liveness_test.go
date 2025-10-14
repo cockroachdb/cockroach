@@ -41,7 +41,7 @@ func TestStoreLiveness(t *testing.T) {
 			defer stopper.Stop(ctx)
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
-			sender := &mockTransport{}
+			sender := &mockBatchTransport{}
 			tickDuration := 1 * time.Second
 			coordinator := NewHeartbeatCoordinator(sender, tickDuration, stopper, settings)
 			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, coordinator, nil)
@@ -74,13 +74,15 @@ func TestStoreLiveness(t *testing.T) {
 						// Collection window (10ms) + smear duration (10ms) + small buffer
 						time.Sleep(25 * time.Millisecond)
 
-						heartbeats := sender.drainSentMessages()
+						heartbeats := sender.getBatchMessages()
+						sender.clearBatchMessages() // Clear after capturing
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
 					case "handle-messages":
 						msgs := parseMsgs(t, d, storeID)
 						sm.handleMessages(ctx, msgs)
-						responses := sender.drainSentMessages()
+						responses := sender.getAsyncMessages()
+						sender.clearAsyncMessages() // Clear after capturing
 						if len(responses) > 0 {
 							return fmt.Sprintf("responses:\n%s", printMsgs(responses))
 						} else {

@@ -82,6 +82,7 @@ type Transport struct {
 }
 
 var _ MessageSender = (*Transport)(nil)
+var _ BatchMessageSender = (*Transport)(nil)
 
 // NewTransport creates a new Store Liveness Transport.
 func NewTransport(
@@ -338,6 +339,89 @@ func (t *Transport) startProcessNewQueue(
 		return false
 	}
 	return true
+}
+
+// SendBatchDirect sends a pre-formed batch of messages to a node asynchronously.
+// Used by HeartbeatCoordinator for smeared batch sending.
+// This bypasses Transport's internal queuing and sends the batch directly.
+// Returns true if the async task was successfully started, false otherwise.
+func (t *Transport) SendBatchDirect(
+	ctx context.Context, nodeID roachpb.NodeID, messages []slpb.Message,
+) bool {
+	if len(messages) == 0 {
+		return true
+	}
+
+	worker := func(ctx context.Context) {
+		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, nodeID, connClass)
+		if err != nil {
+			// DialNode already logs sufficiently, so just return.
+			t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+			return
+		}
+
+		streamCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		stream, err := client.Stream(streamCtx) // closed via cancellation
+		if err != nil {
+			log.KvExec.Warningf(ctx, "creating stream client for node %d failed: %s", nodeID, err)
+			t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+			return
+		}
+
+		if err = t.processBatchDirect(messages, stream); err != nil {
+			log.KvExec.Warningf(ctx, "sending batch to node %d failed: %s", nodeID, err)
+		}
+	}
+
+	err := t.stopper.RunAsyncTask(
+		ctx, "storeliveness.Transport: sending batch",
+		func(ctx context.Context) {
+			pprof.Do(ctx, pprof.Labels("remote_node_id", nodeID.String()), worker)
+		},
+	)
+	if err != nil {
+		t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+		return false
+	}
+	return true
+}
+
+// processBatchDirect sends a batch of messages over an established stream.
+// This is similar to processQueue but for a single batch send.
+func (t *Transport) processBatchDirect(
+	messages []slpb.Message, stream slpb.RPCStoreLiveness_StreamClient,
+) (err error) {
+	defer func() {
+		_, closeErr := stream.CloseAndRecv()
+		err = errors.Join(err, closeErr)
+	}()
+
+	// Build the batch
+	batch := &slpb.MessageBatch{
+		Messages: messages,
+		Now:      t.clock.NowAsClockTimestamp(),
+	}
+
+	// Send batch
+	if err = stream.Send(batch); err != nil {
+		t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+		return err
+	}
+
+	// Update metrics
+	t.metrics.BatchesSent.Inc(1)
+	t.metrics.MessagesSent.Inc(int64(len(messages)))
+	t.metrics.MessagesPerBatch.Inc(int64(len(messages)))
+
+	var batchSizeBytes int64
+	for _, msg := range messages {
+		batchSizeBytes += int64(msg.Size())
+	}
+	t.metrics.BatchSizeBytes.RecordValue(batchSizeBytes)
+
+	return nil
 }
 
 // processQueue opens a Store Liveness client stream and sends messages from the

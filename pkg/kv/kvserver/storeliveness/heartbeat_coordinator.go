@@ -35,7 +35,7 @@ func (c *heartbeatPacerConfig) GetSmear() time.Duration {
 }
 
 type HeartbeatCoordinator struct {
-	transport    MessageSender
+	transport    BatchMessageSender
 	tickDuration time.Duration
 	stopper      *stop.Stopper
 	settings     *cluster.Settings
@@ -48,8 +48,7 @@ type HeartbeatCoordinator struct {
 }
 
 type DestinationQueue struct {
-	mu       syncutil.Mutex
-	messages []slpb.Message
+	messages chan slpb.Message
 }
 
 // Ensure HeartbeatCoordinator implements MessageSender interface
@@ -57,7 +56,7 @@ var _ MessageSender = (*HeartbeatCoordinator)(nil)
 
 // NewHeartbeatCoordinator creates a new HeartbeatCoordinator.
 func NewHeartbeatCoordinator(
-	transport MessageSender,
+	transport BatchMessageSender,
 	tickDuration time.Duration,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
@@ -135,8 +134,7 @@ func (c *HeartbeatCoordinator) Enqueue(messages []slpb.Message) int {
 		}
 
 		// Enqueue the message
-		c.enqueueToQueue(queue, msg)
-
+		queue.messages <- msg
 		successes++
 	}
 
@@ -150,19 +148,10 @@ func (c *HeartbeatCoordinator) Enqueue(messages []slpb.Message) int {
 func (c *HeartbeatCoordinator) updateTotalMessagesMetric() {
 	totalMessages := 0
 	c.nodeQueues.Range(func(nodeID roachpb.NodeID, queue **DestinationQueue) bool {
-		(*queue).mu.Lock()
-		defer (*queue).mu.Unlock()
 		totalMessages += len((*queue).messages)
 		return true
 	})
 	c.metrics.TotalMessagesInQueues.Update(int64(totalMessages))
-}
-
-// enqueueToQueue safely appends a message to a queue with proper locking.
-func (c *HeartbeatCoordinator) enqueueToQueue(queue *DestinationQueue, msg slpb.Message) {
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
-	queue.messages = append(queue.messages, msg)
 }
 
 // getOrCreateQueue returns the queue for the given nodeID, creating it if necessary.
@@ -173,9 +162,9 @@ func (c *HeartbeatCoordinator) getOrCreateQueue(nodeID roachpb.NodeID) (*Destina
 		return *queue, false
 	}
 
-	// Create new queue
+	// Create new queue with buffered channel
 	queue := &DestinationQueue{
-		messages: make([]slpb.Message, 0),
+		messages: make(chan slpb.Message, 1000),
 	}
 
 	// Store the new queue (or get existing if another goroutine created it)
@@ -190,10 +179,7 @@ func (c *HeartbeatCoordinator) drainAndSmear(ctx context.Context) {
 	// Collect all nodeIDs that have messages
 	var nodeIDs []roachpb.NodeID
 	c.nodeQueues.Range(func(nodeID roachpb.NodeID, queue **DestinationQueue) bool {
-		(*queue).mu.Lock()
-		defer (*queue).mu.Unlock()
-		hasMessages := len((*queue).messages) > 0
-		if hasMessages {
+		if len((*queue).messages) > 0 {
 			nodeIDs = append(nodeIDs, nodeID)
 		}
 		return true
@@ -260,28 +246,30 @@ func (c *HeartbeatCoordinator) processNodeQueue(ctx context.Context, nodeID roac
 		return
 	}
 
-	// Drain queue with lock
-	(*queue).mu.Lock()
-	defer (*queue).mu.Unlock()
-	messages := (*queue).messages
-	(*queue).messages = (*queue).messages[:0] // Reuse capacity
+	// Drain channel into slice
+	var messages []slpb.Message
+	for {
+		select {
+		case msg := <-(*queue).messages:
+			messages = append(messages, msg)
+		default:
+			goto done
+		}
+	}
+done:
 
 	if len(messages) == 0 {
 		return
 	}
 
-	// Send messages via Transport
-	messagesSent := 0
-	for _, msg := range messages {
-		success := c.transport.SendAsync(ctx, msg)
-		if success {
-			messagesSent++
-		} else {
-			c.metrics.SendErrors.Inc(1)
-		}
+	// Send batch directly via Transport, bypassing its queues
+	success := c.transport.SendBatchDirect(ctx, nodeID, messages)
+	if !success {
+		c.metrics.SendErrors.Inc(int64(len(messages)))
+		log.KvExec.Warningf(ctx, "Failed to send batch to node %d", nodeID)
+	} else {
+		c.metrics.MessagesSent.Inc(int64(len(messages)))
 	}
-
-	c.metrics.MessagesSent.Inc(int64(messagesSent))
 }
 
 // ClearQueues clears all pending messages from all queues.
@@ -289,25 +277,36 @@ func (c *HeartbeatCoordinator) processNodeQueue(ctx context.Context, nodeID roac
 // of previously enqueued messages.
 func (c *HeartbeatCoordinator) ClearQueues() {
 	c.nodeQueues.Range(func(nodeID roachpb.NodeID, queue **DestinationQueue) bool {
-		(*queue).mu.Lock()
-		defer (*queue).mu.Unlock()
-		(*queue).messages = (*queue).messages[:0]
-		return true
+		// Drain channel
+		for {
+			select {
+			case <-(*queue).messages:
+			default:
+				return true
+			}
+		}
 	})
 	c.updateTotalMessagesMetric()
 }
 
 // run contains the main processing goroutine which waits for signals and processes batches.
 func (c *HeartbeatCoordinator) run(ctx context.Context) {
+	var batchTimer timeutil.Timer
+	defer batchTimer.Stop()
 	for {
 		select {
 		case <-c.signalChan:
 			// Collection window: allow other stores to enqueue
-			collectionDuration := 10 * time.Millisecond
-			time.Sleep(collectionDuration)
+			batchingDuration := HeartbeatBatchingDuration.Get(&c.settings.SV)
+			batchTimer.Reset(batchingDuration)
+			for done := false; !done; {
+				select {
+				case <-c.signalChan:
 
-			// Drain any additional signals that arrived during sleep
-			c.drainPendingSignals()
+				case <-batchTimer.C:
+					done = true
+				}
+			}
 
 			// Process the batch
 			c.drainAndSmear(ctx)
