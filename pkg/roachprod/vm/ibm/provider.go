@@ -228,7 +228,7 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 		//		b) <user-home-dir>/ibm-credentials.env which is not currently used
 		//		c) <current-working-directory>/ibm-credentials.env which is not currently used
 		// 2) Then uses the passed in string argument as a prefix and matches to
-		//	  any env var with a matching prefix. If IBM_APIKEY isn't set as then
+		//	  any env var with a matching prefix. If IBM_APIKEY isn't set then
 		//	  this function continues.
 		// 3) Finally, will try to load VCAP_SERVICES which is not currently used
 		//
