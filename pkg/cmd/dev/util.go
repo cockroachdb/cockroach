@@ -269,3 +269,11 @@ func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
 	}
 	return strings.TrimSpace(string(baseBytes)), nil
 }
+
+func addCommonBazelArguments(args *[]string) {
+	if numCPUs != 0 {
+		*args = append(*args, fmt.Sprintf("--local_resources=cpu=%d", numCPUs))
+		*args = append(*args, fmt.Sprintf("--jobs=%d", numCPUs))
+		*args = append(*args, fmt.Sprintf("--local_test_jobs=%d", numCPUs))
+	}
+}

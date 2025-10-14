@@ -368,10 +368,7 @@ func (d *dev) getBasicBuildArgs(
 	}
 
 	args = append(args, "build")
-	if numCPUs != 0 {
-		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
-	}
-
+	addCommonBazelArguments(&args)
 	canDisableNogo := true
 	shouldBuildWithTestConfig := false
 	for _, target := range targets {
