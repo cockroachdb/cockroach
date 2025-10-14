@@ -42,8 +42,8 @@ func TestStoreLiveness(t *testing.T) {
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
 			sender := &mockBatchTransport{}
-			heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+			coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, coordinator, nil)
 			require.NoError(t, sm.onRestart(ctx))
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -69,17 +69,19 @@ func TestStoreLiveness(t *testing.T) {
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
 
-						time.Sleep(20 * time.Millisecond)
+						// Wait for async heartbeat processing to complete.
+						// Collection window (10ms) + smear duration (10ms) + small buffer.
+						time.Sleep(25 * time.Millisecond)
 
 						heartbeats := sender.getBatchMessages()
-						sender.clearBatchMessages()
+						sender.clearBatchMessages() // Clear after capturing
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
 					case "handle-messages":
 						msgs := parseMsgs(t, d, storeID)
 						sm.handleMessages(ctx, msgs)
 						responses := sender.getAsyncMessages()
-						sender.clearAsyncMessages()
+						sender.clearAsyncMessages() // Clear after capturing
 						if len(responses) > 0 {
 							return fmt.Sprintf("responses:\n%s", printMsgs(responses))
 						} else {
@@ -96,9 +98,8 @@ func TestStoreLiveness(t *testing.T) {
 						now := parseTimestamp(t, d, "now")
 						gracePeriod := parseDuration(t, d, "grace-period")
 						o := Options{SupportWithdrawalGracePeriod: gracePeriod}
-						heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
 						sm = NewSupportManager(
-							storeID, engine, o, settings, stopper, clock, nil, heartbeatCoordinator, nil,
+							storeID, engine, o, settings, stopper, clock, nil, coordinator, nil,
 						)
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))

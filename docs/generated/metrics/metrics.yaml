@@ -17454,6 +17454,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storeliveness.transport.batch-duration
+      exported_name: storeliveness_transport_batch_duration
+      description: Duration spent collecting messages into batches by the Store Liveness Transport
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: storeliveness.transport.batch-size-bytes
+      exported_name: storeliveness_transport_batch_size_bytes
+      description: Size in bytes of batches sent by the Store Liveness Transport
+      y_axis_label: Bytes
+      type: HISTOGRAM
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storeliveness.transport.batches-sent
+      exported_name: storeliveness_transport_batches_sent
+      description: Number of message batches sent by the Store Liveness Transport
+      y_axis_label: Batches
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storeliveness.transport.messages-per-batch
+      exported_name: storeliveness_transport_messages_per_batch
+      description: Number of messages per batch sent by the Store Liveness Transport
+      y_axis_label: Messages
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: storeliveness.transport.receive-queue-bytes
       exported_name: storeliveness_transport_receive_queue_bytes
       description: Total byte size of pending incoming messages from Store Liveness Transport

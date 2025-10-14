@@ -352,10 +352,24 @@ func (t *Transport) SendBatchDirect(
 		return true
 	}
 
+	// If this is a batch to the local node, handle all messages directly
+	// without going through GRPC.
+	if len(messages) > 0 && messages[0].From.NodeID == nodeID {
+		for i := range messages {
+			t.handleMessage(ctx, &messages[i])
+		}
+		t.metrics.MessagesSent.Inc(int64(len(messages)))
+		return true
+	}
+
+	if b, ok := t.dialer.GetCircuitBreaker(nodeID, connClass); ok && b.Signal().Err() != nil {
+		t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
+		return false
+	}
+
 	worker := func(ctx context.Context) {
 		client, err := slpb.DialStoreLivenessClient(t.dialer, ctx, nodeID, connClass)
 		if err != nil {
-			// DialNode already logs sufficiently, so just return.
 			t.metrics.MessagesSendDropped.Inc(int64(len(messages)))
 			return
 		}

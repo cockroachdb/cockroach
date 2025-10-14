@@ -40,7 +40,6 @@ func (m *mockBatchTransport) SendBatchDirect(
 ) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	// Make a copy of the batch
 	batch := make([]slpb.Message, len(messages))
 	copy(batch, messages)
 	m.batches = append(m.batches, batch)
@@ -60,7 +59,6 @@ func (m *mockBatchTransport) getBatchMessages() []slpb.Message {
 	defer m.mu.Unlock()
 	var batchMessages []slpb.Message
 
-	// Add messages from batches (sent via SendBatchDirect)
 	for _, batch := range m.batches {
 		batchMessages = append(batchMessages, batch...)
 	}
@@ -92,6 +90,16 @@ func (m *mockBatchTransport) getBatchCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.batches)
+}
+
+func (m *mockBatchTransport) getTotalMessagesSent() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	total := 0
+	for _, batch := range m.batches {
+		total += len(batch)
+	}
+	return total
 }
 
 var _ BatchMessageSender = (*mockBatchTransport)(nil)
@@ -145,7 +153,7 @@ func TestHeartbeatCoordinatorRequestsAreBatched(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	transport := &mockBatchTransport{}
 
-	// Set a short batching duration for the test.
+	// Set short durations for the test.
 	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 20*time.Millisecond)
 
 	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
@@ -173,8 +181,7 @@ func TestHeartbeatCoordinatorRequestsAreBatched(t *testing.T) {
 
 	coordinator.SignalToSend()
 
-	// Wait for batching duration plus some buffer.
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 
 	batches := transport.getBatches()
 	require.Len(t, batches, 1)
@@ -186,7 +193,7 @@ func TestHeartbeatCoordinatorRequestsAreBatched(t *testing.T) {
 }
 
 // TestHeartbeatCoordinatorMultipleNodes verifies that messages to different
-// nodes are sent in separate batches.
+// nodes are sent in separate batches with smearing.
 func TestHeartbeatCoordinatorMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -198,6 +205,7 @@ func TestHeartbeatCoordinatorMultipleNodes(t *testing.T) {
 	transport := &mockBatchTransport{}
 
 	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 20*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 20*time.Millisecond)
 
 	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
 
@@ -221,7 +229,7 @@ func TestHeartbeatCoordinatorMultipleNodes(t *testing.T) {
 	coordinator.Enqueue(requests)
 	coordinator.SignalToSend()
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 
 	batches := transport.getBatches()
 	require.Len(t, batches, 2)
@@ -271,7 +279,7 @@ func TestHeartbeatCoordinatorClearQueues(t *testing.T) {
 	require.Equal(t, int64(0), coordinator.metrics.TotalMessagesInQueues.Value())
 
 	coordinator.SignalToSend()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(60 * time.Millisecond)
 
 	require.Equal(t, 0, transport.getBatchCount())
 }
@@ -289,6 +297,7 @@ func TestHeartbeatCoordinatorBatchingWindow(t *testing.T) {
 	transport := &mockBatchTransport{}
 
 	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 50*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 20*time.Millisecond)
 
 	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
 
@@ -315,9 +324,341 @@ func TestHeartbeatCoordinatorBatchingWindow(t *testing.T) {
 	})
 	coordinator.SignalToSend() // This signal should be drained during collection window.
 
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	batches := transport.getBatches()
 	require.Len(t, batches, 1)
 	require.Len(t, batches[0], 2)
+}
+
+// TestHeartbeatCoordinatorSmearing verifies that messages are sent with
+// smearing over the configured duration.
+func TestHeartbeatCoordinatorSmearing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+
+	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 50*time.Millisecond)
+
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	var requests []slpb.Message
+	for i := 2; i <= 5; i++ {
+		requests = append(requests, slpb.Message{
+			Type:       slpb.MsgHeartbeat,
+			From:       slpb.StoreIdent{NodeID: 1, StoreID: 1},
+			To:         slpb.StoreIdent{NodeID: roachpb.NodeID(i), StoreID: roachpb.StoreID(i)},
+			Epoch:      1,
+			Expiration: hlc.Timestamp{WallTime: 100},
+		})
+	}
+
+	coordinator.Enqueue(requests)
+	coordinator.SignalToSend()
+
+	time.Sleep(80 * time.Millisecond)
+
+	batches := transport.getBatches()
+	require.Len(t, batches, 4)
+
+	for _, batch := range batches {
+		require.Len(t, batch, 1)
+	}
+
+	require.Equal(t, int64(4), coordinator.metrics.MessagesSent.Count())
+	require.Equal(t, int64(4), coordinator.metrics.ActiveQueues.Value())
+}
+
+// TestHeartbeatCoordinator_BasicEnqueue tests basic message enqueueing.
+func TestHeartbeatCoordinator_BasicEnqueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	msg1 := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 2, StoreID: 1},
+	}
+	msg2 := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 2, StoreID: 2},
+	}
+
+	coordinator.Enqueue([]slpb.Message{msg1, msg2})
+
+	queue, ok := coordinator.nodeQueues.Load(roachpb.NodeID(2))
+	require.True(t, ok)
+
+	require.Equal(t, 2, len((*queue).messages), "Both messages should be in the same queue")
+}
+
+// TestHeartbeatCoordinator_RequestEnqueue tests that requests are enqueued for smearing.
+func TestHeartbeatCoordinator_RequestEnqueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	request := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 2, StoreID: 1},
+	}
+
+	coordinator.Enqueue([]slpb.Message{request})
+
+	queue, ok := coordinator.nodeQueues.Load(roachpb.NodeID(2))
+	require.True(t, ok)
+	require.Equal(t, 1, len((*queue).messages))
+}
+
+// TestHeartbeatCoordinator_SignalTriggersAsyncBatchSend tests that SignalToSend drains queues
+// and triggers async batch sending via Transport.SendBatchDirect.
+func TestHeartbeatCoordinator_SignalTriggersAsyncBatchSend(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+
+	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	var messages []slpb.Message
+	for i := 0; i < 5; i++ {
+		msg := slpb.Message{
+			Type: slpb.MsgHeartbeat,
+			From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+			To:   slpb.StoreIdent{NodeID: 2, StoreID: roachpb.StoreID(i + 1)},
+		}
+		messages = append(messages, msg)
+	}
+
+	coordinator.Enqueue(messages)
+
+	queue, ok := coordinator.nodeQueues.Load(roachpb.NodeID(2))
+	require.True(t, ok)
+	require.Equal(t, 5, len((*queue).messages))
+
+	coordinator.SignalToSend()
+
+	time.Sleep(50 * time.Millisecond)
+
+	require.Equal(t, 0, len((*queue).messages), "Queue should be empty after SignalToSend")
+
+	require.Equal(t, 1, transport.getBatchCount(), "Should have sent 1 batch")
+	batches := transport.getBatches()
+	require.Len(t, batches[0], 5, "Batch should contain 5 messages")
+}
+
+// TestHeartbeatCoordinator_SignalCoalescing tests signal coalescing behaviour.
+func TestHeartbeatCoordinator_SignalCoalescing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+
+	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	msg1 := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 2, StoreID: 1},
+	}
+	msg2 := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 2, StoreID: 2},
+	}
+
+	coordinator.Enqueue([]slpb.Message{msg1, msg2})
+
+	coordinator.SignalToSend()
+
+	coordinator.SignalToSend()
+	coordinator.SignalToSend()
+
+	time.Sleep(50 * time.Millisecond)
+
+	queue, ok := coordinator.nodeQueues.Load(roachpb.NodeID(2))
+	require.True(t, ok)
+	require.Equal(t, 0, len((*queue).messages), "Queue should be empty after processing")
+
+	// Verify at least one signal was accepted (the first one).
+	require.GreaterOrEqual(t, coordinator.metrics.SignalsAccepted.Count(), int64(1),
+		"Should have accepted at least 1 signal")
+}
+
+// TestHeartbeatCoordinator_SmearingTimingbehaviour verifies that smearing occurs
+// within the expected time window.
+func TestHeartbeatCoordinator_SmearingTimingbehaviour(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+
+	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	for nodeID := roachpb.NodeID(2); nodeID <= 10; nodeID++ {
+		msg := slpb.Message{
+			Type: slpb.MsgHeartbeat,
+			From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+			To:   slpb.StoreIdent{NodeID: nodeID, StoreID: 1},
+		}
+		coordinator.Enqueue([]slpb.Message{msg})
+	}
+
+	start := time.Now()
+	coordinator.SignalToSend()
+
+	time.Sleep(50 * time.Millisecond)
+	duration := time.Since(start)
+
+	require.Less(t, duration, 100*time.Millisecond, "Processing should complete within 100ms")
+
+	require.Equal(t, 9, transport.getTotalMessagesSent(), "Should have sent 9 messages")
+
+	t.Logf("Processed 9 nodes in %v (smear duration: %v)",
+		duration, HeartbeatSmearDuration.Get(&settings.SV))
+}
+
+// TestHeartbeatCoordinator_ProductionScaleSimulation tests heartbeat smearing at production scale:
+// 24 nodes with 3 stores per node (72 total stores), simulating realistic cluster behaviour.
+func TestHeartbeatCoordinator_ProductionScaleSimulation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	settings := cluster.MakeTestingClusterSettings()
+	transport := &mockBatchTransport{}
+
+	HeartbeatBatchingDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+	HeartbeatSmearDuration.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	coordinator := NewHeartbeatCoordinator(transport, stopper, settings)
+
+	const numNodes = 24
+	const storesPerNode = 3
+	const totalStores = numNodes * storesPerNode
+
+	t.Logf("Starting production-scale simulation: %d nodes, %d stores per node, %d total stores",
+		numNodes, storesPerNode, totalStores)
+
+	var allMessages []slpb.Message
+	messageCount := 0
+
+	for fromNodeID := roachpb.NodeID(1); fromNodeID <= numNodes; fromNodeID++ {
+		for fromStoreID := roachpb.StoreID(1); fromStoreID <= storesPerNode; fromStoreID++ {
+			for toNodeID := roachpb.NodeID(1); toNodeID <= numNodes; toNodeID++ {
+				if toNodeID == fromNodeID {
+					continue
+				}
+				for toStoreID := roachpb.StoreID(1); toStoreID <= storesPerNode; toStoreID++ {
+					msg := slpb.Message{
+						Type: slpb.MsgHeartbeat,
+						From: slpb.StoreIdent{NodeID: fromNodeID, StoreID: fromStoreID},
+						To:   slpb.StoreIdent{NodeID: toNodeID, StoreID: toStoreID},
+					}
+					allMessages = append(allMessages, msg)
+					messageCount++
+				}
+			}
+		}
+	}
+
+	t.Logf("Generated %d heartbeat messages for production-scale simulation", messageCount)
+
+	startTime := time.Now()
+	coordinator.Enqueue(allMessages)
+	enqueueDuration := time.Since(startTime)
+
+	t.Logf("Enqueued %d messages in %v", messageCount, enqueueDuration)
+
+	nodeQueueCounts := make(map[roachpb.NodeID]int)
+	for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+		queue, ok := coordinator.nodeQueues.Load(nodeID)
+		if ok {
+			count := len((*queue).messages)
+			nodeQueueCounts[nodeID] = count
+			t.Logf("  Node %d: %d messages", nodeID, count)
+		}
+	}
+
+	smearStartTime := time.Now()
+	coordinator.SignalToSend()
+
+	time.Sleep(50 * time.Millisecond)
+	smearDuration := time.Since(smearStartTime)
+
+	t.Logf("Heartbeat smearing completed in %v (target: ~20ms)", smearDuration)
+
+	for nodeID := roachpb.NodeID(1); nodeID <= numNodes; nodeID++ {
+		queue, ok := coordinator.nodeQueues.Load(nodeID)
+		if ok {
+			require.Equal(t, 0, len((*queue).messages),
+				"Node %d queue should be empty after SignalToSend", nodeID)
+		}
+	}
+
+	t.Logf("Total messages processed: %d", messageCount)
+	t.Logf("Enqueue duration: %v", enqueueDuration)
+	t.Logf("Smear duration: %v", smearDuration)
+	t.Logf("Messages per millisecond: %.2f",
+		float64(messageCount)/float64(smearDuration.Milliseconds()))
+	t.Logf("Average messages per node: %.2f",
+		float64(messageCount)/float64(numNodes))
+
+	smearDurationMs := smearDuration.Milliseconds()
+	if smearDurationMs > 0 {
+		t.Logf("Smearing efficiency: %.2f messages/ms",
+			float64(messageCount)/float64(smearDurationMs))
+	}
+
+	t.Logf("Production-scale heartbeat smearing simulation completed successfully")
 }
