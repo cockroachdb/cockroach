@@ -337,7 +337,8 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	mb.disambiguateColumns()
 
 	// Add all computed columns in case their values have changed.
-	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
+	mb.addSynthesizedComputedCols(mb.updateColIDs,
+		&mb.targetColList, &mb.targetColSet, true /* restrict */)
 
 	// Add assignment casts for computed column values.
 	mb.addAssignmentCasts(mb.updateColIDs)
