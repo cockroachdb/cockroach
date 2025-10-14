@@ -8,9 +8,11 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"net/url"
 	"os"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,8 +40,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1024,17 +1029,7 @@ func TestCloudStorageWTF(t *testing.T) {
 		changefeedbase.SpanCheckpointMaxBytes.Override(context.Background(), &s.Server.ClusterSettings().SV, 100<<20 /* 100 MiB */)
 		changefeedbase.SpanCheckpointLagThreshold.Override(context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
 
-		// Optionally skip some rangefeed checkpoints to simulate lagging spans.
-		if s.TestingKnobs.DistSQL != nil && s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs) != nil {
-			if cfKnobs, ok := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs); ok && cfKnobs != nil {
-				// Skip checkpoints for spans that don't contain the inserted key.
-				cfKnobs.FeedKnobs.ShouldSkipCheckpoint = func(rfc *kvpb.RangeFeedCheckpoint) bool {
-					insertedKey := "todo"
-					return !rfc.Span.ContainsKey([]byte(insertedKey))
-				}
-				defer func() { cfKnobs.FeedKnobs.ShouldSkipCheckpoint = nil }()
-			}
-		}
+		// We'll set a checkpoint filter after we determine the exact KV key for (key=1).
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `
@@ -1043,31 +1038,165 @@ func TestCloudStorageWTF(t *testing.T) {
 		ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
 		`)
 
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "d", "foo")
-		tableSpan := fooDesc.PrimaryIndexSpan(s.Codec())
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.Server.DB(), s.Server.Codec(), "d", "foo")
+		pkKey, err := randgen.TestingMakePrimaryIndexKeyForTenant(fooDesc, s.Server.Codec(), 1)
+		require.NoError(t, err)
+		t.Logf("pkKey: %v", pkKey)
+
+		sessionID := "2_begin"
+
+		// Now that we have the key for (key=1), skip checkpoints for spans that don't contain it.
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.FeedKnobs.ShouldSkipCheckpoint = func(rfc *kvpb.RangeFeedCheckpoint) bool {
+			return !rfc.Span.ContainsKey(pkKey)
+		}
+		knobs.WrapSink = func(s Sink, jobID jobspb.JobID) Sink {
+			s.(*cloudStorageSink).jobSessionID = sessionID
+			return s
+		}
 
 		// Start a cloudstorage changefeed (cdcTest configures the sink for us).
 		// Force frequent resolved and checkpoint writes; no initial scan so we control emitted rows.
-		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan`
+		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, updated`
 		cf := feed(t, f, feedStmt)
 		defer closeFeed(t, cf)
 
-		// Emit a single row after the feed starts.
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+		loadProgress := func() jobspb.Progress {
+			job, err := jobRegistry.LoadJob(context.Background(), cf.(cdctest.EnterpriseTestFeed).JobID())
+			require.NoError(t, err)
+			return job.Progress()
+		}
 
-		// Read and assert a single data row arrives.
-		require.NoError(t, withTimeout(cf, assertPayloadsTimeout(), func(ctx context.Context) error {
-			msgs, err := readNextMessages(ctx, cf, 1)
+		getHwmAndChkpt := func() (hwm hlc.Timestamp, chkTS hlc.Timestamp) {
+			progress := loadProgress()
+			chk := maps.Collect(loadCheckpoint(t, progress).All())
+			for ts, sp := range chk {
+				if sp.ContainsKey(pkKey) {
+					chkTS = ts
+					break
+				}
+			}
+			return *progress.GetHighWater(), chkTS
+		}
+
+		// make sure we have a checkpoint including '1'
+		testutils.SucceedsSoon(t, func() error {
+			_, chkTS := getHwmAndChkpt()
+			if chkTS.IsEmpty() {
+				return errors.New("waiting for checkpoint with pkKey")
+			}
+			return nil
+		})
+		// now we have the span with '1' ahead of the hwm. make sure of that.
+		hwm, chkTS := getHwmAndChkpt()
+		require.False(t, hwm.IsEmpty())
+		require.NotZero(t, chkTS)
+		require.True(t, hwm.Less(chkTS))
+
+		// idea:
+		// - hwm = 1
+		// - emit F1 with K@1 and K@2
+		// - checkpoint with K@1.5
+		// - restart
+		// - emit F2 with K@2
+
+		// update t set v = 'a' where true returning cluster_logical_timestamp()
+		T1TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T1' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
+		T1Ts, err := hlc.ParseHLC(T1TsStr)
+		require.NoError(t, err)
+
+		// wait for checkpoint after T1
+		testutils.SucceedsSoon(t, func() error {
+			_, chkTS := getHwmAndChkpt()
+			if T1Ts.Less(chkTS) {
+				return nil
+			}
+			return errors.Newf("waiting for checkpoint after T1: %s < %s", T1Ts, chkTS)
+		})
+
+		// make checkpoints not happen
+		// TODO
+
+		T2TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T2' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
+		T2Ts, err := hlc.ParseHLC(T2TsStr)
+		require.NoError(t, err)
+
+		// Pause
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+
+		// Make sure we didn't checkpoint >= T2
+		_, chkTS = getHwmAndChkpt()
+		require.False(t, T2Ts.LessEq(chkTS))
+
+		// Resume (with a lower session id)
+		sessionID = "1_after"
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Resume())
+
+		// TODO wait for T2 to be emitted
+
+		// pause again and validate
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+
+		// wait for no .tmp files
+		testutils.SucceedsSoon(t, func() error {
+			return filepath.Walk(cf.(*cloudFeed).dir, func(path string, d os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					return nil
+				}
+				if strings.HasSuffix(path, `.tmp`) {
+					return errors.New("tmp file found")
+				}
+				return nil
+			})
+		})
+
+		validator := cdctest.NewOrderValidator("foo")
+		require.NoError(t, filepath.Walk(cf.(*cloudFeed).dir, func(path string, d os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
-			require.NotEmpty(t, msgs)
-			require.NotEmpty(t, msgs[0].Key)
-			require.NotEmpty(t, msgs[0].Value)
+			if d.IsDir() || strings.Contains(d.Name(), "crdb_external_storage_location") {
+				return nil
+			}
+
+			// read file
+			contents, err := os.ReadFile(path)
+			require.NoError(t, err)
+
+			nl := 0
+			for _, line := range strings.Split(string(contents), "\n") {
+				if line == "" {
+					if nl == 0 {
+						t.Logf("file %s is empty?", path)
+					}
+					continue
+				}
+				var row struct {
+					After struct {
+						ID int `json:"id"`
+					} `json:"after"`
+					Key      gojson.RawMessage `json:"key"`
+					Topic    string            `json:"topic"`
+					Updated  string            `json:"updated"`
+					Resolved string            `json:"resolved"`
+				}
+
+				require.NoError(t, gojson.Unmarshal([]byte(line), &row))
+				updated := parseTimeToHLC(t, row.Updated)
+				if row.Resolved != "" {
+					continue
+				}
+				require.NoError(t, validator.NoteRow(cloudFeedPartition, string(row.Key), row.Topic, updated, "foo"))
+				nl++
+			}
 			return nil
 		}))
+		require.Empty(t, validator.Failures())
 	}
 
-	// Run using a cloudstorage sink via the cdcTest helper.
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
