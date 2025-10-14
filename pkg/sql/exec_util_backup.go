@@ -86,6 +86,10 @@ type BackupRestoreTestingKnobs struct {
 	// RunBeforeDownloadCleanup is called before we cleanup after all external
 	// files have been download.
 	RunBeforeDownloadCleanup func() error
+
+	// AfterAddRemoteSST is called after a remote SST is linked to pebble during
+	// the link phase of online restore.
+	AfterAddRemoteSST func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
