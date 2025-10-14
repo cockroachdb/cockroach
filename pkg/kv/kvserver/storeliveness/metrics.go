@@ -115,6 +115,10 @@ type HeartbeatCoordinatorMetrics struct {
 	ActiveQueues          *metric.Gauge
 	TotalMessagesInQueues *metric.Gauge
 
+	// Timing metrics.
+	TickDuration  *metric.Gauge
+	SmearDuration *metric.Gauge
+
 	// Signal metrics.
 	SignalsAccepted *metric.Counter
 	SignalsIgnored  *metric.Counter
@@ -132,6 +136,8 @@ func newHeartbeatCoordinatorMetrics() *HeartbeatCoordinatorMetrics {
 		MessagesSentImmediate: metric.NewCounter(metaHeartbeatCoordinatorMessagesSentImmediate),
 		ActiveQueues:          metric.NewGauge(metaHeartbeatCoordinatorActiveQueues),
 		TotalMessagesInQueues: metric.NewGauge(metaHeartbeatCoordinatorTotalMessagesInQueues),
+		TickDuration:          metric.NewGauge(metaHeartbeatCoordinatorTickDuration),
+		SmearDuration:         metric.NewGauge(metaHeartbeatCoordinatorSmearDuration),
 		SignalsAccepted:       metric.NewCounter(metaHeartbeatCoordinatorSignalsAccepted),
 		SignalsIgnored:        metric.NewCounter(metaHeartbeatCoordinatorSignalsIgnored),
 		SignalsDrained:        metric.NewCounter(metaHeartbeatCoordinatorSignalsDrained),
@@ -297,6 +303,18 @@ var (
 		Name:        "storeliveness.heartbeat_coordinator.total_messages_in_queues",
 		Help:        "Current total number of messages across all queues",
 		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorTickDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.tick_duration_ms",
+		Help:        "Heartbeat tick duration in milliseconds",
+		Measurement: "Duration",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSmearDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.smear_duration_ms",
+		Help:        "Heartbeat smear duration in milliseconds",
+		Measurement: "Duration",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaHeartbeatCoordinatorSendErrors = metric.Metadata{

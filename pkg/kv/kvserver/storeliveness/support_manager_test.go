@@ -49,8 +49,9 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+
+	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
@@ -124,8 +125,9 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+
+	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	cb := func(supportWithdrawn map[roachpb.StoreID]struct{}) {
 		require.Equal(t, 1, len(supportWithdrawn))
 		_, ok := supportWithdrawn[roachpb.StoreID(2)]
@@ -212,8 +214,9 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+
+	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats by calling SupportFrom.
@@ -223,7 +226,7 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	// Disable Store Liveness and make sure heartbeats stop.
 	Enabled.Override(ctx, &settings.SV, false)
 	// One heartbeat may race in while heartbeats are being disabled.
-	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 1)
+	ensurePendingHeartbeatsComplete(t, sender, sm, 1)
 
 	// Enable Store Liveness again and make sure heartbeats are sent.
 	Enabled.Override(ctx, &settings.SV, true)
@@ -247,8 +250,9 @@ func TestSupportManagerRestart(t *testing.T) {
 	clock := hlc.NewClockForTesting(manual)
 	clockBehind := hlc.NewClockForTesting(manualBehind)
 	sender := &testMessageSender{}
-	heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+
+	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -281,7 +285,7 @@ func TestSupportManagerRestart(t *testing.T) {
 
 	// Simulate a restart by creating a new SupportManager with the same engine.
 	// Use a regressed clock.
-	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, nil, sender, nil)
+	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, nil, coordinator, nil)
 	now := sm.clock.Now()
 	require.False(t, requestedTime.Less(now))
 	require.False(t, withdrawalTime.Less(now))
@@ -311,6 +315,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
+
 	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
 	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	// Initialize the SupportManager without starting the main goroutine.
@@ -348,7 +353,8 @@ func TestSupportManagerDiskStall(t *testing.T) {
 			ctx, "heartbeat", sm.sendHeartbeats,
 		),
 	)
-	ensureNoHeartbeats(t, sender, sm.options.HeartbeatInterval, 0)
+
+	ensurePendingHeartbeatsComplete(t, sender, sm, 0)
 
 	// SupportFrom and SupportFor calls are still being answered.
 	epoch, _ := sm.SupportFrom(remoteStore)
@@ -380,8 +386,9 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+
+	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -422,11 +429,12 @@ func TestSupportManagerHeartbeatNewStore(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+
+	coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
 	// Set a very large heartbeat interval to ensure heartbeats for new stores are
 	// sent out before the heartbeat ticker is signalled.
 	options.HeartbeatInterval = time.Hour
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, coordinator, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
@@ -470,5 +478,22 @@ func ensureNoHeartbeats(
 			}
 		}, hbInterval*10,
 	)
+	require.Regexp(t, err, "no heartbeats")
+}
+
+func ensurePendingHeartbeatsComplete(
+	t *testing.T, sender *testMessageSender, sm *SupportManager, slack int,
+) {
+	sender.drainSentMessages()
+	wait := HeartbeatBatchingDuration.Get(&sm.settings.SV) +
+		HeartbeatSmearDuration.Get(&sm.settings.SV) +
+		sm.options.HeartbeatInterval
+	err := testutils.SucceedsWithinError(func() error {
+		if sender.getNumSentMessages() > slack {
+			sender.drainSentMessages()
+			return errors.New("heartbeats are sent")
+		}
+		return errors.New("no heartbeats")
+	}, wait*10)
 	require.Regexp(t, err, "no heartbeats")
 }

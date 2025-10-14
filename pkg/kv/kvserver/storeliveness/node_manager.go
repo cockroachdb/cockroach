@@ -29,7 +29,11 @@ type NodeContainer struct {
 
 // NewNodeContainer creates a new NodeContainer.
 func NewNodeContainer(
-	stopper *stop.Stopper, options Options, transport *Transport, knobs *TestingKnobs, settings *cluster.Settings,
+	stopper *stop.Stopper,
+	options Options,
+	transport *Transport,
+	knobs *TestingKnobs,
+	settings *cluster.Settings,
 ) *NodeContainer {
 	ticker := timeutil.NewBroadcastTicker(options.HeartbeatInterval)
 	stopper.AddCloser(stop.CloserFn(ticker.Stop))
