@@ -48,7 +48,7 @@ func newInspectRun(
 
 		switch stmt.Typ {
 		case tree.InspectTable:
-			table, err := p.ResolveExistingObjectEx(ctx, stmt.Table, true /* required */, tree.ResolveRequireTableDesc)
+			table, err := p.ResolveExistingObjectEx(ctx, stmt.Table.ToUnresolvedObjectName(), true /* required */, tree.ResolveRequireTableDesc)
 			if err != nil {
 				return inspectRun{}, err
 			}
@@ -119,7 +119,7 @@ func inspectPlanHook(
 		return nil, nil, false, err
 	}
 
-	if err := inspectStmt.Validate(); err != nil {
+	if err := inspectStmt.Populate(); err != nil {
 		return nil, nil, false, err
 	}
 

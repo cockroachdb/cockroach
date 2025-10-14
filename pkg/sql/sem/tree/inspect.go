@@ -27,7 +27,7 @@ type Inspect struct {
 	Typ     InspectType
 	Options InspectOptions
 	// Table is only set during INSPECT TABLE statements.
-	Table *UnresolvedObjectName
+	Table *TableName
 	// Database is only set during INSPECT DATABASE statements.
 	Database *UnresolvedObjectName
 	AsOf     AsOfClause
@@ -83,8 +83,8 @@ func (n *InspectOptions) HasIndexAll() bool {
 	return false
 }
 
-// Validate checks for internal consistency of the INSPECT command.
-func (n *Inspect) Validate() error {
+// Populate checks for internal consistency of the INSPECT command and fills in any missing information.
+func (n *Inspect) Populate() error {
 	if err := n.Options.validate(); err != nil {
 		return err
 	}
@@ -96,12 +96,18 @@ func (n *Inspect) Validate() error {
 	for _, index := range n.Options.NamedIndexes() {
 		switch n.Typ {
 		case InspectTable:
-			if index.Table.ObjectName != "" && n.Table.Object() != index.Table.Object() {
-				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", index.String(), n.Table.String())
+			if index.Table.ObjectName != "" {
+				if n.Table.Object() != index.Table.Object() {
+					return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", index.String(), n.Table.String())
+				}
+			} else {
+				index.Table.ObjectName = n.Table.ObjectName
 			}
 		case InspectDatabase:
 			if index.Table.ExplicitCatalog && n.Database.Object() != index.Table.Catalog() {
 				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to database %q", index.String(), n.Database.String())
+			} else {
+
 			}
 		}
 	}
