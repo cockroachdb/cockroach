@@ -729,7 +729,8 @@ func (mb *mutationBuilder) addSynthesizedColsForInsert() {
 	mb.addAssignmentCasts(mb.insertColIDs)
 
 	// Now add all computed columns.
-	mb.addSynthesizedComputedCols(mb.insertColIDs, false /* restrict */)
+	mb.addSynthesizedComputedCols(mb.insertColIDs,
+		&mb.targetColList, &mb.targetColSet, false /* restrict */)
 
 	// Add assignment casts for computed column values.
 	mb.addAssignmentCasts(mb.insertColIDs)
