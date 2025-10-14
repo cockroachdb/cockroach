@@ -874,6 +874,16 @@ func (p *Provider) ListVolumes(l *logger.Logger, v *vm.VM) ([]vm.Volume, error) 
 		}
 	}
 
+	// Unfortunately the above responses contain no common identifier to join
+	// on, so we must resort to indexing. This does not work if the number of
+	// attached disks is different from the number of described volumes, i.e.
+	// if the cluster is using local SSDs.
+	if len(attachedDisks) != len(describedVolumes) {
+		err := errors.Newf("expected to find the same number of attached disks (%d) as described volumes (%d)",
+			len(attachedDisks), len(describedVolumes))
+		return nil, errors.WithHint(err, "is the cluster using local SSD?")
+	}
+
 	var volumes []vm.Volume
 	for idx := range attachedDisks {
 		attachedDisk := attachedDisks[idx]
