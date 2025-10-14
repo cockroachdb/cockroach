@@ -76,7 +76,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
@@ -126,7 +126,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
@@ -188,7 +188,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -241,7 +241,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -301,7 +301,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(3,4)=1, null(3,4)=0]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
       │   histogram(3)=  0    0.5     0    0.5
       │                <--- 'banana' --- 'cherry'
       │   histogram(4)=  0   1
@@ -356,7 +356,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(3,4)=1, null(3,4)=0]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(2-4)=1, null(2-4)=0]
       │   histogram(3)=  0    0.5     0    0.5
       │                <--- 'banana' --- 'cherry'
       │   histogram(4)=  0 0.16667 0 0.33333 0  0.5

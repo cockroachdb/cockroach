@@ -2136,7 +2136,7 @@ index-join t
       ├── constraint: /2/1
       │    ├── [/NULL/5 - /NULL/5]
       │    └── [/5 - /5]
-      ├── stats: [rows=1.502, distinct(1)=1.502, null(1)=0, distinct(2)=1.502, null(2)=1.502]
+      ├── stats: [rows=1.502, distinct(1)=1.502, null(1)=0, distinct(2)=1.502, null(2)=1.502, distinct(1,2)=1.502, null(1,2)=1.502]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -3048,7 +3048,7 @@ top-k
       │    ├── [/8/4/10/1/NULL/'2022-02-04 19:25:25.356+00' - /8/4/10/1/NULL/'2022-02-11 19:25:25.356+00']
       │    └── [/8/6/10/1/NULL/'2022-02-04 19:25:25.356+00' - /8/6/10/1/NULL/'2022-02-11 19:25:25.356+00']
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(1,4)=1, null(1,4)=0, distinct(2,3,5)=1, null(2,3,5)=0, distinct(1-5)=1, null(1-5)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=1, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(1,4,6)=1, null(1,4,6)=0, distinct(2,3,5)=1, null(2,3,5)=0, distinct(1-6)=1, null(1-6)=0]
       │   histogram(1)=  0                 0                 1           1.6534e-15
       │                <--- '2022-02-04 19:25:25.355999+00' --- '2022-02-11 19:25:25.356+00'
       │   histogram(3)=  0  1
