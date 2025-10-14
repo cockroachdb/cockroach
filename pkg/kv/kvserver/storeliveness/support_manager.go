@@ -31,10 +31,23 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var PacedHeartbeatsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.paced_heartbeats.enabled",
+	"if enabled, heartbeat messages will be paced across configurable interval to avoid "+
+		"bursts of network traffic; if disabled, heartbeats will be sent immediately",
+	true,
+)
+
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
 	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
+}
+
+type BatchMessageSender interface {
+	MessageSender
+	SendBatchDirect(ctx context.Context, nodeID roachpb.NodeID, messages []slpb.Message) bool
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -313,6 +326,10 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
+
+	heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
+	heartbeatCoordinator.ClearQueues()
+
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
@@ -320,18 +337,25 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	}
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
-	// Send heartbeats to each remote store.
-	successes := 0
-	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(ctx, msg); sent {
-			successes++
-		} else {
-			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
+	pacedHeartbeatsEnabled := PacedHeartbeatsEnabled.Get(&sm.settings.SV)
+
+	var successes int
+	if pacedHeartbeatsEnabled {
+		// Paced heartbeats are enabled, use HeartbeatCoordinator.
+		successes = heartbeatCoordinator.Enqueue(heartbeats)
+		heartbeatCoordinator.SignalToSend()
+	} else {
+		// Paced heartbeats are disabled, send heartbeats immediately.
+		for _, heartbeat := range heartbeats {
+			if sm.sender.SendAsync(ctx, heartbeat) {
+				successes++
+			}
 		}
 	}
+
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
-	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
+	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores (paced: %v)", successes, pacedHeartbeatsEnabled)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.
