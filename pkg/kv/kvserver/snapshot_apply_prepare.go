@@ -20,14 +20,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// destroyReplicaInfo contains the replica's metadata needed for its removal
-// from storage.
-// TODO(pav-kv): for WAG, add the truncated state and applied index. See #152845.
-type destroyReplicaInfo struct {
-	id   roachpb.FullReplicaID
-	desc *roachpb.RangeDescriptor
-}
-
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
 type snapWriteBuilder struct {
@@ -41,9 +33,8 @@ type snapWriteBuilder struct {
 	hardState  raftpb.HardState
 	desc       *roachpb.RangeDescriptor // corresponds to the range descriptor in the snapshot
 	origDesc   *roachpb.RangeDescriptor // pre-snapshot range descriptor
-	// NB: subsume, if set, must be in sorted (by destroyReplicaInfo.desc start
-	// key) order.
-	subsume []destroyReplicaInfo
+	// NB: subsume must be in sorted order by DestroyReplicaInfo start key.
+	subsume []kvstorage.DestroyReplicaInfo
 
 	// cleared contains the spans that this snapshot application clears before
 	// writing new state on top.
@@ -112,7 +103,7 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 // the Reader reflects the latest I/O each of the subsumed replicas has done
 // (i.e. Reader was instantiated after all raftMu were acquired).
 //
-// NB: does nothing if s.subsumedDescs is empty.
+// NB: does nothing if there are no subsumed replicas.
 func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) error {
 	if len(s.subsume) == 0 {
 		return nil // no subsumed replicas to speak of; early return
@@ -123,10 +114,10 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	// the left implies that either we merged "to the left" (we don't), or that
 	// we're applying a snapshot for another range (we don't do that either).
 	// Something is severely wrong for this to happen, so perform a sanity check.
-	if s.subsume[0].desc.StartKey.Compare(s.desc.StartKey) < 0 { // subsumedDescs are sorted by StartKey
+	if s.subsume[0].Keys.Key.Compare(s.desc.StartKey) < 0 { // subsume is sorted by start key
 		log.KvDistribution.Fatalf(ctx,
 			"subsuming replica to our left; subsumed desc start key: %v; snapshot desc start key %v",
-			s.subsume[0].desc.StartKey, s.desc.StartKey,
+			s.subsume[0].Keys.Key, s.desc.StartKey,
 		)
 	}
 
@@ -167,12 +158,12 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 				ClearUnreplicatedByRangeID: true,
 				MustUseClearRange:          true,
 			}
-			s.cleared = append(s.cleared, rditer.Select(sub.id.RangeID, rditer.SelectOpts{
+			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, rditer.SelectOpts{
 				ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 				UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 			})...)
 			// NB: Actually clear RangeID local key spans.
-			return kvstorage.DestroyReplica(ctx, sub.id, reader, w, mergedTombstoneReplicaID, opts)
+			return kvstorage.DestroyReplica(ctx, reader, w, sub, mergedTombstoneReplicaID, opts)
 		}); err != nil {
 			return err
 		}
@@ -223,23 +214,22 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		return nil
 	}
 
-	rightMostDesc := s.origDesc
+	endKey := s.origDesc.EndKey
 	if len(s.subsume) != 0 {
 		// NB: s.subsume are non-overlapping and sorted by start key. Pick the last
 		// one to determine whether the snapshot is narrowing the keyspace or not.
-		rightMostDesc = s.subsume[len(s.subsume)-1].desc
+		endKey = s.subsume[len(s.subsume)-1].Keys.EndKey
 	}
 
-	if rightMostDesc.EndKey.Compare(s.desc.EndKey) <= 0 {
+	if endKey.Compare(s.desc.EndKey) <= 0 {
 		return nil // we aren't narrowing anything; no-op
 	}
 
 	// TODO(sep-raft-log): read from the state machine engine here.
 	reader := storage.Reader(s.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{RSpan: roachpb.RSpan{
-			Key: s.desc.EndKey, EndKey: rightMostDesc.EndKey,
-		},
+		Ranged: rditer.SelectRangedOptions{
+			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
 			SystemKeys: true,
 			LockTable:  true,
 			UserKeys:   true,

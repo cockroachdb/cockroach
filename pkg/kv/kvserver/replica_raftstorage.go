@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -568,7 +569,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
 
-	subsume := make([]destroyReplicaInfo, 0, len(subsumedRepls))
+	subsume := make([]kvstorage.DestroyReplicaInfo, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
 		// We mark the replica as destroyed so that new commands are not
 		// accepted. This destroy status will be detected after the batch
@@ -582,19 +583,18 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		sr.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(sr.RangeID, sr.store.StoreID()),
 			destroyReasonRemoved)
-		srDesc := sr.descRLocked()
 		sr.mu.Unlock()
 		sr.readOnlyCmdMu.Unlock()
 
-		subsume = append(subsume, destroyReplicaInfo{id: sr.ID(), desc: srDesc})
+		subsume = append(subsume, sr.destroyInfoRaftMuLocked())
 	}
 
-	// NB: subsumedDescs in snapWriteBuilder must be sorted by start key. This
+	// NB: subsumed replicas in snapWriteBuilder must be sorted by start key. This
 	// should be the case, by construction, but add a test-only assertion just in
 	// case this ever changes.
-	testingAssert(slices.IsSortedFunc(subsume, func(a, b destroyReplicaInfo) int {
-		return a.desc.StartKey.Compare(b.desc.StartKey)
-	}), "subsumedDescs must be sorted by start key")
+	testingAssert(slices.IsSortedFunc(subsume, func(a, b kvstorage.DestroyReplicaInfo) int {
+		return a.Keys.Key.Compare(b.Keys.Key)
+	}), "subsumed replicas must be sorted by start key")
 
 	sb := snapWriteBuilder{
 		id: r.ID(),
@@ -840,5 +840,19 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 func testingAssert(cond bool, msg string) {
 	if buildutil.CrdbTestBuild && !cond {
 		panic(msg)
+	}
+}
+
+// destroyInfoRaftMuLocked returns the information necessary for constructing a
+// storage write destructing this replica.
+//
+// NB: since raftMu is locked, there is no concurrent write that would be able
+// to change this replica. In particular, no concurrent log truncations. The
+// caller must make sure to complete the destruction before raftMu is released.
+func (r *Replica) destroyInfoRaftMuLocked() kvstorage.DestroyReplicaInfo {
+	r.raftMu.AssertHeld()
+	return kvstorage.DestroyReplicaInfo{
+		FullReplicaID: r.ID(),
+		Keys:          r.shMu.state.Desc.RSpan(),
 	}
 }
