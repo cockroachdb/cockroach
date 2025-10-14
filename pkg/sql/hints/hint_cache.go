@@ -210,7 +210,8 @@ func (c *StatementHintsCache) onUpdate(
 	if update.Type == rangefeedcache.CompleteUpdate {
 		log.Dev.Info(ctx, "statement_hints rangefeed completed initial scan")
 		c.handleInitialScan(update)
-	} else {
+	} else if len(update.Events) > 0 {
+		// Ignore empty updates that only bump the resolved timestamp.
 		log.Dev.Info(ctx, "statement_hints rangefeed applying incremental update")
 		c.handleIncrementalUpdate(ctx, update)
 	}
@@ -248,10 +249,6 @@ func (c *StatementHintsCache) handleInitialScan(update rangefeedcache.Update[*bu
 func (c *StatementHintsCache) handleIncrementalUpdate(
 	ctx context.Context, update rangefeedcache.Update[*bufferEvent],
 ) {
-	if len(update.Events) == 0 {
-		// Avoid synchronization when we're just bumping the resolved timestamp.
-		return
-	}
 	defer c.generation.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()

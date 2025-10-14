@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -911,6 +912,92 @@ func TestMergedStatistics(t *testing.T) {
 			}
 			if !reflect.DeepEqual(merged, expected) {
 				t.Errorf("test case %d incorrect, merged:\n%s\nexpected:\n%s", i, merged, expected)
+			}
+		})
+	}
+}
+
+// TestStripOuterBuckets tests stripOuterBuckets which removes outer buckets
+// added by addOuterBuckets before merging partial statistics.
+func TestStripOuterBuckets(t *testing.T) {
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.NewTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	t.Run("no outer buckets returns input", func(t *testing.T) {
+		buckets := []cat.HistogramBucket{
+			{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			{NumEq: 2, NumRange: 1, DistinctRange: 1, UpperBound: tree.NewDInt(20)},
+		}
+		strippedBuckets := stripOuterBuckets(ctx, evalCtx, buckets)
+		if !reflect.DeepEqual(strippedBuckets, buckets) {
+			t.Fatalf("expected buckets unchanged: %v", strippedBuckets)
+		}
+		if len(strippedBuckets) > 0 && &strippedBuckets[0] != &buckets[0] {
+			t.Fatalf("unexpected copy of backing array when no outer buckets")
+		}
+	})
+
+	testCases := []struct {
+		name     string
+		buckets  []cat.HistogramBucket
+		expected []cat.HistogramBucket
+	}{
+		{
+			buckets: []cat.HistogramBucket{
+				{NumEq: 0, UpperBound: tree.NewDInt(math.MinInt64)},
+				{NumEq: 1, NumRange: 10, DistinctRange: 5, UpperBound: tree.NewDInt(30)},
+				{NumEq: 0, UpperBound: tree.NewDInt(math.MaxInt64)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
+			},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumEq: 0, UpperBound: tree.NewDInt(math.MinInt64)},
+				{NumEq: 1, NumRange: 10, DistinctRange: 5, UpperBound: tree.NewDInt(30)},
+				{NumEq: 2, NumRange: 4, DistinctRange: 3, UpperBound: tree.NewDInt(40)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumEq: 1, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
+				{NumEq: 2, NumRange: 4, DistinctRange: 3, UpperBound: tree.NewDInt(40)},
+			},
+		},
+		{
+			buckets: []cat.HistogramBucket{
+				{NumEq: 3, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
+				{NumEq: 2, NumRange: 4, DistinctRange: 3, UpperBound: tree.NewDInt(40)},
+				{NumEq: 0, UpperBound: tree.NewDInt(math.MaxInt64)},
+			},
+			expected: []cat.HistogramBucket{
+				{NumEq: 3, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(30)},
+				{NumEq: 2, NumRange: 4, DistinctRange: 3, UpperBound: tree.NewDInt(40)},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			buckets := append([]cat.HistogramBucket(nil), tc.buckets...)
+			bucketsCopy := append([]cat.HistogramBucket(nil), buckets...)
+			strippedBuckets := stripOuterBuckets(ctx, evalCtx, buckets)
+
+			if !reflect.DeepEqual(strippedBuckets, tc.expected) {
+				t.Fatalf("test case %d incorrect, stripped buckets:\n%v\nexpected:\n%v",
+					i, strippedBuckets, tc.expected)
+			}
+			if !reflect.DeepEqual(buckets, bucketsCopy) {
+				t.Fatalf("test case %d unexpected mutation of input buckets:\n%v\nexpected:\n%v",
+					i, buckets, bucketsCopy)
+			}
+			if len(strippedBuckets) > 0 {
+				for bi := range buckets {
+					if &strippedBuckets[0] == &buckets[bi] {
+						t.Fatalf("test case %d expected stripped buckets result to copy"+
+							" input slice, but shares backing array", i)
+					}
+				}
 			}
 		})
 	}

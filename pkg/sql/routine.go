@@ -163,7 +163,7 @@ func (p *planner) EvalRoutineExpr(
 		if routineDepthValue := ctx.Value(routineDepthKey{}); routineDepthValue != nil {
 			routineDepth = routineDepthValue.(int)
 		}
-		const maxDepth = 10000
+		const maxDepth = 100
 		if routineDepth > maxDepth {
 			return nil, pgerror.Newf(pgcode.ProgramLimitExceeded,
 				"routine reached recursion depth limit: %d (probably infinite loop)", maxDepth)
