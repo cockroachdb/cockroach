@@ -34,7 +34,7 @@ var Enabled = settings.RegisterBoolSetting(
 var PacedHeartbeatsEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.store_liveness.paced_heartbeats.enabled",
-	"if enabled, heartbeat messages will be paced across configurable interval to avoid "+
+	"if enabled, heartbeat messages will be paced across `HeartbeatSmearDuration` to avoid "+
 		"bursts of network traffic; if disabled, heartbeats will be sent immediately",
 	true,
 )
@@ -340,7 +340,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	var successes int
 	if pacedHeartbeatsEnabled {
 		// Paced heartbeats are enabled, use HeartbeatCoordinator.
-		successes = heartbeatCoordinator.Enqueue(heartbeats)
+		successes = heartbeatCoordinator.Enqueue(ctx, heartbeats)
 		heartbeatCoordinator.SignalToSend()
 	} else {
 		// Paced heartbeats are disabled, send heartbeats immediately.

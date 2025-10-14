@@ -35,6 +35,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/taskpacer",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
@@ -60,7 +61,7 @@ go_test(
     embed = [":storeliveness"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
-        "//conditions:default": {"test.Pool": "default"},
+        "//conditions:default": {"test.Pool": "large"},
     }),
     deps = [
         "//pkg/base",
@@ -89,6 +90,7 @@ go_test(
         "//pkg/util/metric",
         "//pkg/util/netutil",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",

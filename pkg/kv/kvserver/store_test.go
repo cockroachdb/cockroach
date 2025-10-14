@@ -255,7 +255,7 @@ func createTestStoreWithoutStart(
 		)
 		require.NoError(t, err)
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
-		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs, cfg.Settings)
 	}
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
