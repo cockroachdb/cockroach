@@ -61,6 +61,7 @@ class=elastic delta=+9MiB
 ----
 regular: deducted: +16 MiB, returned: +16 MiB, force-flush: +0 B, prevent-send-q: +2.0 MiB
 elastic: deducted: +27 MiB, returned: +27 MiB, force-flush: +2.0 MiB, prevent-send-q: +11 MiB
+inflight: deducted: +0 B, returned: +0 B, force-flush: +0 B, prevent-send-q: +0 B
 
 history
 ----

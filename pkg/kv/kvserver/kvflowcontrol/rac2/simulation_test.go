@@ -459,6 +459,7 @@ func (s *simulator) init(t *testing.T, ctx context.Context) {
 	s.state.init(t, ctx)
 	s.state.initialRegularTokens = kvflowcontrol.Tokens(kvflowcontrol.RegularTokensPerStream.Get(&s.state.settings.SV))
 	s.state.initialElasticTokens = kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Get(&s.state.settings.SV))
+	s.state.maxInflightBytes = kvflowcontrol.Tokens(kvflowcontrol.InFlightTokensPerStream.Get(&s.state.settings.SV))
 	s.registry = metric.NewRegistry()
 	s.tsdb = asciitsdb.New(t, s.registry)
 	s.registry.AddMetricStruct(s.state.evalMetrics)
@@ -661,7 +662,7 @@ var _ ticker = &streamsTicker{}
 
 // tick is part of the ticker interface.
 func (st *streamsTicker) tick(ctx context.Context, t time.Time) {
-	wc := admissionpb.WorkClassFromPri(st.pri)
+	wc := WorkClassOrInflight(admissionpb.WorkClassFromPri(st.pri))
 	if ds, ok := st.deduct[t]; ok {
 		for _, deduct := range ds {
 			deduct()
@@ -994,7 +995,7 @@ func (t *tokenCounter) testingNonBlockingAdmit(
 	}
 
 	admit = func() bool {
-		tokens := t.tokens(wc)
+		tokens := t.tokens(WorkClassOrInflight(wc))
 		if tokens <= 0 {
 			return false
 		}

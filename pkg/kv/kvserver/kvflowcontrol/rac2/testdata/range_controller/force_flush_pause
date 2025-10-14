@@ -7,11 +7,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 # Append entries. Replica 1 has no send tokens, but is not allowed to form a
 # send-queue since it is the leader. Replica 3 also has no send tokens, but is
@@ -26,11 +26,11 @@ range_id=1
     term=1 index=5 pri=NormalPri size=1.5MiB
 ----
 t1/s1: eval reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-5.5 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 t1/s3: eval reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-5.5 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -85,7 +85,7 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,6) precise_q_size=+7.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,6) precise_q_size=+7.5 MiB (deducted-inflight=+2.0 MiB) force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+7.5 MiB ela=+0 B
 ++++
@@ -94,8 +94,8 @@ eval original in send-q: reg=+7.5 MiB ela=+0 B
 schedule-controller-event-count: 1
 scheduled-replicas: 2
 
-# Scheduler event. 3MiB is dequeued, since force-flush grabs up to 4MiB of
-# entries. The replica does not schedule itself again since the
+# Scheduler event. 1.5MiB is dequeued, since we had 2MiB of tokens. The replica
+# schedule itself again since it still has 512KiB of tokens.
 # max-inflight-bytes limit of 2MiB has been reached.
 handle_scheduler_event range_id=1
 ----
@@ -109,6 +109,34 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (1.5 MiB) send_queue=[2,6) precise_q_size=+6.0 MiB (deducted-inflight=+512 KiB) force-flushing
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+6.0 MiB ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+++++
+(n3,s3):3: closed
+++++
+MsgApps sent in pull mode:
+ to: 2, lowPri: true entries: [1]
+++++
+schedule-controller-event-count: 2
+scheduled-replicas: 2
+
+# Scheduler event. Another 1.5MiB is dequeued. The replica does not schedule
+# itself again.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,6) (7.5 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+7.5 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
 (n2,s2):2: state=replicate closed=false inflight=[1,3) (3.0 MiB) send_queue=[3,6) precise_q_size=+4.5 MiB force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+4.5 MiB ela=+0 B
@@ -119,20 +147,21 @@ LowPri:
 (n3,s3):3: closed
 ++++
 MsgApps sent in pull mode:
- to: 2, lowPri: true entries: [1 2]
+ to: 2, lowPri: true entries: [2]
 ++++
-schedule-controller-event-count: 1
+schedule-controller-event-count: 2
 
-# Send an empty event. Nothing will happen because force-flush is paused.
+# Send an empty event. Nothing will happen because force-flush is paused
+# because there are no inflight tokens.
 raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=-7.5 MiB/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-5.5 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -155,7 +184,7 @@ LowPri:
 ++++
 (n3,s3):3: closed
 ++++
-schedule-controller-event-count: 1
+schedule-controller-event-count: 2
 
 # Admit an entry so that s2 has only 1.5MiB inflight, which is less than the
 # max-inflight-bytes of 2MiB and unpauses force-flush.
@@ -165,21 +194,21 @@ range_id=1
   store_id=2 term=1 to_index=1 pri=NormalPri
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-5.5 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=+0 B/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 # Replica 3 schedules itself, as force-flush is unpaused.
 stream_state range_id=1
@@ -193,7 +222,7 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,3) (1.5 MiB) send_queue=[3,6) precise_q_size=+4.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[2,3) (1.5 MiB) send_queue=[3,6) precise_q_size=+4.5 MiB (deducted-inflight=+512 KiB) force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+4.5 MiB ela=+0 B
 LowPri:
@@ -202,12 +231,10 @@ LowPri:
 ++++
 (n3,s3):3: closed
 ++++
-schedule-controller-event-count: 2
+schedule-controller-event-count: 3
 scheduled-replicas: 2
 
-# Two more entries are send and force-flush pauses. Note that sending 1 entry
-# exceeds the max-inflight-bytes, but the code is a coarse graned
-# pause/unpause, so each scheduled event can send up to 4MiB when unpaused.
+# One more entry is sent and force-flush pauses.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
@@ -219,21 +246,20 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,5) (4.5 MiB) send_queue=[5,6) precise_q_size=+1.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[2,4) (3.0 MiB) send_queue=[4,6) precise_q_size=+3.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
-eval original in send-q: reg=+1.5 MiB ela=+0 B
+eval original in send-q: reg=+3.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1572864
   term=1 index=2  tokens=1572864
   term=1 index=3  tokens=1572864
-  term=1 index=4  tokens=1572864
 ++++
 (n3,s3):3: closed
 ++++
 MsgApps sent in pull mode:
- to: 2, lowPri: true entries: [3 4]
+ to: 2, lowPri: true entries: [3]
 ++++
-schedule-controller-event-count: 2
+schedule-controller-event-count: 3
 
 # Noop since force flush is paused.
 handle_scheduler_event range_id=1
@@ -247,40 +273,39 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[2,5) (4.5 MiB) send_queue=[5,6) precise_q_size=+1.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[2,4) (3.0 MiB) send_queue=[4,6) precise_q_size=+3.0 MiB force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
-eval original in send-q: reg=+1.5 MiB ela=+0 B
+eval original in send-q: reg=+3.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1572864
   term=1 index=2  tokens=1572864
   term=1 index=3  tokens=1572864
-  term=1 index=4  tokens=1572864
 ++++
 (n3,s3):3: closed
 ++++
-schedule-controller-event-count: 2
+schedule-controller-event-count: 3
 
-# Admit an entry. Force-flush stays paused since inflight bytes is 3MiB.
+# Admit an entry. Force-flush unpauses since inflight is 1.5MiB.
 admit
 range_id=1
   store_id=2 term=1 to_index=2 pri=NormalPri
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=+0 B/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -293,42 +318,42 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[3,5) (3.0 MiB) send_queue=[5,6) precise_q_size=+1.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[3,4) (1.5 MiB) send_queue=[4,6) precise_q_size=+3.0 MiB (deducted-inflight=+512 KiB) force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
-eval original in send-q: reg=+1.5 MiB ela=+0 B
+eval original in send-q: reg=+3.0 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=1572864
   term=1 index=2  tokens=1572864
   term=1 index=3  tokens=1572864
-  term=1 index=4  tokens=1572864
 ++++
 (n3,s3):3: closed
 ++++
-schedule-controller-event-count: 2
+schedule-controller-event-count: 4
+scheduled-replicas: 2
 
-# Admit another entry, and inflight bytes drops to 1.5MiB, unpausing force-flush.
+# Admit another entry, and inflight bytes drops to 0MiB.
 admit
 range_id=1
   store_id=2 term=1 to_index=3 pri=NormalPri
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=+0 B/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
 raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=+1.5 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+2.0 MiB/+64 MiB
 
-# Since force-flush unpauses, replica 3 schedules itself.
+# Replica 3 is already scheduled.
 stream_state range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
@@ -340,7 +365,33 @@ NormalPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[4,5) (1.5 MiB) send_queue=[5,6) precise_q_size=+1.5 MiB force-flushing
+(n2,s2):2: state=replicate closed=false inflight=[4,4) send_queue=[4,6) precise_q_size=+3.0 MiB (deducted-inflight=+512 KiB) force-flushing
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+3.0 MiB ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+++++
+(n3,s3):3: closed
+++++
+schedule-controller-event-count: 4
+scheduled-replicas: 2
+
+# Scheduler event causes an entry to be sent. And more tokens are deducted,
+# and the replica schedules itself.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+6.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,5) (1.5 MiB) send_queue=[5,6) precise_q_size=+1.5 MiB (deducted-inflight=+512 KiB) force-flushing
 eval deducted: reg=+0 B ela=+7.5 MiB
 eval original in send-q: reg=+1.5 MiB ela=+0 B
 LowPri:
@@ -351,11 +402,14 @@ LowPri:
 ++++
 (n3,s3):3: closed
 ++++
-schedule-controller-event-count: 3
+MsgApps sent in pull mode:
+ to: 2, lowPri: true entries: [4]
+++++
+schedule-controller-event-count: 5
 scheduled-replicas: 2
 
-# Scheduler event causes an entry to be sent and the send-queue becomes empty,
-# so no more need to force-flush.
+# Scheduler event causes an entry to be sent. The send-queue is empty so
+# force-flush stops.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
@@ -382,7 +436,7 @@ LowPri:
 MsgApps sent in pull mode:
  to: 2, lowPri: true entries: [5]
 ++++
-schedule-controller-event-count: 3
+schedule-controller-event-count: 5
 
 # Return replica 3 to StateReplicate.
 set_replicas pull-mode
@@ -419,7 +473,7 @@ LowPri:
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-schedule-controller-event-count: 3
+schedule-controller-event-count: 5
 
 # Force flush up to index 3. Replica 3 starts force-flushing and schedules itself.
 set_force_flush_index range_id=1 index=3
@@ -443,15 +497,49 @@ LowPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,6) precise_q_size=+0 B force-flushing (stop=3)
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,6) precise_q_size=+0 B (deducted-inflight=+5.4 KiB) force-flushing (stop=3)
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 6
 scheduled-replicas: 3
 
-# Scheduler event. Replica 3 sends two entries, but does not schedule itself
-# again because max-inflight-bytes is reached.
+# Scheduler event. Replica 3 sends one entry, and schedules itself again.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+6.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,6) (3.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.5 MiB) send_queue=[2,6) precise_q_size=+0 B (deducted-inflight=+512 KiB) force-flushing (stop=3)
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: true entries: [1]
+++++
+schedule-controller-event-count: 7
+scheduled-replicas: 3
+
+# Scheduler event. Replica 3 sends another entry, and does not schedule itself
+# since there are no more inflight tokens.
 handle_scheduler_event range_id=1
 ----
 (n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
@@ -481,20 +569,20 @@ LowPri:
   term=1 index=2  tokens=1572864
 ++++
 MsgApps sent in pull mode:
- to: 3, lowPri: true entries: [1 2]
+ to: 3, lowPri: true entries: [2]
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 7
 
 # Noop.
 raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -524,7 +612,7 @@ LowPri:
   term=1 index=1  tokens=1572864
   term=1 index=2  tokens=1572864
 ++++
-schedule-controller-event-count: 4
+schedule-controller-event-count: 7
 
 # Admit one entry on replica 3, so inflight bytes is 1.5MiB which is below the
 # max-inflight-bytes threshold.
@@ -533,11 +621,11 @@ range_id=1
   store_id=3 term=1 to_index=1 pri=NormalPri
 ----
 t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
-       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-3.0 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
 
 # Advance force-flush-index. The raft event causes the replicaSendStream to
 # see the advancement, and to see that max-inflight-bytes is small enough to
@@ -563,17 +651,108 @@ LowPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,3) (1.5 MiB) send_queue=[3,6) precise_q_size=+0 B force-flushing (stop=4)
+(n3,s3):3: state=replicate closed=false inflight=[2,3) (1.5 MiB) send_queue=[3,6) precise_q_size=+0 B (deducted-inflight=+512 KiB) force-flushing (stop=4)
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
   term=1 index=1  tokens=1572864
   term=1 index=2  tokens=1572864
 ++++
-schedule-controller-event-count: 5
+schedule-controller-event-count: 8
 scheduled-replicas: 3
 
-# Scheduler event cause replica 3 to send two entries, and since
+# Scheduler event cause replica 3 to send one entry.
+handle_scheduler_event range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+6.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,6) (3.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n3,s3):3: state=replicate closed=false inflight=[2,4) (3.0 MiB) send_queue=[4,6) precise_q_size=+0 B force-flushing (stop=4)
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+++++
+MsgApps sent in pull mode:
+ to: 3, lowPri: true entries: [3]
+++++
+schedule-controller-event-count: 8
+
+# Admit one entry on replica 3, so inflight bytes is 1.5MiB which is below the
+# max-inflight-bytes threshold.
+admit
+range_id=1
+  store_id=3 term=1 to_index=2 pri=NormalPri
+----
+t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
+
+# Let the replica know.
+raft_event pull-mode
+range_id=1
+----
+t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-4.5 MiB/+8.0 MiB inflight=+0 B/+64 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[2,6) (6.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+6.0 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n2,s2):2: state=replicate closed=false inflight=[4,6) (3.0 MiB) send_queue=[6,6) precise_q_size=+0 B
+eval deducted: reg=+0 B ela=+7.5 MiB
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+  term=1 index=4  tokens=1572864
+  term=1 index=5  tokens=1572864
+++++
+(n3,s3):3: state=replicate closed=false inflight=[3,4) (1.5 MiB) send_queue=[4,6) precise_q_size=+0 B (deducted-inflight=+512 KiB) force-flushing (stop=4)
+eval deducted: reg=+0 B ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+LowPri:
+  term=1 index=1  tokens=1572864
+  term=1 index=2  tokens=1572864
+  term=1 index=3  tokens=1572864
+++++
+schedule-controller-event-count: 9
+scheduled-replicas: 3
+
+# Scheduler event causes replica 3 to send one entry. And since
 # force-flush-index is reached, force-flushing stops.
 handle_scheduler_event range_id=1
 ----
@@ -596,7 +775,7 @@ LowPri:
   term=1 index=4  tokens=1572864
   term=1 index=5  tokens=1572864
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[2,5) (4.5 MiB) send_queue=[5,6) precise_q_size=+0 B watching-for-tokens
+(n3,s3):3: state=replicate closed=false inflight=[3,5) (3.0 MiB) send_queue=[5,6) precise_q_size=+0 B watching-for-tokens
 eval deducted: reg=+0 B ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 LowPri:
@@ -606,6 +785,17 @@ LowPri:
   term=1 index=4  tokens=1572864
 ++++
 MsgApps sent in pull mode:
- to: 3, lowPri: true entries: [3 4]
+ to: 3, lowPri: true entries: [4]
 ++++
-schedule-controller-event-count: 5
+schedule-controller-event-count: 9
+
+# Noop, to see the current tokens
+adjust_tokens send
+  store_id=1 pri=HighPri tokens=0
+----
+t1/s1: eval reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=-6.0 MiB/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-4.0 MiB/+64 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-7.5 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=-1.0 MiB/+64 MiB

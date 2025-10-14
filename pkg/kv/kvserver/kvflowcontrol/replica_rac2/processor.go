@@ -1173,8 +1173,8 @@ type RangeControllerFactoryImpl struct {
 	closeTimerScheduler        rac2.ProbeToCloseTimerScheduler
 	scheduler                  rac2.Scheduler
 	sendTokenWatcher           *rac2.SendTokenWatcher
+	inFlightTokenWatcher       *rac2.SendTokenWatcher
 	waitForEvalConfig          *rac2.WaitForEvalConfig
-	raftMaxInflightBytes       uint64
 	knobs                      *kvflowcontrol.TestingKnobs
 }
 
@@ -1186,8 +1186,8 @@ func NewRangeControllerFactoryImpl(
 	closeTimerScheduler rac2.ProbeToCloseTimerScheduler,
 	scheduler rac2.Scheduler,
 	sendTokenWatcher *rac2.SendTokenWatcher,
+	inFlightTokenWatcher *rac2.SendTokenWatcher,
 	waitForEvalConfig *rac2.WaitForEvalConfig,
-	raftMaxInflightBytes uint64,
 	knobs *kvflowcontrol.TestingKnobs,
 ) RangeControllerFactoryImpl {
 	return RangeControllerFactoryImpl{
@@ -1198,8 +1198,8 @@ func NewRangeControllerFactoryImpl(
 		closeTimerScheduler:        closeTimerScheduler,
 		scheduler:                  scheduler,
 		sendTokenWatcher:           sendTokenWatcher,
+		inFlightTokenWatcher:       inFlightTokenWatcher,
 		waitForEvalConfig:          waitForEvalConfig,
-		raftMaxInflightBytes:       raftMaxInflightBytes,
 		knobs:                      knobs,
 	}
 }
@@ -1221,10 +1221,10 @@ func (f RangeControllerFactoryImpl) New(
 			CloseTimerScheduler:    f.closeTimerScheduler,
 			Scheduler:              f.scheduler,
 			SendTokenWatcher:       f.sendTokenWatcher,
+			InFlightTokenWatcher:   f.inFlightTokenWatcher,
 			EvalWaitMetrics:        f.evalWaitMetrics,
 			RangeControllerMetrics: f.rangeControllerMetrics,
 			WaitForEvalConfig:      f.waitForEvalConfig,
-			RaftMaxInflightBytes:   f.raftMaxInflightBytes,
 			ReplicaMutexAsserter:   state.muAsserter,
 			Knobs:                  f.knobs,
 		},

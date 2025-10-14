@@ -58,6 +58,7 @@ type testingRCState struct {
 	clock                 *hlc.Clock
 	ssTokenCounter        *StreamTokenCounterProvider
 	sendTokenWatcher      *SendTokenWatcher
+	inFlightTokenWatcher  *SendTokenWatcher
 	probeToCloseScheduler ProbeToCloseTimerScheduler
 	waitForEvalConfig     *WaitForEvalConfig
 	evalMetrics           *EvalWaitMetrics
@@ -70,7 +71,7 @@ type testingRCState struct {
 	setTokenCounters     map[kvflowcontrol.Stream]struct{}
 	initialRegularTokens kvflowcontrol.Tokens
 	initialElasticTokens kvflowcontrol.Tokens
-	maxInflightBytes     uint64
+	maxInflightBytes     kvflowcontrol.Tokens
 }
 
 func (s *testingRCState) init(t *testing.T, ctx context.Context) {
@@ -83,7 +84,8 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.ts = timeutil.NewManualTime(timeutil.UnixEpoch)
 	s.clock = hlc.NewClockForTesting(s.ts)
 	s.ssTokenCounter = NewStreamTokenCounterProvider(s.settings, s.clock)
-	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts)
+	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts, ElasticWC)
+	s.inFlightTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts, InFlight)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
 	s.waitForEvalConfig = NewWaitForEvalConfig(s.settings)
 	s.evalMetrics = NewEvalWaitMetrics()
@@ -92,6 +94,7 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.setTokenCounters = make(map[kvflowcontrol.Stream]struct{})
 	s.initialRegularTokens = kvflowcontrol.Tokens(-1)
 	s.initialElasticTokens = kvflowcontrol.Tokens(-1)
+	s.maxInflightBytes = kvflowcontrol.Tokens(-1)
 }
 
 func sortReplicas(r *testingRCRange) []roachpb.ReplicaDescriptor {
@@ -259,7 +262,12 @@ func (s *testingRCState) sendStreamString(rangeID roachpb.RangeID) string {
 			if !rss.mu.sendQueue.forceFlushStopIndex.untilInfinity() {
 				stopStr = fmt.Sprintf(" (stop=%d)", rss.mu.sendQueue.forceFlushStopIndex)
 			}
-			fmt.Fprintf(&b, " force-flushing%s", stopStr)
+			var tokenStr string
+			if rss.mu.sendQueue.forceFlushDeductedForInflightTokens != 0 {
+				fmt.Fprintf(&b, " (deducted-inflight=%v)",
+					rss.mu.sendQueue.forceFlushDeductedForInflightTokens)
+			}
+			fmt.Fprintf(&b, " force-flushing%s%s", stopStr, tokenStr)
 		}
 		if rss.mu.sendQueue.deductedForSchedulerTokens > 0 {
 			fmt.Fprintf(&b, " deducted=%v", rss.mu.sendQueue.deductedForSchedulerTokens)
@@ -321,15 +329,18 @@ func (s *testingRCState) maybeSetInitialTokens(r testingRange) {
 			s.setTokenCounters[stream] = struct{}{}
 			if s.initialRegularTokens != -1 {
 				s.ssTokenCounter.Eval(stream).testingSetTokens(s.testCtx,
-					admissionpb.RegularWorkClass, s.initialRegularTokens)
+					RegularWC, s.initialRegularTokens)
 				s.ssTokenCounter.Send(stream).testingSetTokens(s.testCtx,
-					admissionpb.RegularWorkClass, s.initialRegularTokens)
+					RegularWC, s.initialRegularTokens)
 			}
 			if s.initialElasticTokens != -1 {
 				s.ssTokenCounter.Eval(stream).testingSetTokens(s.testCtx,
-					admissionpb.ElasticWorkClass, s.initialElasticTokens)
+					ElasticWC, s.initialElasticTokens)
 				s.ssTokenCounter.Send(stream).testingSetTokens(s.testCtx,
-					admissionpb.ElasticWorkClass, s.initialElasticTokens)
+					ElasticWC, s.initialElasticTokens)
+			}
+			if s.maxInflightBytes != -1 {
+				s.ssTokenCounter.Send(stream).testingSetTokens(s.testCtx, InFlight, s.maxInflightBytes)
 			}
 		}
 	}
@@ -365,10 +376,10 @@ func (s *testingRCState) getOrInitRange(
 			CloseTimerScheduler:    s.probeToCloseScheduler,
 			Scheduler:              testRC,
 			SendTokenWatcher:       s.sendTokenWatcher,
+			InFlightTokenWatcher:   s.inFlightTokenWatcher,
 			EvalWaitMetrics:        s.evalMetrics,
 			RangeControllerMetrics: s.rcMetrics,
 			WaitForEvalConfig:      s.waitForEvalConfig,
-			RaftMaxInflightBytes:   s.maxInflightBytes,
 			ReplicaMutexAsserter:   makeTestMutexAsserter(),
 			Knobs:                  &kvflowcontrol.TestingKnobs{},
 		}
@@ -1159,7 +1170,7 @@ func TestRangeController(t *testing.T) {
 				if maxInflightBytesString != "" {
 					maxInflightBytes, err := humanizeutil.ParseBytes(maxInflightBytesString)
 					require.NoError(t, err)
-					state.maxInflightBytes = uint64(maxInflightBytes)
+					state.maxInflightBytes = kvflowcontrol.Tokens(maxInflightBytes)
 				}
 
 				for _, r := range scanRanges(t, d.Input) {
@@ -1227,7 +1238,7 @@ func TestRangeController(t *testing.T) {
 						})
 					}
 					tc.adjust(ctx,
-						admissionpb.WorkClassFromPri(pri),
+						WorkClassOrInflight(admissionpb.WorkClassFromPri(pri)),
 						kvflowcontrol.Tokens(tokens),
 						AdjNormal,
 					)

@@ -7,11 +7,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Replica 1 is the leader so sending [1,1) is ignored and everything is
 # considered sent (the leader does not see MsgApps for itself).
@@ -27,11 +27,11 @@ range_id=1
     replica_id=3 [1,1)
 ----
 t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
 t1/s2: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Replicas 2 and 3 have a send-queue which is possible in push mode.
 stream_state range_id=1
@@ -78,11 +78,11 @@ raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+24 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=+0 B/+8.0 MiB inflight=+24 MiB/+64 MiB
 
 # Replica 3 starts force-flushing with no limit, since it was necessary for
 # quorum. Replica 2 is force-flushing up to index 1.
@@ -96,11 +96,11 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB force-flushing (stop=1)
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB (deducted-inflight=+40 MiB) force-flushing (stop=1)
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+18 MiB ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB force-flushing
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB (deducted-inflight=+40 MiB) force-flushing
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+18 MiB ela=+0 B
 ++++
@@ -121,11 +121,11 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB force-flushing (stop=2)
+(n2,s2):2: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB (deducted-inflight=+40 MiB) force-flushing (stop=2)
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+18 MiB ela=+0 B
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB force-flushing (stop=2)
+(n3,s3):3: state=replicate closed=false inflight=[1,1) send_queue=[1,4) precise_q_size=+18 MiB (deducted-inflight=+40 MiB) force-flushing (stop=2)
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+18 MiB ela=+0 B
 ++++
@@ -143,13 +143,13 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB force-flushing (stop=2)
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB (deducted-inflight=+34 MiB) force-flushing (stop=2)
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB force-flushing (stop=2)
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB (deducted-inflight=+34 MiB) force-flushing (stop=2)
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
@@ -167,11 +167,11 @@ raft_event
 range_id=1
 ----
 t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
 t1/s2: eval reg=-12 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=+58 MiB/+64 MiB
 t1/s3: eval reg=-12 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=+58 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -204,11 +204,11 @@ raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=+32 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-6.0 MiB/+8.0 MiB inflight=+32 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -220,13 +220,13 @@ NormalPri:
   term=1 index=2  tokens=6291456
   term=1 index=3  tokens=6291456
 ++++
-(n2,s2):2: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB force-flushing (stop=2)
+(n2,s2):2: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB (deducted-inflight=+26 MiB) force-flushing (stop=2)
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
   term=1 index=1  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB force-flushing
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (6.0 MiB) send_queue=[2,4) precise_q_size=+12 MiB (deducted-inflight=+26 MiB) force-flushing
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+12 MiB ela=+0 B
 LowPri:
@@ -254,7 +254,7 @@ LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,3) (12 MiB) send_queue=[3,4) precise_q_size=+6.0 MiB force-flushing
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (12 MiB) send_queue=[3,4) precise_q_size=+6.0 MiB (deducted-inflight=+20 MiB) force-flushing
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
@@ -268,27 +268,38 @@ MsgApps sent in pull mode:
 schedule-controller-event-count: 3
 scheduled-replicas: 3
 
+# Noop, to see the current tokens
+adjust_tokens send
+  store_id=1 pri=HighPri tokens=0
+----
+t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+52 MiB/+64 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+32 MiB/+64 MiB
+
 # Switch back to push mode and then back to pull mode. Replica 2 should not be
 # force-flushing and replica 3 should be force-flushing.
 raft_event
 range_id=1
 ----
 t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
 t1/s2: eval reg=-6.0 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+52 MiB/+64 MiB
 t1/s3: eval reg=-6.0 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+52 MiB/+64 MiB
 
 raft_event pull-mode
 range_id=1
 ----
 t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+52 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
-       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+39 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -307,7 +318,7 @@ LowPri:
   term=1 index=1  tokens=6291456
   term=1 index=2  tokens=6291456
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,3) (12 MiB) send_queue=[3,4) precise_q_size=+6.0 MiB force-flushing
+(n3,s3):3: state=replicate closed=false inflight=[1,3) (12 MiB) send_queue=[3,4) precise_q_size=+6.0 MiB (deducted-inflight=+13 MiB) force-flushing
 eval deducted: reg=+0 B ela=+18 MiB
 eval original in send-q: reg=+6.0 MiB ela=+0 B
 LowPri:
@@ -347,3 +358,14 @@ MsgApps sent in pull mode:
  to: 3, lowPri: true entries: [3]
 ++++
 schedule-controller-event-count: 3
+
+# Noop, to see the current tokens
+adjust_tokens send
+  store_id=1 pri=HighPri tokens=0
+----
+t1/s1: eval reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=-18 MiB/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB
+t1/s2: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-12 MiB/+8.0 MiB inflight=+52 MiB/+64 MiB
+t1/s3: eval reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB
+       send reg=+0 B/+16 MiB ela=-18 MiB/+8.0 MiB inflight=+46 MiB/+64 MiB

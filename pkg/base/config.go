@@ -697,6 +697,11 @@ type RaftConfig struct {
 	// latency of 100ms to the leader and this setting is set to 1 MB, there is a
 	// throughput limit of 10 MB/s for this group. With RTT of 400ms, this drops
 	// to 2.5 MB/s. See Little's law to understand the maths behind.
+	//
+	// This setting is ignored when Quorum Replication Flow Control is operating
+	// in default mode.
+	//
+	// TODO(sumeer): remove this at some point in the future.
 	RaftMaxInflightBytes uint64
 
 	// Splitting a range which has a replica needing a snapshot results in two

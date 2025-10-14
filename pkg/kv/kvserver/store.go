@@ -1312,7 +1312,8 @@ type StoreConfig struct {
 	KVFlowStreamTokenProvider *rac2.StreamTokenCounterProvider
 	// KVFlowSendTokenWatcher is used for replication AC (flow control) v2 to
 	// watch for elastic send tokens.
-	KVFlowSendTokenWatcher *rac2.SendTokenWatcher
+	KVFlowSendTokenWatcher     *rac2.SendTokenWatcher
+	KVFlowInFlightTokenWatcher *rac2.SendTokenWatcher
 	// KVFlowWaitForEvalConfig is used for configuring WaitForEval for
 	// replication AC (flow control) v2.
 	KVFlowWaitForEvalConfig *rac2.WaitForEvalConfig
@@ -2278,7 +2279,10 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		if buildutil.CrdbTestBuild {
 			// Ensure that this is actually test build. If it is not, we should not
 			// be compensating for an underlying bug.
-			s.cfg.KVFlowSendTokenWatcher = rac2.NewSendTokenWatcher(s.stopper, timeutil.DefaultTimeSource{})
+			s.cfg.KVFlowSendTokenWatcher =
+				rac2.NewSendTokenWatcher(s.stopper, timeutil.DefaultTimeSource{}, rac2.ElasticWC)
+			s.cfg.KVFlowInFlightTokenWatcher =
+				rac2.NewSendTokenWatcher(s.stopper, timeutil.DefaultTimeSource{}, rac2.InFlight)
 		} else {
 			return errors.New("missing KVFlowSendTokenWatcher")
 		}
@@ -2301,8 +2305,8 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		scs,
 		(*racV2Scheduler)(s.scheduler),
 		s.cfg.KVFlowSendTokenWatcher,
+		s.cfg.KVFlowInFlightTokenWatcher,
 		s.cfg.KVFlowWaitForEvalConfig,
-		s.cfg.RaftMaxInflightBytes,
 		s.TestingKnobs().FlowControlTestingKnobs,
 	)
 

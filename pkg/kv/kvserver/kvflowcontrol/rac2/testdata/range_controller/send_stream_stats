@@ -11,11 +11,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 raft_event
 range_id=1
@@ -29,11 +29,11 @@ range_id=1
     replica_id=3 [1,2)
 ----
 t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+61 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+63 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -85,11 +85,31 @@ range_id=1
     replica_id=3 [2,2)
 ----
 t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB inflight=+49 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+63 MiB/+64 MiB
+
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,5) (15 MiB) send_queue=[5,5) precise_q_size=+0 B
+eval deducted: reg=+15 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+  term=1 index=4  tokens=12582912
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,5) precise_q_size=+14 MiB
+eval deducted: reg=+15 MiB ela=+0 B
+eval original in send-q: reg=+14 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
 
 # The stats shouldn't have changed, as we haven't refreshed them via ticking.
 send_stream_stats range_id=1 refresh=false
@@ -108,12 +128,31 @@ raft_event
 range_id=1
 ----
 t1/s1: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
+       send reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB inflight=+49 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+63 MiB/+64 MiB
 
+stream_state range_id=1
+----
+(n1,s1):1: state=replicate closed=false inflight=[1,5) (15 MiB) send_queue=[5,5) precise_q_size=+0 B
+eval deducted: reg=+15 MiB ela=+0 B
+eval original in send-q: reg=+0 B ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+  term=1 index=2  tokens=1048576
+  term=1 index=3  tokens=1048576
+  term=1 index=4  tokens=12582912
+++++
+(n2,s2):2: closed
+++++
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,5) precise_q_size=+14 MiB
+eval deducted: reg=+15 MiB ela=+0 B
+eval original in send-q: reg=+14 MiB ela=+0 B
+NormalPri:
+  term=1 index=1  tokens=1048576
+++++
 
 # The stats now should have been populated.
 send_stream_stats range_id=1 refresh=false

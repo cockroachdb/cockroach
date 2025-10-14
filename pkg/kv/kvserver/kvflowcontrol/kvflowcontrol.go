@@ -98,6 +98,14 @@ var ElasticTokensPerStream = settings.RegisterByteSizeSetting(
 	validateTokenRange,
 )
 
+var InFlightTokensPerStream = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_controller.in_flight_tokens_per_stream",
+	"flow tokens available for in-flight work on a per-stream basis",
+	64<<20, // 64 MiB
+	validateTokenRange,
+)
+
 const (
 	minTokensPerStream Tokens = 1 << 20  // 1 MiB
 	maxTokensPerStream Tokens = 64 << 20 // 64 MiB

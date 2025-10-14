@@ -579,19 +579,12 @@ type RangeControllerOptions struct {
 	CloseTimerScheduler    ProbeToCloseTimerScheduler
 	Scheduler              Scheduler
 	SendTokenWatcher       *SendTokenWatcher
+	InFlightTokenWatcher   *SendTokenWatcher
 	EvalWaitMetrics        *EvalWaitMetrics
 	RangeControllerMetrics *RangeControllerMetrics
 	WaitForEvalConfig      *WaitForEvalConfig
-	// RaftMaxInflightBytes is a soft limit on the maximum inflight bytes when
-	// using MsgAppPull mode. Currently, the RangeController only attempts to
-	// respect this when force-flushing a replicaSendStream, since the typical
-	// production configuration of this value (32MiB) is larger than the typical
-	// production configuration of the shared regular token pool (16MiB), so
-	// attempting to respect this when doing non-force-flush sends is
-	// unnecessary.
-	RaftMaxInflightBytes uint64
-	ReplicaMutexAsserter ReplicaMutexAsserter
-	Knobs                *kvflowcontrol.TestingKnobs
+	ReplicaMutexAsserter   ReplicaMutexAsserter
+	Knobs                  *kvflowcontrol.TestingKnobs
 }
 
 // RangeControllerInitState is the initial state at the time of creation.
@@ -710,9 +703,6 @@ func NewRangeController(
 	if log.V(1) {
 		log.KvDistribution.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
 	}
-	if o.RaftMaxInflightBytes == 0 {
-		o.RaftMaxInflightBytes = math.MaxUint64
-	}
 	rc := &rangeController{
 		opts:            o,
 		term:            init.Term,
@@ -793,7 +783,7 @@ retry:
 		requiredWait := false
 		// First check the voter set, which participate in quorum.
 		for _, v := range vs {
-			available, handle := v.evalTokenCounter.TokensAvailable(wc)
+			available, handle := v.evalTokenCounter.TokensAvailable(WorkClassOrInflight(wc))
 			if available && !v.hasSendQ {
 				votersHaveEvalTokensCount++
 				continue
@@ -816,7 +806,7 @@ retry:
 		// checking them.
 		if waitForAllReplicateHandles {
 			for _, nv := range nvs {
-				available, handle := nv.evalTokenCounter.TokensAvailable(wc)
+				available, handle := nv.evalTokenCounter.TokensAvailable(WorkClassOrInflight(wc))
 				if available || !nv.isStateReplicate {
 					// Ignore non-voters without tokens which are not in StateReplicate,
 					// as we won't be waiting for them.
@@ -1328,17 +1318,17 @@ func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
 		// isReplicate
 		// !noSendQ || !hasSendTokens
 		// NB: forceFlushing => !noSendQ
-		sendPoolLimit := rs.sendTokenCounter.limit(admissionpb.ElasticWorkClass)
+		sendPoolLimit := rs.sendTokenCounter.limit(ElasticWC)
 		sendPoolBucket := sendPoolLimit / 10
 		if sendPoolBucket == 0 {
 			sendPoolBucket = 1
 		}
-		sendTokens := rs.sendTokenCounter.tokens(admissionpb.ElasticWorkClass)
+		sendTokens := rs.sendTokenCounter.tokens(ElasticWC)
 		bucketedSendTokens := (sendTokens / sendPoolBucket) * sendPoolBucket
 		score := replicaScore{
 			replicaID:          rs.replicaID,
 			bucketedTokensSend: bucketedSendTokens,
-			tokensEval:         rs.evalTokenCounter.tokens(admissionpb.ElasticWorkClass),
+			tokensEval:         rs.evalTokenCounter.tokens(ElasticWC),
 		}
 		if rs.scratchVoterStreamState.forceFlushStopIndex.active() {
 			forceFlushingScores = append(forceFlushingScores, score)
@@ -2199,7 +2189,19 @@ type replicaSendStream struct {
 			//
 			// deductedForSchedulerTokens != 0 => tokenWatcherHandle is zero and
 			// !forceFlushStopIndex.active()
-			forceFlushStopIndex forceFlushStopIndex
+			//
+			// forceFlushStopIndex.active() <=>
+			//   forceFlushDeductedForInflightTokens != 0 ||
+			//   forceFlushInflightTokensWatcherHandle is non-zero
+			//
+			// forceFlushInflightTokensWatcherHandle is non-zero =>
+			//    forceFlushDeductedForInflightTokens == 0
+			//
+			// forceFlushDeductedForInflightTokens != 0 =>
+			//    forceFlushInflightTokensWatcherHandle is zero
+			forceFlushStopIndex                   forceFlushStopIndex
+			forceFlushInflightTokensWatcherHandle SendTokenWatcherHandle
+			forceFlushDeductedForInflightTokens   kvflowcontrol.Tokens
 
 			tokenWatcherHandle         SendTokenWatcherHandle
 			deductedForSchedulerTokens kvflowcontrol.Tokens
@@ -2470,12 +2472,12 @@ func (rs *replicaState) computeReplicaStreamStateRaftMuLocked(
 		// frequency of flapping between send-queue and no send-queue is reduced,
 		// which means the WaitForEval refreshCh needs to be used less frequently.
 		if needsTokens[admissionpb.ElasticWorkClass] {
-			if rs.sendTokenCounter.tokens(admissionpb.ElasticWorkClass) <= 0 {
+			if rs.sendTokenCounter.tokens(ElasticWC) <= 0 {
 				vss.hasSendTokens = false
 			}
 		}
 		if needsTokens[admissionpb.RegularWorkClass] {
-			if rs.sendTokenCounter.tokens(admissionpb.RegularWorkClass) <= 0 {
+			if rs.sendTokenCounter.tokens(RegularWC) <= 0 {
 				vss.hasSendTokens = false
 			}
 		}
@@ -2596,7 +2598,8 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	rss := rs.sendStream
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
-	if !rss.mu.sendQueue.forceFlushStopIndex.active() && rss.mu.sendQueue.deductedForSchedulerTokens == 0 {
+	if rss.mu.sendQueue.forceFlushDeductedForInflightTokens == 0 &&
+		rss.mu.sendQueue.deductedForSchedulerTokens == 0 {
 		// NB: it is possible mode != rss.mu.mode, and we will ignore the change
 		// here. This is fine in that we will pick up the change in the next
 		// RaftEvent.
@@ -2613,19 +2616,15 @@ func (rs *replicaState) scheduledRaftMuLocked(
 		rss.tryHandleModeChangeRaftMuAndStreamLocked(ctx, mode, false, false)
 		return false, false
 	}
-	forceFlushActiveAndPaused := func() bool {
-		return rss.mu.sendQueue.forceFlushStopIndex.active() &&
-			rss.reachedInflightBytesThresholdRaftMuAndStreamLocked()
-	}
-	if forceFlushActiveAndPaused() {
-		return false, false
-	}
 	// 4MB. Don't want to hog the scheduler thread for too long.
 	const MaxBytesToSend kvflowcontrol.Tokens = 4 << 20
 	bytesToSend := MaxBytesToSend
-	if !rss.mu.sendQueue.forceFlushStopIndex.active() &&
-		rss.mu.sendQueue.deductedForSchedulerTokens < bytesToSend {
-		bytesToSend = rss.mu.sendQueue.deductedForSchedulerTokens
+	if rss.mu.sendQueue.deductedForSchedulerTokens > 0 {
+		if rss.mu.sendQueue.deductedForSchedulerTokens < bytesToSend {
+			bytesToSend = rss.mu.sendQueue.deductedForSchedulerTokens
+		}
+	} else if rss.mu.sendQueue.forceFlushDeductedForInflightTokens < bytesToSend {
+		bytesToSend = rss.mu.sendQueue.forceFlushDeductedForInflightTokens
 	}
 	// TODO(sumeer): if (for some reason) many entries are not subject to
 	// replication AC in pull mode, and a send-queue forms, and these entries
@@ -2649,6 +2648,12 @@ func (rs *replicaState) scheduledRaftMuLocked(
 	// and elastic work, and MsgAppPull mode, in which case the total size of
 	// entries not subject to flow control will be tiny. We of course return the
 	// unused tokens for entries not subject to flow control.
+	//
+	// TODO(sumeer): when bytesToSend is not sufficient to empty the send-queue,
+	// we will send N entries which together are < bytesToSend, leaving behind a
+	// small amount and then will schedule again to send 1 entry. This behavior
+	// will repeat. We should send N+1 entries, which will require modification
+	// to LeadSlice.
 	slice, err := logSnapshot.LeadSlice(
 		rss.mu.sendQueue.indexToSend-1, rss.mu.sendQueue.nextRaftIndex-1, uint64(bytesToSend))
 	var msg raftpb.Message
@@ -2667,7 +2672,7 @@ func (rs *replicaState) scheduledRaftMuLocked(
 		rs.sendStream = nil
 		return false, true
 	}
-	rss.updateInflightRaftMuAndStreamLocked(slice)
+	rss.updateInflightRaftMuAndStreamLocked(ctx, slice)
 	rss.dequeueFromQueueAndSendRaftMuAndStreamLocked(ctx, msg)
 	isEmpty := rss.isEmptySendQueueStreamLocked()
 	if isEmpty {
@@ -2675,22 +2680,32 @@ func (rs *replicaState) scheduledRaftMuLocked(
 		return false, true
 	}
 	// Still have a send-queue.
-	if rss.mu.sendQueue.forceFlushStopIndex.active() &&
-		uint64(rss.mu.sendQueue.forceFlushStopIndex) < rss.mu.sendQueue.indexToSend {
-		// It is possible that we don't have a quorum with no send-queue and we
-		// needed to rely on this force-flush until the send-queue was empty. That
-		// knowledge will become known in the next
-		// rangeController.HandleRaftEventRaftMuLocked, which will happen at the
-		// next tick. We accept a latency hiccup in this case for now.
-		rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
+	watchForTokens := false
+	if rss.mu.sendQueue.forceFlushStopIndex.active() {
+		if uint64(rss.mu.sendQueue.forceFlushStopIndex) < rss.mu.sendQueue.indexToSend {
+			// It is possible that we don't have a quorum with no send-queue and we
+			// needed to rely on this force-flush until the send-queue was empty. That
+			// knowledge will become known in the next
+			// rangeController.HandleRaftEventRaftMuLocked, which will happen at the
+			// next tick. We accept a latency hiccup in this case for now.
+			rss.stopForceFlushRaftMuAndStreamLocked(ctx, false)
+		} else {
+			// Force flush is ongoing.
+			if rss.mu.sendQueue.forceFlushDeductedForInflightTokens == 0 {
+				rss.startAttemptingToEmptySendQueueViaForceFlushedStreamLocked(ctx)
+				watchForTokens = true
+			}
+			// Else have some tokens.
+		}
 	}
-	forceFlushNeedsToPause := forceFlushActiveAndPaused()
-	watchForTokens :=
-		!rss.mu.sendQueue.forceFlushStopIndex.active() && rss.mu.sendQueue.deductedForSchedulerTokens == 0
-	if watchForTokens {
-		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
+	if !rss.mu.sendQueue.forceFlushStopIndex.active() {
+		if rss.mu.sendQueue.deductedForSchedulerTokens == 0 {
+			rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
+			watchForTokens = true
+		}
+		// Else have some tokens.
 	}
-	scheduleAgain = !watchForTokens && !forceFlushNeedsToPause
+	scheduleAgain = !watchForTokens
 	return scheduleAgain, false
 }
 
@@ -2720,6 +2735,11 @@ func (rss *replicaSendStream) closeRaftMuAndStreamLocked(ctx context.Context) {
 	rss.returnSendTokensRaftMuAndStreamLocked(ctx, rss.raftMu.tracker.UntrackAll(), true /* disconnect */)
 	rss.returnAllEvalTokensRaftMuAndStreamLocked(ctx)
 	rss.stopAttemptingToEmptySendQueueRaftMuAndStreamLocked(ctx, true)
+	if rss.mu.inflightBytes > 0 {
+		rss.parent.sendTokenCounter.Return(
+			ctx, InFlight, kvflowcontrol.Tokens(rss.mu.inflightBytes), AdjDisconnect)
+		rss.mu.inflightBytes = 0
+	}
 	rss.mu.closed = true
 }
 
@@ -2751,9 +2771,17 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 	wasEmptySendQ := rss.isEmptySendQueueStreamLocked()
 	rss.tryHandleModeChangeRaftMuAndStreamLocked(
 		ctx, event.mode, wasEmptySendQ, directive.forceFlushStopIndex.active())
-	// Use the latest inflight bytes, since it reflects the advancing Match.
-	wasExceedingInflightBytesThreshold := rss.reachedInflightBytesThresholdRaftMuAndStreamLocked()
+	prevInflightBytes := rss.mu.inflightBytes
 	rss.mu.inflightBytes = event.replicaStateInfo.InflightBytes
+	if prevInflightBytes > rss.mu.inflightBytes {
+		rss.parent.sendTokenCounter.Return(
+			ctx, InFlight, kvflowcontrol.Tokens(prevInflightBytes-rss.mu.inflightBytes), AdjNormal)
+	} else if prevInflightBytes < rss.mu.inflightBytes {
+		// This should be rare, unless some MsgApps got sent without us knowing,
+		// like a MsgApp ping.
+		rss.parent.sendTokenCounter.Deduct(
+			ctx, InFlight, kvflowcontrol.Tokens(rss.mu.inflightBytes-prevInflightBytes), AdjNormal)
+	}
 	if event.mode == MsgAppPull {
 		// MsgAppPull mode (i.e., followers). Populate sendingEntries.
 		n := len(event.sendingEntries)
@@ -2768,11 +2796,8 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 				rss.startForceFlushRaftMuAndStreamLocked(ctx, directive.forceFlushStopIndex)
 			} else {
 				if rss.mu.sendQueue.forceFlushStopIndex != directive.forceFlushStopIndex {
+					// Continuing with an already started force flush.
 					rss.setForceFlushStopIndexRaftMuAndStreamLocked(directive.forceFlushStopIndex)
-				}
-				if wasExceedingInflightBytesThreshold &&
-					!rss.reachedInflightBytesThresholdRaftMuAndStreamLocked() {
-					rss.parent.parent.scheduleReplica(rss.parent.replicaID)
 				}
 			}
 		} else {
@@ -2780,7 +2805,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 			if rss.mu.sendQueue.forceFlushStopIndex.active() {
 				// Must have a send-queue, so sendingEntries should stay empty (these
 				// will be queued).
-				rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
+				rss.stopForceFlushRaftMuAndStreamLocked(ctx, false)
 				rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
 				if directive.hasSendTokens {
 					panic(errors.AssertionFailedf("hasSendTokens true despite send-queue"))
@@ -2842,7 +2867,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		}
 		for wc, tokens := range sendTokensToDeduct {
 			if tokens != 0 {
-				rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.WorkClass(wc), tokens, flag)
+				rss.parent.sendTokenCounter.Deduct(ctx, WorkClassOrInflight(wc), tokens, flag)
 			}
 		}
 		if directive.preventSendQNoForceFlush {
@@ -2896,7 +2921,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		}
 		for wc, tokens := range evalTokensToDeduct {
 			if tokens != 0 {
-				rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.WorkClass(wc), tokens, AdjNormal)
+				rss.parent.evalTokenCounter.Deduct(ctx, WorkClassOrInflight(wc), tokens, AdjNormal)
 			}
 		}
 	}
@@ -2915,7 +2940,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 			return false,
 				errors.Errorf("SendMsgApp could not send for replica %d", rss.parent.replicaID)
 		}
-		rss.updateInflightRaftMuAndStreamLocked(slice)
+		rss.updateInflightRaftMuAndStreamLocked(ctx, slice)
 		rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, false)
 	}
 
@@ -2935,13 +2960,36 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 	return transitionedSendQState, nil
 }
 
-func (rss *replicaSendStream) updateInflightRaftMuAndStreamLocked(ls raft.LeadSlice) {
+func (rss *replicaSendStream) updateInflightRaftMuAndStreamLocked(
+	ctx context.Context, ls raft.LeadSlice,
+) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
 	entries := ls.Entries()
+	var totalSize uint64
 	for i := range ls.Entries() {
 		// NB: raft.payloadSize also uses len(raftpb.Entry.Data).
-		rss.mu.inflightBytes += uint64(len(entries[i].Data))
+		entryLen := uint64(len(entries[i].Data))
+		rss.mu.inflightBytes += entryLen
+		totalSize += entryLen
+	}
+	if kvflowcontrol.Tokens(totalSize) > rss.mu.sendQueue.forceFlushDeductedForInflightTokens {
+		toDeduct := kvflowcontrol.Tokens(totalSize) - rss.mu.sendQueue.forceFlushDeductedForInflightTokens
+		rss.parent.sendTokenCounter.Deduct(ctx, InFlight, toDeduct, AdjNormal)
+		if rss.mu.sendQueue.forceFlushDeductedForInflightTokens != 0 {
+			rss.mu.sendQueue.forceFlushDeductedForInflightTokens = 0
+			if buildutil.CrdbTestBuild && !rss.mu.sendQueue.forceFlushStopIndex.active() {
+				panic(errors.AssertionFailedf("force-flush is not active"))
+			}
+		}
+	} else {
+		if rss.mu.sendQueue.forceFlushDeductedForInflightTokens != 0 {
+			if buildutil.CrdbTestBuild && !rss.mu.sendQueue.forceFlushStopIndex.active() {
+				panic(errors.AssertionFailedf("force-flush is not active"))
+			}
+			rss.mu.sendQueue.forceFlushDeductedForInflightTokens -= kvflowcontrol.Tokens(totalSize)
+		}
+		// Else both are 0.
 	}
 }
 
@@ -2960,11 +3008,11 @@ func (rss *replicaSendStream) tryHandleModeChangeRaftMuAndStreamLocked(
 		// we want regular to count as regular. So return tokens to elastic and
 		// deduct from regular.
 		// TODO(kvoli): Should we have a metric for this? It should be rare.
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, ElasticWC,
 			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.RegularWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, RegularWC,
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
@@ -2972,11 +3020,11 @@ func (rss *replicaSendStream) tryHandleModeChangeRaftMuAndStreamLocked(
 	} else {
 		// Switching from push to pull. Regular needs to be counted as elastic, so
 		// return to regular and deduct from elastic.
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, ElasticWC,
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.RegularWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, RegularWC,
 			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
@@ -2986,22 +3034,61 @@ func (rss *replicaSendStream) tryHandleModeChangeRaftMuAndStreamLocked(
 	}
 }
 
-func (rss *replicaSendStream) reachedInflightBytesThresholdRaftMuAndStreamLocked() bool {
-	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	rss.mu.AssertHeld()
-	return rss.mu.inflightBytes >= rss.parent.parent.opts.RaftMaxInflightBytes
-}
-
 func (rss *replicaSendStream) startForceFlushRaftMuAndStreamLocked(
 	ctx context.Context, forceFlushStopIndex forceFlushStopIndex,
 ) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
 	rss.setForceFlushStopIndexRaftMuAndStreamLocked(forceFlushStopIndex)
-	if !rss.reachedInflightBytesThresholdRaftMuAndStreamLocked() {
-		rss.parent.parent.scheduleReplica(rss.parent.replicaID)
-	}
 	rss.stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(ctx, false)
+	rss.startAttemptingToEmptySendQueueViaForceFlushedStreamLocked(ctx)
+}
+
+// NB: raftMu may or may not be held. Specifically, when called from Notify,
+// raftMu is not held.
+func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaForceFlushedStreamLocked(
+	ctx context.Context,
+) {
+	rss.mu.AssertHeld()
+	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 ||
+		rss.mu.sendQueue.tokenWatcherHandle != (SendTokenWatcherHandle{}) {
+		panic(errors.AssertionFailedf("already trying to empty send-queue via watcher"))
+	}
+	if rss.mu.sendQueue.forceFlushDeductedForInflightTokens != 0 {
+		panic(errors.AssertionFailedf("force-flush already has some inflight tokens"))
+	}
+	if !rss.mu.sendQueue.forceFlushStopIndex.active() {
+		panic(errors.AssertionFailedf("force-flush is not active"))
+	}
+	// NB: it is very likely that inflight byte tokens are already available. So
+	// this extra watching step could be eliminated with some additional code.
+	// Since force-flush is not common, we are ok with this slight inefficiency
+	// in startup.
+	rss.mu.sendQueue.forceFlushInflightTokensWatcherHandle =
+		rss.parent.parent.opts.InFlightTokenWatcher.NotifyWhenAvailable(ctx, rss.parent.sendTokenCounter, rss)
+}
+
+// REQUIRES: force-flush is active.
+func (rss *replicaSendStream) stopForceFlushRaftMuAndStreamLocked(
+	ctx context.Context, disconnect bool,
+) {
+	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
+	rss.mu.AssertHeld()
+	rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
+	if rss.mu.sendQueue.forceFlushDeductedForInflightTokens != 0 {
+		// Update metrics.
+		flag := AdjNormal
+		if disconnect {
+			flag = AdjDisconnect
+		}
+		rss.parent.sendTokenCounter.Return(
+			ctx, InFlight, rss.mu.sendQueue.forceFlushDeductedForInflightTokens, flag)
+		rss.mu.sendQueue.forceFlushDeductedForInflightTokens = 0
+	}
+	if handle := rss.mu.sendQueue.forceFlushInflightTokensWatcherHandle; handle != (SendTokenWatcherHandle{}) {
+		rss.parent.parent.opts.InFlightTokenWatcher.CancelHandle(ctx, handle)
+		rss.mu.sendQueue.forceFlushInflightTokensWatcherHandle = SendTokenWatcherHandle{}
+	}
 }
 
 // Only called in MsgAppPull mode. Either when force-flushing or when
@@ -3079,7 +3166,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendRaftMuAndStreamLocked(
 		if rss.mu.sendQueue.forceFlushStopIndex.active() {
 			flag = AdjForceFlush
 		}
-		rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, tokensNeeded, flag)
+		rss.parent.sendTokenCounter.Deduct(ctx, ElasticWC, tokensNeeded, flag)
 	}
 	rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, true)
 }
@@ -3126,6 +3213,11 @@ func (rss *replicaSendStream) changeToProbeRaftMuAndStreamLocked(
 		rss.mu.sendQueue.tokenWatcherHandle != (SendTokenWatcherHandle{}) {
 		panic(errors.AssertionFailedf("no send-queue but trying to empty send-queue via watcher"))
 	}
+	if rss.mu.inflightBytes > 0 {
+		rss.parent.sendTokenCounter.Return(
+			ctx, InFlight, kvflowcontrol.Tokens(rss.mu.inflightBytes), AdjDisconnect)
+		rss.mu.inflightBytes = 0
+	}
 }
 
 func (rss *replicaSendStream) stopAttemptingToEmptySendQueueRaftMuAndStreamLocked(
@@ -3134,7 +3226,7 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueRaftMuAndStreamLocke
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
 	if rss.mu.sendQueue.forceFlushStopIndex.active() {
-		rss.setForceFlushStopIndexRaftMuAndStreamLocked(0)
+		rss.stopForceFlushRaftMuAndStreamLocked(ctx, disconnect)
 	}
 	rss.stopAttemptingToEmptySendQueueViaWatcherRaftMuAndStreamLocked(ctx, disconnect)
 }
@@ -3155,7 +3247,7 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherRaftMuAndS
 			int64(rss.mu.sendQueue.deductedForSchedulerTokens))
 
 		rss.parent.sendTokenCounter.Return(
-			ctx, admissionpb.ElasticWorkClass, rss.mu.sendQueue.deductedForSchedulerTokens, flag)
+			ctx, ElasticWC, rss.mu.sendQueue.deductedForSchedulerTokens, flag)
 		rss.mu.sendQueue.deductedForSchedulerTokens = 0
 	}
 	if handle := rss.mu.sendQueue.tokenWatcherHandle; handle != (SendTokenWatcherHandle{}) {
@@ -3210,17 +3302,22 @@ func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaWatcherStreamLoc
 }
 
 // Notify implements TokenGrantNotification.
-func (rss *replicaSendStream) Notify(ctx context.Context) {
+func (rss *replicaSendStream) Notify(ctx context.Context, wc WorkClassOrInflight) {
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 	if rss.mu.closed {
 		return
 	}
-	if rss.mu.sendQueue.tokenWatcherHandle == (SendTokenWatcherHandle{}) {
+	handle := &rss.mu.sendQueue.tokenWatcherHandle
+	if wc == InFlight {
+		handle = &rss.mu.sendQueue.forceFlushInflightTokensWatcherHandle
+	}
+	if *handle == (SendTokenWatcherHandle{}) {
 		return
 	}
-	rss.mu.sendQueue.tokenWatcherHandle = SendTokenWatcherHandle{}
-	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 {
+	*handle = SendTokenWatcherHandle{}
+	if rss.mu.sendQueue.deductedForSchedulerTokens != 0 ||
+		rss.mu.sendQueue.forceFlushDeductedForInflightTokens != 0 {
 		panic(errors.AssertionFailedf("watcher was registered when already had tokens"))
 	}
 	if rss.isEmptySendQueueStreamLocked() {
@@ -3237,18 +3334,35 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 		// replication AC. Even in that case we grab some tokens.
 		queueSize = 4096
 	}
-	flag := AdjNormal
-	if rss.mu.sendQueue.forceFlushStopIndex.active() {
-		panic(errors.AssertionFailedf("cannot be force-flushing"))
+	if wc == InFlight {
+		// The size needs to accommodate entries that are not subject to
+		// replication AC (which should be rare), but nonetheless we further pad
+		// it.
+		queueSize *= 2
+		if !rss.mu.sendQueue.forceFlushStopIndex.active() {
+			panic(errors.AssertionFailedf("must be force-flushing"))
+		}
+	} else {
+		if rss.mu.sendQueue.forceFlushStopIndex.active() {
+			panic(errors.AssertionFailedf("cannot be force-flushing"))
+		}
 	}
-	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, admissionpb.ElasticWorkClass, queueSize, flag)
+	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, wc, queueSize, AdjNormal)
 	if tokens == 0 {
 		// Rare case: no tokens available despite notification. Register again.
-		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
+		if wc == InFlight {
+			rss.startAttemptingToEmptySendQueueViaForceFlushedStreamLocked(ctx)
+		} else {
+			rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
+		}
 		return
 	}
-	rss.mu.sendQueue.deductedForSchedulerTokens = tokens
-	rss.parent.parent.opts.RangeControllerMetrics.SendQueue.DeductedForSchedulerBytes.Inc(int64(tokens))
+	if wc == InFlight {
+		rss.mu.sendQueue.forceFlushDeductedForInflightTokens = tokens
+	} else {
+		rss.mu.sendQueue.deductedForSchedulerTokens = tokens
+		rss.parent.parent.opts.RangeControllerMetrics.SendQueue.DeductedForSchedulerBytes.Inc(int64(tokens))
+	}
 	rss.parent.parent.scheduleReplica(rss.parent.replicaID)
 }
 
@@ -3289,8 +3403,8 @@ func (rss *replicaSendStream) returnSendTokensRaftMuAndStreamLocked(
 	}
 	for pri, tokens := range returned {
 		if tokens > 0 {
-			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
-			rss.parent.sendTokenCounter.Return(ctx, pri, tokens, flag)
+			wc := WorkClassOrInflight(WorkClassFromRaftPriority(raftpb.Priority(pri)))
+			rss.parent.sendTokenCounter.Return(ctx, wc, tokens, flag)
 		}
 	}
 }
@@ -3306,7 +3420,7 @@ func (rss *replicaSendStream) returnEvalTokensRaftMuAndStreamLocked(
 		rpri := raftpb.Priority(pri)
 		wc := WorkClassFromRaftPriority(rpri)
 		if tokens > 0 {
-			rss.parent.evalTokenCounter.Return(ctx, wc, tokens, AdjNormal)
+			rss.parent.evalTokenCounter.Return(ctx, WorkClassOrInflight(wc), tokens, AdjNormal)
 			rss.mu.eval.tokensDeducted[wc] -= tokens
 			if rss.mu.eval.tokensDeducted[wc] < 0 {
 				if buildutil.CrdbTestBuild {
@@ -3327,7 +3441,7 @@ func (rss *replicaSendStream) returnAllEvalTokensRaftMuAndStreamLocked(ctx conte
 	for wc, tokens := range rss.mu.eval.tokensDeducted {
 		if tokens > 0 {
 			// NB: This is only called for disconnects.
-			rss.parent.evalTokenCounter.Return(ctx, admissionpb.WorkClass(wc), tokens, AdjDisconnect)
+			rss.parent.evalTokenCounter.Return(ctx, WorkClassOrInflight(wc), tokens, AdjDisconnect)
 		}
 		rss.mu.eval.tokensDeducted[wc] = 0
 	}

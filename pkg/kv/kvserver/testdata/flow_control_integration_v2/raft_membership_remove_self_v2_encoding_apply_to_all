@@ -13,7 +13,7 @@ SELECT
 FROM
   crdb_internal.node_metrics
 WHERE
-  name LIKE '%kvflowcontrol%tokens%'
+  name LIKE '%kvflowcontrol%tokens%' AND name NOT LIKE '%inflight%'
 ORDER BY
   name ASC;
 
@@ -54,7 +54,7 @@ SELECT
 FROM
   crdb_internal.node_metrics
 WHERE
-  name LIKE '%kvflowcontrol%tokens%'
+  name LIKE '%kvflowcontrol%tokens%' AND name NOT LIKE '%inflight%'
 ORDER BY
   name ASC;
 
@@ -128,7 +128,7 @@ SELECT
 FROM
   crdb_internal.node_metrics
 WHERE
-  name LIKE '%kvflowcontrol%tokens%'
+  name LIKE '%kvflowcontrol%tokens%' AND name NOT LIKE '%inflight%'
 ORDER BY
   name ASC;
 

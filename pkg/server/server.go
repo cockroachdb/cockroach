@@ -637,7 +637,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	admittedPiggybacker := node_rac2.NewAdmittedPiggybacker()
 	streamTokenCounterProvider := rac2.NewStreamTokenCounterProvider(st, clock)
-	sendTokenWatcher := rac2.NewSendTokenWatcher(stopper, timeutil.DefaultTimeSource{})
+	sendTokenWatcher := rac2.NewSendTokenWatcher(stopper, timeutil.DefaultTimeSource{}, rac2.ElasticWC)
+	inFlightTokenWatcher := rac2.NewSendTokenWatcher(stopper, timeutil.DefaultTimeSource{}, rac2.InFlight)
 	waitForEvalConfig := rac2.NewWaitForEvalConfig(st)
 	evalWaitMetrics := rac2.NewEvalWaitMetrics()
 	rangeControllerMetrics := rac2.NewRangeControllerMetrics()
@@ -959,6 +960,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		KVFlowAdmittedPiggybacker:    admittedPiggybacker,
 		KVFlowStreamTokenProvider:    streamTokenCounterProvider,
 		KVFlowSendTokenWatcher:       sendTokenWatcher,
+		KVFlowInFlightTokenWatcher:   inFlightTokenWatcher,
 		KVFlowWaitForEvalConfig:      waitForEvalConfig,
 		KVFlowEvalWaitMetrics:        evalWaitMetrics,
 		KVFlowRangeControllerMetrics: rangeControllerMetrics,
