@@ -2823,6 +2823,8 @@ Note that the measurement does not include the duration for replicating the eval
 		Name:        "storage.wal.failover.write_and_sync.latency",
 		Help:        "The observed latency for writing and syncing to the logical Write-Ahead Log.",
 		Measurement: "Nanoseconds",
+		Category:    metric.Metadata_STORAGE,
+		Essential:   true,
 		Unit:        metric.Unit_NANOSECONDS,
 		HowToUse: "Only populated when WAL failover is configured. Without WAL failover, the relevant " +
 			"metric is storage.wal.fsync.latency.",
