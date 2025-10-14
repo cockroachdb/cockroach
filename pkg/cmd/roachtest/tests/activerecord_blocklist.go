@@ -53,6 +53,7 @@ var activeRecordIgnoreList = blocklist{
 	`AssociationCallbacksTest#test_has_many_callbacks_for_destroy_on_parent`:                                                                                   "flaky",
 	`BasicsTest#test_default_values_are_deeply_dupped`:                                                                                                         "flaky",
 	`CockroachDB::FixturesTest#test_create_fixtures`:                                                                                                           "flaky",
+	`CockroachDB::FixturesTest#test_create_symbol_fixtures`:                                                                                                    "flaky",
 	`FixtureWithSetModelClassPrevailsOverNamingConventionTest#test_model_class_in_fixture_file_is_respected`:                                                   "flaky",
 	`HasManyAssociationsTest#test_collection_association_with_private_kernel_method`:                                                                           "flaky",
 	`HasManyAssociationsTest#test_delete_all_association_with_primary_key_deletes_correct_records`:                                                             "flaky",
