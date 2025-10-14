@@ -28,6 +28,7 @@ func (n AnnotatedNode) GetAnnotation(ann *Annotations) interface{} {
 		// Avoid index-out-of bounds panics in production builds. The impact is
 		// that the node will be treated as if it doesn't have the annotation,
 		// which is better than the process crash.
+		// TODO(155405): Address this panic on the setter side.
 		return nil
 	}
 	return ann.Get(n.AnnIdx)
@@ -35,6 +36,12 @@ func (n AnnotatedNode) GetAnnotation(ann *Annotations) interface{} {
 
 // SetAnnotation sets the annotation associated with this node.
 func (n AnnotatedNode) SetAnnotation(ann *Annotations, annotation interface{}) {
+	if n.AnnIdx == NoAnnotation {
+		*ann = append(*ann, nil)
+		n.AnnIdx = AnnotationIdx(len(*ann))
+	}
+	// TODO(155405): Avoid index-of-bounds panics in SetAnnotation in production.
+
 	ann.Set(n.AnnIdx, annotation)
 }
 
