@@ -42,8 +42,8 @@ func TestStoreLiveness(t *testing.T) {
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
 			sender := &mockBatchTransport{}
-			heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
-			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, heartbeatCoordinator, nil)
+			coordinator := NewHeartbeatCoordinator(sender, stopper, settings)
+			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, coordinator, nil)
 			require.NoError(t, sm.onRestart(ctx))
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -69,17 +69,16 @@ func TestStoreLiveness(t *testing.T) {
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
 
-						time.Sleep(20 * time.Millisecond)
+						heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
 
-						heartbeats := sender.getBatchMessages()
-						sender.clearBatchMessages()
+						heartbeats := heartbeatCoordinator.drainHeartbeatQueues()
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
 					case "handle-messages":
 						msgs := parseMsgs(t, d, storeID)
 						sm.handleMessages(ctx, msgs)
 						responses := sender.getAsyncMessages()
-						sender.clearAsyncMessages()
+						sender.clearAsyncMessages() // Clear after capturing.
 						if len(responses) > 0 {
 							return fmt.Sprintf("responses:\n%s", printMsgs(responses))
 						} else {
@@ -96,9 +95,8 @@ func TestStoreLiveness(t *testing.T) {
 						now := parseTimestamp(t, d, "now")
 						gracePeriod := parseDuration(t, d, "grace-period")
 						o := Options{SupportWithdrawalGracePeriod: gracePeriod}
-						heartbeatCoordinator := NewHeartbeatCoordinator(sender, stopper, settings)
 						sm = NewSupportManager(
-							storeID, engine, o, settings, stopper, clock, nil, heartbeatCoordinator, nil,
+							storeID, engine, o, settings, stopper, clock, nil, coordinator, nil,
 						)
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
@@ -237,4 +235,26 @@ func parseMsgs(t *testing.T, d *datadriven.TestData, storeIdent slpb.StoreIdent)
 		msgs = append(msgs, msg)
 	}
 	return msgs
+}
+
+// This is a test-only helper that synchronously retrieves all pending heartbeat
+// messages from the HeartbeatCoordinator's internal queues.
+// Unlike the real system (which batches and asynchronously sends heartbeats after
+// a delay) data-driven tests require deterministic, immediate inspection of
+// these messages. By draining the queues directly, we bypass concurrency,
+// producing stable and reliable outputs for each test step.
+func (c *HeartbeatCoordinator) drainHeartbeatQueues() []slpb.Message {
+	var all []slpb.Message
+	c.nodeQueues.Range(func(_ roachpb.NodeID, queue *DestinationQueue) bool {
+		// Drain the queue non-blockingly.
+		for {
+			select {
+			case msg := <-queue.messages:
+				all = append(all, msg)
+			default:
+				return true
+			}
+		}
+	})
+	return all
 }
