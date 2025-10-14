@@ -9,45 +9,48 @@ import "testing"
 
 func TestParseAzureID(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		expectErr bool
-		expected  azureID
+		name           string
+		input          string
+		expectedString string
+		expectErr      bool
+		expected       azureID
 	}{
 		{
-			name:  "Valid VM",
-			input: "/subscriptions/1234-abcd/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/n01",
+			name:           "Valid VM",
+			input:          "/subscriptions/1234-abcd/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/n01",
+			expectedString: "/subscriptions/1234-abcd/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/n01",
 			expected: azureID{
-				subscription:               "1234-abcd",
-				resourceGroup:              "my-rg",
-				provider:                   "Microsoft.Compute",
-				resourceType:               "virtualMachines",
-				resourceName:               "n01",
-				childResourceTypeNamePairs: "",
+				subscription:  "1234-abcd",
+				resourceGroup: "my-rg",
+				provider:      "Microsoft.Compute",
+				resourceType:  "virtualMachines",
+				resourceName:  "n01",
 			},
 		},
 		{
-			name:  "Valid NIC",
-			input: "/subscriptions/1234-abcd/resourceGroups/test-rg/providers/Microsoft.Network/networkInterfaces/test-nic01",
+			name:           "Valid NIC",
+			input:          "/subscriptions/1234-abcd/resourceGroups/test-rg/providers/Microsoft.Network/networkInterfaces/test-nic01",
+			expectedString: "/subscriptions/1234-abcd/resourceGroups/test-rg/providers/Microsoft.Network/networkInterfaces/test-nic01",
 			expected: azureID{
-				subscription:               "1234-abcd",
-				resourceGroup:              "test-rg",
-				provider:                   "Microsoft.Network",
-				resourceType:               "networkInterfaces",
-				resourceName:               "test-nic01",
-				childResourceTypeNamePairs: "",
+				subscription:  "1234-abcd",
+				resourceGroup: "test-rg",
+				provider:      "Microsoft.Network",
+				resourceType:  "networkInterfaces",
+				resourceName:  "test-nic01",
 			},
 		},
 		{
-			name:  "Valid with child resource",
-			input: "/subscriptions/1111/resourceGroups/rg1/providers/Microsoft.Network/loadBalancers/lb01/frontendIPConfigurations/ipconfig1",
+			// Since child resources are not implemented, all we are checking here is
+			// that the resourceName gets selected out properly
+			name:           "Valid with child resource",
+			input:          "/subscriptions/1111/resourceGroups/rg1/providers/Microsoft.Network/loadBalancers/lb01/frontendIPConfigurations/ipconfig1",
+			expectedString: "/subscriptions/1111/resourceGroups/rg1/providers/Microsoft.Network/loadBalancers/lb01",
 			expected: azureID{
-				subscription:               "1111",
-				resourceGroup:              "rg1",
-				provider:                   "Microsoft.Network",
-				resourceType:               "loadBalancers",
-				resourceName:               "lb01",
-				childResourceTypeNamePairs: "frontendIPConfigurations/ipconfig1",
+				subscription:  "1111",
+				resourceGroup: "rg1",
+				provider:      "Microsoft.Network",
+				resourceType:  "loadBalancers",
+				resourceName:  "lb01",
 			},
 		},
 		{
@@ -91,12 +94,9 @@ func TestParseAzureID(t *testing.T) {
 			if actual.resourceName != tt.expected.resourceName {
 				t.Errorf("resourceName: actual %q, expected %q", actual.resourceName, tt.expected.resourceName)
 			}
-			if actual.childResourceTypeNamePairs != tt.expected.childResourceTypeNamePairs {
-				t.Errorf("childResourceTypeNamePairs: actual %q, expected %q", actual.childResourceTypeNamePairs, tt.expected.childResourceTypeNamePairs)
-			}
 			// Ensure String() reconstructs the same input
-			if actual.String() != tt.input {
-				t.Errorf("String(): actual %q, expected %q", actual.String(), tt.input)
+			if actual.String() != tt.expectedString {
+				t.Errorf("String(): actual %q, expected %q", actual.String(), tt.expectedString)
 			}
 		})
 	}

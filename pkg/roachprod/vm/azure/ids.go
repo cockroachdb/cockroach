@@ -25,6 +25,14 @@ import (
 // If child resource type name pair(s) are not present, the last matching
 // group will be empty. Otherwise, the last matching group will contain all
 // additional pairs.
+//
+// Currently, we are not using any Azure Resource IDs that contain child
+// resource type name pairs, so we do not save them as a field in azureID. If
+// we need to use them in the future we can add a field to azureID and set
+// that field in parseAzureID.
+// Note: the number of child resource pairs is ambiguous and currently the
+// entire remainder of the string gets matched to the last group if a trailing
+// '/' is present after resourceName.
 var azureIDPattern = regexp.MustCompile(
 	`/subscriptions/([^/]+)/resourceGroups/([^/]+)/providers/([^/]+)/([^/]+)/([^/]+)(?:/(.*))?`)
 
@@ -35,27 +43,25 @@ var azureIDPattern = regexp.MustCompile(
 //
 // Additional type name pairs are optional, and if they exist, this Resource ID
 // is describing a child resource or sometimes referred to as a subresource.
+// This struct does not contain a field for child resources. If a
+// child resource ID needs to be parsed, this struct must be extended.
 //
 // Template:
 //
 //	/subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/{namespace}/{type}/{name}[/childType/childName ...]
 type azureID struct {
-	// childResourceTypeNamePairs does not have its name pairs parsed into
-	// struct fields because if present, the number of pairs is ambiguous
-	childResourceTypeNamePairs string
-	provider                   string
-	resourceGroup              string
-	resourceName               string
-	resourceType               string
-	subscription               string
+	provider      string
+	resourceGroup string
+	resourceName  string
+	resourceType  string
+	subscription  string
 }
 
+// String does not account for child resources since they are not saved after
+// being parsed
 func (id azureID) String() string {
 	s := fmt.Sprintf("/subscriptions/%s/resourceGroups/%s/providers/%s/%s/%s",
 		id.subscription, id.resourceGroup, id.provider, id.resourceType, id.resourceName)
-	if id.childResourceTypeNamePairs != "" {
-		s += "/" + id.childResourceTypeNamePairs
-	}
 	return s
 }
 
@@ -64,16 +70,12 @@ func parseAzureID(id string) (azureID, error) {
 	if len(parts) != 7 {
 		return azureID{}, errors.Errorf("could not parse Azure ID %q", id)
 	}
-	if parts[1] == "" || parts[2] == "" || parts[3] == "" || parts[4] == "" || parts[5] == "" {
-		return azureID{}, errors.Errorf("Azure ID %q is missing a required field(s)", id)
-	}
 	ret := azureID{
-		subscription:               parts[1],
-		resourceGroup:              parts[2],
-		provider:                   parts[3],
-		resourceType:               parts[4],
-		resourceName:               parts[5],
-		childResourceTypeNamePairs: parts[6],
+		subscription:  parts[1],
+		resourceGroup: parts[2],
+		provider:      parts[3],
+		resourceType:  parts[4],
+		resourceName:  parts[5],
 	}
 	return ret, nil
 }
