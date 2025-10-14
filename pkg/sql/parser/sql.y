@@ -7879,9 +7879,11 @@ inspect_stmt:
 inspect_table_stmt:
   INSPECT TABLE table_name opt_as_of_clause opt_inspect_options_clause
   {
+    name := $3.unresolvedObjectName().ToTableName()
+
     $$.val = &tree.Inspect{
       Typ: tree.InspectTable,
-      Table: $3.unresolvedObjectName(),
+      Table: &name,
       AsOf: $4.asOfClause(),
       Options: $5.inspectOptions(),
     }

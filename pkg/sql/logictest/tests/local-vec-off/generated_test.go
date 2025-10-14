@@ -1060,6 +1060,20 @@ func TestLogic_inspect(
 	runLogicTest(t, "inspect")
 }
 
+func TestLogic_inspect_database_resolve_indexes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect_database_resolve_indexes")
+}
+
+func TestLogic_inspect_table_resolve_indexes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect_table_resolve_indexes")
+}
+
 func TestLogic_int_size(
 	t *testing.T,
 ) {

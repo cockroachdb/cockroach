@@ -27,7 +27,7 @@ type Inspect struct {
 	Typ     InspectType
 	Options InspectOptions
 	// Table is only set during INSPECT TABLE statements.
-	Table *UnresolvedObjectName
+	Table *TableName
 	// Database is only set during INSPECT DATABASE statements.
 	Database *UnresolvedObjectName
 	AsOf     AsOfClause
@@ -83,27 +83,10 @@ func (n *InspectOptions) HasIndexAll() bool {
 	return false
 }
 
-// Validate checks for internal consistency of the INSPECT command.
+// Valide checks for internal consistency of the INSPECT command.
 func (n *Inspect) Validate() error {
 	if err := n.Options.validate(); err != nil {
 		return err
-	}
-
-	// TODO(155056): Better validate index names from the options with the name
-	// of the database or table from the command.
-	// TODO(148365): Check for duplicated index names (including the name of the
-	// database or table from the command).
-	for _, index := range n.Options.NamedIndexes() {
-		switch n.Typ {
-		case InspectTable:
-			if index.Table.ObjectName != "" && n.Table.Object() != index.Table.Object() {
-				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", index.String(), n.Table.String())
-			}
-		case InspectDatabase:
-			if index.Table.ExplicitCatalog && n.Database.Object() != index.Table.Catalog() {
-				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to database %q", index.String(), n.Database.String())
-			}
-		}
 	}
 
 	return nil

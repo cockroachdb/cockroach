@@ -156,12 +156,27 @@ type indexKey struct {
 // If index names are not found or are not supported for inspection, an error is returned.
 // Index names are deduplicated.
 func InspectChecksByIndexNames(
-	ctx context.Context, p PlanHookState, names tree.TableIndexNames,
+	ctx context.Context, p PlanHookState, names tree.TableIndexNames, tdn *TableDescriptorName,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
 	var seenIndexes = make(map[indexKey]struct{})
 	for _, indexName := range names {
+		if tdn != nil {
+			if indexName.Table.ObjectName == "" {
+				indexName.Table.ObjectName = tdn.ObjectName
+			} else if indexName.Table.ObjectName != tdn.ObjectName {
+				return nil, pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", indexName.String(), tdn.FQString())
+			}
+
+			if !(indexName.Table.ExplicitCatalog || indexName.Table.ExplicitSchema) {
+				indexName.Table.CatalogName = tdn.CatalogName
+				indexName.Table.SchemaName = tdn.SchemaName
+				indexName.Table.ExplicitCatalog = true
+				indexName.Table.ExplicitSchema = true
+			}
+		}
+
 		_, table, index, err := p.GetTableAndIndex(ctx, indexName, privilege.INSPECT, false /* skipCache */)
 		if err != nil {
 			return nil, err
@@ -176,10 +191,21 @@ func InspectChecksByIndexNames(
 			return nil, pgerror.Newf(pgcode.InvalidName, "index %q on table %q is not supported for index consistency checking", index.GetName(), table.GetName())
 		}
 
+		if tdn != nil && table.GetID() != tdn.GetID() {
+			return nil, pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", indexName.String(), tdn.FQString())
+		}
+
 		checks = append(checks, &jobspb.InspectDetails_Check{Type: jobspb.InspectCheckIndexConsistency, TableID: table.GetID(), IndexID: index.GetID()})
 	}
 
 	return checks, nil
+}
+
+// TableDescriptorName is a helper struct that combines a TableDescriptor with its
+// fully qualified name.
+type TableDescriptorName struct {
+	catalog.TableDescriptor
+	tree.TableName
 }
 
 func isUnsupportedIndexForIndexConsistencyCheck(
