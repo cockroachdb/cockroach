@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -89,6 +90,12 @@ type inspectProcessor struct {
 	logger         inspectLogger
 	concurrency    int
 	clock          *hlc.Clock
+	mu             struct {
+		// Guards calls to output.Push because DistSQLReceiver.Push is not
+		// concurrency safe and progress metadata can be emitted from multiple
+		// worker goroutines.
+		syncutil.Mutex
+	}
 }
 
 var _ execinfra.Processor = (*inspectProcessor)(nil)
@@ -329,7 +336,7 @@ func (p *inspectProcessor) sendInspectProgress(
 		},
 	}
 
-	output.Push(nil, meta)
+	p.pushProgressMeta(output, meta)
 	return nil
 }
 
@@ -369,8 +376,19 @@ func (p *inspectProcessor) sendSpanCompletionProgress(
 		},
 	}
 
-	output.Push(nil, meta)
+	p.pushProgressMeta(output, meta)
 	return nil
+}
+
+// pushProgressMeta serializes metadata pushes so only one goroutine interacts
+// with the DistSQL receiver at a time (DistSQLReceiver.Push is not concurrency
+// safe).
+func (p *inspectProcessor) pushProgressMeta(
+	output execinfra.RowReceiver, meta *execinfrapb.ProducerMetadata,
+) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	output.Push(nil, meta)
 }
 
 // newInspectProcessor constructs a new inspectProcessor from the given InspectSpec.
