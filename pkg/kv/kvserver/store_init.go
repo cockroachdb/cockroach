@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -86,9 +87,9 @@ func WriteInitialClusterData(
 		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal},
 		roachpb.KeyValue{Key: keys.NodeLivenessKey(kvstorage.FirstNodeID), Value: livenessVal})
 
-	// firstRangeMS is going to accumulate the stats for the first range, as we
-	// write the meta records for all the other ranges.
-	firstRangeMS := &enginepb.MVCCStats{}
+	// secondRangeMS is going to accumulate the stats for the second range
+	// (meta2), as we write the meta records for all the other ranges.
+	secondRangeMS := &enginepb.MVCCStats{}
 
 	// filter initial values for a given descriptor, returning only the ones that
 	// pertain to the respective range.
@@ -106,26 +107,75 @@ func WriteInitialClusterData(
 	if knobs.InitialReplicaVersionOverride != nil {
 		initialReplicaVersion = *knobs.InitialReplicaVersionOverride
 	}
+
+	// Get the index in the splits list of meta2, if it exists. Some tests call
+	// this function with an empty splits list.
+	meta2SplitIndex := -1
+	for i, split := range splits {
+		if split.Equal(keys.Meta2Prefix) {
+			meta2SplitIndex = i
+			break
+		}
+	}
+
+	// Record whether we're splitting meta2.
+	splitMeta2 := meta2SplitIndex != -1
+
+	// We expect meta2 to be in the splits. One exception is when we're called
+	// with an empty splits list (some tests do this by setting
+	// opts.createSystemRanges=false).
+	if buildutil.CrdbTestBuild && len(splits) > 0 && meta2SplitIndex == -1 {
+		panic("meta2 not found in splits list")
+	}
+
+	// Historically, meta1 and meta2 were bootstrapped on the same range (r1).
+	// However, we now have them on two separate ranges at bootstrap. To keep the
+	// other system ranges in the same order as before, we assign meta2 rangeID of
+	// 1 + the last system range at bootstrap.
+	//
+	// `i` is the index of the split we're currently creating a range for.
+	// It is -1 when creating the first range (which starts at KeyMin).
+	getBootstrapRangeID := func(i, meta2splitIndex, splitListSize int) roachpb.RangeID {
+		if i == -1 {
+			// Special case for the first range.
+			return roachpb.RangeID(1)
+		}
+
+		if i == meta2splitIndex {
+			// Special case for the meta2 range to prevent it from being rangeID 2
+			// since we want to reserve that for the liveness range.
+			return roachpb.RangeID(splitListSize + 1)
+		}
+
+		if i > meta2splitIndex {
+			// All ranges after meta2 get shifted down by 1 (i + 1 instead of i + 2).
+			return roachpb.RangeID(i + 1)
+		}
+
+		return roachpb.RangeID(i + 2)
+	}
+
 	// We iterate through the ranges backwards, since they all need to contribute
-	// to the stats of the first range (i.e. because they all write meta2 records
-	// in the first range), and so we want to create the first range last so that
-	// the stats we compute for it are correct.
+	// to the stats of the second range (i.e. because they all write meta2 records
+	// in the second range), and so we want to create the second range at the end
+	// so that the stats we compute for it are correct.
 	startKey := roachpb.RKeyMax
 	for i := len(splits) - 1; i >= -1; i-- {
 		endKey := startKey
-		rangeID := roachpb.RangeID(i + 2) // RangeIDs are 1-based.
 		if i >= 0 {
 			startKey = splits[i]
 		} else {
 			startKey = roachpb.RKeyMin
 		}
 
+		rangeID := getBootstrapRangeID(i, meta2SplitIndex, len(splits))
 		desc := &roachpb.RangeDescriptor{
 			RangeID:       rangeID,
 			StartKey:      startKey,
 			EndKey:        endKey,
 			NextReplicaID: 2,
 		}
+
 		const firstReplicaID = 1
 		replicas := []roachpb.ReplicaDescriptor{
 			{
@@ -193,19 +243,28 @@ func WriteInitialClusterData(
 				return err
 			}
 
-			// Range addressing for meta2.
-			meta2Key := keys.RangeMetaKey(endKey)
+			// All range descriptors are stored in meta2. Note that we're also storing
+			// the range descriptor for the second range in meta2 as well. This is
+			// because the second range doesn't end at the end of meta2 -- there's
+			// still some keys between the end of meta2 and the start of node
+			// liveness.
+			metaKey := keys.RangeMetaKey(endKey)
 			if err := storage.MVCCPutProto(
-				ctx, batch, meta2Key.AsRawKey(),
-				now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
+				ctx, batch, metaKey.AsRawKey(),
+				now, desc, storage.MVCCWriteOptions{Stats: secondRangeMS},
 			); err != nil {
 				return err
 			}
 
-			// The first range gets some special treatment.
-			if startKey.Equal(roachpb.RKeyMin) {
-				// Range addressing for meta1.
-				meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+			// If we want to split meta2 range, we need to write the meta1 record
+			// for it.
+			// Also, some tests call this function with an empty splits list. In that
+			// case, we also need to write the meta1 but for the range, except that
+			// range is the one starting at KeyMin since both meta1 and meta2 are on
+			// the same range.
+			if startKey.Equal(keys.Meta2Prefix) || (startKey.Equal(roachpb.RKeyMin) && !splitMeta2) {
+				// The range descriptor is stored in meta1.
+				meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax)) // range addressing for meta1
 				if err := storage.MVCCPutProto(
 					ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
 				); err != nil {
