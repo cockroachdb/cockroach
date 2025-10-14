@@ -113,12 +113,12 @@ func DequalifyAndValidateExpr(
 	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
 		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
 	}
-	columnLookupByNameFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	columnLookupByNameFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
 		if err != nil || col.Dropped() {
-			return false, false, 0, nil
+			return false, false, false, 0, nil
 		}
-		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+		return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 	}
 
 	return DequalifyAndValidateExprImpl(ctx, expr, typ, context, semaCtx, maxVolatility, tn, version,
@@ -249,12 +249,12 @@ func FormatExprForExpressionIndexDisplay(
 }
 
 func makeColumnLookupFnForTableDesc(desc catalog.TableDescriptor) ColumnLookupFn {
-	return func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	return func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
 		if err != nil || col.Dropped() {
-			return false, false, 0, nil
+			return false, false, false, 0, nil
 		}
-		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+		return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 	}
 }
 
@@ -269,14 +269,14 @@ func ParseTriggerWhenExprForDisplay(
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
-	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	lookupFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 		// Trigger WHEN expressions can reference only the special OLD and NEW
 		// columns.
 		switch columnName {
 		case "old", "new":
-			return true, true, 0, tableTyp
+			return true, true, false, 0, tableTyp
 		}
-		return false, false, 0, nil
+		return false, false, false, 0, nil
 	}
 	return parseExprForDisplayImpl(
 		ctx,

@@ -261,7 +261,7 @@ func (d *dummyColumn) ResolvedType() *types.T {
 	return d.typ
 }
 
-type ColumnLookupFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T)
+type ColumnLookupFn func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T)
 
 // ReplaceColumnVars replaces the occurrences of column names in an expression with
 // dummyColumns containing their type, so that they may be type-checked. It
@@ -295,7 +295,7 @@ func ReplaceColumnVars(
 			return true, expr, nil
 		}
 
-		colExists, colIsAccessible, colID, colType := columnLookupFn(c.ColumnName)
+		colExists, colIsAccessible, _, colID, colType := columnLookupFn(c.ColumnName)
 		if !colExists {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
