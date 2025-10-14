@@ -1793,6 +1793,7 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		if flowErr != nil {
+			fmt.Printf("resumeWithRetries flowErr: %v\n", flowErr)
 			return flowErr
 		}
 

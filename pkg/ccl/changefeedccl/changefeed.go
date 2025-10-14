@@ -120,8 +120,8 @@ func getTargetsFromDatabaseSpec(
 	err = sql.DescsTxn(ctx, execCfg, func(
 		ctx context.Context, txn isql.Txn, descs *descs.Collection,
 	) error {
-		// TODO: Set fixed timestamp here.
 		if timestamp != (hlc.Timestamp{}) {
+			fmt.Printf("getTargetsFromDatabaseSpec: setting fixed timestamp to %s\n", timestamp)
 			if err := txn.KV().SetFixedTimestamp(ctx, timestamp); err != nil {
 				return errors.Wrapf(err, "setting timestamp for table descriptor fetch")
 			}

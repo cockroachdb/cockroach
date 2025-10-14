@@ -288,9 +288,12 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	initialTableDescsFn := func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		fmt.Printf("primeInitialTableDescs: setting fixed timestamp to %s\n", tf.initialFrontier)
-		if err := txn.KV().SetFixedTimestamp(ctx, tf.initialFrontier); err != nil {
-			return err
+		if tf.initialFrontier != (hlc.Timestamp{}) {
+			fmt.Printf("primeInitialTableDescs: setting fixed timestamp to %s\n", tf.initialFrontier)
+			if err := txn.KV().SetFixedTimestamp(ctx, tf.initialFrontier); err != nil {
+				// fmt.Printf("primeInitialTableDescs: failed setting fixed timestamp to %s\n", tf.initialFrontier)
+				return err
+			}
 		}
 		descriptors := txn.Descriptors()
 		err := tf.targets.EachTableID(func(id descpb.ID) error {

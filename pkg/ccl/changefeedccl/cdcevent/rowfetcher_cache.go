@@ -7,6 +7,7 @@ package cdcevent
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -107,6 +108,7 @@ func refreshUDT(
 	// descs.Collection directly here.
 	// TODO (SQL Schema): #53751.
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		fmt.Printf("refreshUDT: setting fixed timestamp to %s\n", ts)
 		err := txn.SetFixedTimestamp(ctx, ts)
 		if err != nil {
 			return err

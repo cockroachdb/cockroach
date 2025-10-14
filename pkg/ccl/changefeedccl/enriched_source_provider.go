@@ -557,9 +557,11 @@ func getDescriptors(
 	var schemaDescriptor catalog.SchemaDescriptor
 	var err error
 	f := func(ctx context.Context, txn descs.Txn) error {
-		fmt.Printf("getDescriptors: setting fixed timestamp to %s\n", initialHighWater)
-		if err := txn.KV().SetFixedTimestamp(ctx, initialHighWater); err != nil {
-			return err
+		if initialHighWater != (hlc.Timestamp{}) {
+			fmt.Printf("getDescriptors: setting fixed timestamp to %s\n", initialHighWater)
+			if err := txn.KV().SetFixedTimestamp(ctx, initialHighWater); err != nil {
+				return err
+			}
 		}
 		byIDGetter := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get()
 		tableDescriptor, err = byIDGetter.Table(ctx, tableID)
