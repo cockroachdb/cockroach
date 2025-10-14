@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -304,6 +305,7 @@ func sendAddRemoteSSTWorker(
 	approxDataSize *int64,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
+		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
 		for entry := range restoreSpanEntriesCh {
 			log.Dev.VInfof(ctx, 1, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
 
@@ -342,6 +344,12 @@ func sendAddRemoteSSTWorker(
 				file.BackupFileEntrySpan = restoringSubspan
 				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
 					return err
+				}
+
+				if testingKnobs != nil && testingKnobs.AfterAddRemoteSST != nil {
+					if err := testingKnobs.AfterAddRemoteSST(); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -388,8 +396,16 @@ func sendAdminScatter(
 	ctx, sp := tracing.ChildSpan(ctx, "backup.sendAdminScatter")
 	defer sp.Finish()
 
-	const maxSize = 4 << 20
+	// To obey the golden rule of never scattering non-empty ranges, we set a
+	// maxSize of 1 here. The link phase should generally only ever be scattering
+	// empty ranges, but since the link phase can retry, we may end up attempting
+	// to scatter a range that contains external SSTs. If a scatter request fails
+	// due to the range being non-empty, we can ignore the error.
+	const maxSize = 1
 	_, err := execCtx.ExecCfg().DB.AdminScatter(ctx, scatterKey, maxSize)
+	if err == nil || strings.Contains(err.Error(), "existing range size") {
+		return nil
+	}
 	return err
 }
 

@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -696,6 +698,98 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 	require.Equal(t, maxDownloadAttempts*2, attemptCount)
+}
+
+func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	// This test first runs online restore and waits for an external SST to be
+	// added to ensure at least one range has ingested an external SST. It then
+	// pauses the job and resumes it. During this second phase, we count the
+	// number of KV scatter requets that are sent and the number of successful
+	// scatter requests. Since at least one range contains an external SST, the
+	// number of scatter requests should be greater than the number of successful
+	// scatter requests.
+	// NB: This relies on the fact that the `TestingResponseFilter` hook is not
+	// called if an admin scatter fails due to the size limit being hit.
+	reachedPause := make(chan struct{})
+	defer close(reachedPause)
+	pauseCh := make(chan struct{})
+	defer close(pauseCh)
+
+	var resumed atomic.Bool
+	var postPauseScatterRequests atomic.Int32
+	var postPauseSuccessfulScatters atomic.Int32
+
+	params := orParams
+	params.ServerArgs.Knobs = base.TestingKnobs{
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			AfterAddRemoteSST: func() error {
+				if resumed.Load() {
+					return nil
+				}
+				reachedPause <- struct{}{}
+				<-pauseCh
+				return nil
+			},
+		},
+		Store: &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
+				if !resumed.Load() {
+					return nil
+				}
+				for _, req := range ba.Requests {
+					if req.GetInner().Method() == kvpb.AdminScatter {
+						postPauseScatterRequests.Add(1)
+					}
+				}
+				return nil
+			},
+			TestingResponseFilter: func(
+				ctx context.Context, req *kvpb.BatchRequest, resp *kvpb.BatchResponse,
+			) *kvpb.Error {
+				if !resumed.Load() {
+					return nil
+				}
+				for _, r := range req.Requests {
+					if r.GetInner().Method() == kvpb.AdminScatter {
+						postPauseSuccessfulScatters.Add(1)
+					}
+				}
+				return nil
+			},
+		},
+	}
+
+	const numAccounts = 100
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, params,
+	)
+	defer cleanupFn()
+
+	externalStorage := "nodelocal://1/backup"
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+
+	var linkJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t,
+		`RESTORE DATABASE data FROM LATEST IN $1
+		WITH EXPERIMENTAL DEFERRED COPY, DETACHED, new_db_name='data2'`,
+		externalStorage,
+	).Scan(&linkJobID)
+
+	<-reachedPause
+	sqlDB.Exec(t, "PAUSE JOB $1", linkJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, linkJobID)
+	pauseCh <- struct{}{}
+
+	resumed.Store(true)
+	sqlDB.Exec(t, "RESUME JOB $1", linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, linkJobID)
+
+	require.Greater(t, postPauseScatterRequests.Load(), postPauseSuccessfulScatters.Load())
 }
 
 func bankOnlineRestore(
