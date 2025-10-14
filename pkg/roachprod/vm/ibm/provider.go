@@ -222,7 +222,7 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 
 	// If an authenticator is not provided, create one from the environment.
 	if p.authenticator == nil {
-		// GetAuthenticatorFromEnvironment fails silently if IBM_APIKEY isn't set
+		// GetAuthenticatorFromEnvironment returns nil if IBM_APIKEY isn't set
 		// 1) First tries to find a credential file
 		//		a) using IBM_CREDENTIALS_FILE which is not set
 		//		b) <user-home-dir>/ibm-credentials.env which is not currently used
