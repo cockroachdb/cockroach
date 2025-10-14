@@ -224,8 +224,8 @@ func TestHeartbeatCoordinator_RequestEnqueue(t *testing.T) {
 	(*queue).mu.Unlock()
 }
 
-// TestHeartbeatCoordinator_sendMessagesWithPacingDrainsAllQueues tests that OnTick drains all queues.
-func TestHeartbeatCoordinator_sendMessagesWithPacingDrainsAllQueues(t *testing.T) {
+// TestHeartbeatCoordinator_SignalDrainsAllQueues tests that Signal drains all queues.
+func TestHeartbeatCoordinator_SignalDrainsAllQueues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -263,14 +263,16 @@ func TestHeartbeatCoordinator_sendMessagesWithPacingDrainsAllQueues(t *testing.T
 	require.Len(t, (*queue).messages, len(allMessages), "All messages should be in the same queue")
 	(*queue).mu.Unlock()
 
-	coordinator.sendMessagesWithPacing()
+	// Signal coordinator to process messages
+	coordinator.Signal()
 
-	time.Sleep(20 * time.Millisecond)
+	// Wait for async processing to complete (collection window + smear duration)
+	time.Sleep(25 * time.Millisecond)
 
 	// Verify queue is now empty (messages were processed)
 	(*queue).mu.Lock()
 	defer (*queue).mu.Unlock()
-	require.Len(t, (*queue).messages, 0, "Queue should be empty after sendMessagesWithPacing")
+	require.Len(t, (*queue).messages, 0, "Queue should be empty after Signal")
 }
 
 // TestHeartbeatCoordinator_MultipleNodesSmearing tests that messages to different nodes
@@ -316,20 +318,73 @@ func TestHeartbeatCoordinator_MultipleNodesSmearing(t *testing.T) {
 		(*queue).mu.Unlock()
 	}
 
-	// Test the actual workflow: Enqueue + sendMessagesWithPacing (like sendHeartbeats does)
-	coordinator.sendMessagesWithPacing()
+	// Test the actual workflow: Enqueue + Signal (like sendHeartbeats does)
+	coordinator.Signal()
+
+	// Wait for async processing to complete (collection window + smear duration)
+	time.Sleep(25 * time.Millisecond)
 
 	// Verify all queues are now empty (messages were processed)
 	for _, nodeID := range destinationNodes {
 		queue, ok := coordinator.nodeQueues.Load(nodeID)
 		require.True(t, ok)
 		(*queue).mu.Lock()
-		require.Len(t, (*queue).messages, 0, "Node %d queue should be empty after sendMessagesWithPacing", nodeID)
+		require.Len(t, (*queue).messages, 0, "Node %d queue should be empty after Signal", nodeID)
 		(*queue).mu.Unlock()
 	}
 
 	t.Logf("Multiple nodes smearing verified: %d messages distributed across %d nodes and processed together",
 		len(allMessages), len(destinationNodes))
+}
+
+// TestHeartbeatCoordinator_SignalCoalescing tests that multiple signals are coalesced.
+func TestHeartbeatCoordinator_SignalCoalescing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	tickDuration := 1 * time.Second
+	settings := cluster.MakeTestingClusterSettings()
+	transport := createTestTransport(t, stopper)
+	coordinator := NewHeartbeatCoordinator(transport, tickDuration, stopper, settings)
+
+	// Create test messages
+	msg1 := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 1, StoreID: 2},
+	}
+	msg2 := slpb.Message{
+		Type: slpb.MsgHeartbeat,
+		From: slpb.StoreIdent{NodeID: 1, StoreID: 1},
+		To:   slpb.StoreIdent{NodeID: 1, StoreID: 3},
+	}
+
+	// Enqueue messages
+	coordinator.Enqueue([]slpb.Message{msg1})
+	coordinator.Enqueue([]slpb.Message{msg2})
+
+	// Send multiple signals rapidly
+	coordinator.Signal() // First signal should be accepted
+	coordinator.Signal() // Second signal should be ignored (already processing)
+	coordinator.Signal() // Third signal should be ignored
+
+	// Wait for processing to complete
+	time.Sleep(25 * time.Millisecond)
+
+	// Verify queue is empty (messages were processed)
+	queue, ok := coordinator.nodeQueues.Load(roachpb.NodeID(1))
+	require.True(t, ok)
+	(*queue).mu.Lock()
+	defer (*queue).mu.Unlock()
+	require.Len(t, (*queue).messages, 0, "Queue should be empty after processing")
+
+	// Verify signal metrics
+	require.Equal(t, int64(1), coordinator.metrics.SignalsAccepted.Count(), "Should have accepted 1 signal")
+	require.Equal(t, int64(2), coordinator.metrics.SignalsIgnored.Count(), "Should have ignored 2 signals")
 }
 
 // TestHeartbeatCoordinator_TimingBehavior tests the actual heartbeat timing behavior:
@@ -364,13 +419,15 @@ func TestHeartbeatCoordinator_TimingBehavior(t *testing.T) {
 	// Verify messages are queued but not sent yet
 	// Note: In a real test, we would verify the queue state
 
-	// Trigger sendMessagesWithPacing - this simulates the heartbeat tick
+	// Signal coordinator - this simulates the heartbeat tick
 	startTime := timeutil.Now()
-	coordinator.sendMessagesWithPacing()
+	coordinator.Signal()
+
+	// Wait for async processing to complete
+	time.Sleep(25 * time.Millisecond)
 	sendDuration := timeutil.Since(startTime)
 
 	// Verify the send completes reasonably quickly (within smear duration tolerance)
-	// With few messages, it may complete very quickly without sleeping between batches
 	require.True(t, sendDuration <= 100*time.Millisecond, "Send duration %v should complete quickly", sendDuration)
 
 	t.Logf("Timing behavior verified: %d messages processed in %v (smear duration: %v)",
@@ -459,10 +516,13 @@ func TestHeartbeatCoordinator_ProductionScaleSimulation(t *testing.T) {
 		(*queue).mu.Unlock()
 	}
 
-	// Test the actual workflow: Enqueue + sendMessagesWithPacing (like sendHeartbeats does)
+	// Test the actual workflow: Enqueue + Signal (like sendHeartbeats does)
 	// This simulates the real heartbeat sending process with smearing
 	smearStartTime := time.Now()
-	coordinator.sendMessagesWithPacing()
+	coordinator.Signal()
+
+	// Wait for async processing to complete
+	time.Sleep(25 * time.Millisecond)
 	smearDuration := time.Since(smearStartTime)
 
 	t.Logf("Heartbeat smearing completed in %v (target: ~10ms)", smearDuration)
@@ -472,7 +532,7 @@ func TestHeartbeatCoordinator_ProductionScaleSimulation(t *testing.T) {
 		queue, ok := coordinator.nodeQueues.Load(nodeID)
 		require.True(t, ok)
 		(*queue).mu.Lock()
-		require.Len(t, (*queue).messages, 0, "Node %d queue should be empty after sendMessagesWithPacing", nodeID)
+		require.Len(t, (*queue).messages, 0, "Node %d queue should be empty after Signal", nodeID)
 		(*queue).mu.Unlock()
 	}
 

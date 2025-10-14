@@ -119,6 +119,11 @@ type HeartbeatCoordinatorMetrics struct {
 	TickDuration  *metric.Gauge
 	SmearDuration *metric.Gauge
 
+	// Signal metrics
+	SignalsAccepted *metric.Counter
+	SignalsIgnored  *metric.Counter
+	SignalsDrained  *metric.Counter
+
 	// Error metrics
 	SendErrors  *metric.Counter
 	PacerErrors *metric.Counter
@@ -133,6 +138,9 @@ func newHeartbeatCoordinatorMetrics() *HeartbeatCoordinatorMetrics {
 		TotalMessagesInQueues: metric.NewGauge(metaHeartbeatCoordinatorTotalMessagesInQueues),
 		TickDuration:          metric.NewGauge(metaHeartbeatCoordinatorTickDuration),
 		SmearDuration:         metric.NewGauge(metaHeartbeatCoordinatorSmearDuration),
+		SignalsAccepted:       metric.NewCounter(metaHeartbeatCoordinatorSignalsAccepted),
+		SignalsIgnored:        metric.NewCounter(metaHeartbeatCoordinatorSignalsIgnored),
+		SignalsDrained:        metric.NewCounter(metaHeartbeatCoordinatorSignalsDrained),
 		SendErrors:            metric.NewCounter(metaHeartbeatCoordinatorSendErrors),
 		PacerErrors:           metric.NewCounter(metaHeartbeatCoordinatorPacerErrors),
 	}
@@ -319,6 +327,24 @@ var (
 		Name:        "storeliveness.heartbeat_coordinator.pacer_errors",
 		Help:        "Total number of errors in the pacer",
 		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSignalsAccepted = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.signals_accepted",
+		Help:        "Total number of signals accepted by the heartbeat coordinator",
+		Measurement: "Signals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSignalsIgnored = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.signals_ignored",
+		Help:        "Total number of signals ignored by the heartbeat coordinator (already processing)",
+		Measurement: "Signals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSignalsDrained = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.signals_drained",
+		Help:        "Total number of signals drained during collection window",
+		Measurement: "Signals",
 		Unit:        metric.Unit_COUNT,
 	}
 

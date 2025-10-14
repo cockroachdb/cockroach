@@ -69,6 +69,11 @@ func TestStoreLiveness(t *testing.T) {
 						sm.options.SupportDuration = parseDuration(t, d, "support-duration")
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
+
+						// Wait for async heartbeat processing to complete
+						// Collection window (10ms) + smear duration (10ms) + small buffer
+						time.Sleep(25 * time.Millisecond)
+
 						heartbeats := sender.drainSentMessages()
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
