@@ -110,10 +110,15 @@ type HeartbeatCoordinatorMetrics struct {
 	MessagesEnqueued      *metric.Counter
 	MessagesSent          *metric.Counter
 	MessagesSentImmediate *metric.Counter // responses that bypass smearing
+	MessagesDropped       *metric.Counter
 
 	// Queue metrics.
 	ActiveQueues          *metric.Gauge
 	TotalMessagesInQueues *metric.Gauge
+
+	// Timing metrics.
+	TickDuration  *metric.Gauge
+	SmearDuration *metric.Gauge
 
 	// Signal metrics.
 	SignalsAccepted *metric.Counter
@@ -130,8 +135,11 @@ func newHeartbeatCoordinatorMetrics() *HeartbeatCoordinatorMetrics {
 		MessagesEnqueued:      metric.NewCounter(metaHeartbeatCoordinatorMessagesEnqueued),
 		MessagesSent:          metric.NewCounter(metaHeartbeatCoordinatorMessagesSent),
 		MessagesSentImmediate: metric.NewCounter(metaHeartbeatCoordinatorMessagesSentImmediate),
+		MessagesDropped:       metric.NewCounter(metaHeartbeatCoordinatorMessagesDropped),
 		ActiveQueues:          metric.NewGauge(metaHeartbeatCoordinatorActiveQueues),
 		TotalMessagesInQueues: metric.NewGauge(metaHeartbeatCoordinatorTotalMessagesInQueues),
+		TickDuration:          metric.NewGauge(metaHeartbeatCoordinatorTickDuration),
+		SmearDuration:         metric.NewGauge(metaHeartbeatCoordinatorSmearDuration),
 		SignalsAccepted:       metric.NewCounter(metaHeartbeatCoordinatorSignalsAccepted),
 		SignalsIgnored:        metric.NewCounter(metaHeartbeatCoordinatorSignalsIgnored),
 		SignalsDrained:        metric.NewCounter(metaHeartbeatCoordinatorSignalsDrained),
@@ -282,8 +290,16 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaHeartbeatCoordinatorMessagesSentImmediate = metric.Metadata{
-		Name:        "storeliveness.heartbeat_coordinator.messages_sent_immediate",
-		Help:        "Total number of heartbeat response messages sent immediately (bypassing smearing)",
+		Name: "storeliveness.heartbeat_coordinator.messages_sent_immediate",
+		Help: "Total number of heartbeat response messages sent " +
+			"immediately (bypassing smearing)",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorMessagesDropped = metric.Metadata{
+		Name: "storeliveness.heartbeat_coordinator.messages_dropped",
+		Help: "Total number of heartbeat messages dropped due to message " +
+			"buffer queues being full",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -297,6 +313,18 @@ var (
 		Name:        "storeliveness.heartbeat_coordinator.total_messages_in_queues",
 		Help:        "Current total number of messages across all queues",
 		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorTickDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.tick_duration_ms",
+		Help:        "Heartbeat tick duration in milliseconds",
+		Measurement: "Duration",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSmearDuration = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.smear_duration_ms",
+		Help:        "Heartbeat smear duration in milliseconds",
+		Measurement: "Duration",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaHeartbeatCoordinatorSendErrors = metric.Metadata{
@@ -318,8 +346,9 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 	metaHeartbeatCoordinatorSignalsIgnored = metric.Metadata{
-		Name:        "storeliveness.heartbeat_coordinator.signals_ignored",
-		Help:        "Total number of signals ignored by the heartbeat coordinator (already processing)",
+		Name: "storeliveness.heartbeat_coordinator.signals_ignored",
+		Help: "Total number of signals ignored by the heartbeat " +
+			"coordinator (already processing)",
 		Measurement: "Signals",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -349,8 +378,9 @@ var (
 		Unit:        metric.Unit_BYTES,
 	}
 	metaBatchDuration = metric.Metadata{
-		Name:        "storeliveness.transport.batch-duration",
-		Help:        "Duration spent collecting messages into batches by the Store Liveness Transport",
+		Name: "storeliveness.transport.batch-duration",
+		Help: "Duration spent collecting messages into batches by the " +
+			"Store Liveness Transport",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 	}

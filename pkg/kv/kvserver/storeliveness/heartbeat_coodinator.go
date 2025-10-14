@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -26,6 +27,28 @@ var HeartbeatBatchingDuration = settings.RegisterDurationSetting(
 	"duration over which heartbeat messages are batched to per-node destination queues;",
 	10*time.Millisecond,
 )
+
+var HeartbeatSmearDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_smear_duration",
+	"duration over which heartbeat messages are smeared to prevent goroutine "+
+		"spikes; all heartbeats for all nodes are sent within this window at "+
+		"the start of each tick",
+	10*time.Millisecond,
+)
+
+type heartbeatPacerConfig struct {
+	refresh time.Duration
+	smear   time.Duration
+}
+
+func (c *heartbeatPacerConfig) GetRefresh() time.Duration {
+	return c.refresh
+}
+
+func (c *heartbeatPacerConfig) GetSmear() time.Duration {
+	return c.smear
+}
 
 type HeartbeatCoordinator struct {
 	transport BatchMessageSender
@@ -48,9 +71,7 @@ type DestinationQueue struct {
 var _ MessageSender = (*HeartbeatCoordinator)(nil)
 
 func NewHeartbeatCoordinator(
-	transport BatchMessageSender,
-	stopper *stop.Stopper,
-	settings *cluster.Settings,
+	transport BatchMessageSender, stopper *stop.Stopper, settings *cluster.Settings,
 ) *HeartbeatCoordinator {
 	metrics := newHeartbeatCoordinatorMetrics()
 
@@ -69,13 +90,13 @@ func NewHeartbeatCoordinator(
 			c.run(ctx)
 		},
 	); err != nil {
-		log.KvExec.Warningf(context.Background(), "failed to start HeartbeatCoordinator: %v", err)
+		log.KvExec.Warningf(context.Background(),
+			"failed to start HeartbeatCoordinator: %v", err)
 	}
 
 	return c
 }
 
-// run contains the main processing goroutine which waits for signals and processes heartbeats.
 func (c *HeartbeatCoordinator) run(ctx context.Context) {
 	var batchTimer timeutil.Timer
 	defer batchTimer.Stop()
@@ -108,7 +129,7 @@ func (c *HeartbeatCoordinator) run(ctx context.Context) {
 			// signaling times from across all stores' goroutines.
 
 			// Process the batch.
-			c.drainAndSend(ctx)
+			c.drainAndSmear(ctx)
 
 		case <-c.stopper.ShouldQuiesce():
 			return
@@ -127,12 +148,16 @@ func (c *HeartbeatCoordinator) run(ctx context.Context) {
 func (c *HeartbeatCoordinator) SendAsync(ctx context.Context, msg slpb.Message) bool {
 	if msg.Type == slpb.MsgHeartbeatResp {
 		c.metrics.MessagesSentImmediate.Inc(1)
-		log.KvExec.VInfof(ctx, 2, "HeartbeatCoordinator sending immediate response to node %d", msg.To.NodeID)
+		log.KvExec.VInfof(ctx, 2,
+			"HeartbeatCoordinator sending immediate response to node %d",
+			msg.To.NodeID)
 
 		success := c.transport.SendAsync(ctx, msg)
 		if !success {
 			c.metrics.SendErrors.Inc(1)
-			log.KvExec.Warningf(ctx, "Failed to send immediate heartbeat response to node %d", msg.To.NodeID)
+			log.KvExec.Warningf(ctx,
+				"Failed to send immediate heartbeat response to node %d",
+				msg.To.NodeID)
 		}
 		return success
 	}
@@ -140,8 +165,9 @@ func (c *HeartbeatCoordinator) SendAsync(ctx context.Context, msg slpb.Message) 
 }
 
 // Enqueue adds messages to the appropriate destination queue.
-func (c *HeartbeatCoordinator) Enqueue(messages []slpb.Message) int {
-	log.KvExec.VInfof(context.Background(), 2, "HeartbeatCoordinator enqueuing %d messages", len(messages))
+func (c *HeartbeatCoordinator) Enqueue(ctx context.Context, messages []slpb.Message) int {
+	log.KvExec.VInfof(context.Background(), 2,
+		"HeartbeatCoordinator enqueuing %d messages", len(messages))
 	successes := 0
 	for _, msg := range messages {
 		nodeID := msg.To.NodeID
@@ -149,12 +175,18 @@ func (c *HeartbeatCoordinator) Enqueue(messages []slpb.Message) int {
 		queue, isNew := c.getOrCreateQueue(nodeID)
 		if isNew {
 			c.metrics.ActiveQueues.Inc(1)
-			log.KvExec.VInfof(context.Background(), 1, "HeartbeatCoordinator created new queue for node %d", nodeID)
+			log.KvExec.VInfof(ctx, 1,
+				"HeartbeatCoordinator created new queue for node %d", nodeID)
 		}
 
-		queue.messages <- msg
-		c.metrics.MessagesEnqueued.Inc(1)
-		successes++
+		select {
+		case queue.messages <- msg:
+			c.metrics.MessagesEnqueued.Inc(1)
+			successes++
+		default:
+			c.metrics.MessagesDropped.Inc(1)
+			log.KvExec.Warningf(ctx, "dropped heartbeat to node %d, queue full", nodeID)
+		}
 	}
 
 	c.updateTotalMessagesMetric()
@@ -209,7 +241,8 @@ func (c *HeartbeatCoordinator) SignalToSend() {
 	}
 }
 
-func (c *HeartbeatCoordinator) drainAndSend(ctx context.Context) {
+func (c *HeartbeatCoordinator) drainAndSmear(ctx context.Context) {
+	startTime := timeutil.Now()
 
 	var nodeIDs []roachpb.NodeID
 	c.nodeQueues.Range(func(nodeID roachpb.NodeID, queue *DestinationQueue) bool {
@@ -223,15 +256,49 @@ func (c *HeartbeatCoordinator) drainAndSend(ctx context.Context) {
 		return
 	}
 
+	// Sort for deterministic ordering.
 	sort.Slice(nodeIDs, func(i, j int) bool {
 		return nodeIDs[i] < nodeIDs[j]
 	})
 
-	for _, nodeID := range nodeIDs {
-		c.processNodeQueue(ctx, nodeID)
+	smearDuration := HeartbeatSmearDuration.Get(&c.settings.SV)
+	pacerConfig := &heartbeatPacerConfig{
+		refresh: smearDuration,
+		smear:   smearDuration / 10,
+	}
+	pacer := taskpacer.New(pacerConfig)
+	pacer.StartTask(timeutil.Now())
+
+	workLeft := len(nodeIDs)
+	nodeIndex := 0
+
+	for workLeft > 0 {
+		todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
+		if todo <= 0 {
+			c.metrics.PacerErrors.Inc(1)
+			break
+		}
+
+		for j := 0; j < todo && nodeIndex < len(nodeIDs); j++ {
+			nodeID := nodeIDs[nodeIndex]
+			c.processNodeQueue(ctx, nodeID)
+			nodeIndex++
+		}
+
+		workLeft -= todo
+
+		if workLeft > 0 && by.After(timeutil.Now()) {
+			sleepDuration := by.Sub(timeutil.Now())
+			if sleepDuration > 0 {
+				time.Sleep(sleepDuration)
+			}
+		}
 	}
 
-	log.KvExec.VInfof(ctx, 2, "HeartbeatCoordinator processed %d nodes", len(nodeIDs))
+	totalDuration := timeutil.Since(startTime)
+	log.KvExec.VInfof(ctx, 2,
+		"HeartbeatCoordinator processed %d nodes in %v", len(nodeIDs), totalDuration)
 }
 
 // processNodeQueue processes all messages in a specific node's queue.
