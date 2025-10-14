@@ -17,8 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -27,9 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -60,20 +56,7 @@ func WithBuilderDependenciesFromTestServer(
 		sd,
 	)
 	defer cleanup()
-	planner := ip.(interface {
-		InternalSQLTxn() descs.Txn
-		Descriptors() *descs.Collection
-		SessionData() *sessiondata.SessionData
-		SemaCtx() *tree.SemaContext
-		EvalContext() *eval.Context
-		resolver.SchemaResolver
-		scbuild.AuthorizationAccessor
-		scbuild.AstFormatter
-		scbuild.FeatureChecker
-		scbuild.TemporarySchemaProvider
-		scbuild.NodesStatusInfo
-		scbuild.RegionProvider
-	})
+	planner := ip
 
 	refProviderFactory, refCleanup := sql.NewReferenceProviderFactoryForTest(
 		ctx, "test", planner.InternalSQLTxn().KV(), username.RootUserName(), &execCfg, "defaultdb",

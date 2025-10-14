@@ -12,8 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -53,15 +51,8 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		require.NoError(t, err)
 		txn := kvDB.NewTxn(ctx, "test")
 		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sd)
-
-		// Extract
-		pi := p.(interface {
-			EvalContext() *eval.Context
-			InternalSQLTxn() descs.Txn
-		})
 		defer cleanup()
-		ec := pi.EvalContext()
-		mgr, err := newReplicationStreamManager(ctx, ec, p.(resolver.SchemaResolver), pi.InternalSQLTxn(), clusterunique.ID{})
+		mgr, err := newReplicationStreamManager(ctx, p.EvalContext(), p, p.InternalSQLTxn(), clusterunique.ID{})
 		require.NoError(t, err)
 		if err := mgr.AuthorizeViaReplicationPriv(context.Background()); err != nil {
 			return nil, err

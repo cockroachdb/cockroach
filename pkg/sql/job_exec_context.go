@@ -34,7 +34,7 @@ func MakeJobExecContext(
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
 ) (JobExecContext, func()) {
-	plannerInterface, close := NewInternalPlanner(
+	p, close := NewInternalPlanner(
 		opName,
 		nil, /*txn*/
 		user,
@@ -42,7 +42,6 @@ func MakeJobExecContext(
 		execCfg,
 		NewInternalSessionData(ctx, execCfg.Settings, opName),
 	)
-	p := plannerInterface.(*planner)
 	return &plannerJobExecContext{p: p}, close
 }
 
