@@ -91,10 +91,23 @@ func TestReplicaCollection(t *testing.T) {
 
 		// Check counters on retrieved replica info.
 		cnt := getInfoCounters(replicas)
+
+		// Collect all range IDs from local replicas
+		replicaRangeIDs := make(map[roachpb.RangeID]bool)
+		for _, nodeInfo := range replicas.LocalInfo {
+			for _, replica := range nodeInfo.Replicas {
+				replicaRangeIDs[replica.Desc.RangeID] = true
+			}
+		}
+
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
 		if expectRangeMeta {
-			require.Equal(t, totalRanges, cnt.descriptors,
+			// The scan from Meta2Prefix to MetaMax retrieves:
+			// - r2 (meta2 range) descriptor from its meta1 index entry
+			// - All user range descriptors (r3, r4, ..., rN) from their meta2 index entries
+			// The meta1 range (r1) is NOT indexed in meta1 or meta2, so we get totalRanges - 1.
+			require.Equal(t, totalRanges, cnt.descriptors+1,
 				"number of collected descriptors from metadata")
 		}
 		require.Equal(t, totalRanges*liveNodes, cnt.replicas, "number of collected replicas")
@@ -102,7 +115,7 @@ func TestReplicaCollection(t *testing.T) {
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
 		if expectRangeMeta {
-			require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
+			require.Equal(t, totalRanges, stats.Descriptors+1, "range descriptor counter stats")
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
 		require.Equal(t, replicas.Version,
@@ -135,7 +148,7 @@ func TestStreamRestart(t *testing.T) {
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
 					ForwardReplicaFilter: func(response *serverpb.RecoveryCollectLocalReplicaInfoResponse) error {
-						if response.ReplicaInfo.NodeID == 2 && response.ReplicaInfo.Desc.RangeID == 14 && failCount.Add(1) < 3 {
+						if response.ReplicaInfo.NodeID == 2 && response.ReplicaInfo.Desc.RangeID == 15 && failCount.Add(1) < 3 {
 							return errors.New("rpc stream stopped")
 						}
 						return nil
@@ -166,14 +179,18 @@ func TestStreamRestart(t *testing.T) {
 		cnt := getInfoCounters(replicas)
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
-		require.Equal(t, totalRanges, cnt.descriptors,
+		// The scan from Meta2Prefix to MetaMax retrieves:
+		// - r2 (meta2 range) descriptor from its meta1 index entry
+		// - All user range descriptors (r3, r4, ..., rN) from their meta2 index entries
+		// The meta1 range (r1) is NOT indexed in meta1 or meta2, so we get totalRanges - 1.
+		require.Equal(t, totalRanges, cnt.descriptors+1,
 			"number of collected descriptors from metadata")
 		require.Equal(t, totalRanges*liveNodes, cnt.replicas,
 			"number of collected replicas")
 		// Check stats counters as well.
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
-		require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
+		require.Equal(t, totalRanges, stats.Descriptors+1, "range descriptor counter stats")
 	}
 
 	assertReplicas(3)

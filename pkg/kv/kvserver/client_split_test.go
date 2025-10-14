@@ -1950,7 +1950,17 @@ func runSetupSplitSnapshotRace(
 		&kvpb.ScanRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key:    keys.MetaMin,
-				EndKey: keys.MetaMax,
+				EndKey: keys.Meta1KeyMax,
+			},
+		}); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	if _, pErr := kv.SendWrapped(context.Background(), tc.Servers[0].DistSenderI().(kv.Sender),
+		&kvpb.ScanRequest{
+			RequestHeader: kvpb.RequestHeader{
+				Key:    keys.Meta2Prefix,
+				EndKey: keys.Meta2KeyMax,
 			},
 		}); pErr != nil {
 		t.Fatal(pErr)

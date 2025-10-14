@@ -25,6 +25,7 @@ go_test(
         ":rangedesc",
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

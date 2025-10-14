@@ -86,9 +86,9 @@ func WriteInitialClusterData(
 		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal},
 		roachpb.KeyValue{Key: keys.NodeLivenessKey(kvstorage.FirstNodeID), Value: livenessVal})
 
-	// firstRangeMS is going to accumulate the stats for the first range, as we
+	// secondRangeMS is going to accumulate the stats for the first range, as we
 	// write the meta records for all the other ranges.
-	firstRangeMS := &enginepb.MVCCStats{}
+	secondRangeMS := &enginepb.MVCCStats{}
 
 	// filter initial values for a given descriptor, returning only the ones that
 	// pertain to the respective range.
@@ -106,18 +106,27 @@ func WriteInitialClusterData(
 	if knobs.InitialReplicaVersionOverride != nil {
 		initialReplicaVersion = *knobs.InitialReplicaVersionOverride
 	}
+
 	// We iterate through the ranges backwards, since they all need to contribute
-	// to the stats of the first range (i.e. because they all write meta2 records
-	// in the first range), and so we want to create the first range last so that
-	// the stats we compute for it are correct.
+	// to the stats of the second range (i.e. because they all write meta2 records
+	// in the second range), and so we want to create the second range in the end
+	// so that the stats we compute for it are correct.
 	startKey := roachpb.RKeyMax
 	for i := len(splits) - 1; i >= -1; i-- {
 		endKey := startKey
-		rangeID := roachpb.RangeID(i + 2) // RangeIDs are 1-based.
 		if i >= 0 {
 			startKey = splits[i]
 		} else {
 			startKey = roachpb.RKeyMin
+		}
+
+		rangeID := roachpb.RangeID(i + 1) // RangeIDs are 1-based.
+		if startKey.Equal(keys.Meta2Prefix) {
+			rangeID = roachpb.RangeID(len(splits) + 1)
+		}
+
+		if i == -1 {
+			rangeID = roachpb.RangeID(1)
 		}
 
 		desc := &roachpb.RangeDescriptor{
@@ -195,17 +204,45 @@ func WriteInitialClusterData(
 
 			// Range addressing for meta2.
 			meta2Key := keys.RangeMetaKey(endKey)
+			//fmt.Printf("meta2Key: %s, desc: %+v\n", meta2Key, desc)
 			if err := storage.MVCCPutProto(
 				ctx, batch, meta2Key.AsRawKey(),
-				now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
+				now, desc, storage.MVCCWriteOptions{Stats: secondRangeMS},
 			); err != nil {
 				return err
 			}
 
-			// The first range gets some special treatment.
-			if startKey.Equal(roachpb.RKeyMin) {
-				// Range addressing for meta1.
-				meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+			// Write the meta1 record for the range containing meta2 keys.
+			// - If meta1 and meta2 are split (Meta2Prefix in splits list), this is the
+			//   range starting at Meta2Prefix.
+			// - If there's only one range (empty splits list), this is the range starting
+			//   at /Min which contains everything including meta1 and meta2.
+			// We need to check if Meta2Prefix is a split point to distinguish these cases.
+			//
+			// Note: We do NOT write r1 (the meta1 range) to meta1, as it's the root of
+			// the addressing hierarchy. Only r2 (meta2 range) and beyond get indexed.
+			shouldWriteMeta1 := false
+			if startKey.Equal(keys.Meta2Prefix) {
+				// This is the meta2 range in a split setup.
+				shouldWriteMeta1 = true
+			} else if startKey.Equal(roachpb.RKeyMin) {
+				// This is the first range. Only write meta1 if Meta2Prefix is NOT a split
+				// (i.e., this range contains both meta1 and meta2).
+				isMeta2Split := false
+				for _, split := range splits {
+					if split.Equal(keys.Meta2Prefix) {
+						isMeta2Split = true
+						break
+					}
+				}
+				shouldWriteMeta1 = !isMeta2Split
+			}
+
+			if shouldWriteMeta1 {
+				// The range descriptor is stored in meta1.
+				meta1Key := keys.RangeMetaKey(roachpb.RKey(keys.Meta2KeyMax)) // range addressing for meta1
+				//fmt.Printf("meta1Key: %s, desc: %+v\n", meta1Key, desc)
+				log.KvExec.Infof(ctx, "writing meta1 record for range %d at key %s", rangeID, meta1Key)
 				if err := storage.MVCCPutProto(
 					ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
 				); err != nil {

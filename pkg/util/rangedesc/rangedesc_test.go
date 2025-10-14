@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -221,4 +222,85 @@ func TestIterator(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestSplitMeta2AndPrintRanges splits meta2 range and prints all range descriptors.
+func TestSplitMeta2AndPrintRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer server.Stopper().Stop(ctx)
+
+	// fmt.Println("\n=== Initial state (no splits) ===")
+	// printAllRanges(t, ctx, kvDB)
+
+	//// Split at Meta2Prefix to separate meta1 and meta2
+	//fmt.Println("\n=== Splitting at Meta2Prefix (separating meta1 and meta2) ===")
+	//_, _, err := server.SplitRange(keys.Meta2Prefix)
+	//require.NoError(t, err)
+	printAllRanges(t, ctx, kvDB)
+
+	// Iterate over meta range keys from MetaMin to MetaMax
+	// This is similar to how it's done in pkg/kv/kvserver/loqrecovery/server.go
+	fmt.Println("\n=== Iterating over meta ranges from MetaMin to MetaMax ===")
+	const rangeMetadataScanChunkSize = 1000
+	start := keys.Meta2Prefix
+	rangeNum := 0
+
+	for {
+		kvs, err := kvDB.Scan(ctx, start, keys.MetaMax, rangeMetadataScanChunkSize)
+		require.NoError(t, err)
+
+		if len(kvs) == 0 {
+			break
+		}
+
+		var endKey roachpb.Key
+		for _, rangeDescKV := range kvs {
+			endKey = rangeDescKV.Key
+			rangeNum++
+
+			var desc roachpb.RangeDescriptor
+			if err := rangeDescKV.ValueProto(&desc); err != nil {
+				fmt.Printf("  [%d] Key: %s - Error decoding: %v\n", rangeNum, rangeDescKV.Key, err)
+				continue
+			}
+
+			fmt.Printf("\n[%d] Meta Key: %s\n", rangeNum, rangeDescKV.Key)
+			fmt.Printf("    Range r%d:\n", desc.RangeID)
+			fmt.Printf("      StartKey: %s\n", desc.StartKey)
+			fmt.Printf("      EndKey:   %s\n", desc.EndKey)
+			fmt.Printf("      Replicas: %v\n", desc.Replicas())
+			fmt.Printf("      Generation: %d\n", desc.Generation)
+		}
+
+		// Move to the next key after the last one we scanned
+		start = endKey.Next()
+	}
+
+	fmt.Printf("\nTotal meta range entries scanned: %d\n", rangeNum)
+}
+
+// printAllRanges prints all range descriptors in the cluster.
+func printAllRanges(t *testing.T, ctx context.Context, kvDB *kv.DB) {
+	scanner := rangedesc.NewScanner(kvDB)
+	var rangeNum int
+	err := scanner.Scan(ctx, 100, func() { rangeNum = 0 }, keys.EverythingSpan,
+		func(descriptors ...roachpb.RangeDescriptor) error {
+			for _, desc := range descriptors {
+				rangeNum++
+				fmt.Printf("Range %d: r%d [%s, %s)\n",
+					rangeNum,
+					desc.RangeID,
+					desc.StartKey,
+					desc.EndKey)
+			}
+			return nil
+		})
+	require.NoError(t, err)
+	fmt.Printf("Total ranges: %d\n", rangeNum)
 }
