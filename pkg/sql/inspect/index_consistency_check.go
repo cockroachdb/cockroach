@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -214,11 +213,12 @@ func (c *indexConsistencyCheck) Start(
 	c.lastQuery = queryWithAsOf
 
 	// Execute the query with AS OF SYSTEM TIME embedded in the SQL
+	qos := getInspectQoS(&c.flowCtx.Cfg.Settings.SV)
 	it, err := c.flowCtx.Cfg.DB.Executor().QueryIteratorEx(
 		ctx, "inspect-index-consistency-check", nil, /* txn */
 		sessiondata.InternalExecutorOverride{
 			User:             username.NodeUserName(),
-			QualityOfService: &sessiondatapb.BulkLowQoS,
+			QualityOfService: &qos,
 		},
 		queryWithAsOf,
 		queryArgs...,

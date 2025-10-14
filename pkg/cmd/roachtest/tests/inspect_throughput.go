@@ -81,7 +81,7 @@ func makeInspectThroughputTest(
 	}
 
 	return registry.TestSpec{
-		Name:             fmt.Sprintf("inspect/throughput/bulkingest/rows=%d", numRows),
+		Name:             fmt.Sprintf("inspect/throughput/bulkingest/nodes=%d/cpu=%d/rows=%d/checks=%d", numNodes, numCPUs, numRows, numChecks),
 		Owner:            registry.OwnerSQLFoundations,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
