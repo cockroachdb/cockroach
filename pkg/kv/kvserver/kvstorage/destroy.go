@@ -108,6 +108,18 @@ func ClearRangeData(
 // atomically, and 1 is not written.
 const DestroyReplicaTODO = 0
 
+// DestroyReplicaInfo contains the replica's metadata needed for its removal
+// from storage.
+//
+// TODO(pav-kv): for separated storage, add the applied raft log span. #152845
+type DestroyReplicaInfo struct {
+	// FullReplicaID identifies the replica on its store.
+	roachpb.FullReplicaID
+	// Keys is the user key span of this replica, taken from its RangeDescriptor.
+	// Non-empty iff the replica is initialized.
+	Keys roachpb.RSpan
+}
+
 // DestroyReplica destroys all or a part of the Replica's state, installing a
 // RangeTombstone in its place. Due to merges, splits, etc, there is a need
 // to control which part of the state this method actually gets to remove,
@@ -118,39 +130,39 @@ const DestroyReplicaTODO = 0
 // not be cleared.
 func DestroyReplica(
 	ctx context.Context,
-	id roachpb.FullReplicaID,
 	reader storage.Reader,
 	writer storage.Writer,
-	nextReplicaID roachpb.ReplicaID,
+	info DestroyReplicaInfo,
+	next roachpb.ReplicaID,
 	opts ClearRangeDataOptions,
 ) error {
-	diskReplicaID, err := stateloader.Make(id.RangeID).LoadRaftReplicaID(ctx, reader)
+	sl := stateloader.Make(info.RangeID)
+	diskReplicaID, err := sl.LoadRaftReplicaID(ctx, reader)
 	if err != nil {
 		return err
 	}
-	if repID := diskReplicaID.ReplicaID; repID != id.ReplicaID {
-		return errors.AssertionFailedf("replica %v has a mismatching ID %d", id, repID)
-	} else if repID >= nextReplicaID {
-		return errors.AssertionFailedf("replica %v must not survive its own tombstone", id)
+	if repID := diskReplicaID.ReplicaID; repID != info.ReplicaID {
+		return errors.AssertionFailedf("replica %v has a mismatching ID %d", info.FullReplicaID, repID)
+	} else if repID >= next {
+		return errors.AssertionFailedf("replica %v must not survive its own tombstone", info.FullReplicaID)
 	}
 	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	if err := ClearRangeData(ctx, id.RangeID, reader, writer, opts); err != nil {
+	if err := ClearRangeData(ctx, info.RangeID, reader, writer, opts); err != nil {
 		return err
 	}
 
 	// Save a tombstone to ensure that replica IDs never get reused. Assert that
 	// the provided tombstone moves the existing one strictly forward. Failure to
 	// do so indicates that something is going wrong in the replica lifecycle.
-	sl := stateloader.Make(id.RangeID)
 	ts, err := sl.LoadRangeTombstone(ctx, reader)
 	if err != nil {
 		return err
-	} else if ts.NextReplicaID >= nextReplicaID {
+	} else if ts.NextReplicaID >= next {
 		return errors.AssertionFailedf(
-			"cannot rewind tombstone from %d to %d", ts.NextReplicaID, nextReplicaID)
+			"cannot rewind tombstone from %d to %d", ts.NextReplicaID, next)
 	}
 	_ = DestroyReplicaTODO // 2.3
 	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
-		NextReplicaID: nextReplicaID, // NB: nextReplicaID > 0
+		NextReplicaID: next, // NB: NextReplicaID > 0
 	})
 }

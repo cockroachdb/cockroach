@@ -68,11 +68,15 @@ func TestDestroyReplica(t *testing.T) {
 		r.createStateMachine(ctx, t, rw)
 	})
 	mutate("destroy", func(rw storage.ReadWriter) {
-		require.NoError(t, DestroyReplica(ctx, r.id, rw, rw, r.id.ReplicaID+1, ClearRangeDataOptions{
-			ClearUnreplicatedByRangeID: true,
-			ClearReplicatedByRangeID:   true,
-			ClearReplicatedBySpan:      r.keys,
-		}))
+		require.NoError(t, DestroyReplica(
+			ctx, rw, rw,
+			DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
+			ClearRangeDataOptions{
+				ClearUnreplicatedByRangeID: true,
+				ClearReplicatedByRangeID:   true,
+				ClearReplicatedBySpan:      r.keys,
+			},
+		))
 	})
 
 	str := strings.ReplaceAll(sb.String(), "\n\n", "\n")
