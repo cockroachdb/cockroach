@@ -4230,10 +4230,10 @@ func (sb *statisticsBuilder) selectivityFromMultiColDistinctCounts(
 		singleColSel := sb.selectivityFromDistinctCount(singleColStat, inputSingleColStat, inputStats.RowCount)
 		multiColSelWithIndepAssumption.Multiply(singleColSel)
 
-		// Don't bother including columns in the multi-column calculation that
-		// don't contribute to the selectivity.
+		// If the single-column selectivity is 1, then the values calculated
+		// below will not change. Keep the column in the set because it may
+		// prefix other columns in multi-column stats.
 		if singleColSel == props.OneSelectivity {
-			multiColSet.Remove(col)
 			continue
 		}
 
