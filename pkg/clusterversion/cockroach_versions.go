@@ -232,6 +232,9 @@ const (
 	// associated with a query without modifying the query or application itself.
 	V25_4_AddSystemStatementHintsTable
 
+	// V25_4 is CockroachDB v25.4. It's used for all v25.4.x patch releases.
+	V25_4
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -295,6 +298,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V25_4_AddSystemStatementHintsTable: {Major: 25, Minor: 3, Internal: 14},
 
+	V25_4: {Major: 25, Minor: 4, Internal: 0},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -311,14 +316,6 @@ const MinSupported Key = V25_2
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
 const PreviousRelease Key = V25_3
-
-// V25_4 is a placeholder that will eventually be replaced by the actual 25.4
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 25.4 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.4.
-const V25_4 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
