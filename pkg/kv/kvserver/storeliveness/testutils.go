@@ -101,6 +101,15 @@ func (tms *testMessageSender) SendAsync(_ context.Context, msg slpb.Message) (se
 	return true
 }
 
+func (tms *testMessageSender) SendBatchDirect(
+	_ context.Context, nodeID roachpb.NodeID, messages []slpb.Message,
+) bool {
+	tms.mu.Lock()
+	defer tms.mu.Unlock()
+	tms.messages = append(tms.messages, messages...)
+	return true
+}
+
 func (tms *testMessageSender) drainSentMessages() []slpb.Message {
 	tms.mu.Lock()
 	defer tms.mu.Unlock()
@@ -116,6 +125,7 @@ func (tms *testMessageSender) getNumSentMessages() int {
 }
 
 var _ MessageSender = (*testMessageSender)(nil)
+var _ BatchMessageSender = (*testMessageSender)(nil)
 
 // UnreliableHandler allows users to selectively drop StoreLiveness messages.
 type UnreliableHandler struct {

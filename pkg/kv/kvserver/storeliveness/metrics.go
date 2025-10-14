@@ -28,6 +28,11 @@ type TransportMetrics struct {
 	MessagesReceived       *metric.Counter
 	MessagesSendDropped    *metric.Counter
 	MessagesReceiveDropped *metric.Counter
+
+	BatchesSent      *metric.Counter
+	MessagesPerBatch *metric.Counter
+	BatchSizeBytes   metric.IHistogram
+	BatchDuration    metric.IHistogram
 }
 
 func newTransportMetrics() *TransportMetrics {
@@ -39,6 +44,24 @@ func newTransportMetrics() *TransportMetrics {
 		MessagesReceived:       metric.NewCounter(metaMessagesReceived),
 		MessagesSendDropped:    metric.NewCounter(metaMessagesSendDropped),
 		MessagesReceiveDropped: metric.NewCounter(metaMessagesReceiveDropped),
+		BatchesSent:            metric.NewCounter(metaBatchesSent),
+		MessagesPerBatch:       metric.NewCounter(metaMessagesPerBatch),
+		BatchSizeBytes: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaBatchSizeBytes,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.DataSize16MBBuckets,
+			},
+		),
+		BatchDuration: metric.NewHistogram(
+			metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     metaBatchDuration,
+				Duration:     base.DefaultHistogramWindowInterval(),
+				BucketConfig: metric.IOLatencyBuckets,
+			},
+		),
 	}
 }
 
@@ -78,6 +101,42 @@ func newSupportManagerMetrics() *SupportManagerMetrics {
 		SupportForStores:  metric.NewGauge(metaSupportForStores),
 		ReceiveQueueSize:  metric.NewGauge(metaReceiveQueueSize),
 		ReceiveQueueBytes: metric.NewGauge(metaReceiveQueueBytes),
+	}
+}
+
+// HeartbeatCoordinatorMetrics includes all HeartbeatCoordinator metrics.
+type HeartbeatCoordinatorMetrics struct {
+	// Message counts.
+	MessagesEnqueued      *metric.Counter
+	MessagesSent          *metric.Counter
+	MessagesSentImmediate *metric.Counter // responses that bypass smearing
+
+	// Queue metrics.
+	ActiveQueues          *metric.Gauge
+	TotalMessagesInQueues *metric.Gauge
+
+	// Signal metrics.
+	SignalsAccepted *metric.Counter
+	SignalsIgnored  *metric.Counter
+	SignalsDrained  *metric.Counter
+
+	// Error metrics.
+	SendErrors  *metric.Counter
+	PacerErrors *metric.Counter
+}
+
+func newHeartbeatCoordinatorMetrics() *HeartbeatCoordinatorMetrics {
+	return &HeartbeatCoordinatorMetrics{
+		MessagesEnqueued:      metric.NewCounter(metaHeartbeatCoordinatorMessagesEnqueued),
+		MessagesSent:          metric.NewCounter(metaHeartbeatCoordinatorMessagesSent),
+		MessagesSentImmediate: metric.NewCounter(metaHeartbeatCoordinatorMessagesSentImmediate),
+		ActiveQueues:          metric.NewGauge(metaHeartbeatCoordinatorActiveQueues),
+		TotalMessagesInQueues: metric.NewGauge(metaHeartbeatCoordinatorTotalMessagesInQueues),
+		SignalsAccepted:       metric.NewCounter(metaHeartbeatCoordinatorSignalsAccepted),
+		SignalsIgnored:        metric.NewCounter(metaHeartbeatCoordinatorSignalsIgnored),
+		SignalsDrained:        metric.NewCounter(metaHeartbeatCoordinatorSignalsDrained),
+		SendErrors:            metric.NewCounter(metaHeartbeatCoordinatorSendErrors),
+		PacerErrors:           metric.NewCounter(metaHeartbeatCoordinatorPacerErrors),
 	}
 }
 
@@ -205,6 +264,93 @@ var (
 	metaCallbacksProcessingDuration = metric.Metadata{
 		Name:        "storeliveness.callbacks.processing_duration",
 		Help:        "Duration of support withdrawal callback processing",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+
+	// HeartbeatCoordinator metric metadata
+	metaHeartbeatCoordinatorMessagesEnqueued = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.messages_enqueued",
+		Help:        "Total number of heartbeat messages enqueued for smearing",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorMessagesSent = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.messages_sent",
+		Help:        "Total number of heartbeat messages sent via transport",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorMessagesSentImmediate = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.messages_sent_immediate",
+		Help:        "Total number of heartbeat response messages sent immediately (bypassing smearing)",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorActiveQueues = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.active_queues",
+		Help:        "Current number of active destination queues",
+		Measurement: "Queues",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorTotalMessagesInQueues = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.total_messages_in_queues",
+		Help:        "Current total number of messages across all queues",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSendErrors = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.send_errors",
+		Help:        "Total number of errors sending heartbeat messages",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorPacerErrors = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.pacer_errors",
+		Help:        "Total number of errors in the pacer",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSignalsAccepted = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.signals_accepted",
+		Help:        "Total number of signals accepted by the heartbeat coordinator",
+		Measurement: "Signals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSignalsIgnored = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.signals_ignored",
+		Help:        "Total number of signals ignored by the heartbeat coordinator (already processing)",
+		Measurement: "Signals",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaHeartbeatCoordinatorSignalsDrained = metric.Metadata{
+		Name:        "storeliveness.heartbeat_coordinator.signals_drained",
+		Help:        "Total number of signals drained during collection window",
+		Measurement: "Signals",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	metaBatchesSent = metric.Metadata{
+		Name:        "storeliveness.transport.batches-sent",
+		Help:        "Number of message batches sent by the Store Liveness Transport",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMessagesPerBatch = metric.Metadata{
+		Name:        "storeliveness.transport.messages-per-batch",
+		Help:        "Number of messages per batch sent by the Store Liveness Transport",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBatchSizeBytes = metric.Metadata{
+		Name:        "storeliveness.transport.batch-size-bytes",
+		Help:        "Size in bytes of batches sent by the Store Liveness Transport",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBatchDuration = metric.Metadata{
+		Name:        "storeliveness.transport.batch-duration",
+		Help:        "Duration spent collecting messages into batches by the Store Liveness Transport",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
