@@ -338,6 +338,17 @@ var concurrentDownloadCompactions = settings.RegisterIntSetting(
 	settings.IntWithMinimum(1),
 )
 
+// This setting controls deletion pacing. This helps prevent disk slowness
+// events on some SSDs, that kick off an expensive GC if a lot of files are
+// deleted at once.
+var baselineDeletionRate = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.baseline_deletion_rate",
+	"the baseline allowed rate of bytes deleted per second by each store",
+	128*1024*1024, // 128 MB/s
+	settings.NonNegativeInt,
+)
+
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = func() pebble.Comparer {
@@ -423,10 +434,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	// This ensures that range keys are quickly flushed, allowing use of lazy
 	// combined iteration within Pebble.
 	opts.FlushDelayRangeKey = 10 * time.Second
-	// Enable deletion pacing. This helps prevent disk slowness events on some
-	// SSDs, that kick off an expensive GC if a lot of files are deleted at
-	// once.
-	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
 		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
@@ -734,6 +741,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		cfg.opts.MaxConcurrentDownloads = func() int {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
+	}
+	cfg.opts.TargetByteDeletionRate = func() int {
+		return int(baselineDeletionRate.Get(&cfg.settings.SV))
 	}
 
 	cfg.opts.EnsureDefaults()
