@@ -63,28 +63,15 @@ const (
 	GCloud
 )
 
-// NewIAPTokenSource returns a new IAPTokenSource struct with the given options.
-func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) {
-
-	if opts.OAuthClientID == "" {
-		return nil, errors.New("OAuthClientID is required")
-	}
-
-	if opts.ServiceAccountEmail == "" {
-		return nil, errors.New("ServiceAccountEmail is required")
-	}
-
-	var method IAPAuthMethod
-
-	ctx := context.Background()
-	var err error
-	var creds *google.Credentials
+func GetGCECredentials(
+	ctx context.Context, opts IAPTokenSourceOptions,
+) (creds *google.Credentials, method IAPAuthMethod, err error) {
 	if cj := os.Getenv(CredentialsEnvironmentVariable); cj != "" {
 		// In case a GOOGLE_EPHEMERAL_CREDENTIALS environment variable exist,
 		// it takes precedence over other sources, and we use it as our identity.
 		creds, err = google.CredentialsFromJSON(ctx, []byte(cj), cloudPlatformScope)
 		if err != nil {
-			return nil, errors.Wrapf(err, "failed to get credentials from environment variable")
+			return nil, Env, errors.Wrapf(err, "failed to get credentials from environment variable")
 		}
 
 		method = Env
@@ -113,11 +100,34 @@ func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) 
 			// or if the user has a different set of credentials for application default.
 			creds, err = gcloudconfig.GetCredentials("")
 			if err != nil {
-				return nil, errors.Wrapf(err, "failed to get default credentials")
+				return nil, GCloud, errors.Wrapf(err, "failed to get default credentials")
 			}
 
 			method = GCloud
 		}
+	}
+
+	return creds, method, nil
+}
+
+// NewIAPTokenSource returns a new IAPTokenSource struct with the given options.
+func NewIAPTokenSource(opts IAPTokenSourceOptions) (*IAPTokenSourceImpl, error) {
+
+	if opts.OAuthClientID == "" {
+		return nil, errors.New("OAuthClientID is required")
+	}
+
+	if opts.ServiceAccountEmail == "" {
+		return nil, errors.New("ServiceAccountEmail is required")
+	}
+
+	var method IAPAuthMethod
+
+	ctx := context.Background()
+
+	creds, method, err := GetGCECredentials(ctx, opts)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get credentials")
 	}
 
 	// Create a new ID token source with the impersonate config.
