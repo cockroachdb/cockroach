@@ -575,7 +575,12 @@ func TestCheckRestartSafe_Integration(t *testing.T) {
 	ctx := context.Background()
 	var err error
 
-	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// TODO(155111): Test is flakey with DRPC enabled.
+			DefaultDRPCOption: base.TestDRPCDisabled,
+		},
+	})
 	defer testCluster.Stopper().Stop(ctx)
 
 	ts0 := testCluster.Server(0)
