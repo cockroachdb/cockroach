@@ -52,11 +52,13 @@ func VMDir(clusterName string, nodeIdx int) string {
 
 // Init initializes the Local provider and registers it into vm.Providers.
 func Init(storage VMStorage) error {
-	vm.Providers[ProviderName] = &Provider{
+	p := &Provider{
 		clusters:    make(cloudcluster.Clusters),
 		storage:     storage,
-		DNSProvider: NewDNSProvider(config.DNSDir, "local-zone"),
+		dnsProvider: NewDNSProvider(config.DNSDir, "local-zone"),
 	}
+	vm.Providers[ProviderName] = p
+	vm.DNSProviders[ProviderName] = p.dnsProvider
 	return nil
 }
 
@@ -93,7 +95,7 @@ func DeleteCluster(l *logger.Logger, name string) error {
 	// Local clusters are expected to specifically use the local DNS provider
 	// implementation, and should clean up any DNS records in the local file
 	// system cache.
-	return p.DeleteSRVRecordsBySubdomain(context.Background(), c.Name)
+	return p.dnsProvider.DeleteSRVRecordsBySubdomain(context.Background(), c.Name)
 }
 
 // Clusters returns a list of all known local clusters.
@@ -115,9 +117,9 @@ type VMStorage interface {
 
 // A Provider is used to create stub VM objects.
 type Provider struct {
-	clusters cloudcluster.Clusters
-	storage  VMStorage
-	vm.DNSProvider
+	clusters    cloudcluster.Clusters
+	storage     VMStorage
+	dnsProvider vm.DNSProvider
 }
 
 // IsCentralizedProvider returns false because it is executed locally.
