@@ -120,14 +120,18 @@ const CreateUninitReplicaTODO = 0
 // Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
 func CreateUninitializedReplica(
-	ctx context.Context, eng storage.Engine, storeID roachpb.StoreID, id roachpb.FullReplicaID,
+	ctx context.Context,
+	reader storage.Reader,
+	writer storage.Writer,
+	storeID roachpb.StoreID,
+	id roachpb.FullReplicaID,
 ) error {
 	sl := stateloader.Make(id.RangeID)
 	// Before creating the replica, see if there is a tombstone which would
 	// indicate that this replica has been removed.
 	// TODO(pav-kv): should also check that there is no existing replica, i.e.
 	// ReplicaID load should find nothing.
-	if ts, err := sl.LoadRangeTombstone(ctx, eng); err != nil {
+	if ts, err := sl.LoadRangeTombstone(ctx, reader); err != nil {
 		return err
 	} else if id.ReplicaID < ts.NextReplicaID {
 		return &kvpb.RaftGroupDeletedError{}
@@ -140,12 +144,12 @@ func CreateUninitializedReplica(
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
 	_ = CreateUninitReplicaTODO
-	if err := sl.SetRaftReplicaID(ctx, eng, id.ReplicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, writer, id.ReplicaID); err != nil {
 		return err
 	}
 
 	// Make sure that storage invariants for this uninitialized replica hold.
 	uninitDesc := roachpb.RangeDescriptor{RangeID: id.RangeID}
-	_, err := LoadReplicaState(ctx, eng, storeID, &uninitDesc, id.ReplicaID)
+	_, err := LoadReplicaState(ctx, reader, storeID, &uninitDesc, id.ReplicaID)
 	return err
 }
