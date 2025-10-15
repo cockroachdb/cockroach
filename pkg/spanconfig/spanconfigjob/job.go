@@ -134,6 +134,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	}
 
 	var lastCheckpoint = hlc.Timestamp{}
+	var lastErr error
 	const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
 	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
 		started := timeutil.Now()
@@ -167,6 +168,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 				Checkpoint: rc.Checkpoint(),
 			})
 		}); err != nil {
+			lastErr = err
 			if shouldSkipRetry {
 				break
 			}
@@ -192,6 +194,9 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 		return nil // we're done here (the stopper was stopped, Reconcile exited cleanly)
 	}
 
+	if lastErr != nil {
+		return errors.Wrap(lastErr, "reconciliation unsuccessful, failing job")
+	}
 	return errors.Newf("reconciliation unsuccessful, failing job")
 }
 

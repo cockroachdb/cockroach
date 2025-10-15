@@ -1785,8 +1785,10 @@ func countExpectedRowsForInvertedIndex(
 	if withFirstMutationPublic {
 		// Make the mutations public in an in-memory copy of the descriptor and
 		// add it to the Collection's synthetic descriptors, so that we can use
-		// SQL below to perform the validation.
-		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints, catalog.RetainDroppingColumns)
+		// SQL below to perform the validation. Avoid making PK swaps public, otherwise
+		// in the declarative schema changer we can select incomplete primary indexes
+		// for validation.
+		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints, catalog.RetainDroppingColumns, catalog.IgnorePKSwaps)
 		if err != nil {
 			return 0, err
 		}
