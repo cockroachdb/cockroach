@@ -109,6 +109,9 @@ func (m *UnsafeInternalsDenied) LoggingChannel() logpb.Channel { return logpb.Ch
 func (m *QueryExecute) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *ScanRowCountMisestimate) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *AlterDatabaseAddRegion) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_SCHEMA }
 
 // LoggingChannel implements the EventPayload interface.

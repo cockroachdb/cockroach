@@ -49,14 +49,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -1358,7 +1358,6 @@ type scanStageEstimate struct {
 	estimatedRowCount uint64
 	statsCreatedAt    time.Time
 	tableID           descpb.ID
-	tableName         string
 	indexName         string
 
 	rowsRead uint64
@@ -1366,19 +1365,31 @@ type scanStageEstimate struct {
 
 var misestimateLogLimiter = log.Every(10 * time.Second)
 
-func (s *scanStageEstimate) logMisestimate(ctx context.Context, refresher *stats.Refresher) {
-	var suffix string
+func (s *scanStageEstimate) logMisestimate(ctx context.Context, planner *planner) {
+	tn, err := planner.GetQualifiedTableNameByID(ctx, int64(s.tableID), tree.ResolveAnyTableKind)
+	if err != nil {
+		return
+	}
+	fqTableName := tn.FQString()
+
+	event := &eventpb.ScanRowCountMisestimate{
+		CommonSQLEventDetails: planner.getCommonSQLEventDetails(),
+		TableName:             fqTableName,
+		IndexName:             s.indexName,
+		EstimatedRowCount:     s.estimatedRowCount,
+		ActualRowCount:        s.rowsRead,
+	}
 	if !s.statsCreatedAt.IsZero() {
-		timeSinceStats := timeutil.Since(s.statsCreatedAt)
-		suffix = fmt.Sprintf("; table stats collected %s ago",
-			humanizeutil.LongDuration(timeSinceStats))
-		staleness, err := refresher.EstimateStaleness(ctx, s.tableID)
-		if err == nil {
-			suffix += fmt.Sprintf(" (estimated %.0f%% stale)", staleness*100)
+		nanosSinceStats := timeutil.Since(s.statsCreatedAt).Nanoseconds()
+		event.NanosSinceStatsCollected = nanosSinceStats
+
+		if estimatedStaleness, err :=
+			planner.ExecCfg().StatsRefresher.EstimateStaleness(ctx, s.tableID); err == nil {
+			event.EstimatedStaleness = estimatedStaleness
 		}
 	}
-	log.Dev.Warningf(ctx, "inaccurate estimate for scan on table %q (index %q): estimated=%d actual=%d%s",
-		s.tableName, s.indexName, s.estimatedRowCount, s.rowsRead, suffix)
+
+	log.StructuredEvent(ctx, severity.WARNING, event)
 }
 
 var _ execinfra.RowReceiver = &DistSQLReceiver{}
@@ -1844,7 +1855,6 @@ func (r *DistSQLReceiver) makeScanEstimates(physPlan *PhysicalPlan, st *cluster.
 				estimatedRowCount: p.Spec.EstimatedRowCount,
 				statsCreatedAt:    p.Spec.StatsCreatedAt,
 				tableID:           p.Spec.Core.TableReader.FetchSpec.TableID,
-				tableName:         p.Spec.Core.TableReader.FetchSpec.TableName,
 				indexName:         p.Spec.Core.TableReader.FetchSpec.IndexName,
 			}
 		}
@@ -1883,7 +1893,7 @@ func (r *DistSQLReceiver) maybeLogMisestimates(ctx context.Context, planner *pla
 			}
 			checkedLimiter = true
 		}
-		s.logMisestimate(ctx, planner.ExecCfg().StatsRefresher)
+		s.logMisestimate(ctx, planner)
 	}
 }
 
