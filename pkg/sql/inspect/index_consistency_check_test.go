@@ -124,6 +124,9 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				Inspect: &sql.InspectTestingKnobs{
 					InspectIssueLogger: issueLogger,
 				},
+				GCJob: &sql.GCJobTestingKnobs{
+					SkipWaitingForMVCCGC: true,
+				},
 			},
 		},
 	})
