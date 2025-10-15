@@ -3500,8 +3500,16 @@ func (it *sessionDataMutatorIterator) mutator(
 	return ret
 }
 
+// SetDatabase sets the database for the session. It is exported for use in
+// inspect which is outside the sql package.
+func (it *sessionDataMutatorIterator) SetDatabase(dbName string) {
+	it.applyOnEachMutator(func(m sessionDataMutator) {
+		m.SetDatabase(dbName)
+	})
+}
+
 // SetSessionDefaultIntSize sets the default int size for the session.
-// It is exported for use in import which is a CCL package.
+// It is exported for use in import is outside the sql package.
 func (it *sessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
 	it.applyOnEachMutator(func(m sessionDataMutator) {
 		m.SetDefaultIntSize(size)

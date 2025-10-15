@@ -89,29 +89,6 @@ func (n *Inspect) Populate() error {
 		return err
 	}
 
-	// TODO(155056): Better validate index names from the options with the name
-	// of the database or table from the command.
-	// TODO(148365): Check for duplicated index names (including the name of the
-	// database or table from the command).
-	for _, index := range n.Options.NamedIndexes() {
-		switch n.Typ {
-		case InspectTable:
-			if index.Table.ObjectName != "" {
-				if n.Table.Object() != index.Table.Object() {
-					return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to table %q", index.String(), n.Table.String())
-				}
-			} else {
-				index.Table.ObjectName = n.Table.ObjectName
-			}
-		case InspectDatabase:
-			if index.Table.ExplicitCatalog && n.Database.Object() != index.Table.Catalog() {
-				return pgerror.Newf(pgcode.InvalidName, "index %q does not belong to database %q", index.String(), n.Database.String())
-			} else {
-
-			}
-		}
-	}
-
 	return nil
 }
 

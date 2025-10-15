@@ -109,10 +109,6 @@ CREATE INDEX idx_c3 ON bar (c3);
 statement error pq: index "bar@idx_c1" does not belong to table "foo"
 INSPECT TABLE foo WITH OPTIONS INDEX (bar@idx_c1);
 
-# TODO(148365): The table name should be used to disambiguate.
-statement error index name "idx_c1" is ambiguous \(found in test.public.foo and test.public.bar\)
-INSPECT TABLE bar WITH OPTIONS INDEX (idx_c1);
-
 statement error index "dbfake.foo.idx_c1" does not belong to database "test"
 INSPECT DATABASE test WITH OPTIONS INDEX (dbfake.foo.idx_c1);
 

@@ -1050,6 +1050,20 @@ func TestRepeatableReadLogic_inspect(
 	runLogicTest(t, "inspect")
 }
 
+func TestRepeatableReadLogic_inspect_database_resolve_indexes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect_database_resolve_indexes")
+}
+
+func TestRepeatableReadLogic_inspect_table_resolve_indexes(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect_table_resolve_indexes")
+}
+
 func TestRepeatableReadLogic_int_size(
 	t *testing.T,
 ) {
