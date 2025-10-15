@@ -124,6 +124,8 @@ func readNextMessages(
 			if m != nil {
 				log.Changefeed.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
 					m.Topic, m.Key, m.Value, m.Resolved, timeutil.Since(lastMessage))
+				fmt.Printf(`msg %s: %s->%s (%s) (%s)\n`,
+					m.Topic, m.Key, m.Value, m.Resolved, timeutil.Since(lastMessage))
 			} else {
 				log.Changefeed.Infof(context.Background(), `err %v`, err)
 			}

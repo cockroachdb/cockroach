@@ -1062,6 +1062,7 @@ func TestCloudStorageWTF(t *testing.T) {
 		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', initial_scan='no', updated, format='json'`
 		cf := feed(t, f, feedStmt)
 		defer closeFeed(t, cf)
+		t.Logf("dir=%s", cf.(*cloudFeed).dir)
 
 		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
 		loadProgress := func() jobspb.Progress {
@@ -1070,7 +1071,7 @@ func TestCloudStorageWTF(t *testing.T) {
 			return job.Progress()
 		}
 
-		getHwmAndChkpt := func() (hwm hlc.Timestamp, chkTS hlc.Timestamp) {
+		getHwmAndChkpt := func() (hwm *hlc.Timestamp, chkTS hlc.Timestamp) {
 			progress := loadProgress()
 			chk := maps.Collect(loadCheckpoint(t, progress).All())
 			for ts, sp := range chk {
@@ -1079,7 +1080,7 @@ func TestCloudStorageWTF(t *testing.T) {
 					break
 				}
 			}
-			return *progress.GetHighWater(), chkTS
+			return progress.GetHighWater(), chkTS
 		}
 
 		// make sure we have a checkpoint including '1'
@@ -1109,6 +1110,7 @@ func TestCloudStorageWTF(t *testing.T) {
 		T1TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T1' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
 		T1Ts, err := hlc.ParseHLC(T1TsStr)
 		require.NoError(t, err)
+		t.Logf("T1Ts=%s", T1Ts)
 
 		// wait for checkpoint after T1
 		testutils.SucceedsSoon(t, func() error {
@@ -1124,6 +1126,12 @@ func TestCloudStorageWTF(t *testing.T) {
 		// make subsequent checkpoints not happen
 		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
 
+		// TODO why no worky
+		// Make sure we saw k@ T1
+		assertPayloads(t, cf, []string{
+			`foo: [1]->{"after": {"v": "T1"}}`,
+		})
+
 		T2TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T2' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
 		T2Ts, err := hlc.ParseHLC(T2TsStr)
 		require.NoError(t, err)
@@ -1138,11 +1146,6 @@ func TestCloudStorageWTF(t *testing.T) {
 		_, chkTS = getHwmAndChkpt()
 		require.False(t, T2Ts.LessEq(chkTS))
 		t.Logf("got our checkpoint after T2. hwm: %s, chkTS: %s", hwm, chkTS)
-
-		// Make sure we saw k@ T1
-		assertPayloads(t, cf, []string{
-			`foo: [1]->{"after": {"v": "T1"}}`,
-		})
 
 		// Resume (with a lower session id)
 		sessionID = "1_after"
