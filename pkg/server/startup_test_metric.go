@@ -19,21 +19,56 @@ var metaStartupTestLastUpdated = metric.Metadata{
 	Unit:        metric.Unit_TIMESTAMP_SEC,
 }
 
+var metaStartupTestHistogram = metric.Metadata{
+	Name:        "server.test.last-updated-histogram",
+	Help:        "test histogram",
+	Measurement: "Histogram",
+	Unit:        metric.Unit_NANOSECONDS,
+}
+
+var metaStartupTestCounter = metric.Metadata{
+	Name:        "server.test.last-updated-counter",
+	Help:        "test counter",
+	Measurement: "Counter",
+	Unit:        metric.Unit_COUNT,
+}
+
 // StartupTestMetrics contains a very simple metric that gets populated during
 // server startup. It mirrors other startup-populated metrics by recording a
 // timestamp in a gauge.
 type StartupTestMetrics struct {
-	// StartupLastUpdated is set to the Unix timestamp at server startup.
 	StartupLastUpdated *metric.Gauge
 }
 
-// MetricStruct is part of the metric.Struct interface.
-func (StartupTestMetrics) MetricStruct() {}
+type StartupTestMetricsHistogram struct {
+	StartupLastUpdatedHistogram metric.IHistogram
+}
 
-// MakeStartupTestMetrics constructs the startup test metrics and initializes
-// the timestamp gauge to the current time.
+type StartupTestMetricsCounter struct {
+	StartupLastUpdatedCounter *metric.Counter
+}
+
+func (StartupTestMetrics) MetricStruct() {}
+func (StartupTestMetricsHistogram) MetricStruct() {}
+func (StartupTestMetricsCounter) MetricStruct() {}
+
 func MakeStartupTestMetrics() StartupTestMetrics {
 	g := metric.NewGauge(metaStartupTestLastUpdated)
 	g.Update(timeutil.Now().Unix())
 	return StartupTestMetrics{StartupLastUpdated: g}
+}
+
+func MakeStartupTestMetricsHistogram() StartupTestMetricsHistogram {
+	c := metric.NewHistogram(metric.HistogramOptions{
+		Metadata: metaStartupTestHistogram,
+		BucketConfig: metric.IOLatencyBuckets,
+	})
+	c.RecordValue(1)
+	return StartupTestMetricsHistogram{StartupLastUpdatedHistogram: c}
+}
+
+func MakeStartupTestMetricsCounter() StartupTestMetricsCounter {
+	c := metric.NewCounter(metaStartupTestCounter)
+	c.Inc(1)
+	return StartupTestMetricsCounter{StartupLastUpdatedCounter: c}
 }

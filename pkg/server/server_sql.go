@@ -1708,6 +1708,12 @@ func (s *SQLServer) preStart(
 	startupTestMetrics := MakeStartupTestMetrics()
 	s.metricsRegistry.AddMetricStruct(startupTestMetrics)
 
+	startupTestMetricsCustom := MakeStartupTestMetricsHistogram()
+	s.metricsRegistry.AddMetricStruct(startupTestMetricsCustom)
+	
+	startupAnotherTestMetricsCustom := MakeStartupTestMetricsCounter()
+	s.metricsRegistry.AddMetricStruct(startupAnotherTestMetricsCustom)
+
 	// Run all the "permanent" upgrades that haven't already run in this cluster,
 	// until the currently active version. Upgrades for higher versions, if any,
 	// will be run in response to `SET CLUSTER SETTING version = <v>`, just like
