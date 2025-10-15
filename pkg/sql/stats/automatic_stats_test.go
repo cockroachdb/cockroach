@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -1146,7 +1147,7 @@ func TestEstimateStaleness(t *testing.T) {
 		return err
 	}
 
-	overwriteFullStats := func(startOffsetHours, intervalHours int) error {
+	overwriteFullStats := func(startOffsetHours, intervalHours, numStats int) error {
 		return s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			_, err := internalDB.Executor().Exec(
 				ctx, "delete-stats", txn,
@@ -1157,7 +1158,7 @@ func TestEstimateStaleness(t *testing.T) {
 				return err
 			}
 
-			for i := 0; i < 5; i++ {
+			for i := 0; i < numStats; i++ {
 				columnIDsVal := tree.NewDArray(types.Int)
 				if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(1))); err != nil {
 					return err
@@ -1190,10 +1191,33 @@ func TestEstimateStaleness(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "automatic stats collection is not allowed for this table")
 
+	// Ensure that we return an error if estimating staleness with insufficient
+	// auto stats history.
+	if err = overwriteFullStats(
+		5, /* startOffsetHours */
+		0, /* intervalHours */
+		1, /* numStats */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	err = testutils.SucceedsSoonError(func() error {
+		_, err := refresher.EstimateStaleness(ctx, table.GetID())
+		if err == nil {
+			return fmt.Errorf("expected error but got nil")
+		}
+		if !strings.Contains(err.Error(), "insufficient auto stats history to estimate staleness") {
+			return fmt.Errorf("expected 'insufficient auto stats history to estimate staleness' but got: %w", err)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
 	// Create stats with 10-hour intervals, the most recent being 5 hours old.
 	if err = overwriteFullStats(
 		5,  /* startOffsetHours */
 		10, /* intervalHours */
+		5,  /* numStats */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1223,6 +1247,7 @@ func TestEstimateStaleness(t *testing.T) {
 	if err = overwriteFullStats(
 		15, /* startOffsetHours */
 		3,  /* intervalHours */
+		5,  /* numStats */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -1239,6 +1264,7 @@ func TestEstimateStaleness(t *testing.T) {
 	if err = overwriteFullStats(
 		15, /* startOffsetHours */
 		2,  /* intervalHours */
+		5,  /* numStats */
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -49,8 +49,11 @@ func handleSchemaChangeWorkloadError(err error) error {
 	// If the UNEXPECTED ERROR detail appears, the workload likely flaked.
 	// Otherwise, the workload could have failed due to other reasons like a node
 	// crash.
-	if err != nil && strings.Contains(errors.FlattenDetails(err), "UNEXPECTED ERROR") {
-		return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
+	if err != nil {
+		flattenedErr := errors.FlattenDetails(err)
+		if strings.Contains(flattenedErr, "UNEXPECTED ERROR") || strings.Contains(flattenedErr, "UNEXPECTED COMMIT ERROR") {
+			return registry.ErrorWithOwner(registry.OwnerSQLFoundations, errors.Wrapf(err, "schema change workload failed"))
+		}
 	}
 	return err
 }

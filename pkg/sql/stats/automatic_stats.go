@@ -936,6 +936,9 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	staleTargetFraction := r.autoStatsFractionStaleRows(explicitSettings)
 
 	avgRefreshTime := avgFullRefreshTime(tableStats)
+	if avgRefreshTime == defaultAverageTimeBetweenRefreshes {
+		return 0, errors.New("insufficient auto stats history to estimate staleness")
+	}
 	statsAge := timeutil.Since(stat.CreatedAt)
 	if r.knobs != nil && r.knobs.StubTimeNow != nil {
 		statsAge = r.knobs.StubTimeNow().Sub(stat.CreatedAt)
