@@ -1135,7 +1135,8 @@ func TestCloudStorageWTF(t *testing.T) {
 		// becase the cloudfeed is wrapped by a sinkSynchronizer which makes it not scan for new data until a Flush(), which we are intentionally avoiding.
 		// -> do it hackily
 		testutils.SucceedsSoon(t, func() error {
-			out, err := exec.Command("grep", "-R", "T1", cf.(*cloudFeed).dir).Output()
+			cmd := fmt.Sprintf(`grep -RH "T1" %s | grep 2_begin`, cf.(*cloudFeed).dir)
+			out, err := exec.Command("bash", "-c", cmd).Output()
 			if err != nil {
 				return errors.Wrapf(err, "grepping for T1")
 			}
@@ -1172,7 +1173,8 @@ func TestCloudStorageWTF(t *testing.T) {
 		// 	`foo: [1]->{"after": {"v": "T2"}}`,
 		// })
 		testutils.SucceedsSoon(t, func() error {
-			out, err := exec.Command("grep", "-R", "T2", cf.(*cloudFeed).dir).Output()
+			cmd := fmt.Sprintf(`grep -RH "T2" %s | grep 1_after`, cf.(*cloudFeed).dir)
+			out, err := exec.Command("bash", "-c", cmd).Output()
 			if err != nil {
 				return errors.Wrapf(err, "grepping for T2")
 			}
