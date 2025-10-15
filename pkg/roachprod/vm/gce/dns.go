@@ -121,6 +121,7 @@ func NewDNSProviderWithExec(execFn ExecFn, opts DNSProviderOpts) *dnsProvider {
 	}
 }
 
+// DNSProviderOpts are the options for the DNS provider.
 type DNSProviderOpts struct {
 	DNSProject    string
 	PublicZone    string
@@ -129,14 +130,9 @@ type DNSProviderOpts struct {
 	ManagedDomain string
 }
 
-func NewDNSProviderDefaultOptions() DNSProviderOpts {
-	return DNSProviderOpts{
-		DNSProject:    defaultDNSProject,
-		PublicZone:    dnsDefaultZone,
-		PublicDomain:  dnsDefaultDomain,
-		ManagedZone:   dnsDefaultManagedZone,
-		ManagedDomain: dnsDefaultManagedDomain,
-	}
+// NewFromGCEDNSProviderOpts creates a new DNSProviderOpts from a gce.dnsOpts.
+func (o *DNSProviderOpts) NewFromGCEDNSProviderOpts(opts dnsOpts) DNSProviderOpts {
+	return DNSProviderOpts(opts)
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
@@ -212,7 +208,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 	return nil
 }
 
-// LookupSRVRecords implements the vm.DNSProvider interface.
+// LookupRecords implements the vm.DNSProvider interface.
 func (n *dnsProvider) LookupRecords(
 	ctx context.Context, recordType vm.DNSType, name string,
 ) ([]vm.DNSRecord, error) {
@@ -315,7 +311,7 @@ func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
 }
 
 func (n *dnsProvider) ProviderName() string {
-	return "gce"
+	return ProviderName
 }
 
 // lookupSRVRecords uses standard net tools to perform a DNS lookup. This
@@ -455,22 +451,19 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 		return nil
 	}
 
-	defer func() {
-		if err != nil {
-			err = errors.Wrapf(err, "syncing DNS for %s", p.publicDomain)
-		}
-	}()
-
 	f, err := os.CreateTemp(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	// Keep imported zone file in dry run mode.
 	defer func() {
-		if err := os.Remove(f.Name()); err != nil {
-			l.Errorf("removing %s failed: %v", f.Name(), err)
+		f.Close()
+		if errRemove := os.Remove(f.Name()); errRemove != nil {
+			l.Errorf("removing %s failed: %v", f.Name(), errRemove)
+		}
+		if err != nil {
+			err = errors.Wrapf(err, "syncing DNS for %s", p.publicDomain)
 		}
 	}()
 
@@ -484,7 +477,6 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 		zoneBuilder.WriteString(entry)
 	}
 	fmt.Fprint(f, zoneBuilder.String())
-	f.Close()
 
 	args := []string{"--project", p.dnsProject, "dns", "record-sets", "import",
 		f.Name(), "-z", p.publicZone, "--delete-all-existing", "--zone-file-format"}

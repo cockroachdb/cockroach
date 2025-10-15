@@ -563,6 +563,9 @@ type DeleteCluster interface {
 // Providers contains all known Provider instances. This is initialized by subpackage init() functions.
 var Providers = map[string]Provider{}
 
+// DNSProviders contains all known DNS providers.
+var DNSProviders = map[string]DNSProvider{}
+
 // ProviderOptionsContainer is a container for a collection of provider-specific options.
 type ProviderOptionsContainer map[string]ProviderOpts
 
