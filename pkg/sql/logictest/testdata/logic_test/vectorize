@@ -507,12 +507,17 @@ SELECT b FROM a WHERE b < 0.5
 ----
 0
 
-# Test unsupported scrub (should fall back to distsql).
+# Test INSPECT (should fall back to distsql).
 statement ok
 RESET vectorize;
 CREATE TABLE t38626 (id int PRIMARY KEY, name STRING, CONSTRAINT abc CHECK (name > 'he'));
 INSERT INTO t38626 VALUES (1, 'hello');
-EXPERIMENTAL SCRUB TABLE t38626;
+SET enable_inspect_command = true;
+
+statement ok
+INSPECT TABLE t38626;
+
+statement ok
 SET vectorize = experimental_always
 
 # Regression test for issue with reading from system tables that have no
