@@ -4,7 +4,6 @@ go_library(
     name = "sqlutils",
     srcs = [
         "inject.go",
-        "inspect.go",
         "parse.go",
         "pretty.go",
         "rows.go",
