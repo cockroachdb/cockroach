@@ -772,7 +772,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"INSERT INTO d.arr VALUES($1, $2)", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{}), pq.Array([]string{})),
 		}},
-		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
+		{"INSPECT TABLE system.locations", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
 		{"ALTER RANGE default CONFIGURE ZONE = $1", []preparedQueryTest{
