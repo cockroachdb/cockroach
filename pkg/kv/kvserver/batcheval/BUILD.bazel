@@ -139,6 +139,7 @@ go_test(
         "testutils_test.go",
         "transaction_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":batcheval"],
     exec_properties = {"test.Pool": "large"},
     deps = [

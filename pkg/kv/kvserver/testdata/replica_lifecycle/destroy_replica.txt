@@ -1,0 +1,37 @@
+create-descriptor start=a end=z replicas=[1]
+----
+created descriptor: r1:{a-z} [(n1,s0):1, next=0, gen=0]
+Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:14 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:11 (0x016989757266746c000000000000000b00): Term:5 Index:11 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:12 (0x016989757266746c000000000000000c00): Term:5 Index:12 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:13 (0x016989757266746c000000000000000d00): Term:5 Index:13 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:14 (0x016989757266746c000000000000000e00): Term:5 Index:14 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RaftLog/logIndex:15 (0x016989757266746c000000000000000f00): Term:5 Index:15 Type:EntryNormal : EMPTY
+Put: 0,0 /Local/RangeID/1/u/RangeTombstone (0x016989757266746200): next_replica_id:1 
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+
+# Set up a basic lease for the range.
+set-lease range-id=1 replica=1
+----
+set lease for range 1 replica 1: leader-lease
+
+print-range-state
+----
+range 1: ["a","z") replicas=n1(r1)
+
+# Destroy the replica on n1 from range 1. The replica state was already
+# created in create-descriptor. The output shows only the delete operations and
+# tombstone update from the destroy operation.
+destroy-replica range-id=1
+----
+Delete (Sized at 30): 0,0 /Local/RangeID/1/u/RangeTombstone (0x016989757266746200): 
+Delete (Sized at 38): 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): 
+Delete (Sized at 42): 0,0 /Local/RangeID/1/u/RaftLog/logIndex:11 (0x016989757266746c000000000000000b00): 
+Delete (Sized at 42): 0,0 /Local/RangeID/1/u/RaftLog/logIndex:12 (0x016989757266746c000000000000000c00): 
+Delete (Sized at 42): 0,0 /Local/RangeID/1/u/RaftLog/logIndex:13 (0x016989757266746c000000000000000d00): 
+Delete (Sized at 42): 0,0 /Local/RangeID/1/u/RaftLog/logIndex:14 (0x016989757266746c000000000000000e00): 
+Delete (Sized at 42): 0,0 /Local/RangeID/1/u/RaftLog/logIndex:15 (0x016989757266746c000000000000000f00): 
+Delete (Sized at 30): 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): 
+Delete (Sized at 32): 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): 
+Put: 0,0 /Local/RangeID/1/u/RangeTombstone (0x016989757266746200): next_replica_id:2 
