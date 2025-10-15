@@ -1,4 +1,5 @@
 # LogicTest: !local-mixed-25.2
+# knob-opt: allow-unsafe
 
 # Set up functions that inspect function dependencies.
 statement ok
