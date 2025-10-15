@@ -8,39 +8,39 @@ package sqlutils
 import (
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/errors"
 )
 
-// InspectResult is the go struct for the row results for an
-// INSPECT query.
+// InspectResult is a struct for the row results for a SHOW INSPECT ERRORS query.
 type InspectResult struct {
 	ErrorType  string
 	Database   string
+	Schema     string
 	Table      string
 	PrimaryKey string
-	Timestamp  time.Time
-	Repaired   bool
+	JobID      int64
+	Aost       time.Time
 	Details    string
 }
 
-// GetInspectResultRows will scan and unmarshal InspectResults from a Rows
-// iterator. The Rows iterate must from an INSPECT query.
-func GetInspectResultRows(rows *gosql.Rows) (results []InspectResult, err error) {
+// getInspectResultRows will scan and unmarshal InspectResults from a Rows
+// iterator. The Rows iterate must from a SHOW INSPECT ERRORS query.
+func getInspectResultRows(rows *gosql.Rows) (results []InspectResult, err error) {
 	defer rows.Close()
 
-	var unused *string
 	for rows.Next() {
 		result := InspectResult{}
 		if err := rows.Scan(
-			&unused, /* job_uuid */
 			&result.ErrorType,
 			&result.Database,
+			&result.Schema,
 			&result.Table,
 			&result.PrimaryKey,
-			&result.Timestamp,
-			&result.Repaired,
+			&result.JobID,
+			&result.Aost,
 			&result.Details,
 		); err != nil {
 			return nil, err
@@ -48,7 +48,7 @@ func GetInspectResultRows(rows *gosql.Rows) (results []InspectResult, err error)
 		results = append(results, result)
 	}
 
-	if rows.Err() != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
@@ -57,21 +57,28 @@ func GetInspectResultRows(rows *gosql.Rows) (results []InspectResult, err error)
 
 // RunInspect will run execute an exhaustive inspect check for a table.
 func RunInspect(sqlDB *gosql.DB, database string, table string) error {
-	return RunInspectWithOptions(sqlDB, database, table, "")
+	return runInspectWithOptions(sqlDB, database, table, "")
 }
 
-// RunInspectWithOptions will run an inspect check for a table with the specified options string.
-func RunInspectWithOptions(sqlDB *gosql.DB, database string, table string, options string) error {
+// runInspectWithOptions will run an inspect check for a table with the specified options string.
+func runInspectWithOptions(sqlDB *gosql.DB, database string, table string, options string) error {
 	if _, err := sqlDB.Exec(`SET enable_inspect_command = true;`); err != nil {
 		return err
 	}
-	rows, err := sqlDB.Query(fmt.Sprintf(`INSPECT TABLE %s.%s %s`,
-		database, table, options))
-	if err != nil {
+
+	if _, err := sqlDB.Exec(fmt.Sprintf(`INSPECT TABLE %s.%s %s`, database, table, options)); err == nil {
+		return nil
+	} else if !(strings.Contains(err.Error(), "INSPECT found inconsistencies") || strings.Contains(err.Error(), "INSPECT encountered internal errors")) {
 		return err
 	}
 
-	results, err := GetInspectResultRows(rows)
+	rows, err := sqlDB.Query(fmt.Sprintf(`SHOW INSPECT ERRORS FOR TABLE %s.%s WITH DETAILS`, database, table))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	results, err := getInspectResultRows(rows)
 	if err != nil {
 		return err
 	}
@@ -79,5 +86,6 @@ func RunInspectWithOptions(sqlDB *gosql.DB, database string, table string, optio
 	if len(results) > 0 {
 		return errors.Errorf("expected no inspect results instead got: %#v", results)
 	}
+
 	return nil
 }

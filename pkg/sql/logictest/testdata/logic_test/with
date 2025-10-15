@@ -993,9 +993,15 @@ SELECT * FROM t
 8 100
 20 400
 
+statement ok
+SET enable_inspect_command = true;
+
 # Check for corruption. (There should be none!)
+statement ok
+INSPECT TABLE t;
+
 query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
+SHOW INSPECT ERRORS FOR TABLE t WITH DETAILS;
 ----
 
 statement ok
@@ -1019,8 +1025,11 @@ TABLE u1 UNION ALL TABLE u2
 20 440
 
 # Check for corruption.
+statement ok
+INSPECT TABLE t;
+
 query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
+SHOW INSPECT ERRORS FOR TABLE t WITH DETAILS;
 ----
 
 statement ok
@@ -1142,8 +1151,11 @@ SELECT i, j FROM u@u_j_idx
 0 0
 
 # Check for corruption. (There should be none!)
+statement ok
+INSPECT TABLE u;
+
 query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE u WITH OPTIONS INDEX ALL
+SHOW INSPECT ERRORS FOR TABLE u WITH DETAILS;
 ----
 
 # Example pulled from a blog post.

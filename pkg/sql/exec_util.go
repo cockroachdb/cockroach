@@ -4416,10 +4416,6 @@ func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
 }
 
-func (m *sessionDataMutator) SetEnableScrubJob(val bool) {
-	m.data.EnableScrubJob = val
-}
-
 func (m *sessionDataMutator) SetEnableInspectCommand(val bool) {
 	m.data.EnableInspectCommand = val
 }
