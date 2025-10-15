@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -33,9 +34,11 @@ Uploads a file to a gateway node's local file system using a SQL connection.
 	RunE: clierrorplus.MaybeShoutError(runUpload),
 }
 
+const nodeLocalAppName = catconstants.InternalAppNamePrefix + " cockroach nodelocal"
+
 func runUpload(cmd *cobra.Command, args []string) (resErr error) {
 	ctx := context.Background()
-	conn, err := makeSQLClient(ctx, "cockroach nodelocal", useSystemDb)
+	conn, err := makeSQLClient(ctx, nodeLocalAppName, useSystemDb)
 	if err != nil {
 		return err
 	}

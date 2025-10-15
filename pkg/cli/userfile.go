@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
@@ -37,6 +38,7 @@ const (
 	defaultQualifiedHexNamePrefix = "defaultdb.public.userfilesx_"
 	tmpSuffix                     = ".tmp"
 	fileTableNameSuffix           = "_upload_files"
+	userFileAppName               = catconstants.InternalAppNamePrefix + " cockroach userfile"
 )
 
 var userFileUploadCmd = &cobra.Command{
@@ -90,7 +92,7 @@ atomic, and all deletions prior to the first failure will occur.
 
 func runUserFileDelete(cmd *cobra.Command, args []string) (resErr error) {
 	ctx := context.Background()
-	conn, err := makeSQLClient(ctx, "cockroach userfile", useDefaultDb)
+	conn, err := makeSQLClient(ctx, userFileAppName, useDefaultDb)
 	if err != nil {
 		return err
 	}

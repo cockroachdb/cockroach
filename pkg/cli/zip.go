@@ -50,6 +50,7 @@ type zipRequest struct {
 
 const (
 	debugZipCommandFlagsFileName = "debug_zip_command_flags.txt"
+	debugZipAppName              = catconstants.InternalAppNamePrefix + " cockroach zip"
 )
 
 type debugZipContext struct {
@@ -324,7 +325,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 
 			zr.sqlOutputFilenameExtension = computeSQLOutputFilenameExtension(sqlExecCtx.TableDisplayFormat)
 
-			sqlConn, err := makeTenantSQLClient(ctx, catconstants.InternalAppNamePrefix+" cockroach zip", useSystemDb, tenant.TenantName)
+			sqlConn, err := makeTenantSQLClient(ctx, debugZipAppName, useSystemDb, tenant.TenantName)
 			// The zip output is sent directly into a text file, so the results should
 			// be scanned into strings.
 			_ = sqlConn.SetAlwaysInferResultTypes(false)

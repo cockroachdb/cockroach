@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -36,6 +37,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+const tsDumpAppName = catconstants.InternalAppNamePrefix + " cockroach tsdump"
 
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
@@ -549,7 +552,7 @@ func createYAML(ctx context.Context) (resErr error) {
 
 // getStoreToNodeMapping retrieves the store-to-node mapping from the database
 func getStoreToNodeMapping(ctx context.Context) (map[string]string, error) {
-	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
+	sqlConn, err := makeSQLClient(ctx, tsDumpAppName, useSystemDb)
 	if err != nil {
 		return nil, err
 	}
