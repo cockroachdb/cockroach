@@ -565,6 +565,10 @@ type StoreTestingKnobs struct {
 	// messages because it has no updates and heartbeats are turned off. This
 	// simulation is only meaningful for ranges that use leader leases.
 	DisableUpdateLastUpdateTimesMapOnRaftGroupStep func(r *Replica) bool
+
+	// BeforeSplitAcquiresLocksOnRHS is invoked during a split application before
+	// we start acquiring locks on the right hand side.
+	BeforeSplitAcquiresLocksOnRHS func(context.Context, *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
