@@ -8,12 +8,15 @@ package changefeedccl
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -25,18 +28,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1007,4 +1017,242 @@ func (n *mockSinkStorage) Delete(_ context.Context, _ string) error {
 
 func (n *mockSinkStorage) Size(_ context.Context, _ string) (int64, error) {
 	return 0, nil
+}
+
+// --- Helpers for TestCloudStorageWTF ---
+
+// getJobProgress loads job progress for the given jobID.
+func getJobProgress(t *testing.T, jr *jobs.Registry, jobID jobspb.JobID) jobspb.Progress {
+	job, err := jr.LoadJob(context.Background(), jobID)
+	require.NoError(t, err)
+	return job.Progress()
+}
+
+// getHwmAndChkptForKey returns the job high-water mark and the checkpoint
+// timestamp for the span that contains the provided key.
+func getHwmAndChkptForKey(
+	t *testing.T, jr *jobs.Registry, jobID jobspb.JobID, key roachpb.Key,
+) (*hlc.Timestamp, hlc.Timestamp) {
+	progress := getJobProgress(t, jr, jobID)
+	chk := maps.Collect(loadCheckpoint(t, progress).All())
+	var chkTS hlc.Timestamp
+	for ts, sp := range chk {
+		if sp.ContainsKey(key) {
+			chkTS = ts
+			break
+		}
+	}
+	return progress.GetHighWater(), chkTS
+}
+
+// awaitCheckpointForKey waits until there is a checkpoint that contains the key.
+func awaitCheckpointForKey(t *testing.T, jr *jobs.Registry, jobID jobspb.JobID, key roachpb.Key) {
+	testutils.SucceedsSoon(t, func() error {
+		_, chkTS := getHwmAndChkptForKey(t, jr, jobID, key)
+		if chkTS.IsEmpty() {
+			return errors.New("waiting for checkpoint with pkKey")
+		}
+		return nil
+	})
+}
+
+// searchCloudFeedData waits until a given needle appears in files under dir for the given session marker.
+func searchCloudFeedData(t *testing.T, dir, needle, session string) {
+	testutils.SucceedsSoon(t, func() error {
+		cmd := fmt.Sprintf(`grep -RH %q %s | grep %q`, needle, dir, session)
+		out, err := exec.Command("bash", "-c", cmd).Output()
+		if err != nil {
+			return errors.Wrapf(err, "grepping for %s", needle)
+		}
+		if len(out) == 0 {
+			return errors.Newf("no %s found", needle)
+		}
+		t.Logf("found %s: %s", needle, string(out))
+		return nil
+	})
+}
+
+// waitForNoTmpFiles waits until there are no .tmp files left under dir.
+func waitForNoTmpFiles(t *testing.T, dir string) {
+	testutils.SucceedsSoon(t, func() error {
+		return filepath.Walk(dir, func(path string, d os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(path, `.tmp`) {
+				return errors.New("tmp file found")
+			}
+			return nil
+		})
+	})
+}
+
+// validateCloudFeedResults walks the cloudfeed output directory and validates
+// ordering using the OrderValidator.
+func validateCloudFeedResults(t *testing.T, dir string) {
+	validator := cdctest.NewOrderValidator("foo")
+	require.NoError(t, filepath.Walk(dir, func(path string, d os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || strings.Contains(d.Name(), "crdb_external_storage_location") {
+			return nil
+		}
+
+		contents, err := os.ReadFile(path)
+		require.NoError(t, err)
+
+		for _, line := range strings.Split(string(contents), "\n") {
+			if line == "" {
+				continue
+			}
+
+			var row struct {
+				After struct {
+					ID int `json:"id"`
+				} `json:"after"`
+				Key      gojson.RawMessage `json:"key"`
+				Topic    string            `json:"topic"`
+				Updated  string            `json:"updated"`
+				Resolved string            `json:"resolved"`
+			}
+
+			require.NoError(t, gojson.Unmarshal([]byte(line), &row))
+			if row.Resolved != "" {
+				require.NoError(t, validator.NoteResolved(cloudFeedPartition, parseTimeToHLC(t, row.Resolved)))
+				continue
+			}
+			updated := parseTimeToHLC(t, row.Updated)
+			require.NoError(t, validator.NoteRow(cloudFeedPartition, string(row.Key), row.Topic, updated, "foo"))
+		}
+		return nil
+	}))
+	require.Empty(t, validator.Failures())
+}
+
+// TestCloudStorageOrderingWhileLaggingAndRestarting tests ordering while lagging
+// and restarting.
+// It tests approximately the following scenario:
+// - start changefeed with hacked session id = S
+// - hwm = 1
+// - emit F(ile)1 with K@1 and K@2
+// - checkpoint K's span at K@1.5
+// - restart. override session id = S' where S' orders before S.
+// - emit F2 with K@2
+// - look at the result.
+//
+// What we see today is that F1 and F2 share the same timestamp (because the HWM
+// hasn't advanced). This results in F2 being ordered before F1. But since F2
+// has K@2 and not K@1, this results in a violation of the cloud storage
+// ordering guarantee.
+func TestCloudStorageOrderingWhileLaggingAndRestarting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		// Checkpoint extremely frequently.
+		changefeedbase.SpanCheckpointInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.SpanCheckpointMaxBytes.Override(context.Background(), &s.Server.ClusterSettings().SV, 100<<20 /* 100 MiB */)
+		changefeedbase.SpanCheckpointLagThreshold.Override(context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `
+		CREATE TABLE foo (key INT PRIMARY KEY, v STRING);
+		INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+		ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));
+		`)
+
+		const nonLaggingKeyVal = 1
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.Server.DB(), s.Server.Codec(), "d", "foo")
+		nonLaggingKey, err := randgen.TestingMakePrimaryIndexKeyForTenant(fooDesc, s.Server.Codec(), nonLaggingKeyVal)
+		require.NoError(t, err)
+
+		// Skip checkpoints for spans that don't contain the non-lagging key to simulate the other spans lagging.
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		knobs.FeedKnobs.ShouldSkipCheckpoint = func(rfc *kvpb.RangeFeedCheckpoint) bool {
+			return !rfc.Span.ContainsKey(nonLaggingKey)
+		}
+
+		// Hacked session id. The first one must order *after* the second one to
+		// actually result in an ordering violation. In reality the session ids
+		// are random, and this just makes the test less flaky.
+		sessionID := "2_begin"
+		knobs.WrapSink = func(s Sink, jobID jobspb.JobID) Sink {
+			s.(*cloudStorageSink).jobSessionID = sessionID
+			return s
+		}
+
+		feedStmt := `CREATE CHANGEFEED FOR foo WITH resolved='50ms', min_checkpoint_frequency='50ms', initial_scan='no', updated, format='json'`
+		cf := feed(t, f, feedStmt)
+		defer closeFeed(t, cf)
+
+		jobRegistry := s.Server.JobRegistry().(*jobs.Registry)
+		jobID := cf.(cdctest.EnterpriseTestFeed).JobID()
+
+		// Make sure we have a checkpoint including the non-lagging key before we continue.
+		awaitCheckpointForKey(t, jobRegistry, jobID, nonLaggingKey)
+		// Now we have the span with the non-lagging key ahead of the HWM. Double check that.
+		hwm, chkTS := getHwmAndChkptForKey(t, jobRegistry, jobID, nonLaggingKey)
+		require.False(t, hwm.IsEmpty())
+		require.NotZero(t, chkTS)
+		require.True(t, hwm.Less(chkTS))
+
+		// Write K@T1
+		T1TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T1' WHERE key = $1 RETURNING cluster_logical_timestamp()`,
+			nonLaggingKeyVal)[0][0]
+		T1Ts, err := hlc.ParseHLC(T1TsStr)
+		require.NoError(t, err)
+
+		// Wait for checkpoint after T1.
+		testutils.SucceedsSoon(t, func() error {
+			hwm2, chkTS2 := getHwmAndChkptForKey(t, jobRegistry, jobID, nonLaggingKey)
+			if T1Ts.Less(chkTS2) {
+				require.True(t, hwm2.Less(chkTS2))
+				return nil
+			}
+			return errors.Newf("waiting for checkpoint after T1: %s < %s", T1Ts, chkTS2)
+		})
+
+		// Make subsequent checkpoints not happen.
+		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
+
+		// Make sure we saw K@ T1.
+		// You may ask, "Why can't we just use assertPayloads?"
+		// TBH I'm not 100% sure. cloudfeed.Next doesn't scan for new data until a
+		// Flush() (see sinkSynchronizer). This is simpler to reason about.
+		searchCloudFeedData(t, cf.(*cloudFeed).dir, "T1", "2_begin")
+
+		// Write K@T2
+		T2TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T2' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
+		T2Ts, err := hlc.ParseHLC(T2TsStr)
+		require.NoError(t, err)
+
+		// Pause.
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+
+		// Make sure we didn't checkpoint >= T2.
+		_, chkTS = getHwmAndChkptForKey(t, jobRegistry, jobID, nonLaggingKey)
+		require.False(t, T2Ts.LessEq(chkTS))
+
+		// Resume (with a lower session id).
+		sessionID = "1_after"
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Resume())
+
+		// Wait for k@T2 to be emitted (or re-emitted; it could be present in "2_begin"'s file also).
+		searchCloudFeedData(t, cf.(*cloudFeed).dir, "T2", "1_after")
+
+		// Stop and validate results.
+		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Pause())
+
+		waitForNoTmpFiles(t, cf.(*cloudFeed).dir)
+		validateCloudFeedResults(t, cf.(*cloudFeed).dir)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }

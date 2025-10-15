@@ -1542,7 +1542,10 @@ func (c *cloudFeed) readParquetResolvedPayload(path string) ([]byte, error) {
 }
 
 // Next implements the TestFeed interface.
-func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
+func (c *cloudFeed) Next() (m *cdctest.TestFeedMessage, err error) {
+	defer func() {
+		fmt.Printf("cloudFeed.Next returned %v; %v\n", m, err)
+	}()
 	for {
 		if len(c.rows) > 0 {
 			e := c.rows[0]
