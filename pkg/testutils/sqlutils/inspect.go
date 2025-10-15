@@ -8,7 +8,6 @@ package sqlutils
 import (
 	gosql "database/sql"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/errors"
 )
@@ -18,11 +17,11 @@ import (
 type InspectResult struct {
 	ErrorType  string
 	Database   string
+	Schema     string
 	Table      string
 	PrimaryKey string
-	Timestamp  time.Time
-	Repaired   bool
-	Details    string
+	JobID      string
+	Aost       string
 }
 
 // GetInspectResultRows will scan and unmarshal InspectResults from a Rows
@@ -30,18 +29,16 @@ type InspectResult struct {
 func GetInspectResultRows(rows *gosql.Rows) (results []InspectResult, err error) {
 	defer rows.Close()
 
-	var unused *string
 	for rows.Next() {
 		result := InspectResult{}
 		if err := rows.Scan(
-			&unused, /* job_uuid */
 			&result.ErrorType,
 			&result.Database,
+			&result.Schema,
 			&result.Table,
 			&result.PrimaryKey,
-			&result.Timestamp,
-			&result.Repaired,
-			&result.Details,
+			&result.JobID,
+			&result.Aost,
 		); err != nil {
 			return nil, err
 		}
