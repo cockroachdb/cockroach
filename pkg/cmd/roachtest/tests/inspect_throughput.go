@@ -33,9 +33,7 @@ func registerInspectThoughput(r registry.Registry) {
 	r.Add(makeInspectThroughputTest(r, 12, 8, 500_000_000, 3*time.Hour, 1))
 
 	// Long run: 12 nodes × 8 CPUs, 1B rows, 2 index checks (runs INSPECT twice: 1 index, then 2 indexes), ~5 hours (in v25.4)
-	// TODO(148365): Until we have INSPECT syntax, we cannot execute the INSPECT
-	// job on a subset of indexes. Set this to 2 when INSPECT SQL is available.
-	const indexesForLongRun = 1
+	const indexesForLongRun = 2
 	r.Add(makeInspectThroughputTest(r, 12, 8, 1_000_000_000, 8*time.Hour, indexesForLongRun))
 }
 
@@ -212,8 +210,8 @@ func makeInspectThroughputTest(
 				t.Fatal(err)
 			}
 
-			// Enable scrub jobs for EXPERIMENTAL SCRUB to use job system.
-			if _, err := db.Exec("SET enable_scrub_job = on"); err != nil {
+			// Enable INSPECT feature flag.
+			if _, err := db.Exec("USE bulkingest; SET enable_inspect_command = true"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -226,9 +224,8 @@ func makeInspectThroughputTest(
 				tickHistogram(cfg.metricName)
 				before := timeutil.Now()
 
-				// TODO(148365): Update to use INSPECT syntax when SQL is ready.
-				scrubSQL := fmt.Sprintf("EXPERIMENTAL SCRUB TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s)", cfg.indexListSQL)
-				if _, err := db.Exec(scrubSQL); err != nil {
+				inspectSQL := fmt.Sprintf("INSPECT TABLE bulkingest.bulkingest WITH OPTIONS INDEX (%s)", cfg.indexListSQL)
+				if _, err := db.Exec(inspectSQL); err != nil {
 					t.Fatal(err)
 				}
 
