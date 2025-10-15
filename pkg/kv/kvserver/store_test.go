@@ -797,7 +797,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	func() {
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
-		r.setDescRaftMuLocked(ctx, desc)
+		r.setDescRaftMuLocked(ctx, desc, nil)
 	}()
 	expectedResult = "not in uninitReplicas"
 	func() {

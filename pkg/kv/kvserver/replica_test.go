@@ -306,7 +306,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 	}
 
 	tc.repl.raftMu.Lock()
-	tc.repl.setDescRaftMuLocked(ctx, &newDesc)
+	tc.repl.setDescRaftMuLocked(ctx, &newDesc, nil)
 	tc.repl.mu.RLock()
 	tc.repl.assertStateRaftMuLockedReplicaMuRLocked(ctx, tc.stateEng, tc.raftEng)
 	tc.repl.mu.RUnlock()
