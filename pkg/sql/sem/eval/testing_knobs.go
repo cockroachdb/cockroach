@@ -41,6 +41,8 @@ type TestingKnobs struct {
 	// We use clusterversion.Key rather than a roachpb.Version because it will be used
 	// to get initial values to use during bootstrap.
 	TenantLogicalVersionKeyOverride clusterversion.Key
+
+	AllowInternalAccess func() bool
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}
