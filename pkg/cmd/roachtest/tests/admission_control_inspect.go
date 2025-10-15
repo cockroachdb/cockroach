@@ -42,14 +42,15 @@ func makeInspectAdmissionControlTest(
 	totalNodes := numCRDBNodes + 1
 
 	return registry.TestSpec{
-		Name:             fmt.Sprintf("inspect/admission-control/nodes=%d/cpu=%d/rows=%d", numCRDBNodes, numCPUs, numRows),
-		Timeout:          timeout,
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Weekly),
-		Cluster:          r.MakeClusterSpec(totalNodes, spec.CPU(numCPUs), spec.WorkloadNode()),
-		Leases:           registry.MetamorphicLeases,
+		Name:                fmt.Sprintf("inspect/admission-control/nodes=%d/cpu=%d/rows=%d", numCRDBNodes, numCPUs, numRows),
+		Timeout:             timeout,
+		Owner:               registry.OwnerSQLFoundations,
+		Benchmark:           true,
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Weekly),
+		Cluster:             r.MakeClusterSpec(totalNodes, spec.CPU(numCPUs), spec.WorkloadNode()),
+		Leases:              registry.MetamorphicLeases,
+		SkipPostValidations: registry.PostValidationInspect,
 		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 			metrics := roachtestutil.AggregatedPerfMetrics{}
 
