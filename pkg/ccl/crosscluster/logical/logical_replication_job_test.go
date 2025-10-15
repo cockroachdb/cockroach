@@ -623,17 +623,18 @@ func TestLogicalReplicationWithPhantomDelete(t *testing.T) {
 	skip.UnderDeadlock(t)
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-
-	tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
-	defer tc.Stopper().Stop(ctx)
-
-	serverAURL, cleanup := s.PGUrl(t)
-	serverAURL.Path = "a"
-	defer cleanup()
-
 	for _, mode := range []string{"validated", "immediate"} {
 		t.Run(mode, func(t *testing.T) {
+			ctx := context.Background()
+			tc, s, serverASQL, serverBSQL := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+			defer tc.Stopper().Stop(ctx)
+
+			serverAURL, cleanup := s.PGUrl(t)
+			serverAURL.Path = "a"
+			defer cleanup()
+			serverASQL.Exec(t, "ALTER TABLE tab SET (schema_locked = false)")
+			serverBSQL.Exec(t, "ALTER TABLE tab SET (schema_locked = false)")
+
 			serverASQL.Exec(t, "TRUNCATE tab")
 			serverBSQL.Exec(t, "TRUNCATE tab")
 			var jobBID jobspb.JobID
