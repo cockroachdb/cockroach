@@ -637,6 +637,34 @@ message SlowQuery {
   CommonSQLExecDetails exec = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
 }
 
+// ScanRowCountMisestimate is recorded when the optimizer's row count estimate
+// for a logical scan differs significantly from the actual number of rows read,
+// and cluster setting `sql.log.scan_row_count_misestimate.enabled` is set.
+message ScanRowCountMisestimate {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // The fully qualified name of the table being scanned.
+  string table_name = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The name of the index being scanned.
+  string index_name = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // The optimizer's estimated row count for the scan.
+  uint64 estimated_row_count = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // The actual number of rows read by all processors performing the scan.
+  uint64 actual_row_count = 6 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Time in nanoseconds that have passed since full stats were collected on
+  // the table.
+  int64 nanos_since_stats_collected = 7 [(gogoproto.jsontag) = ",omitempty"];
+
+  // Estimated fraction of stale rows in the table based on the time since stats
+  // were last collected.
+  double estimated_staleness = 8 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // CommonLargeRowDetails contains the fields common to both LargeRow and
 // LargeRowInternal events.
 message CommonLargeRowDetails {

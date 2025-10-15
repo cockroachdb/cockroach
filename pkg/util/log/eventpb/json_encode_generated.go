@@ -5580,6 +5580,72 @@ func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.Redactab
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *ScanRowCountMisestimate) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.TableName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"TableName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.TableName)))
+		b = append(b, '"')
+	}
+
+	if m.IndexName != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"IndexName\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.IndexName)))
+		b = append(b, '"')
+	}
+
+	if m.EstimatedRowCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"EstimatedRowCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.EstimatedRowCount), 10)
+	}
+
+	if m.ActualRowCount != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"ActualRowCount\":"...)
+		b = strconv.AppendUint(b, uint64(m.ActualRowCount), 10)
+	}
+
+	if m.NanosSinceStatsCollected != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NanosSinceStatsCollected\":"...)
+		b = strconv.AppendInt(b, int64(m.NanosSinceStatsCollected), 10)
+	}
+
+	if m.EstimatedStaleness != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"EstimatedStaleness\":"...)
+		b = strconv.AppendFloat(b, float64(m.EstimatedStaleness), 'f', -1, 64)
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *SchemaDescriptor) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

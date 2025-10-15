@@ -333,6 +333,9 @@ func (m *ClientSessionEnd) LoggingChannel() logpb.Channel { return logpb.Channel
 func (m *LargeRow) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *ScanRowCountMisestimate) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *SlowQuery) LoggingChannel() logpb.Channel { return logpb.Channel_SQL_EXEC }
 
 // LoggingChannel implements the EventPayload interface.
