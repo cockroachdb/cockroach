@@ -56,10 +56,10 @@ type bufferedRegistration struct {
 		outputLoopCancelFn func()
 		disconnected       bool
 
-		// catchUpIter is created by replcia under raftMu lock when registration is
-		// created. It is detached by output loop for processing and closed.
-		// If output loop was not started and catchUpIter is non-nil at the time
-		// that disconnect is called, it is closed by disconnect.
+		// catchUpIter is created by replica under raftMu lock when registration is
+		// created. It is detached by output loop for processing and closed. If
+		// output loop was not started and catchUpIter is non-nil at the time that
+		// disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
 	}
 

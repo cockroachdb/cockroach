@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -20,14 +21,14 @@ import (
 )
 
 // unbufferedRegistration is similar to bufferedRegistration but does not
-// internally buffer events delivered via publish(). Rather, when caught up, it
-// forwards events directly to the BufferedStream. It assumes that
-// BufferedStream's SendBuffered method is non-blocking. As a result, it does
-// not require a long-lived goroutine to move event between an internal buffer
-// and the sender.
+// internally buffer events delivered via publish() after its initial catch-up
+// scan. Rather, it forwards events directly to the BufferedStream. It assumes
+// that BufferedStream's SendBuffered method is non-blocking. As a result, it
+// does not require a long-lived goroutine to move event between an internal
+// buffer and the sender.
 //
 // Note that UnbufferedRegistration needs to ensure that events sent to
-// BufferedStream from the processor during a running catchup scan are sent to
+// BufferedStream from the processor during a running catch-up scan are sent to
 // the client in order. To achieve this, events from catch-up scans are sent
 // using UnbufferedSend. While the catch-up scan is ongoing, live updates
 // delivered via publish() are temporarily buffered in catchUpBuf to hold them
@@ -38,7 +39,7 @@ import (
 // the buffered sender directly. unbufferedRegistration is responsible for
 // correctly handling memory reservations for data stored in the catchUpBuf.
 //
-// All errors are delivered to this registration via Disonnect() which is
+// All errors are delivered to this registration via Disconnect() which is
 // non-blocking. Disconnect sends an error to the stream and invokes any
 // necessary cleanup.
 //
@@ -81,10 +82,6 @@ type unbufferedRegistration struct {
 		// created. It is set to nil by output loop for processing and closed when
 		// done.
 		catchUpIter *CatchUpIterator
-
-		// Used for testing only. Indicates that all events in catchUpBuf have been
-		// sent to BufferedStream.
-		caughtUp bool
 	}
 }
 
@@ -119,7 +116,6 @@ func newUnbufferedRegistration(
 		stream:  stream,
 	}
 	br.mu.catchUpIter = catchUpIter
-	br.mu.caughtUp = true
 	if br.mu.catchUpIter != nil {
 		// A nil catchUpIter indicates we don't need a catch-up scan. We avoid
 		// initializing catchUpBuf in this case, which will result in publish()
@@ -132,8 +128,7 @@ func newUnbufferedRegistration(
 // publish sends a single event to this registration. It is called by the
 // processor if the event overlaps the span this registration is interested in.
 // Events are either stored in catchUpBuf or sent to BufferedStream directly,
-// depending on whether catch-up scan is done. publish is responsible for using
-// and releasing alloc.
+// depending on whether catch-up scan is done.
 func (ubr *unbufferedRegistration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
@@ -159,7 +154,6 @@ func (ubr *unbufferedRegistration) publish(
 		alloc.Use(ctx)
 		select {
 		case ubr.mu.catchUpBuf <- e:
-			ubr.mu.caughtUp = false
 		default:
 			// catchUpBuf exceeded and we are dropping this event. A catch up scan is
 			// needed later.
@@ -258,33 +252,43 @@ func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks 
 }
 
 // drainAllocations drains catchUpBuf and release all memory held by the events
-// in catch-up buffer without publishing them. It is safe to assume that
-// catch-up buffer is empty and nil after this.
+// in catch-up buffer without publishing them. It should only be called in the
+// case of a catch-up scan failure, in which case the registration should have
+// already been disconnected.
+//
+// It is safe to assume that catch-up buffer is empty and nil after this.
 func (ubr *unbufferedRegistration) drainAllocations(ctx context.Context) {
-	ubr.mu.Lock()
-	defer ubr.mu.Unlock()
-	// TODO(wenyihu6): Check if we can just discard without holding the lock first
-	// ? We shouldn't be reading from the buffer at the same time
-	if ubr.mu.catchUpBuf == nil {
-		// Already drained.
+	if !ubr.drainAllocationsRequired() {
 		return
 	}
 
-	func() {
-		for {
-			select {
-			case e := <-ubr.mu.catchUpBuf:
-				e.alloc.Release(ctx)
-				putPooledSharedEvent(e)
-			default:
-				// Done.
-				return
-			}
-		}
-	}()
+	for {
+		select {
+		case e := <-ubr.mu.catchUpBuf:
+			e.alloc.Release(ctx)
+			putPooledSharedEvent(e)
+		default:
+			// Buffer is empty, unset catchUpBuf for good measure. But we should never
+			// be here on a connected registration.
+			ubr.mu.Lock()
+			bufLen := len(ubr.mu.catchUpBuf) // nolint:deferunlockcheck
+			ubr.mu.catchUpBuf = nil
+			ubr.mu.Unlock()
+			assertTrue(bufLen == 0, "non-empty catch up buffer after drainAllocation")
 
-	ubr.mu.catchUpBuf = nil
-	ubr.mu.caughtUp = true
+			return
+		}
+	}
+}
+
+func (ubr *unbufferedRegistration) drainAllocationsRequired() bool {
+	ubr.mu.Lock()
+	defer ubr.mu.Unlock()
+	if ubr.mu.catchUpBuf == nil {
+		return false
+	}
+	assertTrue(ubr.mu.disconnected, "drainAllocations called on connected registration without a non-nil catchUpBuf")
+	return true
 }
 
 // publishCatchUpBuffer drains catchUpBuf and release all memory held by the
@@ -380,7 +384,6 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 
 	// Success.
 	ubr.mu.catchUpBuf = nil
-	ubr.mu.caughtUp = true
 	return nil
 }
 
@@ -440,7 +443,7 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	}
 	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
 		ubr.mu.Lock()
-		caughtUp := len(ubr.mu.catchUpBuf) == 0 && ubr.mu.caughtUp
+		caughtUp := ubr.mu.catchUpBuf == nil
 		ubr.mu.Unlock()
 		if caughtUp {
 			return nil
@@ -449,5 +452,11 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return errors.Errorf("unbufferedRegistration %v failed to empty in time", ubr.Range())
+	return errors.Errorf("unbufferedRegistration for %v failed to drain its catch-up buffer in time", ubr.Range())
+}
+
+func assertTrue(cond bool, msg string) {
+	if buildutil.CrdbTestBuild && !cond {
+		panic(msg)
+	}
 }
