@@ -2031,6 +2031,7 @@ func (d *BackupRestoreTestDriver) runBackup(
 	bType fmt.Stringer,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	collectionOpts collectionOpts,
 ) (backupCollection, string, error) {
 	pauseAfter := 1024 * time.Hour // infinity
 	var pauseResumeDB *gosql.DB
@@ -2056,10 +2057,13 @@ func (d *BackupRestoreTestDriver) runBackup(
 	var collection backupCollection
 	switch b := bType.(type) {
 	case fullBackup:
-		btype := d.newBackupScope(rng, isMultitenant)
-		name := d.backupCollectionName(d.nextBackupID(), b.namePrefix, btype)
+		scope := collectionOpts.backupScope
+		if scope == nil {
+			d.newBackupScope(rng, isMultitenant)
+		}
+		name := d.backupCollectionName(d.nextBackupID(), b.namePrefix, scope)
 		createOptions := newBackupOptions(rng, d.testUtils.onlineRestore)
-		collection = newBackupCollection(name, btype, createOptions, d.cluster.IsLocal())
+		collection = newBackupCollection(name, scope, createOptions, d.cluster.IsLocal())
 		l.Printf("creating full backup for %s", collection.name)
 	case incrementalBackup:
 		collection = b.collection
@@ -2227,6 +2231,26 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 	return nil
 }
 
+type collectionOpts struct {
+	// number of backups in the collection, including the full backup
+	numBackups  int
+	backupScope backupScope
+}
+
+type collectionOpt func(*collectionOpts)
+
+func withNumBackups(num int) collectionOpt {
+	return func(o *collectionOpts) {
+		o.numBackups = num
+	}
+}
+
+func withBackupScope(scope backupScope) collectionOpt {
+	return func(o *collectionOpts) {
+		o.backupScope = scope
+	}
+}
+
 // createBackupCollection creates a new backup collection to be
 // restored/verified at the end of the test. A full backup is created,
 // and an incremental one is created on top of it. Both backups are
@@ -2242,18 +2266,23 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	backupNamePrefix string,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	opt ...collectionOpt,
 ) (*backupCollection, error) {
 	var collection backupCollection
 	backupEndTimes := make([]string, 0)
 	var latestIncBackupEndTime string
 	var fullBackupEndTime string
+	var collOpts collectionOpts
+	for _, o := range opt {
+		o(&collOpts)
+	}
 
 	// Create full backup.
 	if err := d.testUtils.runJobOnOneOf(ctx, l, fullBackupSpec.Execute.Nodes, func() error {
 		var err error
 		collection, fullBackupEndTime, err = d.runBackup(
 			ctx, l, tasker, rng, fullBackupSpec.Plan.Nodes, fullBackupSpec.PauseProbability,
-			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant,
+			fullBackup{backupNamePrefix}, internalSystemJobs, isMultitenant, collOpts,
 		)
 		return err
 	}); err != nil {
@@ -2262,10 +2291,15 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	backupEndTimes = append(backupEndTimes, fullBackupEndTime)
 
 	// Create incremental backups.
-	numIncrementals := possibleNumIncrementalBackups[rng.Intn(len(possibleNumIncrementalBackups))]
-	if d.testUtils.mock {
+	var numIncrementals int
+	if collOpts.numBackups > 0 {
+		numIncrementals = collOpts.numBackups - 1
+	} else if d.testUtils.mock {
 		numIncrementals = 2
+	} else {
+		numIncrementals = possibleNumIncrementalBackups[rng.Intn(len(possibleNumIncrementalBackups))]
 	}
+
 	l.Printf("creating %d incremental backups", numIncrementals)
 	for i := range numIncrementals {
 		d.randomWait(l, rng)
@@ -2274,6 +2308,7 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 			collection, latestIncBackupEndTime, err = d.runBackup(
 				ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
 				incrementalBackup{collection: collection, incNum: i + 1}, internalSystemJobs, isMultitenant,
+				collOpts,
 			)
 			return err
 		}); err != nil {
@@ -2303,7 +2338,8 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 				var err error
 				collection, latestIncBackupEndTime, err = d.runBackup(
 					ctx, l, tasker, rng, incBackupSpec.Plan.Nodes, incBackupSpec.PauseProbability,
-					compact, internalSystemJobs, isMultitenant)
+					compact, internalSystemJobs, isMultitenant, collOpts,
+				)
 				return err
 			}); err != nil {
 				return nil, err
@@ -2335,35 +2371,20 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
 }
 
-// deleteUserTableSST deletes an SST that covers a user table from the full
-// backup in a collection. This is used to test online restore recovery. We
-// delete from the full backup specifically to avoid deleting an SST from an
-// incremental that is skipped due to a compacted backup. This ensures that
-// deleting an SST will cause the download job to fail (assuming it hasn't
-// already been downloaded).
-// Note: We delete specifically a user-table SST as opposed to choosing a random
-// SST because the temporary system table SSTs may be GC'd before the download
-// phase attempts to download the SST. This would cause the download job to
-// succeed instead of failing as expected. See
-// https://github.com/cockroachdb/cockroach/issues/148408 for more details.
-// TODO (kev-cao): Investigate if blocking storage level compaction would
-// prevent GC of temporary system tables and allow us to delete a random SST
-// instead. Technically, it is still possible, but unlikely, for storage to
-// compact away a user-table SST before the download job attempts to download
-// it, which would result in false positives in the test.
-func (d *BackupRestoreTestDriver) deleteUserTableSST(
+// deleteRandomSST deletes a random SST from a backup collection. This is used
+// to test online restore recovery. We delete from the full backup specifically
+// to avoid deleting an SST from an incremental that is skipped due to a
+// compacted backup. This ensures that deleting an SST will cause the download
+// job to fail (assuming it hasn't already been downloaded).
+func (d *BackupRestoreTestDriver) deleteRandomSST(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
 	var sstPath string
 	if err := db.QueryRowContext(
 		ctx,
 		`SELECT path FROM
-		(
-			SELECT row_number() OVER (), * FROM
-			[SHOW BACKUP FILES FROM LATEST IN $1]
-		)
 		WHERE backup_type = 'full'
-		ORDER BY row_number DESC
+		ORDER BY random()
 		LIMIT 1`,
 		collection.uri(),
 	).Scan(&sstPath); err != nil {
