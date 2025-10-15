@@ -4491,6 +4491,13 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 `,
 	resultColumns: colinfo.RangesNoLeases,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, limit int64, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		// We have to disable the unsafe check on execution, because for this table
+		// we may have gotten to it through delegate execution, eg. SHOW RANGES.
+		// Accessing it will still fail if queried directly during planning, eg
+		// `SELECT * FROM crdb_internal.ranges_no_leases`, so it's safe to unblock
+		// here.
+		defer p.DisableUnsafeInternalsCheck()()
+
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, nil, err

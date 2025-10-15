@@ -721,6 +721,13 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv pri
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
 	b.factory.Metadata().AddDependency(name, ds, priv)
+
+	// If we're building within a builtin context (unsafe checks disabled),
+	// mark this dependency as coming from a builtin so it can bypass unsafe
+	// checks during memo staleness checking.
+	if b.skipUnsafeInternalsCheck {
+		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED)
+	}
 }
 
 // resolveNumericColumnRefs converts a list of tree.ColumnIDs from a
