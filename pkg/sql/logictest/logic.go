@@ -1119,6 +1119,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1507,6 +1511,15 @@ func (t *logicTest) newCluster(
 		knobs.DistSQL = &execinfra.TestingKnobs{
 			ForceDiskSpill: t.cfg.SQLExecUseDisk,
 		}
+		var evalTestingKnobs *eval.TestingKnobs
+		if knobs.SQLEvalContext != nil {
+			evalTestingKnobs = knobs.SQLEvalContext.(*eval.TestingKnobs)
+		} else {
+			evalTestingKnobs = &eval.TestingKnobs{}
+			knobs.SQLEvalContext = evalTestingKnobs
+		}
+
+		evalTestingKnobs.UnsafeOverride = func() *bool { return &t.allowUnsafe }
 	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
 	// it installs detects a transaction that doesn't have
@@ -2115,6 +2128,18 @@ func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
 	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
 }
 
+// knobOptAllowUnsafe always allows access to the unsafe internals.
+type knobOptAllowUnsafe struct{}
+
+var _ knobOpt = knobOptAllowUnsafe{}
+
+// apply implements the clusterOpt interface.
+func (c knobOptAllowUnsafe) apply(args *base.TestingKnobs) {
+	e := args.SQLEvalContext.(*eval.TestingKnobs)
+	v := true
+	e.UnsafeOverride = func() *bool { return &v }
+}
+
 // clusterOptIgnoreStrictGCForTenants corresponds to the
 // ignore-tenant-strict-gc-enforcement directive.
 type clusterOptIgnoreStrictGCForTenants struct{}
@@ -2268,6 +2293,8 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 			res = append(res, knobOptDisableCorpusGeneration{})
 		case "sync-event-log":
 			res = append(res, knobOptSynchronousEventLog{})
+		case "allow-unsafe":
+			res = append(res, knobOptAllowUnsafe{})
 		default:
 			t.Fatalf("unrecognized knob option: %s", opt)
 		}
@@ -3599,6 +3626,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	defer t.setSafetyGate(stmt.sql)()
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3722,6 +3750,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	defer t.setSafetyGate(query.sql)()
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -4609,6 +4638,7 @@ func RunLogicTest(
 		perErrorSummary:            make(map[string][]string),
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
+		allowUnsafe:                true,
 	}
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
@@ -4883,4 +4913,24 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// setSafetyGate is a utility function which controls whether access to the unsafe
+// internals is allowed by the contained sql statement. The reasoning behind it is
+// as follows. We want queries which explicitly access unsafe internals to have
+// access to them, but we want to prevent indirect access wherever possible.
+// Indirect access can be described as any query which doesn't reference an unsafe
+// object, but still accesses it under the hood. We want to flush out these cases
+// so that users can never execute statements which look safe, but block when executed.
+func (t *logicTest) setSafetyGate(sql string) func() {
+	sql = strings.ToLower(sql)
+	explicitlyUnsafe := strings.Contains(sql, "crdb_internal.") || strings.Contains(sql, "system.")
+	explicitlyUnsafe = explicitlyUnsafe || strings.Contains(sql, "-- allow-unsafe")
+	if !explicitlyUnsafe {
+		t.allowUnsafe = false
+	}
+
+	return func() {
+		t.allowUnsafe = true
+	}
 }
