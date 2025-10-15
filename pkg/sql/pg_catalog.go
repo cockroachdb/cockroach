@@ -607,6 +607,23 @@ func userIsSuper(
 	return tree.DBool(isSuper), err
 }
 
+func userHasReplicationPrivilegeOrRoleOption(
+	ctx context.Context, p *planner, userName username.SQLUsername,
+) (tree.DBool, error) {
+	replication, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.REPLICATION, userName)
+	if err != nil {
+		return tree.DBool(replication), err
+	}
+
+	replicationDest, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.REPLICATIONDEST, userName)
+	if err != nil {
+		return tree.DBool(replication || replicationDest), err
+	}
+
+	replicationSrc, err := p.UserHasGlobalPrivilegeOrRoleOption(ctx, privilege.REPLICATIONSOURCE, userName)
+	return tree.DBool(replication || replicationDest || replicationSrc), err
+}
+
 var pgCatalogAuthIDTable = virtualSchemaTable{
 	comment: `authorization identifiers - differs from postgres as we do not display passwords, 
 and thus do not require admin privileges for access. 
@@ -649,6 +666,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				return err
 			}
 
+			replication, err := userHasReplicationPrivilegeOrRoleOption(ctx, p, userName)
+			if err != nil {
+				return err
+			}
+
 			return addRow(
 				h.UserOid(userName),                              // oid
 				tree.NewDName(userName.Normalized()),             // rolname
@@ -657,7 +679,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 				tree.MakeDBool(isRoot || tree.DBool(createRole)), // rolcreaterole
 				tree.MakeDBool(isRoot || tree.DBool(createDB)),   // rolcreatedb
 				tree.MakeDBool(roleCanLogin),                     // rolcanlogin.
-				tree.DBoolFalse,                                  // rolreplication
+				tree.MakeDBool(replication),                      // rolreplication
 				tree.MakeDBool(tree.DBool(bypassRLS)),            // rolbypassrls
 				negOneVal,                                        // rolconnlimit
 				passwdStarString,                                 // rolpassword
@@ -3022,6 +3044,11 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					return err
 				}
 
+				replication, err := userHasReplicationPrivilegeOrRoleOption(ctx, p, userName)
+				if err != nil {
+					return err
+				}
+
 				return addRow(
 					h.UserOid(userName),                               // oid
 					tree.NewDName(userName.Normalized()),              // rolname
@@ -3031,7 +3058,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 					tree.MakeDBool(isSuper || tree.DBool(createDB)),   // rolcreatedb
 					tree.DBoolFalse,                                   // rolcatupdate
 					tree.MakeDBool(roleCanLogin),                      // rolcanlogin.
-					tree.DBoolFalse,                                   // rolreplication
+					tree.MakeDBool(replication),                       // rolreplication
 					negOneVal,                                         // rolconnlimit
 					passwdStarString,                                  // rolpassword
 					rolValidUntil,                                     // rolvaliduntil
