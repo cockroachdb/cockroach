@@ -1142,6 +1142,7 @@ func TestCloudStorageWTF(t *testing.T) {
 			if len(out) == 0 {
 				return errors.New("no T1 found")
 			}
+			t.Logf("found T1: %s", string(out))
 			return nil
 		})
 		t.Logf("saw k@T1")
@@ -1166,7 +1167,7 @@ func TestCloudStorageWTF(t *testing.T) {
 		require.NoError(t, cf.(cdctest.EnterpriseTestFeed).Resume())
 		t.Logf("resumed")
 
-		// wait for k@T2 to be emitted
+		// wait for k@T2 to be emitted or re-emitted
 		// assertPayloads(t, cf, []string{
 		// 	`foo: [1]->{"after": {"v": "T2"}}`,
 		// })
@@ -1178,6 +1179,7 @@ func TestCloudStorageWTF(t *testing.T) {
 			if len(out) == 0 {
 				return errors.New("no T2 found")
 			}
+			t.Logf("found T2: %s", string(out))
 			return nil
 		})
 
