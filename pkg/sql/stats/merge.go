@@ -86,8 +86,9 @@ func MergedStatistics(
 	return mergedStats
 }
 
-// stripOuterBuckets removes the outer buckets from a histogram without a
-// leading NULL bucket.
+// stripOuterBuckets returns a copy of the histogram buckets with any outer
+// buckets that may have been added by addOuterBuckets removed. histogram must
+// not have a leading NULL bucket.
 func stripOuterBuckets(
 	ctx context.Context, evalCtx *eval.Context, histogram []cat.HistogramBucket,
 ) []cat.HistogramBucket {
@@ -96,17 +97,28 @@ func stripOuterBuckets(
 	}
 	startIdx := 0
 	endIdx := len(histogram)
-	if histogram[0].UpperBound.IsMin(ctx, evalCtx) && histogram[0].NumEq == 0 {
+	hasLowerOuter := histogram[0].UpperBound.IsMin(ctx, evalCtx) && histogram[0].NumEq == 0
+	if hasLowerOuter {
 		startIdx = 1
-		// Set the first range counts to zero to counteract range counts added by
-		// addOuterBuckets.
-		histogram[startIdx].NumRange = 0
-		histogram[startIdx].DistinctRange = 0
 	}
 	if histogram[len(histogram)-1].UpperBound.IsMax(ctx, evalCtx) && histogram[len(histogram)-1].NumEq == 0 {
 		endIdx = len(histogram) - 1
 	}
-	return histogram[startIdx:endIdx]
+	if startIdx == 0 && endIdx == len(histogram) {
+		return histogram
+	}
+	if startIdx >= endIdx {
+		return nil
+	}
+
+	out := append([]cat.HistogramBucket(nil), histogram[startIdx:endIdx]...)
+	if hasLowerOuter {
+		// Set the first range counts to zero to counteract range counts added by
+		// addOuterBuckets.
+		out[0].NumRange = 0
+		out[0].DistinctRange = 0
+	}
+	return out
 }
 
 // mergePartialStatistic merges a full statistic with a more recent partial
