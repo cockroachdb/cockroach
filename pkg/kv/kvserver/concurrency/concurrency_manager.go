@@ -123,7 +123,7 @@ var UnreplicatedLockReliabilitySplit = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.split.enabled",
 	"whether the replica should attempt to keep unreplicated locks during range splits",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", true),
+	false,
 )
 
 // UnreplicatedLockReliabilityLeaseTransfer controls whether the replica will attempt
