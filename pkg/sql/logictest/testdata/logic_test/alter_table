@@ -5265,3 +5265,23 @@ statement ok
 RESET experimental_enable_unique_without_index_constraints
 
 subtest end
+
+# Tests for a regression found by #155145 where the wrong primary index could
+# be scanned for when validating inverted indexes recreated after an ALTER
+# PRIMARY KEY.
+subtest validate_alter_pk_with_inverted
+
+statement ok
+CREATE TABLE t_alter_pk_with_inverted(
+    a STRING NOT NULL,
+    d DECIMAL[],
+    INVERTED INDEX (d)
+  );
+
+statement ok
+INSERT INTO t_alter_pk_with_inverted VALUES ('test', ARRAY[1.0, 2.0]);
+
+statement ok
+ALTER TABLE t_alter_pk_with_inverted ALTER PRIMARY KEY USING COLUMNS (a) USING HASH;
+
+subtest end
