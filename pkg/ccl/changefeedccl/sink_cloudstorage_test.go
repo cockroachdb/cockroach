@@ -1115,13 +1115,13 @@ func TestCloudStorageWTF(t *testing.T) {
 
 		// wait for checkpoint after T1
 		testutils.SucceedsSoon(t, func() error {
-			hwm, chkTS := getHwmAndChkpt()
-			if T1Ts.Less(chkTS) {
-				require.True(t, hwm.Less(chkTS))
-				t.Logf("got our checkpoint after T1. hwm: %s, chkTS: %s", hwm, chkTS)
+			hwm2, chkTS2 := getHwmAndChkpt()
+			if T1Ts.Less(chkTS2) {
+				require.True(t, hwm2.Less(chkTS2))
+				t.Logf("got our checkpoint after T1. hwm: %s, chkTS: %s", hwm2, chkTS2)
 				return nil
 			}
-			return errors.Newf("waiting for checkpoint after T1: %s < %s", T1Ts, chkTS)
+			return errors.Newf("waiting for checkpoint after T1: %s < %s", T1Ts, chkTS2)
 		})
 
 		// make subsequent checkpoints not happen
