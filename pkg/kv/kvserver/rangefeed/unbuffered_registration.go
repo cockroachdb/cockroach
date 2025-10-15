@@ -105,6 +105,7 @@ func newUnbufferedRegistration(
 		baseRegistration: baseRegistration{
 			streamCtx:              streamCtx,
 			span:                   span,
+			keys:                   span.AsRange(),
 			catchUpTimestamp:       startTS,
 			withDiff:               withDiff,
 			withFiltering:          withFiltering,
