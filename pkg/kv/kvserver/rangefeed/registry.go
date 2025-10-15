@@ -105,6 +105,32 @@ type baseRegistration struct {
 	shouldUnreg atomic.Bool
 }
 
+// newBaseRegistration returns a baseRegistration. Note that a baseRegistration
+// does not implement registration. Rather this is used by the buffered and
+// unbuffered registrations to share some basic methods.
+func newBaseRegistration(
+	streamCtx context.Context,
+	span roachpb.Span,
+	startTS hlc.Timestamp,
+	withDiff bool,
+	withFiltering bool,
+	withOmitRemote bool,
+	bulkDeliverySize int,
+	removeRegFromProcessor func(registration),
+) baseRegistration {
+	return baseRegistration{
+		streamCtx:              streamCtx,
+		span:                   span,
+		keys:                   span.AsRange(),
+		catchUpTimestamp:       startTS,
+		withDiff:               withDiff,
+		withFiltering:          withFiltering,
+		withOmitRemote:         withOmitRemote,
+		bulkDelivery:           bulkDeliverySize,
+		removeRegFromProcessor: removeRegFromProcessor,
+	}
+}
+
 // ID implements interval.Interface.
 func (r *baseRegistration) ID() uintptr {
 	return uintptr(r.id)
