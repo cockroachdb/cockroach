@@ -330,6 +330,7 @@ import (
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
+//      - allowunsafe: allows access to unsafe internals during execution.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -969,6 +970,9 @@ type logicQuery struct {
 	// roundFloatsInStringsSigFigs specifies the number of significant figures
 	// to round floats embedded in strings to where zero means do not round.
 	roundFloatsInStringsSigFigs int
+
+	// allowUnsafe indicates whether unsafe operations are allowed during execution.
+	allowUnsafe bool
 }
 
 var allowedKVOpTypes = []string{
@@ -1119,6 +1123,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1493,6 +1501,7 @@ func (t *logicTest) newCluster(
 			DisableOptimizerRuleProbability: *disableOptRuleProbability,
 			OptimizerCostPerturbation:       *optimizerCostPerturbation,
 			ForceProductionValues:           serverArgs.ForceProductionValues,
+			UnsafeOverride:                  func() *bool { return &t.allowUnsafe },
 		}
 		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 			DeterministicExplain:            true,
@@ -2115,6 +2124,18 @@ func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
 	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
 }
 
+// knobOptAllowUnsafe always allows access to the unsafe internals.
+type knobOptAllowUnsafe struct{}
+
+var _ knobOpt = knobOptAllowUnsafe{}
+
+// apply implements the clusterOpt interface.
+func (c knobOptAllowUnsafe) apply(args *base.TestingKnobs) {
+	e := args.SQLEvalContext.(*eval.TestingKnobs)
+	v := true
+	e.UnsafeOverride = func() *bool { return &v }
+}
+
 // clusterOptIgnoreStrictGCForTenants corresponds to the
 // ignore-tenant-strict-gc-enforcement directive.
 type clusterOptIgnoreStrictGCForTenants struct{}
@@ -2268,6 +2289,8 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 			res = append(res, knobOptDisableCorpusGeneration{})
 		case "sync-event-log":
 			res = append(res, knobOptSynchronousEventLog{})
+		case "allow-unsafe":
+			res = append(res, knobOptAllowUnsafe{})
 		default:
 			t.Fatalf("unrecognized knob option: %s", opt)
 		}
@@ -2954,6 +2977,9 @@ func (t *logicTest) processSubtest(
 						case "async":
 							query.expectAsync = true
 
+						case "allowunsafe":
+							query.allowUnsafe = true
+
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
 								significantFigures, err := floatcmp.ParseRoundInStringsDirective(opt)
@@ -3599,6 +3625,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	defer t.setSafetyGate(stmt.sql, false)()
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3722,6 +3749,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	defer t.setSafetyGate(query.sql, query.allowUnsafe)()
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -4609,6 +4637,7 @@ func RunLogicTest(
 		perErrorSummary:            make(map[string][]string),
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
+		allowUnsafe:                true,
 	}
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
@@ -4883,4 +4912,24 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// setSafetyGate is a utility function which controls whether access to the unsafe
+// internals is allowed by the contained sql statement. The reasoning behind it is
+// as follows. We want queries which explicitly access unsafe internals to have
+// access to them, but we want to prevent indirect access wherever possible.
+// Indirect access can be described as any query which doesn't reference an unsafe
+// object, but still accesses it under the hood. We want to flush out these cases
+// so that users can never execute statements which look safe, but block when executed.
+func (t *logicTest) setSafetyGate(sql string, skip bool) func() {
+	sql = strings.ToLower(sql)
+	explicitlyUnsafe := strings.Contains(sql, "crdb_internal.") || strings.Contains(sql, "system.")
+	if skip || explicitlyUnsafe {
+		return func() {}
+	}
+
+	t.allowUnsafe = false
+	return func() {
+		t.allowUnsafe = true
+	}
 }
