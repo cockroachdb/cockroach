@@ -129,7 +129,7 @@ const skipRate = .6
 
 // Stop once max stages has been hit.
 const maxStagesToTest = 8
-const maxStagesToTestMultiRegion = 6
+const maxStagesToTestMultiRegion = 4
 
 // shouldSkipBackup samples about 60% of total stages or up to
 // max stages.
