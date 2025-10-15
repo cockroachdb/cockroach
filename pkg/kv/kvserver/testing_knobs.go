@@ -585,6 +585,10 @@ type StoreTestingKnobs struct {
 	// DisableLeaderlessWatcherRefreshOnRaftTick, if set, disables refreshing
 	// the leaderless watcher's unavailable state during raft ticks.
 	DisableLeaderlessWatcherRefreshOnRaftTick bool
+
+	// BeforeSplitAcquiresLocksOnRHS is invoked during a split application before
+	// we start acquiring locks on the right hand side.
+	BeforeSplitAcquiresLocksOnRHS func(context.Context, *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
