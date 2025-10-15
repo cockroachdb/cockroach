@@ -62,6 +62,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
+        "//pkg/util/humanizeutil",
         "//pkg/util/interval",
         "//pkg/util/intsets",
         "//pkg/util/iterutil",

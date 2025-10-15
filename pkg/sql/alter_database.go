@@ -2537,3 +2537,59 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 func (n *alterDatabaseSetZoneConfigExtensionNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabaseSetZoneConfigExtensionNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseSetZoneConfigExtensionNode) Close(context.Context)        {}
+
+type alterDatabaseSetStorageParamsNode struct {
+	zeroInputPlanNode
+	n    *tree.AlterDatabaseSetStorageParams
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseSetStorageParams(
+	ctx context.Context, n *tree.AlterDatabaseSetStorageParams,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().MutableByName(p.txn).Database(ctx, string(n.Name))
+	if err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseSetStorageParamsNode{
+		n:    n,
+		desc: dbDesc,
+	}, nil
+}
+
+func (n *alterDatabaseSetStorageParamsNode) startExec(params runParams) error {
+	return errors.New("unimplemented")
+}
+
+func (n *alterDatabaseSetStorageParamsNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseSetStorageParamsNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseSetStorageParamsNode) Close(context.Context)        {}
+
+type alterDatabaseResetStorageParamsNode struct {
+	zeroInputPlanNode
+	n    *tree.AlterDatabaseResetStorageParams
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseResetStorageParams(
+	ctx context.Context, n *tree.AlterDatabaseResetStorageParams,
+) (planNode, error) {
+	return nil, errors.New("unimplemented")
+}
+
+func (n *alterDatabaseResetStorageParamsNode) startExec(params runParams) error {
+	return errors.New("unimplemented")
+}
+
+func (n *alterDatabaseResetStorageParamsNode) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseResetStorageParamsNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseResetStorageParamsNode) Close(context.Context)        {}

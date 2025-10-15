@@ -57,6 +57,8 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterDatabaseSecondaryRegion{}):            "alter database secondary region",
 	reflect.TypeOf(&alterDatabaseDropSecondaryRegion{}):        "alter database secondary region",
 	reflect.TypeOf(&alterDatabaseSetZoneConfigExtensionNode{}): "alter database configure zone extension",
+	reflect.TypeOf(&alterDatabaseSetStorageParamsNode{}):       "alter database set storage params",
+	reflect.TypeOf(&alterDatabaseResetStorageParamsNode{}):     "alter database reset storage params",
 	reflect.TypeOf(&alterDefaultPrivilegesNode{}):              "alter default privileges",
 	reflect.TypeOf(&alterExternalConnectionNode{}):             "alter external connection",
 	reflect.TypeOf(&alterFunctionOptionsNode{}):                "alter function",

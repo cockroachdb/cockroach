@@ -479,3 +479,23 @@ CREATE TABLE public.roaches (
 
 
 subtest end
+
+
+subtest show_create_with_guardrails
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE t_show_create_with_guardrails (a INT PRIMARY KEY) WITH (max_row_size_log = '1KiB', max_row_size_err = '2KiB');
+
+query TT
+SHOW CREATE TABLE t_show_create_with_guardrails;
+----
+t_show_create_with_guardrails  CREATE TABLE public.t_show_create_with_guardrails (
+  a INT8 NOT NULL,
+  CONSTRAINT t_show_create_with_guardrails_pkey PRIMARY KEY (a ASC)
+) WITH (max_row_size_log = 1.0 KiB, max_row_size_err = 2.0 KiB);
+
+
+subtest end

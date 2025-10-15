@@ -20,6 +20,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:alter_database_placement.html",
     "//docs/generated/sql/bnf:alter_database_primary_region.html",
     "//docs/generated/sql/bnf:alter_database_set.html",
+    "//docs/generated/sql/bnf:alter_database_set_reset_storage_params.html",
     "//docs/generated/sql/bnf:alter_database_set_secondary_region.html",
     "//docs/generated/sql/bnf:alter_database_set_zone_config_extension.html",
     "//docs/generated/sql/bnf:alter_database_survival_goal.html",
