@@ -26,18 +26,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testProvider struct {
-	vm.Provider
-	vm.DNSProvider
-}
-
 func TestServicePorts(t *testing.T) {
 	ctx := context.Background()
 	clusterName := "tc"
 	z1NS := local.NewDNSProvider(t.TempDir(), "z1")
-	vm.Providers["p1"] = &testProvider{DNSProvider: z1NS}
+	vm.DNSProviders["p1"] = z1NS
 	z2NS := local.NewDNSProvider(t.TempDir(), "z2")
-	vm.Providers["p2"] = &testProvider{DNSProvider: z2NS}
+	vm.DNSProviders["p2"] = z2NS
 
 	err := z1NS.CreateRecords(ctx,
 		vm.CreateSRVRecord(serviceDNSName(z1NS, "t1", ServiceTypeSQL, clusterName), net.SRV{
