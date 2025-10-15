@@ -15,6 +15,7 @@ type ProviderOptions struct {
 	DNSPublicDomain  string
 	DNSManagedZone   string
 	DNSManagedDomain string
+	WithSDKSupport   bool
 }
 
 type OptionFunc func(p *Provider)
@@ -50,63 +51,49 @@ func WithMetadataProject(project string) OptionFunc {
 // WithDNSProject returns an option to set the DNS project.
 func WithDNSProject(project string) OptionFunc {
 	return func(p *Provider) {
-		if p.dnsProvider == nil {
-			p.dnsProvider = &dnsProvider{}
-		}
-		p.dnsProvider.dnsProject = project
+		p.dnsProviderOpts.DNSProject = project
 	}
 }
 
 // WithDNSPublicZone returns an option to set the public DNS zone.
 func WithDNSPublicZone(zone string) OptionFunc {
 	return func(p *Provider) {
-		if p.dnsProvider == nil {
-			p.dnsProvider = &dnsProvider{}
-		}
-		p.dnsProvider.publicZone = zone
+		p.dnsProviderOpts.PublicZone = zone
 	}
 }
 
 // WithDNSPublicDomain returns an option to set the public DNS domain.
 func WithDNSPublicDomain(domain string) OptionFunc {
 	return func(p *Provider) {
-		if p.dnsProvider == nil {
-			p.dnsProvider = &dnsProvider{}
-		}
-		p.dnsProvider.publicDomain = domain
+		p.dnsProviderOpts.PublicDomain = domain
 	}
 }
 
 // WithDNSManagedZone returns an option to set the managed DNS zone.
 func WithDNSManagedZone(zone string) OptionFunc {
 	return func(p *Provider) {
-		if p.dnsProvider == nil {
-			p.dnsProvider = &dnsProvider{}
-		}
-		p.dnsProvider.managedZone = zone
+		p.dnsProviderOpts.ManagedZone = zone
 	}
 }
 
 // WithDNSManagedDomain returns an option to set the managed DNS domain.
 func WithDNSManagedDomain(domain string) OptionFunc {
 	return func(p *Provider) {
-		if p.dnsProvider == nil {
-			p.dnsProvider = &dnsProvider{}
-		}
-		p.dnsProvider.managedDomain = domain
+		p.dnsProviderOpts.ManagedDomain = domain
 	}
 }
 
 // WithDNSProvider returns an option to set the DNS provider.
-// TODO(golgeek): GCE only supports its own DNS provider, so we try and cast
-// the interface before setting it. In case the cast fails, we ignore the provided
-// DNS provider. This will need to be revisited if we ever want to support non-GCE
-// DNS providers.
 func WithDNSProvider(dnsP vm.DNSProvider) OptionFunc {
 	return func(p *Provider) {
-		if gceDnsProvider, isGCE := dnsP.(*dnsProvider); isGCE {
-			p.dnsProvider = gceDnsProvider
-		}
+		p.dnsProvider = dnsP
+	}
+}
+
+// WithSDKSupport returns an option to set the WithSDKSupport flag.
+func WithSDKSupport(withSDKSupport bool) OptionFunc {
+	return func(p *Provider) {
+		p.withSDKSupport = withSDKSupport
 	}
 }
 
@@ -139,6 +126,9 @@ func (po *ProviderOptions) ToOptions() []Option {
 	}
 	if po.DNSManagedDomain != "" {
 		opts = append(opts, WithDNSManagedDomain(po.DNSManagedDomain))
+	}
+	if po.WithSDKSupport {
+		opts = append(opts, WithSDKSupport(po.WithSDKSupport))
 	}
 	return opts
 }

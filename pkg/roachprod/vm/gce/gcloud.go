@@ -20,9 +20,11 @@ import (
 	"time"
 	"unicode"
 
+	compute "cloud.google.com/go/compute/apiv1"
 	"github.com/Masterminds/semver/v3"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
@@ -34,6 +36,7 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/sync/errgroup"
 	cloudbilling "google.golang.org/api/cloudbilling/v1beta"
+	"google.golang.org/api/option"
 )
 
 const (
@@ -144,6 +147,7 @@ func Init() error {
 
 	initialized = true
 	vm.Providers[ProviderName] = providerInstance
+	vm.DNSProviders[providerInstance.dnsProvider.ProviderName()] = providerInstance.dnsProvider
 	Infrastructure = providerInstance
 
 	return nil
@@ -154,7 +158,7 @@ func NewProvider(options ...Option) (*Provider, error) {
 
 	// Create a new provider with the default options.
 	p := &Provider{
-		dnsProvider:     NewDNSProvider(NewDNSProviderDefaultOptions()),
+		dnsProviderOpts: NewDNSProviderDefaultOptions(),
 		Projects:        []string{},
 		defaultProject:  defaultDefaultProject,
 		metadataProject: defaultMetadataProject,
@@ -167,6 +171,57 @@ func NewProvider(options ...Option) (*Provider, error) {
 	// If no projects were specified by the options, use the default project.
 	if len(p.Projects) == 0 {
 		p.Projects = []string{defaultDefaultProject}
+	}
+
+	// If no DNS provider was specified, create a new default one (gcloud)
+	// with the configured options.
+	dnsProviderInitializedInInit := false
+	if p.dnsProvider == nil {
+		p.dnsProvider = NewDNSProvider(
+			(&DNSProviderOpts{}).NewFromGCEDNSProviderOpts(p.dnsProviderOpts),
+		)
+		dnsProviderInitializedInInit = true
+	}
+
+	// If withSDKSupport is enabled, initialize the GCE clients.
+	if p.withSDKSupport {
+		creds, _, err := roachprodutil.GetGCECredentials(
+			context.Background(),
+			roachprodutil.IAPTokenSourceOptions{},
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get credentials")
+		}
+
+		instancesClient, err := compute.NewInstancesRESTClient(
+			context.Background(),
+			option.WithCredentials(creds),
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to init compute instances client")
+		}
+
+		instanceTemplatesClient, err := compute.NewInstanceTemplatesRESTClient(
+			context.Background(),
+			option.WithCredentials(creds),
+		)
+		if err != nil {
+			return nil, errors.Wrap(err, "unable to init compute instance templates client")
+		}
+
+		p.computeInstancesClient = instancesClient
+		p.computeInstanceTemplatesClient = instanceTemplatesClient
+
+		// If the DNS provider was initialized in this function (with the default one using gcloud),
+		// update it to use the SDK version.
+		if dnsProviderInitializedInInit {
+			p.dnsProvider, err = NewSDKDNSProvider(
+				(&SDKDNSProviderOpts{}).NewFromGCEDNSProviderOpts(p.dnsProviderOpts),
+			)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to init dns client")
+			}
+		}
 	}
 
 	return p, nil
@@ -423,7 +478,9 @@ type ProviderOpts struct {
 
 // Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
-	*dnsProvider
+	dnsProvider     vm.DNSProvider
+	dnsProviderOpts dnsOpts
+
 	Projects []string
 
 	// The project to use for looking up metadata. In particular, this includes
@@ -432,6 +489,29 @@ type Provider struct {
 
 	// The project that provides the core roachprod services.
 	defaultProject string
+
+	// ComputeClients
+	withSDKSupport                 bool
+	computeInstancesClient         *compute.InstancesClient
+	computeInstanceTemplatesClient *compute.InstanceTemplatesClient
+}
+
+type dnsOpts struct {
+	DNSProject    string
+	PublicZone    string
+	PublicDomain  string
+	ManagedZone   string
+	ManagedDomain string
+}
+
+func NewDNSProviderDefaultOptions() dnsOpts {
+	return dnsOpts{
+		DNSProject:    defaultDNSProject,
+		PublicZone:    dnsDefaultZone,
+		PublicDomain:  dnsDefaultDomain,
+		ManagedZone:   dnsDefaultManagedZone,
+		ManagedDomain: dnsDefaultManagedDomain,
+	}
 }
 
 // LogEntry represents a single log entry from the gcloud logging(stack driver)
@@ -1226,34 +1306,33 @@ func (p *Provider) ConfigureProviderFlags(flags *pflag.FlagSet, opt vm.MultipleP
 
 	// Flags about DNS override the default values in
 	// dnsProvider.
-	dnsProviderInstance := p.dnsProvider
 	flags.StringVar(
-		&dnsProviderInstance.dnsProject, ProviderName+"-dns-project",
-		dnsProviderInstance.dnsProject,
+		&p.dnsProviderOpts.DNSProject, ProviderName+"-dns-project",
+		p.dnsProviderOpts.DNSProject,
 		"project to use to set up DNS",
 	)
 	flags.StringVar(
-		&dnsProviderInstance.publicZone,
+		&p.dnsProviderOpts.PublicZone,
 		ProviderName+"-dns-zone",
-		dnsProviderInstance.publicZone,
+		p.dnsProviderOpts.PublicZone,
 		"zone file in gcloud project to use to set up public DNS records",
 	)
 	flags.StringVar(
-		&dnsProviderInstance.publicDomain,
+		&p.dnsProviderOpts.PublicDomain,
 		ProviderName+"-dns-domain",
-		dnsProviderInstance.publicDomain,
+		p.dnsProviderOpts.PublicDomain,
 		"zone domian in gcloud project to use to set up public DNS records",
 	)
 	flags.StringVar(
-		&dnsProviderInstance.managedZone,
-		ProviderName+"managed-dns-zone",
-		dnsProviderInstance.managedZone,
+		&p.dnsProviderOpts.ManagedZone,
+		ProviderName+"-managed-dns-zone",
+		p.dnsProviderOpts.ManagedZone,
 		"zone file in gcloud project to use to set up DNS SRV records",
 	)
 	flags.StringVar(
-		&dnsProviderInstance.managedDomain,
-		ProviderName+"managed-dns-domain",
-		dnsProviderInstance.managedDomain,
+		&p.dnsProviderOpts.ManagedDomain,
+		ProviderName+"-managed-dns-domain",
+		p.dnsProviderOpts.ManagedDomain,
 		"zone file in gcloud project to use to set up DNS SRV records",
 	)
 
@@ -1834,7 +1913,7 @@ func (p *Provider) Create(
 		// Now that the instance-group is stable,
 		// fetch the list of instances in the managed instance group.
 		vmList, err = getManagedInstanceGroupVMs(
-			l, project, groupName, zonesInstanceTemplates, p.publicDomain,
+			l, project, groupName, zonesInstanceTemplates, p.dnsProvider.PublicDomain(),
 		)
 		if err != nil {
 			return nil, err
@@ -1870,7 +1949,7 @@ func (p *Provider) Create(
 					vmListMutex.Lock()
 					defer vmListMutex.Unlock()
 					for _, i := range instances {
-						v := i.toVM(project, p.publicDomain)
+						v := i.toVM(project, p.dnsProvider.PublicDomain())
 						vmList = append(vmList, *v)
 					}
 					return nil
@@ -2034,7 +2113,7 @@ func (p *Provider) Grow(
 	}
 
 	// Fetch the list of instances in the managed instance group.
-	vmList, err := getManagedInstanceGroupVMs(l, project, groupName, zoneToInstanceTemplates, p.publicDomain)
+	vmList, err := getManagedInstanceGroupVMs(l, project, groupName, zoneToInstanceTemplates, p.dnsProvider.PublicDomain())
 	if err != nil {
 		return nil, err
 	}
@@ -3118,6 +3197,10 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 // List queries gcloud to produce a list of VM info objects.
 func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 
+	if p.withSDKSupport {
+		return p.listWithSDK(context.Background(), l, opts)
+	}
+
 	templatesInUse := make(map[string]map[string]struct{})
 	var vms vm.List
 	for _, prj := range p.GetProjects() {
@@ -3153,7 +3236,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 
 		// Now, convert the json payload into our common VM type
 		for _, jsonVM := range jsonVMS {
-			vms = append(vms, *jsonVM.toVM(prj, p.publicDomain))
+			vms = append(vms, *jsonVM.toVM(prj, p.dnsProvider.PublicDomain()))
 		}
 	}
 
