@@ -28,6 +28,8 @@ import (
 	"github.com/otan/gopgkrb5"
 )
 
+const InternalSqlAppName = "$ internal cockroach sql"
+
 func init() {
 	// Ensure that the CLI client commands can use GSSAPI authentication.
 	pgconn.RegisterGSSProvider(func() (pgconn.GSS, error) { return gopgkrb5.NewGSS() })
@@ -436,22 +438,7 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	defer func(prev bool) { c.alwaysInferResultTypes = prev }(c.alwaysInferResultTypes)
 	c.alwaysInferResultTypes = false
 
-	// Metadata checks require allow_unsafe_internals to be on.
-	allowUnsafeInternals, err := c.getSessionVariable(ctx, "allow_unsafe_internals")
-	if err != nil {
-		fmt.Fprintf(c.errw, "warning: unable to retrieve allow_unsafe_internals setting: %v\n", err)
-	} else if allowUnsafeInternals == "off" {
-		// Temporarily turn on allow_unsafe_internals.
-		if err := c.Exec(ctx, "SET allow_unsafe_internals = on"); err != nil {
-			fmt.Fprintf(c.errw, "warning: unable to set allow_unsafe_internals to true: %v\n", err)
-		} else {
-			defer func() {
-				if resetErr := c.Exec(ctx, "SET allow_unsafe_internals = off"); resetErr != nil {
-					fmt.Fprintf(c.errw, "warning: unable to reset allow_unsafe_internals to false: %v\n", resetErr)
-				}
-			}()
-		}
-	}
+	defer c.AllowExecuteInternal(ctx)()
 
 	_, newServerVersion, newClusterID, err := c.GetServerMetadata(ctx)
 	if c.conn.IsClosed() {
@@ -517,6 +504,18 @@ func (c *sqlConn) checkServerMetadata(ctx context.Context) error {
 	// Try to enable server execution timings for the CLI to display if
 	// supported by the server.
 	return c.tryEnableServerExecutionTimings(ctx)
+}
+
+func (c *sqlConn) AllowExecuteInternal(ctx context.Context) func() {
+	oldApplicationName, _ := c.getSessionVariable(ctx, "application_name")
+	if strings.HasPrefix(oldApplicationName, InternalSqlAppName) {
+		// If already an internal app name, we don't need to set a new one
+		return func() {}
+	}
+	_ = c.Exec(ctx, fmt.Sprintf("SET application_name = '%s'", InternalSqlAppName))
+	return func() {
+		_ = c.Exec(ctx, fmt.Sprintf("SET application_name = '%s'", oldApplicationName))
+	}
 }
 
 // GetServerInfo returns a copy of the remote server details.

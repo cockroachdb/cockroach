@@ -101,6 +101,11 @@ type Conn interface {
 	// the fields may be empty if there were errors while retrieving
 	// them when the connection was established.
 	GetServerInfo() ServerInfo
+
+	// AllowExecuteInternal allows internal statements to be executed, regardless
+	// of the allow_unsafe_internals session variable. The returned function should
+	// be called after the internal statements have been executed.
+	AllowExecuteInternal(context.Context) func()
 }
 
 // ServerInfo describes the remote server.
