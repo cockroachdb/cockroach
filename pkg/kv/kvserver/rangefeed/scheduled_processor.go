@@ -371,7 +371,7 @@ func (p *ScheduledProcessor) Register(
 		if p.stopping.Load() {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.Span()) {
 			log.KvDistribution.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
