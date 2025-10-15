@@ -1,0 +1,32 @@
+create-descriptor start=a end=d replicas=[1,2,3]
+----
+created descriptor: r1:{a-d} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=1
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+
+# Create an initialized replica this time around.
+create-descriptor start=d end=k replicas=[1,2,3]
+----
+created descriptor: r2:{d-k} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=2 initialized
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): <empty>
+Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0,0
+Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
+Put: 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): index:10 term:5 
+
+print-range-state
+----
+range desc: r1:{a-d} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 uninitialized
+range desc: r2:{d-k} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5}
