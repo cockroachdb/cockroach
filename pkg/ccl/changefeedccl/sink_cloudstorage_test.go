@@ -16,6 +16,7 @@ import (
 	"math"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -1126,11 +1127,24 @@ func TestCloudStorageWTF(t *testing.T) {
 		// make subsequent checkpoints not happen
 		changefeedbase.SpanCheckpointInterval.Override(ctx, &s.Server.ClusterSettings().SV, 0)
 
-		// TODO why no worky
-		// Make sure we saw k@ T1
-		assertPayloads(t, cf, []string{
-			`foo: [1]->{"after": {"v": "T1"}}`,
+		// // Make sure we saw k@ T1
+		// assertPayloads(t, cf, []string{
+		// 	`foo: [1]->{"after": {"v": "T1"}}`,
+		// })
+		// why above no worky?
+		// becase the cloudfeed is wrapped by a sinkSynchronizer which makes it not scan for new data until a Flush(), which we are intentionally avoiding.
+		// -> do it hackily
+		testutils.SucceedsSoon(t, func() error {
+			out, err := exec.Command("grep", "-R", "T1", cf.(*cloudFeed).dir).Output()
+			if err != nil {
+				return errors.Wrapf(err, "grepping for T1")
+			}
+			if len(out) == 0 {
+				return errors.New("no T1 found")
+			}
+			return nil
 		})
+		t.Logf("saw k@T1")
 
 		T2TsStr := sqlDB.QueryStr(t, `UPDATE foo SET v = 'T2' WHERE key = 1 RETURNING cluster_logical_timestamp()`)[0][0]
 		T2Ts, err := hlc.ParseHLC(T2TsStr)
@@ -1153,9 +1167,20 @@ func TestCloudStorageWTF(t *testing.T) {
 		t.Logf("resumed")
 
 		// wait for k@T2 to be emitted
-		assertPayloads(t, cf, []string{
-			`foo: [1]->{"after": {"v": "T2"}}`,
+		// assertPayloads(t, cf, []string{
+		// 	`foo: [1]->{"after": {"v": "T2"}}`,
+		// })
+		testutils.SucceedsSoon(t, func() error {
+			out, err := exec.Command("grep", "-R", "T2", cf.(*cloudFeed).dir).Output()
+			if err != nil {
+				return errors.Wrapf(err, "grepping for T2")
+			}
+			if len(out) == 0 {
+				return errors.New("no T2 found")
+			}
+			return nil
 		})
+
 		t.Logf("saw k@T2")
 
 		// stop and validate results
@@ -1200,6 +1225,8 @@ func TestCloudStorageWTF(t *testing.T) {
 					}
 					continue
 				}
+				t.Logf("file %s: %s", path, line)
+
 				var row struct {
 					After struct {
 						ID int `json:"id"`
@@ -1211,13 +1238,12 @@ func TestCloudStorageWTF(t *testing.T) {
 				}
 
 				require.NoError(t, gojson.Unmarshal([]byte(line), &row))
-				updated := parseTimeToHLC(t, row.Updated)
 				if row.Resolved != "" {
 					continue
 				}
+				updated := parseTimeToHLC(t, row.Updated)
 				require.NoError(t, validator.NoteRow(cloudFeedPartition, string(row.Key), row.Topic, updated, "foo"))
 				nl++
-				t.Logf("file %s: %s", path, line)
 			}
 			return nil
 		}))
