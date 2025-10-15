@@ -152,6 +152,9 @@ func (m *ManualTime) advanceToLocked(now time.Time, skipIntermediateTicks bool) 
 	// Fire off any tickers.
 	for e := m.mu.tickers.Front(); e != nil; e = e.Next() {
 		t := e.Value.(*manualTicker)
+		// This simulates a ticker dropping ticks, as can happen if receivers are slow:
+		// https://pkg.go.dev/time#NewTicker. We are not trying to copy the exact
+		// behavior of time.Ticker here, which is not documented.
 		if skipIntermediateTicks {
 			if !t.nextTick.After(now) {
 				select {
@@ -161,15 +164,15 @@ func (m *ManualTime) advanceToLocked(now time.Time, skipIntermediateTicks bool) 
 				}
 				t.nextTick = now.Add(t.duration)
 			}
-			continue
-		}
-		for !t.nextTick.After(now) {
-			select {
-			case t.ch <- t.nextTick:
-			default:
-				panic("ticker channel full")
+		} else {
+			for !t.nextTick.After(now) {
+				select {
+				case t.ch <- t.nextTick:
+				default:
+					panic("ticker channel full")
+				}
+				t.nextTick = t.nextTick.Add(t.duration)
 			}
-			t.nextTick = t.nextTick.Add(t.duration)
 		}
 	}
 }

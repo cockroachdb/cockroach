@@ -1,0 +1,96 @@
+init
+----
+elapsed: 0s
+
+# Let 2s pass, 200ms at a time. Expect a call to allocateTokens
+# per 200ms advance (since advance uses AdvanceInOneTick). Expect
+# a reset every 1s.
+advance dur=200ms
+----
+allocateTokens(800)
+elapsed: 200ms
+
+advance dur=200ms
+----
+allocateTokens(600)
+elapsed: 400ms
+
+advance dur=200ms
+----
+allocateTokens(400)
+elapsed: 600ms
+
+advance dur=200ms
+----
+allocateTokens(200)
+elapsed: 800ms
+
+advance dur=200ms
+----
+allocateTokens(1)
+resetInterval()
+allocateTokens(1000)
+elapsed: 1s
+
+advance dur=200ms
+----
+allocateTokens(800)
+elapsed: 1.2s
+
+advance dur=200ms
+----
+allocateTokens(600)
+elapsed: 1.4s
+
+advance dur=200ms
+----
+allocateTokens(400)
+elapsed: 1.6s
+
+advance dur=200ms
+----
+allocateTokens(200)
+elapsed: 1.8s
+
+advance dur=200ms
+----
+allocateTokens(1)
+resetInterval()
+allocateTokens(1000)
+elapsed: 2s
+
+# Let 1s pass in one tick. Expect allocateTokens(1) to be called.
+# Expect a reset.
+advance dur=1000ms
+----
+allocateTokens(1)
+resetInterval()
+allocateTokens(1000)
+elapsed: 3s
+
+# Let 1s pass in a different tick interval than every 200ms.
+advance dur=400ms
+----
+allocateTokens(600)
+elapsed: 3.4s
+
+advance dur=200ms
+----
+allocateTokens(400)
+elapsed: 3.6s
+
+advance dur=200ms
+----
+allocateTokens(200)
+elapsed: 3.8s
+
+advance dur=200ms
+----
+allocateTokens(1)
+resetInterval()
+allocateTokens(1000)
+elapsed: 4s
+
+stop
+----
+elapsed: 4s

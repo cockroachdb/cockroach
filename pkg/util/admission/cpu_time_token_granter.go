@@ -244,3 +244,29 @@ func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
 	}
 	return false
 }
+
+// refill adds delta tokens to the corresponding buckets, while respecting
+// the capacity info stored in bucketCapacity. That is, if a bucket is already
+// at capacity, no more tokens will be added. delta is always positive,
+// thus refill will always attempt to grant admission to waiting requests.
+func (stg *cpuTimeTokenGranter) refill(
+	delta [numResourceTiers][numBurstQualifications]int64,
+	bucketCapacity [numResourceTiers][numBurstQualifications]int64,
+) {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+
+	for wc := range stg.mu.buckets {
+		for kind := range stg.mu.buckets[wc] {
+			tokens := stg.mu.buckets[wc][kind].tokens + delta[wc][kind]
+			if tokens > bucketCapacity[wc][kind] {
+				tokens = bucketCapacity[wc][kind]
+			}
+			stg.mu.buckets[wc][kind].tokens = tokens
+		}
+	}
+
+	// delta is always positive, thus refill should always attempt to grant
+	// admission to waiting requests.
+	stg.grantUntilNoWaitingRequestsLocked()
+}

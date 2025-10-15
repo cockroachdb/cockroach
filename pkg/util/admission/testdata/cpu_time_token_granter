@@ -205,3 +205,23 @@ kvtier0: returnGrant(1)
 cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        1
+
+# Test refill, which is the interface cpuTimeTokenFiller uses to add tokens to
+# the buckets. The final allocation of tokens in the buckets is a result of
+# the delta argument to refill, the bucket capacities in certain cases capping how
+# tokens should be added, and one queued request being granted admission.
+init tier1waiter=1
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 1
+
+refill
+----
+kvtier1: granted in chain 0, and returning 1
+refill([[5 4] [3 1]] [[4 3] [10 1]])
+cpuTTG canBurst noBurst
+tier0  3        2
+tier1  2        0
