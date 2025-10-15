@@ -779,7 +779,7 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	select {
 	case err := <-alterErr:
 		require.NoError(t, err)
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+	case <-time.After(testutils.SucceedsSoonDuration()):
 		t.Fatal("alter did not complete")
 	}
 	require.NoError(t, conn.Close(ctx))
