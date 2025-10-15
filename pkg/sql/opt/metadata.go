@@ -637,6 +637,18 @@ func maybeSwallowMetadataResolveErr(err error) error {
 func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog cat.Catalog) error {
 	for _, dataSource := range md.dataSourceDeps {
 		privileges := md.privileges[dataSource.ID()]
+
+		// Check if this dependency has the special builtin-allowed privilege.
+		// If so, disable unsafe internal checks for all privilege checks on this data source.
+		var restoreUnsafeCheck func()
+		if (privileges & (1 << privilege.BUILTIN_UNSAFE_ALLOWED)) != 0 {
+			// Clear the BUILTIN_UNSAFE_ALLOWED bit so the loop doesn't process it.
+			privileges &= ^privilegeBitmap(1 << privilege.BUILTIN_UNSAFE_ALLOWED)
+
+			// Disable unsafe internal checks for this data source.
+			restoreUnsafeCheck = optCatalog.DisableUnsafeInternalCheck()
+		}
+
 		for privs := privileges; privs != 0; {
 			// Strip off each privilege bit and make call to CheckPrivilege for it.
 			// Note that priv == 0 can occur when a dependency was added with
@@ -645,11 +657,19 @@ func (md *Metadata) checkDataSourcePrivileges(ctx context.Context, optCatalog ca
 			priv := privilege.Kind(bits.TrailingZeros32(uint32(privs)))
 			if priv != 0 {
 				if err := optCatalog.CheckPrivilege(ctx, dataSource, optCatalog.GetCurrentUser(), priv); err != nil {
+					if restoreUnsafeCheck != nil {
+						restoreUnsafeCheck()
+					}
 					return err
 				}
 			}
 			// Set the just-handled privilege bit to zero and look for next.
 			privs &= ^(1 << priv)
+		}
+
+		// Restore the unsafe check if it was disabled.
+		if restoreUnsafeCheck != nil {
+			restoreUnsafeCheck()
 		}
 	}
 	return nil

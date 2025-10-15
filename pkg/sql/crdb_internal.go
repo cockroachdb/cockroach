@@ -4491,6 +4491,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 `,
 	resultColumns: colinfo.RangesNoLeases,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, limit int64, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		defer p.DisableUnsafeInternalsCheck()()
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, nil, err

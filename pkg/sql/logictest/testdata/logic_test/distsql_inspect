@@ -103,6 +103,7 @@ statement ok
 INSPECT TABLE table_ltree_array_leading;
 
 query TI
+-- allow-unsafe
 SELECT * FROM last_inspect_job;
 ----
 succeeded 1
