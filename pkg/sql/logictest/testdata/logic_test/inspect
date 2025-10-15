@@ -2,119 +2,144 @@
 # non-nil txn, which is not available in job-based flows like INSPECT. Using
 # them causes a nil pointer panic in the span resolver setup.
 #
-# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !local-mixed-25.2 !local-mixed-25.3
 
-subtest setup
-
-statement ok
-SET enable_scrub_job = true;
 
 statement ok
-CREATE TABLE t1 (c1 INT);
-
-statement ok
-CREATE INDEX i1 ON t1 (c1);
-
-subtest end
-
-subtest scrub_job_implicit_txn
-
-statement ok
-EXPERIMENTAL SCRUB TABLE t1 AS OF SYSTEM TIME '-1us';
-
-query TTB
-SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1
-----
-EXPERIMENTAL SCRUB TABLE t1 AS OF SYSTEM TIME '-1us'  succeeded  true
-
-# Verify the checks that were done.
-query TI
-SELECT
-  json_extract_path_text(
-    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
-    'inspectDetails', 'checks', '0', 'type'
-  ) AS check_type,
-  jsonb_array_length(
-    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) -> 'inspectDetails' -> 'checks'
+CREATE VIEW last_inspect_job AS
+SELECT status, jsonb_array_length(
+    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'inspectDetails'->'checks'
   ) AS num_checks
 FROM crdb_internal.system_jobs
 WHERE job_type = 'INSPECT'
 ORDER BY created DESC
 LIMIT 1
-----
-INSPECT_CHECK_INDEX_CONSISTENCY  1
-
-subtest end
-
-subtest scrub_job_multi_stmt_txn
 
 statement ok
-BEGIN;
+CREATE TABLE foo (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 
-statement error pq: cannot run within a multi-statement transaction
-EXPERIMENTAL SCRUB TABLE t1;
-
-statement ok
-COMMIT;
-
-subtest end
-
-subtest scrub_database
-
-statement error pq: SCRUB DATABASE not supported with enable_scrub_job
-EXPERIMENTAL SCRUB DATABASE defaultdb;
-
-subtest cleanup
-
-statement ok
-DROP TABLE t1;
-
-subtest end
-
-# inspect and scrub are converging so for now tests on INSPECT live here
-subtest inspect
-
-onlyif config local-mixed-25.2 local-mixed-25.3
-statement error pq: SHOW INSPECT ERRORS requires the cluster to be upgraded to v25.4
-SHOW INSPECT ERRORS
-
-statement ok
-CREATE TABLE foo (c1 INT);
-
-skipif config local-mixed-25.2 local-mixed-25.3
-statement error INSPECT TABLE requires the enable_inspect_command setting to be enabled
+statement error pq: INSPECT is an experimental feature and is disabled by default
 INSPECT TABLE foo;
 
-skipif config local-mixed-25.2 local-mixed-25.3
-statement error INSPECT DATABASE requires the enable_inspect_command setting to be enabled
+statement error pq: INSPECT is an experimental feature and is disabled by default
 INSPECT DATABASE test;
 
 statement ok
 SET enable_inspect_command = true;
 
-skipif config local-mixed-25.2 local-mixed-25.3
+statement ok
+BEGIN;
+
+statement error pq: cannot run within a multi-statement transaction
+INSPECT TABLE foo;
+
+statement ok
+ROLLBACK;
+
 statement ok
 INSPECT TABLE foo;
 
-skipif config local-mixed-25.2 local-mixed-25.3
-statement ok
-INSPECT TABLE foo WITH OPTIONS INDEX (bar.public.biz);
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
 
-skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
-INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (bar,biz);
+INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1);
 
-# test permissions
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Names are quietly deduplicated.
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1, foo@idx_c1);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (idx_c1,idx_c2);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement error pq: index "idx_c3" does not exist
+INSPECT TABLE foo WITH OPTIONS INDEX (idx_c3);
+
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX ALL;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+statement ok
+INSPECT DATABASE test;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  28
+
+statement error index "idx_c3" does not exist
+INSPECT DATABASE test WITH OPTIONS INDEX (idx_c1, idx_c3);
+
+statement ok
+CREATE TABLE bar (c1 INT, c3 INT);
+
+statement ok
+INSPECT TABLE bar;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  NULL
+
+statement ok
+CREATE INDEX idx_c1 ON bar (c1);
+CREATE INDEX idx_c3 ON bar (c3);
+
+statement error pq: index "bar@idx_c1" does not belong to table "foo"
+INSPECT TABLE foo WITH OPTIONS INDEX (bar@idx_c1);
+
+# TODO(148365): The table name should be used to disambiguate.
+statement error index name "idx_c1" is ambiguous \(found in test.public.foo and test.public.bar\)
+INSPECT TABLE bar WITH OPTIONS INDEX (idx_c1);
+
+statement error index "dbfake.foo.idx_c1" does not belong to database "test"
+INSPECT DATABASE test WITH OPTIONS INDEX (dbfake.foo.idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in test.public.foo and test.public.bar\)
+INSPECT DATABASE test WITH OPTIONS INDEX (idx_c1, idx_c3);
+
+statement ok
+INSPECT DATABASE test WITH OPTIONS INDEX (foo@idx_c1, test.public.bar@idx_c1, test.idx_c3);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  3
+
+subtest permissions
+
 statement ok
 CREATE USER testuser2;
 
 user testuser2
 
-skipif config local-mixed-25.2 local-mixed-25.3
+statement ok
+SET enable_inspect_command = true;
+
 statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT TABLE foo;
 
-skipif config local-mixed-25.2 local-mixed-25.3
 statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT DATABASE test;
 
@@ -128,11 +153,9 @@ user testuser2
 statement ok
 SET enable_inspect_command = true;
 
-skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT TABLE foo;
 
-skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 INSPECT DATABASE test;
 
@@ -143,35 +166,56 @@ subtest inspect_unsupported_indexes
 user root
 
 # Test that unsupported indexes (hash-sharded, expression) are skipped.
-# Table has both unsupported indexes and a regular index.
+# Table has both unsupported indexes and two regular indexes.
 statement ok
-CREATE TABLE t2 (x INT, y INT, z INT, INDEX hash_idx (x) USING HASH, INDEX expr_idx ((y + z)), INDEX regular_idx (z));
+CREATE TABLE t2 (
+    x INT, y INT, z INT,
+    j JSONB NULL,
+    INDEX hash_idx (x) USING HASH,
+    INDEX expr_idx ((y + z)),
+    INDEX regular_idx_y (y),
+    INDEX regular_idx_z (z),
+    VECTOR INDEX vector_idx ((CAST(j->>'v' AS VECTOR(3)))),
+    INDEX partial_idx (j) WHERE 1=1,
+    INVERTED INDEX inverted_idx (j)
+);
 
 statement ok
 INSERT INTO t2 (x, y, z) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 
 # Should succeed, checking only the regular index.
-skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
-EXPERIMENTAL SCRUB TABLE t2 AS OF SYSTEM TIME '-1us';
+INSPECT TABLE t2 AS OF SYSTEM TIME '-1us';
 
-# Verify only one check was created (for the regular index).
-skipif config local-mixed-25.2 local-mixed-25.3
+# Verify only two checks were created (for the regular indexes).
 query TI
-SELECT
-  json_extract_path_text(
-    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
-    'inspectDetails', 'checks', '0', 'type'
-  ) AS check_type,
-  jsonb_array_length(
-    crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) -> 'inspectDetails' -> 'checks'
-  ) AS num_checks
-FROM crdb_internal.system_jobs
-WHERE job_type = 'INSPECT'
-ORDER BY created DESC
-LIMIT 1
+SELECT * FROM last_inspect_job;
 ----
-INSPECT_CHECK_INDEX_CONSISTENCY  1
+succeeded  2
+
+statement error pq: index "t2_pkey" on table "t2" is not supported for index consistency checking
+INSPECT TABLE t2 WITH OPTIONS INDEX (t2@t2_pkey);
+
+statement error pq: index "hash_idx" on table "t2" is not supported for index consistency checking
+INSPECT TABLE t2 WITH OPTIONS INDEX (hash_idx);
+
+statement error pq: index "expr_idx" on table "t2" is not supported for index consistency checking
+INSPECT TABLE t2 WITH OPTIONS INDEX (expr_idx);
+
+statement error pq: index "vector_idx" on table "t2" is not supported for index consistency checking
+INSPECT TABLE t2 WITH OPTIONS INDEX (vector_idx);
+
+statement error pq: index "partial_idx" on table "t2" is not supported for index consistency checking
+INSPECT TABLE t2 WITH OPTIONS INDEX (partial_idx);
+
+statement error pq: index "inverted_idx" on table "t2" is not supported for index consistency checking
+INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
+
+# Confirm no jobs were run.
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
 
 statement ok
 DROP TABLE t2;
