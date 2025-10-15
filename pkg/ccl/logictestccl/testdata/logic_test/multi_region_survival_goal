@@ -1,4 +1,4 @@
-# knob-opt: sync-event-log
+# knob-opt: sync-event-log allow-unsafe
 # LogicTest: multiregion-9node-3region-3azs-tenant
 
 # Only the root user can modify the system database's regions.

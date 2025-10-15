@@ -102,7 +102,7 @@ ALTER TABLE table_ltree_array_leading SCATTER;
 statement ok
 INSPECT TABLE table_ltree_array_leading;
 
-query TI
+query TI allowunsafe
 SELECT * FROM last_inspect_job;
 ----
 succeeded 1
