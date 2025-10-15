@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -354,6 +355,14 @@ type cloudStorageSink struct {
 	prevFilename      string
 	metrics           metricsRecorder
 
+	// filenameMinMVCC controls whether we include a per-file tie-breaker inside
+	// the <uniquer> segment of the filename. When enabled, the first sub-segment
+	// of <uniquer> is formatted as "<min_mvcc>_<session_id>" (note underscore),
+	// preserving the number of dash-delimited segments while ensuring that, for
+	// files sharing the same <timestamp>, lexical ordering reflects the oldest
+	// MVCC timestamp for the file.
+	filenameMinMVCC bool
+
 	asyncFlushActive bool
 	flushGroup       ctxgroup.Group
 	asyncFlushCh     chan flushRequest // channel for submitting flush requests.
@@ -451,6 +460,8 @@ func makeCloudStorageSink(
 		asyncFlushTermCh: make(chan struct{}),
 		testingKnobs:     testingKnobs,
 	}
+	// Read filename tie-breaker setting once at sink creation.
+	s.filenameMinMVCC = enableFilenameMinMVCCTieBreaker.Get(&settings.SV)
 	s.flushGroup.GoCtx(s.asyncFlusher)
 
 	if partitionFormat := u.ConsumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
@@ -751,6 +762,18 @@ var enableAsyncFlush = settings.RegisterBoolSetting(
 	true,
 )
 
+// enableFilenameMinMVCCTieBreaker controls whether we include a per-file
+// minimum MVCC timestamp tie-breaker inside the <uniquer> segment of the
+// filename (using an underscore to avoid changing the number of dash-delimited
+// segments). This preserves ordering across restarts when multiple sessions
+// emit files with the same dataFileTs.
+var enableFilenameMinMVCCTieBreaker = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.cloudstorage.filename_min_mvcc_tiebreaker.enabled",
+	"include per-file min MVCC timestamp in data file names to preserve ordering across restarts",
+	true,
+)
+
 // waitAsyncFlush waits until all async flushes complete.
 func (s *cloudStorageSink) waitAsyncFlush(ctx context.Context) error {
 	done := make(chan struct{})
@@ -806,9 +829,19 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	// Pad file ID to maintain lexical ordering among files from the same sink.
 	// Note that we use `-` here to delimit the filename because we want
 	// `%d.RESOLVED` files to lexicographically succeed data files that have the
-	// same timestamp. This works because ascii `-` < ascii '.'.
-	filename := fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
-		s.jobSessionID, s.srcID, s.sinkID, fileID, file.topic, file.schemaID, s.ext)
+	// same timestamp. This works because ascii `-` < ascii '.'. When the
+	// filenameMinMVCC option is enabled, we include a per-file min MVCC
+	// tie-breaker right after the <timestamp> within the <uniquer> segment using
+	// an underscore to avoid changing the number of dash-delimited segments.
+	var filename string
+	if s.filenameMinMVCC {
+		// Format: <timestamp>-<minmvcc>_<session_id>-<node_id>-<sink_id>-<file_id>-<topic>-<schema><ext>
+		filename = fmt.Sprintf(`%s-%s_%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
+			cloudStorageFormatTime(file.oldestMVCC), s.jobSessionID, s.srcID, s.sinkID, fileID, file.topic, file.schemaID, s.ext)
+	} else {
+		filename = fmt.Sprintf(`%s-%s-%d-%d-%08x-%s-%x%s`, s.dataFileTs,
+			s.jobSessionID, s.srcID, s.sinkID, fileID, file.topic, file.schemaID, s.ext)
+	}
 	if s.prevFilename != "" && filename < s.prevFilename {
 		err := errors.AssertionFailedf("error: detected a filename %s that lexically "+
 			"precedes a file emitted before: %s", filename, s.prevFilename)
