@@ -102,17 +102,15 @@ func newUnbufferedRegistration(
 	removeRegFromProcessor func(registration),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
-		baseRegistration: baseRegistration{
-			streamCtx:              streamCtx,
-			span:                   span,
-			keys:                   span.AsRange(),
-			catchUpTimestamp:       startTS,
-			withDiff:               withDiff,
-			withFiltering:          withFiltering,
-			withOmitRemote:         withOmitRemote,
-			removeRegFromProcessor: removeRegFromProcessor,
-			bulkDelivery:           bulkDeliverySize,
-		},
+		baseRegistration: newBaseRegistration(
+			streamCtx,
+			span,
+			startTS,
+			withDiff,
+			withFiltering,
+			withOmitRemote,
+			bulkDeliverySize,
+			removeRegFromProcessor),
 		metrics: metrics,
 		stream:  stream,
 	}
