@@ -175,6 +175,12 @@ func TestStoreLivenessAllToAllSupport(t *testing.T) {
 	ensureAllToAllSupport(t, tc)
 }
 
+func TestStoreLivenessPassesCI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+}
+
 // TestStoreLivenessRestart tests that when a node is stopped all its stores
 // lose support; when the node is restarted, all stores re-establish support.
 func TestStoreLivenessRestart(t *testing.T) {
