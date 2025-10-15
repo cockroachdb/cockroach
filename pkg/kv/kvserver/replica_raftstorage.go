@@ -741,7 +741,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 			log.KvExec.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %+v", err)
 		}
 	} else {
-		r.setDescLockedRaftMuLocked(ctx, desc)
+		r.setDescLockedRaftMuLocked(ctx, desc, nil)
 	}
 	// NOTE: even though we acquired the store mutex first (according to the
 	// lock ordering rules described on Store.mu), it is safe to drop it first
