@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -66,5 +67,17 @@ func TestCreateTenantFromReplicationUsingID(t *testing.T) {
 	verifyCreatedTenant(t, sqlB, 51, func() {
 		t.Logf("starting replication [50]->[51]")
 		sqlB.Exec(t, "CREATE VIRTUAL CLUSTER [51] FROM REPLICATION OF 'cluster-50' ON $1", serverAURL.String())
+	})
+
+	// We wait for tenant 50's SQL server to be up and running before ending the
+	// test. This should help reduce flakes where the tenant is being setup when
+	// the stopper begins quiescing.
+	testutils.SucceedsSoon(t, func() error {
+		tenantConn, err := serverA.ApplicationLayer().SQLConnE(serverutils.DBName("cluster:cluster-50"))
+		if err != nil {
+			return err
+		}
+		defer tenantConn.Close()
+		return tenantConn.PingContext(ctx)
 	})
 }
