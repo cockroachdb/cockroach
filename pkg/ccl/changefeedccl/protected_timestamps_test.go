@@ -1155,22 +1155,22 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 					return err
 				}
 
-				if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
+				if len(ptsEntries.PerTableRecords) != len(expectedTables) {
 					return errors.Newf(
 						"expected %d per-table PTS records, got %d",
-						len(expectedTables), len(ptsEntries.ProtectedTimestampRecords),
+						len(expectedTables), len(ptsEntries.PerTableRecords),
 					)
 				}
 
 				// We save the protection timestamps for each table in tablePTS
 				// so that we can assert that they progress as expected later.
 				for tableID := range expectedTables {
-					if ptsEntries.ProtectedTimestampRecords[tableID] == uuid.Nil {
+					if ptsEntries.PerTableRecords[tableID] == uuid.Nil {
 						return errors.Newf("expected PTS record for table %d", tableID)
 					}
 					ptsQry := fmt.Sprintf(
 						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
-						ptsEntries.ProtectedTimestampRecords[tableID],
+						ptsEntries.PerTableRecords[tableID],
 					)
 					var tsStr string
 					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
@@ -1195,7 +1195,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 				for tableID := range expectedTables {
 					ptsQry := fmt.Sprintf(
 						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
-						ptsEntries.ProtectedTimestampRecords[tableID],
+						ptsEntries.PerTableRecords[tableID],
 					)
 					var tsStr string
 					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)

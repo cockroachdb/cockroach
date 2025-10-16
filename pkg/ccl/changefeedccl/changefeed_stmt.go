@@ -356,7 +356,7 @@ func changefeedPlanHook(
 					return err
 				}
 				ptsRecords = &cdcprogresspb.ProtectedTimestampRecords{
-					ProtectedTimestampRecords: protectedTimestampRecords,
+					PerTableRecords: protectedTimestampRecords,
 				}
 			} else {
 				ptr = createProtectedTimestampRecord(
@@ -1974,10 +1974,10 @@ func (b *changefeedResumer) OnFailOrCancel(
 			return err
 		}
 
-		if len(ptsEntries.ProtectedTimestampRecords) == 0 {
+		if len(ptsEntries.PerTableRecords) == 0 {
 			return nil
 		}
-		for _, record := range ptsEntries.ProtectedTimestampRecords {
+		for _, record := range ptsEntries.PerTableRecords {
 			maybeCleanUpProtectedTimestamp(record)
 		}
 		return deleteChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, txn, b.job.ID())

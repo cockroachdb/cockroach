@@ -2023,7 +2023,7 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 			return frontier.Frontier()
 		}()
 
-		if ptsEntries.ProtectedTimestampRecords[tableID] != uuid.Nil {
+		if ptsEntries.PerTableRecords[tableID] != uuid.Nil {
 			if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, tableHighWater, pts); err != nil {
 				return false, err
 			} else if updated {
@@ -2061,7 +2061,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 	tableHighWater hlc.Timestamp,
 	pts protectedts.Storage,
 ) (updated bool, err error) {
-	rec, err := pts.GetRecord(ctx, ptsEntries.ProtectedTimestampRecords[tableID])
+	rec, err := pts.GetRecord(ctx, ptsEntries.PerTableRecords[tableID])
 	if err != nil {
 		return false, err
 	}
@@ -2071,7 +2071,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 		return false, nil
 	}
 
-	if err := pts.UpdateTimestamp(ctx, ptsEntries.ProtectedTimestampRecords[tableID], tableHighWater); err != nil {
+	if err := pts.UpdateTimestamp(ctx, ptsEntries.PerTableRecords[tableID], tableHighWater); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -2083,8 +2083,8 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 	tableIDsToCreate map[descpb.ID]hlc.Timestamp,
 	pts protectedts.Storage,
 ) error {
-	if ptsEntries.ProtectedTimestampRecords == nil {
-		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]uuid.UUID)
+	if ptsEntries.PerTableRecords == nil {
+		ptsEntries.PerTableRecords = make(map[descpb.ID]uuid.UUID)
 	}
 	for tableID, tableHighWater := range tableIDsToCreate {
 		targets, err := cf.createPerTablePTSTargets(tableID)
@@ -2095,7 +2095,7 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
 		)
 		uuid := ptr.ID.GetUUID()
-		ptsEntries.ProtectedTimestampRecords[tableID] = uuid
+		ptsEntries.PerTableRecords[tableID] = uuid
 		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}
