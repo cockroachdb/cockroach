@@ -99,7 +99,7 @@ CREATE STATISTICS stat_wrong_col ON price FROM products WHERE category_id = 1
 statement error pq: filter cannot be a contradiction
 CREATE STATISTICS stat_contradiction ON price FROM products WHERE price < 10 AND price > 10
 
-statement error pq: table products does not contain a non-partial forward index with created_at as a prefix column
+statement error pq: table products does not contain a suitable index with created_at as a prefix column
 CREATE STATISTICS stat_created_at ON created_at FROM products WHERE created_at > '2025-01-05'
 
 statement error column "nonexistent" does not exist
@@ -205,5 +205,91 @@ stats_from_table_id  {price}       10         10              0           price 
 statement ok
 CREATE TABLE infer (x INT NOT NULL, y INT NOT NULL AS (x % 5) STORED, PRIMARY KEY (y, x));
 
-statement error pq: table infer does not contain a non-partial forward index with x as a prefix column
+statement error pq: table infer does not contain a suitable index with x as a prefix column
 CREATE STATISTICS inferred_stat ON x FROM infer WHERE x = 100;
+
+# Test partial statistics with a WHERE clause on tables with partial indexes.
+statement ok
+CREATE TABLE partial_indexes (
+    a INT,
+    b INT,
+    INDEX idx_partial (a) WHERE a > 5
+);
+
+statement ok
+INSERT INTO partial_indexes SELECT g, g FROM generate_series(1, 10) AS g;
+
+statement ok
+CREATE STATISTICS fullstat FROM partial_indexes;
+
+# Clear the stat cache so that creating partial statistics has access to the
+# latest full statistic.
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+# Filter implies the partial index predicate, so it can be used.
+statement ok
+CREATE STATISTICS partial_stat_implied ON a FROM partial_indexes WHERE a > 7;
+
+query TTIIIT colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE partial_indexes]
+WHERE statistics_name = 'partial_stat_implied';
+----
+statistics_name       column_names  row_count  distinct_count  null_count  partial_predicate
+partial_stat_implied  {a}           3          3               0           a > 7
+
+# Filter equals partial index predicate, so it can be used.
+statement ok
+CREATE STATISTICS partial_stat_exact ON a FROM partial_indexes WHERE a > 5;
+
+query TTIIIT colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE partial_indexes]
+WHERE statistics_name = 'partial_stat_exact';
+----
+statistics_name     column_names  row_count  distinct_count  null_count  partial_predicate
+partial_stat_exact  {a}           5          5               0           a > 5
+
+# Filter does not imply the partial index predicate, so it can't be used.
+statement error pq: table partial_indexes does not contain a suitable index with a as a prefix column
+CREATE STATISTICS partial_stat_not_implied ON a FROM partial_indexes WHERE a > 3;
+
+# Ensure that we use suitable full indexes when a partial index is not implied.
+statement ok
+CREATE INDEX idx_a ON partial_indexes (a);
+
+statement ok
+CREATE STATISTICS partial_stat_not_implied ON a FROM partial_indexes WHERE a > 3;
+
+query TTIIIT colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count, partial_predicate
+FROM [SHOW STATISTICS FOR TABLE partial_indexes]
+WHERE statistics_name = 'partial_stat_not_implied';
+----
+statistics_name          column_names  row_count  distinct_count  null_count  partial_predicate
+partial_stat_not_implied  {a}           7          7               0           a > 3
+
+# Ensure that we only use partial indexes with the required prefix columns.
+statement ok
+DROP INDEX partial_indexes@idx_partial;
+
+statement ok
+DROP INDEX partial_indexes@idx_a;
+
+statement ok
+CREATE INDEX idx_b ON partial_indexes (b) WHERE a > 5;
+
+statement error pq: table partial_indexes does not contain a suitable index with a as a prefix column
+CREATE STATISTICS partial_stat_implied ON a FROM partial_indexes WHERE a > 7;
+
+statement ok
+DROP INDEX partial_indexes@idx_b;
+
+# Ensure that we can't use an implied partial index when the filter doesn't
+# create a single constrained span.
+statement ok
+CREATE INDEX idx_b ON partial_indexes (b) WHERE b > 1 AND b % 2 = 0;
+
+statement error pq: predicate could not become a constrained scan of an index
+CREATE STATISTICS partial_stat_implied ON b FROM partial_indexes WHERE b > 1 AND b % 2 = 0;
