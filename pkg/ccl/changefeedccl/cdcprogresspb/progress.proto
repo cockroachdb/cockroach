@@ -9,11 +9,20 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcp
 
 import "gogoproto/gogo.proto";
 
-// ProtectedTimestampRecords is a map from table descriptor IDs to protected timestamp record IDs.
+// ProtectedTimestampRecords contains the IDs of protected timestamps records
+// for a changefeed.
 message ProtectedTimestampRecords {
-  map<uint32, bytes> protected_timestamp_records = 1 [
+  // UserTables is a map from the ID of a user table to the protected timestamp
+  // record that protects it.
+  map<uint32, bytes> user_tables = 1 [
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false
+  ];
+  // SystemTables is the ID of PTS record that protects the system tables
+  // back to the changefeed's highwater.
+  bytes system_tables = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
   ];
 }

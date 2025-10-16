@@ -66,3 +66,14 @@ func GetPTSTarget(t *testing.T, db *sqlutils.SQLRunner, ptsID *uuid.UUID) *ptpb.
 	}
 	return ret
 }
+
+func GetPTSTimestamp(t *testing.T, db *sqlutils.SQLRunner, ptsRecordID uuid.UUID) hlc.Timestamp {
+	var tsStr string
+	tsQuery := `SELECT ts FROM system.protected_ts_records WHERE id = $1`
+	db.QueryRow(t, tsQuery, ptsRecordID).Scan(&tsStr)
+	ts, err := hlc.ParseHLC(tsStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ts
+}

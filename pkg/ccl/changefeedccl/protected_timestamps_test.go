@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -396,7 +397,17 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		require.Equal(t, 1, getNumPTSRecords())
+		perTablePTSEnabled :=
+			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
+				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+
+		if perTablePTSEnabled {
+			// We expect 2 PTS records: one for the per-table PTS record and
+			// one for the system tables PTS record.
+			require.Equal(t, 2, getNumPTSRecords())
+		} else {
+			require.Equal(t, 1, getNumPTSRecords())
+		}
 
 		require.NoError(t, jobFeed.Pause())
 		sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d ADD TABLE foo2 with initial_scan='yes'", jobFeed.JobID()))
@@ -404,18 +415,19 @@ func TestChangefeedAlterPTS(t *testing.T) {
 
 		_, _ = expectResolvedTimestamp(t, f2)
 
-		perTablePTSEnabled :=
-			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
-				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
-
 		if perTablePTSEnabled {
+			// We protect the new table the next time the highwater is advanced.
+			// TODO(#153894): Newly added/dropped tables should be protected
+			// at ALTER time.
 			eFeed, ok := f2.(cdctest.EnterpriseTestFeed)
 			require.True(t, ok)
 			hwm, err := eFeed.HighWaterMark()
 			require.NoError(t, err)
 			require.NoError(t, eFeed.WaitForHighWaterMark(hwm))
 
-			require.Equal(t, 2, getNumPTSRecords())
+			// We expect 3 PTS records: one per-table record for each of the two
+			// tables and one for the system tables PTS record.
+			require.Equal(t, 3, getNumPTSRecords())
 		} else {
 			require.Equal(t, 1, getNumPTSRecords())
 		}
@@ -615,7 +627,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	waitForJobState(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
-	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
+	ptr := createCombinedProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
@@ -767,8 +779,6 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		execCfg := s.Server.ExecutorConfig().(sql.ExecutorConfig)
 		ptp := s.Server.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
-		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.SystemServer.DB(), s.Codec, "d", "foo")
-		fooID := fooDesc.GetID()
 
 		jobFeed := foo.(cdctest.EnterpriseTestFeed)
 
@@ -799,16 +809,47 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			})
 		}
 
-		// Wipe out the targets from the changefeed PTS record, simulating an old-style PTS record.
-		oldRecordID := getPTSRecordID(ctx, t, registry, jobFeed)
+		perTablePTSEnabled :=
+			changefeedbase.PerTableProtectedTimestamps.Get(&s.Server.ClusterSettings().SV) &&
+				changefeedbase.TrackPerTableProgress.Get(&s.Server.ClusterSettings().SV)
+
+		// Gets the system tables specific PTS record ID which exist when
+		// per-table protected timestamps are enabled.
+		getSystemTablesRecordID := func() uuid.UUID {
+			var systemTablesRecordID uuid.UUID
+			require.NoError(t, execCfg.InternalDB.Txn(context.Background(), func(ctx context.Context, txn isql.Txn) error {
+				var ptsEntries cdcprogresspb.ProtectedTimestampRecords
+				if err := readChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, &ptsEntries, txn, jobFeed.JobID()); err != nil {
+					return err
+				}
+				systemTablesRecordID = ptsEntries.SystemTables
+				return nil
+			}))
+			return systemTablesRecordID
+		}
+
+		// Remove a PTS target from the changefeed PTS record. This simulates a
+		// PTS record that is missing a system table target.
+		oldRecordID := func() uuid.UUID {
+			if perTablePTSEnabled {
+				return getSystemTablesRecordID()
+			}
+			return getPTSRecordID(ctx, t, registry, jobFeed)
+		}()
+		require.NotEqual(t, oldRecordID, uuid.Nil)
 		require.NoError(t, removeOnePTSTarget(oldRecordID))
 
 		// Sanity check: make sure that it worked
 		oldRecord, err := readPTSRecord(ctx, t, execCfg, ptp, oldRecordID)
 		require.NoError(t, err)
 		targetIDs := oldRecord.Target.GetSchemaObjects().IDs
-		require.Contains(t, targetIDs, fooID)
 		require.NotSubset(t, targetIDs, systemTablesToProtect)
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(s.SystemServer.DB(), s.Codec, "d", "foo")
+		fooID := fooDesc.GetID()
+		if !perTablePTSEnabled {
+			require.Contains(t, targetIDs, fooID)
+		}
 
 		// Flip the knob so the changefeed migrates the record
 		dontMigrate.Store(false)
@@ -817,7 +858,12 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 			var recID uuid.UUID
 			var record *ptpb.Record
 			testutils.SucceedsSoon(t, func() error {
-				recID = getPTSRecordID(ctx, t, registry, jobFeed)
+				recID = func() uuid.UUID {
+					if perTablePTSEnabled {
+						return getSystemTablesRecordID()
+					}
+					return getPTSRecordID(ctx, t, registry, jobFeed)
+				}()
 				if recID.Equal(oldRecordID) {
 					return errors.New("waiting for new PTS record")
 				}
@@ -834,7 +880,9 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 
 		// Assert the new PTS record has the right targets.
 		targetIDs = newRec.Target.GetSchemaObjects().IDs
-		require.Contains(t, targetIDs, fooID)
+		if !perTablePTSEnabled {
+			require.Contains(t, targetIDs, fooID)
+		}
 		require.Subset(t, targetIDs, systemTablesToProtect)
 
 		// Ensure the old pts record was deleted.
@@ -847,7 +895,7 @@ func TestChangefeedMigratesProtectedTimestampTargets(t *testing.T) {
 
 // TestChangefeedUpdateProtectedTimestamp tests that changefeeds using the
 // old style PTS records will migrate themselves to use the new style PTS
-// records.
+// records. The old style PTS records did not specify target tables.
 func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -870,9 +918,12 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 		changefeedbase.ProtectTimestampLag.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, ptsInterval)
 
-		// Since old style PTS records should not be created when per-table PTS records are enabled,
-		// we disable them for this test. Per-table PTS breaks assumptions about where we can find
-		// the PTS record uuids.
+		// Since old style PTS records should not be created when per-table PTS
+		// records are enabled, we disable them for this test. If we begin
+		// protecting a new system table, existing PTS records may be missing
+		// individual new targets. This scenario could happen for changefeeds
+		// using per-table PTS records as well. This is tested in the previous
+		// test, TestChangefeedMigratesProtectedTimestampTargets.
 		changefeedbase.PerTableProtectedTimestamps.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, false)
 
@@ -1062,7 +1113,8 @@ WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
 				return err
 			}
 
-			require.Equal(t, 0, ptsEntries.Size())
+			require.Equal(t, 0, len(ptsEntries.UserTables))
+			require.Equal(t, uuid.Nil, ptsEntries.SystemTables)
 			return nil
 		})
 
@@ -1140,6 +1192,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, progress.ProtectedTimestampRecord, uuid.UUID{})
 
+		systemTablesPTS := hlc.Timestamp{}
 		tablePTS := make(map[descpb.ID]hlc.Timestamp)
 		expectedTables := map[descpb.ID]struct{}{
 			table1ID: {},
@@ -1155,29 +1208,54 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 					return err
 				}
 
-				if len(ptsEntries.ProtectedTimestampRecords) != len(expectedTables) {
+				if len(ptsEntries.UserTables) != len(expectedTables) {
 					return errors.Newf(
 						"expected %d per-table PTS records, got %d",
-						len(expectedTables), len(ptsEntries.ProtectedTimestampRecords),
+						len(expectedTables), len(ptsEntries.UserTables),
 					)
 				}
 
-				// We save the protection timestamps for each table in tablePTS
-				// so that we can assert that they progress as expected later.
+				// We also collect all PTS record IDs to assert they are unique.
+				ptsRecordIDs := make(map[uuid.UUID]struct{})
 				for tableID := range expectedTables {
-					if ptsEntries.ProtectedTimestampRecords[tableID] == uuid.Nil {
+					// Assert that the per-table PTS record exists and is unique.
+					if ptsEntries.UserTables[tableID] == uuid.Nil {
 						return errors.Newf("expected PTS record for table %d", tableID)
 					}
-					ptsQry := fmt.Sprintf(
-						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
-						ptsEntries.ProtectedTimestampRecords[tableID],
-					)
-					var tsStr string
-					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
-					ts, err := hlc.ParseHLC(tsStr)
-					require.NoError(t, err)
-					tablePTS[tableID] = ts
+					ptsRecordID := ptsEntries.UserTables[tableID]
+					if _, exists := ptsRecordIDs[ptsRecordID]; exists {
+						return errors.Newf("duplicate PTS record ID %s found", ptsRecordID)
+					}
+					ptsRecordIDs[ptsRecordID] = struct{}{}
+
+					// Assert that the per-table PTS record targets only the user table.
+					tableTarget := ptutil.GetPTSTarget(t, sqlDB, &ptsRecordID)
+					require.Equal(t, tableID, tableTarget.GetSchemaObjects().IDs[0])
+					require.Equal(t, 1, len(tableTarget.GetSchemaObjects().IDs))
+
+					// We save the protection timestamps for each table in tablePTS
+					// so that we can assert that they progress as expected later.
+					tablePTS[tableID] =
+						ptutil.GetPTSTimestamp(t, sqlDB, ptsEntries.UserTables[tableID])
 				}
+
+				// Assert that the system tables PTS record exists.
+				if ptsEntries.SystemTables == uuid.Nil {
+					return errors.Newf("expected system tables PTS record")
+				}
+
+				// Assert that the system tables PTS record targets all system tables.
+				systemTablesTarget := ptutil.GetPTSTarget(t, sqlDB, &ptsEntries.SystemTables)
+				actualProtectedTables := systemTablesTarget.GetSchemaObjects().IDs
+
+				require.Equal(t, len(systemTablesToProtect), len(actualProtectedTables))
+				for _, id := range systemTablesToProtect {
+					require.Contains(t, actualProtectedTables, id)
+				}
+
+				// Store its timestamp so that we can assert that it progresses later.
+				systemTablesPTS = ptutil.GetPTSTimestamp(t, sqlDB, ptsEntries.SystemTables)
+				require.NotEqual(t, systemTablesPTS, hlc.Timestamp{})
 				return nil
 			})
 		})
@@ -1193,20 +1271,23 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 				}
 
 				for tableID := range expectedTables {
-					ptsQry := fmt.Sprintf(
-						`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
-						ptsEntries.ProtectedTimestampRecords[tableID],
-					)
-					var tsStr string
-					sqlDB.QueryRow(t, ptsQry).Scan(&tsStr)
-					ts, err := hlc.ParseHLC(tsStr)
-					require.NoError(t, err)
-					if !ts.After(tablePTS[tableID]) {
+					newTablePTS :=
+						ptutil.GetPTSTimestamp(t, sqlDB, ptsEntries.UserTables[tableID])
+					if !newTablePTS.After(tablePTS[tableID]) {
 						return errors.Newf(
 							"expected PTS record for table %d to progress since %s, got %s",
-							tableID, tablePTS[tableID], ts,
+							tableID, tablePTS[tableID], newTablePTS,
 						)
 					}
+				}
+
+				newSystemTablesPTS :=
+					ptutil.GetPTSTimestamp(t, sqlDB, ptsEntries.SystemTables)
+				if !newSystemTablesPTS.After(systemTablesPTS) {
+					return errors.Newf(
+						"expected system tables PTS to progress since %s, got %s",
+						systemTablesPTS, newSystemTablesPTS,
+					)
 				}
 				return nil
 			})
