@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -77,6 +78,9 @@ type DestroyReplicaInfo struct {
 // DestroyReplica destroys the entirety of the replica's state in storage, and
 // installs a RangeTombstone in its place. It handles both uninitialized and
 // initialized replicas uniformly.
+//
+// This call issues all writes ordered by key. This is to support a large
+// variety of uses, including SSTable generation for snapshot application.
 func DestroyReplica(
 	ctx context.Context,
 	reader storage.Reader,
@@ -84,7 +88,7 @@ func DestroyReplica(
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
 ) error {
-	return destroyReplicaImpl(ctx, reader, writer, info, next, false /* forceSortedKeys */)
+	return destroyReplicaImpl(ctx, reader, writer, info, next)
 }
 
 func destroyReplicaImpl(
@@ -93,7 +97,6 @@ func destroyReplicaImpl(
 	writer storage.Writer,
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
-	forceSortedKeys bool,
 ) error {
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
@@ -114,62 +117,82 @@ func destroyReplicaImpl(
 			info.FullReplicaID, ts.NextReplicaID, next)
 	}
 
-	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	// NB: if forceSortedKeys is true, disable the heuristic and force deletion by
-	// range keys. This call can be used for generating SSTables when ingesting a
-	// snapshot, which requires Clears and Puts to be written in key order. Since
-	// we write RangeTombstoneKey further down, ensure that this is the only point
-	// key here.
-	pointKeyThreshold := ClearRangeThresholdPointKeys()
-	if forceSortedKeys {
-		pointKeyThreshold = 1
+	_ = DestroyReplicaTODO
+	// Clear all range data in sorted order of engine keys. This call can be used
+	// for generating SSTables when ingesting a snapshot, which requires Clears
+	// and Puts to be written in key order.
+	//
+	// All the code below is equivalent to clearing all the spans that the
+	// following SelectOpts represents, and leaving only the RangeTombstoneKey
+	// populated with the specified NextReplicaID.
+	if buildutil.CrdbTestBuild {
+		_ = rditer.SelectOpts{
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+			Ranged:                rditer.SelectAllRanged(info.Keys),
+		}
 	}
-	// TODO(pav-kv): decompose this loop to delete raft and state machine keys
-	// separately. The main challenge is the unreplicated span because it is
-	// scattered across 2 engines.
+
+	// First, clear all RangeID-local replicated keys. Also, include all
+	// RangeID-local unreplicated keys < RangeTombstoneKey as a drive-by, since we
+	// decided that these (currently none) belong to the state machine engine.
+	tombstoneKey := keys.RangeTombstoneKey(info.RangeID)
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, reader, writer,
+		keys.MakeRangeIDReplicatedPrefix(info.RangeID),
+		tombstoneKey,
+		ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	// Save a tombstone to ensure that replica IDs never get reused.
+	if err := sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
+		NextReplicaID: next, // NB: NextReplicaID > 0
+	}); err != nil {
+		return err
+	}
+	// Clear the rest of the RangeID-local unreplicated keys.
+	// TODO(pav-kv): decompose this further to delete raft and state machine keys
+	// separately. Currently, all the remaining keys in this span belong to the
+	// raft engine except the RaftReplicaID.
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, reader, writer,
+		tombstoneKey.Next(),
+		keys.MakeRangeIDUnreplicatedPrefix(info.RangeID).PrefixEnd(),
+		ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	// Finally, clear all the user keys (MVCC keyspace and the corresponding
+	// system and lock table keys), if info.Keys is not empty.
 	for _, span := range rditer.Select(info.RangeID, rditer.SelectOpts{
-		UnreplicatedByRangeID: true,
-		ReplicatedByRangeID:   true,
-		Ranged:                rditer.SelectAllRanged(info.Keys),
+		Ranged: rditer.SelectAllRanged(info.Keys),
 	}) {
 		if err := storage.ClearRangeWithHeuristic(
-			ctx, reader, writer, span.Key, span.EndKey, pointKeyThreshold,
+			ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
 	}
-
-	// Save a tombstone to ensure that replica IDs never get reused.
-	_ = DestroyReplicaTODO // 2.3
-	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
-		NextReplicaID: next, // NB: NextReplicaID > 0
-	})
+	return nil
 }
 
 // SubsumeReplica is like DestroyReplica, but it does not delete the user keys
 // (and the corresponding system and lock table keys). The latter are inherited
 // by the subsuming range.
 //
-// The forceSortedKeys flag, if true, forces the writes to be generated in the
-// sorted order of keys. This is to support feeding the writes from this
-// function to SSTables, in the snapshot ingestion path.
-//
 // Returns SelectOpts which can be used to reflect on the key spans that this
 // function clears.
 // TODO(pav-kv): get rid of SelectOpts.
 func SubsumeReplica(
-	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
-	info DestroyReplicaInfo,
-	forceSortedKeys bool,
+	ctx context.Context, reader storage.Reader, writer storage.Writer, info DestroyReplicaInfo,
 ) (rditer.SelectOpts, error) {
 	// Forget about the user keys.
 	info.Keys = roachpb.RSpan{}
 	return rditer.SelectOpts{
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
-	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID, forceSortedKeys)
+	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID)
 }
 
 // RemoveStaleRHSFromSplit removes all data for the RHS replica of a split. This

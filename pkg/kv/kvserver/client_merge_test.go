@@ -3957,18 +3957,17 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				sstFile := &storage.MemObject{}
 				sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 				defer sst.Close()
-				{
-					// The snapshot code uses ClearRangeWithHeuristic with a threshold of
-					// 1 to clear the range, but it will truncate the range tombstone to
-					// the first key. In this case, the first key is RangeGCThresholdKey,
-					// which doesn't yet exist in the engine, so we set it manually.
-					sl := rditer.Select(rangeID, rditer.SelectOpts{
-						ReplicatedByRangeID: true,
-					})
-					require.Len(t, sl, 1)
-					s := sl[0]
-					require.NoError(t, sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false))
-				}
+				// The snapshot code uses ClearRangeWithHeuristic with a threshold of 1
+				// to clear the range, but it will truncate the range tombstone to the
+				// first key. In this case, the first key is RangeGCThresholdKey, which
+				// doesn't yet exist in the engine, so we set it manually.
+				//
+				// The deletion also extends to the RangeTombstoneKey.
+				require.NoError(t, sst.ClearRawRange(
+					keys.RangeGCThresholdKey(rangeID),
+					keys.RangeTombstoneKey(rangeID),
+					true, false,
+				))
 				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetRangeTombstone(
 					context.Background(), &sst,
 					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
