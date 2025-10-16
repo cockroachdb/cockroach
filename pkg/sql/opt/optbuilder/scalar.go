@@ -890,6 +890,14 @@ func (b *Builder) constructUnary(
 	panic(errors.AssertionFailedf("unhandled unary operator: %s", redact.Safe(un)))
 }
 
+// SupportedCRDBInternal are the crdb_internal builtins that are "supported" for real
+// customer use in production for legacy reasons. Avoid adding to this list if
+// possible and prefer to add new customer-facing tables that should be public
+// under the non-"internal" namespace of information_schema.
+var SupportedCRDBInternalBuiltins = map[string]struct{}{
+	`crdb_internal.datums_to_bytes`: {},
+}
+
 // isUnsafeBuiltin returns true if the given function definition
 // is a CRDB internal builtin function.
 func (b *Builder) isUnsafeBuiltin(
@@ -904,7 +912,9 @@ func (b *Builder) isUnsafeBuiltin(
 	}
 	for _, o := range def.Overloads {
 		if o.Schema == catconstants.CRDBInternalSchemaName {
-			return true
+			if _, ok := SupportedCRDBInternalBuiltins[def.Name]; !ok {
+				return true
+			}
 		}
 	}
 	return false

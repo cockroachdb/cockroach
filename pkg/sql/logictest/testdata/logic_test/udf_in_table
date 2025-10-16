@@ -43,6 +43,7 @@ json_array_elements(
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_col_fn_ids
 CREATE FUNCTION get_col_fn_ids(table_id INT) RETURNS SETOF v_col_fn_ids
 LANGUAGE SQL
 AS $$
@@ -65,6 +66,7 @@ SELECT
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_fn_depended_on_by
 CREATE FUNCTION get_fn_depended_on_by(function_id INT) RETURNS STRING
 LANGUAGE SQL
 AS $$
@@ -103,6 +105,7 @@ SELECT id FROM system.namespace WHERE name = 't1';
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -146,6 +149,7 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -165,6 +169,7 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -204,6 +209,7 @@ CREATE TABLE public.t1 (
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -224,6 +230,7 @@ ALTER TABLE t1 ALTER COLUMN e SET ON UPDATE f1();
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -254,6 +261,7 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT NULL;
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -265,6 +273,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -285,6 +294,7 @@ ALTER TABLE t1 ALTER COLUMN e SET ON UPDATE NULL;
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -296,6 +306,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -315,6 +326,7 @@ ALTER TABLE t1 ALTER COLUMN b DROP DEFAULT;
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr  on_update_expr         compute_expr  uses_fn_ids
@@ -326,6 +338,7 @@ id   col_id  default_expr  on_update_expr         compute_expr  uses_fn_ids
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -344,6 +357,7 @@ ALTER TABLE t1 ALTER COLUMN d DROP ON UPDATE;
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr  on_update_expr  compute_expr  uses_fn_ids
@@ -355,6 +369,7 @@ id   col_id  default_expr  on_update_expr  compute_expr  uses_fn_ids
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL
@@ -370,6 +385,7 @@ ALTER TABLE t1 ALTER COLUMN d SET ON UPDATE f1();
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -389,6 +405,7 @@ ALTER TABLE t1 ALTER COLUMN c SET DEFAULT f1();
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -400,6 +417,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -419,6 +437,7 @@ ALTER TABLE t1 DROP COLUMN c;
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr  uses_fn_ids
@@ -429,6 +448,7 @@ id   col_id  default_expr           on_update_expr         compute_expr  uses_fn
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -457,6 +477,7 @@ ALTER TABLE t1 ADD COLUMN h int ON UPDATE (f1());
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr           uses_fn_ids
@@ -470,6 +491,7 @@ id   col_id  default_expr           on_update_expr         compute_expr         
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -492,6 +514,7 @@ ALTER TABLE t1 ALTER COLUMN b SET DEFAULT f1();
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr         compute_expr           uses_fn_ids
@@ -505,6 +528,7 @@ id   col_id  default_expr           on_update_expr         compute_expr         
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -524,6 +548,7 @@ statement ok
 DROP TABLE t1;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL
@@ -544,6 +569,7 @@ CREATE TABLE t2(
 );
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -566,6 +592,7 @@ DROP TABLE t1;
 DROp TABLE t2;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL
@@ -596,6 +623,7 @@ CREATE TABLE t1(
 );
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -609,6 +637,7 @@ SELECT get_fn_depended_on_by($fn_id)
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id_2)
 ----
 [
@@ -624,11 +653,13 @@ statement ok
 DROP TABLE t1;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id_2)
 ----
 NULL
@@ -676,6 +707,7 @@ let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr  compute_expr  uses_fn_ids
@@ -683,6 +715,7 @@ id   col_id  default_expr           on_update_expr  compute_expr  uses_fn_ids
 119  2       "[FUNCTION 100118]()"  NULL            NULL          [118]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id);
 ----
 [
@@ -719,6 +752,7 @@ let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr           on_update_expr  compute_expr  uses_fn_ids
@@ -726,6 +760,7 @@ id   col_id  default_expr           on_update_expr  compute_expr  uses_fn_ids
 120  2       "[FUNCTION 100121]()"  NULL            NULL          [121]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id);
 ----
 [
@@ -828,6 +863,7 @@ SELECT id FROM system.namespace WHERE name = 't_computed';
 # Check that computed column expressions track function usage.
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_computed_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr  on_update_expr  compute_expr            uses_fn_ids
@@ -843,6 +879,7 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f_compute';
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_compute_id)
 ----
 [
@@ -862,6 +899,7 @@ ALTER TABLE t_computed DROP COLUMN c;
 
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_computed_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr  on_update_expr  compute_expr            uses_fn_ids
@@ -871,6 +909,7 @@ id   col_id  default_expr  on_update_expr  compute_expr            uses_fn_ids
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_compute_id)
 ----
 [
@@ -889,6 +928,7 @@ DROP TABLE t_computed;
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_compute_id)
 ----
 NULL
@@ -930,6 +970,7 @@ SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f_add';
 # Check that computed column tracks multiple function references.
 skipif config local-mixed-25.2
 query IITTTT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_multi_fn_id) ORDER BY 1, 2;
 ----
 id   col_id  default_expr  on_update_expr  compute_expr                                      uses_fn_ids
@@ -939,6 +980,7 @@ id   col_id  default_expr  on_update_expr  compute_expr                         
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_compute_id)
 ----
 [
@@ -952,6 +994,7 @@ SELECT get_fn_depended_on_by($fn_compute_id)
 
 skipif config local-mixed-25.2
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_add_id)
 ----
 [

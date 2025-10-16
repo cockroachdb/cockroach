@@ -404,12 +404,14 @@ statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b INT, INDEX (b))
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via tbl_json
 SELECT stripped(tbl_json(desc_bytes('t')))
 ----
 {"indexInvisibility": null, "indexNotVisible": null, "modificationTime": {}, "version": 1}
 
 # Post-deserialization changes are idempotent.
 query T
+-- logictest_allow_unsafe: references nested explicit access via tbl_json
 SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
 ----
 {"indexInvisibility": null, "indexNotVisible": null, "modificationTime": {}, "version": 1}
@@ -436,17 +438,20 @@ WHERE
 	name = 't'
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via tbl_json
 SELECT stripped(tbl_json(desc_bytes('t')))
 ----
 {"indexInvisibility": null, "indexNotVisible": true, "modificationTime": {}, "version": 2}
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via tbl_json
 SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
 ----
 {"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {}, "version": 2}
 
 # Check that existing modification times (possible for pre-19.2 descriptors) are not affected.
 query T
+-- logictest_allow_unsafe: references nested explicit access via tbl_json
 SELECT
 	stripped(
 		tbl_json(
@@ -473,6 +478,7 @@ statement ok
 ALTER TABLE t RENAME TO t_renamed
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via tbl_json
 SELECT stripped(tbl_json(desc_bytes('t_renamed')))
 ----
 {"indexInvisibility": 1, "indexNotVisible": true, "modificationTime": {}, "version": 3}

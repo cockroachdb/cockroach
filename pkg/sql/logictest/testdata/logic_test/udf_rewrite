@@ -42,6 +42,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "SELECT nextval(106:::REGCLASS);"
@@ -56,6 +57,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "INSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;"
@@ -70,6 +72,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "SELECT b'\\x80':::@100107;"
@@ -84,6 +87,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "UPDATE test.public.t_rewrite SET w = b'\\xa0':::@100107 WHERE w = b'\\x80':::@100107 RETURNING w;"
@@ -98,6 +102,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "SELECT b'\\xa0':::@100107;"
@@ -112,6 +117,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "SELECT b'\\xa0':::@100107;"
@@ -130,6 +136,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "INSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;"
@@ -144,6 +151,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "UPDATE test.public.t_rewrite SET w = b'\\xa0':::@100107 WHERE w = b'\\x80':::@100107 RETURNING w;"
@@ -158,6 +166,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "SELECT b'\\xa0':::@100107;"
@@ -172,6 +181,7 @@ $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "SELECT b'\\xa0':::@100107;"
@@ -196,6 +206,7 @@ $$ LANGUAGE SQL
 
 # TODO(fqazi): Renaming function calls will break today until #120351 is completed.
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "SELECT public.nested_func();\nSELECT nested_func FROM ROWS FROM (public.nested_func());"
@@ -220,6 +231,7 @@ CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS $$
 $$ LANGUAGE SQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "DO $funcbody$\nBEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;\nDO $$\nBEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;\nEND;\n$$;\nEND;\n$funcbody$;\n;\nSELECT 1;"
