@@ -216,3 +216,40 @@ func SubsumeReplica(
 		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID, opts)
 }
+
+// RemoveStaleRHSFromSplit removes all data for the RHS replica of a split. This
+// is used in a situation when the RHS replica is already known to have been
+// removed from our store, so any pending writes that were supposed to
+// initialize the RHS replica should be dropped from the write batch.
+//
+// TODO(#152199): do not remove the unreplicated state which can belong to a
+// newer (uninitialized) replica.
+func RemoveStaleRHSFromSplit(
+	ctx context.Context,
+	reader storage.Reader,
+	writer storage.Writer,
+	rangeID roachpb.RangeID,
+	keys roachpb.RSpan,
+) error {
+	return ClearRangeData(ctx, rangeID, reader, writer, ClearRangeDataOptions{
+		// Since the RHS replica is uninitalized, we know there isn't anything in
+		// the two replicated spans below, before the current batch. Setting these
+		// options will in effect only clear the writes to the RHS replicated state
+		// staged in the batch.
+		ClearReplicatedBySpan:    keys,
+		ClearReplicatedByRangeID: true,
+		// TODO(tbg): we don't actually want to touch the raft state of the RHS
+		// replica since it's absent or a more recent one than in the split. Now
+		// that we have a bool targeting unreplicated RangeID-local keys, we can set
+		// it to false and remove the HardState+ReplicaID write-back in the caller.
+		// However, there can be historical split proposals with the
+		// RaftTruncatedState key set in splitTriggerHelper[^1]. We must first make
+		// sure that such proposals no longer exist, e.g. with a below-raft
+		// migration.
+		//
+		// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
+		//
+		// See also: https://github.com/cockroachdb/cockroach/issues/94933
+		ClearUnreplicatedByRangeID: true,
+	})
+}
