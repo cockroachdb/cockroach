@@ -2211,16 +2211,29 @@ func (cf *changeFrontier) maybeEmitResolved(ctx context.Context, newResolved hlc
 
 // updateProgressSkewMetrics updates the progress skew metrics.
 func (cf *changeFrontier) updateProgressSkewMetrics() {
-	maxSpanTS := cf.frontier.LatestTS()
-	maxTableTS := cf.frontier.Frontier()
-	for _, f := range cf.frontier.Frontiers() {
-		tableTS := f.Frontier()
-		if tableTS.After(maxTableTS) {
-			maxTableTS = tableTS
+	fastestSpanTS := cf.frontier.LatestTS()
+	fastestTableTS := func() hlc.Timestamp {
+		var maxTS hlc.Timestamp
+		for _, f := range cf.frontier.Frontiers() {
+			if f.Frontier().After(maxTS) {
+				maxTS = f.Frontier()
+			}
+		}
+		return maxTS
+	}()
+
+	slowestTS := cf.frontier.Frontier()
+	var spanSkew, tableSkew int64
+	if slowestTS.IsSet() {
+		if fastestSpanTS.IsSet() {
+			spanSkew = fastestSpanTS.WallTime - slowestTS.WallTime
+		}
+		if fastestTableTS.IsSet() {
+			tableSkew = fastestTableTS.WallTime - slowestTS.WallTime
 		}
 	}
 
-	cf.sliMetrics.setFastestTS(cf.sliMetricsID, maxSpanTS, maxTableTS)
+	cf.sliMetrics.setProgressSkew(cf.sliMetricsID, spanSkew, tableSkew)
 }
 
 func frontierIsBehind(frontier hlc.Timestamp, sv *settings.Values) bool {

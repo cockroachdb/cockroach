@@ -78,3 +78,15 @@ func MinFunc[E any](seq iter.Seq[E], cmp func(E, E) int) E {
 	}
 	return m
 }
+
+// MaxFunc returns the maximum element in seq, using cmp to compare elements.
+// If seq has no values, the zero value is returned.
+func MaxFunc[E any](seq iter.Seq[E], cmp func(E, E) int) E {
+	var m E
+	for i, v := range Enumerate(seq) {
+		if i == 0 || cmp(v, m) > 0 {
+			m = v
+		}
+	}
+	return m
+}
