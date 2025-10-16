@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/changefeeds"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -70,6 +71,8 @@ var prometheusPort = sharedFlags.Int(
 	2112,
 	"Port to expose prometheus metrics if the workload has a prometheus gatherer set.",
 )
+var withChangefeed = runFlags.Bool("with-changefeed", false,
+	"Optionally run a changefeed over the tables")
 
 // individualOperationReceiverAddr is an address to send latency
 // measurements to. By default it will not send anything.
@@ -484,12 +487,19 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				log.Dev.Warningf(ctx, "retrying after error while creating load: %v", err)
 			}
 			ops, err = o.Ops(ctx, urls, reg)
+			if err != nil && !*tolerateErrors {
+				return errors.Wrapf(err, "failed to initialize the load generator")
+			}
+
+			if *withChangefeed {
+				log.Dev.Infof(ctx, "adding changefeed to query load...")
+				err = changefeeds.AddChangefeedToQueryLoad(ctx, gen.(workload.ConnFlagser), dbName, urls, reg, &ops)
+				if err != nil && !*tolerateErrors {
+					return errors.Wrapf(err, "failed to initialize changefeed")
+				}
+			}
 			if err == nil {
 				return nil
-			}
-			err = errors.Wrapf(err, "failed to initialize the load generator")
-			if !*tolerateErrors {
-				return err
 			}
 		}
 		if ctx.Err() != nil {
