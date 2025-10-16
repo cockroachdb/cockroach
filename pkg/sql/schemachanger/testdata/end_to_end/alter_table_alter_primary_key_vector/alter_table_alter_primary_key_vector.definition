@@ -1,5 +1,4 @@
 setup
-SET CLUSTER SETTING feature.vector_index.enabled = true;
 SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true;
 CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, embedding VECTOR(3), metadata TEXT);
 INSERT INTO t(i, j, embedding, metadata) VALUES (-4, -4, '[1,2,3]', 'data1'), (-2, -2, '[4,5,6]', 'data2'), (-3, -3, NULL, 'null_data');
