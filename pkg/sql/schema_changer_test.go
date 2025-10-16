@@ -320,7 +320,7 @@ CREATE INDEX foo ON t.test (v)
 		mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 	}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -425,7 +425,7 @@ SELECT count(*)
 	testutils.SucceedsSoon(t, func() error {
 		return sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, keyMultiple, maxValue+numInserts)
 	})
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -667,7 +667,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
 			return err
 		}
-		if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 			return err
 		}
 		return nil
@@ -873,7 +873,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1190,7 +1190,7 @@ COMMIT;
 				return sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, testCase.expectedNumKeysPerRow, maxValue)
 			})
 
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1810,7 +1810,7 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1912,7 +1912,7 @@ ALTER TABLE t.test ADD column v INT DEFAULT 0;
 	close(continueBackfillNotification)
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -3418,7 +3418,7 @@ ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 	// Check data!
@@ -3551,7 +3551,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -3661,7 +3661,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 					t.Fatal(err)
 				}
 
-				if err := sqlutils.RunScrub(sqlDB, "t", "kv"); err != nil {
+				if err := sqlutils.RunInspect(sqlDB, "t", "kv"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -3777,7 +3777,7 @@ CREATE TABLE d.t (
 				t.Errorf("expected one row but read %d", count)
 			}
 
-			if err := sqlutils.RunScrub(sqlDB, "d", "t"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "d", "t"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -3898,7 +3898,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3994,7 +3994,7 @@ func TestTruncateCompletion(t *testing.T) {
 			if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 				t.Fatal(err)
 			}
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -4031,7 +4031,7 @@ func TestTruncateCompletion(t *testing.T) {
 			row.Scan(&count)
 			require.Equal(t, maxValue+1, count)
 
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -4379,7 +4379,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 		t.Fatal(err)
 	}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -5166,10 +5166,10 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "child"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "child"); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "parent"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "parent"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5248,7 +5248,7 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "tab"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "tab"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5345,7 +5345,7 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5442,7 +5442,7 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }

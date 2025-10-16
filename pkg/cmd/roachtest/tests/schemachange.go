@@ -85,11 +85,6 @@ func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) e
 		return err
 	}
 
-	// TODO(vivek): Fix #21544.
-	// if err := sqlutils.RunScrub(db, `test`, `kv`); err != nil {
-	//   return err
-	// }
-
 	// All these return the same result.
 	validationQueries := []string{
 		"SELECT count(*) FROM tpch.customer AS OF SYSTEM TIME %s",
@@ -113,11 +108,6 @@ func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) e
 	if err := runSchemaChanges(ctx, l, db, schemaChanges); err != nil {
 		return err
 	}
-
-	// TODO(vivek): Fix #21544.
-	// if err := sqlutils.RunScrub(db, `test`, `kv`); err != nil {
-	//	return err
-	// }
 
 	// All these return the same result.
 	validationQueries = []string{
