@@ -818,7 +818,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// allowed in (perhaps not involving any of the RangeIDs known to the merge
 		// but still touching its keyspace) and causing corruption.
 		ph, err := r.store.removeInitializedReplicaRaftMuLocked(
-			ctx, sr, mergedTombstoneReplicaID, "subsumed by snapshot",
+			ctx, sr, kvstorage.MergedTombstoneReplicaID, "subsumed by snapshot",
 			RemoveOptions{
 				// The data was already destroyed by clearSubsumedReplicaDiskData.
 				DestroyData:       false,

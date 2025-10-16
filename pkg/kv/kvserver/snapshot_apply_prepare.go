@@ -163,7 +163,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 				UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 			})...)
 			// NB: Actually clear RangeID local key spans.
-			return kvstorage.DestroyReplica(ctx, reader, w, sub, mergedTombstoneReplicaID, opts)
+			return kvstorage.DestroyReplica(ctx, reader, w, sub, kvstorage.MergedTombstoneReplicaID, opts)
 		}); err != nil {
 			return err
 		}

@@ -7,6 +7,7 @@ package kvstorage
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -29,6 +30,14 @@ const (
 	// perhaps we should fix Pebble to handle large numbers of range tombstones in
 	// an sstable better.
 	ClearRangeThresholdPointKeys = 64
+
+	// MergedTombstoneReplicaID is the replica ID written into the RangeTombstone
+	// for replicas of a range which is known to have been merged. This value
+	// should prevent any messages from stale replicas of that range from ever
+	// resurrecting merged replicas. Whenever merging or subsuming a replica we
+	// know new replicas can never be created so this value is used even if we
+	// don't know the current replica ID.
+	MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 )
 
 // ClearRangeDataOptions specify which parts of a Replica are to be destroyed.
