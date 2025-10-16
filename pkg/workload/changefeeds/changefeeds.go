@@ -68,6 +68,11 @@ func AddChangefeedToQueryLoad(
 		return err
 	}
 
+	var cursorStr string
+	if err := conn.QueryRow(ctx, "SELECT cluster_logical_timestamp()").Scan(&cursorStr); err != nil {
+		return err
+	}
+
 	tableNames := strings.Builder{}
 	for i, table := range gen.Tables() {
 		if i == 0 {
@@ -77,7 +82,7 @@ func AddChangefeedToQueryLoad(
 		}
 	}
 
-	stmt := fmt.Sprintf("EXPERIMENTAL CHANGEFEED FOR %s WITH updated, no_initial_scan, schema_change_policy=nobackfill",
+	stmt := fmt.Sprintf("EXPERIMENTAL CHANGEFEED FOR %s WITH updated, no_initial_scan, schema_change_policy=nobackfill,cursor=$1",
 		tableNames.String())
 	cfCtx, cancel := context.WithCancel(ctx)
 
@@ -97,16 +102,18 @@ func AddChangefeedToQueryLoad(
 			return false
 		}
 		var err error
-		rows, err = conn.Query(cfCtx, stmt)
+		rows, err = conn.Query(cfCtx, stmt, cursorStr)
 		return maybeMarkDone(err)
 	}
-	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
+
+	ql.ChangefeedFns = append(ql.ChangefeedFns, func(ctx context.Context) error {
 		if doneErr != nil {
 			return doneErr
 		}
 		if maybeSetupRows() {
 			return doneErr
 		}
+
 		if rows.Next() {
 			values, err := rows.Values()
 			if maybeMarkDone(err) {

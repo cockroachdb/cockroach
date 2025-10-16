@@ -71,8 +71,14 @@ var prometheusPort = sharedFlags.Int(
 	2112,
 	"Port to expose prometheus metrics if the workload has a prometheus gatherer set.",
 )
+
 var withChangefeed = runFlags.Bool("with-changefeed", false,
 	"Optionally run a changefeed over the tables")
+
+var changefeedStartDelay = runFlags.Duration("changefeed-start-delay", 0*time.Second, "how long to wait before starting the changefeed")
+
+var maxChangefeedRate = runFlags.Float64(
+	"max-changefeed-rate", 0, "Maximum frequency of changefeed ingestion. If 0, no limit.")
 
 // individualOperationReceiverAddr is an address to send latency
 // measurements to. By default it will not send anything.
@@ -427,6 +433,10 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		// with allowed burst of 1 at the maximum allowed rate.
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
 	}
+	var changefeedLimiter *rate.Limiter
+	if *maxChangefeedRate > 0 {
+		changefeedLimiter = rate.NewLimiter(rate.Limit(*maxChangefeedRate), 1)
+	}
 
 	maybeLogRandomSeed(ctx, gen)
 	o, ok := gen.(workload.Opser)
@@ -537,8 +547,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	var wg sync.WaitGroup
-	wg.Add(len(ops.WorkerFns))
+	wg.Add(len(ops.WorkerFns) + len(ops.ChangefeedFns))
 	go func() {
+		for _, workFn := range ops.ChangefeedFns {
+			go func(workFn func(context.Context) error) {
+				if *changefeedStartDelay > 0 {
+					time.Sleep(*changefeedStartDelay)
+				}
+				workerRun(workersCtx, errCh, &wg, changefeedLimiter, workFn)
+			}(workFn)
+		}
+
 		// If a ramp period was specified, start all the workers gradually
 		// with a new context.
 		var rampCtx context.Context
