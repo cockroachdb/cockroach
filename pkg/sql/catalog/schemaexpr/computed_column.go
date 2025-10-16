@@ -12,10 +12,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,6 +38,9 @@ import (
 //
 //   - It does not have a default value.
 //   - It does not reference other computed columns.
+//   - It does not reference inaccessible columns.
+//   - It does not depend on the region column name if the table is REGIONAL BY
+//     ROW and uses a foreign key to populate the region column.
 //
 // TODO(mgartner): Add unit tests for Validate.
 func ValidateComputedColumnExpression(
@@ -47,62 +52,45 @@ func ValidateComputedColumnExpression(
 	semaCtx *tree.SemaContext,
 	version clusterversion.ClusterVersion,
 ) (serializedExpr string, _ *types.T, _ error) {
-	if d.HasDefaultExpr() {
-		return "", nil, pgerror.Newf(
-			pgcode.InvalidTableDefinition,
-			"%s cannot have default values",
-			context,
-		)
+	// Create helper functions from the descriptor and delegate to the
+	// lookup-based validation function.
+	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
+		cols := desc.NonDropColumns()
+		ret := make(colinfo.ResultColumns, len(cols))
+		for i, col := range cols {
+			ret[i] = colinfo.ResultColumn{
+				Name:           col.GetName(),
+				Typ:            col.GetType(),
+				Hidden:         col.IsHidden(),
+				TableID:        desc.GetID(),
+				PGAttributeNum: uint32(col.GetPGAttributeNum()),
+			}
+		}
+		return ret
+	}
+
+	columnLookupFn := makeColumnLookupFnForTableDesc(desc)
+
+	serializedExpr, typ, err := ValidateComputedColumnExpressionWithLookup(
+		ctx,
+		desc,
+		d,
+		tn,
+		context,
+		semaCtx,
+		version,
+		getAllNonDropColumnsFn,
+		columnLookupFn,
+	)
+	if err != nil {
+		return "", nil, err
 	}
 
 	var depColIDs catalog.TableColSet
-	// First, check that no column in the expression is an inaccessible or
-	// computed column.
-	err := iterColDescriptors(desc, d.Computed.Expr, func(c catalog.Column) error {
-		if c.IsInaccessible() {
-			return pgerror.Newf(
-				pgcode.UndefinedColumn,
-				"column %q is inaccessible and cannot be referenced in a computed column expression",
-				c.GetName(),
-			)
-		}
-		if c.IsComputed() {
-			return pgerror.Newf(
-				pgcode.InvalidTableDefinition,
-				"%s expression cannot reference computed columns",
-				context,
-			)
-		}
+	if err := iterColDescriptors(desc, d.Computed.Expr, func(c catalog.Column) error {
 		depColIDs.Add(c.GetID())
-
 		return nil
-	})
-	if err != nil {
-		return "", nil, err
-	}
-
-	// Resolve the type of the computed column expression.
-	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
-	if err != nil {
-		return "", nil, err
-	}
-
-	// Check that the type of the expression is of type defType and that there
-	// are no variable expressions (besides dummyColumnItems) and no impure
-	// functions. In order to safely serialize user defined types and their
-	// members, we need to serialize the typed expression here.
-	expr, typ, _, err := DequalifyAndValidateExpr(
-		ctx,
-		desc,
-		d.Computed.Expr,
-		defType,
-		context,
-		semaCtx,
-		volatility.Immutable,
-		tn,
-		version,
-	)
-	if err != nil {
+	}); err != nil {
 		return "", nil, err
 	}
 
@@ -110,6 +98,7 @@ func ValidateComputedColumnExpression(
 	// would not be safe in the case that the mutation column was being
 	// backfilled and the virtual computed column value needed to be computed
 	// for the purpose of writing to a secondary index.
+	// This check is specific to the legacy schema changer.
 	if d.IsVirtual() {
 		var mutationColumnNames []string
 		var err error
@@ -142,6 +131,86 @@ func ValidateComputedColumnExpression(
 				"virtual computed column %q referencing columns (%s) added in the "+
 					"current transaction", d.Name, strings.Join(mutationColumnNames, ", "))
 		}
+	}
+
+	return serializedExpr, typ, nil
+}
+
+// ValidateComputedColumnExpressionWithLookup verifies that an expression is a
+// valid computed column expression using a column lookup function. It returns
+// the serialized expression and its type if valid, and an error otherwise.
+//
+// This is similar to ValidateComputedColumnExpression but uses a ColumnLookupFn
+// instead of a catalog.TableDescriptor, allowing it to work with declarative
+// schema changer elements.
+func ValidateComputedColumnExpressionWithLookup(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	d *tree.ColumnTableDef,
+	tn *tree.TableName,
+	context tree.SchemaExprContext,
+	semaCtx *tree.SemaContext,
+	version clusterversion.ClusterVersion,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupFn ColumnLookupFn,
+) (serializedExpr string, _ *types.T, _ error) {
+	if d.HasDefaultExpr() {
+		return "", nil, pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"%s cannot have default values",
+			context,
+		)
+	}
+
+	var depColIDs catalog.TableColSet
+	// First, check that no column in the expression is an inaccessible or
+	// computed column.
+	err := iterColsWithLookupFn(d.Computed.Expr, columnLookupFn,
+		func(columnName tree.Name, id catid.ColumnID, typ *types.T, isAccessible, isComputed bool) error {
+			if !isAccessible {
+				return pgerror.Newf(
+					pgcode.UndefinedColumn,
+					"column %q is inaccessible and cannot be referenced in a computed column expression",
+					columnName,
+				)
+			}
+			if isComputed {
+				return pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"%s expression cannot reference computed columns",
+					context,
+				)
+			}
+			depColIDs.Add(id)
+			return nil
+		})
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Resolve the type of the computed column expression.
+	defType, err := tree.ResolveType(ctx, d.Type, semaCtx.GetTypeResolver())
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Check that the type of the expression is of type defType and that there
+	// are no variable expressions (besides dummyColumnItems) and no impure
+	// functions. We use DequalifyAndValidateExprImpl with the lookup function.
+	expr, typ, _, err := DequalifyAndValidateExprImpl(
+		ctx,
+		d.Computed.Expr,
+		defType,
+		context,
+		semaCtx,
+		volatility.Immutable,
+		tn,
+		version,
+		getAllNonDropColumnsFn,
+		columnLookupFn,
+	)
+	if err != nil {
+		return "", nil, err
 	}
 
 	// If this is a REGIONAL BY ROW table using a foreign key to populate the
