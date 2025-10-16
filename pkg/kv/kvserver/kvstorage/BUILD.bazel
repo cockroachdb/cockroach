@@ -10,6 +10,7 @@ go_library(
         "initial.go",
         "replica_state.go",
         "stateloader.go",
+        "storage.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage",
     visibility = ["//visibility:public"],
