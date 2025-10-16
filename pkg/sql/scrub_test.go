@@ -298,7 +298,7 @@ CREATE INDEX secondary ON t.test (v);
 	}
 	defer rows.Close()
 
-	results, err := sqlutils.GetScrubResultRows(rows)
+	results, err := sqlutils.GetInspectResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -327,7 +327,7 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %+v", err)
 	}
 	defer rows.Close()
-	scrubDatabaseResults, err := sqlutils.GetScrubResultRows(rows)
+	scrubDatabaseResults, err := sqlutils.GetInspectResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	} else if len(scrubDatabaseResults) != 1 {
@@ -386,7 +386,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	}
 	defer rows.Close()
 
-	results, err := sqlutils.GetScrubResultRows(rows)
+	results, err := sqlutils.GetInspectResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -505,7 +505,7 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
-	results, err := sqlutils.GetScrubResultRows(rows)
+	results, err := sqlutils.GetInspectResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

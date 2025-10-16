@@ -26,7 +26,7 @@ type ExpectedScrubResult struct {
 
 // CheckScrubResult compares the results from running SCRUB with the expected
 // results and throws an error if they do not match.
-func CheckScrubResult(t *testing.T, ress []sqlutils.ScrubResult, exps []ExpectedScrubResult) {
+func CheckScrubResult(t *testing.T, ress []sqlutils.InspectResult, exps []ExpectedScrubResult) {
 	t.Helper()
 
 	for i := 0; i < len(exps); i++ {
