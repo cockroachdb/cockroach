@@ -109,12 +109,12 @@ func TestGSS(t *testing.T) {
 			user:     "tester",
 			gssErr:   "",
 		},
-		// Verify case-sensitivity.
+		// Verify names are matched without case-sensitivity.
 		{
 			conf:     `host all all all gss map=demo`,
 			identMap: `demo /^(.*)@MY.EX$ \1`,
 			user:     "tester",
-			gssErr:   `system identity "tester@my.ex" did not map to a database role`,
+			gssErr:   ``,
 		},
 		// Validating the use of "map" as a filter.
 		{
