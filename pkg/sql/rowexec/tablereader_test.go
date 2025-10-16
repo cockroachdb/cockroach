@@ -143,7 +143,8 @@ func TestTableReader(t *testing.T) {
 					buf = &distsqlutils.RowBuffer{}
 					out = buf
 				}
-				tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &ts, &c.post)
+				tr, err := newTableReader(ctx, &flowCtx, 0, /* processorID */
+					0 /* stageID */, &ts, &c.post)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -244,7 +245,8 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 			buf = &distsqlutils.RowBuffer{}
 			out = buf
 		}
-		tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
+		tr, err := newTableReader(ctx, &flowCtx, 0, /* processorID */
+			0 /* stageID */, &spec, &post)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -348,7 +350,8 @@ func TestTableReaderDrain(t *testing.T) {
 	post := execinfrapb.PostProcessSpec{}
 
 	testReaderProcessorDrain(ctx, t, func() (execinfra.Processor, error) {
-		return newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
+		return newTableReader(ctx, &flowCtx, 0, /* processorID */
+			0 /* stageID*/, &spec, &post)
 	})
 }
 
@@ -408,7 +411,8 @@ func TestLimitScans(t *testing.T) {
 	ctx = tracing.ContextWithSpan(ctx, sp)
 	flowCtx.CollectStats = true
 
-	tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
+	tr, err := newTableReader(ctx, &flowCtx, 0, /* processorID */
+		0 /* stageID */, &spec, &post)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -520,7 +524,8 @@ func BenchmarkTableReader(b *testing.B) {
 				// txnKVFetcher reuses the passed-in slice and destructively
 				// modifies it.
 				spec.Spans = []roachpb.Span{span}
-				tr, err := newTableReader(ctx, &flowCtx, 0 /* processorID */, &spec, &post)
+				tr, err := newTableReader(ctx, &flowCtx, 0, /* processorID */
+					0 /* stageID */, &spec, &post)
 				if err != nil {
 					b.Fatal(err)
 				}
