@@ -34,10 +34,6 @@ type snapWriteBuilder struct {
 	origDesc   *roachpb.RangeDescriptor // pre-snapshot range descriptor
 	// NB: subsume must be in sorted order by DestroyReplicaInfo start key.
 	subsume []kvstorage.DestroyReplicaInfo
-
-	// cleared contains the spans that this snapshot application clears before
-	// writing new state on top.
-	cleared []roachpb.Span
 }
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
@@ -63,13 +59,9 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 // provided state. Specifically, it rewrites HardState and RaftTruncatedState,
 // and clears the raft log. All writes are generated in the engine keys order.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	cleared, err := kvstorage.RewriteRaftState(
+	_, err := kvstorage.RewriteRaftState(
 		ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
-	if err != nil {
-		return err
-	}
-	s.cleared = append(s.cleared, cleared)
-	return nil
+	return err
 }
 
 // clearSubsumedReplicaDiskData clears the on disk data of the subsumed
@@ -127,10 +119,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			opts, err := kvstorage.SubsumeReplica(
-				ctx, kvstorage.TODOReaderWriter(reader, w), sub,
-			)
-			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, opts)...)
+			_, err := kvstorage.SubsumeReplica(ctx, kvstorage.TODOReaderWriter(reader, w), sub)
 			return err
 		}); err != nil {
 			return err
@@ -210,7 +199,6 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		}); err != nil {
 			return err
 		}
-		s.cleared = append(s.cleared, span)
 	}
 
 	return nil
