@@ -1429,7 +1429,8 @@ func TestApproximateDiskBytes(t *testing.T) {
 	}
 }
 
-func TestConvertFilesToBatchAndCommit(t *testing.T) {
+// FIXME
+func TestIngestAndExciseFilesToWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1498,11 +1499,12 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	require.NoError(t, w2.Finish())
 	w2.Close()
 
-	require.NoError(t, engs[batchEngine].ConvertFilesToBatchAndCommit(
+	require.NoError(t, engs[batchEngine].IngestAndExciseFilesToWriter(
 		ctx, []string{fileName1, fileName2}, []roachpb.Span{
 			{Key: lkStart, EndKey: lkEnd}, {Key: startKey, EndKey: endKey},
 		}))
 	require.NoError(t, engs[ingestEngine].IngestLocalFiles(ctx, []string{fileName1, fileName2}))
+
 	outputState := func(eng Engine) []string {
 		it, err := eng.NewEngineIterator(context.Background(), IterOptions{
 			UpperBound: roachpb.KeyMax,
