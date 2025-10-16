@@ -52,9 +52,6 @@ func TestVectorColumnAndIndexBackfill(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	// Enable vector indexes.
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
-
 	// Create a table with a vector column
 	sqlDB.Exec(t, `
 		CREATE TABLE vectors (
@@ -118,9 +115,6 @@ func TestConcurrentOperationsDuringVectorIndexCreation(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// Enable vector indexes.
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
 	// Create a table with a vector column
 	sqlDB.Exec(t, `
@@ -204,9 +198,6 @@ func TestVectorIndexWithPrefixBackfill(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	// Enable vector indexes.
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
-
 	// Create a table with a vector column + a prefix column.
 	sqlDB.Exec(t, `
 		CREATE TABLE items (
@@ -275,9 +266,6 @@ func TestVectorIndexMergingDuringBackfill(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// Enable vector indexes.
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
 	// Enable deterministic vector index fixups for consistent testing.
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true`)
@@ -372,9 +360,6 @@ func TestVectorIndexMergingDuringBackfillWithPrefix(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-
-	// Enable vector indexes.
-	sqlDB.Exec(t, `SET CLUSTER SETTING feature.vector_index.enabled = true`)
 
 	// Enable deterministic vector index fixups for consistent testing.
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true`)
