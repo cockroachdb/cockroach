@@ -19,4 +19,10 @@ message ProtectedTimestampRecords {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false
   ];
+  // SystemTablesRecord is the ID of PTS record that protects the system tables
+  // back to the changefeed's highwater.
+  bytes system_tables_record = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }
