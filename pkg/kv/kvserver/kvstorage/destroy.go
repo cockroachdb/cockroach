@@ -144,11 +144,7 @@ func DestroyReplica(
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
 ) error {
-	return destroyReplicaImpl(ctx, reader, writer, info, next, clearRangeDataOptions{
-		clearReplicatedByRangeID:   true,
-		clearUnreplicatedByRangeID: true,
-		clearReplicatedBySpan:      info.Keys,
-	})
+	return destroyReplicaImpl(ctx, reader, writer, info, next, false /* forceSortedKeys */)
 }
 
 func destroyReplicaImpl(
@@ -157,7 +153,7 @@ func destroyReplicaImpl(
 	writer storage.Writer,
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
-	opts clearRangeDataOptions,
+	forceSortedKeys bool,
 ) error {
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
@@ -179,7 +175,16 @@ func destroyReplicaImpl(
 	}
 
 	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	if err := clearRangeData(ctx, info.RangeID, reader, writer, opts); err != nil {
+	// NB: if required, set mustUseClearRange to true. This call can be used for
+	// generating SSTables when ingesting a snapshot, which requires Clears and
+	// Puts to be written in key order. DestroyReplica sets RangeTombstoneKey
+	// after clearing the unreplicated span which may contain higher keys.
+	if err := clearRangeData(ctx, info.RangeID, reader, writer, clearRangeDataOptions{
+		clearReplicatedByRangeID:   true,
+		clearUnreplicatedByRangeID: true,
+		clearReplicatedBySpan:      info.Keys,
+		mustUseClearRange:          forceSortedKeys,
+	}); err != nil {
 		return err
 	}
 	// Save a tombstone to ensure that replica IDs never get reused.
@@ -207,19 +212,12 @@ func SubsumeReplica(
 	info DestroyReplicaInfo,
 	forceSortedKeys bool,
 ) (rditer.SelectOpts, error) {
-	// NB: if required, set MustUseClearRange to true. This call can be used for
-	// generating SSTables when ingesting a snapshot, which requires Clears and
-	// Puts to be written in key order. DestroyReplica sets RangeTombstoneKey
-	// after clearing the unreplicated span which may contain higher keys.
-	opts := clearRangeDataOptions{
-		clearReplicatedByRangeID:   true,
-		clearUnreplicatedByRangeID: true,
-		mustUseClearRange:          forceSortedKeys,
-	}
+	// Forget about the user keys.
+	info.Keys = roachpb.RSpan{}
 	return rditer.SelectOpts{
-		ReplicatedByRangeID:   opts.clearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.clearUnreplicatedByRangeID,
-	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID, opts)
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: true,
+	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID, forceSortedKeys)
 }
 
 // RemoveStaleRHSFromSplit removes all data for the RHS replica of a split. This
