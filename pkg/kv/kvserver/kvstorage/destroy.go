@@ -179,20 +179,28 @@ func DestroyReplica(
 // (and the corresponding system and lock table keys). The latter are inherited
 // by the subsuming range.
 //
+// The forceSortedKeys flag, if true, forces the writes to be generated in the
+// sorted order of keys. This is to support feeding the writes from this
+// function to SSTables, in the snapshot ingestion path.
+//
 // Returns SelectOpts which can be used to reflect on the key spans that this
 // function clears.
 // TODO(pav-kv): get rid of SelectOpts.
 func SubsumeReplica(
-	ctx context.Context, reader storage.Reader, writer storage.Writer, info DestroyReplicaInfo,
+	ctx context.Context,
+	reader storage.Reader,
+	writer storage.Writer,
+	info DestroyReplicaInfo,
+	forceSortedKeys bool,
 ) (rditer.SelectOpts, error) {
-	// NB: set MustUseClearRange to true because this call is used for generating
-	// SSTables when ingesting a snapshot, which requires Clears and Puts to be
-	// written in key order. DestroyReplica sets RangeTombstoneKey after clearing
-	// the unreplicated span which may contain higher keys.
+	// NB: if required, set MustUseClearRange to true. This call can be used for
+	// generating SSTables when ingesting a snapshot, which requires Clears and
+	// Puts to be written in key order. DestroyReplica sets RangeTombstoneKey
+	// after clearing the unreplicated span which may contain higher keys.
 	opts := ClearRangeDataOptions{
 		ClearReplicatedByRangeID:   true,
 		ClearUnreplicatedByRangeID: true,
-		MustUseClearRange:          true,
+		MustUseClearRange:          forceSortedKeys,
 	}
 	return rditer.SelectOpts{
 		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,

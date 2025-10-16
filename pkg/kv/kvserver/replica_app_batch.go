@@ -359,21 +359,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
-		// Use math.MaxInt32 (MergedTombstoneReplicaID) as the nextReplicaID as an
-		// extra safeguard against creating new replicas of the RHS. This isn't
-		// required for correctness, since the merge protocol should guarantee that
-		// no new replicas of the RHS can ever be created, but it doesn't hurt to
-		// be careful.
-		if err := kvstorage.DestroyReplica(
-			ctx, b.batch, b.batch,
-			rhsRepl.destroyInfoRaftMuLocked(),
-			kvstorage.MergedTombstoneReplicaID,
-			kvstorage.ClearRangeDataOptions{
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-			},
+		if _, err := kvstorage.SubsumeReplica(
+			ctx, b.batch, b.batch, rhsRepl.destroyInfoRaftMuLocked(), false, /* forceSortedKeys */
 		); err != nil {
-			return errors.Wrapf(err, "unable to destroy replica before merge")
+			return errors.Wrapf(err, "unable to subsume replica before merge")
 		}
 
 		// Shut down rangefeed processors on either side of the merge.
