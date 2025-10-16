@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -93,9 +94,9 @@ func TestPrepareSnapApply(t *testing.T) {
 		hardState:  raftpb.HardState{Term: 20, Commit: 100},
 		desc:       desc(id.RangeID, "a", "k"),
 		origDesc:   desc(id.RangeID, "a", "k"),
-		subsume: []destroyReplicaInfo{
-			{id: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, desc: descA},
-			{id: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, desc: descB},
+		subsume: []kvstorage.DestroyReplicaInfo{
+			{FullReplicaID: roachpb.FullReplicaID{RangeID: descA.RangeID, ReplicaID: replicaID}, Keys: descA.RSpan()},
+			{FullReplicaID: roachpb.FullReplicaID{RangeID: descB.RangeID, ReplicaID: replicaID}, Keys: descB.RSpan()},
 		},
 	}
 
