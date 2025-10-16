@@ -327,6 +327,9 @@ func changefeedPlanHook(
 			// perTablePTSRecords is the per-table protected timestamp records which exist when
 			// per-table protected timestamps are enabled.
 			var perTablePTSRecords []*ptpb.Record
+			// systemTablesPTSRecord is the system tables protected timestamp record which exists when
+			// per-table protected timestamps are enabled.
+			var systemTablesPTSRecord *ptpb.Record
 			// ptsRecords is the protected timestamp records object containing all per-table protected
 			// timestamp records. Its format matches what will be persisted to the job info table.
 			var ptsRecords *cdcprogresspb.ProtectedTimestampRecords
@@ -347,6 +350,7 @@ func changefeedPlanHook(
 						jobID,
 						ptsTargets,
 						details.StatementTime,
+						false, /* includeSystemTables */
 					)
 					perTablePTSRecords = append(perTablePTSRecords, ptsRecord)
 					uuid := ptsRecord.ID.GetUUID()
@@ -355,8 +359,15 @@ func changefeedPlanHook(
 				}); err != nil {
 					return err
 				}
+				systemTablesPTSRecord = createSystemTablesProtectedTimestampRecord(
+					ctx,
+					codec,
+					jobID,
+					details.StatementTime,
+				)
 				ptsRecords = &cdcprogresspb.ProtectedTimestampRecords{
-					PerTableRecords: protectedTimestampRecords,
+					PerTableRecords:    protectedTimestampRecords,
+					SystemTablesRecord: systemTablesPTSRecord.ID.GetUUID(),
 				}
 			} else {
 				ptr = createProtectedTimestampRecord(
@@ -365,6 +376,7 @@ func changefeedPlanHook(
 					jobID,
 					targets,
 					details.StatementTime,
+					true, /* includeSystemTables */
 				)
 				progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
 			}
@@ -380,11 +392,14 @@ func changefeedPlanHook(
 					}
 				}
 				if usingPerTablePTS {
+					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 					for _, perTableRecord := range perTablePTSRecords {
-						pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 						if err := pts.Protect(ctx, perTableRecord); err != nil {
 							return err
 						}
+					}
+					if err := pts.Protect(ctx, systemTablesPTSRecord); err != nil {
+						return err
 					}
 					if err := writeChangefeedJobInfo(
 						ctx, perTableProtectedTimestampsFilename, ptsRecords, p.InternalSQLTxn(), jobID,
@@ -427,6 +442,9 @@ func changefeedPlanHook(
 						if err := pts.Protect(ctx, perTableRecord); err != nil {
 							return err
 						}
+					}
+					if err := pts.Protect(ctx, systemTablesPTSRecord); err != nil {
+						return err
 					}
 					if err := writeChangefeedJobInfo(
 						ctx, perTableProtectedTimestampsFilename, ptsRecords, txn, jobID,
@@ -1973,13 +1991,13 @@ func (b *changefeedResumer) OnFailOrCancel(
 		); err != nil {
 			return err
 		}
-
-		if len(ptsEntries.PerTableRecords) == 0 {
+		if len(ptsEntries.PerTableRecords) == 0 && ptsEntries.SystemTablesRecord == uuid.Nil {
 			return nil
 		}
 		for _, record := range ptsEntries.PerTableRecords {
 			maybeCleanUpProtectedTimestamp(record)
 		}
+		maybeCleanUpProtectedTimestamp(ptsEntries.SystemTablesRecord)
 		return deleteChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, txn, b.job.ID())
 	}); err != nil {
 		return err

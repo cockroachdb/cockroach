@@ -19,4 +19,10 @@ message ProtectedTimestampRecords {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false
   ];
+  // SystemTablesRecord protects all system tables back to the highwater.
+  bytes system_tables_record = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "SystemTablesRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
 }

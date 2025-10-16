@@ -12103,6 +12103,9 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// TestChangefeedProtectedTimestampUpdate tests that a changefeed will update
+// its protected timestamp record when the high watermark advances and update
+// the related metrics.
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

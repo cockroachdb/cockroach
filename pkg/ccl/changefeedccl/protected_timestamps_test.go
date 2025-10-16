@@ -615,7 +615,7 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	waitForJobState(sqlDB, t, jobID, `running`)
 
 	// Lay protected timestamp record.
-	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts)
+	ptr := createProtectedTimestampRecord(ctx, s.Codec(), jobID, targets, ts, true /* includeSystemTables */)
 	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return execCfg.ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 	}))
@@ -1062,7 +1062,8 @@ WITH resolved='10ms', min_checkpoint_frequency='100ms', initial_scan='no'`
 				return err
 			}
 
-			require.Equal(t, 0, ptsEntries.Size())
+			require.Equal(t, 0, len(ptsEntries.PerTableRecords))
+			require.Equal(t, uuid.Nil, ptsEntries.SystemTablesRecord)
 			return nil
 		})
 
@@ -1140,6 +1141,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, progress.ProtectedTimestampRecord, uuid.UUID{})
 
+		systemTablesPTS := hlc.Timestamp{}
 		tablePTS := make(map[descpb.ID]hlc.Timestamp)
 		expectedTables := map[descpb.ID]struct{}{
 			table1ID: {},
@@ -1178,6 +1180,17 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 					require.NoError(t, err)
 					tablePTS[tableID] = ts
 				}
+
+				systemTablesPTSQry := fmt.Sprintf(
+					`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`,
+					ptsEntries.SystemTablesRecord,
+				)
+				var tsStr string
+				sqlDB.QueryRow(t, systemTablesPTSQry).Scan(&tsStr)
+				ts, err := hlc.ParseHLC(tsStr)
+				require.NoError(t, err)
+				systemTablesPTS = ts
+				require.NotEqual(t, systemTablesPTS, hlc.Timestamp{})
 				return nil
 			})
 		})
@@ -1207,6 +1220,17 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 							tableID, tablePTS[tableID], ts,
 						)
 					}
+				}
+
+				systemTablesPTSQry := fmt.Sprintf(
+					`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, ptsEntries.SystemTablesRecord,
+				)
+				var tsStr string
+				sqlDB.QueryRow(t, systemTablesPTSQry).Scan(&tsStr)
+				ts, err := hlc.ParseHLC(tsStr)
+				require.NoError(t, err)
+				if !ts.After(systemTablesPTS) {
+					return errors.Newf("expected system tables PTS to progress since %s, got %s", systemTablesPTS, ts)
 				}
 				return nil
 			})
