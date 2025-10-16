@@ -236,13 +236,13 @@ func RemoveStaleRHSFromSplit(
 	rangeID roachpb.RangeID,
 	keys roachpb.RSpan,
 ) error {
-	return clearRangeData(ctx, rangeID, reader, writer, clearRangeDataOptions{
+	for _, span := range rditer.Select(rangeID, rditer.SelectOpts{
 		// Since the RHS replica is uninitalized, we know there isn't anything in
-		// the two replicated spans below, before the current batch. Setting these
+		// the replicated spans below, before the current batch. Setting these
 		// options will in effect only clear the writes to the RHS replicated state
 		// staged in the batch.
-		clearReplicatedBySpan:    keys,
-		clearReplicatedByRangeID: true,
+		ReplicatedByRangeID: true,
+		Ranged:              rditer.SelectAllRanged(keys),
 		// TODO(tbg): we don't actually want to touch the raft state of the RHS
 		// replica since it's absent or a more recent one than in the split. Now
 		// that we have a bool targeting unreplicated RangeID-local keys, we can set
@@ -255,8 +255,15 @@ func RemoveStaleRHSFromSplit(
 		// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
 		//
 		// See also: https://github.com/cockroachdb/cockroach/issues/94933
-		clearUnreplicatedByRangeID: true,
-	})
+		UnreplicatedByRangeID: true,
+	}) {
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // TestingForceClearRange changes the value of ClearRangeThresholdPointKeys to
