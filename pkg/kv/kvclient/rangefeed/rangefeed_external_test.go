@@ -1886,6 +1886,7 @@ func TestRangeFeedMetadataAutoSplit(t *testing.T) {
 func TestRangefeedCatchupStarvation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "may oom with race detector")
 
 	testutils.RunValues(t, "feed_type", feedTypes, func(t *testing.T, rt rangefeedTestType) {
 		ctx := context.Background()
