@@ -26,7 +26,7 @@ type ExpectedScrubResult struct {
 
 // CheckScrubResult compares the results from running SCRUB with the expected
 // results and throws an error if they do not match.
-func CheckScrubResult(t *testing.T, ress []sqlutils.ScrubResult, exps []ExpectedScrubResult) {
+func CheckScrubResult(t *testing.T, ress []sqlutils.InspectResult, exps []ExpectedScrubResult) {
 	t.Helper()
 
 	for i := 0; i < len(exps); i++ {
@@ -71,7 +71,7 @@ func RunScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp []ExpectedScrubR
 	}
 	defer rows.Close()
 
-	results, err := sqlutils.GetScrubResultRows(rows)
+	results, err := sqlutils.GetInspectResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
