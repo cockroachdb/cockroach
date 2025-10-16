@@ -440,7 +440,6 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		b.r.shMu.destroyStatus.Set(
 			kvpb.NewRangeNotFoundError(b.r.RangeID, b.r.store.StoreID()),
 			destroyReasonRemoved)
-		span := b.r.descRLocked().RSpan()
 		b.r.mu.Unlock()
 		b.r.readOnlyCmdMu.Unlock()
 		b.changeRemovesReplica = true
@@ -450,14 +449,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
 		if err := kvstorage.DestroyReplica(
-			ctx, b.batch, b.batch,
-			b.r.destroyInfoRaftMuLocked(),
-			change.NextReplicaID(),
-			kvstorage.ClearRangeDataOptions{
-				ClearReplicatedBySpan:      span,
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-			},
+			ctx, b.batch, b.batch, b.r.destroyInfoRaftMuLocked(), change.NextReplicaID(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")
 		}

@@ -129,15 +129,24 @@ type DestroyReplicaInfo struct {
 	Keys roachpb.RSpan
 }
 
-// DestroyReplica destroys all or a part of the Replica's state, installing a
-// RangeTombstone in its place. Due to merges, splits, etc, there is a need to
-// control which part of the state this method actually gets to remove, which is
-// done via the provided options[^1]; the caller is always responsible for
-// managing the remaining disk state accordingly.
-//
-// [^1] e.g., on a merge, the user data moves to the subsuming replica and must
-// not be cleared.
+// DestroyReplica destroys the entirety of the replica's state in storage, and
+// installs a RangeTombstone in its place. It handles both uninitialized and
+// initialized replicas uniformly.
 func DestroyReplica(
+	ctx context.Context,
+	reader storage.Reader,
+	writer storage.Writer,
+	info DestroyReplicaInfo,
+	next roachpb.ReplicaID,
+) error {
+	return destroyReplicaImpl(ctx, reader, writer, info, next, ClearRangeDataOptions{
+		ClearReplicatedByRangeID:   true,
+		ClearUnreplicatedByRangeID: true,
+		ClearReplicatedBySpan:      info.Keys,
+	})
+}
+
+func destroyReplicaImpl(
 	ctx context.Context,
 	reader storage.Reader,
 	writer storage.Writer,
@@ -205,5 +214,5 @@ func SubsumeReplica(
 	return rditer.SelectOpts{
 		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-	}, DestroyReplica(ctx, reader, writer, info, MergedTombstoneReplicaID, opts)
+	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID, opts)
 }
