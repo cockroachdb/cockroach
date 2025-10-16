@@ -1428,6 +1428,36 @@ func getLatestPrimaryIndex(b BuildCtx, tableID catid.DescID) *scpb.PrimaryIndex 
 	}
 }
 
+// getNonDropResultColumns returns all public and adding columns, sorted by
+// column ID in ascending order, in the format of ResultColumns.
+func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.ResultColumns) {
+	for _, col := range getNonDropColumns(b, tableID) {
+		ret = append(ret, colinfo.ResultColumn{
+			Name:           mustRetrieveColumnNameElem(b, tableID, col.ColumnID).Name,
+			Typ:            mustRetrieveColumnTypeElem(b, tableID, col.ColumnID).Type,
+			Hidden:         col.IsHidden,
+			TableID:        tableID,
+			PGAttributeNum: uint32(col.PgAttributeNum),
+		})
+	}
+	return ret
+}
+
+// columnLookupFn can look up information of a column by name.
+func columnLookupFn(
+	b BuildCtx, tableID catid.DescID, columnName tree.Name,
+) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
+	if columnID == 0 {
+		return false, false, false, 0, nil
+	}
+
+	colElem := mustRetrieveColumnElem(b, tableID, columnID)
+	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
+	computeExpr := retrieveColumnComputeExpression(b, tableID, columnID)
+	return true, !colElem.IsInaccessible, computeExpr != nil, columnID, colTypeElem.Type
+}
+
 // addASwapInIndexByCloningFromSource adds a primary index `in` that is going
 // to swap out `out` yet `in`'s columns are cloned from `source`.
 //

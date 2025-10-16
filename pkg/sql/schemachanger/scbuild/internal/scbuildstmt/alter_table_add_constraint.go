@@ -662,37 +662,6 @@ func validateConstraintNameIsNotUsed(
 		"duplicate constraint name: %q", name)
 }
 
-// getNonDropResultColumns returns all public and adding columns, sorted by
-// column ID in ascending order, in the format of ResultColumns.
-func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.ResultColumns) {
-	for _, col := range getNonDropColumns(b, tableID) {
-		ret = append(ret, colinfo.ResultColumn{
-			Name:           mustRetrieveColumnNameElem(b, tableID, col.ColumnID).Name,
-			Typ:            mustRetrieveColumnTypeElem(b, tableID, col.ColumnID).Type,
-			Hidden:         col.IsHidden,
-			TableID:        tableID,
-			PGAttributeNum: uint32(col.PgAttributeNum),
-		})
-	}
-	return ret
-}
-
-// columnLookupFn can look up information of a column by name.
-// It should be exclusively used in DequalifyAndValidateExprImpl.
-func columnLookupFn(
-	b BuildCtx, tableID catid.DescID, columnName tree.Name,
-) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
-	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
-	if columnID == 0 {
-		return false, false, false, 0, nil
-	}
-
-	colElem := mustRetrieveColumnElem(b, tableID, columnID)
-	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
-	computeExpr := retrieveColumnComputeExpression(b, tableID, columnID)
-	return true, !colElem.IsInaccessible, computeExpr != nil, columnID, colTypeElem.Type
-}
-
 // generateUniqueCheckConstraintName generates a unique name for check constraint.
 // The default name is `check_` followed by all columns in the expression (e.g. `check_a_b_a`).
 // If that name is already in use, append a number (i.e. 1, 2, ...) to it until
