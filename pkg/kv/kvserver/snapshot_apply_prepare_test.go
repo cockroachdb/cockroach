@@ -85,10 +85,11 @@ func TestPrepareSnapApply(t *testing.T) {
 	}
 
 	swb := snapWriteBuilder{
-		id:       id,
-		todoEng:  eng,
-		sl:       sl,
-		writeSST: writeSST,
+		id:        id,
+		todoEng:   eng,
+		sl:        sl,
+		writeSST:  writeSST,
+		ingesting: true,
 
 		truncState: kvserverpb.RaftTruncatedState{Index: 100, Term: 20},
 		hardState:  raftpb.HardState{Term: 20, Commit: 100},
@@ -105,9 +106,6 @@ func TestPrepareSnapApply(t *testing.T) {
 
 	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
-	}
-	for _, span := range swb.cleared {
-		sb.Printf(">> cleared: %v\n", span)
 	}
 	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
 

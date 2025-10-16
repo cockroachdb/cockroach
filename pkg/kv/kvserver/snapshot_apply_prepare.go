@@ -25,9 +25,10 @@ import (
 type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
-	todoEng  storage.Engine
-	sl       stateloader.StateLoader
-	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
+	todoEng   storage.Engine
+	sl        stateloader.StateLoader
+	writeSST  func(context.Context, func(context.Context, storage.Writer) error) error
+	ingesting bool
 
 	truncState kvserverpb.RaftTruncatedState
 	hardState  raftpb.HardState
@@ -90,8 +91,6 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
-
-	s.cleared = append(s.cleared, roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd})
 	return nil
 }
 
@@ -150,20 +149,18 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			// NOTE: We set mustClearRange to true because we are setting
-			// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
-			// order of keys, it is not safe to use ClearRangeIter.
-			opts := kvstorage.ClearRangeDataOptions{
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-				MustUseClearRange:          true,
-			}
-			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, rditer.SelectOpts{
-				ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-				UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-			})...)
-			// NB: Actually clear RangeID local key spans.
-			return kvstorage.DestroyReplica(ctx, reader, w, sub, mergedTombstoneReplicaID, opts)
+			// NOTE: when ingesting, set MustUseClearRange to true because in this
+			// case Clears and Puts must be done in increasing order of keys.
+			// DestroyReplica sets the RangeTombstoneKey after clearing the
+			// unreplicated span.
+			return kvstorage.DestroyReplica(
+				ctx, reader, w, sub, mergedTombstoneReplicaID,
+				kvstorage.ClearRangeDataOptions{
+					ClearReplicatedByRangeID:   true,
+					ClearUnreplicatedByRangeID: true,
+					MustUseClearRange:          s.ingesting,
+				},
+			)
 		}); err != nil {
 			return err
 		}
