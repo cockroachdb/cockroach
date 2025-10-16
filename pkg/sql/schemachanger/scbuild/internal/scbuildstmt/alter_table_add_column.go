@@ -167,7 +167,15 @@ func alterTableAddColumn(
 		))
 	}
 	if desc.IsComputed() {
-		validExpr, _ := b.ComputedColumnExpression(tbl, d, tree.ComputedColumnExprContext(d.IsVirtual()))
+		validExpr, _ := b.ComputedColumnExpression(
+			tbl, d, tree.ComputedColumnExprContext(d.IsVirtual()),
+			func() colinfo.ResultColumns {
+				return getNonDropResultColumns(b, tbl.TableID)
+			},
+			func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+				return columnLookupFn(b, tbl.TableID, columnName)
+			},
+		)
 		expr := b.WrapExpression(tbl.TableID, validExpr)
 		if spec.colType.ElementCreationMetadata.In_24_3OrLater {
 			spec.compute = &scpb.ColumnComputeExpression{

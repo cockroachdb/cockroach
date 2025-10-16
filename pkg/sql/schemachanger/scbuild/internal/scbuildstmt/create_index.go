@@ -978,7 +978,15 @@ func maybeCreateVirtualColumnForIndex(
 	d.Nullable.Nullability = tree.Null
 	// Infer column type from expression.
 	{
-		_, columnType := b.ComputedColumnExpression(tbl, d, tree.ExpressionIndexElementExpr)
+		_, columnType := b.ComputedColumnExpression(
+			tbl, d, tree.ExpressionIndexElementExpr,
+			func() colinfo.ResultColumns {
+				return getNonDropResultColumns(b, tbl.TableID)
+			},
+			func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
+				return columnLookupFn(b, tbl.TableID, columnName)
+			},
+		)
 		d.Type = columnType
 		validateColumnIndexableType(columnType)
 	}
