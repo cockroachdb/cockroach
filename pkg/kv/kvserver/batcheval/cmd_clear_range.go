@@ -168,7 +168,7 @@ func ClearRange(
 // path of simply subtracting the non-system values is accurate.
 // Returns the delta stats.
 func computeStatsDelta(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, from, to roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats
@@ -189,7 +189,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled, compute stats
 	// across the key span to be cleared.
 	if !entireRange || util.RaceEnabled {
-		computed, err := storage.ComputeStats(ctx, readWriter, from, to, delta.LastUpdateNanos)
+		computed, err := storage.ComputeStats(ctx, reader, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
@@ -214,7 +214,7 @@ func computeStatsDelta(
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			rkIter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+			rkIter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:     storage.IterKeyTypeRangesOnly,
 				LowerBound:   leftPeekBound,
 				UpperBound:   rightPeekBound,

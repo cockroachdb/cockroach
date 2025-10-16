@@ -746,7 +746,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	ui uncertainty.Interval,
 	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
-	batch, opLogger := r.newBatchedEngine(ba, g)
+	batch, opLogger := r.newBatchedEngine(g)
 	now := timeutil.Now()
 	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
@@ -764,9 +764,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(
-	ba *kvpb.BatchRequest, g *concurrency.Guard,
-) (storage.Batch, *storage.OpLoggerBatch) {
+func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
 	batch := r.store.TODOEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
