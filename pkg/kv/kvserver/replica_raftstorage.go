@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/redact"
 )
 
@@ -308,8 +309,8 @@ type IncomingSnapshot struct {
 	placeholder      *ReplicaPlaceholder
 	raftAppliedIndex kvpb.RaftIndex      // logging only
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
-	sharedSSTs       []pebble.SharedSSTMeta
-	externalSSTs     []pebble.ExternalFile
+	sharedSSTs       []kvserverpb.SnapshotRequest_SharedTable
+	externalSSTs     []kvserverpb.SnapshotRequest_ExternalTable
 	// clearedSpans represents the key spans in the existing store that will be
 	// cleared by doing the Ingest*. This is tracked so that we can convert the
 	// ssts into a WriteBatch if the total size of the ssts is small.
@@ -641,7 +642,12 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	if applyAsIngest {
 		_ = applySnapshotTODO // all atomic
 		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+			ctx, inSnap.SSTStorageScratch.SSTs(),
+			convertSharedSSTs(inSnap.sharedSSTs),
+			convertExternalSSTs(inSnap.externalSSTs),
+			exciseSpan,
+		); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
@@ -841,4 +847,47 @@ func testingAssert(cond bool, msg string) {
 	if buildutil.CrdbTestBuild && !cond {
 		panic(msg)
 	}
+}
+
+func convertSharedSSTs(sharedSSTs []kvserverpb.SnapshotRequest_SharedTable) []pebble.SharedSSTMeta {
+	res := make([]pebble.SharedSSTMeta, len(sharedSSTs))
+	pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
+		return pebble.InternalKey{UserKey: k.UserKey, Trailer: pebble.InternalKeyTrailer(k.Trailer)}
+	}
+	for i, sst := range sharedSSTs {
+		res[i] = pebble.SharedSSTMeta{
+			Backing:          stubBackingHandle{sst.Backing},
+			Smallest:         pbToInternalKey(sst.Smallest),
+			Largest:          pbToInternalKey(sst.Largest),
+			SmallestRangeKey: pbToInternalKey(sst.SmallestRangeKey),
+			LargestRangeKey:  pbToInternalKey(sst.LargestRangeKey),
+			SmallestPointKey: pbToInternalKey(sst.SmallestPointKey),
+			LargestPointKey:  pbToInternalKey(sst.LargestPointKey),
+			Level:            uint8(sst.Level),
+			Size:             sst.Size_,
+		}
+	}
+	return res
+}
+
+func convertExternalSSTs(
+	externalSSTs []kvserverpb.SnapshotRequest_ExternalTable,
+) []pebble.ExternalFile {
+	res := make([]pebble.ExternalFile, len(externalSSTs))
+	for i, sst := range externalSSTs {
+		res[i] = pebble.ExternalFile{
+			Locator:           remote.Locator(sst.Locator),
+			ObjName:           sst.ObjectName,
+			StartKey:          sst.StartKey,
+			EndKey:            sst.EndKey,
+			EndKeyIsInclusive: sst.EndKeyIsInclusive,
+			HasPointKey:       sst.HasPointKey,
+			HasRangeKey:       sst.HasRangeKey,
+			SyntheticPrefix:   sst.SyntheticPrefix,
+			SyntheticSuffix:   sst.SyntheticSuffix,
+			Level:             uint8(sst.Level),
+			Size:              sst.Size_,
+		}
+	}
+	return res
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/redact"
 	"golang.org/x/time/rate"
@@ -130,8 +129,8 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	log.Event(ctx, "waiting for snapshot batches to begin")
 
-	var sharedSSTs []pebble.SharedSSTMeta
-	var externalSSTs []pebble.ExternalFile
+	var sharedSSTs []kvserverpb.SnapshotRequest_SharedTable
+	var externalSSTs []kvserverpb.SnapshotRequest_ExternalTable
 	var prevBytesEstimate int64
 
 	snapshotQ := s.cfg.KVAdmissionController.GetSnapshotQueue(s.StoreID())
@@ -203,39 +202,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			timingTag.stop("sst")
 		}
 
-		for i := range req.SharedTables {
-			sst := req.SharedTables[i]
-			pbToInternalKey := func(k *kvserverpb.SnapshotRequest_SharedTable_InternalKey) pebble.InternalKey {
-				return pebble.InternalKey{UserKey: k.UserKey, Trailer: pebble.InternalKeyTrailer(k.Trailer)}
-			}
-			sharedSSTs = append(sharedSSTs, pebble.SharedSSTMeta{
-				Backing:          stubBackingHandle{sst.Backing},
-				Smallest:         pbToInternalKey(sst.Smallest),
-				Largest:          pbToInternalKey(sst.Largest),
-				SmallestRangeKey: pbToInternalKey(sst.SmallestRangeKey),
-				LargestRangeKey:  pbToInternalKey(sst.LargestRangeKey),
-				SmallestPointKey: pbToInternalKey(sst.SmallestPointKey),
-				LargestPointKey:  pbToInternalKey(sst.LargestPointKey),
-				Level:            uint8(sst.Level),
-				Size:             sst.Size_,
-			})
-		}
-		for i := range req.ExternalTables {
-			sst := req.ExternalTables[i]
-			externalSSTs = append(externalSSTs, pebble.ExternalFile{
-				Locator:           remote.Locator(sst.Locator),
-				ObjName:           sst.ObjectName,
-				StartKey:          sst.StartKey,
-				EndKey:            sst.EndKey,
-				EndKeyIsInclusive: sst.EndKeyIsInclusive,
-				HasPointKey:       sst.HasPointKey,
-				HasRangeKey:       sst.HasRangeKey,
-				SyntheticPrefix:   sst.SyntheticPrefix,
-				SyntheticSuffix:   sst.SyntheticSuffix,
-				Level:             uint8(sst.Level),
-				Size:              sst.Size_,
-			})
-		}
+		sharedSSTs = append(sharedSSTs, req.SharedTables...)
+		externalSSTs = append(externalSSTs, req.ExternalTables...)
+
 		if req.Final {
 			// We finished receiving all batches and log entries. It's possible that
 			// we did not receive any key-value pairs for some of the key spans, but
@@ -257,7 +226,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 			log.Eventf(ctx, "all data received from snapshot and all SSTs were finalized")
 			var sharedSize int64
 			for i := range sharedSSTs {
-				sharedSize += int64(sharedSSTs[i].Size)
+				sharedSize += int64(sharedSSTs[i].Size_)
 			}
 
 			snapUUID, err := uuid.FromBytes(header.RaftMessageRequest.Message.Snapshot.Data)
