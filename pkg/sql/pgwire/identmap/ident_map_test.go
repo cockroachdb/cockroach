@@ -18,14 +18,14 @@ func TestIdentityMapElement(t *testing.T) {
 	exactMatch := func(sysName, dbname string) element {
 		return element{
 			dbUser:       dbname,
-			pattern:      regexp.MustCompile("^" + regexp.QuoteMeta(sysName) + "$"),
+			pattern:      regexp.MustCompile("(?i)^" + regexp.QuoteMeta(sysName) + "$"),
 			substituteAt: -1,
 		}
 	}
 	regexMatch := func(sysName, dbName string) element {
 		return element{
 			dbUser:       dbName,
-			pattern:      regexp.MustCompile(sysName),
+			pattern:      regexp.MustCompile("(?i)" + sysName),
 			substituteAt: strings.Index(dbName, `\1`),
 		}
 	}
@@ -64,6 +64,33 @@ func TestIdentityMapElement(t *testing.T) {
 			elt:       regexMatch("^(.*)@cockroachlabs.com$", `\1`),
 			principal: "carl@example.com",
 			expected:  "",
+		},
+		// Case-insensitive exact match tests.
+		{
+			elt:       exactMatch("CaRlItO", "carl"),
+			principal: "carlito",
+			expected:  "carl",
+		},
+		{
+			elt:       exactMatch("carlito", "carl"),
+			principal: "CARLITO",
+			expected:  "carl",
+		},
+		{
+			elt:       exactMatch("CaRlItO", "carl"),
+			principal: "CaRlItO",
+			expected:  "carl",
+		},
+		// Case-insensitive regex match tests.
+		{
+			elt:       regexMatch("^(.*)@CockroachLabs.com$", `\1`),
+			principal: "carl@cockroachlabs.com",
+			expected:  "carl",
+		},
+		{
+			elt:       regexMatch("^(.*)@cockroachlabs.com$", `\1`),
+			principal: "Carl@CockroachLabs.COM",
+			expected:  "Carl",
 		},
 	}
 
@@ -129,4 +156,102 @@ bar      carl@cockroachlabs.com       carl        # Duplicate behavior
 	a.True(mapFound)
 	_, mapFound, _ = m.Map("bar", "something")
 	a.True(mapFound)
+}
+
+func TestIdentityMapCaseInsensitive(t *testing.T) {
+	a := assert.New(t)
+	data := `
+# Test case-insensitive matching for both literal and regex patterns.
+# This is important because certificate CNs are normalized to lowercase
+# before being passed to the user map.
+certmap      AbC123DeF456                  cert_user
+certmap      /^([A-Z0-9]+)@example.com$   user_\1
+emailmap     /^(.*)@COMPANY.COM$           \1
+`
+
+	m, err := From(strings.NewReader(data))
+	if !a.NoError(err) {
+		return
+	}
+
+	// Test literal pattern matching is case-insensitive.
+	elts, _, err := m.Map("certmap", "abc123def456")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("cert_user", elts[0].Normalized())
+	}
+
+	// Test uppercase version also matches.
+	elts, _, err = m.Map("certmap", "ABC123DEF456")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("cert_user", elts[0].Normalized())
+	}
+
+	// Test mixed case also matches.
+	elts, _, err = m.Map("certmap", "AbC123dEf456")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("cert_user", elts[0].Normalized())
+	}
+
+	// Test regex pattern matching is case-insensitive with substitution.
+	elts, _, err = m.Map("certmap", "abc123@example.com")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("user_abc123", elts[0].Normalized())
+	}
+
+	// Test uppercase email also matches. Note that the captured group is lowercased
+	// during SQL username normalization.
+	elts, _, err = m.Map("certmap", "ABC123@EXAMPLE.COM")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("user_abc123", elts[0].Normalized())
+	}
+
+	// Test pattern with uppercase domain matches lowercase input.
+	elts, _, err = m.Map("emailmap", "john.doe@company.com")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("john.doe", elts[0].Normalized())
+	}
+
+	// Test pattern with uppercase domain matches uppercase input.
+	// The captured username is normalized to lowercase.
+	elts, _, err = m.Map("emailmap", "JANE.DOE@COMPANY.COM")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("jane.doe", elts[0].Normalized())
+	}
+}
+
+func TestIdentityMapCaseInsensitiveDeduplication(t *testing.T) {
+	a := assert.New(t)
+	data := `
+# Test that deduplication works correctly with case-insensitive usernames.
+# If multiple rules produce usernames that normalize to the same value,
+# only the first one should be returned.
+testmap      carl@cockroachlabs.com        carl
+testmap      /^(.*)@cockroachlabs.com$     \1
+`
+
+	m, err := From(strings.NewReader(data))
+	if !a.NoError(err) {
+		return
+	}
+
+	// When we pass in Carl@CockroachLabs.com (note the different casing):
+	// - First rule matches and produces: carl
+	// - Second rule matches and produces: Carl (which normalizes to carl)
+	// We should only get one result since they normalize to the same username.
+	elts, _, err := m.Map("testmap", "Carl@CockroachLabs.com")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("carl", elts[0].Normalized())
+	}
+
+	// Also test with lowercase input to verify both rules match but deduplicate.
+	elts, _, err = m.Map("testmap", "carl@cockroachlabs.com")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("carl", elts[0].Normalized())
+	}
+
+	// Test with a completely uppercase input.
+	elts, _, err = m.Map("testmap", "CARL@COCKROACHLABS.COM")
+	if a.NoError(err) && a.Len(elts, 1) {
+		a.Equal("carl", elts[0].Normalized())
+	}
 }
