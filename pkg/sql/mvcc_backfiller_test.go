@@ -291,7 +291,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 
 	const numNodes = 5
 	var chunkSize int64 = 100
-	var maxValue = 4000
+	maxValue := 4000
 	if util.RaceEnabled {
 		// Race builds are a lot slower, so use a smaller number of rows and a
 		// correspondingly smaller chunk size.
@@ -423,7 +423,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -493,7 +493,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	skip.UnderRace(t, "very slow")
 
 	var chunkSize int64 = 1000
-	var initialRows = 10000
+	initialRows := 10000
 	rowIdx := 0
 
 	params, _ := createTestServerParamsAllowTenants()
@@ -588,7 +588,6 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 						require.NoError(t, kvDB.Put(ctx, scratch, "foo"))
 						// This hits WriteTooOldError, but we swallow the error to test the txn failing after the entire txn closure has run.
 						_ = txn.Put(ctx, scratch, "bar")
-
 					})
 					return err
 				},
@@ -704,7 +703,8 @@ func splitIndex(
 
 		rkts[rightRange.RangeID] = rangeAndKT{
 			rightRange,
-			serverutils.KeyAndTargets{StartKey: rightRangeStartKey, Targets: []roachpb.ReplicationTarget{target}}}
+			serverutils.KeyAndTargets{StartKey: rightRangeStartKey, Targets: []roachpb.ReplicationTarget{target}},
+		}
 	}
 
 	var kts []serverutils.KeyAndTargets
@@ -864,7 +864,7 @@ func TestIndexOverwritesChunksDuringMerge(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	var mu syncutil.Mutex
-	var iteration = 0
+	iteration := 0
 	// Upserts rows in the table. If sampleData is false,
 	// then all rows are updated. Otherwise, 1 in 4 rows are
 	// updated.

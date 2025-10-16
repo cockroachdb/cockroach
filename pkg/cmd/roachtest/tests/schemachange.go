@@ -86,7 +86,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) e
 	}
 
 	// TODO(vivek): Fix #21544.
-	// if err := sqlutils.RunScrub(db, `test`, `kv`); err != nil {
+	// if err := sqlutils.RunInspect(db, `test`, `kv`); err != nil {
 	//   return err
 	// }
 
@@ -115,7 +115,7 @@ func waitForSchemaChanges(ctx context.Context, l *logger.Logger, db *gosql.DB) e
 	}
 
 	// TODO(vivek): Fix #21544.
-	// if err := sqlutils.RunScrub(db, `test`, `kv`); err != nil {
+	// if err := sqlutils.RunInspect(db, `test`, `kv`); err != nil {
 	//	return err
 	// }
 

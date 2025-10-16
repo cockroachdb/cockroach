@@ -97,7 +97,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	// so disable leases on tables.
 	defer lease.TestingDisableTableLeases()()
 
-	var instance = base.SQLInstanceID(2)
+	instance := base.SQLInstanceID(2)
 	stopper := stop.NewStopper()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	rf, err := rangefeed.NewFactory(stopper, kvDB, execCfg.Settings, nil /* knobs */)
@@ -320,7 +320,7 @@ CREATE INDEX foo ON t.test (v)
 		mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 	}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -425,7 +425,7 @@ SELECT count(*)
 	testutils.SucceedsSoon(t, func() error {
 		return sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, keyMultiple, maxValue+numInserts)
 	})
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -582,7 +582,7 @@ func TestRaceWithBackfill(t *testing.T) {
 
 	const numNodes = 5
 	var chunkSize int64 = 100
-	var maxValue = 4000
+	maxValue := 4000
 	if util.RaceEnabled {
 		// Race builds are a lot slower, so use a smaller number of rows and a
 		// correspondingly smaller chunk size.
@@ -667,7 +667,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
 			return err
 		}
-		if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 			return err
 		}
 		return nil
@@ -873,7 +873,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1190,7 +1190,7 @@ COMMIT;
 				return sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, testCase.expectedNumKeysPerRow, maxValue)
 			})
 
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -1298,7 +1298,6 @@ func dropColumnSchemaChange(
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
 	}
-
 }
 
 // Drop an index and check that it succeeds.
@@ -1810,7 +1809,7 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1856,7 +1855,6 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 	backfillNotification := make(chan struct{})
 	continueBackfillNotification := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
-
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
 				if backfillNotification != nil {
@@ -1912,7 +1910,7 @@ ALTER TABLE t.test ADD column v INT DEFAULT 0;
 	close(continueBackfillNotification)
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2127,7 +2125,6 @@ func TestOldRevertedDropIndexesAreIgnored(t *testing.T) {
 	r := sqlDB.QueryRow("SELECT DISTINCT(index_name) FROM [SHOW INDEXES FROM test.t] WHERE index_name = $1", "pretend_drop_revert")
 	var n string
 	require.EqualError(t, r.Scan(&n), "sql: no rows in result set")
-
 }
 
 // TestVisibilityDuringPrimaryKeyChange tests visibility of different indexes
@@ -2222,7 +2219,7 @@ func TestPrimaryKeyChangeWithPrecedingIndexCreation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var chunkSize int64 = 100
-	var maxValue = 4000
+	maxValue := 4000
 	if util.RaceEnabled {
 		// Race builds are a lot slower, so use a smaller number of rows.
 		maxValue = 200
@@ -2422,7 +2419,7 @@ func TestPrimaryKeyChangeWithOperations(t *testing.T) {
 	ctx := context.Background()
 
 	var chunkSize int64 = 100
-	var maxValue = 4000
+	maxValue := 4000
 	if util.RaceEnabled {
 		// Race builds are a lot slower, so use a smaller number of rows.
 		maxValue = 200
@@ -2866,7 +2863,6 @@ CREATE TABLE t.test (
 	}
 
 	expected = []string{
-
 		fmt.Sprintf("Del (locking) %s/1/1/2/1", tablePrefixStr),
 		fmt.Sprintf("Put (locking) %s/1/1/3/1 -> /INT/5", tablePrefixStr),
 		fmt.Sprintf("Del (locking) %s/1/1/4/1", tablePrefixStr),
@@ -2926,7 +2922,7 @@ func TestPrimaryKeyChangeWithCancel(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var chunkSize int64 = 100
-	var maxValue = 4000
+	maxValue := 4000
 	if util.RaceEnabled {
 		// Race builds are a lot slower, so use a smaller number of rows.
 		maxValue = 200
@@ -3418,7 +3414,7 @@ ALTER TABLE t.test ADD z INT8 AS (k + id) STORED;`); err != nil {
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 	// Check data!
@@ -3551,7 +3547,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -3592,7 +3588,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 			name:        `createtable-insert`,
 			firstStmt:   `CREATE TABLE t.origin (k CHAR PRIMARY KEY, v CHAR);`,
 			secondStmt:  `INSERT INTO t.origin VALUES ('c', 'd')`,
-			expectedErr: ``},
+			expectedErr: ``,
+		},
 		// Support multiple schema changes for ORMs: #15269
 		// Support insert into another table after schema changes: #15297
 		{
@@ -3661,7 +3658,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 					t.Fatal(err)
 				}
 
-				if err := sqlutils.RunScrub(sqlDB, "t", "kv"); err != nil {
+				if err := sqlutils.RunInspect(sqlDB, "t", "kv"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -3777,7 +3774,7 @@ CREATE TABLE d.t (
 				t.Errorf("expected one row but read %d", count)
 			}
 
-			if err := sqlutils.RunScrub(sqlDB, "d", "t"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "d", "t"); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -3839,7 +3836,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	for _, testCase := range testCases {
 		t.Run(testCase.sql, func(t *testing.T) {
-
 			if _, err := sqlDB.Exec(testCase.sql); err != nil {
 				t.Fatal(err)
 			}
@@ -3860,7 +3856,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			if count != 1 {
 				t.Fatalf("read the wrong number of rows: e = %d, v = %d", 1, count)
 			}
-
 		})
 	}
 }
@@ -3898,7 +3893,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3994,7 +3989,7 @@ func TestTruncateCompletion(t *testing.T) {
 			if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 				t.Fatal(err)
 			}
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -4031,7 +4026,7 @@ func TestTruncateCompletion(t *testing.T) {
 			row.Scan(&count)
 			require.Equal(t, maxValue+1, count)
 
-			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+			if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
 			}
 
@@ -4220,7 +4215,6 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		if got[0] != "true" {
 			t.Fatalf("expected write-ts < gc time (%d). details: %s", gcAt.WallTime, got[1])
 		}
-
 	})
 }
 
@@ -4322,7 +4316,7 @@ SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20s'
 
 	// A large enough value that the backfills run as part of the
 	// schema change run in many chunks.
-	var maxValue = 4001
+	maxValue := 4001
 	if util.RaceEnabled || syncutil.DeadlockEnabled {
 		// Race and deadlock builds are a lot slower, so use a smaller number of rows.
 		maxValue = 200
@@ -4379,7 +4373,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 		t.Fatal(err)
 	}
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -4503,14 +4497,22 @@ func TestCancelSchemaChange(t *testing.T) {
 		// Set to true if the rollback returns in a running, waiting status.
 		isGC bool
 	}{
-		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.4 CREATE FAMILY f2, ADD CHECK (x >= 0)`,
-			true, false},
-		{`CREATE INDEX foo ON t.public.test (v)`,
-			true, true},
-		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.2 CREATE FAMILY f3, ADD CHECK (x >= 0)`,
-			false, false},
-		{`CREATE INDEX foo ON t.public.test (v)`,
-			false, true},
+		{
+			`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.4 CREATE FAMILY f2, ADD CHECK (x >= 0)`,
+			true, false,
+		},
+		{
+			`CREATE INDEX foo ON t.public.test (v)`,
+			true, true,
+		},
+		{
+			`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.2 CREATE FAMILY f3, ADD CHECK (x >= 0)`,
+			false, false,
+		},
+		{
+			`CREATE INDEX foo ON t.public.test (v)`,
+			false, true,
+		},
 	}
 
 	idx := 0
@@ -5166,10 +5168,10 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "child"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "child"); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "parent"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "parent"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5248,7 +5250,7 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "tab"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "tab"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5345,7 +5347,7 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5442,7 +5444,7 @@ SET use_declarative_schema_changer = off;
 
 	wg.Wait()
 
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -5456,7 +5458,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 	var readyToBackfill, canStartBackfill, backfillProgressing chan struct{}
 
 	const numNodes = 1
-	var maxValue = 2000
+	maxValue := 2000
 
 	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs = base.TestingKnobs{
@@ -6551,7 +6553,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 	})
 
 	t.Run("canceling not allowed", func(t *testing.T) {
-		var state = struct {
+		state := struct {
 			mu    syncutil.Mutex
 			jobID jobspb.JobID
 			// Closed in the RunBeforeResume testing knob.
@@ -6703,8 +6705,10 @@ SET use_declarative_schema_changer = off;
 	// fully validate.
 	t.Run("drop-column-and-check-constraint", func(t *testing.T) {
 		jobControlMu.Lock()
-		delayJobList = []string{"ALTER TABLE defaultdb.public.t ADD CHECK (i > 0)",
-			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
+		delayJobList = []string{
+			"ALTER TABLE defaultdb.public.t ADD CHECK (i > 0)",
+			"ALTER TABLE defaultdb.public.t DROP COLUMN j",
+		}
 		delayJobChannels = []chan struct{}{make(chan struct{}), make(chan struct{})}
 		jobControlMu.Unlock()
 
@@ -6742,7 +6746,6 @@ COMMIT;
 			require.NoError(t, <-routineResults)
 		}
 	})
-
 }
 
 // Ensures that errors coming from hlc due to clocks being out of sync are not
@@ -7126,7 +7129,6 @@ ALTER TABLE t.test SET (ttl_expire_after = '10 hours');
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-
 			knobs := &sql.SchemaChangerTestingKnobs{}
 
 			params, _ := createTestServerParamsAllowTenants()
@@ -7418,7 +7420,6 @@ INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
 			pauseAt := rnd.Intn(txnCount) + 1
 			t.Run(fmt.Sprintf("%s_pause_at_txn_%d", tc.name, pauseAt), func(t *testing.T) {
 				runWithPauseAt(t, tc, pauseAt)
-
 			})
 		}
 	}
