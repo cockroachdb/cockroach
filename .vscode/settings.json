@@ -1,0 +1,19 @@
+{
+    "[go]": {
+        "editor.rulers": [
+            80,
+            100,
+        ],
+    },
+    "[git-commit]": {
+        "editor.rulers": [
+            72,
+            100,
+        ],
+        "editor.wordWrap": "off",
+    },
+    "go.lintTool":"golangci-lint",
+    "go.lintFlags": [
+        "--fast"
+    ],
+}
