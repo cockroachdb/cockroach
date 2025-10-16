@@ -88,23 +88,10 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	ms := r.GetMVCCStats()
 	batch := r.store.TODOEngine().NewWriteBatch()
 	defer batch.Close()
-	desc := r.Desc()
-	inited := desc.IsInitialized()
 
-	opts := kvstorage.ClearRangeDataOptions{
-		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
-		// TODO(tbg): if it's uninitialized, we might as well clear
-		// the replicated state because there isn't any. This seems
-		// like it would be simpler, but needs a code audit to ensure
-		// callers don't call this in in-between states where the above
-		// assumption doesn't hold.
-		ClearReplicatedByRangeID:   inited,
-		ClearUnreplicatedByRangeID: true,
-	}
 	// TODO(sep-raft-log): need both engines separately here.
 	if err := kvstorage.DestroyReplica(
-		ctx, r.store.TODOEngine(), batch,
-		r.destroyInfoRaftMuLocked(), nextReplicaID, opts,
+		ctx, r.store.TODOEngine(), batch, r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		return err
 	}
