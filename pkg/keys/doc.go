@@ -192,6 +192,16 @@ var schema = [...]interface{}{
 	//   pertain to just one replica of a range. They are unreplicated and
 	//   unaddressable. The typical example is the Raft log. They all share
 	//   `LocalRangeIDPrefix` and `localRangeIDUnreplicatedInfix`.
+	//
+	// WARNING: when adding a new key in this section, decide whether it should be
+	// classified as "raft" or "state machine" key, correspondingly to which
+	// engine it resides in:
+	//
+	//	- keys <= RangeTombstoneKey in this prefix are "state machine" engine keys
+	//	- keys > RangeTombstoneKey in this prefix are "raft" engine keys
+	//	- historical exception: RaftReplicaIDKey belongs to the state machine
+	//
+	// Failure to classify may result in replica state corruption in storage.
 	localRangeIDUnreplicatedInfix,  // "u"
 	RangeTombstoneKey,              // "rftb"
 	RaftHardStateKey,               // "rfth"
