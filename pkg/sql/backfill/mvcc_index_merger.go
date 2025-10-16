@@ -534,28 +534,32 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 		return nil, 0, 0, 0, err
 	}
 
-	// We acquire the bound account lock for the entirety of the merge batch
-	// construction so that we don't have to acquire the lock every time we want
-	// to grow the account.
 	var memUsedInMerge int64
-	ibm.muBoundAccount.Lock()
-	defer ibm.muBoundAccount.Unlock()
-	for i := range rb.Results {
-		// Since the source index is delete-preserving, reading the latest value for
-		// a key that has existed in the past should always return a value.
-		if rb.Results[i].Rows[0].Value == nil {
-			return nil, 0, 0, 0, errors.AssertionFailedf("expected value to be present in temp index for key=%s", rb.Results[i].Rows[0].Key)
+	err := func() error {
+		ibm.muBoundAccount.Lock()
+		defer ibm.muBoundAccount.Unlock()
+		for i := range rb.Results {
+			// Since the source index is delete-preserving, reading the latest value for
+			// a key that has existed in the past should always return a value.
+			if rb.Results[i].Rows[0].Value == nil {
+				return errors.AssertionFailedf("expected value to be present in temp index for key=%s", rb.Results[i].Rows[0].Key)
+			}
+			rowMem := int64(len(rb.Results[i].Rows[0].Key)) + int64(len(rb.Results[i].Rows[0].Value.RawBytes))
+			if err := ibm.muBoundAccount.boundAccount.Grow(ctx, rowMem); err != nil {
+				return errors.Wrap(err, "failed to allocate space to read latest keys from temp index")
+			}
+			memUsedInMerge += rowMem
 		}
-		rowMem := int64(len(rb.Results[i].Rows[0].Key)) + int64(len(rb.Results[i].Rows[0].Value.RawBytes))
-		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, rowMem); err != nil {
-			return nil, 0, 0, 0, errors.Wrap(err, "failed to allocate space to read latest keys from temp index")
-		}
-		memUsedInMerge += rowMem
+		return nil
+	}()
+	if err != nil {
+		return nil, 0, 0, 0, err
 	}
 
 	prefixLen := len(sourcePrefix)
 	destKey := make([]byte, len(destPrefix))
 	var deletedCount int
+	var totalEntryBytes int64
 	wb := txn.NewBatch()
 	resultOffset := 0
 	for sourceOffset := range sourceKeys {
@@ -587,11 +591,7 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 			continue
 		}
 
-		entryBytes := mergedEntryBytes(mergedEntry, deleted)
-		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, entryBytes); err != nil {
-			return nil, 0, 0, 0, errors.Wrap(err, "failed to allocate space to merge entry from temp index")
-		}
-		memUsedInMerge += entryBytes
+		totalEntryBytes += mergedEntryBytes(mergedEntry, deleted)
 		if deleted {
 			deletedCount++
 			wb.Del(mergedEntry.Key)
@@ -599,6 +599,18 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 			wb.Put(mergedEntry.Key, mergedEntry.Value)
 		}
 	}
+	err = func() error {
+		ibm.muBoundAccount.Lock()
+		defer ibm.muBoundAccount.Unlock()
+		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, totalEntryBytes); err != nil {
+			return errors.Wrap(err, "failed to allocate space to merge entry from temp index")
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, 0, 0, 0, err
+	}
+	memUsedInMerge += totalEntryBytes
 
 	return wb, memUsedInMerge, deletedCount, keysToSkip, nil
 }
