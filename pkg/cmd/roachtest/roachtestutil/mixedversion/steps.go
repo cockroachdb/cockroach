@@ -779,9 +779,12 @@ func quoteVersionForPresentation(v string) string {
 // we should change the default and add an API for tests to opt-out of
 // the default scheduled backup if necessary.
 func startOpts(opts ...option.StartStopOption) option.StartOpts {
-	return option.NewStartOpts(
+	startOpts := option.NewStartOpts(
 		startStopOpts(opts...)...,
 	)
+	// Enable verbose logging for auto_upgrade to help debug upgrade-related issues.
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=auto_upgrade=2")
+	return startOpts
 }
 
 // startStopOpts does the same as `startOpts` but returns StartStopOptions
