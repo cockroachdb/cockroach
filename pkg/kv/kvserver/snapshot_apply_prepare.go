@@ -150,20 +150,9 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			// NOTE: We set mustClearRange to true because we are setting
-			// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
-			// order of keys, it is not safe to use ClearRangeIter.
-			opts := kvstorage.ClearRangeDataOptions{
-				ClearReplicatedByRangeID:   true,
-				ClearUnreplicatedByRangeID: true,
-				MustUseClearRange:          true,
-			}
-			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, rditer.SelectOpts{
-				ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-				UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-			})...)
-			// NB: Actually clear RangeID local key spans.
-			return kvstorage.DestroyReplica(ctx, reader, w, sub, mergedTombstoneReplicaID, opts)
+			opts, err := kvstorage.SubsumeReplica(ctx, reader, w, sub, true /* forceSortedKeys */)
+			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, opts)...)
+			return err
 		}); err != nil {
 			return err
 		}

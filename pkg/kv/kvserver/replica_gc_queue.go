@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -348,11 +349,11 @@ func (rgcq *replicaGCQueue) process(
 			}
 		}
 
-		// A tombstone is written with a value of mergedTombstoneReplicaID because
+		// A tombstone is written with a value of MergedTombstoneReplicaID because
 		// we know the range to have been merged. See the Merge case of
 		// runPreApplyTriggers() for details.
 		if err := repl.store.RemoveReplica(
-			ctx, repl, mergedTombstoneReplicaID, "dangling subsume via replica GC queue",
+			ctx, repl, kvstorage.MergedTombstoneReplicaID, "dangling subsume via replica GC queue",
 		); err != nil {
 			return false, err
 		}

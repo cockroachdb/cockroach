@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -56,14 +55,6 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
-// mergedTombstoneReplicaID is the replica ID written into the tombstone
-// for replicas which are part of a range which is known to have been merged.
-// This value should prevent any messages from stale replicas of that range from
-// ever resurrecting merged replicas. Whenever merging or subsuming a replica we
-// know new replicas can never be created so this value is used even if we
-// don't know the current replica ID.
-const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
-
 // postDestroyRaftMuLocked is called after the replica destruction is durably
 // written to Pebble.
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) error {
@@ -97,23 +88,10 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	ms := r.GetMVCCStats()
 	batch := r.store.TODOEngine().NewWriteBatch()
 	defer batch.Close()
-	desc := r.Desc()
-	inited := desc.IsInitialized()
 
-	opts := kvstorage.ClearRangeDataOptions{
-		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
-		// TODO(tbg): if it's uninitialized, we might as well clear
-		// the replicated state because there isn't any. This seems
-		// like it would be simpler, but needs a code audit to ensure
-		// callers don't call this in in-between states where the above
-		// assumption doesn't hold.
-		ClearReplicatedByRangeID:   inited,
-		ClearUnreplicatedByRangeID: true,
-	}
 	// TODO(sep-raft-log): need both engines separately here.
 	if err := kvstorage.DestroyReplica(
-		ctx, r.store.TODOEngine(), batch,
-		r.destroyInfoRaftMuLocked(), nextReplicaID, opts,
+		ctx, r.store.TODOEngine(), batch, r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		return err
 	}

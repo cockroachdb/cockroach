@@ -98,28 +98,9 @@ func splitPreApply(
 		// racing replica creation for a higher ReplicaID, and it can subsequently
 		// update its HardState. Here, we can accidentally clear the HardState of
 		// that new replica.
-		if err := kvstorage.ClearRangeData(ctx, split.RightDesc.RangeID, readWriter, readWriter, kvstorage.ClearRangeDataOptions{
-			// We know there isn't anything in these two replicated spans below in the
-			// right-hand side (before the current batch), so setting these options
-			// will in effect only clear the writes to the RHS replicated state we have
-			// staged in this batch, which is what we're after.
-			ClearReplicatedBySpan:    split.RightDesc.RSpan(),
-			ClearReplicatedByRangeID: true,
-			// See the HardState write-back dance above and below.
-			//
-			// TODO(tbg): we don't actually want to touch the raft state of the RHS
-			// replica since it's absent or a more recent one than in the split. Now
-			// that we have a bool targeting unreplicated RangeID-local keys, we can
-			// set it to false and remove the HardState+ReplicaID write-back. However,
-			// there can be historical split proposals with the RaftTruncatedState key
-			// set in splitTriggerHelper[^1]. We must first make sure that such
-			// proposals no longer exist, e.g. with a below-raft migration.
-			//
-			// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
-			//
-			// See also: https://github.com/cockroachdb/cockroach/issues/94933
-			ClearUnreplicatedByRangeID: true,
-		}); err != nil {
+		if err := kvstorage.RemoveStaleRHSFromSplit(
+			ctx, readWriter, readWriter, split.RightDesc.RangeID, split.RightDesc.RSpan(),
+		); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
