@@ -40,53 +40,53 @@ const (
 	MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 )
 
-// ClearRangeDataOptions specify which parts of a Replica are to be destroyed.
-type ClearRangeDataOptions struct {
-	// ClearReplicatedByRangeID indicates that replicated RangeID-based keys
+// clearRangeDataOptions specify which parts of a Replica are to be destroyed.
+type clearRangeDataOptions struct {
+	// clearReplicatedByRangeID indicates that replicated RangeID-based keys
 	// (abort span, etc) should be removed.
-	ClearReplicatedByRangeID bool
-	// ClearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
+	clearReplicatedByRangeID bool
+	// clearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
 	// (logstore state incl. HardState, etc) should be removed.
-	ClearUnreplicatedByRangeID bool
-	// ClearReplicatedBySpan causes the state machine data (i.e. the replicated state
+	clearUnreplicatedByRangeID bool
+	// clearReplicatedBySpan causes the state machine data (i.e. the replicated state
 	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
 	// locks) to be removed. No data is removed if this is the zero span.
-	ClearReplicatedBySpan roachpb.RSpan
+	clearReplicatedBySpan roachpb.RSpan
 
-	// If MustUseClearRange is true, a Pebble range tombstone will always be used
+	// If mustUseClearRange is true, a Pebble range tombstone will always be used
 	// to clear the key spans (unless empty). This is typically used when we need
 	// to write additional keys to an SST after this clear, e.g. a replica
 	// tombstone, since keys must be written in order. When this is false, a
 	// heuristic will be used instead.
-	MustUseClearRange bool
+	mustUseClearRange bool
 }
 
-// ClearRangeData clears the data associated with a range descriptor selected
+// clearRangeData clears the data associated with a range descriptor selected
 // by the provided options.
 //
 // TODO(tbg): could rename this to XReplica. The use of "Range" in both the
 // "CRDB Range" and "storage.ClearRange" context in the setting of this method could
 // be confusing.
-func ClearRangeData(
+func clearRangeData(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	reader storage.Reader,
 	writer storage.Writer,
-	opts ClearRangeDataOptions,
+	opts clearRangeDataOptions,
 ) error {
 	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
-			RSpan:      opts.ClearReplicatedBySpan,
+			RSpan:      opts.clearReplicatedBySpan,
 			SystemKeys: true,
 			LockTable:  true,
 			UserKeys:   true,
 		},
-		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
+		ReplicatedByRangeID:   opts.clearReplicatedByRangeID,
+		UnreplicatedByRangeID: opts.clearUnreplicatedByRangeID,
 	})
 
 	pointKeyThreshold := ClearRangeThresholdPointKeys
-	if opts.MustUseClearRange {
+	if opts.mustUseClearRange {
 		pointKeyThreshold = 1
 	}
 
@@ -139,10 +139,10 @@ func DestroyReplica(
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
 ) error {
-	return destroyReplicaImpl(ctx, reader, writer, info, next, ClearRangeDataOptions{
-		ClearReplicatedByRangeID:   true,
-		ClearUnreplicatedByRangeID: true,
-		ClearReplicatedBySpan:      info.Keys,
+	return destroyReplicaImpl(ctx, reader, writer, info, next, clearRangeDataOptions{
+		clearReplicatedByRangeID:   true,
+		clearUnreplicatedByRangeID: true,
+		clearReplicatedBySpan:      info.Keys,
 	})
 }
 
@@ -152,7 +152,7 @@ func destroyReplicaImpl(
 	writer storage.Writer,
 	info DestroyReplicaInfo,
 	next roachpb.ReplicaID,
-	opts ClearRangeDataOptions,
+	opts clearRangeDataOptions,
 ) error {
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
@@ -174,7 +174,7 @@ func destroyReplicaImpl(
 	}
 
 	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	if err := ClearRangeData(ctx, info.RangeID, reader, writer, opts); err != nil {
+	if err := clearRangeData(ctx, info.RangeID, reader, writer, opts); err != nil {
 		return err
 	}
 	// Save a tombstone to ensure that replica IDs never get reused.
@@ -206,14 +206,14 @@ func SubsumeReplica(
 	// generating SSTables when ingesting a snapshot, which requires Clears and
 	// Puts to be written in key order. DestroyReplica sets RangeTombstoneKey
 	// after clearing the unreplicated span which may contain higher keys.
-	opts := ClearRangeDataOptions{
-		ClearReplicatedByRangeID:   true,
-		ClearUnreplicatedByRangeID: true,
-		MustUseClearRange:          forceSortedKeys,
+	opts := clearRangeDataOptions{
+		clearReplicatedByRangeID:   true,
+		clearUnreplicatedByRangeID: true,
+		mustUseClearRange:          forceSortedKeys,
 	}
 	return rditer.SelectOpts{
-		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
+		ReplicatedByRangeID:   opts.clearReplicatedByRangeID,
+		UnreplicatedByRangeID: opts.clearUnreplicatedByRangeID,
 	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID, opts)
 }
 
@@ -231,13 +231,13 @@ func RemoveStaleRHSFromSplit(
 	rangeID roachpb.RangeID,
 	keys roachpb.RSpan,
 ) error {
-	return ClearRangeData(ctx, rangeID, reader, writer, ClearRangeDataOptions{
+	return clearRangeData(ctx, rangeID, reader, writer, clearRangeDataOptions{
 		// Since the RHS replica is uninitalized, we know there isn't anything in
 		// the two replicated spans below, before the current batch. Setting these
 		// options will in effect only clear the writes to the RHS replicated state
 		// staged in the batch.
-		ClearReplicatedBySpan:    keys,
-		ClearReplicatedByRangeID: true,
+		clearReplicatedBySpan:    keys,
+		clearReplicatedByRangeID: true,
 		// TODO(tbg): we don't actually want to touch the raft state of the RHS
 		// replica since it's absent or a more recent one than in the split. Now
 		// that we have a bool targeting unreplicated RangeID-local keys, we can set
@@ -250,6 +250,6 @@ func RemoveStaleRHSFromSplit(
 		// [^1]: https://github.com/cockroachdb/cockroach/blob/f263a765d750e41f2701da0a923a6e92d09159fa/pkg/kv/kvserver/batcheval/cmd_end_transaction.go#L1109-L1149
 		//
 		// See also: https://github.com/cockroachdb/cockroach/issues/94933
-		ClearUnreplicatedByRangeID: true,
+		clearUnreplicatedByRangeID: true,
 	})
 }
