@@ -31,9 +31,6 @@ import (
 // triggered by statements that run in implicit transactions. It verifies that the job
 // starts correctly, that errors or timeouts propagate to the user, and that
 // client-visible semantics (like statement timeout or job failure) behave as expected.
-//
-// Note: This test currently uses SCRUB to trigger a job, but is not testing SCRUB
-// itself. The goal is to verify general execution semantics for async job statements.
 func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -71,7 +68,7 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 
 	runner.Exec(t, `
 		CREATE DATABASE db;
-		SET enable_scrub_job = true;
+		SET enable_inspect_command = true;
 		CREATE TABLE db.t (
 			id INT PRIMARY KEY,
 			val INT
@@ -115,7 +112,7 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 					onInspectErrorToReturn.Store(&tc.onStartError)
 					defer func() { onInspectErrorToReturn.Store(nil) }()
 				}
-				_, err := db.Exec("EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1us'")
+				_, err := db.Exec("INSPECT TABLE db.t AS OF SYSTEM TIME '-1us'")
 				pauseJobStart.Store(false)
 				if tc.expectedErrRegex != "" {
 					require.Error(t, err)
@@ -202,7 +199,7 @@ func TestInspectJobProtectedTimestamp(t *testing.T) {
 			runner := sqlutils.MakeSQLRunner(db)
 			runner.Exec(t, `
 				CREATE DATABASE db;
-				SET enable_scrub_job = true;
+				SET enable_inspect_command = true;
 				CREATE TABLE db.t (
 					id INT PRIMARY KEY,
 					val INT
@@ -216,7 +213,7 @@ func TestInspectJobProtectedTimestamp(t *testing.T) {
 			// Start INSPECT job with AS OF timestamp in a goroutine
 			errCh := make(chan error, 1)
 			go func() {
-				_, err := db.Exec("EXPERIMENTAL SCRUB TABLE db.t AS OF SYSTEM TIME '-1us'")
+				_, err := db.Exec("INSPECT TABLE db.t AS OF SYSTEM TIME '-1us'")
 				errCh <- err
 			}()
 
@@ -368,12 +365,11 @@ func TestInspectProgressWithMultiRangeTable(t *testing.T) {
 	})
 
 	// Start the INSPECT job.
-	// TODO(148365): Run INSPECT instead of SCRUB.
 	t.Logf("Starting INSPECT job on table with %d ranges distributed across %d nodes", rangeCount, nodeCount)
 	_, err := db.Exec(`
-		SET enable_scrub_job = true;
+		SET enable_inspect_command = true;
 		COMMIT;
-		EXPERIMENTAL SCRUB TABLE multi_range_table`)
+		INSPECT TABLE multi_range_table`)
 	require.NoError(t, err)
 
 	var jobID int64

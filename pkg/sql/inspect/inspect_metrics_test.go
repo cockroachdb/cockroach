@@ -35,7 +35,7 @@ func TestInspectMetrics(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, `
 		CREATE DATABASE db;
-		SET enable_scrub_job = true;
+		SET enable_inspect_command = true;
 		CREATE TABLE db.t (
 			id INT PRIMARY KEY,
 			val INT
@@ -52,7 +52,7 @@ func TestInspectMetrics(t *testing.T) {
 	initialIssuesFound := metrics.IssuesFound.Count()
 
 	// First run: no corruption, should succeed without issues
-	runner.Exec(t, "EXPERIMENTAL SCRUB TABLE db.t")
+	runner.Exec(t, "INSPECT TABLE db.t")
 	require.Equal(t, initialRuns+1, metrics.Runs.Count(), "Runs counter should increment")
 	require.Equal(t, initialRunsWithIssues, metrics.RunsWithIssues.Count(), "RunsWithIssues should not increment")
 	require.Equal(t, initialIssuesFound, metrics.IssuesFound.Count(), "IssuesFound should not increment")
@@ -72,7 +72,7 @@ func TestInspectMetrics(t *testing.T) {
 	require.NoError(t, err)
 
 	// Second run: with corruption, should detect the missing index entry.
-	_, err = db.Exec("EXPERIMENTAL SCRUB TABLE db.t")
+	_, err = db.Exec("INSPECT TABLE db.t")
 	require.Error(t, err, "INSPECT should fail when corruption is detected")
 	require.Contains(t, err.Error(), "INSPECT found inconsistencies")
 	require.Equal(t, initialRuns+2, metrics.Runs.Count(),
@@ -91,7 +91,7 @@ func TestInspectMetrics(t *testing.T) {
 		CREATE INDEX i2 on db.t2 (val);
 		INSERT INTO db.t2 VALUES (1, 2), (2, 3);
 	`)
-	runner.Exec(t, "EXPERIMENTAL SCRUB TABLE db.t2")
+	runner.Exec(t, "INSPECT TABLE db.t2")
 	require.Equal(t, initialRuns+3, metrics.Runs.Count(),
 		"Runs counter should increment for third job execution")
 	require.Equal(t, initialRunsWithIssues+1, metrics.RunsWithIssues.Count(),
