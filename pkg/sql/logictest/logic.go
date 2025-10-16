@@ -1119,6 +1119,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe *bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1506,6 +1510,9 @@ func (t *logicTest) newCluster(
 		}
 		knobs.DistSQL = &execinfra.TestingKnobs{
 			ForceDiskSpill: t.cfg.SQLExecUseDisk,
+		}
+		knobs.SQLEvalContext = &eval.TestingKnobs{
+			AllowInternalAccess: t.allowUnsafe,
 		}
 	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -2021,6 +2028,8 @@ func (t *logicTest) setup(
 	t.sharedIODir = tempExternalIODir
 	t.testCleanupFuncs = append(t.testCleanupFuncs, tempExternalIODirCleanup)
 	t.retryDuration = testutils.DefaultSucceedsSoonDuration
+	_v := true
+	t.allowUnsafe = &_v
 
 	if cfg.UseCockroachGoTestserver {
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
@@ -3607,6 +3616,12 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	if !(strings.Contains(stmt.sql, "crdb_internal.") || strings.Contains(stmt.sql, "system.")) {
+		*t.allowUnsafe = false
+		defer func() {
+			*t.allowUnsafe = true
+		}()
+	}
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
