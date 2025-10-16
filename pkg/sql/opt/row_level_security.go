@@ -48,7 +48,10 @@ func (r *RowLevelSecurityMeta) MaybeInit(user username.SQLUsername, hasAdminRole
 
 // Clear unsets the initialized property. This is used as a test helper.
 func (r *RowLevelSecurityMeta) Clear() {
-	r = &RowLevelSecurityMeta{}
+	if r == nil {
+		return
+	}
+	*r = RowLevelSecurityMeta{}
 }
 
 // AddTableUse indicates that an RLS-enabled table was encountered while
