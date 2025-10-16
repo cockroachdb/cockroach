@@ -105,9 +105,6 @@ func TestPrepareSnapApply(t *testing.T) {
 	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
 	}
-	for _, span := range swb.cleared {
-		sb.Printf(">> cleared: %v\n", span)
-	}
 	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
 
 	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()+".txt"))
