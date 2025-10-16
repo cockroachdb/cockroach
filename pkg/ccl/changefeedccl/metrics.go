@@ -6,7 +6,9 @@
 package changefeedccl
 
 import (
+	"cmp"
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -188,11 +191,11 @@ type sliMetrics struct {
 
 	mu struct {
 		syncutil.Mutex
-		id           int64
-		resolved     map[int64]hlc.Timestamp
-		checkpoint   map[int64]hlc.Timestamp
-		fastestSpan  map[int64]hlc.Timestamp
-		fastestTable map[int64]hlc.Timestamp
+		id         int64
+		resolved   map[int64]hlc.Timestamp
+		checkpoint map[int64]hlc.Timestamp
+		spanSkew   map[int64]int64
+		tableSkew  map[int64]int64
 	}
 	NetMetrics *cidr.NetMetrics
 
@@ -206,8 +209,8 @@ func (m *sliMetrics) closeId(id int64) {
 	defer m.mu.Unlock()
 	delete(m.mu.checkpoint, id)
 	delete(m.mu.resolved, id)
-	delete(m.mu.fastestSpan, id)
-	delete(m.mu.fastestTable, id)
+	delete(m.mu.spanSkew, id)
+	delete(m.mu.tableSkew, id)
 }
 
 // setResolved writes a resolved timestamp entry for the given id.
@@ -228,15 +231,15 @@ func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
 	}
 }
 
-// setFastestTS saves the fastest span/table timestamps for a given id.
-func (m *sliMetrics) setFastestTS(id int64, spanTS hlc.Timestamp, tableTS hlc.Timestamp) {
+// setProgressSkew saves the span skew/table skew for a given ID.
+func (m *sliMetrics) setProgressSkew(id int64, spanSkew int64, tableSkew int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.mu.fastestSpan[id]; ok {
-		m.mu.fastestSpan[id] = spanTS
+	if _, ok := m.mu.spanSkew[id]; ok {
+		m.mu.spanSkew[id] = spanSkew
 	}
-	if _, ok := m.mu.fastestTable[id]; ok {
-		m.mu.fastestTable[id] = tableTS
+	if _, ok := m.mu.tableSkew[id]; ok {
+		m.mu.tableSkew[id] = tableSkew
 	}
 }
 
@@ -249,8 +252,8 @@ func (m *sliMetrics) claimId() int64 {
 	// ignored until a nonzero timestamp is written.
 	m.mu.checkpoint[id] = hlc.Timestamp{}
 	m.mu.resolved[id] = hlc.Timestamp{}
-	m.mu.fastestSpan[id] = hlc.Timestamp{}
-	m.mu.fastestTable[id] = hlc.Timestamp{}
+	m.mu.spanSkew[id] = 0
+	m.mu.tableSkew[id] = 0
 	m.mu.id++
 	return id
 }
@@ -1296,8 +1299,8 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
-	sm.mu.fastestSpan = make(map[int64]hlc.Timestamp)
-	sm.mu.fastestTable = make(map[int64]hlc.Timestamp)
+	sm.mu.spanSkew = make(map[int64]int64)
+	sm.mu.tableSkew = make(map[int64]int64)
 	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
 
 	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {
@@ -1328,24 +1331,11 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		}
 	}
 
-	maxTimestampSkewGetter := func(
-		base map[int64]hlc.Timestamp, ahead map[int64]hlc.Timestamp,
-	) func() int64 {
+	maxTimestampSkewGetter := func(m map[int64]int64) func() int64 {
 		return func() int64 {
 			sm.mu.Lock()
 			defer sm.mu.Unlock()
-			var maxSkew int64
-			for id, b := range base {
-				a := ahead[id]
-				if a.IsEmpty() || b.IsEmpty() {
-					continue
-				}
-				skew := a.WallTime - b.WallTime
-				if skew > maxSkew {
-					maxSkew = skew
-				}
-			}
-			return maxSkew
+			return iterutil.MaxFunc(maps.Values(m), cmp.Compare)
 		}
 	}
 
@@ -1353,9 +1343,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
 	sm.MaxBehindNanos = a.MaxBehindNanos.AddFunctionalChild(maxBehindNanosGetter(sm.mu.resolved), scope)
 	sm.SpanProgressSkew = a.SpanProgressSkew.AddFunctionalChild(
-		maxTimestampSkewGetter(sm.mu.checkpoint, sm.mu.fastestSpan), scope)
+		maxTimestampSkewGetter(sm.mu.spanSkew), scope)
 	sm.TableProgressSkew = a.TableProgressSkew.AddFunctionalChild(
-		maxTimestampSkewGetter(sm.mu.checkpoint, sm.mu.fastestTable), scope)
+		maxTimestampSkewGetter(sm.mu.tableSkew), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
@@ -1364,7 +1354,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 // getLaggingRangesCallback returns a function which can be called to update the
 // lagging ranges metric. It should be called with the current number of lagging
 // ranges.
-func (s *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
+func (m *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -1388,10 +1378,10 @@ func (s *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64)
 		last.Lock()
 		defer last.Unlock()
 
-		s.LaggingRanges.Dec(last.lagging - lagging)
+		m.LaggingRanges.Dec(last.lagging - lagging)
 		last.lagging = lagging
 
-		s.TotalRanges.Dec(last.total - total)
+		m.TotalRanges.Dec(last.total - total)
 		last.total = total
 	}
 }
