@@ -1055,20 +1055,24 @@ type Engine interface {
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
 	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-	// ConvertFilesToBatchAndCommit converts local files with the given paths to
-	// a WriteBatch and commits the batch with sync=true. The files represented
-	// in paths must not be overlapping -- this is the same contract as
-	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
+	// IngestAndExciseFilesToWriter converts local files with the given paths to
+	// equivalent writes into the given Writer. The caller is then responsible for
+	// committing the batch behind the Writer.
+	//
+	// The files represented in paths must not be overlapping -- this is the same
+	// contract as IngestLocalFiles*. Additionally, exciseSpan is the span which
 	// must be deleted before writing the data contained in these paths.
 	//
-	// This method is expected to be used instead of IngestLocalFiles* or
+	// This call is semantically same as IngestAndExciseFiles, except that instead
+	// of running an ingestion, it populates a batch with an equivalent write. The
+	// method is expected to be used instead of IngestLocalFiles* or
 	// IngestAndExciseFiles when the sum of the file sizes is small.
 	//
 	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
 	// This should be easy since we use NewSSTEngineIterator to read the ssts,
 	// which supports multiple levels.
-	ConvertFilesToBatchAndCommit(
-		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
+	IngestAndExciseFilesToWriter(
+		ctx context.Context, paths []string, exciseSpan roachpb.Span, writer Writer,
 	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.

@@ -89,8 +89,6 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
-
-	s.cleared = append(s.cleared, roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd})
 	return nil
 }
 

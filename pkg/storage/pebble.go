@@ -2635,9 +2635,9 @@ func (p *Pebble) BufferedSize() int {
 	return 0
 }
 
-// ConvertFilesToBatchAndCommit implements the Engine interface.
-func (p *Pebble) ConvertFilesToBatchAndCommit(
-	_ context.Context, paths []string, clearedSpans []roachpb.Span,
+// IngestAndExciseFilesToWriter implements the Engine interface.
+func (p *Pebble) IngestAndExciseFilesToWriter(
+	_ context.Context, paths []string, excisedSpan roachpb.Span, writer Writer,
 ) error {
 	files := make([]sstable.ReadableFile, len(paths))
 	closeFiles := func() {
@@ -2675,13 +2675,8 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 	}
 	defer iter.Close()
 
-	batch := p.NewWriteBatch()
-	for i := range clearedSpans {
-		err :=
-			batch.ClearRawRange(clearedSpans[i].Key, clearedSpans[i].EndKey, true, true)
-		if err != nil {
-			return err
-		}
+	if err := writer.ClearRawRange(excisedSpan.Key, excisedSpan.EndKey, true, true); err != nil {
+		return err
 	}
 	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
 	for valid {
@@ -2695,7 +2690,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 			if v, err = iter.UnsafeValue(); err != nil {
 				break
 			}
-			if err = batch.PutEngineKey(k, v); err != nil {
+			if err = writer.PutEngineKey(k, v); err != nil {
 				break
 			}
 		}
@@ -2706,7 +2701,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 			}
 			rangeKeys := iter.EngineRangeKeys()
 			for i := range rangeKeys {
-				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
+				if err = writer.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
 					rangeKeys[i].Value); err != nil {
 					break
 				}
@@ -2717,11 +2712,7 @@ func (p *Pebble) ConvertFilesToBatchAndCommit(
 		}
 		valid, err = iter.NextEngineKey()
 	}
-	if err != nil {
-		batch.Close()
-		return err
-	}
-	return batch.Commit(true)
+	return err
 }
 
 func (p *Pebble) GetDiskUnhealthy() bool {

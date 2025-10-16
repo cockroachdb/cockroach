@@ -596,20 +596,42 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		return a.Keys.Key.Compare(b.Keys.Key)
 	}), "subsumed replicas must be sorted by start key")
 
+	// By default, the snapshot, and any additional writes that come with it, are
+	// written to Pebble as a single ingestion. However, small/simple snapshots
+	// are written as a batch (when applyAsIngest == false).
+	var batch storage.WriteBatch
+	writeSST := inSnap.SSTStorageScratch.WriteSST
+	exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
+
+	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
+		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
+		applyAsIngest = false
+		// Convert the snapshot SSTs into an equivalent write batch.
+		batch = r.store.TODOEngine().NewWriteBatch()
+		defer batch.Close()
+		if err := r.store.TODOEngine().IngestAndExciseFilesToWriter(
+			ctx, inSnap.SSTStorageScratch.SSTs(), exciseSpan, batch,
+		); err != nil {
+			return errors.Wrapf(err, "while converting to batch %s", inSnap.SSTStorageScratch.SSTs())
+		}
+		// Redirect the additional writes directly into the same batch.
+		writeSST = func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
+			return write(ctx, batch)
+		}
+	}
+
 	sb := snapWriteBuilder{
 		id: r.ID(),
 
 		todoEng:  r.store.TODOEngine(),
 		sl:       r.raftMu.stateLoader,
-		writeSST: inSnap.SSTStorageScratch.WriteSST,
+		writeSST: writeSST,
 
 		truncState: truncState,
 		hardState:  hs,
 		desc:       desc,
 		origDesc:   r.shMu.state.Desc,
 		subsume:    subsume,
-
-		cleared: inSnap.clearedSpans,
 	}
 	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
 	if err := sb.prepareSnapApply(ctx); err != nil {
@@ -631,25 +653,22 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		}
 	}
 
-	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
-		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
-		applyAsIngest = false
-	}
-
 	var ingestStats pebble.IngestOperationStats
 	var writeBytes uint64
 	if applyAsIngest {
 		_ = applySnapshotTODO // all atomic
-		exciseSpan := desc.KeySpan().AsRawSpanWithNoLocals()
-		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan); err != nil {
+		if ingestStats, err = r.store.TODOEngine().IngestAndExciseFiles(
+			ctx, inSnap.SSTStorageScratch.SSTs(), inSnap.sharedSSTs, inSnap.externalSSTs, exciseSpan,
+		); err != nil {
 			return errors.Wrapf(err, "while ingesting %s and excising %s-%s",
 				inSnap.SSTStorageScratch.SSTs(), exciseSpan.Key, exciseSpan.EndKey)
 		}
 	} else {
+		if batch == nil {
+			panic("batch must not be nil when applyAsIngest is false")
+		}
 		_ = applySnapshotTODO // all atomic
-		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-			ctx, inSnap.SSTStorageScratch.SSTs(), sb.cleared)
-		if err != nil {
+		if err := batch.Commit(true /* sync */); err != nil {
 			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
 		// Admission control wants the writeBytes to be roughly equivalent to
