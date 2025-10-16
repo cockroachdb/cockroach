@@ -40,66 +40,6 @@ const (
 	MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 )
 
-// clearRangeDataOptions specify which parts of a Replica are to be destroyed.
-type clearRangeDataOptions struct {
-	// clearReplicatedByRangeID indicates that replicated RangeID-based keys
-	// (abort span, etc) should be removed.
-	clearReplicatedByRangeID bool
-	// clearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
-	// (logstore state incl. HardState, etc) should be removed.
-	clearUnreplicatedByRangeID bool
-	// clearReplicatedBySpan causes the state machine data (i.e. the replicated state
-	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
-	// locks) to be removed. No data is removed if this is the zero span.
-	clearReplicatedBySpan roachpb.RSpan
-
-	// If mustUseClearRange is true, a Pebble range tombstone will always be used
-	// to clear the key spans (unless empty). This is typically used when we need
-	// to write additional keys to an SST after this clear, e.g. a replica
-	// tombstone, since keys must be written in order. When this is false, a
-	// heuristic will be used instead.
-	mustUseClearRange bool
-}
-
-// clearRangeData clears the data associated with a range descriptor selected
-// by the provided options.
-//
-// TODO(tbg): could rename this to XReplica. The use of "Range" in both the
-// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
-// be confusing.
-func clearRangeData(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	opts clearRangeDataOptions,
-) error {
-	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			RSpan:      opts.clearReplicatedBySpan,
-			SystemKeys: true,
-			LockTable:  true,
-			UserKeys:   true,
-		},
-		ReplicatedByRangeID:   opts.clearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.clearUnreplicatedByRangeID,
-	})
-
-	pointKeyThreshold := ClearRangeThresholdPointKeys
-	if opts.mustUseClearRange {
-		pointKeyThreshold = 1
-	}
-
-	for _, keySpan := range keySpans {
-		if err := storage.ClearRangeWithHeuristic(
-			ctx, reader, writer, keySpan.Key, keySpan.EndKey, pointKeyThreshold,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // DestroyReplicaTODO is the plan for splitting DestroyReplica into cross-engine
 // writes.
 //
@@ -170,18 +110,30 @@ func destroyReplicaImpl(
 	}
 
 	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
-	// NB: if required, set mustUseClearRange to true. This call can be used for
-	// generating SSTables when ingesting a snapshot, which requires Clears and
-	// Puts to be written in key order. DestroyReplica sets RangeTombstoneKey
-	// after clearing the unreplicated span which may contain higher keys.
-	if err := clearRangeData(ctx, info.RangeID, reader, writer, clearRangeDataOptions{
-		clearReplicatedByRangeID:   true,
-		clearUnreplicatedByRangeID: true,
-		clearReplicatedBySpan:      info.Keys,
-		mustUseClearRange:          sortedKeys,
-	}); err != nil {
-		return err
+	// NB: if sortedKeys is true, disable the heuristic and force deletion by
+	// range keys. This call can be used for generating SSTables when ingesting a
+	// snapshot, which requires Clears and Puts to be written in key order. Since
+	// we write RangeTombstoneKey further down, ensure that this is the only point
+	// key here.
+	pointKeyThreshold := ClearRangeThresholdPointKeys
+	if sortedKeys {
+		pointKeyThreshold = 1
 	}
+	// TODO(pav-kv): decompose this loop to delete raft and state machine keys
+	// separately. The main challenge is the unreplicated span because it is
+	// scattered across 2 engines.
+	for _, span := range rditer.Select(info.RangeID, rditer.SelectOpts{
+		UnreplicatedByRangeID: true,
+		ReplicatedByRangeID:   true,
+		Ranged:                rditer.SelectAllRanged(info.Keys),
+	}) {
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, reader, writer, span.Key, span.EndKey, pointKeyThreshold,
+		); err != nil {
+			return err
+		}
+	}
+
 	// Save a tombstone to ensure that replica IDs never get reused.
 	_ = DestroyReplicaTODO // 2.3
 	return sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
