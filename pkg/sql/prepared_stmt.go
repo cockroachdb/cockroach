@@ -120,13 +120,23 @@ func (ex *connExecutor) makePreparedPortal(
 		OutFormats: outFormats,
 	}
 
-	if ex.sessionData().MultipleActivePortalsEnabled && ex.executorType != executorTypeInternal {
-		telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
-		// We will check whether the statement itself is pausable (i.e., that it
-		// doesn't contain DDL or mutations) when we build the plan.
-		portal.pauseInfo = &portalPauseInfo{}
-		portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
-		portal.portalPausablity = PausablePortal
+	if ex.sessionData().MultipleActivePortalsEnabled {
+		// Do not even try running EXPLAIN ANALYZE statements via the pausable
+		// portal path since it doesn't make much sense to do so - the result
+		// rows can only be produced _after_ the query execution completes, so
+		// there are no actual pauses during the execution (plus the
+		// implementation of EXPLAIN ANALYZE in the connExecutor is quite
+		// special, and it seems hard to make it work with pausable portals
+		// model).
+		_, isExplainAnalyze := stmt.AST.(*tree.ExplainAnalyze)
+		if ex.executorType != executorTypeInternal && !isExplainAnalyze {
+			telemetry.Inc(sqltelemetry.StmtsTriedWithPausablePortals)
+			// We will check whether the statement itself is pausable (i.e., that it
+			// doesn't contain DDL or mutations) when we build the plan.
+			portal.pauseInfo = &portalPauseInfo{}
+			portal.pauseInfo.dispatchToExecutionEngine.queryStats = &topLevelQueryStats{}
+			portal.portalPausablity = PausablePortal
+		}
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }
