@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
@@ -157,7 +156,7 @@ func destroyReplicaImpl(
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
 	}
-	sl := stateloader.Make(info.RangeID)
+	sl := Make(info.RangeID)
 	// Assert that the ReplicaID in storage matches the one being removed.
 	if loaded, err := sl.LoadRaftReplicaID(ctx, reader); err != nil {
 		return err

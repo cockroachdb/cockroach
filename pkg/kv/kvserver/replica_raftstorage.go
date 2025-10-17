@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -249,7 +248,7 @@ func (r *Replica) GetSnapshot(
 	// NB: we don't hold either of locks, so can't use Replica.mu.stateLoader or
 	// Replica.raftMu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
-	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snap, startKey)
+	snapData, err := snapshot(ctx, snapUUID, kvstorage.Make(rangeID), snap, startKey)
 	if err != nil {
 		log.KvExec.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
@@ -335,7 +334,7 @@ func (s IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
-	rsl stateloader.StateLoader,
+	rsl kvstorage.StateLoader,
 	snap storage.Reader,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
@@ -677,7 +676,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.Make(desc.RangeID)
 	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "unable to load replica state: %s", err)

@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -26,7 +25,7 @@ type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
 	todoEng  storage.Engine
-	sl       stateloader.StateLoader
+	sl       kvstorage.StateLoader
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
 	truncState kvserverpb.RaftTruncatedState

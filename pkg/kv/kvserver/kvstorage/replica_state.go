@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -41,7 +40,7 @@ func LoadReplicaState(
 	desc *roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
-	sl := stateloader.Make(desc.RangeID)
+	sl := Make(desc.RangeID)
 	id, err := sl.LoadRaftReplicaID(ctx, eng)
 	if err != nil {
 		return LoadedReplicaState{}, err
@@ -126,7 +125,7 @@ func CreateUninitializedReplica(
 	storeID roachpb.StoreID,
 	id roachpb.FullReplicaID,
 ) error {
-	sl := stateloader.Make(id.RangeID)
+	sl := Make(id.RangeID)
 	// Before creating the replica, see if there is a tombstone which would
 	// indicate that this replica has been removed.
 	// TODO(pav-kv): should also check that there is no existing replica, i.e.

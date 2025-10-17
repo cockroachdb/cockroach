@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -105,7 +104,7 @@ func (r *replicaInfo) createRaftState(ctx context.Context, t *testing.T, w stora
 }
 
 func (r *replicaInfo) createStateMachine(ctx context.Context, t *testing.T, rw storage.ReadWriter) {
-	sl := stateloader.Make(r.id.RangeID)
+	sl := Make(r.id.RangeID)
 	require.NoError(t, sl.SetRangeTombstone(ctx, rw, kvserverpb.RangeTombstone{
 		NextReplicaID: r.id.ReplicaID,
 	}))
