@@ -6,6 +6,7 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -435,6 +436,7 @@ type ListOptions struct {
 	ComputeEstimatedCost bool
 	IncludeProviders     []string
 	LimitConcurrency     int
+	BailOnProviderError  bool
 }
 
 type PreemptedVM struct {
@@ -487,6 +489,7 @@ type Provider interface {
 	// Return the account name associated with the provider
 	FindActiveAccount(l *logger.Logger) (string, error)
 	List(l *logger.Logger, opts ListOptions) (List, error)
+	ListWithContext(ctx context.Context, l *logger.Logger, opts ListOptions) (List, error)
 	// AddLabels adds (or updates) the given labels to the given VMs.
 	// N.B. If a VM contains a label with the same key, its value will be updated.
 	AddLabels(l *logger.Logger, vms List, labels map[string]string) error

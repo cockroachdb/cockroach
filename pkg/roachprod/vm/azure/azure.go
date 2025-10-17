@@ -839,7 +839,15 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 // List implements the vm.Provider interface. This will query all
 // Azure VMs in the subscription and select those with a roachprod tag.
 func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+	return p.ListWithContext(context.Background(), l, opts)
+}
+
+// ListWithContext implements the vm.Provider interface.
+// Same as List but with a context. The provider's OperationTimeout is still applied.
+func (p *Provider) ListWithContext(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)
