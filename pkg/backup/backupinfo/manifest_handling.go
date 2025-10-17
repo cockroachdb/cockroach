@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gzip "github.com/klauspost/compress/gzip"
 )
@@ -1774,5 +1775,94 @@ func ConstructDateBasedIncrementalFolderName(start, end time.Time) string {
 		"%s-%s",
 		end.Format(backupbase.DateBasedIncFolderName),
 		start.Format(backupbase.DateBasedIncFolderNameSuffix),
+	)
+}
+
+// WriteBackupMetadata completes the backup compaction process after the backup has been
+// completed by writing the manifest and associated metadata to the backup destination.
+func WriteBackupMetadata(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	store cloud.ExternalStorage,
+	details jobspb.BackupDetails,
+	kmsEnv cloud.KMSEnv,
+	backupManifest *backuppb.BackupManifest,
+	statsTable backuppb.StatsTable,
+) error {
+	backupID := uuid.MakeV4()
+	backupManifest.ID = backupID
+
+	// Write additional partial descriptors to each node for partitioned backups.
+	if len(details.URIsByLocalityKV) > 0 {
+
+		storageByLocalityKV := make(map[string]*cloudpb.ExternalStorage)
+		for kv, uri := range details.URIsByLocalityKV {
+			conf, err := cloud.ExternalStorageConfFromURI(uri, execCtx.User())
+			if err != nil {
+				return err
+			}
+			storageByLocalityKV[kv] = &conf
+		}
+
+		filesByLocalityKV := make(map[string][]backuppb.BackupManifest_File)
+		for _, file := range backupManifest.Files {
+			filesByLocalityKV[file.LocalityKV] = append(filesByLocalityKV[file.LocalityKV], file)
+		}
+
+		nextPartitionedDescFilenameID := 1
+		for kv, conf := range storageByLocalityKV {
+			backupManifest.LocalityKVs = append(backupManifest.LocalityKVs, kv)
+			// Set a unique filename for each partition backup descriptor. The ID
+			// ensures uniqueness, and the kv string appended to the end is for
+			// readability.
+			filename := fmt.Sprintf("%s_%d_%s", backupbase.BackupPartitionDescriptorPrefix,
+				nextPartitionedDescFilenameID, SanitizeLocalityKV(kv))
+			nextPartitionedDescFilenameID++
+			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
+			desc := backuppb.BackupPartitionDescriptor{
+				LocalityKV: kv,
+				Files:      filesByLocalityKV[kv],
+				BackupID:   backupID,
+			}
+
+			if err := func() error {
+				localityStore, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, *conf)
+				if err != nil {
+					return err
+				}
+				defer localityStore.Close()
+				return WriteBackupPartitionDescriptor(ctx, localityStore, filename,
+					details.EncryptionOptions, kmsEnv, &desc)
+			}(); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := WriteBackupManifest(ctx, store, backupbase.DeprecatedBackupManifestName,
+		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
+		return err
+	}
+	if err := WriteMetadataWithExternalSSTs(ctx, store, details.EncryptionOptions,
+		kmsEnv, backupManifest); err != nil {
+		return err
+	}
+
+	if err := WriteTableStatistics(
+		ctx, store, details.EncryptionOptions, kmsEnv, &statsTable,
+	); err != nil {
+		return errors.Wrapf(err, "writing table statistics")
+	}
+
+	return errors.Wrapf(
+		WriteBackupIndexMetadata(
+			ctx,
+			execCtx.ExecCfg(),
+			execCtx.User(),
+			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+			details,
+			backupManifest.RevisionStartTime,
+		),
+		"writing backup index metadata",
 	)
 }
