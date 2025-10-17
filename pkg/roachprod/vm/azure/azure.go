@@ -830,10 +830,11 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 	return username, nil
 }
 
-// List implements the vm.Provider interface. This will query all
-// Azure VMs in the subscription and select those with a roachprod tag.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
+// List implements the vm.Provider interface.
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.OperationTimeout)
 	defer cancel()
 
 	sub, err := p.getSubscription(ctx)

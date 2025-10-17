@@ -3195,10 +3195,13 @@ func (p *Provider) FindActiveAccount(l *logger.Logger) (string, error) {
 }
 
 // List queries gcloud to produce a list of VM info objects.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+// TODO(golgeek): honor the context for non-SDK mode.
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 
 	if p.withSDKSupport {
-		return p.listWithSDK(context.Background(), l, opts)
+		return p.listWithSDK(ctx, l, opts)
 	}
 
 	templatesInUse := make(map[string]map[string]struct{})
@@ -3285,7 +3288,7 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 	}
 
 	if opts.ComputeEstimatedCost {
-		if err := populateCostPerHour(l, vms); err != nil {
+		if err := populateCostPerHour(ctx, l, vms); err != nil {
 			// N.B. We continue despite the error since it doesn't prevent 'List' and other commands which may depend on it.
 
 			l.Errorf("Error during cost estimation (will continue without): %v", err)
@@ -3308,9 +3311,8 @@ func (p *Provider) String() string {
 //     all discounts, but including any automatically applied credits.
 //  2. Network egress costs are completely ignored.
 //  3. Blob storage costs are completely ignored.
-func populateCostPerHour(l *logger.Logger, vms vm.List) error {
+func populateCostPerHour(ctx context.Context, l *logger.Logger, vms vm.List) error {
 	// Construct cost estimation service
-	ctx := context.Background()
 	service, err := cloudbilling.NewService(ctx)
 	if err != nil {
 		return err
