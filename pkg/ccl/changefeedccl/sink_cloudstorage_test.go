@@ -399,8 +399,7 @@ func TestCloudStorageSink(t *testing.T) {
 		s2R.(*cloudStorageSink).sinkID = 7
 
 		// Again, force deterministic job session IDs to force ordering of output
-		// files. Note that making s1R have the same job session ID as s1 should make
-		// its output overwrite s1's output.
+		// files.
 		s1R.(*cloudStorageSink).jobSessionID = "a"
 		s2R.(*cloudStorageSink).jobSessionID = "b"
 		// Each resends the data it did before.
@@ -408,10 +407,11 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, s2R.EmitRow(ctx, t1, noKey, []byte(`w1`), ts(1), ts(1), zeroAlloc, nil))
 		require.NoError(t, s1R.Flush(ctx))
 		require.NoError(t, s2R.Flush(ctx))
-		// s1 data ends up being overwritten, s2 data ends up duplicated.
+		// s1 & s2 data ends up duplicated.
 		require.Equal(t, []string{
 			"v1\n",
 			"w1\n",
+			"v1\n",
 			"w1\n",
 		}, slurpDir(t))
 	})
@@ -461,8 +461,8 @@ func TestCloudStorageSink(t *testing.T) {
 		require.NoError(t, s1.Flush(ctx))
 		require.Equal(t, []string{
 			"v1\nv2\n",
-			"v3\n",
 			"v1\n",
+			"v3\n",
 		}, slurpDir(t))
 	})
 
@@ -1073,7 +1073,9 @@ func TestCloudStorageOrderingWhileLaggingAndRestarting(t *testing.T) {
 		// Override the session ID to ensure the first session orders after the second session.
 		sessionID := "2_begin"
 		knobs.WrapSink = func(s Sink, jobID jobspb.JobID) Sink {
-			s.(*cloudStorageSink).jobSessionID = sessionID
+			if sessionID != "" {
+				s.(*cloudStorageSink).jobSessionID = sessionID
+			}
 			return s
 		}
 
@@ -1110,7 +1112,6 @@ func TestCloudStorageOrderingWhileLaggingAndRestarting(t *testing.T) {
 		var chkTS hlc.Timestamp
 		testutils.SucceedsSoon(t, func() error {
 			hwm, chkTS = getHwmAndChkpt()
-			// TODO: why can the chkTS be empty and the hwm be non-empty?
 			if chkTS.IsEmpty() || hwm == nil || hwm.IsEmpty() {
 				return errors.Newf("waiting for non-zero hwm & checkpoint with non-lagging key: hwm: %v, chkTS: %s", hwm, chkTS)
 			}
