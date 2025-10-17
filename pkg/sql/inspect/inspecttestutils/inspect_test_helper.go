@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package scrubtestutils
+package inspecttestutils
 
 import (
 	gosql "database/sql"
@@ -13,9 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
-// ExpectedScrubResult contains details about errors that are expected during
-// SCRUB testing.
-type ExpectedScrubResult struct {
+// ExpectedInspectResult contains details about errors that are expected during
+// INSPECT testing.
+type ExpectedInspectResult struct {
 	ErrorType    string
 	Database     string
 	Table        string
@@ -24,9 +24,9 @@ type ExpectedScrubResult struct {
 	DetailsRegex string
 }
 
-// CheckScrubResult compares the results from running SCRUB with the expected
+// CheckInspectResult compares the results from running INSPECT with the expected
 // results and throws an error if they do not match.
-func CheckScrubResult(t *testing.T, ress []sqlutils.ScrubResult, exps []ExpectedScrubResult) {
+func CheckInspectResult(t *testing.T, ress []sqlutils.InspectResult, exps []ExpectedInspectResult) {
 	t.Helper()
 
 	for i := 0; i < len(exps); i++ {
@@ -59,19 +59,19 @@ func CheckScrubResult(t *testing.T, ress []sqlutils.ScrubResult, exps []Expected
 	}
 }
 
-// RunScrub runs a SCRUB statement and checks that it returns exactly one scrub
+// RunInspect runs a INSPECT statement and checks that it returns exactly one inspect
 // result and that it matches the expected result.
-func RunScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp []ExpectedScrubResult) {
+func RunInspect(t *testing.T, db *gosql.DB, inspectStmt string, exp []ExpectedInspectResult) {
 	t.Helper()
 
-	// Run SCRUB and find the violation created.
-	rows, err := db.Query(scrubStmt)
+	// Run INSPECT and find the violation created.
+	rows, err := db.Query(inspectStmt)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 	defer rows.Close()
 
-	results, err := sqlutils.GetScrubResultRows(rows)
+	results, err := sqlutils.GetInspectResultRows(rows)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -79,5 +79,5 @@ func RunScrub(t *testing.T, db *gosql.DB, scrubStmt string, exp []ExpectedScrubR
 	if len(results) != len(exp) {
 		t.Fatalf("expected %d results, got %d. got %#v", len(exp), len(results), results)
 	}
-	CheckScrubResult(t, results, exp)
+	CheckInspectResult(t, results, exp)
 }
