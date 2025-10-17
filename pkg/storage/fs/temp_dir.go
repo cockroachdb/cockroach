@@ -156,8 +156,9 @@ func CleanupTempDirs(ctx context.Context, fs vfs.FS, recordPath string) error {
 		}
 	}
 
-	// Remove the record file now that we're done.
-	err = errors.CombineErrors(fs.Remove(recordPath), f.Close())
+	// Close and remove the record file now that we're done. We need to close
+	// the file first to accommodate Windows.
+	err = f.Close()
 	f = nil
 	rmErr := fs.Remove(recordPath)
 	if rmErr != nil && !oserror.IsNotExist(rmErr) {
