@@ -1321,32 +1321,9 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
-    - name: changefeed.buffer_entries.allocated_mem.aggregator
-      exported_name: changefeed_buffer_entries_allocated_mem_aggregator
-      description: Current quota pool memory allocation - between the kvfeed and the sink
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.buffer_entries.allocated_mem.rangefeed
-      exported_name: changefeed_buffer_entries_allocated_mem_rangefeed
-      description: Current quota pool memory allocation - between the rangefeed and the kvfeed
-      y_axis_label: Bytes
-      type: GAUGE
-      unit: BYTES
-      aggregation: AVG
-      derivative: NONE
-    - name: changefeed.buffer_entries.flush
-      exported_name: changefeed_buffer_entries_flush
-      description: Number of flush elements added to the buffer
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.flush.aggregator
       exported_name: changefeed_buffer_entries_flush_aggregator
+      labeled_name: 'changefeed.buffer_entries.flush{buffer_type: aggregator}'
       description: Number of flush elements added to the buffer - between the kvfeed and the sink
       y_axis_label: Events
       type: COUNTER
@@ -1355,22 +1332,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.flush.rangefeed
       exported_name: changefeed_buffer_entries_flush_rangefeed
+      labeled_name: 'changefeed.buffer_entries.flush{buffer_type: rangefeed}'
       description: Number of flush elements added to the buffer - between the rangefeed and the kvfeed
       y_axis_label: Events
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.in
-      exported_name: changefeed_buffer_entries_in
-      description: Total entries entering the buffer between raft and changefeed sinks
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.in.aggregator
       exported_name: changefeed_buffer_entries_in_aggregator
+      labeled_name: 'changefeed.buffer_entries.in{buffer_type: aggregator}'
       description: Total entries entering the buffer between raft and changefeed sinks - between the kvfeed and the sink
       y_axis_label: Entries
       type: COUNTER
@@ -1379,22 +1350,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.in.rangefeed
       exported_name: changefeed_buffer_entries_in_rangefeed
+      labeled_name: 'changefeed.buffer_entries.in{buffer_type: rangefeed}'
       description: Total entries entering the buffer between raft and changefeed sinks - between the rangefeed and the kvfeed
       y_axis_label: Entries
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.kv
-      exported_name: changefeed_buffer_entries_kv
-      description: Number of kv elements added to the buffer
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.kv.aggregator
       exported_name: changefeed_buffer_entries_kv_aggregator
+      labeled_name: 'changefeed.buffer_entries.kv{buffer_type: aggregator}'
       description: Number of kv elements added to the buffer - between the kvfeed and the sink
       y_axis_label: Events
       type: COUNTER
@@ -1403,22 +1368,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.kv.rangefeed
       exported_name: changefeed_buffer_entries_kv_rangefeed
+      labeled_name: 'changefeed.buffer_entries.kv{buffer_type: rangefeed}'
       description: Number of kv elements added to the buffer - between the rangefeed and the kvfeed
       y_axis_label: Events
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.out
-      exported_name: changefeed_buffer_entries_out
-      description: Total entries leaving the buffer between raft and changefeed sinks
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.out.aggregator
       exported_name: changefeed_buffer_entries_out_aggregator
+      labeled_name: 'changefeed.buffer_entries.out{buffer_type: aggregator}'
       description: Total entries leaving the buffer between raft and changefeed sinks - between the kvfeed and the sink
       y_axis_label: Entries
       type: COUNTER
@@ -1427,15 +1386,8 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.out.rangefeed
       exported_name: changefeed_buffer_entries_out_rangefeed
+      labeled_name: 'changefeed.buffer_entries.out{buffer_type: rangefeed}'
       description: Total entries leaving the buffer between raft and changefeed sinks - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.released
-      exported_name: changefeed_buffer_entries_released
-      description: Total entries processed, emitted and acknowledged by the sinks
       y_axis_label: Entries
       type: COUNTER
       unit: COUNT
@@ -1443,6 +1395,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.released.aggregator
       exported_name: changefeed_buffer_entries_released_aggregator
+      labeled_name: 'changefeed.buffer_entries.released{buffer_type: aggregator}'
       description: Total entries processed, emitted and acknowledged by the sinks - between the kvfeed and the sink
       y_axis_label: Entries
       type: COUNTER
@@ -1451,22 +1404,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.released.rangefeed
       exported_name: changefeed_buffer_entries_released_rangefeed
+      labeled_name: 'changefeed.buffer_entries.released{buffer_type: rangefeed}'
       description: Total entries processed, emitted and acknowledged by the sinks - between the rangefeed and the kvfeed
       y_axis_label: Entries
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries.resolved
-      exported_name: changefeed_buffer_entries_resolved
-      description: Number of resolved elements added to the buffer
-      y_axis_label: Events
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.resolved.aggregator
       exported_name: changefeed_buffer_entries_resolved_aggregator
+      labeled_name: 'changefeed.buffer_entries.resolved{buffer_type: aggregator}'
       description: Number of resolved elements added to the buffer - between the kvfeed and the sink
       y_axis_label: Events
       type: COUNTER
@@ -1475,6 +1422,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries.resolved.rangefeed
       exported_name: changefeed_buffer_entries_resolved_rangefeed
+      labeled_name: 'changefeed.buffer_entries.resolved{buffer_type: rangefeed}'
       description: Number of resolved elements added to the buffer - between the rangefeed and the kvfeed
       y_axis_label: Events
       type: COUNTER
@@ -1489,22 +1437,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.acquired.aggregator
-      exported_name: changefeed_buffer_entries_mem_acquired_aggregator
-      description: Total amount of memory acquired for entries as they enter the system - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.acquired.rangefeed
-      exported_name: changefeed_buffer_entries_mem_acquired_rangefeed
-      description: Total amount of memory acquired for entries as they enter the system - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_entries_mem.released
       exported_name: changefeed_buffer_entries_mem_released
       description: Total amount of memory released by the entries after they have been emitted
@@ -1513,32 +1445,9 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.released.aggregator
-      exported_name: changefeed_buffer_entries_mem_released_aggregator
-      description: Total amount of memory released by the entries after they have been emitted - between the kvfeed and the sink
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_entries_mem.released.rangefeed
-      exported_name: changefeed_buffer_entries_mem_released_rangefeed
-      description: Total amount of memory released by the entries after they have been emitted - between the rangefeed and the kvfeed
-      y_axis_label: Entries
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: changefeed.buffer_pushback_nanos
-      exported_name: changefeed_buffer_pushback_nanos
-      description: Total time spent waiting while the buffer was full
-      y_axis_label: Nanoseconds
-      type: COUNTER
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_pushback_nanos.aggregator
       exported_name: changefeed_buffer_pushback_nanos_aggregator
+      labeled_name: 'changefeed.buffer_pushback_nanos{buffer_type: aggregator}'
       description: Total time spent waiting while the buffer was full - between the kvfeed and the sink
       y_axis_label: Nanoseconds
       type: COUNTER
@@ -1547,6 +1456,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: changefeed.buffer_pushback_nanos.rangefeed
       exported_name: changefeed_buffer_pushback_nanos_rangefeed
+      labeled_name: 'changefeed.buffer_pushback_nanos{buffer_type: rangefeed}'
       description: Total time spent waiting while the buffer was full - between the rangefeed and the kvfeed
       y_axis_label: Nanoseconds
       type: COUNTER
