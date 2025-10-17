@@ -111,9 +111,9 @@ func WriteInitialReplicaState(
 //
 // TODO(arul): this can be removed once no longer call this from the split
 // evaluation path.
-func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roachpb.RangeID) error {
-	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(ctx, w,
-		&kvserverpb.RaftTruncatedState{
+func WriteInitialTruncState(ctx context.Context, raftWO RaftWO, rangeID roachpb.RangeID) error {
+	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(
+		ctx, raftWO, &kvserverpb.RaftTruncatedState{
 			Index: RaftInitialLogIndex,
 			Term:  RaftInitialLogTerm,
 		})
