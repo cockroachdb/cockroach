@@ -53,8 +53,8 @@ var StalledOpTimeoutSetting = settings.RegisterDurationSetting(
 var VectorIndexEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"feature.vector_index.enabled",
-	"set to true to enable vector indexes, false to disable; default is false",
-	false,
+	"set to true to enable vector indexes, false to disable; default is true",
+	true,
 	settings.WithPublic)
 
 // CheckEnabled returns an error if the feature.vector_index.enabled cluster
