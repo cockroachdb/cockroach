@@ -141,7 +141,7 @@ func ShouldStartDefaultTestTenant(
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
 			}
 		} else {
-			t.Log(defaultTestTenantMessage(shared) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
+			t.Log(defaultTestTenantMessage(override.SharedProcessMode()) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
 		}
 		return override
 	}
