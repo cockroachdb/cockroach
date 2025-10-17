@@ -6,6 +6,7 @@
 package flagstub
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -170,7 +171,7 @@ func (p *provider) FindActiveAccount(l *logger.Logger) (string, error) {
 }
 
 // List implements vm.Provider and returns an empty list.
-func (p *provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+func (p *provider) List(_ context.Context, l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
 	return nil, nil
 }
 
