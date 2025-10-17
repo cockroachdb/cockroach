@@ -48,6 +48,7 @@ func TestReplicaCollection(t *testing.T) {
 
 	ctx := context.Background()
 
+	skip.UnderRace(t, "slow under race")
 	skip.UnderDeadlock(t, "occasionally flakes")
 
 	// This test stops cluster servers. Use "reusable" listeners, otherwise the
@@ -128,6 +129,8 @@ func TestReplicaCollection(t *testing.T) {
 func TestStreamRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "slow under race")
 
 	ctx := context.Background()
 
