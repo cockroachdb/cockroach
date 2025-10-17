@@ -121,8 +121,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				defer batch.Close()
 
 				if initialized {
-					err := kvstorage.WriteInitialRangeState(ctx, batch, rs.desc, repl.ReplicaID, rs.version)
-					require.NoError(t, err)
+					require.NoError(t, kvstorage.WriteInitialRangeState(
+						ctx, batch, batch,
+						rs.desc, repl.ReplicaID, rs.version,
+					))
 				} else {
 					err := kvstorage.CreateUninitializedReplica(
 						ctx, batch, batch, 1, /* StoreID */

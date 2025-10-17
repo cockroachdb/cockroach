@@ -224,7 +224,9 @@ func WriteInitialClusterData(
 			}
 
 			if err := kvstorage.WriteInitialRangeState(
-				ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
+				ctx, batch, batch,
+				*desc, firstReplicaID, initialReplicaVersion,
+			); err != nil {
 				return err
 			}
 			computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)

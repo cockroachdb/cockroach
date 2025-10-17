@@ -36,7 +36,8 @@ func TestWriteInitialRangeState(t *testing.T) {
 	b := eng.NewBatch() // TODO(pav-kv): make it write-only batch
 	defer b.Close()
 
-	require.NoError(t, WriteInitialRangeState(context.Background(), b,
+	require.NoError(t, WriteInitialRangeState(
+		context.Background(), b, b,
 		roachpb.RangeDescriptor{
 			RangeID:       5,
 			StartKey:      roachpb.RKey("a"),
