@@ -4,6 +4,8 @@ go_library(
     name = "cli",
     srcs = [
         "bash_completion.go",
+        "chaos.go",
+        "chaos_network.go",
         "commands.go",
         "flags.go",
         "handlers.go",
@@ -22,7 +24,9 @@ go_library(
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/errors",
+        "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
         "//pkg/roachprod/roachprodutil",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/ui",
