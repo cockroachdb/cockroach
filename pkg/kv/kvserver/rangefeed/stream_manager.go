@@ -121,8 +121,8 @@ func (sm *StreamManager) OnError(streamID int64) {
 	func() {
 		sm.streams.Lock()
 		defer sm.streams.Unlock()
-		if _, ok := sm.streams.m[streamID]; ok {
-			// TODO(ssd): We should be able to assert we are disconnected here.
+		if d, ok := sm.streams.m[streamID]; ok {
+			assertTrue(d.IsDisconnected(), "OnError called on connected registration")
 			delete(sm.streams.m, streamID)
 			sm.metrics.ActiveMuxRangeFeed.Dec(1)
 		}
