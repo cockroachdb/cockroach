@@ -384,7 +384,14 @@ func (n *sdkDNSProvider) PublicDomain() string {
 
 // SyncDNS implements the vm.DNSProvider interface.
 func (n *sdkDNSProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
-	return n.syncPublicDNS(l, vms)
+	return n.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+// SyncDNSWithContext implements the vm.DNSProvider interface.
+func (n *sdkDNSProvider) SyncDNSWithContext(
+	ctx context.Context, l *logger.Logger, vms vm.List,
+) error {
+	return n.syncPublicDNS(ctx, l, vms)
 }
 
 // ProviderName implements the vm.DNSProvider interface.
@@ -525,7 +532,7 @@ func (n *sdkDNSProvider) clearCacheEntry(name string) {
 
 // syncPublicDNSWithSDK syncs the public DNS zone using the Cloud DNS SDK.
 // This replaces all A records in the zone with records from the given VMs.
-func (n *sdkDNSProvider) syncPublicDNS(l *logger.Logger, vms vm.List) error {
+func (n *sdkDNSProvider) syncPublicDNS(ctx context.Context, l *logger.Logger, vms vm.List) error {
 	if n.publicDomain == "" {
 		return nil
 	}
@@ -575,7 +582,7 @@ func (n *sdkDNSProvider) syncPublicDNS(l *logger.Logger, vms vm.List) error {
 
 	for {
 		req := n.dnsClient.ResourceRecordSets.List(n.dnsProject, n.publicZone).
-			MaxResults(maxPageSize)
+			MaxResults(maxPageSize).Context(ctx)
 
 		if pageToken != "" {
 			req = req.PageToken(pageToken)
@@ -622,7 +629,7 @@ func (n *sdkDNSProvider) syncPublicDNS(l *logger.Logger, vms vm.List) error {
 			Deletions: deletions,
 			Additions: additions,
 		},
-	).Do()
+	).Context(ctx).Do()
 	if err != nil {
 		return errors.Wrap(err, "failed to sync DNS records")
 	}

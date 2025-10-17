@@ -16,10 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -75,7 +75,7 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	// Init a new Cloud struct with the computed providers.
 	cloud := NewCloud(WithProviders(providers))
 
-	err := cloud.ListCloud(l, options)
+	err := cloud.ListCloud(context.Background(), l, options)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (c *Cloud) addProviders(providers []vm.Provider) {
 
 // ListCloud populates the Cloud struct with all clusters and bad instances
 // found across all providers.
-func (c *Cloud) ListCloud(l *logger.Logger, options vm.ListOptions) error {
+func (c *Cloud) ListCloud(ctx context.Context, l *logger.Logger, options vm.ListOptions) error {
 
 	// Reset the Clusters and BadInstance fields.
 	c.Clusters = make(cloudcluster.Clusters)
@@ -142,7 +142,7 @@ func (c *Cloud) ListCloud(l *logger.Logger, options vm.ListOptions) error {
 
 	// List all VMs across all providers in parallel.
 	providerVMs := make(map[string]vm.List)
-	var g errgroup.Group
+	g := ctxgroup.WithContext(ctx)
 
 	// Limit concurrent provider List() calls to prevent blocking all OS threads.
 	// Each provider may spawn blocking syscalls (gcloud, aws) and concurrency
@@ -153,8 +153,8 @@ func (c *Cloud) ListCloud(l *logger.Logger, options vm.ListOptions) error {
 
 	vmListLock := syncutil.Mutex{}
 	for _, provider := range providers {
-		g.Go(func() error {
-			pVms, err := provider.List(l, options)
+		g.GoCtx(func(ctx context.Context) error {
+			pVms, err := provider.ListWithContext(ctx, l, options)
 			if err != nil {
 				return errors.Wrapf(err, "provider %s", provider.String())
 			}
@@ -168,10 +168,19 @@ func (c *Cloud) ListCloud(l *logger.Logger, options vm.ListOptions) error {
 	}
 	providerErr := g.Wait()
 	if providerErr != nil {
-		// We continue despite the error as we don't want to fail for all providers if only one
-		// has an issue. The function that calls ListCloud may not even use the erring provider,
-		// so log a warning and let the caller decide how to handle the error.
-		l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", providerErr.Error())
+		if options.BailOnProviderError {
+			// On the roachprod-centralized path, this is executed as part
+			// of an async task, and we want to fail fast if a provider errors out
+			// or the context is cancelled or its deadline is exceeded.
+			// This avoids partial/incomplete listings when DNS entries are updated
+			// or when the results are stored in the repository.
+			return providerErr
+		} else {
+			// We continue despite the error as we don't want to fail for all providers if only one
+			// has an issue. The function that calls ListCloud may not even use the erring provider,
+			// so log a warning and let the caller decide how to handle the error.
+			l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", providerErr.Error())
+		}
 	}
 
 	for providerID, vms := range providerVMs {

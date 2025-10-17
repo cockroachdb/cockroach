@@ -349,6 +349,13 @@ func (p *Provider) CreateProviderOpts() vm.ProviderOpts {
 
 // List reports all the local cluster "VM" instances.
 func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+	return p.ListWithContext(context.Background(), l, opts)
+}
+
+// ListWithContext reports all the local cluster "VM" instances.
+func (p *Provider) ListWithContext(
+	_ context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 	var result vm.List
 	for _, clusterName := range p.clusters.Names() {
 		c := p.clusters[clusterName]
