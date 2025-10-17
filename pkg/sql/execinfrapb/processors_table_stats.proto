@@ -14,6 +14,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 
+import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";
 
@@ -48,13 +49,14 @@ message SketchSpec {
   // statistic on extreme values was derived from.
   optional uint64 full_statistic_id = 8 [(gogoproto.customname) = "FullStatisticID", (gogoproto.nullable) = false];
 
-  // PrevLowerBound is a tree.Datum serialized into a string representing
-  // the minimum bucket value of the previous full statistic histogram.
-  // It is used as the boundary between the lower extreme histogram and
-  // the upper extreme histogram when partial statistics USING EXTREMES
-  // are collected and the histogram is constructed. For full table
-  // statistics, it is the empty string.
-  optional string prev_lower_bound = 9 [(gogoproto.nullable) = false];
+  reserved 9;
+
+  // PartialSpans are the spans over which this partial statistic is computed.
+  repeated roachpb.Span partial_spans = 10 [(gogoproto.nullable) = false];
+
+  // Table is the table descriptor for the table on which this statistic is
+  // being computed.
+  required sqlbase.TableDescriptor table = 11 [(gogoproto.nullable) = false];
 }
 
 // SamplerSpec is the specification of a "sampler" processor which

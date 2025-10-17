@@ -2497,6 +2497,7 @@ SHOW HISTOGRAM $hist_xy_x_partial
 upper_bound  range_rows  distinct_range_rows  equal_rows
 -2           0           0                    1
 -1           0           0                    1
+NULL         0           0                    0
 5            0           0                    1
 6            0           0                    1
 
@@ -2627,6 +2628,7 @@ SHOW HISTOGRAM $hist_d_desc
 ----
 upper_bound  range_rows  distinct_range_rows  equal_rows
 0            0           0                    1
+NULL         0           0                    0
 5            0           0                    1
 
 query TTII colnames

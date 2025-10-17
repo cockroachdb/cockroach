@@ -34,9 +34,6 @@ func MergedStatistics(
 	// It relies on the fact that the first full statistic
 	// is the latest.
 	fullStatsMap := make(map[descpb.ColumnID]*TableStatistic)
-	// Map from full statistic ID to its lower bound. This is used to determine
-	// where to split histograms for partial statistics at extremes when merging.
-	extremesBoundMap := make(map[uint64]tree.Datum)
 	for _, fullStat := range stats {
 		if fullStat.IsPartial() || len(fullStat.ColumnIDs) != 1 {
 			continue
@@ -45,13 +42,6 @@ func MergedStatistics(
 		_, ok := fullStatsMap[col]
 		if !ok {
 			fullStatsMap[col] = fullStat
-		}
-		if len(fullStat.Histogram) > 0 {
-			fh := fullStat.nonNullHistogram().buckets
-			fh = stripOuterBuckets(ctx, cmpCtx, fh)
-			if len(fh) > 0 {
-				extremesBoundMap[fullStat.StatisticID] = fh[0].UpperBound
-			}
 		}
 	}
 
@@ -66,9 +56,7 @@ func MergedStatistics(
 		col := partialStat.ColumnIDs[0]
 		if fullStat, ok := fullStatsMap[col]; ok && partialStat.CreatedAt.After(fullStat.CreatedAt) {
 			atExtremes := partialStat.FullStatisticID != 0
-			extremesBound := extremesBoundMap[partialStat.FullStatisticID]
-			merged, err := mergePartialStatistic(ctx, cmpCtx, fullStat, partialStat,
-				st, atExtremes, extremesBound)
+			merged, err := mergePartialStatistic(ctx, cmpCtx, fullStat, partialStat, st, atExtremes)
 			if err != nil {
 				log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v",
 					fullStat.TableID, redact.Safe(col), err)
@@ -138,7 +126,6 @@ func mergePartialStatistic(
 	partialStat *TableStatistic,
 	st *cluster.Settings,
 	atExtremes bool,
-	extremesBound tree.Datum,
 ) (*TableStatistic, error) {
 	fullStatColKey := MakeSortedColStatKey(fullStat.ColumnIDs)
 	partialStatColKey := MakeSortedColStatKey(partialStat.ColumnIDs)
@@ -147,7 +134,7 @@ func mergePartialStatistic(
 	}
 
 	fullHistogram := fullStat.Histogram
-	partialHistogram := partialStat.Histogram
+	partialBuckets := partialStat.Histogram
 
 	if len(fullHistogram) == 0 {
 		return nil, errors.New("the full statistic histogram does not exist")
@@ -157,7 +144,7 @@ func mergePartialStatistic(
 	// spans. We can do better here by subtracting from the full histogram based
 	// on the stat predicate, but return the full statistic for simplicity since
 	// overestimates are generally safe.
-	if len(partialHistogram) == 0 {
+	if len(partialBuckets) == 0 {
 		mergedStat := *fullStat
 		mergedStat.Name = jobspb.MergedStatsName
 		mergedStat.CreatedAt = partialStat.CreatedAt
@@ -165,7 +152,7 @@ func mergePartialStatistic(
 	}
 
 	fullHistogram = fullStat.nonNullHistogram().buckets
-	partialHistogram = partialStat.nonNullHistogram().buckets
+	partialBuckets = partialStat.nonNullHistogram().buckets
 
 	// Note that we still merge if the partial histogram has only NULL values
 	// since we can create a merged statistic with an updated NULL count.
@@ -174,49 +161,17 @@ func mergePartialStatistic(
 	}
 
 	fullHistogram = stripOuterBuckets(ctx, evalCtx, fullHistogram)
-	partialHistogram = stripOuterBuckets(ctx, evalCtx, partialHistogram)
+	partialBuckets = stripOuterBuckets(ctx, evalCtx, partialBuckets)
+
+	partialHistogram := histogram{buckets: partialBuckets}
+	partialHistograms := partialHistogram.splitPartial()
 
 	mergedHistogram := fullHistogram
-	if atExtremes {
-		if extremesBound == nil {
-			return nil, errors.New("can't merge partial statistic at extremes without an extremes bound")
-		}
-		// Find the index separating the lower and upper extreme partial buckets.
-		i := 0
-		for i < len(partialHistogram) {
-			if val, err := partialHistogram[i].UpperBound.Compare(ctx, evalCtx, extremesBound); err == nil {
-				if val == 0 {
-					return nil, errors.New("the lowerbound of the full statistic histogram overlaps with the partial statistic histogram")
-				}
-				if val == -1 {
-					i++
-				} else {
-					break
-				}
-			} else {
-				return nil, err
-			}
-		}
 
-		lowerExtremeBuckets := partialHistogram[:i]
-		upperExtremeBuckets := partialHistogram[i:]
-
+	for _, spanHistogram := range partialHistograms {
 		var err error
-		if len(lowerExtremeBuckets) > 0 {
-			mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, lowerExtremeBuckets)
-			if err != nil {
-				return nil, err
-			}
-		}
-		if len(upperExtremeBuckets) > 0 {
-			mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, upperExtremeBuckets)
-			if err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		var err error
-		mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram, partialHistogram)
+		mergedHistogram, err = mergeHistograms(ctx, evalCtx, mergedHistogram,
+			spanHistogram)
 		if err != nil {
 			return nil, err
 		}
