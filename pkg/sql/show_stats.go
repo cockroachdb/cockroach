@@ -195,9 +195,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					statsList[i], statsList[j] = statsList[j], statsList[i]
 				}
 
+				merged := stats.MergedStatistics(ctx, statsList, p.ExtendedEvalContext().Settings)
+				statsList = append(merged, statsList...)
 				if withMerge {
-					merged := stats.MergedStatistics(ctx, statsList, p.ExtendedEvalContext().Settings)
-					statsList = append(merged, statsList...)
 					// Iterate in reverse order to match the ORDER BY "columnIDs".
 					for i := len(merged) - 1; i >= 0; i-- {
 						mergedRow, err := tableStatisticProtoToRow(&merged[i].TableStatisticProto)
