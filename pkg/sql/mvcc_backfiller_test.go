@@ -423,7 +423,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
