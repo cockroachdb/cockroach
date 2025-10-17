@@ -2582,7 +2582,7 @@ func StartOpenTelemetry(
 	return opentelemetry.Install(ctx, l, c, config)
 }
 
-// Stop stops the OpenTelemetry Collector on the cluster identified by clusterName.
+// StopOpenTelemetry stops the OpenTelemetry Collector on the cluster identified by clusterName.
 func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
