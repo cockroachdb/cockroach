@@ -6,6 +6,7 @@
 package ibm
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -338,14 +339,21 @@ func (p *Provider) IsLocalProvider() bool {
 
 // List queries the IBM Cloud API to return all Roachprod VMs across all regions.
 func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+	return p.ListWithContext(context.Background(), l, opts)
+}
+
+// ListWithContext queries the IBM Cloud API to return all Roachprod VMs across all regions.
+func (p *Provider) ListWithContext(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 
 	var ret vm.List
 	var mux syncutil.Mutex
-	var g errgroup.Group
+	g, ctx := errgroup.WithContext(ctx)
 
 	for r := range p.vpcServices {
 		g.Go(func() error {
-			vms, err := p.listRegion(l, r, opts)
+			vms, err := p.listRegion(ctx, l, r, opts)
 			if err != nil {
 				// Failing to list VMs in a region is not fatal.
 				l.Printf("failed to list IBM VMs in region: %s\n%v\n", r, err)

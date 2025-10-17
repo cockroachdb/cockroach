@@ -53,6 +53,11 @@ func (n *dnsProvider) ProviderName() string {
 
 // SyncDNS is unimplemented for the local DNS provider.
 func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return n.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+// SyncDNSWithContext is unimplemented for the local DNS provider.
+func (n *dnsProvider) SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms vm.List) error {
 	// No-op for local DNS provider.
 	return nil
 }
