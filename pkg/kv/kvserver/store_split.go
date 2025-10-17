@@ -127,7 +127,7 @@ func splitPreApply(
 	// [*] Note that uninitialized replicas may cast votes, and if they have, we
 	// can't load the default Term and Vote values.
 	rsl := kvstorage.MakeLoader(split.RightDesc.RangeID)
-	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
+	if err := rsl.SynthesizeRaftState(ctx, readWriter, kvstorage.TODORaft(readWriter)); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{

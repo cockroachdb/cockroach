@@ -442,12 +442,12 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 // TODO(sep-raft-log): this is now only used in splits, when initializing a
 // replica. Make the implementation straightforward, most of the stuff here is
 // constant except the existing HardState.
-func (s StateLoader) SynthesizeRaftState(ctx context.Context, readWriter storage.ReadWriter) error {
-	hs, err := s.LoadHardState(ctx, readWriter)
+func (s StateLoader) SynthesizeRaftState(ctx context.Context, stateRO StateRO, raftRW Raft) error {
+	hs, err := s.LoadHardState(ctx, raftRW.RO)
 	if err != nil {
 		return err
 	}
-	as, err := s.LoadRangeAppliedState(ctx, readWriter)
+	as, err := s.LoadRangeAppliedState(ctx, stateRO)
 	if err != nil {
 		return err
 	}
@@ -455,5 +455,5 @@ func (s StateLoader) SynthesizeRaftState(ctx context.Context, readWriter storage
 		Index: as.RaftAppliedIndex,
 		Term:  as.RaftAppliedIndexTerm,
 	}
-	return s.SynthesizeHardState(ctx, readWriter, hs, applied)
+	return s.SynthesizeHardState(ctx, raftRW.WO, hs, applied)
 }
