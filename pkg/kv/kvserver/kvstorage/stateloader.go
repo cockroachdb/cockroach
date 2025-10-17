@@ -111,26 +111,26 @@ func (s StateLoader) Load(
 // missing whenever save is called. Optional values should be reserved
 // strictly for use in Result. Do before merge.
 func (s StateLoader) Save(
-	ctx context.Context, readWriter storage.ReadWriter, state kvserverpb.ReplicaState,
+	ctx context.Context, stateRW StateRW, state kvserverpb.ReplicaState,
 ) (enginepb.MVCCStats, error) {
 	ms := state.Stats
-	if err := s.SetLease(ctx, readWriter, ms, *state.Lease); err != nil {
+	if err := s.SetLease(ctx, stateRW, ms, *state.Lease); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := s.SetGCThreshold(ctx, readWriter, ms, state.GCThreshold); err != nil {
+	if err := s.SetGCThreshold(ctx, stateRW, ms, state.GCThreshold); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
-	if err := s.SetGCHint(ctx, readWriter, ms, state.GCHint); err != nil {
+	if err := s.SetGCHint(ctx, stateRW, ms, state.GCHint); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	if state.Version != nil {
-		if err := s.SetVersion(ctx, readWriter, ms, state.Version); err != nil {
+		if err := s.SetVersion(ctx, stateRW, ms, state.Version); err != nil {
 			return enginepb.MVCCStats{}, err
 		}
 	}
 	if err := s.SetRangeAppliedState(
 		ctx,
-		readWriter,
+		stateRW,
 		state.RaftAppliedIndex,
 		state.LeaseAppliedIndex,
 		state.RaftAppliedIndexTerm,
@@ -153,9 +153,9 @@ func (s StateLoader) LoadLease(ctx context.Context, stateRO StateRO) (roachpb.Le
 
 // SetLease persists a lease.
 func (s StateLoader) SetLease(
-	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, lease roachpb.Lease,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, lease roachpb.Lease,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, s.RangeLeaseKey(),
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeLeaseKey(),
 		hlc.Timestamp{}, &lease, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -170,10 +170,7 @@ func (s StateLoader) SetLease(
 // prevLease may be modified concurrently. In that case the lease request will
 // fail below Raft, so it doesn't matter if the stats are wrong.
 func (s StateLoader) SetLeaseBlind(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	lease, prevLease roachpb.Lease,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, lease, prevLease roachpb.Lease,
 ) error {
 	key := s.RangeLeaseKey()
 	var value, prevValue roachpb.Value
@@ -187,7 +184,7 @@ func (s StateLoader) SetLeaseBlind(
 		return err
 	}
 	prevValue.InitChecksum(key)
-	return storage.MVCCBlindPutInlineWithPrev(ctx, readWriter, ms, key, value, prevValue)
+	return storage.MVCCBlindPutInlineWithPrev(ctx, stateRW, ms, key, value, prevValue)
 }
 
 // LoadRangeAppliedState loads the Range applied state.
@@ -220,7 +217,7 @@ func (s StateLoader) LoadMVCCStats(
 // by the range applied state key.
 func (s StateLoader) SetRangeAppliedState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	stateRW StateRW,
 	appliedIndex kvpb.RaftIndex,
 	leaseAppliedIndex kvpb.LeaseAppliedIndex,
 	appliedIndexTerm kvpb.RaftTerm,
@@ -242,7 +239,7 @@ func (s StateLoader) SetRangeAppliedState(
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in ComputeStats.
 	ms := (*enginepb.MVCCStats)(nil)
-	return storage.MVCCPutProto(ctx, readWriter, s.RangeAppliedStateKey(),
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeAppliedStateKey(),
 		hlc.Timestamp{}, as, storage.MVCCWriteOptions{Stats: ms, Category: fs.ReplicationReadCategory})
 }
 
@@ -250,29 +247,29 @@ func (s StateLoader) SetRangeAppliedState(
 // RangeAppliedState key before overwriting the stats. Use SetRangeAppliedState
 // when performance is important.
 func (s StateLoader) SetMVCCStats(
-	ctx context.Context, readWriter storage.ReadWriter, newMS *enginepb.MVCCStats,
+	ctx context.Context, stateRW StateRW, newMS *enginepb.MVCCStats,
 ) error {
-	as, err := s.LoadRangeAppliedState(ctx, readWriter)
+	as, err := s.LoadRangeAppliedState(ctx, stateRW)
 	if err != nil {
 		return err
 	}
 	alloc := as // reuse
 	return s.SetRangeAppliedState(
-		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
+		ctx, stateRW, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
 		as.RaftClosedTimestamp, alloc)
 }
 
 // SetClosedTimestamp overwrites the closed timestamp.
 func (s StateLoader) SetClosedTimestamp(
-	ctx context.Context, readWriter storage.ReadWriter, closedTS hlc.Timestamp,
+	ctx context.Context, stateRW StateRW, closedTS hlc.Timestamp,
 ) error {
-	as, err := s.LoadRangeAppliedState(ctx, readWriter)
+	as, err := s.LoadRangeAppliedState(ctx, stateRW)
 	if err != nil {
 		return err
 	}
 	alloc := as // reuse
 	return s.SetRangeAppliedState(
-		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
+		ctx, stateRW, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
 		as.RangeStats.ToStatsPtr(), closedTS, alloc)
 }
 
@@ -286,15 +283,12 @@ func (s StateLoader) LoadGCThreshold(ctx context.Context, stateRO StateRO) (*hlc
 
 // SetGCThreshold sets the GC threshold.
 func (s StateLoader) SetGCThreshold(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	threshold *hlc.Timestamp,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, threshold *hlc.Timestamp,
 ) error {
 	if threshold == nil {
 		return errors.New("cannot persist nil GCThreshold")
 	}
-	return storage.MVCCPutProto(ctx, readWriter, s.RangeGCThresholdKey(),
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeGCThresholdKey(),
 		hlc.Timestamp{}, threshold, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -311,12 +305,12 @@ func (s StateLoader) LoadGCHint(ctx context.Context, stateRO StateRO) (*roachpb.
 
 // SetGCHint writes the GC hint.
 func (s StateLoader) SetGCHint(
-	ctx context.Context, readWriter storage.ReadWriter, ms *enginepb.MVCCStats, hint *roachpb.GCHint,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, hint *roachpb.GCHint,
 ) error {
 	if hint == nil {
 		return errors.New("cannot persist nil GCHint")
 	}
-	return storage.MVCCPutProto(ctx, readWriter, s.RangeGCHintKey(),
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeGCHintKey(),
 		hlc.Timestamp{}, hint, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -330,12 +324,9 @@ func (s StateLoader) LoadVersion(ctx context.Context, stateRO StateRO) (roachpb.
 
 // SetVersion sets the replica version.
 func (s StateLoader) SetVersion(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	version *roachpb.Version,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, version *roachpb.Version,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, s.RangeVersionKey(),
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeVersionKey(),
 		hlc.Timestamp{}, version, storage.MVCCWriteOptions{Stats: ms})
 }
 
@@ -352,12 +343,9 @@ func (s StateLoader) LoadRangeForceFlushIndex(
 
 // SetForceFlushIndex sets the force-flush index.
 func (s StateLoader) SetForceFlushIndex(
-	ctx context.Context,
-	readWriter storage.ReadWriter,
-	ms *enginepb.MVCCStats,
-	ffIndex *roachpb.ForceFlushIndex,
+	ctx context.Context, stateRW StateRW, ms *enginepb.MVCCStats, ffIndex *roachpb.ForceFlushIndex,
 ) error {
-	return storage.MVCCPutProto(ctx, readWriter, s.RangeForceFlushKey(),
+	return storage.MVCCPutProto(ctx, stateRW, s.RangeForceFlushKey(),
 		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
