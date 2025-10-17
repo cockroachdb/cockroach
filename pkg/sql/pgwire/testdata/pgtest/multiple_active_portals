@@ -1629,3 +1629,100 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end
+
+subtest explain_analyze
+
+# Regression test that EXPLAIN ANALYZE doesn't run through the pausable portal
+# path even when the feature is enabled (#137597).
+
+send crdb_only
+Query {"String": "SET multiple_active_portals_enabled = 'true';"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "qea1", "Query": "EXPLAIN ANALYZE SELECT 1;"}
+Bind {"DestinationPortal": "pea1", "PreparedStatement": "qea1"}
+Execute {"Portal": "pea1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only ignore=DataRow
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "pea1"}
+Sync
+----
+
+until crdb_only ignore=DataRow
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "qea2", "Query": "EXPLAIN ANALYZE (DEBUG) SELECT 1;"}
+Bind {"DestinationPortal": "pea2", "PreparedStatement": "qea2"}
+Execute {"Portal": "pea2", "MaxRows": 1}
+Sync
+----
+
+until crdb_only ignore=DataRow
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Execute {"Portal": "pea2"}
+Sync
+----
+
+until crdb_only ignore=DataRow
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end
