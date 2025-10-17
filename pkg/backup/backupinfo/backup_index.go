@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package backupdest
+package backupinfo
 
 import (
 	"bytes"
@@ -279,7 +279,7 @@ func GetBackupTreeIndexMetadata(
 // Note: While the path is stored in the index file, we can take a shortcut here
 // and derive it from the filename solely because backup paths are
 // millisecond-precise and so are the timestamps encoded in the filename.
-func parseBackupFilePathFromIndexFileName(subdir, basename string) (string, error) {
+func ParseBackupFilePathFromIndexFileName(subdir, basename string) (string, error) {
 	start, end, err := parseIndexFilename(basename)
 	if err != nil {
 		return "", err

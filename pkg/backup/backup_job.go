@@ -444,7 +444,7 @@ func backup(
 		return roachpb.RowCount{}, 0, err
 	}
 
-	if err := backupdest.WriteBackupIndexMetadata(
+	if err := backupinfo.WriteBackupIndexMetadata(
 		ctx,
 		execCtx.ExecCfg(),
 		execCtx.User(),
