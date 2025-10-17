@@ -623,12 +623,14 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	cost.C += cpuCostFactor
 
 	// Add a one-time cost for any operator with unbounded cardinality. This
-	// ensures we prefer plans that push limits as far down the tree as possible,
-	// all else being equal.
+	// ensures we prefer plans that push limits as far down the tree as
+	// possible, all else being equal.
 	//
-	// Also add a cost flag for unbounded cardinality.
+	// Also add a cost flag for unbounded cardinality, and a penalty if the
+	// corresponding session setting is enabled.
 	if candidate.Relational().Cardinality.IsUnbounded() {
 		cost.C += cpuCostFactor
+		cost.SetUnboundedCardinality()
 		if c.evalCtx.SessionData().OptimizerPreferBoundedCardinality {
 			cost.Flags.UnboundedCardinality = true
 		}
