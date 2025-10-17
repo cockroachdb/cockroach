@@ -1476,7 +1476,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		if portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 			portal.pauseInfo.execStmtInOpenState.ihWrapper = &instrumentationHelperWrapper{
 				ctx: ctx,
-				ih:  *ih,
+				// TODO(yuzefovich): we're capturing the instrumentationHelper
+				// by value here, meaning that modifications that happen later
+				// (notably in makeExecPlan) aren't captured. For example,
+				// explainPlan field will remain unset. However, so far we've
+				// only observed this impact EXPLAIN ANALYZE which doesn't run
+				// through the pausable portal path.
+				ih: *ih,
 			}
 		} else {
 			p.instrumentation = portal.pauseInfo.execStmtInOpenState.ihWrapper.ih
