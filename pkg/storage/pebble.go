@@ -283,6 +283,9 @@ const (
 
 	// StoreCompressionGood uses pebble.DBCompressionGood.
 	StoreCompressionGood StoreCompressionSetting = 7
+
+	// StoreCompressionFast uses pebble.DBCompressionFast.
+	StoreCompressionFast StoreCompressionSetting = 8
 )
 
 var storeCompressionSettingToString = map[StoreCompressionSetting]string{
@@ -291,6 +294,7 @@ var storeCompressionSettingToString = map[StoreCompressionSetting]string{
 	StoreCompressionNone:   "none",
 	StoreCompressionZstd:   "zstd",
 
+	StoreCompressionFast:     "fast",
 	StoreCompressionFastest:  "fastest",
 	StoreCompressionBalanced: "balanced",
 	StoreCompressionGood:     "good",
@@ -305,6 +309,7 @@ var storeCompressionSettings = map[StoreCompressionSetting]pebble.DBCompressionS
 	StoreCompressionFastest:  pebble.DBCompressionFastest,
 	StoreCompressionBalanced: pebble.DBCompressionBalanced,
 	StoreCompressionGood:     pebble.DBCompressionGood,
+	StoreCompressionFast:     pebble.DBCompressionFast,
 }
 
 // String implements fmt.Stringer for StoreCompressionSetting.
@@ -338,7 +343,7 @@ const compressionSettingClass = settings.SystemVisible
 var CompressionAlgorithmStorage = settings.RegisterEnumSetting[StoreCompressionSetting](
 	compressionSettingClass,
 	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental);`,
+	`determines the compression algorithm to use for Pebble stores`,
 	// TODO(radu,jackson): use a metamorphic constant.
 	StoreCompressionFastest.String(),
 	storeCompressionSettingToString,
