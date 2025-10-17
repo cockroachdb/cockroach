@@ -1449,8 +1449,11 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)
 
+	// Get the current value of the cluster setting.
+	maxErrors := int(maxRepeatedErrorCount.Get(&srv.ClusterSettings().SV))
+
 	atomic.StoreUint32(&shouldError, 1)
-	for i := 0; i < maxRepeatedErrorCount+100; i++ {
+	for i := 0; i < maxErrors+100; i++ {
 		var s int
 		err := conn.QueryRowContext(ctx, "SELECT 1").Scan(&s)
 		if err != nil {
@@ -1459,9 +1462,9 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 			}
 			if errors.Is(err, driver.ErrBadConn) {
 				// The server closed the connection, which is what we want!
-				require.GreaterOrEqualf(t, i, maxRepeatedErrorCount,
+				require.GreaterOrEqualf(t, i, maxErrors,
 					"the server should have aborted after seeing %d errors",
-					maxRepeatedErrorCount,
+					maxErrors,
 				)
 				return
 			}
