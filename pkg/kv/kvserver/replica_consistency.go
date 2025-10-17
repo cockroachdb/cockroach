@@ -634,7 +634,7 @@ func CalcReplicaDigest(
 		result.RecomputedMS = ms
 	}
 
-	rangeAppliedState, err := kvstorage.Make(desc.RangeID).LoadRangeAppliedState(ctx, snap)
+	rangeAppliedState, err := kvstorage.MakeLoader(desc.RangeID).LoadRangeAppliedState(ctx, snap)
 	if err != nil {
 		return nil, err
 	}
@@ -686,7 +686,7 @@ func (r *Replica) computeChecksumPostApply(
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	if cc.Checkpoint {
-		sl := kvstorage.Make(r.RangeID)
+		sl := kvstorage.MakeLoader(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
 		if err != nil {
 			log.KvExec.Warningf(ctx, "unable to load applied index, continuing anyway")

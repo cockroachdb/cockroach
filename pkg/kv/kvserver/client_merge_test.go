@@ -1367,9 +1367,9 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for both ranges now that we have data.
 	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
-	msA, err := kvstorage.Make(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
+	msA, err := kvstorage.MakeLoader(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
-	msB, err := kvstorage.Make(rhsDesc.RangeID).LoadMVCCStats(ctx, snap)
+	msB, err := kvstorage.MakeLoader(rhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 
 	// Stats should agree with recomputation.
@@ -1385,7 +1385,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for the merged range and verify.
 	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
-	msMerged, err := kvstorage.Make(replMerged.RangeID).LoadMVCCStats(ctx, snap)
+	msMerged, err := kvstorage.MakeLoader(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 
 	// Merged stats should agree with recomputation.
@@ -2550,7 +2550,7 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 
 	// Be extra paranoid and verify the exact value of the replica tombstone.
 	checkTombstone := func(eng storage.Engine) {
-		ts, err := kvstorage.Make(rhsDesc.RangeID).LoadRangeTombstone(ctx, eng)
+		ts, err := kvstorage.MakeLoader(rhsDesc.RangeID).LoadRangeTombstone(ctx, eng)
 		require.NoError(t, err)
 		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), ts.NextReplicaID)
 	}
@@ -3998,7 +3998,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
 				}
 
-				if err := kvstorage.Make(rangeID).SetRangeTombstone(
+				if err := kvstorage.MakeLoader(rangeID).SetRangeTombstone(
 					context.Background(), &sst,
 					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
 				); err != nil {

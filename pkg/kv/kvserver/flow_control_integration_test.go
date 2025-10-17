@@ -2909,7 +2909,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 			return errors.Errorf("expected in-memory version %s, got %s", expV, gotV)
 		}
 
-		sl := kvstorage.Make(desc.RangeID)
+		sl := kvstorage.MakeLoader(desc.RangeID)
 		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
 		if err != nil {
 			return err

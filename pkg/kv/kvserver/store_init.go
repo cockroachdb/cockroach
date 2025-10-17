@@ -232,7 +232,7 @@ func WriteInitialClusterData(
 				return err
 			}
 
-			sl := kvstorage.Make(rangeID)
+			sl := kvstorage.MakeLoader(rangeID)
 			if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
 				return err
 			}

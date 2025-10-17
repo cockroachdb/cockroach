@@ -207,7 +207,7 @@ func applyReplicaUpdate(
 			"can not find replica with ID %d for range r%d", update.OldReplicaID, update.RangeID)
 	}
 
-	sl := kvstorage.Make(localDesc.RangeID)
+	sl := kvstorage.MakeLoader(localDesc.RangeID)
 	ms, err := sl.LoadMVCCStats(ctx, readWriter)
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")

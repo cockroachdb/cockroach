@@ -64,7 +64,7 @@ func (e *env) handleNewReplica(
 	skipRaftReplicaID bool,
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
-	sl := Make(id.RangeID)
+	sl := MakeLoader(id.RangeID)
 	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
 		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))

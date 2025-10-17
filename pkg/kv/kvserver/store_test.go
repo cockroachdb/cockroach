@@ -424,7 +424,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
 
 			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			require.NoError(t, kvstorage.Make(rangeID).SetRangeTombstone(ctx, eng, tombstone))
+			require.NoError(t, kvstorage.MakeLoader(rangeID).SetRangeTombstone(ctx, eng, tombstone))
 
 			if len(wanted) >= rangeCount {
 				break
@@ -892,7 +892,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	}
 
 	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
-	require.NoError(t, kvstorage.Make(newID.RangeID).SetRaftReplicaID(
+	require.NoError(t, kvstorage.MakeLoader(newID.RangeID).SetRaftReplicaID(
 		ctx, store.TODOEngine(), newID.ReplicaID))
 
 	r, err := newUninitializedReplica(store, newID)
@@ -2774,7 +2774,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := kvstorage.Make(repl.RangeID).LoadGCThreshold(
+		pgcThreshold, err := kvstorage.MakeLoader(repl.RangeID).LoadGCThreshold(
 			context.Background(), store.StateEngine())
 		repl.mu.Unlock()
 		if err != nil {
@@ -4107,7 +4107,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := kvstorage.Make(repl.RangeID).LoadRaftReplicaID(
+	replicaID, err := kvstorage.MakeLoader(repl.RangeID).LoadRaftReplicaID(
 		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
 	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
@@ -4137,7 +4137,7 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}
 	desc.AddReplica(1, 1, roachpb.VOTER_FULL)
 
-	sl := kvstorage.Make(desc.RangeID)
+	sl := kvstorage.MakeLoader(desc.RangeID)
 	// Write the range state that will be consulted and copied during the split.
 	lease := roachpb.Lease{
 		Replica:       desc.InternalReplicas[0],
@@ -4178,7 +4178,7 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	splitPreApply(ctx, lhsRepl, batch, split, nil)
 
 	// Verify that the RHS truncated state is initialized as expected.
-	rsl := kvstorage.Make(rightDesc.RangeID)
+	rsl := kvstorage.MakeLoader(rightDesc.RangeID)
 	truncState, err := rsl.LoadRaftTruncatedState(ctx, batch)
 	require.NoError(t, err)
 	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))

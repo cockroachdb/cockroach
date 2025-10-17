@@ -156,7 +156,7 @@ func destroyReplicaImpl(
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
 	}
-	sl := Make(info.RangeID)
+	sl := MakeLoader(info.RangeID)
 	// Assert that the ReplicaID in storage matches the one being removed.
 	if loaded, err := sl.LoadRaftReplicaID(ctx, reader); err != nil {
 		return err

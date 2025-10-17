@@ -229,7 +229,7 @@ func (tc *testCtx) updatePostReplicaCreateState(
 ) {
 	// Sanity check that we're not overwriting an existing replica.
 	require.Nil(t, rs.replica)
-	sl := kvstorage.Make(rs.desc.RangeID)
+	sl := kvstorage.MakeLoader(rs.desc.RangeID)
 	hs, err := sl.LoadHardState(ctx, batch)
 	require.NoError(t, err)
 	ts, err := sl.LoadRaftTruncatedState(ctx, batch)

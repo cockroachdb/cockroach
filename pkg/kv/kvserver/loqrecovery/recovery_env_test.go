@@ -327,7 +327,7 @@ func (e *quorumRecoveryEnv) handleReplicationData(t *testing.T, d datadriven.Tes
 			t.Fatalf("failed to write range descriptor into store: %v", err)
 		}
 
-		sl := kvstorage.Make(replica.RangeID)
+		sl := kvstorage.MakeLoader(replica.RangeID)
 		if _, err := sl.Save(ctx, eng, replicaState); err != nil {
 			t.Fatalf("failed to save raft replica state into store: %v", err)
 		}
@@ -773,7 +773,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 			func(desc roachpb.RangeDescriptor) error {
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
-				sl := kvstorage.Make(desc.RangeID)
+				sl := kvstorage.MakeLoader(desc.RangeID)
 				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
 				if err != nil {
 					t.Fatalf("failed to load Raft replica ID: %v", err)

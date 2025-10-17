@@ -84,7 +84,7 @@ func TestSynthesizeHardState(t *testing.T) {
 		func() {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			rsl := Make(roachpb.RangeID(1))
+			rsl := MakeLoader(roachpb.RangeID(1))
 
 			if test.OldHS != nil {
 				if err := rsl.SetHardState(context.Background(), batch, *test.OldHS); err != nil {

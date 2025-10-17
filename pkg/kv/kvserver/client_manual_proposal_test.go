@@ -137,7 +137,7 @@ LIMIT
 			return nil
 		}))
 
-	sl := kvstorage.Make(rangeID)
+	sl := kvstorage.MakeLoader(rangeID)
 	lease, err := sl.LoadLease(ctx, eng)
 	require.NoError(t, err)
 

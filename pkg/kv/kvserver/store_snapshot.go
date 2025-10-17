@@ -708,7 +708,7 @@ func SendEmptySnapshot(
 	}
 
 	// Use stateloader to load state out of memory from the previously created engine.
-	sl := kvstorage.Make(desc.RangeID)
+	sl := kvstorage.MakeLoader(desc.RangeID)
 	state, err := sl.Load(ctx, eng, &desc)
 	if err != nil {
 		return err

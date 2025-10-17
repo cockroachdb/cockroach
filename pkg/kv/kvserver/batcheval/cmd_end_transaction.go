@@ -1655,7 +1655,7 @@ func mergeTrigger(
 		if err != nil {
 			return result.Result{}, err
 		}
-		rhsLoader := kvstorage.Make(merge.RightDesc.RangeID)
+		rhsLoader := kvstorage.MakeLoader(merge.RightDesc.RangeID)
 		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
 		if err != nil {
 			return result.Result{}, err
