@@ -7,14 +7,13 @@ package backupdest
 
 import (
 	"context"
-	"fmt"
 	"path"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -92,11 +91,11 @@ func FindAllIncrementalPaths(
 	defer sp.Finish()
 
 	// Backup indexes do not support custom incremental locations.
-	if customIncLocation || !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
+	if customIncLocation || !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
 		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 
-	indexes, err := ListIndexes(ctx, rootStore, subdir)
+	indexes, err := backupinfo.ListIndexes(ctx, rootStore, subdir)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +109,7 @@ func FindAllIncrementalPaths(
 	return util.MapE(
 		indexes[1:], // We skip the full backup
 		func(indexFilename string) (string, error) {
-			return parseBackupFilePathFromIndexFileName(subdir, indexFilename)
+			return backupinfo.ParseBackupFilePathFromIndexFileName(subdir, indexFilename)
 		},
 	)
 }
@@ -316,19 +315,4 @@ func ResolveDefaultBaseIncrementalStorageLocation(
 	}
 
 	return defaultURI, nil
-}
-
-// ConstructDateBasedIncrementalFolderName constructs the name of a date-based
-// incremental backup folder relative to the full subdirectory it belongs to.
-//
-// /2025/07/30-120000.00/20250730/130000.00-20250730-120000.00
-//
-//	 	                 └─────────────────────────────────────┘
-//										               returns this
-func ConstructDateBasedIncrementalFolderName(start, end time.Time) string {
-	return fmt.Sprintf(
-		"%s-%s",
-		end.Format(backupbase.DateBasedIncFolderName),
-		start.Format(backupbase.DateBasedIncFolderNameSuffix),
-	)
 }

@@ -237,7 +237,7 @@ func ResolveDest(
 		}
 	}
 
-	partName := ConstructDateBasedIncrementalFolderName(startTime.GoTime(), endTime.GoTime())
+	partName := backupinfo.ConstructDateBasedIncrementalFolderName(startTime.GoTime(), endTime.GoTime())
 	defaultIncrementalsURI, urisByLocalityKV, err := GetURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
 	if err != nil {
 		return ResolvedDestination{}, err
@@ -478,7 +478,7 @@ func ListFullBackupsInCollection(
 	ctx context.Context, store cloud.ExternalStorage, useIndex bool,
 ) ([]string, error) {
 	if useIndex {
-		return ListSubdirsFromIndex(ctx, store)
+		return backupinfo.ListSubdirsFromIndex(ctx, store)
 	}
 
 	var backupPaths []string
@@ -539,7 +539,7 @@ func ResolveBackupManifests(
 	}
 	defer rootStore.Close()
 
-	if !ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || isCustomIncLocation {
+	if !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) || isCustomIncLocation {
 		return legacyResolveBackupManifests(
 			ctx, execCfg, mem, defaultCollectionURI, mkStore,
 			resolvedSubdir, fullyResolvedBaseDirectory, fullyResolvedIncrementalsDirectory,
@@ -547,7 +547,7 @@ func ResolveBackupManifests(
 		)
 	}
 
-	exists, err := IndexExists(ctx, rootStore, resolvedSubdir)
+	exists, err := backupinfo.IndexExists(ctx, rootStore, resolvedSubdir)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
@@ -759,7 +759,7 @@ func indexedResolveBackupManifests(
 		}
 	}()
 
-	indexes, err := GetBackupTreeIndexMetadata(
+	indexes, err := backupinfo.GetBackupTreeIndexMetadata(
 		ctx, rootStores[0], resolvedSubdir,
 	)
 	if err != nil {

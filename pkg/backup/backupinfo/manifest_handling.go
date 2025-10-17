@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
@@ -1759,4 +1760,19 @@ func GetBackupManifestIterFactories(
 	}
 
 	return layerToFileIterFactory, nil
+}
+
+// ConstructDateBasedIncrementalFolderName constructs the name of a date-based
+// incremental backup folder relative to the full subdirectory it belongs to.
+//
+// /2025/07/30-120000.00/20250730/130000.00-20250730-120000.00
+//
+//	 	                 └─────────────────────────────────────┘
+//										               returns this
+func ConstructDateBasedIncrementalFolderName(start, end time.Time) string {
+	return fmt.Sprintf(
+		"%s-%s",
+		end.Format(backupbase.DateBasedIncFolderName),
+		start.Format(backupbase.DateBasedIncFolderNameSuffix),
+	)
 }

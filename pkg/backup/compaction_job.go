@@ -810,7 +810,7 @@ func concludeBackupCompaction(
 	}
 
 	return errors.Wrapf(
-		backupdest.WriteBackupIndexMetadata(
+		backupinfo.WriteBackupIndexMetadata(
 			ctx,
 			execCtx.ExecCfg(),
 			execCtx.User(),
