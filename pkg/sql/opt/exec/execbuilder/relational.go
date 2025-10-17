@@ -4353,12 +4353,23 @@ func (b *Builder) getEnvData() (exec.ExplainEnvData, error) {
 			refTableIncluded.Add(int(table.ID()))
 		},
 	)
-	envOpts.AddFKs = opt.GetAllFKsAmongTables(
+	var skipFKs []*tree.AlterTable
+	envOpts.AddFKs, skipFKs = opt.GetAllFKs(
+		b.ctx,
+		b.catalog,
 		refTables,
 		func(t cat.Table) (tree.TableName, error) {
 			return b.catalog.FullyQualifiedName(b.ctx, t)
 		},
 	)
+	// Given that we include all FK-related tables when visiting them, we should
+	// not skip any FKs - we'll return an error if we find any in test-only
+	// builds.
+	if buildutil.CrdbTestBuild {
+		if len(skipFKs) > 0 {
+			return envOpts, errors.AssertionFailedf("unexpectedly skipped adding FKs in EXPLAIN (OPT): %v", skipFKs)
+		}
+	}
 	var err error
 	envOpts.Tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 		return refTables[i]
