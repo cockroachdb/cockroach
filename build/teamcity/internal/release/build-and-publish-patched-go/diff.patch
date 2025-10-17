@@ -302,156 +302,41 @@ index 4e84aa9d8f..17b6891783 100644
  
  // supportsECDHE returns whether ECDHE key exchanges can be used with this
 diff --git a/src/crypto/x509/name_constraints_test.go b/src/crypto/x509/name_constraints_test.go
-index 78263fc0b2..831fcbc8d2 100644
+index 78263fc0b2..a585184516 100644
 --- a/src/crypto/x509/name_constraints_test.go
 +++ b/src/crypto/x509/name_constraints_test.go
-@@ -1456,63 +1456,7 @@ var nameConstraintsTests = []nameConstraintsTest{
- 		expectedError: "incompatible key usage",
- 	},
- 
--	// An invalid DNS SAN should be detected only at validation time so
--	// that we can process CA certificates in the wild that have invalid SANs.
--	// See https://github.com/golang/go/issues/23995
--
--	// #77: an invalid DNS or mail SAN will not be detected if name constraint
--	// checking is not triggered.
--	{
--		roots: make([]constraintsSpec, 1),
--		intermediates: [][]constraintsSpec{
--			{
--				{},
--			},
--		},
--		leaf: leafSpec{
--			sans: []string{"dns:this is invalid", "email:this @ is invalid"},
--		},
--	},
--
--	// #78: an invalid DNS SAN will be detected if any name constraint checking
--	// is triggered.
--	{
--		roots: []constraintsSpec{
--			{
--				bad: []string{"uri:"},
--			},
--		},
--		intermediates: [][]constraintsSpec{
--			{
--				{},
--			},
--		},
--		leaf: leafSpec{
--			sans: []string{"dns:this is invalid"},
--		},
--		expectedError: "cannot parse dnsName",
--	},
--
--	// #79: an invalid email SAN will be detected if any name constraint
--	// checking is triggered.
--	{
--		roots: []constraintsSpec{
--			{
--				bad: []string{"uri:"},
--			},
--		},
--		intermediates: [][]constraintsSpec{
--			{
--				{},
--			},
--		},
--		leaf: leafSpec{
--			sans: []string{"email:this @ is invalid"},
--		},
--		expectedError: "cannot parse rfc822Name",
--	},
--
--	// #80: if several EKUs are requested, satisfying any of them is sufficient.
-+	// #77: if several EKUs are requested, satisfying any of them is sufficient.
- 	{
- 		roots: make([]constraintsSpec, 1),
- 		intermediates: [][]constraintsSpec{
-@@ -1527,7 +1471,7 @@ var nameConstraintsTests = []nameConstraintsTest{
- 		requestedEKUs: []ExtKeyUsage{ExtKeyUsageClientAuth, ExtKeyUsageEmailProtection},
- 	},
- 
--	// #81: EKUs that are not asserted in VerifyOpts are not required to be
-+	// #78: EKUs that are not asserted in VerifyOpts are not required to be
- 	// nested.
- 	{
- 		roots: make([]constraintsSpec, 1),
-@@ -1546,7 +1490,7 @@ var nameConstraintsTests = []nameConstraintsTest{
+@@ -1600,6 +1600,13 @@ var nameConstraintsTests = []nameConstraintsTest{
  		},
  	},
  
--	// #82: a certificate without SANs and CN is accepted in a constrained chain.
-+	// #79: a certificate without SANs and CN is accepted in a constrained chain.
++	// #85: .example.com is an invalid DNS name, it should not match the
++	// constraint example.com.
++	{
++		roots:         []constraintsSpec{{ok: []string{"dns:example.com"}}},
++		leaf:          leafSpec{sans: []string{"dns:.example.com"}},
++		expectedError: "cannot parse dnsName \".example.com\"",
++	},
+ 	// #86: URIs with IPv6 addresses with zones and ports are rejected
  	{
  		roots: []constraintsSpec{
- 			{
-@@ -1563,7 +1507,7 @@ var nameConstraintsTests = []nameConstraintsTest{
- 		},
- 	},
- 
--	// #83: a certificate without SANs and with a CN that does not parse as a
-+	// #80: a certificate without SANs and with a CN that does not parse as a
- 	// hostname is accepted in a constrained chain.
- 	{
- 		roots: []constraintsSpec{
-@@ -1582,7 +1526,7 @@ var nameConstraintsTests = []nameConstraintsTest{
- 		},
- 	},
- 
--	// #84: a certificate with SANs and CN is accepted in a constrained chain.
-+	// #81: a certificate with SANs and CN is accepted in a constrained chain.
- 	{
- 		roots: []constraintsSpec{
- 			{
-@@ -1600,7 +1544,7 @@ var nameConstraintsTests = []nameConstraintsTest{
- 		},
- 	},
- 
--	// #86: URIs with IPv6 addresses with zones and ports are rejected
-+	// #82: URIs with IPv6 addresses with zones and ports are rejected
- 	{
- 		roots: []constraintsSpec{
- 			{
 diff --git a/src/crypto/x509/parser.go b/src/crypto/x509/parser.go
-index 812b0d2d28..9a3bcd6da0 100644
+index 812b0d2d28..f8beff71ad 100644
 --- a/src/crypto/x509/parser.go
 +++ b/src/crypto/x509/parser.go
-@@ -378,10 +378,14 @@ func parseSANExtension(der cryptobyte.String) (dnsNames, emailAddresses []string
- 			if err := isIA5String(email); err != nil {
- 				return errors.New("x509: SAN rfc822Name is malformed")
- 			}
-+			parsed, ok := parseRFC2821Mailbox(email)
-+			if !ok || (ok && !domainNameValid(parsed.domain, false)) {
-+				return errors.New("x509: SAN rfc822Name is malformed")
-+			}
- 			emailAddresses = append(emailAddresses, email)
- 		case nameTypeDNS:
- 			name := string(data)
--			if err := isIA5String(name); err != nil {
-+			if err := isIA5String(name); err != nil || (err == nil && !domainNameValid(name, false)) {
- 				return errors.New("x509: SAN dNSName is malformed")
- 			}
- 			dnsNames = append(dnsNames, string(name))
-@@ -391,14 +395,9 @@ func parseSANExtension(der cryptobyte.String) (dnsNames, emailAddresses []string
- 				return errors.New("x509: SAN uniformResourceIdentifier is malformed")
- 			}
- 			uri, err := url.Parse(uriStr)
--			if err != nil {
-+			if err != nil || (err == nil && uri.Host != "" && !domainNameValid(uri.Host, false)) {
+@@ -394,10 +394,8 @@ func parseSANExtension(der cryptobyte.String) (dnsNames, emailAddresses []string
+ 			if err != nil {
  				return fmt.Errorf("x509: cannot parse URI %q: %s", uriStr, err)
  			}
 -			if len(uri.Host) > 0 {
 -				if _, ok := domainToReverseLabels(uri.Host); !ok {
 -					return fmt.Errorf("x509: cannot parse URI %q: invalid domain", uriStr)
 -				}
--			}
++			if len(uri.Host) > 0 && !domainNameValid(uri.Host, false) {
++				return fmt.Errorf("x509: cannot parse URI %q: invalid domain", uriStr)
+ 			}
  			uris = append(uris, uri)
  		case nameTypeIP:
- 			switch len(data) {
-@@ -538,15 +537,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
+@@ -538,15 +536,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
  					return nil, nil, nil, nil, errors.New("x509: invalid constraint value: " + err.Error())
  				}
  
@@ -468,7 +353,7 @@ index 812b0d2d28..9a3bcd6da0 100644
  					return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse dnsName constraint %q", domain)
  				}
  				dnsNames = append(dnsNames, domain)
-@@ -587,12 +578,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
+@@ -587,12 +577,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
  						return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse rfc822Name constraint %q", constraint)
  					}
  				} else {
@@ -482,7 +367,7 @@ index 812b0d2d28..9a3bcd6da0 100644
  						return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse rfc822Name constraint %q", constraint)
  					}
  				}
-@@ -608,15 +594,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
+@@ -608,15 +593,7 @@ func parseNameConstraintsExtension(out *Certificate, e pkix.Extension) (unhandle
  					return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse URI constraint %q: cannot be IP address", domain)
  				}
  
@@ -499,49 +384,85 @@ index 812b0d2d28..9a3bcd6da0 100644
  					return nil, nil, nil, nil, fmt.Errorf("x509: failed to parse URI constraint %q", domain)
  				}
  				uriDomains = append(uriDomains, domain)
-@@ -1197,3 +1175,40 @@ func ParseRevocationList(der []byte) (*RevocationList, error) {
+@@ -1197,3 +1174,62 @@ func ParseRevocationList(der []byte) (*RevocationList, error) {
  
  	return rl, nil
  }
 +
-+// domainNameValid does minimal domain name validity checking. In particular it
-+// enforces the following properties:
-+//   - names cannot have the trailing period
-+//   - names can only have a leading period if constraint is true
-+//   - names must be <= 253 characters
-+//   - names cannot have empty labels
-+//   - names cannot labels that are longer than 63 characters
-+//
-+// Note that this does not enforce the LDH requirements for domain names.
++// domainNameValid is an alloc-less version of the checks that
++// domainToReverseLabels does.
 +func domainNameValid(s string, constraint bool) bool {
-+	if len(s) == 0 && constraint {
++	// TODO(#75835): This function omits a number of checks which we
++	// really should be doing to enforce that domain names are valid names per
++	// RFC 1034. We previously enabled these checks, but this broke a
++	// significant number of certificates we previously considered valid, and we
++	// happily create via CreateCertificate (et al). We should enable these
++	// checks, but will need to gate them behind a GODEBUG.
++	//
++	// I have left the checks we previously enabled, noted with "TODO(#75835)" so
++	// that we can easily re-enable them once we unbreak everyone.
++
++	// TODO(#75835): this should only be true for constraints.
++	if len(s) == 0 {
 +		return true
 +	}
-+	if len(s) == 0 || (!constraint && s[0] == '.') || s[len(s)-1] == '.' || len(s) > 253 {
++
++	// Do not allow trailing period (FQDN format is not allowed in SANs or
++	// constraints).
++	if s[len(s)-1] == '.' {
 +		return false
 +	}
++
++	// TODO(#75835): domains must have at least one label, cannot have
++	// a leading empty label, and cannot be longer than 253 characters.
++	// if len(s) == 0 || (!constraint && s[0] == '.') || len(s) > 253 {
++	// 	return false
++	// }
++
 +	lastDot := -1
 +	if constraint && s[0] == '.' {
 +		s = s[1:]
 +	}
 +
 +	for i := 0; i <= len(s); i++ {
++		if i < len(s) && (s[i] < 33 || s[i] > 126) {
++			// Invalid character.
++			return false
++		}
 +		if i == len(s) || s[i] == '.' {
 +			labelLen := i
 +			if lastDot >= 0 {
 +				labelLen -= lastDot + 1
 +			}
-+			if labelLen == 0 || labelLen > 63 {
++			if labelLen == 0 {
 +				return false
 +			}
++			// TODO(#75835): labels cannot be longer than 63 characters.
++			// if labelLen > 63 {
++			// 	return false
++			// }
 +			lastDot = i
 +		}
 +	}
 +
 +	return true
 +}
+diff --git a/src/crypto/x509/parser_test.go b/src/crypto/x509/parser_test.go
+index b31f9cdb24..dbb2083215 100644
+--- a/src/crypto/x509/parser_test.go
++++ b/src/crypto/x509/parser_test.go
+@@ -5,6 +5,9 @@
+ package x509
+ 
+ import (
++	"crypto/ecdsa"
++	"crypto/elliptic"
++	"crypto/rand"
+ 	"encoding/asn1"
+ 	"testing"
+ 
 diff --git a/src/crypto/x509/verify.go b/src/crypto/x509/verify.go
-index 2d2a271d53..14cd23f6e6 100644
+index 2d2a271d53..e6707862bb 100644
 --- a/src/crypto/x509/verify.go
 +++ b/src/crypto/x509/verify.go
 @@ -360,6 +360,7 @@ func parseRFC2821Mailbox(in string) (mailbox rfc2821Mailbox, ok bool) {
@@ -552,7 +473,135 @@ index 2d2a271d53..14cd23f6e6 100644
  	for len(domain) > 0 {
  		if i := strings.LastIndexByte(domain, '.'); i == -1 {
  			reverseLabels = append(reverseLabels, domain)
-@@ -867,7 +868,10 @@ func alreadyInChain(candidate *Certificate, chain []*Certificate) bool {
+@@ -392,7 +393,7 @@ func domainToReverseLabels(domain string) (reverseLabels []string, ok bool) {
+ 	return reverseLabels, true
+ }
+ 
+-func matchEmailConstraint(mailbox rfc2821Mailbox, constraint string) (bool, error) {
++func matchEmailConstraint(mailbox rfc2821Mailbox, constraint string, reversedDomainsCache map[string][]string, reversedConstraintsCache map[string][]string) (bool, error) {
+ 	// If the constraint contains an @, then it specifies an exact mailbox
+ 	// name.
+ 	if strings.Contains(constraint, "@") {
+@@ -405,10 +406,10 @@ func matchEmailConstraint(mailbox rfc2821Mailbox, constraint string) (bool, erro
+ 
+ 	// Otherwise the constraint is like a DNS constraint of the domain part
+ 	// of the mailbox.
+-	return matchDomainConstraint(mailbox.domain, constraint)
++	return matchDomainConstraint(mailbox.domain, constraint, reversedDomainsCache, reversedConstraintsCache)
+ }
+ 
+-func matchURIConstraint(uri *url.URL, constraint string) (bool, error) {
++func matchURIConstraint(uri *url.URL, constraint string, reversedDomainsCache map[string][]string, reversedConstraintsCache map[string][]string) (bool, error) {
+ 	// From RFC 5280, Section 4.2.1.10:
+ 	// “a uniformResourceIdentifier that does not include an authority
+ 	// component with a host name specified as a fully qualified domain
+@@ -437,7 +438,7 @@ func matchURIConstraint(uri *url.URL, constraint string) (bool, error) {
+ 		return false, fmt.Errorf("URI with IP (%q) cannot be matched against constraints", uri.String())
+ 	}
+ 
+-	return matchDomainConstraint(host, constraint)
++	return matchDomainConstraint(host, constraint, reversedDomainsCache, reversedConstraintsCache)
+ }
+ 
+ func matchIPConstraint(ip net.IP, constraint *net.IPNet) (bool, error) {
+@@ -454,16 +455,21 @@ func matchIPConstraint(ip net.IP, constraint *net.IPNet) (bool, error) {
+ 	return true, nil
+ }
+ 
+-func matchDomainConstraint(domain, constraint string) (bool, error) {
++func matchDomainConstraint(domain, constraint string, reversedDomainsCache map[string][]string, reversedConstraintsCache map[string][]string) (bool, error) {
+ 	// The meaning of zero length constraints is not specified, but this
+ 	// code follows NSS and accepts them as matching everything.
+ 	if len(constraint) == 0 {
+ 		return true, nil
+ 	}
+ 
+-	domainLabels, ok := domainToReverseLabels(domain)
+-	if !ok {
+-		return false, fmt.Errorf("x509: internal error: cannot parse domain %q", domain)
++	domainLabels, found := reversedDomainsCache[domain]
++	if !found {
++		var ok bool
++		domainLabels, ok = domainToReverseLabels(domain)
++		if !ok {
++			return false, fmt.Errorf("x509: internal error: cannot parse domain %q", domain)
++		}
++		reversedDomainsCache[domain] = domainLabels
+ 	}
+ 
+ 	// RFC 5280 says that a leading period in a domain name means that at
+@@ -477,9 +483,14 @@ func matchDomainConstraint(domain, constraint string) (bool, error) {
+ 		constraint = constraint[1:]
+ 	}
+ 
+-	constraintLabels, ok := domainToReverseLabels(constraint)
+-	if !ok {
+-		return false, fmt.Errorf("x509: internal error: cannot parse domain %q", constraint)
++	constraintLabels, found := reversedConstraintsCache[constraint]
++	if !found {
++		var ok bool
++		constraintLabels, ok = domainToReverseLabels(constraint)
++		if !ok {
++			return false, fmt.Errorf("x509: internal error: cannot parse domain %q", constraint)
++		}
++		reversedConstraintsCache[constraint] = constraintLabels
+ 	}
+ 
+ 	if len(domainLabels) < len(constraintLabels) ||
+@@ -600,6 +611,19 @@ func (c *Certificate) isValid(certType int, currentChain []*Certificate, opts *V
+ 		}
+ 	}
+ 
++	// Each time we do constraint checking, we need to check the constraints in
++	// the current certificate against all of the names that preceded it. We
++	// reverse these names using domainToReverseLabels, which is a relatively
++	// expensive operation. Since we check each name against each constraint,
++	// this requires us to do N*C calls to domainToReverseLabels (where N is the
++	// total number of names that preceed the certificate, and C is the total
++	// number of constraints in the certificate). By caching the results of
++	// calling domainToReverseLabels, we can reduce that to N+C calls at the
++	// cost of keeping all of the parsed names and constraints in memory until
++	// we return from isValid.
++	reversedDomainsCache := map[string][]string{}
++	reversedConstraintsCache := map[string][]string{}
++
+ 	if (certType == intermediateCertificate || certType == rootCertificate) &&
+ 		c.hasNameConstraints() {
+ 		toCheck := []*Certificate{}
+@@ -620,20 +644,20 @@ func (c *Certificate) isValid(certType int, currentChain []*Certificate, opts *V
+ 
+ 					if err := c.checkNameConstraints(&comparisonCount, maxConstraintComparisons, "email address", name, mailbox,
+ 						func(parsedName, constraint any) (bool, error) {
+-							return matchEmailConstraint(parsedName.(rfc2821Mailbox), constraint.(string))
++							return matchEmailConstraint(parsedName.(rfc2821Mailbox), constraint.(string), reversedDomainsCache, reversedConstraintsCache)
+ 						}, c.PermittedEmailAddresses, c.ExcludedEmailAddresses); err != nil {
+ 						return err
+ 					}
+ 
+ 				case nameTypeDNS:
+ 					name := string(data)
+-					if _, ok := domainToReverseLabels(name); !ok {
++					if !domainNameValid(name, false) {
+ 						return fmt.Errorf("x509: cannot parse dnsName %q", name)
+ 					}
+ 
+ 					if err := c.checkNameConstraints(&comparisonCount, maxConstraintComparisons, "DNS name", name, name,
+ 						func(parsedName, constraint any) (bool, error) {
+-							return matchDomainConstraint(parsedName.(string), constraint.(string))
++							return matchDomainConstraint(parsedName.(string), constraint.(string), reversedDomainsCache, reversedConstraintsCache)
+ 						}, c.PermittedDNSDomains, c.ExcludedDNSDomains); err != nil {
+ 						return err
+ 					}
+@@ -647,7 +671,7 @@ func (c *Certificate) isValid(certType int, currentChain []*Certificate, opts *V
+ 
+ 					if err := c.checkNameConstraints(&comparisonCount, maxConstraintComparisons, "URI", name, uri,
+ 						func(parsedName, constraint any) (bool, error) {
+-							return matchURIConstraint(parsedName.(*url.URL), constraint.(string))
++							return matchURIConstraint(parsedName.(*url.URL), constraint.(string), reversedDomainsCache, reversedConstraintsCache)
+ 						}, c.PermittedURIDomains, c.ExcludedURIDomains); err != nil {
+ 						return err
+ 					}
+@@ -867,7 +891,10 @@ func alreadyInChain(candidate *Certificate, chain []*Certificate) bool {
  		if !bytes.Equal(candidate.RawSubject, cert.RawSubject) {
  			continue
  		}
@@ -564,6 +613,19 @@ index 2d2a271d53..14cd23f6e6 100644
  			continue
  		}
  		var certSAN *pkix.Extension
+diff --git a/src/crypto/x509/verify_test.go b/src/crypto/x509/verify_test.go
+index 8a7a5f6e2c..3fa60ed315 100644
+--- a/src/crypto/x509/verify_test.go
++++ b/src/crypto/x509/verify_test.go
+@@ -1548,7 +1548,7 @@ var nameConstraintTests = []struct {
+ 
+ func TestNameConstraints(t *testing.T) {
+ 	for i, test := range nameConstraintTests {
+-		result, err := matchDomainConstraint(test.domain, test.constraint)
++		result, err := matchDomainConstraint(test.domain, test.constraint, map[string][]string{}, map[string][]string{})
+ 
+ 		if err != nil && !test.expectError {
+ 			t.Errorf("unexpected error for test #%d: domain=%s, constraint=%s, err=%s", i, test.domain, test.constraint, err)
 diff --git a/src/encoding/asn1/asn1.go b/src/encoding/asn1/asn1.go
 index 781ab87691..16c7138022 100644
 --- a/src/encoding/asn1/asn1.go
