@@ -88,7 +88,7 @@ func TestCleanupTempDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := os.Remove(recordFile.Name()); err != nil {
+		if err := os.Remove(recordFile.Name()); err != nil && !oserror.IsNotExist(err) {
 			t.Fatal(err)
 		}
 	}()
