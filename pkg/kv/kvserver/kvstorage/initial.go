@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -123,7 +122,8 @@ func WriteInitialTruncState(ctx context.Context, raftWO RaftWO, rangeID roachpb.
 // bootstrap.
 func WriteInitialRangeState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	stateRW StateRW,
+	raftWO RaftWO,
 	desc roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
@@ -134,20 +134,20 @@ func WriteInitialRangeState(
 	initialMS := enginepb.MVCCStats{}
 
 	if _, err := WriteInitialReplicaState(
-		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
+		ctx, stateRW, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
 		replicaVersion,
 	); err != nil {
 		return err
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := MakeStateLoader(desc.RangeID).SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
+	if err := MakeStateLoader(desc.RangeID).SetRaftReplicaID(ctx, stateRW, replicaID); err != nil {
 		return err
 	}
 
 	// TODO(sep-raft-log): when the log storage is separated, raft state must be
 	// written separately.
-	return WriteInitialRaftState(ctx, readWriter, desc.RangeID)
+	return WriteInitialRaftState(ctx, raftWO, desc.RangeID)
 }
 
 // WriteInitialRaftState writes raft state for an initialized replica created
