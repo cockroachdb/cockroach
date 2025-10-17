@@ -379,13 +379,13 @@ func (s StateLoader) LoadRaftReplicaID(
 
 // SetRaftReplicaID overwrites the RaftReplicaID.
 func (s StateLoader) SetRaftReplicaID(
-	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
+	ctx context.Context, stateWO StateWO, replicaID roachpb.ReplicaID,
 ) error {
 	rid := kvserverpb.RaftReplicaID{ReplicaID: replicaID}
 	// "Blind" because opts.Stats == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
 		ctx,
-		writer,
+		stateWO,
 		s.RaftReplicaIDKey(),
 		hlc.Timestamp{}, /* timestamp */
 		&rid,
@@ -411,10 +411,10 @@ func (s StateLoader) LoadRangeTombstone(
 
 // SetRangeTombstone writes the RangeTombstone.
 func (s StateLoader) SetRangeTombstone(
-	ctx context.Context, writer storage.Writer, ts kvserverpb.RangeTombstone,
+	ctx context.Context, stateWO StateWO, ts kvserverpb.RangeTombstone,
 ) error {
 	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, s.RangeTombstoneKey(),
+	return storage.MVCCBlindPutProto(ctx, stateWO, s.RangeTombstoneKey(),
 		hlc.Timestamp{}, &ts, storage.MVCCWriteOptions{})
 }
 
