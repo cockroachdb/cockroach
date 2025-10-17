@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -71,6 +72,8 @@ when run on an empty cluster, recreate that state as closely as possible. System
 tables are queried either from a live cluster or from an unzipped debug.zip.
 `,
 }
+
+const doctorAppName = catconstants.InternalAppNamePrefix + " cockroach doctor"
 
 type doctorFn = func(
 	version *clusterversion.ClusterVersion,
@@ -117,7 +120,7 @@ Run the doctor tool system data from a live cluster specified by --url.
 		Args: cobra.NoArgs,
 		RunE: clierrorplus.MaybeDecorateError(
 			func(cmd *cobra.Command, args []string) (resErr error) {
-				sqlConn, err := makeSQLClient(context.Background(), "cockroach doctor", useSystemDb)
+				sqlConn, err := makeSQLClient(context.Background(), doctorAppName, useSystemDb)
 				if err != nil {
 					return errors.Wrap(err, "could not establish connection to cluster")
 				}
