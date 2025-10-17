@@ -174,8 +174,8 @@ jobs:
             3. A suggested fix
 
             **OUTPUT REQUIREMENT**: End your response with a single line containing only:
-            - `STAGE3_RESULT: POTENTIAL_BUG_CONFIRMED` or
-            - `STAGE3_RESULT: NO_BUG_FOUND`
+            - `STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED` or
+            - `STAGE3_RESULT - NO_BUG_FOUND`
 
       - name: Extract Stage 3 Result
         id: stage3_result
@@ -226,7 +226,7 @@ jobs:
             **If all three stages detected bugs**, this indicates a potential issue that warrants investigation.
 
       - name: Comment on PR if bugs confirmed
-        if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT: POTENTIAL_BUG_CONFIRMED')
+        if: contains(steps.stage3_result.outputs.result, 'STAGE3_RESULT - POTENTIAL_BUG_CONFIRMED')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
