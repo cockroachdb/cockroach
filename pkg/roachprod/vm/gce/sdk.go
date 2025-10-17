@@ -42,8 +42,11 @@ func (p *Provider) listWithSDK(
 			if errors.Is(err, iterator.Done) {
 				break
 			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			if err != nil {
-				return nil, fmt.Errorf("iterate: %w", err)
+				return nil, errors.Wrap(err, "error listing instances")
 			}
 			if pair.Value == nil || len(pair.Value.Instances) == 0 {
 				continue
@@ -116,7 +119,7 @@ func (p *Provider) listWithSDK(
 	}
 
 	if opts.ComputeEstimatedCost {
-		if err := populateCostPerHour(l, vms); err != nil {
+		if err := populateCostPerHour(ctx, l, vms); err != nil {
 			// N.B. We continue despite the error since it doesn't prevent 'List' and other commands which may depend on it.
 
 			l.Errorf("Error during cost estimation (will continue without): %v", err)
@@ -144,8 +147,11 @@ func (p *Provider) listInstanceTemplatesWithSDK(
 		if errors.Is(err, iterator.Done) {
 			break
 		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err != nil {
-			return templates, err
+			return nil, err
 		}
 
 		if clusterFilter == "" {
