@@ -127,7 +127,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					))
 				} else {
 					err := kvstorage.CreateUninitializedReplica(
-						ctx, batch, batch, 1, /* StoreID */
+						ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
 						roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
 					)
 					require.NoError(t, err)

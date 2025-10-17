@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -121,8 +120,8 @@ const CreateUninitReplicaTODO = 0
 // because it has been deleted.
 func CreateUninitializedReplica(
 	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
+	stateRW State,
+	raftRO RaftRO,
 	storeID roachpb.StoreID,
 	id roachpb.FullReplicaID,
 ) error {
@@ -131,7 +130,7 @@ func CreateUninitializedReplica(
 	// indicate that this replica has been removed.
 	// TODO(pav-kv): should also check that there is no existing replica, i.e.
 	// ReplicaID load should find nothing.
-	if ts, err := sl.LoadRangeTombstone(ctx, reader); err != nil {
+	if ts, err := sl.LoadRangeTombstone(ctx, stateRW.RO); err != nil {
 		return err
 	} else if id.ReplicaID < ts.NextReplicaID {
 		return &kvpb.RaftGroupDeletedError{}
@@ -144,12 +143,12 @@ func CreateUninitializedReplica(
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
 	_ = CreateUninitReplicaTODO
-	if err := sl.SetRaftReplicaID(ctx, writer, id.ReplicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
 		return err
 	}
 
 	// Make sure that storage invariants for this uninitialized replica hold.
 	uninitDesc := roachpb.RangeDescriptor{RangeID: id.RangeID}
-	_, err := LoadReplicaState(ctx, reader, reader, storeID, &uninitDesc, id.ReplicaID)
+	_, err := LoadReplicaState(ctx, stateRW.RO, raftRO, storeID, &uninitDesc, id.ReplicaID)
 	return err
 }
