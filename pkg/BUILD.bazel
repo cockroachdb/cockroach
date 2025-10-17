@@ -2865,6 +2865,7 @@ GO_TARGETS = [
     "//pkg/workload/bank:bank",
     "//pkg/workload/bank:bank_test",
     "//pkg/workload/bulkingest:bulkingest",
+    "//pkg/workload/changefeeds:changefeeds",
     "//pkg/workload/cli:cli",
     "//pkg/workload/cli:cli_test",
     "//pkg/workload/conflict:conflict",
