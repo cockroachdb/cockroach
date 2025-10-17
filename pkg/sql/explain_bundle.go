@@ -599,7 +599,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	// update this logic to not include virtual tables into schema.sql but still
 	// create stats files for them.
 	var tables, sequences, views []tree.TableName
-	var addFKs []*tree.AlterTable
+	var addFKs, skipFKs []*tree.AlterTable
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Catalog objects can show up multiple times in our lists, so
 		// deduplicate them.
@@ -778,9 +778,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 				include = hasDelete || hasUpdate || hasUpsert
 			},
 		)
-		addFKs = opt.GetAllFKsAmongTables(refTables, func(t cat.Table) (tree.TableName, error) {
-			return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, t, txn)
-		})
+		addFKs, skipFKs = opt.GetAllFKs(
+			ctx,
+			b.plan.catalog,
+			refTables,
+			func(t cat.Table) (tree.TableName, error) {
+				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, t, txn)
+			})
 		var err error
 		tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 			return refTables[i]
@@ -889,6 +893,10 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		// we need to add them separately.
 		for _, addFK := range addFKs {
 			fmt.Fprintf(&buf, "%s;\n", addFK)
+		}
+		// Include FK constraints that were skipped in commented out form.
+		for _, skipFK := range skipFKs {
+			fmt.Fprintf(&buf, "-- %s;\n", skipFK)
 		}
 	}
 	for i := range views {
