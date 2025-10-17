@@ -152,13 +152,11 @@ func WriteInitialRangeState(
 
 // WriteInitialRaftState writes raft state for an initialized replica created
 // during cluster bootstrap.
-func WriteInitialRaftState(
-	ctx context.Context, writer storage.Writer, rangeID roachpb.RangeID,
-) error {
+func WriteInitialRaftState(ctx context.Context, raftWO RaftWO, rangeID roachpb.RangeID) error {
 	sl := logstore.NewStateLoader(rangeID)
 	// Initialize the HardState with the term and commit index matching the
 	// initial applied state of the replica.
-	if err := sl.SetHardState(ctx, writer, raftpb.HardState{
+	if err := sl.SetHardState(ctx, raftWO, raftpb.HardState{
 		Term:   RaftInitialLogTerm,
 		Commit: RaftInitialLogIndex,
 	}); err != nil {
@@ -166,7 +164,7 @@ func WriteInitialRaftState(
 	}
 	// The raft log is initialized empty, with the truncated state matching the
 	// committed / applied initial state of the replica.
-	return sl.SetRaftTruncatedState(ctx, writer, &kvserverpb.RaftTruncatedState{
+	return sl.SetRaftTruncatedState(ctx, raftWO, &kvserverpb.RaftTruncatedState{
 		Index: RaftInitialLogIndex,
 		Term:  RaftInitialLogTerm,
 	})
