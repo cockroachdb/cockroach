@@ -928,6 +928,10 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 		ca.sliMetrics.setResolved(ca.sliMetricsID, ca.frontier.Frontier())
 	}
 
+	if ca.knobs.ShouldFlushFrontier != nil && ca.knobs.ShouldFlushFrontier(resolved) {
+		return ca.flushFrontier(ctx)
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
 	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),

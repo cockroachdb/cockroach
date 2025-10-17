@@ -71,6 +71,10 @@ type TestingKnobs struct {
 		partitions []sql.SpanPartition, draining []roachpb.NodeID,
 	) ([]sql.SpanPartition, error)
 
+	// ShouldFlushFrontier returns true if the change aggregator should flush
+	// its frontier after processing a resolved span.
+	ShouldFlushFrontier func(rs jobspb.ResolvedSpan) bool
+
 	// ShouldCheckpointToJobRecord returns true if change frontier should checkpoint itself
 	// to the job record.
 	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
