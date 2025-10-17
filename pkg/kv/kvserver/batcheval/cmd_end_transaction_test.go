@@ -2169,7 +2169,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	gcHint := roachpb.GCHint{GCTimestamp: gcThreshold}
 	abortSpanTxnID := uuid.MakeV4()
 	as := abortspan.New(desc.RangeID)
-	sl := kvstorage.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	rec := (&MockEvalCtx{
 		ClusterSettings:        st,
 		Desc:                   &desc,
@@ -2217,7 +2217,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 
 	// Verify that range state was migrated to the right-hand side properly.
 	asRight := abortspan.New(rightDesc.RangeID)
-	slRight := kvstorage.Make(rightDesc.RangeID)
+	slRight := kvstorage.MakeStateLoader(rightDesc.RangeID)
 	// The abort span should have been transferred over.
 	ok, err := asRight.Get(ctx, batch, abortSpanTxnID, &roachpb.AbortSpanEntry{})
 	require.NoError(t, err)

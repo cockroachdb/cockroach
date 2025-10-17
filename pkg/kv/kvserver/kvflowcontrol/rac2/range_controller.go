@@ -3476,7 +3476,7 @@ func (a *entryTokensApproximator) meanTokensPerEntry() kvflowcontrol.Tokens {
 // stop. When set to infinityEntryIndex, force-flush must continue until the
 // send-queue is empty. The zero value implies no force-flush, even though
 // this index is inclusive, since index 0 is never used in CockroachDB's use
-// of Raft (see stateloader.RaftInitialLogIndex).
+// of Raft (see kvstorage.RaftInitialLogIndex).
 type forceFlushStopIndex uint64
 
 // active returns whether the stream is force-flushing.

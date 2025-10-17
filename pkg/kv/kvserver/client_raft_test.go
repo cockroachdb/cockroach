@@ -3236,7 +3236,7 @@ func TestRaftRemoveRace(t *testing.T) {
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
 		// Verify the tombstone key does not exist. See #12130.
-		ts, err := kvstorage.Make(desc.RangeID).LoadRangeTombstone(
+		ts, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRangeTombstone(
 			ctx, tc.GetFirstStoreFromServer(t, 2).StateEngine())
 		require.NoError(t, err)
 		require.Equal(t, kvserverpb.RangeTombstone{}, ts)
@@ -5319,7 +5319,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 		ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 			t.Helper()
-			ts, err := kvstorage.Make(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
+			ts, err := kvstorage.MakeStateLoader(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
 			require.NoError(t, err)
 			require.Zero(t, ts.NextReplicaID)
 		}

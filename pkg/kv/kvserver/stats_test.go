@@ -43,7 +43,7 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	rsl := kvstorage.Make(tc.repl.RangeID)
+	rsl := kvstorage.MakeStateLoader(tc.repl.RangeID)
 	if err := rsl.SetMVCCStats(ctx, tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}

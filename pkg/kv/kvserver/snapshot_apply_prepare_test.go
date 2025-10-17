@@ -76,11 +76,11 @@ func TestPrepareSnapApply(t *testing.T) {
 	createRangeData(t, eng, *descA)
 	createRangeData(t, eng, *descB)
 
-	sl := kvstorage.Make(id.RangeID)
+	sl := kvstorage.MakeStateLoader(id.RangeID)
 	ctx := context.Background()
 	require.NoError(t, sl.SetRaftReplicaID(ctx, eng, id.ReplicaID))
 	for _, rID := range []roachpb.RangeID{101, 102} {
-		require.NoError(t, kvstorage.Make(rID).SetRaftReplicaID(ctx, eng, replicaID))
+		require.NoError(t, kvstorage.MakeStateLoader(rID).SetRaftReplicaID(ctx, eng, replicaID))
 	}
 
 	swb := snapWriteBuilder{

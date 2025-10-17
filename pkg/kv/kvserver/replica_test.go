@@ -6196,7 +6196,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 func verifyRangeStats(
 	reader storage.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
 ) error {
-	ms, err := kvstorage.Make(rangeID).LoadMVCCStats(context.Background(), reader)
+	ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), reader)
 	if err != nil {
 		return err
 	}

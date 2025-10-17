@@ -666,7 +666,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.NotNil(t, originalRepl)
 	// Get the original stats for key and value bytes.
-	ms, err := kvstorage.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	ms, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -739,12 +739,12 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	left, err := kvstorage.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	left, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	right, err := kvstorage.Make(newRng.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+	right, err := kvstorage.MakeStateLoader(newRng.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -813,7 +813,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	defer snap.Close()
 	repl.RaftUnlock()
 
-	ms, err := kvstorage.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
+	ms, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	assertRecomputedStats(t, "before split", snap, repl.Desc(), ms, start.WallTime)
 
@@ -827,10 +827,10 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
-	msLeft, err := kvstorage.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
+	msLeft, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	replRight := store.LookupReplica(splitKey)
-	msRight, err := kvstorage.Make(replRight.RangeID).LoadMVCCStats(ctx, snap)
+	msRight, err := kvstorage.MakeStateLoader(replRight.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 
 	// Stats should both have the new timestamp.
@@ -889,7 +889,7 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	snap = store.TODOEngine().NewSnapshot()
 	defer snap.Close()
 
-	msMerged, err := kvstorage.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
+	msMerged, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	assertRecomputedStats(t, "in-mem after merge", snap, repl.Desc(), msMerged, s.Clock().PhysicalNow())
 
@@ -1008,10 +1008,10 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 
 					snap := store.TODOEngine().NewSnapshot()
 					defer snap.Close()
-					lhsStats, err := kvstorage.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+					lhsStats, err := kvstorage.MakeStateLoader(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
 					rhsRepl := store.LookupReplica(splitKeyAddr)
-					rhsStats, err := kvstorage.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+					rhsStats, err := kvstorage.MakeStateLoader(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
 					// If the split is producing estimates and neither of the tight count
 					// and bytes thresholds is set, expect non-zero ContainsEstimates.
@@ -1044,15 +1044,15 @@ func TestStoreRangeSplitWithConcurrentWrites(t *testing.T) {
 
 					snap = store.TODOEngine().NewSnapshot()
 					defer snap.Close()
-					lhs1Stats, err := kvstorage.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+					lhs1Stats, err := kvstorage.MakeStateLoader(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
 					lhs2Repl := store.LookupReplica(splitKeyLeftAddr)
-					lhs2Stats, err := kvstorage.Make(lhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
+					lhs2Stats, err := kvstorage.MakeStateLoader(lhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
-					rhs1Stats, err := kvstorage.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+					rhs1Stats, err := kvstorage.MakeStateLoader(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
 					rhs2Repl := store.LookupReplica(splitKeyRightAddr)
-					rhs2Stats, err := kvstorage.Make(rhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
+					rhs2Stats, err := kvstorage.MakeStateLoader(rhs2Repl.RangeID).LoadMVCCStats(ctx, snap)
 					require.NoError(t, err)
 
 					// Stats should agree with re-computation unless we're producing
@@ -1429,10 +1429,10 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	snap := store.TODOEngine().NewSnapshot()
 	defer snap.Close()
-	msLeft, err := kvstorage.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
+	msLeft, err := kvstorage.MakeStateLoader(repl.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 	replRight := store.LookupReplica(midKey)
-	msRight, err := kvstorage.Make(replRight.RangeID).LoadMVCCStats(ctx, snap)
+	msRight, err := kvstorage.MakeStateLoader(replRight.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
 
 	// Stats should both have the new timestamp.
@@ -1463,7 +1463,7 @@ func fillRange(
 	src := rand.New(rand.NewSource(0))
 	var key []byte
 	for {
-		ms, err := kvstorage.Make(rangeID).LoadMVCCStats(context.Background(), store.TODOEngine())
+		ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), store.TODOEngine())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4502,7 +4502,7 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 
 			originalRepl := store.LookupReplica(roachpb.RKey(splitKey))
 			require.NotNil(t, originalRepl)
-			origStats, err := kvstorage.Make(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
+			origStats, err := kvstorage.MakeStateLoader(originalRepl.RangeID).LoadMVCCStats(ctx, store.TODOEngine())
 			require.NoError(t, err)
 			require.Greater(t, origStats.ContainsEstimates, int64(0), "range expected to have estimated stats")
 
@@ -4521,9 +4521,9 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 				t.Errorf("ranges mismatched, wanted %q=%q=%q", lhsRepl.Desc().EndKey, splitKey, rhsRepl.Desc().StartKey)
 			}
 
-			lhsStats, err := kvstorage.Make(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			lhsStats, err := kvstorage.MakeStateLoader(lhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 			require.NoError(t, err)
-			rhsStats, err := kvstorage.Make(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
+			rhsStats, err := kvstorage.MakeStateLoader(rhsRepl.RangeID).LoadMVCCStats(ctx, snap)
 			require.NoError(t, err)
 
 			if fastStats {

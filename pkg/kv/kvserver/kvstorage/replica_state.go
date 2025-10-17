@@ -40,7 +40,7 @@ func LoadReplicaState(
 	desc *roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
-	sl := Make(desc.RangeID)
+	sl := MakeStateLoader(desc.RangeID)
 	id, err := sl.LoadRaftReplicaID(ctx, eng)
 	if err != nil {
 		return LoadedReplicaState{}, err
@@ -125,7 +125,7 @@ func CreateUninitializedReplica(
 	storeID roachpb.StoreID,
 	id roachpb.FullReplicaID,
 ) error {
-	sl := Make(id.RangeID)
+	sl := MakeStateLoader(id.RangeID)
 	// Before creating the replica, see if there is a tombstone which would
 	// indicate that this replica has been removed.
 	// TODO(pav-kv): should also check that there is no existing replica, i.e.

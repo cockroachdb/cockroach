@@ -263,7 +263,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	const replicaID = 1
 	require.NoError(t,
-		kvstorage.Make(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+		kvstorage.MakeStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
 	replica, err := loadInitializedReplicaForTesting(ctx, store, &rg, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)

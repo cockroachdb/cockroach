@@ -74,7 +74,7 @@ func WriteInitialReplicaState(
 		s.Version = &replicaVersion
 	}
 
-	rsl := Make(desc.RangeID)
+	rsl := MakeStateLoader(desc.RangeID)
 	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
@@ -141,7 +141,7 @@ func WriteInitialRangeState(
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := Make(desc.RangeID).SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
+	if err := MakeStateLoader(desc.RangeID).SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
 

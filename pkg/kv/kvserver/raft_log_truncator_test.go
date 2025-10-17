@@ -122,7 +122,7 @@ func makeReplicaTT(rangeID roachpb.RangeID, buf *strings.Builder) *replicaTrunca
 	return &replicaTruncatorTest{
 		rangeID:     rangeID,
 		buf:         buf,
-		stateLoader: kvstorage.Make(rangeID),
+		stateLoader: kvstorage.MakeStateLoader(rangeID),
 	}
 }
 

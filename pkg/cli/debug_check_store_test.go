@@ -95,7 +95,7 @@ func TestDebugCheckStore(t *testing.T) {
 			storage.MustExist)
 		require.NoError(t, err)
 		defer eng.Close()
-		sl := kvstorage.Make(1)
+		sl := kvstorage.MakeStateLoader(1)
 		ms, err := sl.LoadMVCCStats(ctx, eng)
 		require.NoError(t, err)
 		ms.ContainsEstimates = 0

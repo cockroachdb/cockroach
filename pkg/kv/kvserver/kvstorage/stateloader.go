@@ -37,8 +37,8 @@ type StateLoader struct {
 	logstore.StateLoader
 }
 
-// Make creates a StateLoader.
-func Make(rangeID roachpb.RangeID) StateLoader {
+// MakeStateLoader creates a StateLoader.
+func MakeStateLoader(rangeID roachpb.RangeID) StateLoader {
 	return StateLoader{
 		StateLoader: logstore.NewStateLoader(rangeID),
 	}

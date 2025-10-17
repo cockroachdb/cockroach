@@ -203,7 +203,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
 	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
-	r.raftMu.stateLoader = kvstorage.Make(id.RangeID)
+	r.raftMu.stateLoader = kvstorage.MakeStateLoader(id.RangeID)
 
 	// Initialize all the components of the log storage. The state of the log
 	// storage, such as RaftTruncatedState and the last entry ID, will be loaded

@@ -9,5 +9,5 @@ import "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 
 // MakeStateLoader creates a StateLoader for the EvalContext.
 func MakeStateLoader(rec EvalContext) kvstorage.StateLoader {
-	return kvstorage.Make(rec.GetRangeID())
+	return kvstorage.MakeStateLoader(rec.GetRangeID())
 }

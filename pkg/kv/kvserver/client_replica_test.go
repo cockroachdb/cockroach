@@ -4169,7 +4169,7 @@ func TestReplicaTombstone(t *testing.T) {
 					if err != nil {
 						return err
 					}
-					ts, err := kvstorage.Make(rhsDesc.RangeID).LoadRangeTombstone(
+					ts, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadRangeTombstone(
 						context.Background(), store.StateEngine(),
 					)
 					require.NoError(t, err)
@@ -5357,7 +5357,7 @@ func TestRangeMigration(t *testing.T) {
 			t.Fatalf("expected in-memory version %s, got %s", expV, gotV)
 		}
 
-		sl := kvstorage.Make(rangeID)
+		sl := kvstorage.MakeStateLoader(rangeID)
 		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
 		if err != nil {
 			t.Fatal(err)

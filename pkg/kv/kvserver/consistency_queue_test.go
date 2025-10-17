@@ -557,7 +557,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		require.NoError(t, err)
 		defer eng.Close()
 
-		rsl := kvstorage.Make(rangeID)
+		rsl := kvstorage.MakeStateLoader(rangeID)
 		ms, err := rsl.LoadMVCCStats(ctx, eng)
 		require.NoError(t, err)
 

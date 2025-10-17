@@ -46,7 +46,7 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 		"kv.snapshot.ingest_as_write_threshold",
 		100<<10, /* default value is 100KiB */
 		1<<30,   /* 1GiB causes everything to be a normal write */
-		0 /* 0B causes everything to be an ingest */),
+		0        /* 0B causes everything to be an ingest */),
 )
 
 // replicaRaftStorage implements the raft.Storage interface.
@@ -248,7 +248,7 @@ func (r *Replica) GetSnapshot(
 	// NB: we don't hold either of locks, so can't use Replica.mu.stateLoader or
 	// Replica.raftMu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
-	snapData, err := snapshot(ctx, snapUUID, kvstorage.Make(rangeID), snap, startKey)
+	snapData, err := snapshot(ctx, snapUUID, kvstorage.MakeStateLoader(rangeID), snap, startKey)
 	if err != nil {
 		log.KvExec.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
@@ -676,7 +676,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// has not yet been updated. Any errors past this point must therefore be
 	// treated as fatal.
 
-	sl := kvstorage.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	state, err := sl.Load(ctx, r.store.TODOEngine(), desc)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "unable to load replica state: %s", err)
