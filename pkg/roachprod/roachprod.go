@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -2594,6 +2595,36 @@ func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string
 	}
 
 	return opentelemetry.Stop(ctx, l, c)
+}
+
+// StartParcaAgent starts a Parca Agent on the cluster.
+func StartParcaAgent(
+	ctx context.Context, l *logger.Logger, clusterName string, config parca.Config,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return parca.Install(ctx, l, c, config)
+}
+
+// StopParcaAgent stops the Parca Agent on the cluster.
+func StopParcaAgent(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return parca.Stop(ctx, l, c)
 }
 
 // DestroyDNS destroys the DNS records for the given cluster.

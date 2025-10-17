@@ -18,6 +18,7 @@ go_library(
         "//pkg/cmd/roachprod/grafana",
         "//pkg/roachprod/agents/fluentbit",
         "//pkg/roachprod/agents/opentelemetry",
+        "//pkg/roachprod/agents/parca",
         "//pkg/roachprod/cloud",
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
