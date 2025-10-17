@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand"
 	"os"
 	"path"
 	"slices"
@@ -524,9 +525,9 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 		t *testing.T, subdirEnd, start, end int,
 	) {
 		t.Helper()
-		subdirTS := intToTime(subdirEnd).GoTime()
-		startTS := intToTime(start)
-		endTS := intToTime(end)
+		subdirTS := intToTimeWithNano(subdirEnd).GoTime()
+		startTS := intToTimeWithNano(start)
+		endTS := intToTimeWithNano(end)
 		subdir := subdirTS.Format(backupbase.DateBasedIntoFolderName)
 
 		details := jobspb.BackupDetails{
@@ -548,6 +549,21 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 		))
 	}
 
+	randIdx := func(n int) []int {
+		idxs := make([]int, n)
+		for i := 0; i < n; i++ {
+			idxs[i] = i
+		}
+		rand.Shuffle(n, func(i, j int) {
+			// Don't shuffle the full backup as it must be written before incs.
+			if i == 0 || j == 0 {
+				return
+			}
+			idxs[i], idxs[j] = idxs[j], idxs[i]
+		})
+		return idxs
+	}
+
 	type chain = [][2]int
 	simpleChain := chain{{0, 2}, {2, 4}, {4, 6}, {6, 8}}
 	compactedChain := chain{{0, 10}, {10, 11}, {10, 12}, {11, 12}, {12, 14}, {14, 16}}
@@ -560,9 +576,13 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 		doubleCompactedChain,
 		fullOnly,
 	}
+
 	for _, index := range indexes {
-		for _, time := range index {
-			writeIndex(t, index[0][1], time[0], time[1])
+		// Write the index files in random time order to ensure the read always
+		// returns in them in the correct order.
+		rndIdxs := randIdx(len(index))
+		for _, idx := range rndIdxs {
+			writeIndex(t, index[0][1], index[idx][0], index[idx][1])
 		}
 	}
 
@@ -600,7 +620,7 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			subdirTS := intToTime(tc.chain[0][1]).GoTime()
+			subdirTS := intToTimeWithNano(tc.chain[0][1]).GoTime()
 			subdir := subdirTS.Format(backupbase.DateBasedIntoFolderName)
 
 			metadatas, err := GetBackupTreeIndexMetadata(ctx, externalStorage, subdir)
@@ -615,8 +635,8 @@ func TestGetBackupTreeIndexMetadata(t *testing.T) {
 			// Using [2]int64 makes test outputs in event of failure more readable.
 			expectedIndexTimes := util.Map(tc.expectedIndexTimes, func(t [2]int) [2]int64 {
 				return [...]int64{
-					intToTime(t[0]).WallTime,
-					intToTime(t[1]).WallTime,
+					intToTimeWithNano(t[0]).WallTime,
+					intToTimeWithNano(t[1]).WallTime,
 				}
 			})
 			actualIndexTimes := util.Map(metadatas, func(m backuppb.BackupIndexMetadata) [2]int64 {
@@ -733,10 +753,12 @@ func (f *fakeExternalStorage) List(
 	return nil
 }
 
-// intToTime converts the integer time an easy to read hlc.Timestamp (i.e. XX00000000000...).
-// We use ints to more easily write times for test cases.
-func intToTime(t int) hlc.Timestamp {
+// intToTimeWithNano converts the integer time an easy to read hlc.Timestamp
+// (i.e. XX000000000XX). Note that the int is also added as nanoseconds to
+// stress backup's handling of nanosecond precision timestamps. We use ints to
+// more easily write times for test cases.
+func intToTimeWithNano(t int) hlc.Timestamp {
 	// Value needs to be large enough to be represented in milliseconds and be
 	// larger than GoTime zero.
-	return hlc.Timestamp{WallTime: int64(t) * 1e9}
+	return hlc.Timestamp{WallTime: int64(t)*1e9 + int64(t)}
 }
