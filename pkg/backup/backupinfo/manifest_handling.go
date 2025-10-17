@@ -1841,6 +1841,11 @@ func WriteBackupMetadata(
 		}
 	}
 
+	// TODO(msbutler): version gate writing the old manifest once we can guarantee
+	// a cluster version that will not read the old manifest. This will occur when we delete
+	// LegacyFindPriorBackups and the fallback path in
+	// ListFullBackupsInCollection, which can occur when we completely rely on the
+	// backup index.
 	if err := WriteBackupManifest(ctx, store, backupbase.DeprecatedBackupManifestName,
 		details.EncryptionOptions, kmsEnv, backupManifest); err != nil {
 		return err
