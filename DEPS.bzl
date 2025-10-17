@@ -1834,11 +1834,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "0f62a20d58756e8485d14285654993a96b320759bcfa411f8ad46fb4da977fe4",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20251007185819-79e6b4a13387",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20251007185819-79e6b4a13387.zip",
-        ],
+        replace = "github.com/sumeerbhola/pebble",
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:J93uBHr2Drf1GL4IQ48rij9StNhlJxC1n9SxY4Lw13Q=",
+        version = "v0.0.0-20251017003615-844c86348a48",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",

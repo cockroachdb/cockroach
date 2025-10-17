@@ -1145,6 +1145,8 @@ type Engine interface {
 	// this intermediate case. Currently, this mainly feeds into allocation
 	// decisions by the caller (such as shedding leases).
 	GetDiskUnhealthy() bool
+
+	TryWaitForMemTableStallHeadroom(doWait bool) (ok bool, allowedBurst int64)
 }
 
 // Batch is the interface for batch specific operations.

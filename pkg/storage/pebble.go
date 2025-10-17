@@ -2580,6 +2580,20 @@ func (p *Pebble) GetDiskUnhealthy() bool {
 	return p.diskUnhealthyTracker.getUnhealthy()
 }
 
+func (p *Pebble) TryWaitForMemTableStallHeadroom(doWait bool) (ok bool, allowedBurst int64) {
+	// Don't go too low wrt threshold to avoid waiting. If
+	// MemTableStopWritesThreshold is the expected 16, this will give us 8.
+	threshold := max(3, p.cfg.opts.MemTableStopWritesThreshold/2)
+	ok = p.db.TryWaitForMemTableCount(threshold, true)
+	if !ok {
+		return false, 0
+	}
+	// Allow a burst of half the headroom.
+	allowedBurst =
+		int64(max(1, (p.cfg.opts.MemTableStopWritesThreshold-threshold)/2)) * int64(p.cfg.opts.MemTableSize)
+	return true, allowedBurst
+}
+
 type pebbleReadOnly struct {
 	parent *Pebble
 	// The iterator reuse optimization in pebbleReadOnly is for servicing a

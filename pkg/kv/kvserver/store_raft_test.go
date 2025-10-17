@@ -45,7 +45,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 		CurCount: g,
 		Settings: st,
 	})
-	qs := raftReceiveQueues{mon: m, qDecider: &storeRaftQDecider{}}
+	qs := raftReceiveQueues{mon: m}
 
 	const r1 = roachpb.RangeID(1)
 	const r5 = roachpb.RangeID(5)
@@ -238,7 +238,7 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 		CurCount: g,
 		Settings: st,
 	})
-	qs := raftReceiveQueues{mon: m, qDecider: &storeRaftQDecider{}}
+	qs := raftReceiveQueues{mon: m}
 	// checkingMu is locked in write mode when checking that the values of
 	// enforceMaxLen across all the queues is the expected value.
 	var checkingMu syncutil.RWMutex
@@ -301,7 +301,7 @@ func TestRaftReceiveQueuesEnforceMaxLen(t *testing.T) {
 		CurCount: g,
 		Settings: st,
 	})
-	qs := raftReceiveQueues{mon: m, qDecider: &storeRaftQDecider{}}
+	qs := raftReceiveQueues{mon: m}
 	qs.SetEnforceMaxLen(false)
 	q, _ := qs.LoadOrCreate(1, 2)
 	var s RaftMessageResponseStream

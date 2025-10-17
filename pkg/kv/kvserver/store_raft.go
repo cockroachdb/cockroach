@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,7 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 var (
@@ -50,6 +54,7 @@ type raftReceiveQueue struct {
 		syncutil.Mutex
 		msgAppInfos                    []raftRequestInfo
 		numMsgAppEntries               int64
+		sizeMsgAppEntries              int64
 		numLowPriOverrideMsgAppEntries int64
 		otherInfos                     []raftRequestInfo
 		enforceMaxLen                  bool
@@ -66,7 +71,8 @@ type raftReceiveQueue struct {
 		// MsgApp entries, and then adds MsgApp entries that have the
 		// low-pri-override set. This also causes the decider to start monitoring
 		// to transition back to raftDequeueAll.
-		qDecision storeRaftQDecision
+		qDecision              storeRaftQDecision
+		storeRaftQDeciderBytes int64
 	}
 	maxLen    int
 	msgAppAcc mon.BoundAccount
@@ -110,11 +116,12 @@ func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
 			return nil, false
 		}
 		// Common case on followers: only MsgApps in the queue.
+		q.decider.drainingMsgAppsQLocked(q)
 		infos = q.mu.msgAppInfos
 		q.mu.msgAppInfos = nil
 		q.mu.lastDrainedFromOther = false
 		q.mu.numMsgAppEntries = 0
-		q.mu.numLowPriOverrideMsgAppEntries = 0
+		q.mu.sizeMsgAppEntries = 0
 		q.msgAppAcc.Clear(context.Background())
 	} else {
 		infos = q.mu.otherInfos
@@ -122,10 +129,11 @@ func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
 		q.mu.lastDrainedFromOther = true
 		q.otherAcc.Clear(context.Background())
 		if len(q.mu.msgAppInfos) != 0 && q.mu.qDecision == raftQDequeueAll {
+			q.decider.drainingMsgAppsQLocked(q)
 			infos = append(infos, q.mu.msgAppInfos...)
 			q.mu.msgAppInfos = q.mu.msgAppInfos[:0]
 			q.mu.numMsgAppEntries = 0
-			q.mu.numLowPriOverrideMsgAppEntries = 0
+			q.mu.sizeMsgAppEntries = 0
 			q.msgAppAcc.Clear(context.Background())
 		}
 		// Else, common case on leader: only non-MsgApps in the queue.
@@ -137,11 +145,7 @@ func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
 func (q *raftReceiveQueue) Delete() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if q.mu.qDecision == raftQDequeueOther {
-		// Ensure everything is drained.
-		q.mu.qDecision = raftQDequeueAll
-		q.decider.deregisterLocked(q)
-	}
+	q.decider.deregisterQLocked(q)
 	q.drainLocked()
 	q.mu.msgAppInfos = nil
 	q.mu.otherInfos = nil
@@ -220,20 +224,20 @@ func (q *raftReceiveQueue) Append(
 	if n > 0 {
 		wasEmpty := q.mu.numMsgAppEntries == 0
 		q.mu.numMsgAppEntries += n
-		if req.LowPriorityOverride {
-			q.mu.numLowPriOverrideMsgAppEntries += n
-		}
+		q.mu.sizeMsgAppEntries += size
 		if req.LowPriorityOverride {
 			if wasEmpty {
 				// Transitioned from empty MsgApp entries to non-empty with
 				// low-pri-override.
-				q.decider.updateDecisionLocked(q)
+				q.decider.updateDecisionQLocked(q)
 			}
 			// Else use the current decision.
 		} else {
 			// Adding non low-pri-override MsgApp entries. We need
 			// to dequeue.
-			q.mu.qDecision = raftQDequeueAll
+			if q.mu.qDecision == raftQDequeueOther {
+				q.decider.forceTransitionToDequeueAllQLocked(q)
+			}
 		}
 	}
 	// Else n == 0, a MsgApp ping. It does not affect qDecision.
@@ -1266,18 +1270,275 @@ type raftSchedulerForStoreRaftQDecider interface {
 	EnqueueRaftRequest(id roachpb.RangeID)
 }
 
-// Concurrency: mutex is ordered after raftReceiveQueue.mu.
+type engineForStoreRaftQDecider interface {
+	TryWaitForMemTableStallHeadroom(doWait bool) (ok bool, allowedBurst int64)
+}
+
+// storeRaftQDecider decides for a set of raftReceiveQueues, whether they
+// should dequeue all messages, or only non-MsgApp ("other") messages. It is
+// tightly coupled with the internals of raftReceiveQueue since there is no
+// obvious benefit to excessive generality/abstraction.
+//
+// The raftReceiveQueue and storeRaftQDecider interact via 3 fields in the
+// raftReceiveQueue:
+//
+//   - qDecision, storeRaftQDeciderBytes: these are read and modified by
+//     storeRaftQDecider. The qDecision is only read by raftReceiveQueue.
+//
+//   - sizeMsgAppEntries: this is read by storeRaftQDecider and modified by
+//     raftReceiveQueue.
+//
+// The storeRaftQDecider can make two transitions to the qDecision field:
+//
+//   - raftQDequeueAll => raftQDequeueOther: it is selectively asked by the
+//     raftReceiveQueue to consider this decision. This must only be done when
+//     the raftReceiveQueue had no MsgApps and the MsgApp being queued has a
+//     LowPriorityOverride set.
+//
+//   - raftQDequeueOther => raftQDequeueAll: This happens in two situations, (a)
+//     when the raftReceiveQueue decides it needs to force the transition
+//     because it has MsgApps that cannot wait, (b) when the store is healthy
+//     enough (decided by the storeRaftQDecider) for them to be dequeued.
+//
+// In state raftQDequeueOther, the raftReceiveQueue is "enqueued" in the
+// storeRaftQDecider.
+//
+// The methods called by the raftReceiveQueue are:
+//
+// - updateDecisionQLocked: to ask the decider to update the qDecision.
+//
+//   - forceTransitionToDequeueAllQLocked: to force transition to
+//     raftQDequeueAll.
+//
+//   - drainingMsgAppsQLocked: whenever the raftReceiveQueue drains all the
+//     MsgApps. This is needed for bookkeeping inside the decider.
+//
+// - deregisterQLocked: when the queue is being deleted.
+//
+// Concurrency: mutex is ordered after raftReceiveQueue.mu. The
+// raftReceiveQueue calls all methods on storeRaftQDecider while holding its
+// own mutex.
 type storeRaftQDecider struct {
-	// TODO:
+	eng       engineForStoreRaftQDecider
 	scheduler raftSchedulerForStoreRaftQDecider
+	mu        struct {
+		syncutil.Mutex
+		// NB: for simplicity, we don't bother with ordering this queue.
+		waiting                         map[*raftReceiveQueue]struct{}
+		lastHeadroomAvailableSampleTime crtime.Mono
+
+		burstBytesToDrain int64
+		queueCond         *sync.Cond
+		closed            bool
+	}
 }
 
-func (w *storeRaftQDecider) updateDecisionLocked(q *raftReceiveQueue) {
-	// TODO:
+func newStoreRaftQDecider(
+	eng engineForStoreRaftQDecider, scheduler raftSchedulerForStoreRaftQDecider,
+) *storeRaftQDecider {
+	w := &storeRaftQDecider{
+		eng:       eng,
+		scheduler: scheduler,
+	}
+	w.mu.waiting = map[*raftReceiveQueue]struct{}{}
+	w.mu.queueCond = sync.NewCond(&w.mu.Mutex)
+	return w
 }
 
-func (w *storeRaftQDecider) deregisterLocked(q *raftReceiveQueue) {
-	// TODO:
+func (w *storeRaftQDecider) Start() {
+	go w.waiter()
+}
+
+func (w *storeRaftQDecider) Close() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.mu.closed = true
+	w.mu.queueCond.Signal()
+}
+
+func (w *storeRaftQDecider) updateDecisionQLocked(q *raftReceiveQueue) {
+	if w == nil {
+		// For tests.
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if q.mu.storeRaftQDeciderBytes != 0 {
+		panic(errors.AssertionFailedf(
+			"storeRaftQDeciderBytes %d are non zero", q.mu.storeRaftQDeciderBytes))
+	}
+	transitionToNonEmpty := false
+	if len(w.mu.waiting) == 0 {
+		now := crtime.NowMono()
+		haveHeadroom := true
+		if now.Sub(w.mu.lastHeadroomAvailableSampleTime) >= 50*time.Millisecond {
+			w.mu.lastHeadroomAvailableSampleTime = now
+			haveHeadroom, _ = w.eng.TryWaitForMemTableStallHeadroom(false)
+		}
+		if haveHeadroom {
+			// Common case.
+			q.mu.qDecision = raftQDequeueAll
+			return
+		}
+		transitionToNonEmpty = true
+	}
+	// Enqueue.
+	w.mu.waiting[q] = struct{}{}
+	if transitionToNonEmpty {
+		// The waiting queue is transitioning to non-empty, so tell the waiter
+		// goroutine.
+		w.mu.queueCond.Signal()
+	}
+	q.mu.qDecision = raftQDequeueOther
+	return
+}
+
+func (w *storeRaftQDecider) forceTransitionToDequeueAllQLocked(q *raftReceiveQueue) {
+	q.mu.qDecision = raftQDequeueAll
+	_, ok := w.mu.waiting[q]
+	if !ok {
+		panic(errors.AssertionFailedf("q should be in waiting"))
+	}
+	delete(w.mu.waiting, q)
+	if q.mu.storeRaftQDeciderBytes != 0 {
+		panic(errors.AssertionFailedf(
+			"storeRaftQDeciderBytes %d are non zero", q.mu.storeRaftQDeciderBytes))
+	}
+}
+
+func (w *storeRaftQDecider) drainingMsgAppsQLocked(q *raftReceiveQueue) {
+	if w == nil {
+		// For tests.
+		return
+	}
+	if q.mu.storeRaftQDeciderBytes == 0 {
+		// Common case.
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.deductBurstBytesQLockedDLocked(q)
+}
+
+func (w *storeRaftQDecider) deregisterQLocked(q *raftReceiveQueue) {
+	if w == nil {
+		// For tests.
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if q.mu.qDecision == raftQDequeueAll {
+		_, ok := w.mu.waiting[q]
+		if ok {
+			panic(errors.AssertionFailedf("q should not be in waiting"))
+		}
+		if q.mu.storeRaftQDeciderBytes != 0 {
+			w.deductBurstBytesQLockedDLocked(q)
+		}
+		return
+	}
+	// Ensure everything is drained.
+	q.mu.qDecision = raftQDequeueAll
+	_, ok := w.mu.waiting[q]
+	if !ok {
+		panic(errors.AssertionFailedf("q should be in waiting"))
+	}
+	delete(w.mu.waiting, q)
+	if q.mu.storeRaftQDeciderBytes != 0 {
+		panic(errors.AssertionFailedf(
+			"storeRaftQDeciderBytes %d are non zero", q.mu.storeRaftQDeciderBytes))
+	}
+}
+
+func (w *storeRaftQDecider) deductBurstBytesQLockedDLocked(q *raftReceiveQueue) {
+	w.mu.burstBytesToDrain -= q.mu.storeRaftQDeciderBytes
+	if w.mu.burstBytesToDrain < 0 {
+		panic(errors.AssertionFailedf("negative burstBytesToDrain: %d", w.mu.burstBytesToDrain))
+	}
+	q.mu.storeRaftQDeciderBytes = 0
+	if w.mu.burstBytesToDrain == 0 {
+		w.mu.queueCond.Signal()
+	}
+}
+
+func (w *storeRaftQDecider) waiter() {
+	waitForQueueCond := func() (closed bool) {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.mu.queueCond.Wait()
+		return w.mu.closed
+	}
+	var queueBuf []*raftReceiveQueue
+	dequeueBurst := func(allowedBurst int64) {
+		burstConsumed := false
+		size := int64(0)
+		for !burstConsumed {
+			w.mu.Lock()
+			queueBuf = queueBuf[:0]
+			for q := range w.mu.waiting {
+				queueBuf = append(queueBuf, q)
+			}
+			w.mu.Unlock()
+			if len(queueBuf) == 0 {
+				break
+			}
+			for _, q := range queueBuf {
+				q.mu.Lock()
+				if q.mu.qDecision == raftQDequeueAll {
+					// Changed to raftQDequeueAll before we reacquired the lock.
+					continue
+				}
+				size += q.mu.sizeMsgAppEntries
+				// NB: it may dequeue more, but we record what we have granted, so we
+				// can correctly deduct from w.burstBytesToDrain.
+				if q.mu.storeRaftQDeciderBytes != 0 {
+					panic(errors.AssertionFailedf("storeRaftQDeciderBytes was not zero"))
+				}
+				q.mu.storeRaftQDeciderBytes = q.mu.sizeMsgAppEntries
+				q.mu.qDecision = raftQDequeueAll
+				w.mu.Lock()
+				delete(w.mu.waiting, q)
+				w.mu.burstBytesToDrain += q.mu.storeRaftQDeciderBytes
+				w.mu.Unlock()
+				q.mu.Unlock()
+				w.scheduler.EnqueueRaftRequest(q.rangeID)
+				if size > allowedBurst {
+					burstConsumed = true
+					break
+				}
+			}
+			// While dequeueBurst was running, more queues could have been added
+			// to waiting.
+		}
+		if size > 0 {
+			log.KvExec.Infof(context.TODO(), "storeRaftQDecider: allowed burst=%s consumed=%s",
+				redact.SafeString(humanize.Bytes(uint64(allowedBurst))),
+				redact.SafeString(humanize.Bytes(uint64(size))))
+		}
+	}
+	for {
+		closed := waitForQueueCond()
+		if closed {
+			break
+		}
+		if len(w.mu.waiting) > 0 && w.mu.burstBytesToDrain == 0 {
+			// Allow another burst. TryWaitForMemTableStallHeadroom will return if
+			// the engine is closed.
+			ok, allowedBurst := w.eng.TryWaitForMemTableStallHeadroom(true)
+			if !ok {
+				panic(errors.AssertionFailedf("unexpected !ok"))
+			}
+			if allowedBurst <= 0 {
+				panic(errors.AssertionFailedf("allowedBurst must be > 0"))
+			}
+			dequeueBurst(allowedBurst)
+			// Queue may be empty. Or there may be more waiting, but we need to wait
+			// until all the burst is consumed. Or there may be waiters that got
+			// added immediately after dequeueBurst finished. Loop around to wait
+			// for the next event.
+		}
+	}
+	dequeueBurst(math.MaxInt64)
 }
 
 type storeRaftQDecision uint8

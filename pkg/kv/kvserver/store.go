@@ -1570,7 +1570,7 @@ func NewStore(
 		CurCount: s.metrics.RaftRcvdQueuedBytes,
 		Settings: cfg.Settings,
 	})
-	s.raftRecvQueues.qDecider = &storeRaftQDecider{ /*TODO*/ }
+	s.raftRecvQueues.qDecider = newStoreRaftQDecider(s.TODOEngine(), s.scheduler)
 	s.cfg.KVFlowWaitForEvalConfig.RegisterWatcher(func(wc rac2.WaitForEvalCategory) {
 		// When the system is configured with rac2.AllWorkWaitsForEval, RACv2 is
 		// running in a mode where all senders are using send token pools for all
@@ -2146,7 +2146,8 @@ func (s *Store) IsStarted() bool {
 // Start the engine, set the GC and read the StoreIdent.
 func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	s.stopper = stopper
-
+	s.raftRecvQueues.qDecider.Start()
+	s.stopper.AddCloser(s.raftRecvQueues.qDecider)
 	// Populate the store ident. If not bootstrapped, ReadStoreIntent will
 	// return an error.
 	// TODO(sep-raft-log): which engine holds the ident?
