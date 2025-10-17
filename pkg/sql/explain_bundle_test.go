@@ -536,9 +536,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
 		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
 		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		getFK := func(table string) string {
+			if table == "parent" {
+				return ""
+			}
+			return fmt.Sprintf("ALTER TABLE defaultdb.public.%s ADD CONSTRAINT", table)
+		}
 		// Only the target tables should be included since we perform a
 		// read-only stmt.
-		getContentCheckFn := func(targetTableNames, targetFKs []string) func(name, contents string) error {
+		getContentCheckFn := func(targetTableNames, addFKs, skipFKs []string) func(name, contents string) error {
 			return func(name, contents string) error {
 				if name == "schema.sql" {
 					for _, targetTableName := range targetTableNames {
@@ -563,14 +569,27 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 								"unexpectedly found non-target table 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
 						}
 					}
-					// Now confirm that only relevant FKs are included.
+					// Sanity-check that all FKs in the output are either in the
+					// "added" or "skipped" set.
 					numFoundFKs := strings.Count(contents, "FOREIGN KEY")
-					if numFoundFKs != len(targetFKs) {
-						return errors.Newf("found %d FKs, expected %d\n%s", numFoundFKs, len(targetFKs), contents)
+					if numFoundFKs != len(addFKs)+len(skipFKs) {
+						return errors.Newf(
+							"found %d FKs total whereas %d added and %d skipped were passed\n%s",
+							numFoundFKs, len(addFKs), len(skipFKs), contents,
+						)
 					}
-					for _, fk := range targetFKs {
-						if !strings.Contains(contents, fk) {
-							return errors.Newf("didn't find target FK: %s\n%s", fk, contents)
+					// Now check that all expected added and skipped FKs are
+					// present.
+					for _, addFK := range addFKs {
+						if !strings.Contains(contents, addFK) {
+							return errors.Newf("didn't find added FK: %s\n%s", addFK, contents)
+						} else if strings.Contains(contents, "-- "+addFK) {
+							return errors.Newf("added FK shouldn't be commented out: %s\n%s", addFK, contents)
+						}
+					}
+					for _, skipFK := range skipFKs {
+						if !strings.Contains(contents, "-- "+skipFK) {
+							return errors.Newf("didn't find skipped FK in commented out form: %s\n%s", skipFK, contents)
 						}
 					}
 				}
@@ -580,8 +599,12 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		// First read each table separately.
 		for _, tableName := range tableNames {
 			targetTableName := tableName
-			// There should be no FKs included.
-			contentCheck := getContentCheckFn([]string{targetTableName}, nil /* targetFKs */)
+			// No FKs should be added, but 1 FK might be skipped.
+			var skipFKs []string
+			if skipFK := getFK(tableName); skipFK != "" {
+				skipFKs = []string{skipFK}
+			}
+			contentCheck := getContentCheckFn([]string{targetTableName}, nil /* addFKS */, skipFKs)
 			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+targetTableName)
 			checkBundle(
 				t, fmt.Sprint(rows), targetTableName, contentCheck, false, /* expectErrors */
@@ -590,26 +613,27 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			)
 		}
 		// Now read different combinations of tables which will influence
-		// whether ADD CONSTRAINT ... FOREIGN KEY statements are included.
-		contentCheck := getContentCheckFn([]string{"parent", "child1"}, []string{"ALTER TABLE defaultdb.public.child1 ADD CONSTRAINT"})
+		// whether ADD CONSTRAINT ... FOREIGN KEY statements are added or
+		// skipped.
+		contentCheck := getContentCheckFn([]string{"parent", "child1"}, []string{getFK("child1")}, nil)
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child1")
 		checkBundle(
 			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child1.sql distsql.html vec.txt vec-v.txt",
 		)
 
-		// There should be no FKs since there isn't a direct link between the
-		// tables.
-		contentCheck = getContentCheckFn([]string{"parent", "grandchild1"}, nil /* targetFKs */)
+		// There should be no added FKs since there isn't a direct link between
+		// the tables.
+		contentCheck = getContentCheckFn([]string{"parent", "grandchild1"}, nil /* addFKS */, []string{getFK("grandchild1")})
 		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, grandchild1")
 		checkBundle(
 			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
 		)
 
-		// Note that we omit the FK from grandchild1 since the FK referenced
+		// Note that we skip the FK from grandchild1 since the FK referenced
 		// table isn't being read.
-		contentCheck = getContentCheckFn([]string{"parent", "child2", "grandchild1"}, []string{"ALTER TABLE defaultdb.public.child2 ADD CONSTRAINT"})
+		contentCheck = getContentCheckFn([]string{"parent", "child2", "grandchild1"}, []string{getFK("child2")}, []string{getFK("grandchild1")})
 		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child2, grandchild1")
 		checkBundle(
 			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
@@ -618,10 +642,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 		contentCheck = getContentCheckFn(
 			[]string{"parent", "child1", "grandchild1"},
-			[]string{
-				"ALTER TABLE defaultdb.public.child1 ADD CONSTRAINT",
-				"ALTER TABLE defaultdb.public.grandchild1 ADD CONSTRAINT",
-			})
+			[]string{getFK("child1"), getFK("grandchild1")},
+			nil, /* skipFKs */
+		)
 		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child1, grandchild1")
 		checkBundle(
 			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
