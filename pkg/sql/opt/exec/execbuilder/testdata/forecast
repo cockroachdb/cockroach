@@ -398,21 +398,9 @@ WHERE stat->>'name' = '__forecast__'
     "histo_buckets": [
         {
             "distinct_range": 0,
-            "num_eq": 0,
-            "num_range": 0,
-            "upper_bound": "-1"
-        },
-        {
-            "distinct_range": 0,
             "num_eq": 1,
             "num_range": 0,
             "upper_bound": "0"
-        },
-        {
-            "distinct_range": 0,
-            "num_eq": 0,
-            "num_range": 0,
-            "upper_bound": "1"
         }
     ],
     "histo_col_type": "INT8",

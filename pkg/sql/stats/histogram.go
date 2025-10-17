@@ -140,6 +140,37 @@ func DecodeUpperBound(
 	return datum, err
 }
 
+// enumValueExistsBetweenEncodedUpperBounds finds whether any values exist in
+// the enum type with physical representation greater than lowerBound and less
+// than upperBound, exclusive. The encoded bounds could represent old values
+// that were dropped from the enum type, or current values that exist in the
+// enum type.
+//
+// If there are any values in the enum type with physical representation between
+// the bounds, nil is returned. Otherwise an error is returned. If the bounds
+// cannot be decoded as enum physical representations an error is returned.
+func enumValueExistsBetweenEncodedUpperBounds(
+	version HistogramVersion, enumType *types.T, lowerBound, upperBound []byte,
+) error {
+	// If the encoded bounds represent old values that were dropped from the enum
+	// type, we won't be able to decode them as enums. Instead, decode them as
+	// bytes, which should give the physical representation. (This relies on enum
+	// encoding being simply the encoding of the physical representation bytes.)
+	var a tree.DatumAlloc
+	lowerPhys, err := DecodeUpperBound(version, types.Bytes, &a, lowerBound)
+	if err != nil {
+		return err
+	}
+	upperPhys, err := DecodeUpperBound(version, types.Bytes, &a, upperBound)
+	if err != nil {
+		return err
+	}
+	_, err = enumType.EnumGetFirstIdxOfPhysicalBetween(
+		[]byte(*lowerPhys.(*tree.DBytes)), []byte(*upperPhys.(*tree.DBytes)),
+	)
+	return err
+}
+
 // GetDefaultHistogramBuckets gets the default number of histogram buckets to
 // create for the given table.
 func GetDefaultHistogramBuckets(sv *settings.Values, desc catalog.TableDescriptor) uint32 {

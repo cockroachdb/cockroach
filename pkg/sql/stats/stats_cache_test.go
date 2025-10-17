@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -481,4 +483,355 @@ func TestCacheAutoRefresh(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return expectNStats(2)
 	})
+}
+
+func TestDecodeHistogramBucketsEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	enumPhysRep := map[string][]byte{
+		"a": {32},
+		"b": {64},
+		"c": {128},
+		"d": {192},
+	}
+
+	// Create a mock enum type.
+	mockEnumType := func(logical []string) *types.T {
+		physical := make([][]byte, len(logical))
+		for i, v := range logical {
+			physical[i] = enumPhysRep[v]
+		}
+		enum := types.MakeEnum(catid.TypeIDToOID(200), catid.TypeIDToOID(201))
+		enum.TypeMeta = types.UserDefinedTypeMetadata{
+			Name: &types.UserDefinedTypeName{
+				Name: "e",
+			},
+			EnumData: &types.EnumMetadata{
+				LogicalRepresentations:  logical,
+				PhysicalRepresentations: physical,
+				IsMemberReadOnly:        make([]bool, len(logical)),
+			},
+		}
+		return enum
+	}
+
+	// Build a map of enum value to key-encoded bytes.
+	enum := mockEnumType([]string{"a", "b", "c", "d"})
+	enumDatums := tree.MakeAllDEnumsInType(enum)
+	enumEncoded := make(map[string][]byte)
+	for _, d := range enumDatums {
+		encoded, err := EncodeUpperBound(HistVersion, d)
+		require.NoError(t, err)
+		enumEncoded[d.(*tree.DEnum).LogicalRep] = encoded
+	}
+
+	testCases := []struct {
+		name    string
+		enum    []string
+		buckets []HistogramData_Bucket
+		// Because each test case could use a slightly different mock enum type, we
+		// write expected buckets as HistogramData_Bucket and then convert to
+		// cat.HistogramBucket after we've created the mock type for the test case.
+		expected []HistogramData_Bucket
+	}{
+		{
+			name: "normal",
+			enum: []string{"a", "b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-first",
+			enum: []string{"b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-first-add-min",
+			enum: []string{"b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{0, 0, 0, enumPhysRep["b"]},
+				{1, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-first-add-min-steal",
+			enum: []string{"b", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-middle-multiple",
+			enum: []string{"a", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-add-min",
+			enum: []string{"a", "c", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{0, 0, 0, enumPhysRep["a"]},
+				{1, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-multiple",
+			enum: []string{"a", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-carry",
+			enum: []string{"a", "b", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-carry-add-max",
+			enum: []string{"a", "b", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{0, 1, 1, enumPhysRep["d"]},
+			},
+		},
+		{
+			name: "remove-middle-multiple-add-min-add-max-steal",
+			enum: []string{"b", "d"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-last",
+			enum: []string{"a", "b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-last-carry-add-max",
+			enum: []string{"a", "b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{0, 1, 1, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-last-carry-add-max-steal",
+			enum: []string{"a", "b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-last-multiple-carry-add-max-steal",
+			enum: []string{"a", "b"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["a"]},
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-last-multiple-add-min-add-max-steal",
+			enum: []string{"b", "c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-many",
+			enum: []string{"c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-many-steal",
+			enum: []string{"c"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["c"]},
+			},
+		},
+		{
+			name: "remove-many-steal-2",
+			enum: []string{"b"},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 1, 1, enumEncoded["c"]},
+			},
+			expected: []HistogramData_Bucket{
+				{1, 0, 0, enumPhysRep["b"]},
+			},
+		},
+		{
+			name: "remove-all",
+			enum: []string{},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 0, 0, enumEncoded["b"]},
+				{1, 0, 0, enumEncoded["c"]},
+				{1, 0, 0, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{},
+		},
+		{
+			name: "remove-all-with-ranges",
+			enum: []string{},
+			buckets: []HistogramData_Bucket{
+				{1, 0, 0, enumEncoded["a"]},
+				{1, 2, 2, enumEncoded["d"]},
+			},
+			expected: []HistogramData_Bucket{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create mock enum type.
+			enum := mockEnumType(tc.enum)
+
+			// Convert expected buckets to cat.HistogramBucket.
+			expected := make([]cat.HistogramBucket, len(tc.expected))
+			var rowCount, distinctCount uint64
+			for i := range expected {
+				bucket := tc.expected[i]
+				upperBound, err := tree.MakeDEnumFromPhysicalRepresentation(enum, bucket.UpperBound)
+				require.NoError(t, err)
+				expected[i] = cat.HistogramBucket{
+					NumEq:         float64(bucket.NumEq),
+					NumRange:      float64(bucket.NumRange),
+					DistinctRange: bucket.DistinctRange,
+					UpperBound:    tree.NewDEnum(upperBound),
+				}
+				rowCount += uint64(bucket.NumEq) + uint64(bucket.NumRange)
+				distinctCount += uint64(bucket.DistinctRange)
+				if bucket.NumEq > 0 {
+					distinctCount += 1
+				}
+			}
+
+			// Create TableStatistic with the test histogram data.
+			stat := &TableStatistic{
+				TableStatisticProto: TableStatisticProto{
+					TableID:       descpb.ID(202),
+					StatisticID:   1,
+					ColumnIDs:     []descpb.ColumnID{1},
+					RowCount:      rowCount,
+					DistinctCount: distinctCount,
+					HistogramData: &HistogramData{
+						Version:    HistVersion,
+						ColumnType: enum,
+						Buckets:    tc.buckets,
+					},
+				},
+			}
+
+			// Test that DecodeHistogramBuckets produces what we expect.
+			err := DecodeHistogramBuckets(ctx, stat)
+			require.NoError(t, err, tc.name)
+			require.Equal(
+				t, expected, stat.Histogram, "%s: expected buckets %v, got %v",
+				tc.name, expected, stat.Histogram,
+			)
+		})
+	}
 }
