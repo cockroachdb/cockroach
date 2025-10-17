@@ -183,6 +183,15 @@ func (s *topLevelServer) upgradeStatus(
 			if notRunningErr == nil {
 				notRunningErr = errors.Errorf("node %d not running (%d), cannot determine version", nodeID, st)
 			}
+			// However, we don't want to exit the auto upgrade process if we can't validate
+			// our own version. Consider the case where the meta1 leaseholder is the first
+			// node to restart to the new version but has transient liveness issues. If we skip
+			// the check here, we will see all other nodes at the same (old) version and exit
+			// the auto upgrade process with UpgradeAlreadyCompleted. Since the meta1 leaseholder
+			// is the only node that can perform the upgrade, this indefinitely blocks the upgrade.
+			if s.node.Descriptor.NodeID == nodeID {
+				return UpgradeBlockedDueToError, errors.Errorf("node %d not running (%d), cannot determine version", nodeID, st)
+			}
 			continue
 		}
 
