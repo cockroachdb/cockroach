@@ -2685,6 +2685,159 @@ func TestLeaderAppResp(t *testing.T) {
 	}
 }
 
+// TestVoteHintPipelining tests that a candidate correctly processes
+// MsgVoteResp messages that include the voter's last entryID.
+// When the candidate wins the election and becomes leader, it should initialize
+// the follower's Progress.Next value using this best guess information.
+// This test checks various combinations of candidate logs and voter hints to
+// ensure proper initialization of the replication state after election.
+func TestVoteHintPipelining(t *testing.T) {
+	testCases := []struct {
+		candidateLog LeadSlice         // log entries in the candidate
+		voterLast    entryID           // last entryID in the voter's log
+		next         uint64            // expected Progress.Next after election
+		prState      tracker.StateType // expected Progress.State after election
+		compact      uint64            // compact the candidate log before campaigning if not 0
+	}{
+		// NB: All the test illustrations shows a possible/legal raft log of voter n2.
+		// However, the candidate n1 doesn't know what the log of n2 is like.
+		// Since the only information we have is the last entryID of the voter.
+		{
+			// NB: This test case is for showing if the voter did not attach a hint.
+			// For mixed version tests, the voter would not attach anything because it
+			// is still running on old code.
+			// The candidate will just ignore the hint because
+			// !(m.RejectHint != 0 && m.LogTerm != 0)
+			// And set next to be the dummy entry index at 11 after becoming leader.
+			// The follower Progress.State is in StateProbe same as before the change.
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  0,
+				index: 0,
+			},
+			next:    11,
+			prState: tracker.StateProbe,
+		},
+		{
+			//       n1.compacted() = 3
+			//              |
+			//      1  2  3 | 4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1]|[4][4][5][5][6][6][6]
+			// n2: [1][1]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  1,
+				index: 2,
+			},
+			// NB: next is 1 here because index is not set in MsgSnap.
+			next:    1,
+			prState: tracker.StateSnapshot,
+			compact: 3,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 10,
+			},
+			next:    11,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 9,
+			},
+			next:    10,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5][6]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  6,
+				index: 8,
+			},
+			next:    9,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][5][5]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  5,
+				index: 7,
+			},
+			next:    8,
+			prState: tracker.StateReplicate,
+		},
+		{
+			//      1  2  3  4  5  6  7  8  9  10 11 12
+			// n1: [1][1][1][4][4][5][5][6][6][6]
+			// n2: [1][1][1][4][4][4][4]
+			candidateLog: entryID{}.append(1, 1, 1, 4, 4, 5, 5, 6, 6, 6),
+			voterLast: entryID{
+				term:  4,
+				index: 7,
+			},
+			next:    6,
+			prState: tracker.StateReplicate,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			// Create storage with the candidate's log
+			storage := newTestMemoryStorage(withPeers(1, 2, 3))
+			require.NoError(t, storage.Append(tc.candidateLog.entries))
+			if tc.compact != 0 {
+				storage.Compact(tc.compact)
+			}
+
+			// Create candidate node
+			r := newTestRaft(1, 5, 1, storage)
+			r.Term = tc.candidateLog.term
+			// pr.Next does not increment after the leader wins election since
+			// we don't immediately send out the first round of MsgApps.
+			r.lazyReplication = true
+			// n1 campaigns.
+			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgHup})
+			r.advanceMessagesAfterAppend()
+
+			// Simulate receiving vote response from node 2
+			r.Step(pb.Message{
+				From: 2,
+				To:   1,
+				Term: tc.candidateLog.term + 1,
+				// Node 2 includes its last entryID as hint.
+				RejectHint: tc.voterLast.index,
+				LogTerm:    tc.voterLast.term,
+				Type:       pb.MsgVoteResp,
+			})
+
+			// The candidate should now be leader after receiving vote from node 2.
+			assert.Equal(t, pb.StateLeader, r.state)
+
+			p := r.trk.Progress(2)
+			assert.Equal(t, tc.next, p.Next)
+			assert.Equal(t, tc.prState, p.State)
+		})
+	}
+}
+
 // TestBcastBeat is when the leader receives a heartbeat tick, it should
 // send a MsgHeartbeat with m.Index = 0, m.LogTerm=0 and empty entries if
 // store liveness is disabled. On the other hand, if store liveness is enabled,
@@ -5032,7 +5185,7 @@ func entsWithConfig(configFunc func(*Config), terms ...uint64) *raft {
 		configFunc(cfg)
 	}
 	sm := newRaft(cfg)
-	sm.reset(terms[len(terms)-1])
+	sm.reset(terms[len(terms)-1], nil)
 	return sm
 }
 
@@ -5047,7 +5200,7 @@ func votedWithConfig(configFunc func(*Config), vote pb.PeerID, term uint64) *raf
 		configFunc(cfg)
 	}
 	sm := newRaft(cfg)
-	sm.reset(term)
+	sm.reset(term, nil)
 	return sm
 }
 
@@ -5290,7 +5443,7 @@ func newNetworkWithConfigAndLivenessFabric(
 				}
 				v.trk.TestingSetProgress(peerAddrs[i], pr)
 			}
-			v.reset(v.Term)
+			v.reset(v.Term, nil)
 			npeers[id] = v
 		case *blackHole:
 			npeers[id] = v
