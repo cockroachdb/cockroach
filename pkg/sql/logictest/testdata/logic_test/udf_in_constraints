@@ -102,6 +102,10 @@ SELECT get_fn_depended_on_by($fn_id)
 statement ok
 ALTER TABLE t1 ADD CONSTRAINT cka CHECK (f1(a) > 1);
 
+# Regression test for issue #155400 - add new constraint with NOT VALID
+statement ok
+ALTER TABLE t1 ADD CONSTRAINT ckb CHECK (f1(b) > 2) NOT VALID;
+
 query T
 SELECT get_checks($tbl_id);
 ----
@@ -121,6 +125,15 @@ SELECT get_checks($tbl_id);
         "constraintId": 3,
         "expr": "[FUNCTION 100106](a) \u003e 1:::INT8",
         "name": "cka"
+    },
+    {
+        "columnIds": [
+            2
+        ],
+        "constraintId": 4,
+        "expr": "[FUNCTION 100106](b) \u003e 2:::INT8",
+        "name": "ckb",
+        "validity": "Unvalidated"
     }
 ]
 
@@ -131,7 +144,8 @@ SELECT get_fn_depended_on_by($fn_id)
     {
         "constraintIds": [
             2,
-            3
+            3,
+            4
         ],
         "id": 111
     }
@@ -152,7 +166,8 @@ SELECT get_fn_depended_on_by($fn_id)
     {
         "constraintIds": [
             2,
-            3
+            3,
+            4
         ],
         "id": 111
     },
@@ -176,7 +191,8 @@ SELECT get_fn_depended_on_by($fn_id)
     {
         "constraintIds": [
             2,
-            3
+            3,
+            4
         ],
         "id": 111
     },
@@ -198,7 +214,8 @@ SELECT get_fn_depended_on_by($fn_id)
     {
         "constraintIds": [
             2,
-            3
+            3,
+            4
         ],
         "id": 111
     }
