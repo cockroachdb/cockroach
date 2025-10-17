@@ -69,6 +69,8 @@ type DNSProvider interface {
 	ProviderName() string
 	// SyncDNS synchronizes the DNS records for the given VMs.
 	SyncDNS(l *logger.Logger, vms List) error
+	// SyncDNSWithContext synchronizes the DNS records for the given VMs.
+	SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms List) error
 }
 
 // FanOutDNS collates a collection of VMs by their DNS providers and invoke the

@@ -42,8 +42,11 @@ func (p *Provider) listWithSDK(
 			if errors.Is(err, iterator.Done) {
 				break
 			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			if err != nil {
-				return nil, fmt.Errorf("iterate: %w", err)
+				return nil, errors.Wrap(err, "error listing instances")
 			}
 			if pair.Value == nil || len(pair.Value.Instances) == 0 {
 				continue
@@ -116,7 +119,7 @@ func (p *Provider) listWithSDK(
 	}
 
 	if opts.ComputeEstimatedCost {
-		if err := populateCostPerHour(l, vms); err != nil {
+		if err := populateCostPerHour(ctx, l, vms); err != nil {
 			// N.B. We continue despite the error since it doesn't prevent 'List' and other commands which may depend on it.
 
 			l.Errorf("Error during cost estimation (will continue without): %v", err)
@@ -144,8 +147,11 @@ func (p *Provider) listInstanceTemplatesWithSDK(
 		if errors.Is(err, iterator.Done) {
 			break
 		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err != nil {
-			return templates, err
+			return nil, err
 		}
 
 		if clusterFilter == "" {
@@ -177,7 +183,7 @@ type sdkAttachedDisk struct {
 
 func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 
-	var vmErrors []error
+	var vmErrors []vm.VMError
 	var err error
 
 	// Check "lifetime" label.
@@ -185,20 +191,20 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 
 	if lifetimeStr, ok := i.GetLabels()[vm.TagLifetime]; ok {
 		if lifetime, err = time.ParseDuration(lifetimeStr); err != nil {
-			vmErrors = append(vmErrors, vm.ErrNoExpiration)
+			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrNoExpiration))
 		}
 	} else {
-		vmErrors = append(vmErrors, vm.ErrNoExpiration)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrNoExpiration))
 	}
 
 	// Extract network information
 	var publicIP, privateIP, vpc string
 	if len(i.GetNetworkInterfaces()) == 0 {
-		vmErrors = append(vmErrors, vm.ErrBadNetwork)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
 	} else {
 		privateIP = i.GetNetworkInterfaces()[0].GetNetworkIP()
 		if len(i.GetNetworkInterfaces()[0].GetAccessConfigs()) == 0 {
-			vmErrors = append(vmErrors, vm.ErrBadNetwork)
+			vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadNetwork))
 		} else {
 			_ = i.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetName() // silence unused warning
 			publicIP = i.GetNetworkInterfaces()[0].GetAccessConfigs()[0].GetNatIP()
@@ -207,7 +213,7 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 	}
 	if i.GetScheduling().GetOnHostMaintenance() == "" {
 		// N.B. 'onHostMaintenance' is always non-empty, hence its absense implies a parsing error
-		vmErrors = append(vmErrors, vm.ErrBadScheduling)
+		vmErrors = append(vmErrors, vm.NewVMError(vm.ErrBadScheduling))
 	}
 
 	machineType := lastComponent(i.GetMachineType())
@@ -230,7 +236,7 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 
 		vol, volType, err := (&sdkAttachedDisk{attachedDisk}).toVolume()
 		if err != nil {
-			vmErrors = append(vmErrors, err)
+			vmErrors = append(vmErrors, vm.NewVMError(err))
 			continue
 		}
 
@@ -259,7 +265,10 @@ func (i *sdkInstance) toVM(project, dnsDomain string) *vm.VM {
 	creationTimestamp, err := time.Parse(time.RFC3339, creationTimestampStr)
 	if err != nil {
 		creationTimestamp = timeutil.Now()
-		vmErrors = append(vmErrors, errors.Wrapf(err, "could not parse creation timestamp %q", creationTimestampStr))
+		vmErrors = append(
+			vmErrors,
+			vm.NewVMError(errors.Wrapf(err, "could not parse creation timestamp %q", creationTimestampStr)),
+		)
 	}
 
 	return &vm.VM{

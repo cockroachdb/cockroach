@@ -307,7 +307,12 @@ func (n *dnsProvider) PublicDomain() string {
 
 // SyncDNS implements the vm.DNSProvider interface.
 func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
-	return n.syncPublicDNS(l, vms)
+	return n.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+// SyncDNSWithContext implements the vm.DNSProvider interface.
+func (n *dnsProvider) SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms vm.List) error {
+	return n.syncPublicDNS(ctx, l, vms)
 }
 
 func (n *dnsProvider) ProviderName() string {
@@ -446,7 +451,9 @@ func (n *dnsProvider) normaliseName(name string) string {
 // syncPublicDNS syncs the public DNS zone with the given list of VMs.
 //
 // Note that this operates on the public DNS zone, not the managed zone.
-func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
+func (p *dnsProvider) syncPublicDNS(
+	ctx context.Context, l *logger.Logger, vms vm.List,
+) (err error) {
 	if p.publicDomain == "" {
 		return nil
 	}
@@ -480,7 +487,7 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 
 	args := []string{"--project", p.dnsProject, "dns", "record-sets", "import",
 		f.Name(), "-z", p.publicZone, "--delete-all-existing", "--zone-file-format"}
-	cmd := exec.Command("gcloud", args...)
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
 	output, err := cmd.CombinedOutput()
 
 	return errors.Wrapf(err,

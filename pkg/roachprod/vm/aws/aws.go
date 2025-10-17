@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -858,7 +859,7 @@ func (p *Provider) Create(
 	// Our initial list of VMs does not include the IP addresses or volumes.
 	// waitForIPs() returns the VMs list with all information set, so we simply
 	// overwrite the list with the result of waitForIPs().
-	vmList, err := p.waitForIPs(l, names, regions, providerOpts)
+	vmList, err := p.waitForIPs(context.Background(), l, names, regions, providerOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -887,7 +888,7 @@ func (p *Provider) Shrink(*logger.Logger, vm.List, string) error {
 // We do a bad job at higher layers detecting this lack of IP which can lead to
 // commands hanging indefinitely.
 func (p *Provider) waitForIPs(
-	l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
+	ctx context.Context, l *logger.Logger, names []string, regions []string, opts *ProviderOpts,
 ) ([]vm.VM, error) {
 	waitForIPRetry := retry.Start(retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
@@ -899,7 +900,7 @@ func (p *Provider) waitForIPs(
 		// We also include volumes in the list because they were not included
 		// in the initial list of VMs as they're only returned by run-instances
 		// when ready.
-		vms, err := p.listRegionsFiltered(l, regions, names, *opts, vm.ListOptions{
+		vms, err := p.listRegionsFiltered(ctx, l, regions, names, *opts, vm.ListOptions{
 			IncludeVolumes: true,
 		})
 		if err != nil {
@@ -1042,31 +1043,41 @@ func (p *Provider) stsGetCallerIdentity(l *logger.Logger) (string, error) {
 }
 
 // List is part of the vm.Provider interface.
-func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) {
+func (p *Provider) List(
+	ctx context.Context, l *logger.Logger, opts vm.ListOptions,
+) (vm.List, error) {
 	regions, err := p.allRegions(p.Config.availabilityZoneNames())
 	if err != nil {
 		return nil, err
 	}
 	defaultOpts := p.CreateProviderOpts().(*ProviderOpts)
-	return p.listRegions(l, regions, *defaultOpts, opts)
+	return p.listRegions(ctx, l, regions, *defaultOpts, opts)
 }
 
 // listRegions lists VMs in the regions passed.
 // It ignores region-specific errors.
 func (p *Provider) listRegions(
-	l *logger.Logger, regions []string, opts ProviderOpts, listOpts vm.ListOptions,
+	ctx context.Context,
+	l *logger.Logger,
+	regions []string,
+	opts ProviderOpts,
+	listOpts vm.ListOptions,
 ) (vm.List, error) {
-	return p.listRegionsFiltered(l, regions, nil, opts, listOpts)
+	return p.listRegionsFiltered(ctx, l, regions, nil, opts, listOpts)
 }
 
 // listRegionsFiltered lists VMs in the regions with a filter on instance names.
 // The filter makes it more efficient to list specific VMs than listRegions.
 func (p *Provider) listRegionsFiltered(
-	l *logger.Logger, regions, names []string, opts ProviderOpts, listOpts vm.ListOptions,
+	ctx context.Context,
+	l *logger.Logger,
+	regions, names []string,
+	opts ProviderOpts,
+	listOpts vm.ListOptions,
 ) (vm.List, error) {
 	var ret vm.List
 	var mux syncutil.Mutex
-	var g errgroup.Group
+	g := ctxgroup.WithContext(ctx)
 
 	// Create a filter for the instance names.
 	var namesFilter string
@@ -1075,8 +1086,8 @@ func (p *Provider) listRegionsFiltered(
 	}
 
 	for _, r := range regions {
-		g.Go(func() error {
-			vms, err := p.describeInstances(l, r, opts, listOpts, namesFilter)
+		g.GoCtx(func(ctx context.Context) error {
+			vms, err := p.describeInstances(ctx, l, r, opts, listOpts, namesFilter)
 			if err != nil {
 				l.Printf("Failed to list AWS VMs in region: %s\n%v\n", r, err)
 				return nil
@@ -1119,7 +1130,7 @@ func (p *Provider) allRegions(zones []string) (regions []string, err error) {
 }
 
 func (p *Provider) getVolumesForInstances(
-	l *logger.Logger, region string, instanceIDs []string,
+	ctx context.Context, l *logger.Logger, region string, instanceIDs []string,
 ) (vols map[string]map[string]vm.Volume, err error) {
 	type describeVolume struct {
 		Volumes []struct {
@@ -1155,7 +1166,7 @@ func (p *Provider) getVolumesForInstances(
 		"Name=attachment.instance-id,Values=" + strings.Join(instanceIDs, ","),
 	}
 
-	err = p.runJSONCommand(l, getVolumesArgs, &volumeOut)
+	err = p.runJSONCommandWithContext(ctx, l, getVolumesArgs, &volumeOut)
 	if err != nil {
 		return vols, err
 	}
@@ -1339,7 +1350,12 @@ type RunInstancesOutput struct {
 // describeInstances executes the ec2 describe-instances command
 // with the given filters.
 func (p *Provider) describeInstances(
-	l *logger.Logger, region string, opts ProviderOpts, listOpt vm.ListOptions, filters string,
+	ctx context.Context,
+	l *logger.Logger,
+	region string,
+	opts ProviderOpts,
+	listOpt vm.ListOptions,
+	filters string,
 ) (vm.List, error) {
 
 	args := []string{
@@ -1350,7 +1366,7 @@ func (p *Provider) describeInstances(
 		args = append(args, "--filters", filters)
 	}
 	var describeInstancesResponse DescribeInstancesOutput
-	err := p.runJSONCommand(l, args, &describeInstancesResponse)
+	err := p.runJSONCommandWithContext(ctx, l, args, &describeInstancesResponse)
 	if err != nil {
 		return nil, err
 	}
@@ -1381,7 +1397,7 @@ func (p *Provider) describeInstances(
 	// Fetch volume info for all instances at once
 	var volumes map[string]map[string]vm.Volume
 	if listOpt.IncludeVolumes && len(instances) > 0 {
-		volumes, err = p.getVolumesForInstances(l, region, maps.Keys(instances))
+		volumes, err = p.getVolumesForInstances(ctx, l, region, maps.Keys(instances))
 		if err != nil {
 			return nil, err
 		}
