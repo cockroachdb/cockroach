@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
-	"os"
 	"path"
 	"time"
 
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 )
 
 // At the moment, Azure VMs do not have managed identities set up yet.
@@ -653,7 +651,6 @@ func registerBackupFixtures(r registry.Registry) {
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
 				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
@@ -687,44 +684,6 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 		})
 	}
-}
-
-func maybePutAzureCredentialsFile(ctx context.Context, c cluster.Cluster, path string) error {
-	if c.Cloud() != spec.Azure {
-		return nil
-	}
-
-	type azureCreds struct {
-		TenantID     string `yaml:"azure_tenant_id"`
-		ClientID     string `yaml:"azure_client_id"`
-		ClientSecret string `yaml:"azure_client_secret"`
-	}
-
-	azureEnvVars := []string{AzureTenantIDEnvVar, AzureClientIDEnvVar, AzureClientSecretEnvVar}
-	azureEnvValues := make(map[string]string)
-	for _, envVar := range azureEnvVars {
-		val := os.Getenv(envVar)
-		if val == "" {
-			return errors.Newf("environment variable %s is not set", envVar)
-		}
-		azureEnvValues[envVar] = val
-	}
-
-	creds := azureCreds{
-		TenantID:     azureEnvValues[AzureTenantIDEnvVar],
-		ClientID:     azureEnvValues[AzureClientIDEnvVar],
-		ClientSecret: azureEnvValues[AzureClientSecretEnvVar],
-	}
-
-	credsYaml, err := yaml.Marshal(creds)
-	if err != nil {
-		return errors.Wrapf(err, "failed to marshal Azure credentials to YAML")
-	}
-
-	return errors.Wrap(
-		c.PutString(ctx, string(credsYaml), path, 0700),
-		"failed to put Azure credentials file in cluster",
-	)
 }
 
 func registerBlobFixtureGC(r registry.Registry) {
