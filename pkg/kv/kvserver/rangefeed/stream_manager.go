@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -121,8 +122,8 @@ func (sm *StreamManager) OnError(streamID int64) {
 	func() {
 		sm.streams.Lock()
 		defer sm.streams.Unlock()
-		if _, ok := sm.streams.m[streamID]; ok {
-			// TODO(ssd): We should be able to assert we are disconnected here.
+		if d, ok := sm.streams.m[streamID]; ok {
+			assert(d.IsDisconnected(), "OnError called on connected registration")
 			delete(sm.streams.m, streamID)
 			sm.metrics.ActiveMuxRangeFeed.Dec(1)
 		}
@@ -238,4 +239,10 @@ func (sm *StreamManager) activeStreamCount() int {
 	sm.streams.Lock()
 	defer sm.streams.Unlock()
 	return len(sm.streams.m)
+}
+
+func assert(cond bool, msg string) {
+	if buildutil.CrdbTestBuild && !cond {
+		panic(msg)
+	}
 }
