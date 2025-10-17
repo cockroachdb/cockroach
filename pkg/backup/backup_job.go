@@ -400,7 +400,7 @@ func backup(
 			// Set a unique filename for each partition backup descriptor. The ID
 			// ensures uniqueness, and the kv string appended to the end is for
 			// readability.
-			filename := fmt.Sprintf("%s_%d_%s", backupPartitionDescriptorPrefix,
+			filename := fmt.Sprintf("%s_%d_%s", backupbase.BackupPartitionDescriptorPrefix,
 				nextPartitionedDescFilenameID, backupinfo.SanitizeLocalityKV(kv))
 			nextPartitionedDescFilenameID++
 			backupManifest.PartitionDescriptorFilenames = append(backupManifest.PartitionDescriptorFilenames, filename)
