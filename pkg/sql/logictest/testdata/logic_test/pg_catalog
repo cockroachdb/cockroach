@@ -2800,9 +2800,9 @@ FROM pg_catalog.pg_roles
 ORDER BY rolname
 ----
 oid         rolname   rolsuper  rolinherit  rolcreaterole  rolcreatedb  rolcatupdate  rolcanlogin  rolreplication
-2310524507  admin     true      true        true           true         false         true         false
-3233629770  node      true      true        true           true         false         false        false
-1546506610  root      true      true        true           true         false         true         false
+2310524507  admin     true      true        true           true         false         true         true
+3233629770  node      true      true        true           true         false         false        true
+1546506610  root      true      true        true           true         false         true         true
 2264919399  testuser  false     true        false          false        false         true         false
 
 query OTITTBT colnames
@@ -2835,6 +2835,53 @@ testuser
 
 statement ok
 DELETE FROM system.users WHERE username = 'non_cached_user'
+
+## rolreplication from pg_catalog.pg_authid and pg_catalog.pg_roles
+statement ok
+CREATE ROLE test_no_replication;
+CREATE ROLE test_replication;
+GRANT SYSTEM REPLICATION to test_replication;
+CREATE ROLE test_src_replication;
+GRANT SYSTEM REPLICATIONSOURCE to test_src_replication;
+CREATE ROLE test_dst_replication;
+GRANT SYSTEM REPLICATIONDEST to test_dst_replication;
+
+query TB colnames
+SELECT rolname, rolreplication FROM pg_catalog.pg_roles
+ORDER BY rolname
+----
+rolname               rolreplication
+admin                 true
+node                  true
+root                  true
+test_dst_replication  true
+test_no_replication   false
+test_replication      true
+test_src_replication  true
+testuser              false
+
+query TB colnames
+SELECT rolname, rolreplication FROM pg_catalog.pg_authid
+ORDER BY rolname
+----
+rolname               rolreplication
+admin                 true
+node                  true
+root                  true
+test_dst_replication  true
+test_no_replication   false
+test_replication      true
+test_src_replication  true
+testuser              false
+
+statement ok
+DROP ROLE test_no_replication;
+REVOKE SYSTEM REPLICATION FROM test_replication;
+REVOKE SYSTEM REPLICATIONSOURCE FROM test_src_replication;
+REVOKE SYSTEM REPLICATIONDEST FROM test_dst_replication;
+DROP ROLE test_replication;
+DROP ROLE test_src_replication;
+DROP ROLE test_dst_replication;
 
 ## pg_catalog.pg_auth_members
 
