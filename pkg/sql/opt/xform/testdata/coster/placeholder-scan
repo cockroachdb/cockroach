@@ -369,7 +369,7 @@ project
            │         └── a:2 > "$1":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
            ├── parameterized columns: (7,8)
            ├── has-placeholder
-           ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+           ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
            ├── cost: 68690.7277
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
@@ -378,7 +378,7 @@ project
            │    ├── columns: "$1":7 "$2":8
            │    ├── cardinality: [1 - 1]
            │    ├── has-placeholder
-           │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+           │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
            │    ├── cost: 0.02
            │    ├── key: ()
            │    ├── fd: ()-->(7,8)
@@ -1018,7 +1018,7 @@ project
            │         └── a:2 > "$1":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
            ├── parameterized columns: (7,8)
            ├── has-placeholder
-           ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+           ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
            ├── cost: 67857.3943
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
@@ -1027,7 +1027,7 @@ project
            │    ├── columns: "$1":7 "$2":8
            │    ├── cardinality: [1 - 1]
            │    ├── has-placeholder
-           │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+           │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
            │    ├── cost: 0.02
            │    ├── key: ()
            │    ├── fd: ()-->(7,8)
