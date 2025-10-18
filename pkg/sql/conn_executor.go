@@ -2467,7 +2467,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				ex.sessionData().DataConversionConfig,
 				ex.sessionData().GetLocation(),
 				tcmd.Limit,
-				portalName,
+				portal.Name,
 				ex.implicitTxn(),
 				portal.portalPausablity,
 			)
@@ -2483,7 +2483,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 			// followed by Sync (which is the common case), then we still can auto-commit,
 			// which allows the 1PC txn fast path to be used.
 			canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
-			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
+			ev, payload, err = ex.execPortal(ctx, portal, stmtRes, pinfo, canAutoCommit)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
