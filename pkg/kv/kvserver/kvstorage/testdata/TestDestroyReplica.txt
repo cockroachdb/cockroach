@@ -19,7 +19,7 @@ Put: "a"/Intent/00000000-0000-0000-0000-000000000000:
 Put: 0.000000001,0 "y\xff" (0x79ff00000000000000000109): ""
 Put: "y\xff"/Intent/00000000-0000-0000-0000-000000000000: 
 >> destroy:
-Delete (Sized at 31): 0,0 /Local/RangeID/123/u/RangeTombstone (0x0169f67b757266746200): 
+Put: 0,0 /Local/RangeID/123/u/RangeTombstone (0x0169f67b757266746200): next_replica_id:4 
 Delete (Sized at 39): 0,0 /Local/RangeID/123/u/RaftHardState (0x0169f67b757266746800): 
 Delete (Sized at 43): 0,0 /Local/RangeID/123/u/RaftLog/logIndex:11 (0x0169f67b757266746c000000000000000b00): 
 Delete (Sized at 43): 0,0 /Local/RangeID/123/u/RaftLog/logIndex:12 (0x0169f67b757266746c000000000000000c00): 
@@ -35,4 +35,3 @@ Delete (Sized at 26): /Local/Lock"a" 0300000000000000000000000000000000 (0x017a6
 Delete (Sized at 27): /Local/Lock"y\xff" 0300000000000000000000000000000000 (0x017a6b1279ff000100030000000000000000000000000000000012): 
 Delete (Sized at 11): 0.000000001,0 "a" (0x6100000000000000000109): 
 Delete (Sized at 12): 0.000000001,0 "y\xff" (0x79ff00000000000000000109): 
-Put: 0,0 /Local/RangeID/123/u/RangeTombstone (0x0169f67b757266746200): next_replica_id:4 
