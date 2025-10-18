@@ -186,7 +186,12 @@ func (w *workloadReader) readFiles(
 	}
 
 	for _, wc := range wcs {
-		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) error {
+		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) (retErr error) {
+			defer func() {
+				if r := recover(); r != nil {
+					retErr = errors.CombineErrors(errors.AssertionFailedf("panic occurred in workload: %v", r), retErr)
+				}
+			}()
 			evalCtx := w.evalCtx.Copy()
 			return wc.Worker(ctx, evalCtx, w.semaCtx)
 		}); err != nil {
