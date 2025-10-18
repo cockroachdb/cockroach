@@ -2762,9 +2762,19 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				defer planner.curPlan.close(ctx)
 			} else {
 				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-					ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-				})
+				defer func() {
+					// We need to check whether pausable portals model is still
+					// used since it might have been revoked below.
+					if info := getPausablePortalInfo(planner); info != nil {
+						info.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+							info.dispatchToExecutionEngine.planTop.close(ctx)
+						})
+					} else {
+						// Pausable portal execution was disabled, so just do
+						// what we do on the main path.
+						planner.curPlan.close(ctx)
+					}
+				}()
 			}
 		} else {
 			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
@@ -2928,6 +2938,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
+		// Note that here we append the cleanup function without a defer since
+		// there is no more code relevant to pausable portals model below.
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
