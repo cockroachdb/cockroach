@@ -56,10 +56,10 @@ type bufferedRegistration struct {
 		outputLoopCancelFn func()
 		disconnected       bool
 
-		// catchUpIter is created by replcia under raftMu lock when registration is
-		// created. It is detached by output loop for processing and closed.
-		// If output loop was not started and catchUpIter is non-nil at the time
-		// that disconnect is called, it is closed by disconnect.
+		// catchUpIter is created by replica under raftMu lock when registration is
+		// created. It is detached by output loop for processing and closed. If
+		// output loop was not started and catchUpIter is non-nil at the time that
+		// disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
 	}
 
@@ -78,7 +78,7 @@ func newBufferedRegistration(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-	withBulkDelivery int,
+	bulkDeliverySize int,
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
@@ -86,16 +86,15 @@ func newBufferedRegistration(
 	removeRegFromProcessor func(registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
-		baseRegistration: baseRegistration{
-			streamCtx:              streamCtx,
-			span:                   span,
-			catchUpTimestamp:       startTS,
-			withDiff:               withDiff,
-			withFiltering:          withFiltering,
-			withOmitRemote:         withOmitRemote,
-			removeRegFromProcessor: removeRegFromProcessor,
-			bulkDelivery:           withBulkDelivery,
-		},
+		baseRegistration: newBaseRegistration(
+			streamCtx,
+			span,
+			startTS,
+			withDiff,
+			withFiltering,
+			withOmitRemote,
+			bulkDeliverySize,
+			removeRegFromProcessor),
 		metrics:       metrics,
 		stream:        stream,
 		buf:           make(chan *sharedEvent, bufferSz),
