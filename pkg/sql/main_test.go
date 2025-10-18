@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	kvtenant.InitTestConnectorFactory()
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.SharedTestTenantAlwaysEnabled,
 	)()
 
 	os.Exit(m.Run())
