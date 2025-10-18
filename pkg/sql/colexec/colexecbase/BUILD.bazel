@@ -55,6 +55,7 @@ go_test(
     ],
     deps = [
         ":colexecbase",
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
@@ -74,6 +75,7 @@ go_test(
         "//pkg/sql/sem/cast",
         "//pkg/sql/sem/eval",
         "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
