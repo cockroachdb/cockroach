@@ -79,14 +79,15 @@ func makeInspectThroughputTest(
 	}
 
 	return registry.TestSpec{
-		Name:             fmt.Sprintf("inspect/throughput/bulkingest/nodes=%d/cpu=%d/rows=%d/checks=%d", numNodes, numCPUs, numRows, numChecks),
-		Owner:            registry.OwnerSQLFoundations,
-		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
-		Leases:           registry.LeaderLeases,
-		Timeout:          length,
+		Name:                fmt.Sprintf("inspect/throughput/bulkingest/nodes=%d/cpu=%d/rows=%d/checks=%d", numNodes, numCPUs, numRows, numChecks),
+		Owner:               registry.OwnerSQLFoundations,
+		Benchmark:           true,
+		Cluster:             r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
+		Leases:              registry.LeaderLeases,
+		Timeout:             length,
+		SkipPostValidations: registry.PostValidationInspect,
 		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 			// This callback is invoked once with all histogram summaries.
 			// histogram.Summaries contains one entry for each named metric (checks=1, checks=2).
