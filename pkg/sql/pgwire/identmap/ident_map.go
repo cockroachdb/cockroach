@@ -85,9 +85,12 @@ func From(r io.Reader) (*Conf, error) {
 		var sysPattern *regexp.Regexp
 		var err error
 		if sysName := parts[2]; sysName[0] == '/' {
-			sysPattern, err = regexp.Compile(sysName[1:])
+			// Use case-insensitive matching since system identities (e.g., certificate CNs)
+			// are normalized to lowercase before being passed to the user map.
+			sysPattern, err = regexp.Compile("(?i)" + sysName[1:])
 		} else {
-			sysPattern, err = regexp.Compile("^" + regexp.QuoteMeta(sysName) + "$")
+			// Use case-insensitive matching for literal patterns as well.
+			sysPattern, err = regexp.Compile("(?i)^" + regexp.QuoteMeta(sysName) + "$")
 		}
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to parse line %d", lineNo)
