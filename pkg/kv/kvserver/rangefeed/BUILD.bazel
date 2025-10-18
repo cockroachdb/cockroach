@@ -20,6 +20,7 @@ go_library(
         "stream_manager.go",
         "task.go",
         "test_helpers.go",
+        "txn_push_notifier.go",
         "unbuffered_registration.go",
         "unbuffered_sender.go",
     ],

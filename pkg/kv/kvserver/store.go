@@ -2454,7 +2454,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
 
-	s.startRangefeedTxnPushNotifier(ctx)
+	if err := s.startRangefeedTxnPushNotifier(ctx); err != nil {
+		return err
+	}
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
@@ -2662,48 +2664,27 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 // startRangefeedTxnPushNotifier starts a worker that would periodically
 // enqueue txn push event for rangefeed processors to let them push lagging
 // transactions.
-func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
+func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) error {
 	interval := rangefeed.DefaultPushTxnsInterval
 	if i := s.TestingKnobs().RangeFeedPushTxnsInterval; i > 0 {
 		interval = i
 	}
-
-	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
-		TaskName: "transaction-rangefeed-push-notifier",
-		SpanOpt:  stop.SterileRootSpan,
-	}, func(ctx context.Context) {
-		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-		defer cancel()
-
-		makeSchedulerBatch := func() *rangefeed.SchedulerBatch {
-			batch := s.rangefeedScheduler.NewEnqueueBatch()
+	tpn := rangefeed.NewTxnPushNotifier(
+		interval,
+		s.ClusterSettings(),
+		s.rangefeedScheduler,
+		func(f func(int64)) {
 			s.rangefeedReplicas.Lock()
-			for _, id := range s.rangefeedReplicas.m {
-				if id != 0 {
-					// Only process ranges that use scheduler.
-					batch.Add(id)
+			for _, procID := range s.rangefeedReplicas.m {
+				// Only process ranges that use scheduler.
+				if procID != 0 {
+					f(procID)
 				}
 			}
 			s.rangefeedReplicas.Unlock()
-			return batch
-		}
-
-		ticker := time.NewTicker(interval)
-		for {
-			select {
-			case <-ticker.C:
-				if !rangefeed.PushTxnsEnabled.Get(&s.ClusterSettings().SV) {
-					continue
-				}
-				batch := makeSchedulerBatch()
-				s.rangefeedScheduler.EnqueueBatch(batch, rangefeed.PushTxnQueued)
-				batch.Close()
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			}
-		}
-	})
+		},
+	)
+	return tpn.Start(ctx, s.stopper)
 }
 
 func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID, schedulerID int64) {
