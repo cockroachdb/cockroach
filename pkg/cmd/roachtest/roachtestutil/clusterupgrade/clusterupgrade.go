@@ -286,6 +286,7 @@ func uploadBinaryVersion(
 		dir := filepath.Dir(dstBinary)
 		// Avoid staging the binary if it already exists.
 		if err := c.RunE(ctx, option.WithNodes(nodes), "test -e", dstBinary); err == nil {
+			l.Printf("binary %s already exists on nodes %s", dstBinary, nodes) // expecting this line to print
 			return dstBinary, nil
 		}
 

@@ -657,6 +657,17 @@ func (p *testPlanner) systemSetupSteps() []testStep {
 			}))
 	}
 
+	if len(p.options.workloadNodesWithDedicatedWorkloadBinary) > 0 {
+		// Add step for staging all dedicated workload binaries needed for test on
+		// workload node(s)
+		steps = append(steps,
+			p.newSingleStepWithContext(setupContext, stageAllDedicatedWorkloadBinariesStep{
+				versions:      p.versions,
+				rt:            p.rt,
+				workloadNodes: p.options.workloadNodesWithDedicatedWorkloadBinary,
+			}))
+	}
+
 	return steps
 }
 

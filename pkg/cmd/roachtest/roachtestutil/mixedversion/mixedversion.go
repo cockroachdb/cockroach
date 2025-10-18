@@ -346,16 +346,17 @@ type (
 		// predecessorFunc computes the predecessor of a particular
 		// release. By default, random predecessors are used, but tests
 		// may choose to always use the latest predecessor as well.
-		predecessorFunc                predecessorFunc
-		waitForReplication             bool
-		skipVersionProbability         float64
-		settings                       []install.ClusterSettingOption
-		enabledDeploymentModes         []DeploymentMode
-		tag                            string
-		overriddenMutatorProbabilities map[string]float64
-		hooksSupportFailureInjection   bool
-		workloadNodes                  option.NodeListOption
-		enableUpReplication            bool
+		predecessorFunc                          predecessorFunc
+		waitForReplication                       bool
+		skipVersionProbability                   float64
+		settings                                 []install.ClusterSettingOption
+		enabledDeploymentModes                   []DeploymentMode
+		tag                                      string
+		overriddenMutatorProbabilities           map[string]float64
+		hooksSupportFailureInjection             bool
+		workloadNodes                            option.NodeListOption
+		workloadNodesWithDedicatedWorkloadBinary option.NodeListOption
+		enableUpReplication                      bool
 	}
 
 	CustomOption func(*testOptions)
@@ -599,6 +600,17 @@ func WithTag(tag string) CustomOption {
 func WithWorkloadNodes(nodes option.NodeListOption) CustomOption {
 	return func(opts *testOptions) {
 		opts.workloadNodes = nodes
+	}
+}
+
+// WithWorkloadNodesWithDedicatedWorkloadBinary tells the mixedversion
+// framework that this test's cluster includes workload node(s) so the
+// framework can stage all the dedicated workload binaries included in the
+// upgrade plan on the workload node so the test can use versioned workload
+// commands without the test itself having to stage those binaries.
+func WithWorkloadNodesWithDedicatedWorkloadBinary(nodes option.NodeListOption) CustomOption {
+	return func(opts *testOptions) {
+		opts.workloadNodesWithDedicatedWorkloadBinary = nodes
 	}
 }
 
