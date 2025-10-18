@@ -35,22 +35,16 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			const fixturePath = `gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=10?AUTH=implicit`
-
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			m := c.NewDeprecatedMonitor(ctx, c.All())
-			m.Go(func(ctx context.Context) error {
-				t.Status("loading fixture")
-				if _, err := db.Exec(
-					`RESTORE DATABASE tpch FROM 'backup' IN $1 WITH unsafe_restore_incompatible_version`, fixturePath); err != nil {
-					t.Fatal(err)
-				}
-				return nil
-			})
-			m.Wait()
+			if err := importTPCHDataset(
+				ctx, t, c, "" /* virtualClusterName */, db, 10 /* sf */, c.NewDeprecatedMonitor(ctx),
+				c.All(), false /* disableMergeQueue */, false, /* smallRanges */
+			); err != nil {
+				t.Fatal(err)
+			}
 
 			c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach workload init kv --drop --db=test {pgurl:1}`)
 			for node := 1; node <= c.Spec().NodeCount; node++ {
@@ -61,7 +55,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 				}, task.Name(fmt.Sprintf(`kv-%d`, node)))
 			}
 
-			m = c.NewDeprecatedMonitor(ctx, c.All())
+			m := c.NewDeprecatedMonitor(ctx, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
 				return waitForSchemaChanges(ctx, t.L(), db)
