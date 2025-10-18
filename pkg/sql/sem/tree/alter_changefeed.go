@@ -41,15 +41,19 @@ type AlterChangefeedCmd interface {
 	alterChangefeedCmd()
 }
 
-func (*AlterChangefeedAddTarget) alterChangefeedCmd()    {}
-func (*AlterChangefeedDropTarget) alterChangefeedCmd()   {}
-func (*AlterChangefeedSetOptions) alterChangefeedCmd()   {}
-func (*AlterChangefeedUnsetOptions) alterChangefeedCmd() {}
+func (*AlterChangefeedAddTarget) alterChangefeedCmd()         {}
+func (*AlterChangefeedDropTarget) alterChangefeedCmd()        {}
+func (*AlterChangefeedSetOptions) alterChangefeedCmd()        {}
+func (*AlterChangefeedUnsetOptions) alterChangefeedCmd()      {}
+func (*AlterChangefeedSetFilterOption) alterChangefeedCmd()   {}
+func (*AlterChangefeedUnsetFilterOption) alterChangefeedCmd() {}
 
 var _ AlterChangefeedCmd = &AlterChangefeedAddTarget{}
 var _ AlterChangefeedCmd = &AlterChangefeedDropTarget{}
 var _ AlterChangefeedCmd = &AlterChangefeedSetOptions{}
 var _ AlterChangefeedCmd = &AlterChangefeedUnsetOptions{}
+var _ AlterChangefeedCmd = &AlterChangefeedSetFilterOption{}
+var _ AlterChangefeedCmd = &AlterChangefeedUnsetFilterOption{}
 
 // AlterChangefeedAddTarget represents an ADD <targets> command
 type AlterChangefeedAddTarget struct {
@@ -106,4 +110,26 @@ type AlterChangefeedUnsetOptions struct {
 func (node *AlterChangefeedUnsetOptions) Format(ctx *FmtCtx) {
 	ctx.WriteString(" UNSET ")
 	ctx.FormatNode(&node.Options)
+}
+
+type AlterChangefeedSetFilterOption struct {
+	ChangefeedFilterOption ChangefeedFilterOption
+}
+
+func (node *AlterChangefeedSetFilterOption) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET ")
+	ctx.WriteString(node.ChangefeedFilterOption.FilterType.String())
+	ctx.WriteString(" TABLES ")
+	ctx.FormatNode(&node.ChangefeedFilterOption.Tables)
+}
+
+type AlterChangefeedUnsetFilterOption struct {
+	ChangefeedFilterOption ChangefeedFilterOption
+}
+
+func (node *AlterChangefeedUnsetFilterOption) Format(ctx *FmtCtx) {
+	ctx.WriteString(" UNSET ")
+	ctx.WriteString(node.ChangefeedFilterOption.FilterType.String())
+	ctx.WriteString(" TABLES ")
+	ctx.FormatNode(&node.ChangefeedFilterOption.Tables)
 }
