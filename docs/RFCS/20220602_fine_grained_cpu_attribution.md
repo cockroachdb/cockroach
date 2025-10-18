@@ -463,7 +463,7 @@ Comparison:
 ### eBPF probes
 
 Linux has the ability to define
-[probes](https://www.brendangregg.com/blog/2015-06-28/linux-ftrace-uprobe.html)
+[probes](https://web.archive.org/web/20250811074608/https://www.brendangregg.com/blog/2015-06-28/linux-ftrace-uprobe.html)
 at specific callsites in user-level code (which for us would include the Go
 runtime). This document is a good primer on
 [uprobes](https://github.com/jav/systemtap/blob/master/runtime/uprobes/uprobes.txt)
@@ -569,7 +569,7 @@ Comparison:
   in the eBPF + Go ecosystem might make things progressively less painful
   (libraries to read arguments from the Go stack, decoding Go structs).
     - The out-of-the-box `bpftrace` use of [thread
-      IDs](https://www.brendangregg.com/BPF/bpftrace-cheat-sheet.html) (`tid`
+      IDs](https://web.archive.org/web/20250809232702/https://www.brendangregg.com/BPF/bpftrace-cheat-sheet.html) (`tid`
       in the snippet above) don’t apply to Go, we need glue work to
       [access](https://github.com/surki/misc/blob/c343525e35a96497dd356c38921f25b22c77fcc9/go.stp#L5-L21)
       goroutine IDs.
@@ -614,4 +614,4 @@ Considerations:
   this document proposes.
 
 [release-go]: The official Go archives are built using the steps
-  [here](https://go.googlesource.com/build/+/refs/heads/master/cmd/release/release.go).
+  [here](https://go.dev/doc/install/source).
