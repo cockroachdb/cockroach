@@ -2752,7 +2752,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
 				// We don't allow mutations in a pausable portal. Set it back to
 				// an un-pausable (normal) portal.
-				planner.pausablePortal.pauseInfo = nil
+				ex.disablePortalPausability(planner.pausablePortal)
+				planner.pausablePortal = nil
 				err = res.RevokePortalPausability()
 				// If this plan is a transaction control statement, we don't
 				// even execute it but just early exit.
@@ -2846,9 +2847,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			// un-pausable (normal) portal.
 			// With pauseInfo is nil, no cleanup function will be added to the stack
 			// and all clean-up steps will be performed as for normal portals.
-			// TODO(#115887): We may need to move resetting pauseInfo before we add
-			// the pausable portal cleanup step above.
-			planner.pausablePortal.pauseInfo = nil
+			ex.disablePortalPausability(planner.pausablePortal)
+			planner.pausablePortal = nil
 			// We need this so that the result consumption for this portal cannot be
 			// paused either.
 			if err := res.RevokePortalPausability(); err != nil {

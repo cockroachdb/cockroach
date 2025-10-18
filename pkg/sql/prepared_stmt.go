@@ -82,12 +82,16 @@ const (
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
+	// Fields below are initialized when creating the PreparedPortal and aren't
+	// modified later.
 	Name  string
 	Stmt  *prep.Statement
 	Qargs tree.QueryArguments
 
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
+
+	// Fields below might be updated throughout the PreparedPortal's lifecycle.
 
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
@@ -139,6 +143,16 @@ func (ex *connExecutor) makePreparedPortal(
 		}
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+}
+
+func (ex *connExecutor) disablePortalPausability(portal *PreparedPortal) {
+	portal.portalPausablity = PortalPausabilityDisabled
+	portal.pauseInfo = nil
+	// Since the PreparedPortal is stored by value in the map, we need to
+	// explicitly update it. (Note that PreparedPortal.pauseInfo is stored by
+	// pointer, so modifications to portalPauseInfo will be reflected in the map
+	// automatically.)
+	ex.extraTxnState.prepStmtsNamespace.portals[portal.Name] = *portal
 }
 
 // accountForCopy updates the state to account for the copy of the
