@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -122,11 +121,13 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				defer batch.Close()
 
 				if initialized {
-					err := stateloader.WriteInitialRangeState(ctx, batch, rs.desc, repl.ReplicaID, rs.version)
-					require.NoError(t, err)
+					require.NoError(t, kvstorage.WriteInitialRangeState(
+						ctx, batch, batch,
+						rs.desc, repl.ReplicaID, rs.version,
+					))
 				} else {
 					err := kvstorage.CreateUninitializedReplica(
-						ctx, batch, batch, 1, /* StoreID */
+						ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
 						roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
 					)
 					require.NoError(t, err)
@@ -230,7 +231,7 @@ func (tc *testCtx) updatePostReplicaCreateState(
 ) {
 	// Sanity check that we're not overwriting an existing replica.
 	require.Nil(t, rs.replica)
-	sl := stateloader.Make(rs.desc.RangeID)
+	sl := kvstorage.MakeStateLoader(rs.desc.RangeID)
 	hs, err := sl.LoadHardState(ctx, batch)
 	require.NoError(t, err)
 	ts, err := sl.LoadRaftTruncatedState(ctx, batch)

@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,7 +43,7 @@ func TestRangeStatsInit(t *testing.T) {
 		GCBytesAge:      10,
 		LastUpdateNanos: 11,
 	}
-	rsl := stateloader.Make(tc.repl.RangeID)
+	rsl := kvstorage.MakeStateLoader(tc.repl.RangeID)
 	if err := rsl.SetMVCCStats(ctx, tc.engine, &ms); err != nil {
 		t.Fatal(err)
 	}

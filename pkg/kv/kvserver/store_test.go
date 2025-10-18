@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
@@ -425,7 +424,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
 
 			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			require.NoError(t, stateloader.Make(rangeID).SetRangeTombstone(ctx, eng, tombstone))
+			require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetRangeTombstone(ctx, eng, tombstone))
 
 			if len(wanted) >= rangeCount {
 				break
@@ -596,8 +595,9 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		NextReplicaID: 2,
 	}
 	const replicaID = 1
-	if err := stateloader.WriteInitialRangeState(
-		ctx, s.TODOEngine(), *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+	if err := kvstorage.WriteInitialRangeState(
+		ctx, s.StateEngine(), s.LogEngine(),
+		*desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
 	}
@@ -893,7 +893,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 	}
 
 	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
-	require.NoError(t, stateloader.Make(newID.RangeID).SetRaftReplicaID(
+	require.NoError(t, kvstorage.MakeStateLoader(newID.RangeID).SetRaftReplicaID(
 		ctx, store.TODOEngine(), newID.ReplicaID))
 
 	r, err := newUninitializedReplica(store, newID)
@@ -2775,7 +2775,7 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := stateloader.Make(repl.RangeID).LoadGCThreshold(
+		pgcThreshold, err := kvstorage.MakeStateLoader(repl.RangeID).LoadGCThreshold(
 			context.Background(), store.StateEngine())
 		repl.mu.Unlock()
 		if err != nil {
@@ -4108,7 +4108,7 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := stateloader.Make(repl.RangeID).LoadRaftReplicaID(
+	replicaID, err := kvstorage.MakeStateLoader(repl.RangeID).LoadRaftReplicaID(
 		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
 	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
@@ -4138,7 +4138,7 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}
 	desc.AddReplica(1, 1, roachpb.VOTER_FULL)
 
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	// Write the range state that will be consulted and copied during the split.
 	lease := roachpb.Lease{
 		Replica:       desc.InternalReplicas[0],
@@ -4179,11 +4179,11 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	splitPreApply(ctx, lhsRepl, batch, split, nil)
 
 	// Verify that the RHS truncated state is initialized as expected.
-	rsl := stateloader.Make(rightDesc.RangeID)
+	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)
 	truncState, err := rsl.LoadRaftTruncatedState(ctx, batch)
 	require.NoError(t, err)
-	require.Equal(t, stateloader.RaftInitialLogIndex, int(truncState.Index))
-	require.Equal(t, stateloader.RaftInitialLogTerm, int(truncState.Term))
+	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

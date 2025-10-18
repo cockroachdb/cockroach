@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -109,7 +109,7 @@ func TestPendingLogTruncations(t *testing.T) {
 type replicaTruncatorTest struct {
 	rangeID         roachpb.RangeID
 	buf             *strings.Builder
-	stateLoader     stateloader.StateLoader
+	stateLoader     kvstorage.StateLoader
 	truncState      kvserverpb.RaftTruncatedState
 	pendingTruncs   pendingLogTruncations
 	sideloadedFreed int64
@@ -122,7 +122,7 @@ func makeReplicaTT(rangeID roachpb.RangeID, buf *strings.Builder) *replicaTrunca
 	return &replicaTruncatorTest{
 		rangeID:     rangeID,
 		buf:         buf,
-		stateLoader: stateloader.Make(rangeID),
+		stateLoader: kvstorage.MakeStateLoader(rangeID),
 	}
 }
 
@@ -150,7 +150,7 @@ func (r *replicaTruncatorTest) sideloadedStats(
 	return entries, r.sideloadedFreed, r.sideloadedErr
 }
 
-func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
+func (r *replicaTruncatorTest) getStateLoader() kvstorage.StateLoader {
 	fmt.Fprintf(r.buf, "r%d.getStateLoader\n", r.rangeID)
 	return r.stateLoader
 }

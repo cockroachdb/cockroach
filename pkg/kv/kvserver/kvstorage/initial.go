@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package stateloader
+package kvstorage
 
 import (
 	"context"
@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,7 +49,7 @@ const (
 // are returned.
 func WriteInitialReplicaState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	stateRW StateRW,
 	ms enginepb.MVCCStats,
 	desc roachpb.RangeDescriptor,
 	lease roachpb.Lease,
@@ -74,32 +73,32 @@ func WriteInitialReplicaState(
 		s.Version = &replicaVersion
 	}
 
-	rsl := Make(desc.RangeID)
-	if existingLease, err := rsl.LoadLease(ctx, readWriter); err != nil {
+	rsl := MakeStateLoader(desc.RangeID)
+	if existingLease, err := rsl.LoadLease(ctx, stateRW); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading lease")
 	} else if (existingLease != roachpb.Lease{}) {
 		log.KvExec.Fatalf(ctx, "expected trivial lease, but found %+v", existingLease)
 	}
 
-	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, readWriter); err != nil {
+	if existingGCThreshold, err := rsl.LoadGCThreshold(ctx, stateRW); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCThreshold")
 	} else if !existingGCThreshold.IsEmpty() {
 		log.KvExec.Fatalf(ctx, "expected trivial GCthreshold, but found %+v", existingGCThreshold)
 	}
 
-	if existingGCHint, err := rsl.LoadGCHint(ctx, readWriter); err != nil {
+	if existingGCHint, err := rsl.LoadGCHint(ctx, stateRW); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading GCHint")
 	} else if !existingGCHint.IsEmpty() {
 		return enginepb.MVCCStats{}, errors.AssertionFailedf("expected trivial GCHint, but found %+v", existingGCHint)
 	}
 
-	if existingVersion, err := rsl.LoadVersion(ctx, readWriter); err != nil {
+	if existingVersion, err := rsl.LoadVersion(ctx, stateRW); err != nil {
 		return enginepb.MVCCStats{}, errors.Wrap(err, "error reading Version")
 	} else if (existingVersion != roachpb.Version{}) {
 		log.KvExec.Fatalf(ctx, "expected trivial version, but found %+v", existingVersion)
 	}
 
-	newMS, err := rsl.Save(ctx, readWriter, s)
+	newMS, err := rsl.Save(ctx, stateRW, s)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -111,9 +110,9 @@ func WriteInitialReplicaState(
 //
 // TODO(arul): this can be removed once no longer call this from the split
 // evaluation path.
-func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roachpb.RangeID) error {
-	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(ctx, w,
-		&kvserverpb.RaftTruncatedState{
+func WriteInitialTruncState(ctx context.Context, raftWO RaftWO, rangeID roachpb.RangeID) error {
+	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(
+		ctx, raftWO, &kvserverpb.RaftTruncatedState{
 			Index: RaftInitialLogIndex,
 			Term:  RaftInitialLogTerm,
 		})
@@ -123,7 +122,8 @@ func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roach
 // bootstrap.
 func WriteInitialRangeState(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	stateRW StateRW,
+	raftWO RaftWO,
 	desc roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
@@ -134,31 +134,29 @@ func WriteInitialRangeState(
 	initialMS := enginepb.MVCCStats{}
 
 	if _, err := WriteInitialReplicaState(
-		ctx, readWriter, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
+		ctx, stateRW, initialMS, desc, initialLease, initialGCThreshold, initialGCHint,
 		replicaVersion,
 	); err != nil {
 		return err
 	}
 	// Maintain the invariant that any replica (uninitialized or initialized),
 	// with persistent state, has a RaftReplicaID.
-	if err := Make(desc.RangeID).SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
+	if err := MakeStateLoader(desc.RangeID).SetRaftReplicaID(ctx, stateRW, replicaID); err != nil {
 		return err
 	}
 
 	// TODO(sep-raft-log): when the log storage is separated, raft state must be
 	// written separately.
-	return WriteInitialRaftState(ctx, readWriter, desc.RangeID)
+	return WriteInitialRaftState(ctx, raftWO, desc.RangeID)
 }
 
 // WriteInitialRaftState writes raft state for an initialized replica created
 // during cluster bootstrap.
-func WriteInitialRaftState(
-	ctx context.Context, writer storage.Writer, rangeID roachpb.RangeID,
-) error {
+func WriteInitialRaftState(ctx context.Context, raftWO RaftWO, rangeID roachpb.RangeID) error {
 	sl := logstore.NewStateLoader(rangeID)
 	// Initialize the HardState with the term and commit index matching the
 	// initial applied state of the replica.
-	if err := sl.SetHardState(ctx, writer, raftpb.HardState{
+	if err := sl.SetHardState(ctx, raftWO, raftpb.HardState{
 		Term:   RaftInitialLogTerm,
 		Commit: RaftInitialLogIndex,
 	}); err != nil {
@@ -166,7 +164,7 @@ func WriteInitialRaftState(
 	}
 	// The raft log is initialized empty, with the truncated state matching the
 	// committed / applied initial state of the replica.
-	return sl.SetRaftTruncatedState(ctx, writer, &kvserverpb.RaftTruncatedState{
+	return sl.SetRaftTruncatedState(ctx, raftWO, &kvserverpb.RaftTruncatedState{
 		Index: RaftInitialLogIndex,
 		Term:  RaftInitialLogTerm,
 	})

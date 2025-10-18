@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1511,7 +1511,7 @@ func splitTriggerHelper(
 		// HardState via a call to synthesizeRaftState. Here, we only call
 		// writeInitialReplicaState which essentially writes a ReplicaState
 		// only.
-		if *h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
+		if *h.AbsPostSplitRight(), err = kvstorage.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
 		); err != nil {
@@ -1523,7 +1523,7 @@ func splitTriggerHelper(
 		// as all replicas will be responsible for writing it locally before
 		// applying the split.
 		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_4_WriteInitialTruncStateBeforeSplitApplication) {
-			if err := stateloader.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
+			if err := kvstorage.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
 				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 			}
 		}
@@ -1655,7 +1655,7 @@ func mergeTrigger(
 		if err != nil {
 			return result.Result{}, err
 		}
-		rhsLoader := stateloader.Make(merge.RightDesc.RangeID)
+		rhsLoader := kvstorage.MakeStateLoader(merge.RightDesc.RangeID)
 		rhsHint, err := rhsLoader.LoadGCHint(ctx, batch)
 		if err != nil {
 			return result.Result{}, err

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -65,7 +64,10 @@ func loadInitializedReplicaForTesting(
 	if !desc.IsInitialized() {
 		return nil, errors.AssertionFailedf("can not load with uninitialized descriptor: %s", desc)
 	}
-	state, err := kvstorage.LoadReplicaState(ctx, store.TODOEngine(), store.StoreID(), desc, replicaID)
+	state, err := kvstorage.LoadReplicaState(
+		ctx, store.StateEngine(), store.LogEngine(),
+		store.StoreID(), desc, replicaID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +119,7 @@ func newUninitializedReplica(store *Store, id roachpb.FullReplicaID) (*Replica, 
 // newInitializedReplica() to avoid creating the Raft group twice (once when
 // creating the uninitialized replica, and once when initializing it).
 func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplicaID) *Replica {
-	uninitState := stateloader.UninitializedReplicaState(id.RangeID)
+	uninitState := kvstorage.UninitializedReplicaState(id.RangeID)
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        id.RangeID,
@@ -204,7 +206,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 
 	r.raftMu.rangefeedCTLagObserver = newRangeFeedCTLagObserver()
-	r.raftMu.stateLoader = stateloader.Make(id.RangeID)
+	r.raftMu.stateLoader = kvstorage.MakeStateLoader(id.RangeID)
 
 	// Initialize all the components of the log storage. The state of the log
 	// storage, such as RaftTruncatedState and the last entry ID, will be loaded

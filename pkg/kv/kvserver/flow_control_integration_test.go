@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -2909,7 +2909,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 			return errors.Errorf("expected in-memory version %s, got %s", expV, gotV)
 		}
 
-		sl := stateloader.Make(desc.RangeID)
+		sl := kvstorage.MakeStateLoader(desc.RangeID)
 		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
 		if err != nil {
 			return err

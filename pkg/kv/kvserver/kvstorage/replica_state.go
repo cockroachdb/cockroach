@@ -11,10 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,13 +34,14 @@ type LoadedReplicaState struct {
 // TODO(pavelkalinnikov): integrate with stateloader.
 func LoadReplicaState(
 	ctx context.Context,
-	eng storage.Reader,
+	stateRO StateRO,
+	raftRO RaftRO,
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
-	sl := stateloader.Make(desc.RangeID)
-	id, err := sl.LoadRaftReplicaID(ctx, eng)
+	sl := MakeStateLoader(desc.RangeID)
+	id, err := sl.LoadRaftReplicaID(ctx, stateRO)
 	if err != nil {
 		return LoadedReplicaState{}, err
 	}
@@ -52,16 +51,16 @@ func LoadReplicaState(
 	}
 
 	ls := LoadedReplicaState{ReplicaID: replicaID}
-	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
+	if ls.hardState, err = sl.LoadHardState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, eng, ls.TruncState); err != nil {
+	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, raftRO, ls.TruncState); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateRO, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
@@ -121,17 +120,17 @@ const CreateUninitReplicaTODO = 0
 // because it has been deleted.
 func CreateUninitializedReplica(
 	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
+	stateRW State,
+	raftRO RaftRO,
 	storeID roachpb.StoreID,
 	id roachpb.FullReplicaID,
 ) error {
-	sl := stateloader.Make(id.RangeID)
+	sl := MakeStateLoader(id.RangeID)
 	// Before creating the replica, see if there is a tombstone which would
 	// indicate that this replica has been removed.
 	// TODO(pav-kv): should also check that there is no existing replica, i.e.
 	// ReplicaID load should find nothing.
-	if ts, err := sl.LoadRangeTombstone(ctx, reader); err != nil {
+	if ts, err := sl.LoadRangeTombstone(ctx, stateRW.RO); err != nil {
 		return err
 	} else if id.ReplicaID < ts.NextReplicaID {
 		return &kvpb.RaftGroupDeletedError{}
@@ -144,12 +143,12 @@ func CreateUninitializedReplica(
 	// non-existent. The only RangeID-specific key that can be present is the
 	// RangeTombstone inspected above.
 	_ = CreateUninitReplicaTODO
-	if err := sl.SetRaftReplicaID(ctx, writer, id.ReplicaID); err != nil {
+	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
 		return err
 	}
 
 	// Make sure that storage invariants for this uninitialized replica hold.
 	uninitDesc := roachpb.RangeDescriptor{RangeID: id.RangeID}
-	_, err := LoadReplicaState(ctx, reader, storeID, &uninitDesc, id.ReplicaID)
+	_, err := LoadReplicaState(ctx, stateRW.RO, raftRO, storeID, &uninitDesc, id.ReplicaID)
 	return err
 }

@@ -39,13 +39,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -6196,7 +6196,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 func verifyRangeStats(
 	reader storage.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats,
 ) error {
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), reader)
+	ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), reader)
 	if err != nil {
 		return err
 	}

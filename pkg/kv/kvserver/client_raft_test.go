@@ -31,11 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -3236,7 +3236,7 @@ func TestRaftRemoveRace(t *testing.T) {
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
 		// Verify the tombstone key does not exist. See #12130.
-		ts, err := stateloader.Make(desc.RangeID).LoadRangeTombstone(
+		ts, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRangeTombstone(
 			ctx, tc.GetFirstStoreFromServer(t, 2).StateEngine())
 		require.NoError(t, err)
 		require.Equal(t, kvserverpb.RangeTombstone{}, ts)
@@ -5319,7 +5319,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 		ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 			t.Helper()
-			ts, err := stateloader.Make(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
+			ts, err := kvstorage.MakeStateLoader(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
 			require.NoError(t, err)
 			require.Zero(t, ts.NextReplicaID)
 		}

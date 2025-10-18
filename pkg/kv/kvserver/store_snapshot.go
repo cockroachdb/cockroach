@@ -14,8 +14,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -693,7 +693,7 @@ func SendEmptySnapshot(
 		return err
 	}
 
-	ms, err = stateloader.WriteInitialReplicaState(
+	ms, err = kvstorage.WriteInitialReplicaState(
 		ctx,
 		eng,
 		ms,
@@ -708,7 +708,7 @@ func SendEmptySnapshot(
 	}
 
 	// Use stateloader to load state out of memory from the previously created engine.
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	state, err := sl.Load(ctx, eng, &desc)
 	if err != nil {
 		return err

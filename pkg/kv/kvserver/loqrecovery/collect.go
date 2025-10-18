@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -187,7 +186,7 @@ func visitStoreReplicas(
 	send func(info loqrecoverypb.ReplicaInfo) error,
 ) error {
 	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, state, func(desc roachpb.RangeDescriptor) error {
-		rsl := stateloader.Make(desc.RangeID)
+		rsl := kvstorage.MakeStateLoader(desc.RangeID)
 		rstate, err := rsl.Load(ctx, state, &desc)
 		if err != nil {
 			return err

@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -127,13 +126,13 @@ func splitPreApply(
 	//
 	// [*] Note that uninitialized replicas may cast votes, and if they have, we
 	// can't load the default Term and Vote values.
-	rsl := stateloader.Make(split.RightDesc.RangeID)
-	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
+	rsl := kvstorage.MakeStateLoader(split.RightDesc.RangeID)
+	if err := rsl.SynthesizeRaftState(ctx, readWriter, kvstorage.TODORaft(readWriter)); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{
-		Index: stateloader.RaftInitialLogIndex,
-		Term:  stateloader.RaftInitialLogTerm,
+		Index: kvstorage.RaftInitialLogIndex,
+		Term:  kvstorage.RaftInitialLogTerm,
 	}); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
@@ -232,7 +231,9 @@ func prepareRightReplicaForSplit(
 	// Finish initialization of the RHS replica.
 
 	state, err := kvstorage.LoadReplicaState(
-		ctx, r.store.TODOEngine(), r.StoreID(), &split.RightDesc, rightRepl.replicaID)
+		ctx, r.store.StateEngine(), r.store.LogEngine(),
+		r.StoreID(), &split.RightDesc, rightRepl.replicaID,
+	)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}

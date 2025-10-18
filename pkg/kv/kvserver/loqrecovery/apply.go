@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -208,7 +207,7 @@ func applyReplicaUpdate(
 			"can not find replica with ID %d for range r%d", update.OldReplicaID, update.RangeID)
 	}
 
-	sl := stateloader.Make(localDesc.RangeID)
+	sl := kvstorage.MakeStateLoader(localDesc.RangeID)
 	ms, err := sl.LoadMVCCStats(ctx, readWriter)
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")

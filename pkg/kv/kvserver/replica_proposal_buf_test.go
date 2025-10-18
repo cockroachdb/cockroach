@@ -21,10 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	rafttracker "github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -369,12 +369,12 @@ func TestProposalBuffer(t *testing.T) {
 	require.Equal(t, num, p.registered)
 	// We've flushed num requests, out of which one is a lease request (so that
 	// one did not increment the MLAI).
-	require.Equal(t, kvpb.LeaseAppliedIndex(stateloader.InitialLeaseAppliedIndex+num-1), b.assignedLAI)
+	require.Equal(t, kvpb.LeaseAppliedIndex(kvstorage.InitialLeaseAppliedIndex+num-1), b.assignedLAI)
 	require.Equal(t, 2*propBufArrayMinSize, b.arr.len())
 	require.Equal(t, 1, b.evalTracker.Count())
 	proposals := r.consumeProposals()
 	require.Len(t, proposals, propBufArrayMinSize)
-	lai := kvpb.LeaseAppliedIndex(stateloader.InitialLeaseAppliedIndex)
+	lai := kvpb.LeaseAppliedIndex(kvstorage.InitialLeaseAppliedIndex)
 	for i, p := range proposals {
 		if i != leaseReqIdx {
 			lai++

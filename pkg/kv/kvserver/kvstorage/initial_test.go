@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package stateloader
+package kvstorage
 
 import (
 	"context"
@@ -36,7 +36,8 @@ func TestWriteInitialRangeState(t *testing.T) {
 	b := eng.NewBatch() // TODO(pav-kv): make it write-only batch
 	defer b.Close()
 
-	require.NoError(t, WriteInitialRangeState(context.Background(), b,
+	require.NoError(t, WriteInitialRangeState(
+		context.Background(), b, b,
 		roachpb.RangeDescriptor{
 			RangeID:       5,
 			StartKey:      roachpb.RKey("a"),
@@ -84,7 +85,7 @@ func TestSynthesizeHardState(t *testing.T) {
 		func() {
 			batch := eng.NewBatch()
 			defer batch.Close()
-			rsl := Make(roachpb.RangeID(1))
+			rsl := MakeStateLoader(roachpb.RangeID(1))
 
 			if test.OldHS != nil {
 				if err := rsl.SetHardState(context.Background(), batch, *test.OldHS); err != nil {

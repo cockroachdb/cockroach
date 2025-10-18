@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2169,7 +2169,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	gcHint := roachpb.GCHint{GCTimestamp: gcThreshold}
 	abortSpanTxnID := uuid.MakeV4()
 	as := abortspan.New(desc.RangeID)
-	sl := stateloader.Make(desc.RangeID)
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
 	rec := (&MockEvalCtx{
 		ClusterSettings:        st,
 		Desc:                   &desc,
@@ -2217,7 +2217,7 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 
 	// Verify that range state was migrated to the right-hand side properly.
 	asRight := abortspan.New(rightDesc.RangeID)
-	slRight := stateloader.Make(rightDesc.RangeID)
+	slRight := kvstorage.MakeStateLoader(rightDesc.RangeID)
 	// The abort span should have been transferred over.
 	ok, err := asRight.Get(ctx, batch, abortSpanTxnID, &roachpb.AbortSpanEntry{})
 	require.NoError(t, err)
@@ -2251,9 +2251,9 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)
 	expAppliedState := kvserverpb.RangeAppliedState{
-		RaftAppliedIndexTerm: stateloader.RaftInitialLogTerm,
-		RaftAppliedIndex:     stateloader.RaftInitialLogIndex,
-		LeaseAppliedIndex:    stateloader.InitialLeaseAppliedIndex,
+		RaftAppliedIndexTerm: kvstorage.RaftInitialLogTerm,
+		RaftAppliedIndex:     kvstorage.RaftInitialLogIndex,
+		LeaseAppliedIndex:    kvstorage.InitialLeaseAppliedIndex,
 	}
 	loadedAppliedState, err := slRight.LoadRangeAppliedState(ctx, batch)
 	require.NoError(t, err)

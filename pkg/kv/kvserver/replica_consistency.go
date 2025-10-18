@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -634,7 +634,7 @@ func CalcReplicaDigest(
 		result.RecomputedMS = ms
 	}
 
-	rangeAppliedState, err := stateloader.Make(desc.RangeID).LoadRangeAppliedState(ctx, snap)
+	rangeAppliedState, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRangeAppliedState(ctx, snap)
 	if err != nil {
 		return nil, err
 	}
@@ -686,7 +686,7 @@ func (r *Replica) computeChecksumPostApply(
 		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	if cc.Checkpoint {
-		sl := stateloader.Make(r.RangeID)
+		sl := kvstorage.MakeStateLoader(r.RangeID)
 		as, err := sl.LoadRangeAppliedState(ctx, snap)
 		if err != nil {
 			log.KvExec.Warningf(ctx, "unable to load applied index, continuing anyway")
