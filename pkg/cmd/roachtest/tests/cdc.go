@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/errors"
 	prompb "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -250,7 +251,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	case kafkaSink:
-		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.sinkNodes)
+		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.sinkNodes, kafkaManagerOpts{})
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.kafkaArgs.validateOrder
 
@@ -717,15 +718,21 @@ func (ct *cdcTester) waitForWorkload() {
 }
 
 func (cj *changefeedJob) waitForCompletion() {
+	_ = cj.waitForCompletionContext(cj.ctx)
+}
+
+func (cj *changefeedJob) waitForCompletionContext(ctx context.Context) error {
 	completionCh := make(chan struct{})
-	err := cj.runFeedPoller(cj.ctx, time.Second, completionCh, func(info *changefeedInfo) {
+	err := cj.runFeedPoller(ctx, time.Second, completionCh, func(info *changefeedInfo) {
 		if info.status == "succeeded" || info.status == "failed" {
+			cj.logger.Printf("changefeed %s completed with status %s", cj.Label(), info.status)
 			close(completionCh)
 		}
 	})
 	if err != nil {
 		cj.logger.Printf("completion poller error: %s", err)
 	}
+	return err
 }
 
 type opt func(ct *cdcTester)
@@ -865,7 +872,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 	)
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
-	kafka, cleanup := setupKafka(ctx, t, c, kafkaNode)
+	kafka, cleanup := setupKafka(ctx, t, c, kafkaNode, kafkaManagerOpts{})
 	defer cleanup()
 
 	t.Status("creating kafka topic")
@@ -1931,7 +1938,7 @@ func configureDBForMultiTablePTSBenchmark(db *gosql.DB) error {
 
 func getDiagramProcessors(ctx context.Context, db *gosql.DB) ([]any, error) {
 	var diagramURL string
-	diagramQuery := `SELECT value 
+	diagramQuery := `SELECT value
 	FROM system.job_info ji
 	INNER JOIN system.jobs j ON ji.job_id = j.id
 	WHERE j.job_type = 'CHANGEFEED' AND ji.info_key LIKE '~dsp-diag-url-%'`
@@ -2059,9 +2066,9 @@ func registerCDC(r registry.Registry) {
 			ct.runTPCCWorkload(tpccArgs{warehouses: 20})
 
 			var err error
-			_, err = ct.DB().Exec(`ALTER DATABASE tpcc 
-CONFIGURE ZONE USING 
-	constraints = '{+region=us-west1: 1, +region=us-east1: 1}', 
+			_, err = ct.DB().Exec(`ALTER DATABASE tpcc
+CONFIGURE ZONE USING
+	constraints = '{+region=us-west1: 1, +region=us-east1: 1}',
 	lease_preferences = '[[+region=us-west1]]', num_replicas = 3`)
 			require.NoError(t, err)
 
@@ -2830,7 +2837,7 @@ CONFIGURE ZONE USING
 				c:              ct.cluster,
 				kafkaSinkNodes: kafkaNode,
 				mon:            ct.mon,
-				useKafka2:      true, // The broker-side oauth configuration used only works with Kafka 2
+				version:        kafkaVersion2_7, // The broker-side oauth configuration used only works with Kafka 2
 			}
 			kafka.install(ct.ctx)
 
@@ -2872,7 +2879,7 @@ CONFIGURE ZONE USING
 			// Run minimal level of tpcc workload and changefeed.
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
 
-			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
+			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount), kafkaManagerOpts{})
 			defer cleanup()
 
 			db := c.Conn(ctx, t.L(), 1)
@@ -2976,6 +2983,78 @@ CONFIGURE ZONE USING
 			}, time.Minute)
 		},
 	})
+
+	kafkaCreateTopics := func(ctx context.Context, t test.Test, c cluster.Cluster, version kafkaVersion) {
+		ct := newCDCTester(ctx, t, c)
+		defer ct.Close()
+
+		opts := kafkaManagerOpts{
+			numPartitions:      7,
+			replicationFactor:  3,
+			version:            version,
+			noAutoCreateTopics: true,
+		}
+		kafka, cleanup := setupKafka(ctx, t, c, c.WorkloadNode(), opts)
+		defer cleanup()
+
+		db := c.Conn(ctx, t.L(), 1)
+		defer stopFeeds(db)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		sqlDB.Exec(t, `SELECT crdb_internal.set_vmodule('changefeed_stmt=9')`)
+		sqlDB.Exec(t, `CREATE TABLE IF NOT EXISTS t (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE IF NOT EXISTS t2 (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO t (id) VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO t2 (id) VALUES (1)`)
+
+		feed := ct.newChangefeed(feedArgs{
+			sinkType:        kafkaSink,
+			targets:         []string{"t", "t2"},
+			opts:            map[string]string{"initial_scan": "'only'", "create_kafka_topics": "'yes'"},
+			sinkURIOverride: kafka.sinkURL(ctx),
+		})
+
+		ctx, cancel := context.WithTimeout(ctx, 1*time.Minute)
+		defer cancel()
+
+		err := feed.waitForCompletionContext(ctx)
+		if !version.supportsCreateTopicsDefaults() {
+			assert.ErrorIsf(t, err, context.DeadlineExceeded, "expected deadline exceeded error, got %v", err)
+			// we couldnt create the topics, and that's what we expect
+			topics, err := kafka.listTopics(ctx)
+			require.NoError(t, err)
+			assert.NotSubset(t, slices.Collect(maps.Keys(topics)), []string{"t", "t2"})
+			fmt.Printf("topics: %v\n", topics)
+			return
+		} else {
+			require.NoError(t, err)
+		}
+
+		// make sure all topics were created
+		topics, err := kafka.listTopics(ctx)
+		require.NoError(t, err)
+		require.Subset(t, slices.Collect(maps.Keys(topics)), []string{"t", "t2"})
+		for _, details := range topics {
+			require.Equal(t, int32(opts.numPartitions), details.NumPartitions)
+			require.Equal(t, int16(opts.replicationFactor), details.ReplicationFactor)
+		}
+	}
+
+	kafkaVersions := []kafkaVersion{kafkaVersion2_3, kafkaVersion2_7, kafkaVersion3_4}
+	for _, version := range kafkaVersions {
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("cdc/kafka-create-topics_version-%s", strings.ReplaceAll(string(version), ".", "_")),
+			Owner:            `cdc`,
+			Cluster:          r.MakeClusterSpec(3+3, spec.WorkloadNodeCount(3), spec.Arch(spec.OnlyAMD64)),
+			Leases:           registry.MetamorphicLeases,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				kafkaCreateTopics(ctx, t, c, version)
+			},
+		})
+	}
+
 	r.Add(registry.TestSpec{
 		Name:             "cdc/kafka-azure",
 		Owner:            `cdc`,
@@ -3541,15 +3620,57 @@ confluent.support.customer.id=anonymous
 `
 )
 
+type kafkaVersion string
+
+const (
+	kafkaVersion2_3 kafkaVersion = "2.3"
+	kafkaVersion2_7 kafkaVersion = "2.7"
+	kafkaVersion3_4 kafkaVersion = "3.4"
+)
+
+func (v kafkaVersion) installBase() string {
+	switch v {
+	case kafkaVersion2_3:
+		return "confluent-5.3.0"
+	case kafkaVersion2_7:
+		return "confluent-6.1.0"
+	case kafkaVersion3_4:
+		return "confluent-7.4.0"
+	default:
+		panic(fmt.Sprintf("unknown kafka version: %q", v))
+	}
+}
+
+func (v kafkaVersion) downloadURLAndSHA() (string, string) {
+	switch v {
+	case kafkaVersion2_3:
+		// TODO: mirror these to our gcs bucket
+		return "https://packages.confluent.io/archive/5.3/confluent-community-5.3.0-2.11.tar.gz", "5ed80da1544a6b529eede1790037cf170d3b2317473bf355e4f4f6abb2973fe7"
+	case kafkaVersion2_7:
+		return "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz", "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
+	case kafkaVersion3_4:
+		// TODO: mirror these to our gcs bucket
+		return "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz", "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
+	default:
+		panic(fmt.Sprintf("unknown kafka version: %q", v))
+	}
+}
+
+func (v kafkaVersion) supportsCreateTopicsDefaults() bool {
+	switch v {
+	case kafkaVersion2_3:
+		return false
+	default:
+		return true
+	}
+}
+
 type kafkaManager struct {
 	t              test.Test
 	c              cluster.Cluster
 	kafkaSinkNodes option.NodeListOption
 	mon            cluster.Monitor
-
-	// Our method of requiring OAuth on the broker only works with Kafka 2
-	useKafka2 bool
-
+	version        kafkaVersion
 	// validateOrder specifies whether consumers created by the
 	// kafkaManager should create and use order validators.
 	validateOrder bool
@@ -3563,23 +3684,11 @@ func (k kafkaManager) basePath() string {
 }
 
 func (k kafkaManager) confluentInstallBase() string {
-	if k.useKafka2 {
-		return "confluent-6.1.0"
-	} else {
-		return "confluent-7.4.0"
-	}
+	return k.version.installBase()
 }
 
 func (k kafkaManager) confluentDownloadScript() string {
-	var downloadURL string
-	var downloadSHA string
-	if k.useKafka2 {
-		downloadURL = "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz"
-		downloadSHA = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
-	} else {
-		downloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
-		downloadSHA = "cc3066e9b55c211664c6fb9314c553521a0cb0d5b78d163e74480bdc60256d75"
-	}
+	downloadURL, downloadSHA := k.version.downloadURLAndSHA()
 
 	// Confluent CLI Versions 3 and above do not support a local schema registry,
 	// and while confluent-7.4.0 does include a cli with a schema-registry it
@@ -4019,6 +4128,7 @@ func (k kafkaManager) addSCRAMUsers(ctx context.Context) {
 
 func (k kafkaManager) start(ctx context.Context, service string, envVars ...string) {
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
+	k.t.Status("starting kafka")
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes), k.makeCommand("confluent", "local destroy || true"))
 	k.restart(ctx, service, envVars...)
 	// Wait for kafka to be ready. Otherwise we can sometimes try to connect to
@@ -4245,6 +4355,27 @@ func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
 			ReplicationFactor: 1,
 		}, false)
 	})
+}
+
+func (k kafkaManager) listTopics(ctx context.Context) (map[string]sarama.TopicDetail, error) {
+	var resp map[string]sarama.TopicDetail
+	kafkaAddrs := []string{k.consumerURL(ctx)}
+	config := sarama.NewConfig()
+	err := retry.ForDuration(kafkaCreateTopicRetryDuration, func() error {
+		admin, err := sarama.NewClusterAdmin(kafkaAddrs, config)
+		if err != nil {
+			return errors.Wrap(err, "admin client")
+		}
+		resp, err = admin.ListTopics()
+		if err != nil {
+			return errors.Wrap(err, "list topics")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (k kafkaManager) newConsumer(
@@ -4533,17 +4664,39 @@ func stopFeeds(db *gosql.DB) {
 		)`)
 }
 
+type kafkaManagerOpts struct {
+	numPartitions      int
+	replicationFactor  int
+	version            kafkaVersion
+	noAutoCreateTopics bool
+}
+
 // setupKafka installs Kafka on the cluster and configures it so that
 // the test runner can connect to it. Returns a function to be called
 // at the end of the test for stopping Kafka.
 func setupKafka(
-	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	opts kafkaManagerOpts,
 ) (kafkaManager, func()) {
 	kafka := kafkaManager{
 		t:              t,
 		c:              c,
 		kafkaSinkNodes: nodes,
+		version:        opts.version,
 	}
+
+	numPartitions := opts.numPartitions
+	if numPartitions == 0 {
+		numPartitions = len(nodes)
+	}
+	replicationFactor := opts.replicationFactor
+	if replicationFactor == 0 {
+		replicationFactor = 1
+	}
+	replicationFactor = min(replicationFactor, len(nodes))
 
 	kafka.install(ctx)
 	if !c.IsLocal() {
@@ -4557,9 +4710,16 @@ func setupKafka(
 				filepath.Join(kafka.configDir(), "server.properties"))
 			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "broker.id=`+strconv.Itoa(i)+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
-			// Default num partitions = num nodes.
-			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "num.partitions=`+strconv.Itoa(len(urls))+`" >> `+
+			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "num.partitions=`+strconv.Itoa(numPartitions)+`" >> `+
 				filepath.Join(kafka.configDir(), "server.properties"))
+			c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "default.replication.factor=`+strconv.Itoa(replicationFactor)+`" >> `+
+				filepath.Join(kafka.configDir(), "server.properties"))
+
+			if opts.noAutoCreateTopics {
+				c.Run(ctx, option.WithNodes([]int{[]int(kafka.kafkaSinkNodes)[i]}), `echo "auto.create.topics.enable=false" >> `+
+					filepath.Join(kafka.configDir(), "server.properties"))
+			}
+
 			// Use the zookeeper on first kafka node, and ignore the rest of them (if any).
 			if i > 0 {
 				zkUrl := strings.Replace(urls[0], ":9092", ":2181", 1)
