@@ -104,7 +104,7 @@ func TriggerInspectJob(
 func InspectChecksForDatabase(
 	ctx context.Context, p PlanHookState, db catalog.DatabaseDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
-	tables, err := p.Descriptors().ByName(p.Txn()).Get().GetAllTablesInDatabase(ctx, p.Txn(), db)
+	tables, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().GetAllTablesInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return nil, err
 	}
