@@ -2765,7 +2765,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 					}
 					// This stmt is not supported via the pausable portals model
 					// - set it back to an un-pausable (normal) portal.
-					planner.pausablePortal.pauseInfo = nil
+					ex.disablePortalPausability(planner.pausablePortal)
+					planner.pausablePortal = nil
 					err = res.RevokePortalPausability()
 					// If this plan is a transaction control statement, we don't
 					// even execute it but just early exit.
