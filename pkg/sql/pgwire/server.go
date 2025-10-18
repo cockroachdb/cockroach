@@ -94,6 +94,15 @@ var logVerboseSessionAuth = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+var maxRepeatedErrorCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.pgwire.max_repeated_error_count",
+	"the maximum number of times an error can be received while reading from a "+
+		"network connection before the server aborts the connection",
+	1<<8, // 256
+	settings.PositiveInt,
+)
+
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
@@ -1079,11 +1088,6 @@ func (s *Server) newConn(
 	return c
 }
 
-// maxRepeatedErrorCount is the number of times an error can be received
-// while reading from the network connection before the server decides to give
-// up and abort the connection.
-const maxRepeatedErrorCount = 1 << 8
-
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
 // "processor" goroutine (a connExecutor).
@@ -1455,7 +1459,7 @@ func (s *Server) serveImpl(
 			// 3. we reached an arbitrary threshold of repeated errors.
 			if netutil.IsClosedConnection(err) ||
 				errors.Is(err, context.Canceled) ||
-				repeatedErrorCount > maxRepeatedErrorCount {
+				repeatedErrorCount > int(maxRepeatedErrorCount.Get(&s.execCfg.Settings.SV)) {
 				break
 			}
 		} else {
