@@ -38,7 +38,9 @@ func TestMergePartialStatistics(t *testing.T) {
 			partial: &testStat{
 				at: 1, row: 19, dist: 10, null: 0, size: 1, atExtremes: true,
 				hist: testHistogram{
-					{3, 2, 0, 20}, {3, 11, 8, 50}},
+					{3, 2, 0, 20},
+					delimiterBucket(),
+					{3, 11, 8, 50}},
 			},
 			expected: &testStat{
 				at: 1, row: 30, dist: 19, null: 0, size: 1,
@@ -65,6 +67,7 @@ func TestMergePartialStatistics(t *testing.T) {
 				hist: testHistogram{
 					{2, 0, 0, 0},
 					{2, 0, 0, 1},
+					delimiterBucket(),
 					{2, 0, 0, 7},
 					{2, 0, 0, 8},
 				},
@@ -98,6 +101,7 @@ func TestMergePartialStatistics(t *testing.T) {
 					{3, 3, 2, 0},
 					{3, 3, 2, 5},
 					{3, 3, 2, 8},
+					delimiterBucket(),
 					{7, 7, 7, 21},
 					{8, 8, 8, 42},
 				},
@@ -577,12 +581,8 @@ func TestMergePartialStatistics(t *testing.T) {
 			initial := tc.initial.toTableStatistic(ctx, "stat", i, descpb.ColumnIDs{1}, 1 /* statID */, 0 /* fullStatID */, st)
 			partial := tc.partial.toTableStatistic(ctx, "stat", i, descpb.ColumnIDs{1}, 0 /* statID */, 1 /* fullStatID */, st)
 			expected := tc.expected.toTableStatistic(ctx, "__merged__", i, descpb.ColumnIDs{1}, 0 /* statID */, 0 /* fullStatID */, st)
-			var extremesBound tree.Datum
-			if tc.partial.atExtremes {
-				extremesBound = initial.nonNullHistogram().buckets[0].UpperBound
-			}
 			merged, err := mergePartialStatistic(ctx, evalCtx, initial, partial, st,
-				tc.partial.atExtremes, extremesBound)
+				tc.partial.atExtremes)
 			if err != nil {
 				if !tc.err {
 					t.Errorf("test case %d unexpected mergePartialStatistic err: %v", i, err)
@@ -643,13 +643,18 @@ func TestMergedStatistics(t *testing.T) {
 				},
 				{
 					at: 6, row: 5, dist: 3, null: 0, size: 1, colID: 3, atExtremes: true,
-					hist: testHistogram{{1, 0, 0, 10}, {1, 3, 1, 50}},
+					hist: testHistogram{
+						{1, 0, 0, 10},
+						delimiterBucket(),
+						{1, 3, 1, 50},
+					},
 				},
 				{
 					at: 6, row: 7, dist: 5, null: 0, size: 1, colID: 4, atExtremes: true,
 					hist: testHistogram{
 						{1, 0, 0, 0},
 						{1, 0, 0, 10},
+						delimiterBucket(),
 						{1, 3, 1, 50},
 						{1, 0, 0, 60},
 					},
@@ -779,6 +784,7 @@ func TestMergedStatistics(t *testing.T) {
 					at: 6, row: 15, dist: 10, null: 4, size: 1, colID: 1, atExtremes: true,
 					hist: testHistogram{
 						{1, 0, 0, 20},
+						delimiterBucket(),
 						{1, 9, 7, 60},
 					},
 				},
@@ -1011,4 +1017,15 @@ func (tabStat *TableStatistic) RoundDistinctRanges() {
 		tabStat.HistogramData.Buckets[i].DistinctRange =
 			math.Round(tabStat.HistogramData.Buckets[i].DistinctRange)
 	}
+}
+
+// Helper for creating delimiter buckets for partial stats in tests.
+func delimiterBucket() testBucket {
+	// Use NumEq < 0 to indicate a delimiter bucket.
+	return testBucket{NumEq: -1}
+}
+
+// Helper to check if a bucket is a delimiter for partial stats in tests.
+func isDelimiterBucket(bucket testBucket) bool {
+	return bucket.NumEq < 0
 }
