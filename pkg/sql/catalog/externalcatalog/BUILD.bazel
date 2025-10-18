@@ -46,7 +46,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/externalcatalog/externalpb",
-        "//pkg/sql/catalog/resolver",
         "//pkg/sql/isql",
         "//pkg/sql/sem/catconstants",
         "//pkg/sql/sqltestutils",

@@ -75,7 +75,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	// Plan a statement.
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
-	internalPlanner, cleanup := NewInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
 		username.NodeUserName(),
@@ -84,7 +84,6 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		sd,
 	)
 	defer cleanup()
-	p := internalPlanner.(*planner)
 	query := "select * from test.t"
 	stmt, err := parser.ParseOne(query)
 	if err != nil {
@@ -259,7 +258,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			Location:      time.UTC,
 		}
 		// Plan the statement.
-		internalPlanner, cleanup := NewInternalPlanner(
+		p, cleanup := NewInternalPlanner(
 			"test",
 			txn,
 			username.NodeUserName(),
@@ -268,7 +267,6 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			sd,
 		)
 		defer cleanup()
-		p := internalPlanner.(*planner)
 		stmt, err := parser.ParseOne(query)
 		require.NoError(t, err)
 

@@ -188,13 +188,12 @@ func withPlanner(
 			sql.WithDescCollection(col),
 		)
 
-		execCtx := planner.(sql.JobExecContext)
-		semaCleanup := configSemaForCDC(execCtx.SemaCtx(), statementTS)
+		semaCleanup := configSemaForCDC(planner.SemaCtx(), statementTS)
 		cleanup := func() {
 			semaCleanup()
 			plannerCleanup()
 		}
 
-		return fn(ctx, execCtx, cleanup)
+		return fn(ctx, planner, cleanup)
 	})
 }

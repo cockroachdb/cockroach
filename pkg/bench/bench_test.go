@@ -1527,7 +1527,7 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 	)
 
 	defer cleanup()
-	semaCtx := p.(sql.PlanHookState).SemaCtx()
+	semaCtx := p.SemaCtx()
 	sp := sessiondata.MakeSearchPath(append(sessiondata.DefaultSearchPath.GetPathArray(), "sc1", "sc2"))
 	semaCtx.SearchPath = &sp
 

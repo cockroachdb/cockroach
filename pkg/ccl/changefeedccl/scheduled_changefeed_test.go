@@ -834,11 +834,11 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 	)
 	defer cleanup()
 
-	present, err := schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "simple")
+	present, err := schedulebase.CheckScheduleAlreadyExists(ctx, p, "simple")
 	require.NoError(t, err)
 	require.Equal(t, present, true)
 
-	present, err = schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "not-existing")
+	present, err = schedulebase.CheckScheduleAlreadyExists(ctx, p, "not-existing")
 	require.NoError(t, err)
 	require.Equal(t, present, false)
 }
@@ -874,7 +874,7 @@ func TestFullyQualifyTables(t *testing.T) {
 		tablePatterns = append(tablePatterns, target.TableName)
 	}
 
-	qualifiedPatterns, err := schedulebase.FullyQualifyTables(ctx, p.(sql.PlanHookState), tablePatterns)
+	qualifiedPatterns, err := schedulebase.FullyQualifyTables(ctx, p, tablePatterns)
 	require.NoError(t, err)
 	require.Equal(t, "[ocean.public.islands]", fmt.Sprint(qualifiedPatterns))
 }

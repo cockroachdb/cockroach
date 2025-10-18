@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -65,7 +64,7 @@ func TestResolveDestinationObjects(t *testing.T) {
 				sessionData,
 			)
 			defer close()
-			resolved, err = resolveDestinationObjects(ctx, planner.(resolver.SchemaResolver), sessionData, destResources, createTables)
+			resolved, err = resolveDestinationObjects(ctx, planner, sessionData, destResources, createTables)
 			return err
 		})
 		return resolved, err

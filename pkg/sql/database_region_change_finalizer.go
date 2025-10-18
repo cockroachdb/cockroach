@@ -38,7 +38,7 @@ type databaseRegionChangeFinalizer struct {
 func newDatabaseRegionChangeFinalizer(
 	ctx context.Context, txn descs.Txn, execCfg *ExecutorConfig, dbID descpb.ID, typeID descpb.ID,
 ) (*databaseRegionChangeFinalizer, error) {
-	p, cleanup := NewInternalPlanner(
+	localPlanner, cleanup := NewInternalPlanner(
 		"repartition-regional-by-row-tables",
 		txn.KV(),
 		username.NodeUserName(),
@@ -47,7 +47,6 @@ func newDatabaseRegionChangeFinalizer(
 		txn.SessionData(),
 		WithDescCollection(txn.Descriptors()),
 	)
-	localPlanner := p.(*planner)
 
 	var regionalByRowTables []*tabledesc.Mutable
 	if err := func() error {

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -78,16 +77,15 @@ CREATE FUNCTION f(INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT a FROM t $
 			"resolve-index", txn.KV(), username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
 		)
 		defer cleanup()
-		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		ec := planner.EvalContext()
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 		searchPathArray := ec.SessionData().SearchPath.GetPathArray()
 
-		funcResolver := planner.(tree.FunctionReferenceResolver)
 		fname := tree.UnresolvedName{NumParts: 1, Star: false}
 		fname.Parts[0] = "f"
 		path := sessiondata.MakeSearchPath(searchPathArray)
-		funcDef, err := funcResolver.ResolveFunction(
+		funcDef, err := planner.ResolveFunction(
 			ctx,
 			tree.MakeUnresolvedFunctionName(&fname),
 			&path,
@@ -120,7 +118,7 @@ CREATE FUNCTION f(INT) RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT a FROM t $
 		require.Equal(t, types.Int, funcDef.Overloads[2].Types.Types()[0])
 		require.Equal(t, types.Int, funcDef.Overloads[2].ReturnType([]tree.TypedExpr{}))
 
-		_, overload, err := funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
+		_, overload, err := planner.ResolveFunctionByOID(ctx, funcDef.Overloads[0].Oid)
 		require.NoError(t, err)
 		require.Equal(t, `SELECT a FROM defaultdb.public.t;
 SELECT b FROM defaultdb.public.t@t_idx_b;
@@ -134,7 +132,7 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.Equal(t, types.EnumFamily, overload.Types.Types()[0].Family())
 		require.Equal(t, types.Int, overload.ReturnType([]tree.TypedExpr{}))
 
-		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[1].Oid)
+		_, overload, err = planner.ResolveFunctionByOID(ctx, funcDef.Overloads[1].Oid)
 		require.NoError(t, err)
 		require.Equal(t, `SELECT 1;`, overload.Body)
 		require.Equal(t, overload.Type, tree.UDFRoutine)
@@ -142,7 +140,7 @@ SELECT nextval(105:::REGCLASS);`, overload.Body)
 		require.Equal(t, 0, len(overload.Types.Types()))
 		require.Equal(t, types.Void, overload.ReturnType([]tree.TypedExpr{}))
 
-		_, overload, err = funcResolver.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
+		_, overload, err = planner.ResolveFunctionByOID(ctx, funcDef.Overloads[2].Oid)
 		require.NoError(t, err)
 		require.Equal(t, `SELECT a FROM defaultdb.public.t;`, overload.Body)
 		require.Equal(t, overload.Type, tree.UDFRoutine)
@@ -260,16 +258,14 @@ CREATE FUNCTION sc1.lower() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 3 $$;
 			"resolve-index", txn.KV(), username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
 		)
 		defer cleanup()
-		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		ec := planner.EvalContext()
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
-
-		funcResolver := planner.(tree.FunctionReferenceResolver)
 
 		for _, tc := range testCases {
 			t.Run(tc.testName, func(t *testing.T) {
 				path := sessiondata.MakeSearchPath(tc.searchPath)
-				funcDef, err := funcResolver.ResolveFunction(
+				funcDef, err := planner.ResolveFunction(
 					ctx,
 					tree.MakeUnresolvedFunctionName(&tc.funName),
 					&path,
@@ -286,7 +282,7 @@ CREATE FUNCTION sc1.lower() RETURNS INT VOLATILE LANGUAGE SQL AS $$ SELECT 3 $$;
 				schemas := make([]string, len(funcDef.Overloads))
 				isUDF := make([]bool, len(funcDef.Overloads))
 				for i, o := range funcDef.Overloads {
-					_, overload, err := funcResolver.ResolveFunctionByOID(ctx, o.Oid)
+					_, overload, err := planner.ResolveFunctionByOID(ctx, o.Oid)
 					require.NoError(t, err)
 					bodies[i] = overload.Body
 					schemas[i] = o.Schema
@@ -403,7 +399,7 @@ CREATE FUNCTION sc1.lower(a STRING) RETURNS STRING VOLATILE LANGUAGE SQL AS $$ S
 			"resolve-index", txn.KV(), username.NodeUserName(), &sql.MemoryMetrics{}, &execCfg, sd,
 		)
 		defer cleanup()
-		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		ec := planner.EvalContext()
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 

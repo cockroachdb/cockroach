@@ -406,7 +406,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		// Note: the planner is created using the session’s user. This is important
 		// for row-level security (RLS), ensuring that the backfill query runs with
 		// the same visibility and access restrictions as the user who initiated it.
-		p, cleanup := NewInternalPlanner(
+		localPlanner, cleanup := NewInternalPlanner(
 			opName,
 			txn.KV(),
 			sc.sessionData.User(),
@@ -414,9 +414,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			sc.execCfg,
 			sd,
 		)
-
 		defer cleanup()
-		localPlanner := p.(*planner)
 
 		// Delete existing span before ingestion to prevent key collisions.
 		// BulkRowWriter adds SSTables non-transactionally so the writes are not

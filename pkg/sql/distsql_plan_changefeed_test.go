@@ -459,21 +459,20 @@ func TestChangefeedStreamsResults(t *testing.T) {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
-	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
+	planner, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
 		username.NodeUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
 	stmt, err := parser.ParseOne("SELECT * FROM foo WHERE a < 10")
 	require.NoError(t, err)
 	expr := stmt.AST.(*tree.Select)
-	cdcPlan, err := PlanCDCExpression(ctx, p, expr)
+	cdcPlan, err := PlanCDCExpression(ctx, planner, expr)
 	require.NoError(t, err)
 
 	cdcPlan.Plan.planNode, err = prepareCDCPlan(ctx, cdcPlan.Plan.planNode,
 		nil, catalog.ColumnIDToOrdinalMap(fooDesc.PublicColumns()))
 	require.NoError(t, err)
 
-	planner := p.(*planner)
 	physPlan, physPlanCleanup, err := planner.DistSQLPlanner().createPhysPlan(ctx, cdcPlan.PlanCtx, cdcPlan.Plan)
 	defer physPlanCleanup()
 	require.NoError(t, err)
@@ -505,11 +504,10 @@ FAMILY extra (extra)
 	execCfg := tt.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	sd.Database = "defaultdb"
-	p, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
+	planner, cleanup := NewInternalPlanner("test", kv.NewTxn(ctx, kvDB, s.NodeID()),
 		username.NodeUserName(), &MemoryMetrics{}, &execCfg, sd,
 	)
 	defer cleanup()
-	planner := p.(*planner)
 
 	for _, tc := range []struct {
 		name      string
@@ -590,7 +588,7 @@ FAMILY extra (extra)
 
 			var input execinfra.RowChannel
 			input.InitWithBufSizeAndNumSenders(inputTypes, 1024, 1)
-			plan, err := PlanCDCExpression(ctx, p, expr, opts...)
+			plan, err := PlanCDCExpression(ctx, planner, expr, opts...)
 			require.NoError(t, err)
 
 			var rows [][]string

@@ -113,12 +113,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 				sd,
 				sql.WithDescCollection(descriptors),
 			)
-			sr, ok := internalPlanner.(resolver.SchemaResolver)
-			if !ok {
-				cleanup()
-				return nil, nil, errors.New("expected SchemaResolver")
-			}
-			return sr, cleanup, nil
+			return internalPlanner, cleanup, nil
 		}
 
 		err = m.Run(ctx, v, tenantDeps)

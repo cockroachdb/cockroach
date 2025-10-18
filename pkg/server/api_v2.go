@@ -233,7 +233,7 @@ func registerRoutes(
 				a.sqlServer.execCfg,
 				sql.NewInternalSessionData(ctx, a.sqlServer.execCfg.Settings, opName),
 			)
-			return p.(sql.AuthorizationAccessor), cleanup
+			return p, cleanup
 		}
 
 		if route.requiresAuth {

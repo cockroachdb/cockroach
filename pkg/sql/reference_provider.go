@@ -188,6 +188,6 @@ func NewReferenceProviderFactoryForTest(
 ) (scbuild.ReferenceProviderFactory, func()) {
 	sd := NewInternalSessionData(ctx, execCfg.Settings, opName)
 	sd.Database = curDB
-	ip, cleanup := newInternalPlanner(opName, txn, user, &MemoryMetrics{}, execCfg, sd)
+	ip, cleanup := NewInternalPlanner(opName, txn, user, &MemoryMetrics{}, execCfg, sd)
 	return &referenceProviderFactory{p: ip}, cleanup
 }

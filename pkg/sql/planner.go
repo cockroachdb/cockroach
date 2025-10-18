@@ -351,21 +351,7 @@ func WithDescCollection(collection *descs.Collection) InternalPlannerParamsOptio
 	}
 }
 
-// NewInternalPlanner is an exported version of newInternalPlanner. It
-// returns an interface{} so it can be used outside of the sql package.
-func NewInternalPlanner(
-	opName redact.SafeString,
-	txn *kv.Txn,
-	user username.SQLUsername,
-	memMetrics *MemoryMetrics,
-	execCfg *ExecutorConfig,
-	sessionData *sessiondata.SessionData,
-	opts ...InternalPlannerParamsOption,
-) (interface{}, func()) {
-	return newInternalPlanner(opName, txn, user, memMetrics, execCfg, sessionData, opts...)
-}
-
-// newInternalPlanner creates a new planner instance for internal usage. This
+// NewInternalPlanner creates a new planner instance for internal usage. This
 // planner is not associated with a sql session.
 //
 // Since it can't be reset, the planner can be used only for planning a single
@@ -373,7 +359,7 @@ func NewInternalPlanner(
 //
 // Returns a cleanup function that must be called once the caller is done with
 // the planner.
-func newInternalPlanner(
+func NewInternalPlanner(
 	opName redact.SafeString,
 	txn *kv.Txn,
 	user username.SQLUsername,

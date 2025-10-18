@@ -769,7 +769,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		// have (a) use of the txn during type checking of any virtual computed
 		// column expressions, and (b) use of the txn during processor setup during
 		// the execution of the flow.
-		innerPlanner, cleanup := NewInternalPlanner(
+		innerP, cleanup := NewInternalPlanner(
 			"create-stats-resume-job",
 			txn.KV(),
 			jobsPlanner.User(),
@@ -778,7 +778,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			jobsPlanner.SessionData(),
 		)
 		defer cleanup()
-		innerP := innerPlanner.(*planner)
 		innerEvalCtx := innerP.ExtendedEvalContext()
 		if details.AsOf != nil {
 			innerP.ExtendedEvalContext().AsOfSystemTime = &eval.AsOfSystemTime{Timestamp: *details.AsOf}

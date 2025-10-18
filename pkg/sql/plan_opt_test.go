@@ -636,7 +636,7 @@ func TestPlanGistControl(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
-	internalPlanner, cleanup := NewInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
 		username.NodeUserName(),
@@ -647,7 +647,6 @@ func TestPlanGistControl(t *testing.T) {
 	defer cleanup()
 
 	fmtFingerprintMask := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV))
-	p := internalPlanner.(*planner)
 	stmt, err := parser.ParseOne("SELECT 1")
 	if err != nil {
 		t.Fatal(err)
@@ -665,7 +664,7 @@ func TestPlanGistControl(t *testing.T) {
 		t.Error("expected gist by default")
 	}
 
-	internalPlanner, cleanup = NewInternalPlanner(
+	p, cleanup = NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, s.NodeID()),
 		username.NodeUserName(),
@@ -675,7 +674,6 @@ func TestPlanGistControl(t *testing.T) {
 	)
 	defer cleanup()
 
-	p = internalPlanner.(*planner)
 	p.SessionData().DisablePlanGists = true
 
 	p.stmt = makeStatement(stmt, clusterunique.ID{}, fmtFingerprintMask)
