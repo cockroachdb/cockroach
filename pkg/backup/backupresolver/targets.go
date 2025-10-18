@@ -661,6 +661,7 @@ func LoadAllDescs(
 	ctx context.Context, execCfg *sql.ExecutorConfig, asOf hlc.Timestamp,
 ) (allDescs []catalog.Descriptor, _ error) {
 	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		fmt.Printf("LoadAllDescs: setting fixed timestamp to %s\n", asOf)
 		err := txn.KV().SetFixedTimestamp(ctx, asOf)
 		if err != nil {
 			return err

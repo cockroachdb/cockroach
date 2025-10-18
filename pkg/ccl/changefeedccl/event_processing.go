@@ -109,7 +109,8 @@ func newEventConsumer(
 		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
 			var schemaInfo map[descpb.ID]tableSchemaInfo
 			if inSet(changefeedbase.EnrichedPropertySource, encodingOpts.EnrichedProperties) {
-				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets)
+				// TODO(log-head): should cursor be used here instead of initialHighWater?
+				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets, *spec.InitialHighWater)
 				if err != nil {
 					return nil, err
 				}
