@@ -1259,16 +1259,23 @@ type parsedCRN struct {
 	id     string
 }
 
+// parseCRN takes an IBM Cloud Resource Name string and parses it into
+// its components for easier use.
+// We don't store the resource ID in vm.VM, we need to parse the CRN if
+// we need the resource ID which is at index 9 after splitting.
+// CRN format:
+//
+//	crn:version:cname:ctype:service-name:location:scope:service-instance:resource-type:resource
+//
+// CRN e.g.
+//
+//	crn:v1:bluemix:public:is:ca-tor-1:a/ba0325a6257b4dabb3a7aa149a6578ae::instance:02q7_1a2940f7-b058-4742-8ef1-b1ee08273cf0
 func (p *Provider) parseCRN(crn string) (*parsedCRN, error) {
 
 	if crn == "" {
 		return nil, fmt.Errorf("empty CRN")
 	}
 
-	// CRN have the following format:
-	// crn:version:cname:ctype:service-name:location:scope:service-instance:resource-type:resource
-	// e.g.: crn:v1:bluemix:public:is:ca-tor-1:a/ba0325a6257b4dabb3a7aa149a6578ae::instance:02q7_1a2940f7-b058-4742-8ef1-b1ee08273cf0
-	// we're interested in the "resource" part, which is the 10th part
 	parts := strings.Split(crn, ":")
 
 	if len(parts) < 10 {
@@ -1279,6 +1286,9 @@ func (p *Provider) parseCRN(crn string) (*parsedCRN, error) {
 		id: parts[9],
 	}
 
+	// a CRN's location field can be a region or a zone, handle both cases
+	// region e.g. br-sao
+	// zone e.g. br-sao-1
 	splitsRegion := strings.Split(parts[5], "-")
 	if len(splitsRegion) < 3 {
 		c.region = parts[5]
