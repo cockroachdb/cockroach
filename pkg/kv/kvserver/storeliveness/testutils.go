@@ -101,6 +101,10 @@ func (tms *testMessageSender) SendAsync(_ context.Context, msg slpb.Message) (se
 	return true
 }
 
+func (tms *testMessageSender) SendAllMessages(_ context.Context) {
+	// No-op.
+}
+
 func (tms *testMessageSender) drainSentMessages() []slpb.Message {
 	tms.mu.Lock()
 	defer tms.mu.Unlock()
