@@ -71,5 +71,6 @@ func (cr *commandRegistry) register() {
 		cr.buildFetchLogsCmd(),
 		cr.buildGetLatestPProfCmd(),
 		cr.buildFetchCertsDir(),
+		cr.buildChaosCmd(),
 	})
 }
