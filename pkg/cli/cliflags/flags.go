@@ -942,6 +942,16 @@ provided for node user if this flag is set.
 `,
 	}
 
+	DisallowRootLogin = FlagInfo{
+		Name: "disallow-root-login",
+		Description: `
+When set, prevents authentication attempts by clients presenting certificates
+with "root" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. Authentication
+attempts by root will be rejected with an error.
+`,
+	}
+
 	TLSCipherSuites = FlagInfo{
 		Name: "tls-cipher-suites",
 		Description: `

@@ -206,8 +206,16 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, nodeDNString: "CN=foo"},
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true,
 			rootDNString: "CN=foo", nodeDNString: "CN=bar"},
+		// Test case for disallow root login functionality
+		{systemID: stid, ous: nil, commonName: "root", expErr: "root login has been disallowed"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
+			// Enable root login blocking for the specific test case
+			if tc.expErr == "root login has been disallowed" {
+				security.EnableDisallowRootLogin(true)
+				defer security.EnableDisallowRootLogin(false)
+			}
+
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
 			if err != nil {
 				t.Fatal(err)
