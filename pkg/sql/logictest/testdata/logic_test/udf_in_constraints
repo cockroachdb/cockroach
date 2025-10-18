@@ -15,6 +15,7 @@ SELECT
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_checks
 CREATE FUNCTION get_checks(table_id INT) RETURNS STRING
 LANGUAGE SQL
 AS $$
@@ -37,6 +38,7 @@ SELECT
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_fn_depended_on_by
 CREATE FUNCTION get_fn_depended_on_by(function_id INT) RETURNS STRING
 LANGUAGE SQL
 AS $$
@@ -58,6 +60,7 @@ let $tbl_id
 SELECT id FROM system.namespace WHERE name = 't1';
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_checks
 SELECT get_checks($tbl_id);
 ----
 [
@@ -100,6 +103,7 @@ let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -120,6 +124,7 @@ statement ok
 ALTER TABLE t1 ADD CONSTRAINT ckb CHECK (f1(b) > 2) NOT VALID;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_checks
 SELECT get_checks($tbl_id);
 ----
 [
@@ -151,6 +156,7 @@ SELECT get_checks($tbl_id);
 ]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -173,6 +179,7 @@ CREATE TABLE t2(
 );
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -198,6 +205,7 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT check_b;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -221,6 +229,7 @@ statement ok
 ALTER TABLE t2 DROP CONSTRAINT cka;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -240,6 +249,7 @@ DROP TABLE t1;
 DROP TABLE t2;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL
@@ -289,6 +299,7 @@ let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_checks
 SELECT get_checks($tbl_id);
 ----
 [
@@ -303,6 +314,7 @@ SELECT get_checks($tbl_id);
 ]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id);
 ----
 [
@@ -341,6 +353,7 @@ let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'f1';
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_checks
 SELECT get_checks($tbl_id);
 ----
 [
@@ -355,6 +368,7 @@ SELECT get_checks($tbl_id);
 ]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id);
 ----
 [

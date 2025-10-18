@@ -551,9 +551,11 @@ $$;
 
 # Process split fixups for the two indexes.
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via process_vector_index_fixups_for
 CALL process_vector_index_fixups_for('exec_test', 'idx1');
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via process_vector_index_fixups_for
 CALL process_vector_index_fixups_for('exec_test', 'idx2');
 
 statement error pgcode 22000 pq: expected 3 dimensions, not 1
@@ -784,12 +786,15 @@ INSERT INTO distance_metrics (a, v) VALUES
 
 # Process split fixups for the three indexes.
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via process_vector_index_fixups_for
 CALL process_vector_index_fixups_for('distance_metrics', 'idx1');
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via process_vector_index_fixups_for
 CALL process_vector_index_fixups_for('distance_metrics', 'idx2');
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via process_vector_index_fixups_for
 CALL process_vector_index_fixups_for('distance_metrics', 'idx3');
 
 # Results using L2 distance.

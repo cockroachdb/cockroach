@@ -39,6 +39,7 @@ CREATE TABLE foo (
 
 onlyif config schema-locked-disabled
 query T
+-- logictest_allow_unsafe: references nested explicit access via redacted_descriptors
 SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
 ----
 {
@@ -175,6 +176,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
 
 skipif config schema-locked-disabled
 query T
+-- logictest_allow_unsafe: references nested explicit access via redacted_descriptors
 SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
 ----
 {

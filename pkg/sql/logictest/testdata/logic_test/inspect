@@ -40,6 +40,7 @@ statement ok
 INSPECT TABLE foo;
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  2
@@ -48,6 +49,7 @@ statement ok
 INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1);
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  1
@@ -57,6 +59,7 @@ statement ok
 INSPECT TABLE foo WITH OPTIONS INDEX (idx_c1, foo@idx_c1);
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  1
@@ -65,6 +68,7 @@ statement ok
 INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (idx_c1,idx_c2);
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  2
@@ -76,6 +80,7 @@ statement ok
 INSPECT TABLE foo WITH OPTIONS INDEX ALL;
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  2
@@ -84,6 +89,7 @@ statement ok
 INSPECT DATABASE test;
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  28
@@ -98,6 +104,7 @@ statement ok
 INSPECT TABLE bar;
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  NULL
@@ -123,6 +130,7 @@ statement ok
 INSPECT DATABASE test WITH OPTIONS INDEX (foo@idx_c1, test.public.bar@idx_c1, test.idx_c3);
 
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  3
@@ -189,6 +197,7 @@ INSPECT TABLE t2 AS OF SYSTEM TIME '-1us';
 
 # Verify only two checks were created (for the regular indexes).
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  2
@@ -213,6 +222,7 @@ INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
 
 # Confirm no jobs were run.
 query TI
+-- logictest_allow_unsafe: references nested explicit access via last_inspect_job
 SELECT * FROM last_inspect_job;
 ----
 succeeded  2

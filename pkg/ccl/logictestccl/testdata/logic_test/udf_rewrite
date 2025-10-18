@@ -81,6 +81,7 @@ $$
 $$ LANGUAGE PLPGSQL;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "DECLARE\ni INT8 := nextval(106:::REGCLASS);\nj INT8 := nextval(106:::REGCLASS);\ncurs REFCURSOR := nextval(106:::REGCLASS)::STRING;\ncurs2 CURSOR FOR SELECT nextval(106:::REGCLASS);\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('next val: %d':::STRING, nextval(106:::REGCLASS));\nRAISE NOTICE 'val1: %, val2: %', nextval(106:::REGCLASS), nextval(106:::REGCLASS);\nDECLARE\nk INT8 := nextval(106:::REGCLASS);\nBEGIN\nRAISE NOTICE 'k: %, nextval: %', k, nextval(106:::REGCLASS);\nIF k > 0 THEN\n\tSELECT nextval(106:::REGCLASS);\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('next val: %d':::STRING, nextval(106:::REGCLASS));\nWHEN not_null_violation THEN\nSELECT nextval(106:::REGCLASS);\nSELECT nextval(106:::REGCLASS);\nRAISE NOTICE\nUSING MESSAGE = format('next val: %d':::STRING, nextval(106:::REGCLASS));\nEND;\nWHILE nextval(106:::REGCLASS) < 10:::INT8 LOOP\ni := nextval(106:::REGCLASS);\nSELECT nextval(106:::REGCLASS);\nIF nextval(106:::REGCLASS) = 1:::INT8 THEN\n\tSELECT nextval(106:::REGCLASS);\n\tSELECT nextval(106:::REGCLASS);\n\tCONTINUE;\nELSIF nextval(106:::REGCLASS) = 2:::INT8 THEN\n\tSELECT v FROM ROWS FROM (nextval(106:::REGCLASS)) AS v (\"int\") INTO i;\nELSIF nextval(106:::REGCLASS) = 3:::INT8 THEN\n\tSELECT nextval(106:::REGCLASS);\n\tSELECT nextval(106:::REGCLASS);\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT nextval(106:::REGCLASS);\nRETURN nextval(106:::REGCLASS);\nEND;\n"
@@ -145,6 +146,7 @@ statement ok
 ALTER SEQUENCE seq RENAME TO renamed;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "DECLARE\ni INT8 := nextval(106:::REGCLASS);\nj INT8 := nextval(106:::REGCLASS);\ncurs REFCURSOR := nextval(106:::REGCLASS)::STRING;\ncurs2 CURSOR FOR SELECT nextval(106:::REGCLASS);\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('next val: %d':::STRING, nextval(106:::REGCLASS));\nRAISE NOTICE 'val1: %, val2: %', nextval(106:::REGCLASS), nextval(106:::REGCLASS);\nDECLARE\nk INT8 := nextval(106:::REGCLASS);\nBEGIN\nRAISE NOTICE 'k: %, nextval: %', k, nextval(106:::REGCLASS);\nIF k > 0 THEN\n\tSELECT nextval(106:::REGCLASS);\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('next val: %d':::STRING, nextval(106:::REGCLASS));\nWHEN not_null_violation THEN\nSELECT nextval(106:::REGCLASS);\nSELECT nextval(106:::REGCLASS);\nRAISE NOTICE\nUSING MESSAGE = format('next val: %d':::STRING, nextval(106:::REGCLASS));\nEND;\nWHILE nextval(106:::REGCLASS) < 10:::INT8 LOOP\ni := nextval(106:::REGCLASS);\nSELECT nextval(106:::REGCLASS);\nIF nextval(106:::REGCLASS) = 1:::INT8 THEN\n\tSELECT nextval(106:::REGCLASS);\n\tSELECT nextval(106:::REGCLASS);\n\tCONTINUE;\nELSIF nextval(106:::REGCLASS) = 2:::INT8 THEN\n\tSELECT v FROM ROWS FROM (nextval(106:::REGCLASS)) AS v (\"int\") INTO i;\nELSIF nextval(106:::REGCLASS) = 3:::INT8 THEN\n\tSELECT nextval(106:::REGCLASS);\n\tSELECT nextval(106:::REGCLASS);\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT nextval(106:::REGCLASS);\nRETURN nextval(106:::REGCLASS);\nEND;\n"
@@ -278,6 +280,7 @@ $$
 $$ LANGUAGE PLPGSQL;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nSELECT public.f_nested(1:::INT8, b'\\x80':::@100107);\nCALL public.p_nested(1, b'\\x80':::@100107, day);\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
@@ -345,6 +348,7 @@ statement ok
 ALTER TYPE weekday RENAME TO workday;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "DECLARE\nday @100107 := b'\\x80':::@100107;\ntoday @100107 := b'\\xa0':::@100107;\ncurs REFCURSOR := b' ':::@100107::STRING;\ncurs2 CURSOR FOR SELECT b'@':::@100107;\nBEGIN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nRAISE NOTICE 'val1: %, val2: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nSELECT public.f_nested(1:::INT8, b'\\x80':::@100107);\nCALL public.p_nested(1, b'\\x80':::@100107, day);\nDECLARE\nyesterday @100107 := b'\\x80':::@100107;\nBEGIN\nRAISE NOTICE 'val3: %, val4: %', b'\\x80':::@100107, b'\\xa0':::@100107;\nIF yesterday IS NOT NULL THEN\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEXCEPTION\nWHEN division_by_zero THEN\nRAISE NOTICE\nUSING MESSAGE = format('val: %d':::STRING, b'\\x80':::@100107);\nWHEN not_null_violation THEN\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'val: %', b'\\x80':::@100107;\nEND;\nWHILE day != b'\\x80':::@100107 LOOP\nday := b'\\xc0':::@100107;\nSELECT b'\\x80':::@100107;\nIF day = b'\\x80':::@100107 THEN\n\tday := b'\\xa0':::@100107;\n\tSELECT b'@':::@100107;\n\tCONTINUE;\nELSIF day = b' ':::@100107 THEN\n\tSELECT b'@':::@100107 INTO day;\nELSIF day = b'@':::@100107 THEN\n\tSELECT b'\\x80':::@100107 INTO day;\n\tSELECT b'\\x80':::@100107;\nEND IF;\nEND LOOP;\nOPEN curs FOR SELECT b'\\x80':::@100107;\nRETURN b'\\x80':::@100107;\nEND;\n"
@@ -425,6 +429,7 @@ $$
 $$ LANGUAGE PLPGSQL;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "BEGIN\nparam2 := param1;\nparam1 := b'\\xc0':::@100107;\nEND;\n"
@@ -453,6 +458,7 @@ statement ok
 ALTER TYPE weekday RENAME TO workday;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "BEGIN\nparam2 := param1;\nparam1 := b'\\xc0':::@100107;\nEND;\n"
@@ -497,6 +503,7 @@ $$
 $$ LANGUAGE PLPGSQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "BEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;\nEND;\n"
@@ -513,6 +520,7 @@ $$
 $$ LANGUAGE PLPGSQL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "BEGIN\nUPDATE test.public.t_rewrite SET w = b'\\xa0':::@100107 WHERE w = b'\\x80':::@100107 RETURNING w;\nEND;\n"
@@ -530,6 +538,7 @@ $$
 $$ LANGUAGE PLPGSQL;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "BEGIN\nparam2 := param1;\nparam1 := b'\\xc0':::@100107;\nEND;\n"
@@ -554,6 +563,7 @@ statement ok
 ALTER TYPE weekday RENAME TO workday;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('p_rewrite');
 ----
 "BEGIN\nparam2 := param1;\nparam1 := b'\\xc0':::@100107;\nEND;\n"
@@ -607,6 +617,7 @@ CREATE FUNCTION f_rewrite() RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "BEGIN\nDO $funcbody$\nBEGIN\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'foo';\nDO $$\nBEGIN\nRAISE NOTICE 'bar';\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nEND;\n$$;\nEND;\n$funcbody$;\nRETURN 100;\nEND;\n"
@@ -648,6 +659,7 @@ statement ok
 ALTER TYPE weekday RENAME TO workday;
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_body_str
 SELECT get_body_str('f_rewrite');
 ----
 "BEGIN\nDO $funcbody$\nBEGIN\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nRAISE NOTICE 'foo';\nDO $$\nBEGIN\nRAISE NOTICE 'bar';\nSELECT nextval(106:::REGCLASS);\nSELECT b'\\x80':::@100107;\nEND;\n$$;\nEND;\n$funcbody$;\nRETURN 100;\nEND;\n"

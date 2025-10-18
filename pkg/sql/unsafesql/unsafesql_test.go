@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/unsafesql"
@@ -62,8 +63,14 @@ func TestAccessCheckServer(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	_v := false
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				AllowInternalAccess: &_v,
+			},
+		},
 	})
 	defer s.Stopper().Stop(ctx)
 

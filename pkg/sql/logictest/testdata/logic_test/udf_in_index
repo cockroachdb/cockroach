@@ -29,6 +29,7 @@ json_array_elements(
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_col_fn_ids
 CREATE FUNCTION get_col_fn_ids(table_id INT) RETURNS SETOF v_col_fn_ids
 LANGUAGE SQL
 AS $$
@@ -58,6 +59,7 @@ json_array_elements(
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_idx_fn_ids
 CREATE FUNCTION get_idx_fn_ids(table_id INT) RETURNS SETOF v_idx_fn_ids
 LANGUAGE SQL
 AS $$
@@ -80,6 +82,7 @@ SELECT
 FROM system.descriptor
 
 statement ok
+-- logictest_allow_unsafe: references nested explicit access via v_fn_depended_on_by
 CREATE FUNCTION get_fn_depended_on_by(function_id INT) RETURNS STRING
 LANGUAGE SQL
 AS $$
@@ -102,6 +105,7 @@ let $fn_id
 SELECT oid::int - 100000 FROM pg_catalog.pg_proc WHERE proname = 'test_tbl_f';
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -110,6 +114,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -126,6 +131,7 @@ statement ok
 CREATE INDEX t_idx ON test_tbl_t((2 + test_tbl_f()));
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -135,6 +141,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  4       "2:::INT8 + [FUNCTION 100112]()"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -158,6 +165,7 @@ statement ok
 CREATE INDEX t_idx2 ON test_tbl_t(b) WHERE test_tbl_partial_f(b) > 0;
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -167,6 +175,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  4       "2:::INT8 + [FUNCTION 100112]()"  [112]
 
 query IIT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_idx_fn_ids
 SELECT * FROM get_idx_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   idx_id  predicate_expr
@@ -175,6 +184,7 @@ id   idx_id  predicate_expr
 113  5       "[FUNCTION 100114](b) > 0:::INT8"
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($partial_fn_id)
 ----
 [
@@ -210,6 +220,7 @@ statement ok
 CREATE INDEX t_idx3 ON test_tbl_t((b + test_tbl_f()));
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -220,6 +231,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  5       "b + [FUNCTION 100112]()"         [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -238,6 +250,7 @@ statement ok
 CREATE INDEX t_idx4 ON test_tbl_t(test_tbl_f(), b, (test_tbl_f() + 1));
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -250,6 +263,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -270,6 +284,7 @@ statement ok
 DROP INDEX t_idx;
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -281,6 +296,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -304,6 +320,7 @@ statement ok
 DROP INDEX t_idx2;
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -315,6 +332,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -333,6 +351,7 @@ statement ok
 DROP INDEX t_idx3;
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -343,6 +362,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  7       "[FUNCTION 100112]() + 1:::INT8"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -360,6 +380,7 @@ statement ok
 DROP INDEX t_idx4;
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr                      uses_fn_ids
@@ -368,6 +389,7 @@ id   col_id  compute_expr                      uses_fn_ids
 113  3       "1:::INT8 + [FUNCTION 100112]()"  [112]
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 [
@@ -383,6 +405,7 @@ statement ok
 DROP INDEX idx_b;
 
 query IITT colnames
+-- logictest_allow_unsafe: references nested explicit access via get_col_fn_ids
 SELECT * FROM get_col_fn_ids($tbl_id) ORDER BY 1, 2;
 ----
 id   col_id  compute_expr  uses_fn_ids
@@ -390,6 +413,7 @@ id   col_id  compute_expr  uses_fn_ids
 113  2       NULL          NULL
 
 query T
+-- logictest_allow_unsafe: references nested explicit access via get_fn_depended_on_by
 SELECT get_fn_depended_on_by($fn_id)
 ----
 NULL

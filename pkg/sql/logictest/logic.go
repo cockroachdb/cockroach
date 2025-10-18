@@ -1119,6 +1119,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe *bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1506,6 +1510,9 @@ func (t *logicTest) newCluster(
 		}
 		knobs.DistSQL = &execinfra.TestingKnobs{
 			ForceDiskSpill: t.cfg.SQLExecUseDisk,
+		}
+		knobs.SQLEvalContext = &eval.TestingKnobs{
+			AllowInternalAccess: t.allowUnsafe,
 		}
 	}
 	// TODO(andrei): if createTestServerParams() is used here, the command filter
@@ -3599,6 +3606,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
 func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	defer t.setSafetyGate(stmt.sql)()
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3722,6 +3730,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	defer t.setSafetyGate(query.sql)()
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -4603,12 +4612,14 @@ func RunLogicTest(
 	}
 
 	rng, _ := randutil.NewTestRand()
+	_v := true
 	lt := logicTest{
 		rootT:                      t,
 		verbose:                    verbose,
 		perErrorSummary:            make(map[string][]string),
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
+		allowUnsafe:                &_v,
 	}
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
@@ -4883,4 +4894,17 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+func (t *logicTest) setSafetyGate(sql string) func() {
+	sql = strings.ToLower(sql)
+	explicitlyUnsafe := strings.Contains(sql, "crdb_internal.") || strings.Contains(sql, "system.")
+	explicitlyUnsafe = explicitlyUnsafe || strings.Contains(sql, "-- logictest_allow_unsafe")
+	if !explicitlyUnsafe {
+		*t.allowUnsafe = false
+	}
+
+	return func() {
+		*t.allowUnsafe = true
+	}
 }

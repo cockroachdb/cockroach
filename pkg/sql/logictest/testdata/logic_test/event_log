@@ -843,6 +843,7 @@ SELECT jdesc->'schema'->>'name' AS schema, jdesc->'schema'->'privileges'->>'owne
 ORDER BY 1,2,3,4,5,6
 
 query TTTTTT rowsort
+-- logictest_allow_unsafe: references nested explicit access via showOwners
 EXECUTE showOwners('atest')
 ----
 NULL    NULL      NULL  NULL      s     testuser
@@ -869,6 +870,7 @@ ALTER DATABASE atest OWNER TO u;
 
 # Observe/verify the ownership change.
 query TTTTTT rowsort
+-- logictest_allow_unsafe: references nested explicit access via showOwners
 EXECUTE showOwners('atest')
 ----
 NULL    NULL  NULL  NULL  s     testuser
@@ -909,6 +911,7 @@ REASSIGN OWNED BY testuser TO v
 
 # Observe/verify the ownership change.
 query TTTTTT rowsort
+-- logictest_allow_unsafe: references nested explicit access via showOwners
 EXECUTE showOwners('atest')
 ----
 NULL    NULL  NULL  NULL  s     v

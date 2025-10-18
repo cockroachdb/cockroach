@@ -1351,6 +1351,7 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 # The trigger function body stored with the trigger should reference the table
 # on the public schema.
 query T noticetrace
+-- logictest_allow_unsafe: references nested explicit access via show_triggers
 CALL show_triggers();
 ----
 NOTICE: "foo"->test.public.t
@@ -1364,6 +1365,7 @@ CREATE TRIGGER bar AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 # The first trigger should still reference the table on the public schema, but
 # the second should reference the table on schema "s".
 query T noticetrace
+-- logictest_allow_unsafe: references nested explicit access via show_triggers
 CALL show_triggers();
 ----
 NOTICE: "foo"->test.public.t
