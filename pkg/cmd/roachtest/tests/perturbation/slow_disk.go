@@ -81,7 +81,9 @@ func (s *slowDisk) startPerturbation(ctx context.Context, t test.Test, v variati
 
 // endPerturbation implements perturbation.
 func (s *slowDisk) endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration {
-	s.staller.Unstall(ctx, v.targetNodes())
+	if err := s.staller.Unstall(ctx, v.targetNodes()); err != nil {
+		t.Fatal("failed to unstall disk:", err)
+	}
 	waitDuration(ctx, v.validationDuration)
 	return v.validationDuration
 }
