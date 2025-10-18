@@ -697,8 +697,10 @@ func (b *updatesBuf) PaceBroadcastUpdate(ctx context.Context, condVar *sync.Cond
 		}
 		b.mu.Unlock()
 
-		if workLeft > 0 && timeutil.Now().Before(by) {
-			time.Sleep(by.Sub(timeutil.Now()))
+		if workLeft > 0 {
+			if wait := timeutil.Until(by); wait > 0 {
+				time.Sleep(wait)
+			}
 		}
 	}
 }
