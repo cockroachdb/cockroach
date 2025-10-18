@@ -85,6 +85,9 @@ test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
 test:ci --test_tmpdir=/artifacts/tmp
 
+# TODO(ricky): This should be v1.0.0.
+build:fips --@io_bazel_rules_go//go/config:gofips140=latest
+
 build:cross --stamp
 
 # Cross-compilation configurations. Add e.g. --config=crosslinux to turn these on.
@@ -101,7 +104,7 @@ build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh -t x
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxfipsbase --config=cross
-build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.23.12fips
+build:crosslinuxfipsbase --config=fips
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32'
 build:crosswindows --config=crosswindowsbase
 build:crosswindowsbase --platforms=//build/toolchains:cross_windows
