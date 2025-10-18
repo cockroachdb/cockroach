@@ -26,8 +26,11 @@ func TestSplitColumnDefsAndTableConstraints(t *testing.T) {
 		id INT PRIMARY KEY,
 		name TEXT NOT NULL,
 		age INT DEFAULT 30,
+		checksum BYTES DEFAULT 30,
+		haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL,
 		CONSTRAINT user_pk PRIMARY KEY (id),
 		UNIQUE (name),
+		INDEX emigratingbuckets_haserror_idx (haserror DESC),
 		FOREIGN KEY (age) REFERENCES other(age),
 		CHECK (age > 0)
 	`
@@ -36,15 +39,88 @@ func TestSplitColumnDefsAndTableConstraints(t *testing.T) {
 		"id INT PRIMARY KEY",
 		"name TEXT NOT NULL",
 		"age INT DEFAULT 30",
+		"checksum BYTES DEFAULT 30",
+		"haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL",
 	}
 	wantConstraints := []string{
 		"CONSTRAINT user_pk PRIMARY KEY (id)",
 		"UNIQUE (name)",
+		"INDEX emigratingbuckets_haserror_idx (haserror DESC)",
 		"FOREIGN KEY (age) REFERENCES other(age)",
 		"CHECK (age > 0)",
 	}
 	assert.Equal(t, wantCols, cols)
 	assert.Equal(t, wantConstraints, constraints)
+}
+func TestRemoveComputedColumns(t *testing.T) {
+	stmt := `
+CREATE TABLE public.emigratingbuckets (
+	bucketnum INT8 NOT NULL,
+	bucket STRING NOT NULL,
+	shardname STRING NOT NULL,
+	destcluster STRING NOT NULL,
+	starttime TIMESTAMP(0) NULL,
+	startbinlogfile STRING NULL,
+	startbinlogpos INT4 NULL,
+	generation INT4 NOT NULL DEFAULT 0:::INT8,
+	state STRING NOT NULL,
+	activeon STRING NOT NULL,
+	lastheartbeat TIMESTAMP(0) NULL,
+	enqd BOOL NULL,
+	enqdfirst BOOL NULL,
+	enqdtime TIMESTAMP(6) NULL,
+	laststatechangetime TIMESTAMP(0) NOT NULL,
+	lastbinlogfile STRING NOT NULL,
+	lastbinlogpos INT4 NOT NULL,
+	laststatusupdate TIMESTAMP(0) NULL,
+	errordetail STRING NOT NULL,
+	migrationparams JSONB NULL,
+	migrationstatus JSONB NULL,
+	srcbucketinfo JSONB NULL,
+	haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL,
+	CONSTRAINT ""primary"" PRIMARY KEY (bucketnum ASC),
+	INDEX emigratingbuckets_state_idx (state ASC),
+	INDEX emigratingbuckets_activeon_idx (activeon DESC),
+	INDEX emigratingbuckets_shardname_idx (shardname ASC),
+	INDEX emigratingbuckets_destcluster_idx (destcluster ASC),
+	INDEX emigratingbuckets_enqd_idx (enqd DESC),
+	INDEX emigratingbuckets_enqdfirst_idx (enqdfirst DESC),
+	INDEX emigratingbuckets_haserror_idx (haserror DESC),
+	CONSTRAINT check_bucketnum CHECK (bucketnum > 0:::INT8)
+)`
+	assert.Equal(t, `
+CREATE TABLE public.emigratingbuckets (
+	bucketnum INT8 NOT NULL,
+	bucket STRING NOT NULL,
+	shardname STRING NOT NULL,
+	destcluster STRING NOT NULL,
+	starttime TIMESTAMP(0) NULL,
+	startbinlogfile STRING NULL,
+	startbinlogpos INT4 NULL,
+	generation INT4 NOT NULL DEFAULT 0:::INT8,
+	state STRING NOT NULL,
+	activeon STRING NOT NULL,
+	lastheartbeat TIMESTAMP(0) NULL,
+	enqd BOOL NULL,
+	enqdfirst BOOL NULL,
+	enqdtime TIMESTAMP(6) NULL,
+	laststatechangetime TIMESTAMP(0) NOT NULL,
+	lastbinlogfile STRING NOT NULL,
+	lastbinlogpos INT4 NOT NULL,
+	laststatusupdate TIMESTAMP(0) NULL,
+	errordetail STRING NOT NULL,
+	migrationparams JSONB NULL,
+	migrationstatus JSONB NULL,
+	srcbucketinfo JSONB NULL,
+	CONSTRAINT ""primary"" PRIMARY KEY (bucketnum ASC),
+	INDEX emigratingbuckets_state_idx (state ASC),
+	INDEX emigratingbuckets_activeon_idx (activeon DESC),
+	INDEX emigratingbuckets_shardname_idx (shardname ASC),
+	INDEX emigratingbuckets_destcluster_idx (destcluster ASC),
+	INDEX emigratingbuckets_enqd_idx (enqd DESC),
+	INDEX emigratingbuckets_enqdfirst_idx (enqdfirst DESC),
+	CONSTRAINT check_bucketnum CHECK (bucketnum > 0:::INT8)
+)`, removeComputedColumns(stmt))
 }
 
 func TestParseDDL(t *testing.T) {

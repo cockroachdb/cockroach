@@ -34,6 +34,7 @@ const (
 	checkInlinePattern = `(?i)\bCHECK\s*\(`
 	primaryKeyPattern  = `(?i)\bPRIMARY\s+KEY\b`
 	uniquePattern      = `(?i)\bUNIQUE\b`
+	computedPattern    = `(?i)\b(AS)\b`
 
 	// Patterns for table-level constraints
 	tablePrimaryKeyPattern = `\((.*?)\)`
@@ -60,6 +61,7 @@ var (
 	checkInlineRe = regexp.MustCompile(checkInlinePattern)
 	primaryKeyRe  = regexp.MustCompile(primaryKeyPattern)
 	uniqueRe      = regexp.MustCompile(uniquePattern)
+	computedRe    = regexp.MustCompile(computedPattern)
 	//following regexes are for table constraint handling
 	tablePrimaryKeyRe = regexp.MustCompile(tablePrimaryKeyPattern)
 	tableUniqueRe     = regexp.MustCompile(tableUniquePattern)
@@ -352,6 +354,7 @@ func generateDDLFromCSV(
 // It parses the table name, columns, and constraints (primary keys, unique constraints,
 // foreign keys, and check constraints) from the DDL statement and returns a structured
 // representation of the table schema.
+// TODO: (@nameisbhaskar) use sql parser instead of regexes - https://github.com/cockroachdb/cockroach/issues/155173
 func ParseDDL(ddl string) (*TableSchema, error) {
 	tableMatch := tablePattern.FindStringSubmatch(ddl)
 	if tableMatch == nil {
@@ -439,7 +442,8 @@ func hasConstrainingPrefix(up string) bool {
 		sqlFamily,
 	}
 	for _, p := range prefixes {
-		if strings.HasPrefix(up, p) {
+		// a space is added after the prefix to avoid matches like "checksum" as a field name.
+		if strings.HasPrefix(up, p+" ") {
 			return true
 		}
 	}
@@ -453,7 +457,7 @@ func processColumnDefs(table *TableSchema, columnDefs []string) {
 	// Process each column definition
 	for _, columnDef := range columnDefs {
 		colMatch := colPattern.FindStringSubmatch(columnDef)
-		if colMatch == nil {
+		if colMatch == nil || computedRe.MatchString(columnDef) {
 			continue // Skip if pattern doesn't match
 		}
 		// Extract column properties from regex matches
@@ -659,6 +663,120 @@ func openCreateStatementsTSV(zipDir string) (*os.File, error) {
 	return f, nil
 }
 
+// removeComputedColumns removes computed columns (columns with AS clause) from a CREATE TABLE statement.
+// It parses the statement, identifies computed columns, and reconstructs the statement without them.
+// It also removes any indexes or constraints that reference the computed columns.
+func removeComputedColumns(stmt string) string {
+	columnBlockMatch := bodyRe.FindStringSubmatch(stmt)
+	if columnBlockMatch == nil {
+		return stmt
+	}
+
+	body := columnBlockMatch[1]
+	suffix := columnBlockMatch[2]
+
+	// column definitions and table constraints are split based on commas
+	var partsList []string
+	buf := ""
+	depth := 0
+	for _, ch := range body {
+		switch ch {
+		case '(':
+			depth++
+			buf += string(ch)
+		case ')':
+			depth--
+			buf += string(ch)
+		case ',':
+			if depth == 0 {
+				partsList = append(partsList, strings.TrimSpace(buf))
+				buf = ""
+			} else {
+				buf += string(ch)
+			}
+		default:
+			buf += string(ch)
+		}
+	}
+	if strings.TrimSpace(buf) != "" {
+		partsList = append(partsList, strings.TrimSpace(buf))
+	}
+
+	// computed column names are collected for reference
+	computedColumnNames := make(map[string]struct{})
+	for _, p := range partsList {
+		// Computed column (contains AS keyword) is identified using the computedRe regex
+		// Example: "haserror BOOL NULL AS (errordetail != '':::STRING) VIRTUAL"
+		// This will match because it contains "AS"
+		// Note: This is a simple heuristic and may need to be improved for complex cases
+		// where "AS" might appear in other contexts.
+		// The regex is case-insensitive to match "AS", "as", "As", etc.
+		// It looks for the word "AS" surrounded by word boundaries to avoid partial matches.
+		// This approach assumes that computed columns are defined with the "AS" keyword.
+		// If the SQL dialect changes or has different syntax, this may need to be adjusted.
+		// The regex is applied to each part of the column block to identify computed columns.
+		// If a part matches, the column name is extracted and added to the computedColumnNames map.
+		if computedRe.MatchString(p) {
+			colMatch := colPattern.FindStringSubmatch(p)
+			if len(colMatch) > 1 {
+				colName := strings.Trim(colMatch[1], `"`)
+				computedColumnNames[colName] = struct{}{}
+			}
+		}
+	}
+
+	// Computed columns and constraints/indexes that reference them are filtered out
+	var filteredParts []string
+	for _, p := range partsList {
+		// Skip computed columns
+		if computedRe.MatchString(p) {
+			continue
+		}
+
+		// If this is an index or constraint that references a computed column, it is skipped.
+		shouldSkip := false
+		pUpper := strings.ToUpper(p)
+		if strings.HasPrefix(pUpper, "INDEX ") || strings.HasPrefix(pUpper, "UNIQUE INDEX ") {
+			// Computed column names are checked in the index definition
+			// If any computed column is found, the index is skipped
+			// This is a simple substring check and may need to be improved for complex cases
+			// where column names might be part of other identifiers.
+			// For example, if a computed column is "col1", an index on "col10" should not be skipped.
+			for colName := range computedColumnNames {
+				// A regex pattern to match the column name in the index definition is created.
+				pattern := regexp.MustCompile(`\b` + regexp.QuoteMeta(colName) + `\b`)
+				if pattern.MatchString(p) {
+					shouldSkip = true
+					break
+				}
+			}
+		}
+
+		if !shouldSkip {
+			filteredParts = append(filteredParts, p)
+		}
+	}
+
+	// If all parts were filtered out, return original statement
+	if len(filteredParts) == 0 {
+		return stmt
+	}
+
+	// The statement is reconstructed without computed columns and related constraints/indexes
+	// The original formatting (indentation, line breaks) is preserved as much as possible
+	// by joining the filtered parts with commas and new lines.
+	tableMatch := tablePattern.FindStringSubmatch(stmt)
+	if tableMatch == nil {
+		return stmt
+	}
+
+	// The CREATE TABLE is the part before the column block
+	createTablePart := stmt[:strings.Index(stmt, "(")]
+	reconstructed := createTablePart + "(\n\t" + strings.Join(filteredParts, ",\n\t") + "\n)" + suffix
+
+	return reconstructed
+}
+
 // processDDLRecord inspects one TSV row and, if it represents a public table
 // in dbName, normalizes its CREATE TABLE stmt and appends it to order/statements.
 // It returns the fully qualified table name and table statements.
@@ -672,6 +790,9 @@ func processDDLRecord(
 	if !ifNotExistsRe.MatchString(stmt) {
 		stmt = createTableRe.ReplaceAllString(stmt, "${1}IF NOT EXISTS ")
 	}
+
+	// 5) Remove computed columns from the statement
+	stmt = removeComputedColumns(stmt)
 
 	return fmt.Sprintf("%s.%s.%s", dbName, schemaName, tableName), stmt
 }
