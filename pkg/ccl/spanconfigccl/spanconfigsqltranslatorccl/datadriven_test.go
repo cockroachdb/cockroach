@@ -115,6 +115,7 @@ func TestDataDriven(t *testing.T) {
 		sqlExecutorKnobs := &sql.ExecutorTestingKnobs{
 			UseTransactionalDescIDGenerator: true,
 		}
+
 		tsArgs := func(attr string) base.TestServerArgs {
 			return base.TestServerArgs{
 				Knobs: base.TestingKnobs{
