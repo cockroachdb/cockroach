@@ -281,7 +281,6 @@ func (ex *connExecutor) recordFailure(p eventNonRetryableErrPayload) {
 func (ex *connExecutor) execPortal(
 	ctx context.Context,
 	portal PreparedPortal,
-	portalName string,
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,
 	canAutoCommit bool,
@@ -290,7 +289,7 @@ func (ex *connExecutor) execPortal(
 		if portal.isPausable() {
 			if !portal.pauseInfo.exhaustPortal.cleanup.isComplete {
 				portal.pauseInfo.exhaustPortal.cleanup.appendFunc(func(_ context.Context) {
-					ex.exhaustPortal(portalName)
+					ex.exhaustPortal(portal.Name)
 				})
 				portal.pauseInfo.exhaustPortal.cleanup.isComplete = true
 			}
@@ -330,8 +329,8 @@ func (ex *connExecutor) execPortal(
 		// to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok && !portal.isPausable() {
-			defer ex.exhaustPortal(portalName)
+		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portal.Name]; ok && !portal.isPausable() {
+			defer ex.exhaustPortal(portal.Name)
 		}
 		return ev, payload, retErr
 
@@ -2526,6 +2525,13 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	return eventTxnFinishAborted{}, nil
 }
 
+func getPausablePortalInfo(p *planner) *portalPauseInfo {
+	if p != nil && p.pausablePortal != nil {
+		return p.pausablePortal.pauseInfo
+	}
+	return nil
+}
+
 // Each statement in an explicit READ COMMITTED transaction has a SAVEPOINT.
 // This allows for TransactionRetry errors to be retried automatically. We don't
 // do this for implicit transactions because the conn_executor state machine
@@ -2543,13 +2549,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		)
 	}
 
-	getPausablePortalInfo := func() *portalPauseInfo {
-		if p != nil && p.pausablePortal != nil {
-			return p.pausablePortal.pauseInfo
-		}
-		return nil
-	}
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo := getPausablePortalInfo(p); ppInfo != nil {
 		p.autoRetryStmtReason = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason
 		p.autoRetryStmtCounter = ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter
 	}
@@ -2645,7 +2645,7 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 		}
 		p.autoRetryStmtCounter++
 		p.autoRetryStmtReason = maybeRetryableErr
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		if ppInfo := getPausablePortalInfo(p); ppInfo != nil {
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtReason = p.autoRetryStmtReason
 			ppInfo.dispatchReadCommittedStmtToExecutionEngine.autoRetryStmtCounter = p.autoRetryStmtCounter
 		}
@@ -2672,14 +2672,8 @@ func (ex *connExecutor) dispatchReadCommittedStmtToExecutionEngine(
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
 ) (retErr error) {
-	getPausablePortalInfo := func() *portalPauseInfo {
-		if planner != nil && planner.pausablePortal != nil {
-			return planner.pausablePortal.pauseInfo
-		}
-		return nil
-	}
 	defer func() {
-		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 			if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 				ppInfo.dispatchToExecutionEngine.cleanup.isComplete = true
 			}
@@ -2743,7 +2737,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	var err error
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ctx, err = ex.makeExecPlan(ctx, planner)
 			// TODO(janexing): This is a temporary solution to disallow procedure
@@ -2758,7 +2752,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
 				// We don't allow mutations in a pausable portal. Set it back to
 				// an un-pausable (normal) portal.
-				planner.pausablePortal.pauseInfo = nil
+				ex.disablePortalPausability(planner.pausablePortal)
+				planner.pausablePortal = nil
 				err = res.RevokePortalPausability()
 				// If this plan is a transaction control statement, we don't
 				// even execute it but just early exit.
@@ -2768,9 +2763,19 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				defer planner.curPlan.close(ctx)
 			} else {
 				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-					ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-				})
+				defer func() {
+					// We need to check whether pausable portals model is still
+					// used since it might have been revoked below.
+					if info := getPausablePortalInfo(planner); info != nil {
+						info.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+							info.dispatchToExecutionEngine.planTop.close(ctx)
+						})
+					} else {
+						// Pausable portal execution was disabled, so just do
+						// what we do on the main path.
+						planner.curPlan.close(ctx)
+					}
+				}()
 			}
 		} else {
 			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
@@ -2825,7 +2830,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckStart(ctx)
 
 	var afterGetPlanDistribution func()
-	if planner.pausablePortal != nil {
+	if getPausablePortalInfo(planner) != nil {
 		if len(planner.curPlan.subqueryPlans) == 0 &&
 			len(planner.curPlan.cascades) == 0 &&
 			len(planner.curPlan.checkPlans) == 0 &&
@@ -2842,9 +2847,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			// un-pausable (normal) portal.
 			// With pauseInfo is nil, no cleanup function will be added to the stack
 			// and all clean-up steps will be performed as for normal portals.
-			// TODO(#115887): We may need to move resetting pauseInfo before we add
-			// the pausable portal cleanup step above.
-			planner.pausablePortal.pauseInfo = nil
+			ex.disablePortalPausability(planner.pausablePortal)
+			planner.pausablePortal = nil
 			// We need this so that the result consumption for this portal cannot be
 			// paused either.
 			if err := res.RevokePortalPausability(); err != nil {
@@ -2903,7 +2907,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err := ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic, distSQLProhibitedErr,
 	)
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		// For pausable portals, we log the stats when closing the portal, so we need
 		// to aggregate the stats for all executions.
 		ppInfo.dispatchToExecutionEngine.queryStats.add(&stats)
@@ -2930,10 +2934,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
+	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil && !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
+		// Note that here we append the cleanup function without a defer since
+		// there is no more code relevant to pausable portals model below.
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
