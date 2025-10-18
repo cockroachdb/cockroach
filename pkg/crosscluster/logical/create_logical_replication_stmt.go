@@ -65,8 +65,8 @@ SELECT
 			id AS job_id,
 			crdb_internal.pb_to_json(
 				'cockroach.sql.jobs.jobspb.Payload',
-				payload)->'logicalReplicationDetails'->>'parentId' AS parent_id 
-		FROM crdb_internal.system_jobs 
+				payload)->'logicalReplicationDetails'->>'parentId' AS parent_id
+		FROM crdb_internal.system_jobs
 		WHERE job_type = 'LOGICAL REPLICATION'
 	) AS t
 	WHERE t.parent_id = $1
@@ -359,10 +359,12 @@ func (r *ResolvedDestObjects) TargetDescription() string {
 	return targetDescription
 }
 
+// TargetTableNames returns the fully qualified names of the resolved target
+// tables.
 func (r *ResolvedDestObjects) TargetTableNames() []string {
-	var targetTableNames []string
+	targetTableNames := make([]string, len(r.TableNames))
 	for i := range r.TableNames {
-		targetTableNames = append(targetTableNames, r.TableNames[i].Table())
+		targetTableNames[i] = r.TableNames[i].FQString()
 	}
 	return targetTableNames
 }
