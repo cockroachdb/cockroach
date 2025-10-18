@@ -1936,6 +1936,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 		if retErr != nil && planCtx.getPortalPauseInfo() != nil {
 			planCtx.getPortalPauseInfo().resumableFlow.cleanup.run(ctx)
+			planCtx.getPortalPauseInfo().resumableFlow.flow = nil
 		}
 	}()
 	if len(planner.curPlan.subqueryPlans) != 0 {

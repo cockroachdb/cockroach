@@ -314,6 +314,7 @@ type portalPauseInfo struct {
 // cleanupAll is to run all the cleanup layers.
 func (pm *portalPauseInfo) cleanupAll(ctx context.Context) {
 	pm.resumableFlow.cleanup.run(ctx)
+	pm.resumableFlow.flow = nil
 	pm.dispatchToExecutionEngine.cleanup.run(ctx)
 	pm.execStmtInOpenState.cleanup.run(ctx)
 	pm.exhaustPortal.cleanup.run(ctx)
