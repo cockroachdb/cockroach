@@ -44,9 +44,10 @@ var snapshotIngestAsWriteThreshold = settings.RegisterByteSizeSetting(
 	"size below which a range snapshot ingestion will be performed as a normal write",
 	metamorphic.ConstantWithTestChoice[int64](
 		"kv.snapshot.ingest_as_write_threshold",
-		100<<10, /* default value is 100KiB */
-		1<<30,   /* 1GiB causes everything to be a normal write */
-		0        /* 0B causes everything to be an ingest */),
+		100<<10, // default value is 100KiB
+		1<<30,   // 1GiB causes everything to be a normal write
+		0,       // 0B causes everything to be an ingest
+	),
 )
 
 // replicaRaftStorage implements the raft.Storage interface.
