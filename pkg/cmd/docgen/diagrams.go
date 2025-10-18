@@ -416,6 +416,12 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:    "alter_external_connection",
+		stmt:    "alter_external_connection_stmt",
+		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_uri"},
+		unlink:  []string{"connection_name", "connection_uri"},
+	},
+	{
 		name:    "alter_index",
 		stmt:    "alter_index_stmt",
 		inline:  []string{"alter_oneindex_stmt", "alter_index_cmds", "alter_index_cmd", "partition_by_index", "partition_by_inner", "partition_by", "table_index_name", "alter_split_index_stmt", "alter_unsplit_index_stmt", "alter_rename_index_stmt", "alter_zone_index_stmt", "var_set_list", "alter_index_visible_stmt", "set_zone_config", "alter_index_visible"},
