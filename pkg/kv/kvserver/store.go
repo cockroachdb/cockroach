@@ -8,6 +8,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
@@ -108,6 +110,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"golang.org/x/time/rate"
@@ -3452,6 +3455,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
 	kvflowSendStats := rac2.RangeSendStreamStats{}
+	var perStreamSendQueueStats map[kvflowcontrol.Stream]int64
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
 		if metrics.Leader {
@@ -3473,6 +3477,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			sizeCount, sizeBytes := kvflowSendStats.SumSendQueues()
 			kvflowSendQueueSizeCount += sizeCount
 			kvflowSendQueueSizeBytes += sizeBytes
+			for _, s := range kvflowSendStats.Internal {
+				if s.SendQueueBytes > 0 {
+					if perStreamSendQueueStats == nil {
+						perStreamSendQueueStats = make(map[kvflowcontrol.Stream]int64)
+					}
+					perStreamSendQueueStats[s.Stream] = perStreamSendQueueStats[s.Stream] + s.SendQueueBytes
+				}
+			}
 		}
 		if metrics.Leaseholder {
 			s.metrics.RaftQuotaPoolPercentUsed.RecordValue(metrics.QuotaPoolPercentUsed)
@@ -3565,6 +3577,13 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		}
 		return true // more
 	})
+	if len(perStreamSendQueueStats) > 0 {
+		var b strings.Builder
+		for k, bytes := range perStreamSendQueueStats {
+			fmt.Fprintf(&b, "%s: %s ", k.String(), humanize.Bytes(uint64(bytes)))
+		}
+		log.KvExec.Infof(ctx, "%s", redact.SafeString(b.String()))
+	}
 
 	s.metrics.RaftLeaderCount.Update(raftLeaderCount)
 	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)

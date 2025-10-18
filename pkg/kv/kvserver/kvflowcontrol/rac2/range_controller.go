@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // RangeController provides flow control for replication traffic in KV, for a
@@ -211,7 +212,7 @@ const sendQueueStatRefreshInterval = 5 * time.Second
 // RangeSendStreamStats contains the stats for the replica send streams that
 // belong to a range.
 type RangeSendStreamStats struct {
-	internal []ReplicaSendStreamStats
+	Internal []ReplicaSendStreamStats
 }
 
 func (s *RangeSendStreamStats) String() string {
@@ -221,11 +222,11 @@ func (s *RangeSendStreamStats) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s *RangeSendStreamStats) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("[")
-	for i := range s.internal {
+	for i := range s.Internal {
 		if i > 0 {
 			w.Printf(", ")
 		}
-		w.Printf("r%v=(%v)", s.internal[i].ReplicaID, s.internal[i])
+		w.Printf("r%v=(%v)", s.Internal[i].ReplicaID, s.Internal[i])
 	}
 	w.Printf("]")
 }
@@ -233,19 +234,19 @@ func (s *RangeSendStreamStats) SafeFormat(w redact.SafePrinter, _ rune) {
 // Clear clears the stats for all replica send streams so that the underlying
 // memory can be reused.
 func (s *RangeSendStreamStats) Clear() {
-	s.internal = s.internal[:0]
+	s.Internal = s.Internal[:0]
 }
 
 // SetReplicaSendStreamStats sets the stats for the replica send stream that
 // belong to the given replicaID.
 func (s *RangeSendStreamStats) SetReplicaSendStreamStats(stats ReplicaSendStreamStats) {
-	for i := range s.internal {
-		if s.internal[i].ReplicaID == stats.ReplicaID {
-			s.internal[i] = stats
+	for i := range s.Internal {
+		if s.Internal[i].ReplicaID == stats.ReplicaID {
+			s.Internal[i] = stats
 			return
 		}
 	}
-	s.internal = append(s.internal, stats)
+	s.Internal = append(s.Internal, stats)
 }
 
 // ReplicaSendStreamStats returns the stats for the replica send stream that
@@ -254,9 +255,9 @@ func (s *RangeSendStreamStats) SetReplicaSendStreamStats(stats ReplicaSendStream
 func (s *RangeSendStreamStats) ReplicaSendStreamStats(
 	replicaID roachpb.ReplicaID,
 ) (ReplicaSendStreamStats, bool) {
-	for i := range s.internal {
-		if s.internal[i].ReplicaID == replicaID {
-			return s.internal[i], true
+	for i := range s.Internal {
+		if s.Internal[i].ReplicaID == replicaID {
+			return s.Internal[i], true
 		}
 	}
 	return ReplicaSendStreamStats{}, false
@@ -265,7 +266,7 @@ func (s *RangeSendStreamStats) ReplicaSendStreamStats(
 // SumSendQueues returns the sum of the send queues across all replicas,
 // returning both the aggregated number of entries and the number of bytes.
 func (s *RangeSendStreamStats) SumSendQueues() (count int64, bytes int64) {
-	for _, stats := range s.internal {
+	for _, stats := range s.Internal {
 		count += stats.SendQueueCount
 		bytes += stats.SendQueueBytes
 	}
@@ -320,6 +321,7 @@ func (q *RangeSendQueueStats) Clear() {
 // ReplicaSendStreamStats contains the stats for a replica send stream that may
 // be used to inform placement decisions pertaining to the replica.
 type ReplicaSendStreamStats struct {
+	Stream kvflowcontrol.Stream
 	// IsStateReplicate is true iff the replica is being sent entries.
 	IsStateReplicate bool
 	// HasSendQueue is true when a replica has a non-zero amount of queued
@@ -1215,7 +1217,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 		if noChangesNeeded {
 			// Common case.
 		} else {
-			rc.computeVoterDirectivesRaftMuLocked(votersContributingToQuorum, quorumCounts)
+			rc.computeVoterDirectivesRaftMuLocked(ctx, votersContributingToQuorum, quorumCounts)
 		}
 	}
 
@@ -1276,6 +1278,7 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 
 // Score is tuple (bucketed tokens_send(elastic), tokens_eval(elastic)).
 type replicaScore struct {
+	stream             kvflowcontrol.Stream
 	replicaID          roachpb.ReplicaID
 	bucketedTokensSend kvflowcontrol.Tokens
 	tokensEval         kvflowcontrol.Tokens
@@ -1283,7 +1286,7 @@ type replicaScore struct {
 
 // Second-pass decision-making.
 func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
-	votersContributingToQuorum [2]int, quorumCounts [2]int,
+	ctx context.Context, votersContributingToQuorum [2]int, quorumCounts [2]int,
 ) {
 	var scratchFFScores, scratchCandidateFFScores, scratchDenySendQScores [5]replicaScore
 	// Used to stop force-flushes if no longer needed. Never includes the
@@ -1326,6 +1329,7 @@ func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
 		sendTokens := rs.sendTokenCounter.tokens(ElasticWC)
 		bucketedSendTokens := (sendTokens / sendPoolBucket) * sendPoolBucket
 		score := replicaScore{
+			stream:             rs.stream,
 			replicaID:          rs.replicaID,
 			bucketedTokensSend: bucketedSendTokens,
 			tokensEval:         rs.evalTokenCounter.tokens(ElasticWC),
@@ -1356,6 +1360,15 @@ func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
 			return cmp.Or(cmp.Compare(a.bucketedTokensSend, b.bucketedTokensSend),
 				cmp.Compare(a.tokensEval, b.tokensEval), cmp.Compare(a.replicaID, b.replicaID))
 		})
+		var b strings.Builder
+		fmt.Fprintf(&b, "deny-send-q r%s: ", rc.opts.RangeID.String())
+		for i := range candidateDenySendQScores {
+			score := candidateDenySendQScores[i]
+			fmt.Fprintf(&b, "%s: %s,%s,", score.stream.String(),
+				humanize.Bytes(uint64(score.bucketedTokensSend)),
+				humanize.Bytes(uint64(score.tokensEval)))
+		}
+		log.KvExec.Infof(ctx, "%s", redact.SafeString(b.String()))
 	}
 	voterSets := rc.mu.voterSets
 	for i := range voterSets {
@@ -1697,13 +1710,13 @@ func convertTokensSlice(tokens []kvflowcontrol.Tokens) []int64 {
 }
 
 func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
-	if len(statsToSet.internal) != 0 {
-		panic(errors.AssertionFailedf("statsToSet is non-empty %v", statsToSet.internal))
+	if len(statsToSet.Internal) != 0 {
+		panic(errors.AssertionFailedf("statsToSet is non-empty %v", statsToSet.Internal))
 	}
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	statsToSet.internal = slices.Grow(statsToSet.internal, len(rc.mu.lastSendQueueStats))
+	statsToSet.Internal = slices.Grow(statsToSet.Internal, len(rc.mu.lastSendQueueStats))
 	// We will update the cheaper stats to ensure they are up-to-date. For the
 	// more expensive ones, we use the cached copy.
 	for _, vss := range rc.mu.voterSets {
@@ -1711,6 +1724,7 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 		// end up overwriting the same state at most twice, not a big issue.
 		for _, vs := range vss {
 			stats := ReplicaSendStreamStats{
+				Stream:           vs.stateForWaiters.evalTokenCounter.stream,
 				IsStateReplicate: vs.isStateReplicate,
 				HasSendQueue:     vs.hasSendQ,
 			}
@@ -1721,6 +1735,7 @@ func (rc *rangeController) SendStreamStats(statsToSet *RangeSendStreamStats) {
 	// Now handle the non-voters.
 	for _, nv := range rc.mu.nonVoterSet {
 		stats := ReplicaSendStreamStats{
+			Stream:           nv.evalTokenCounter.stream,
 			IsStateReplicate: nv.isStateReplicate,
 			HasSendQueue:     nv.hasSendQ,
 		}

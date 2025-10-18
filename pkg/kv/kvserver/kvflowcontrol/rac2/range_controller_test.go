@@ -2519,7 +2519,7 @@ func TestRangeSendStreamStatsString(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	stats := RangeSendStreamStats{
-		internal: []ReplicaSendStreamStats{
+		Internal: []ReplicaSendStreamStats{
 			{
 				IsStateReplicate: false,
 				HasSendQueue:     true,
