@@ -1204,31 +1204,31 @@ project
  │         ├── grouping columns: s_state:198 i_item_id:206!null i_item_desc:209
  │         ├── key: (198,206,209)
  │         ├── fd: (198,206,209)-->(229-237)
- │         ├── inner-join (lookup date_dim [as=d3])
+ │         ├── inner-join (lookup date_dim [as=d1])
  │         │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8!null ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 cs_sold_date_sk:48!null cs_bill_customer_sk:51!null cs_item_sk:63!null cs_quantity:66 d1.d_date_sk:84!null d1.d_quarter_name:99!null d2.d_date_sk:114!null d2.d_quarter_name:129!null d3.d_date_sk:144!null d3.d_quarter_name:159!null s_store_sk:174!null s_state:198 i_item_sk:205!null i_item_id:206!null i_item_desc:209
- │         │    ├── key columns: [48] = [144]
+ │         │    ├── key columns: [1] = [84]
  │         │    ├── lookup columns are key
  │         │    ├── fd: ()-->(99), (3,10)-->(1,4,8,11), (174)-->(198), (28,35)-->(26,29,36), (144)-->(159), (205)-->(206,209), (114)-->(129), (8)==(174), (174)==(8), (48)==(144), (144)==(48), (3)==(28,63,205), (28)==(3,63,205), (63)==(3,28,205), (205)==(3,28,63), (4)==(29,51), (29)==(4,51), (51)==(4,29), (26)==(114), (114)==(26), (10)==(35), (35)==(10), (1)==(84), (84)==(1)
- │         │    ├── inner-join (lookup item)
- │         │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8!null ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 cs_sold_date_sk:48 cs_bill_customer_sk:51!null cs_item_sk:63!null cs_quantity:66 d1.d_date_sk:84!null d1.d_quarter_name:99!null d2.d_date_sk:114!null d2.d_quarter_name:129!null s_store_sk:174!null s_state:198 i_item_sk:205!null i_item_id:206!null i_item_desc:209
- │         │    │    ├── key columns: [63] = [205]
+ │         │    ├── inner-join (lookup store)
+ │         │    │    ├── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8!null ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 cs_sold_date_sk:48!null cs_bill_customer_sk:51!null cs_item_sk:63!null cs_quantity:66 d2.d_date_sk:114!null d2.d_quarter_name:129!null d3.d_date_sk:144!null d3.d_quarter_name:159!null s_store_sk:174!null s_state:198 i_item_sk:205!null i_item_id:206!null i_item_desc:209
+ │         │    │    ├── key columns: [8] = [174]
  │         │    │    ├── lookup columns are key
- │         │    │    ├── fd: ()-->(99), (174)-->(198), (205)-->(206,209), (114)-->(129), (28,35)-->(26,29,36), (3,10)-->(1,4,8,11), (1)==(84), (84)==(1), (4)==(29,51), (29)==(4,51), (51)==(4,29), (3)==(28,63,205), (28)==(3,63,205), (63)==(3,28,205), (205)==(3,28,63), (10)==(35), (35)==(10), (26)==(114), (114)==(26), (8)==(174), (174)==(8)
- │         │    │    ├── inner-join (lookup catalog_sales)
- │         │    │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8!null ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 cs_sold_date_sk:48 cs_bill_customer_sk:51!null cs_item_sk:63!null cs_quantity:66 d1.d_date_sk:84!null d1.d_quarter_name:99!null d2.d_date_sk:114!null d2.d_quarter_name:129!null s_store_sk:174!null s_state:198
- │         │    │    │    ├── key columns: [28] = [63]
- │         │    │    │    ├── fd: ()-->(99), (174)-->(198), (114)-->(129), (28,35)-->(26,29,36), (3,10)-->(1,4,8,11), (1)==(84), (84)==(1), (4)==(29,51), (29)==(4,51), (51)==(4,29), (3)==(28,63), (28)==(3,63), (63)==(3,28), (10)==(35), (35)==(10), (26)==(114), (114)==(26), (8)==(174), (174)==(8)
- │         │    │    │    ├── inner-join (lookup date_dim [as=d1])
- │         │    │    │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8!null ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 d1.d_date_sk:84!null d1.d_quarter_name:99!null d2.d_date_sk:114!null d2.d_quarter_name:129!null s_store_sk:174!null s_state:198
- │         │    │    │    │    ├── key columns: [1] = [84]
- │         │    │    │    │    ├── lookup columns are key
- │         │    │    │    │    ├── key: (28,35)
- │         │    │    │    │    ├── fd: ()-->(99), (174)-->(198), (114)-->(129), (28,35)-->(26,29,36), (3,10)-->(1,4,8,11), (1)==(84), (84)==(1), (4)==(29), (29)==(4), (3)==(28), (28)==(3), (10)==(35), (35)==(10), (26)==(114), (114)==(26), (8)==(174), (174)==(8)
- │         │    │    │    │    ├── inner-join (hash)
- │         │    │    │    │    │    ├── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8!null ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 d2.d_date_sk:114!null d2.d_quarter_name:129!null s_store_sk:174!null s_state:198
- │         │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │         │    │    │    │    │    ├── key: (28,35)
- │         │    │    │    │    │    ├── fd: (174)-->(198), (3,10)-->(1,4,8,11), (28,35)-->(26,29,36), (114)-->(129), (26)==(114), (114)==(26), (4)==(29), (29)==(4), (3)==(28), (28)==(3), (10)==(35), (35)==(10), (8)==(174), (174)==(8)
+ │         │    │    ├── fd: (3,10)-->(1,4,8,11), (174)-->(198), (28,35)-->(26,29,36), (144)-->(159), (205)-->(206,209), (114)-->(129), (8)==(174), (174)==(8), (48)==(144), (144)==(48), (3)==(28,63,205), (28)==(3,63,205), (63)==(3,28,205), (205)==(3,28,63), (4)==(29,51), (29)==(4,51), (51)==(4,29), (26)==(114), (114)==(26), (10)==(35), (35)==(10)
+ │         │    │    ├── inner-join (lookup date_dim [as=d3])
+ │         │    │    │    ├── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8 ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 cs_sold_date_sk:48!null cs_bill_customer_sk:51!null cs_item_sk:63!null cs_quantity:66 d2.d_date_sk:114!null d2.d_quarter_name:129!null d3.d_date_sk:144!null d3.d_quarter_name:159!null i_item_sk:205!null i_item_id:206!null i_item_desc:209
+ │         │    │    │    ├── key columns: [48] = [144]
+ │         │    │    │    ├── lookup columns are key
+ │         │    │    │    ├── fd: (3,10)-->(1,4,8,11), (28,35)-->(26,29,36), (144)-->(159), (205)-->(206,209), (114)-->(129), (48)==(144), (144)==(48), (3)==(28,63,205), (28)==(3,63,205), (63)==(3,28,205), (205)==(3,28,63), (4)==(29,51), (29)==(4,51), (51)==(4,29), (26)==(114), (114)==(26), (10)==(35), (35)==(10)
+ │         │    │    │    ├── inner-join (lookup catalog_sales)
+ │         │    │    │    │    ├── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8 ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 cs_sold_date_sk:48 cs_bill_customer_sk:51!null cs_item_sk:63!null cs_quantity:66 d2.d_date_sk:114!null d2.d_quarter_name:129!null i_item_sk:205!null i_item_id:206!null i_item_desc:209
+ │         │    │    │    │    ├── key columns: [205] = [63]
+ │         │    │    │    │    ├── fd: (3,10)-->(1,4,8,11), (205)-->(206,209), (28,35)-->(26,29,36), (114)-->(129), (26)==(114), (114)==(26), (3)==(28,63,205), (28)==(3,63,205), (63)==(3,28,205), (205)==(3,28,63), (4)==(29,51), (29)==(4,51), (51)==(4,29), (10)==(35), (35)==(10)
+ │         │    │    │    │    ├── inner-join (lookup item)
+ │         │    │    │    │    │    ├── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8 ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 d2.d_date_sk:114!null d2.d_quarter_name:129!null i_item_sk:205!null i_item_id:206!null i_item_desc:209
+ │         │    │    │    │    │    ├── key columns: [3] = [205]
+ │         │    │    │    │    │    ├── lookup columns are key
+ │         │    │    │    │    │    ├── key: (35,205)
+ │         │    │    │    │    │    ├── fd: (3,10)-->(1,4,8,11), (205)-->(206,209), (28,35)-->(26,29,36), (114)-->(129), (26)==(114), (114)==(26), (3)==(28,205), (28)==(3,205), (205)==(3,28), (4)==(29), (29)==(4), (10)==(35), (35)==(10)
  │         │    │    │    │    │    ├── inner-join (lookup store_sales)
  │         │    │    │    │    │    │    ├── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_customer_sk:4!null ss_store_sk:8 ss_ticket_number:10!null ss_quantity:11 sr_returned_date_sk:26!null sr_item_sk:28!null sr_customer_sk:29!null sr_ticket_number:35!null sr_return_quantity:36 d2.d_date_sk:114!null d2.d_quarter_name:129!null
  │         │    │    │    │    │    │    ├── key columns: [28 35] = [3 10]
@@ -1258,19 +1258,14 @@ project
  │         │    │    │    │    │    │    │         └── sr_returned_date_sk:26 = d2.d_date_sk:114 [outer=(26,114), constraints=(/26: (/NULL - ]; /114: (/NULL - ]), fd=(26)==(114), (114)==(26)]
  │         │    │    │    │    │    │    └── filters
  │         │    │    │    │    │    │         └── ss_customer_sk:4 = sr_customer_sk:29 [outer=(4,29), constraints=(/4: (/NULL - ]; /29: (/NULL - ]), fd=(4)==(29), (29)==(4)]
- │         │    │    │    │    │    ├── scan store
- │         │    │    │    │    │    │    ├── columns: s_store_sk:174!null s_state:198
- │         │    │    │    │    │    │    ├── key: (174)
- │         │    │    │    │    │    │    └── fd: (174)-->(198)
- │         │    │    │    │    │    └── filters
- │         │    │    │    │    │         └── s_store_sk:174 = ss_store_sk:8 [outer=(8,174), constraints=(/8: (/NULL - ]; /174: (/NULL - ]), fd=(8)==(174), (174)==(8)]
+ │         │    │    │    │    │    └── filters (true)
  │         │    │    │    │    └── filters
- │         │    │    │    │         └── d1.d_quarter_name:99 = '2001Q1' [outer=(99), constraints=(/99: [/'2001Q1' - /'2001Q1']; tight), fd=()-->(99)]
+ │         │    │    │    │         └── sr_customer_sk:29 = cs_bill_customer_sk:51 [outer=(29,51), constraints=(/29: (/NULL - ]; /51: (/NULL - ]), fd=(29)==(51), (51)==(29)]
  │         │    │    │    └── filters
- │         │    │    │         └── sr_customer_sk:29 = cs_bill_customer_sk:51 [outer=(29,51), constraints=(/29: (/NULL - ]; /51: (/NULL - ]), fd=(29)==(51), (51)==(29)]
+ │         │    │    │         └── d3.d_quarter_name:159 IN ('2001Q1', '2001Q2', '2001Q3') [outer=(159), constraints=(/159: [/'2001Q1' - /'2001Q1'] [/'2001Q2' - /'2001Q2'] [/'2001Q3' - /'2001Q3']; tight)]
  │         │    │    └── filters (true)
  │         │    └── filters
- │         │         └── d3.d_quarter_name:159 IN ('2001Q1', '2001Q2', '2001Q3') [outer=(159), constraints=(/159: [/'2001Q1' - /'2001Q1'] [/'2001Q2' - /'2001Q2'] [/'2001Q3' - /'2001Q3']; tight)]
+ │         │         └── d1.d_quarter_name:99 = '2001Q1' [outer=(99), constraints=(/99: [/'2001Q1' - /'2001Q1']; tight), fd=()-->(99)]
  │         └── aggregations
  │              ├── count [as=count:229, outer=(11)]
  │              │    └── ss_quantity:11

@@ -11,7 +11,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM system.statement_hints WHERE fingerprint = 
 select
  ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
  ├── stats: [rows=10, distinct(3)=1, null(3)=0]
- ├── cost: 90.4700007
+ ├── cost: 90.47
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(4,5)
@@ -20,7 +20,7 @@ select
  ├── index-join statement_hints
  │    ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
  │    ├── stats: [rows=10]
- │    ├── cost: 90.3400007
+ │    ├── cost: 90.34
  │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(3-5)
@@ -29,7 +29,7 @@ select
  │         ├── columns: row_id:1
  │         ├── constraint: /2/1: [/6457443302007961978 - /6457443302007961978]
  │         ├── stats: [rows=10, distinct(2)=1, null(2)=0]
- │         ├── cost: 28.6200001
+ │         ├── cost: 28.62
  │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (1)
  │         └── distribution: test
@@ -43,7 +43,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM system.statement_hints WHERE hash = 123
 project
  ├── columns: row_id:1 fingerprint:3 hint:4 created_at:5
  ├── stats: [rows=10]
- ├── cost: 90.6600007
+ ├── cost: 90.66
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(3-5)
@@ -52,7 +52,7 @@ project
  └── index-join statement_hints
       ├── columns: row_id:1 hash:2 fingerprint:3 hint:4 created_at:5
       ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-      ├── cost: 90.5400007
+      ├── cost: 90.54
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3-5)
@@ -61,7 +61,7 @@ project
            ├── columns: row_id:1 hash:2
            ├── constraint: /2/1: [/123 - /123]
            ├── stats: [rows=10, distinct(2)=1, null(2)=0]
-           ├── cost: 28.8200001
+           ├── cost: 28.82
            ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: ()-->(2)

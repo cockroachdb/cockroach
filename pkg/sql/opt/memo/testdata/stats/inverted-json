@@ -841,7 +841,7 @@ select
  │              │    └── spans
  │              │         ├── ["a"/[], "a"/[]]
  │              │         └── ["a"/Arr/, "a"/Arr/]
- │              └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+ │              └── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=
  └── filters
       └── (j:2->'a') = '[]' [type=bool, outer=(2), immutable]
@@ -877,7 +877,7 @@ select
  │              │    └── spans
  │              │         ├── ["a"/{}, "a"/{}]
  │              │         └── ["a"/, Arr/)
- │              └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+ │              └── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(5)=1, null(5)=0]
  │                  histogram(5)=
  └── filters
       └── (j:2->'a') = '{}' [type=bool, outer=(2), immutable]
@@ -907,7 +907,7 @@ index-join t
            │    └── spans
            │         ├── ["a"/1, "a"/1]
            │         └── ["a"/Arr/1, "a"/Arr/1]
-           └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+           └── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(5)=1, null(5)=0]
                histogram(5)=
 
 # A query with fetch val and contained by operators uses the inverted index,
@@ -972,7 +972,7 @@ index-join t
            │    └── spans
            │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
            │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
-           └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+           └── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(5)=1, null(5)=0]
                histogram(5)=
 
 # A query with chained fetch val and contained by operators uses the inverted
@@ -1169,7 +1169,7 @@ index-join t
            │    └── spans
            │         ├── ["a"/"b"/"c", "a"/"b"/"c"]
            │         └── ["a"/"b"/Arr/"c", "a"/"b"/Arr/"c"]
-           └── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0]
+           └── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(5)=1, null(5)=0]
                histogram(5)=
 
 # A query with fetch val and contains operators uses the inverted index when

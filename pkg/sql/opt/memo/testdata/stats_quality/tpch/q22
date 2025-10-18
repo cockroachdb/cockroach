@@ -58,7 +58,7 @@ sort
  ├── save-table-name: q22_sort_1
  ├── columns: cntrycode:34(string) numcust:35(int!null) totacctbal:36(float!null)
  ├── immutable
- ├── stats: [rows=1e-10, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0, distinct(36)=1e-10, null(36)=0]
+ ├── stats: [rows=0, distinct(34)=0, null(34)=0, distinct(35)=0, null(35)=0, distinct(36)=0, null(36)=0]
  ├── key: (34)
  ├── fd: (34)-->(35,36)
  ├── ordering: +34
@@ -67,20 +67,20 @@ sort
       ├── columns: cntrycode:34(string) count_rows:35(int!null) sum:36(float!null)
       ├── grouping columns: cntrycode:34(string)
       ├── immutable
-      ├── stats: [rows=1e-10, distinct(34)=1e-10, null(34)=0, distinct(35)=1e-10, null(35)=0, distinct(36)=1e-10, null(36)=0]
+      ├── stats: [rows=0, distinct(34)=0, null(34)=0, distinct(35)=0, null(35)=0, distinct(36)=0, null(36)=0]
       ├── key: (34)
       ├── fd: (34)-->(35,36)
       ├── project
       │    ├── save-table-name: q22_project_3
       │    ├── columns: cntrycode:34(string) c_acctbal:6(float!null)
       │    ├── immutable
-      │    ├── stats: [rows=1e-10, distinct(6)=1e-10, null(6)=0, distinct(34)=1e-10, null(34)=0]
+      │    ├── stats: [rows=1, distinct(6)=0, null(6)=0, distinct(34)=0, null(34)=0]
       │    ├── anti-join (lookup orders@o_ck)
       │    │    ├── save-table-name: q22_lookup_join_4
       │    │    ├── columns: c_custkey:1(int!null) c_phone:5(char!null) c_acctbal:6(float!null)
       │    │    ├── key columns: [1] = [23]
       │    │    ├── immutable
-      │    │    ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(5)=1e-10, null(5)=0, distinct(6)=1e-10, null(6)=0]
+      │    │    ├── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(5)=0, null(5)=0, distinct(6)=0, null(6)=0]
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(5,6)
       │    │    ├── select
@@ -145,26 +145,12 @@ sort
                 └── c_acctbal:6 [type=float]
 
 ----Stats for q22_sort_1----
-column_names  row_count  distinct_count  null_count
-{cntrycode}   7          7               0
-{numcust}     7          7               0
-{totacctbal}  7          7               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{cntrycode}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{numcust}     0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{totacctbal}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q22_group_by_2----
-column_names  row_count  distinct_count  null_count
-{cntrycode}   7          7               0
-{count_rows}  7          7               0
-{sum}         7          7               0
-~~~~
-column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{cntrycode}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{count_rows}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{sum}         0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+WARNING: No previous statistics output was found. To collect actual statistics,
+run with the rewrite-actual-stats flag set to true.
 
 ----Stats for q22_project_3----
 column_names  row_count  distinct_count  null_count
@@ -172,8 +158,8 @@ column_names  row_count  distinct_count  null_count
 {cntrycode}   6384       7               0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{cntrycode}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{c_acctbal}   1.00           6384.00 <==    0.00                +Inf <==            0.00            1.00
+{cntrycode}   1.00           6384.00 <==    0.00                +Inf <==            0.00            1.00
 
 ----Stats for q22_lookup_join_4----
 column_names  row_count  distinct_count  null_count
@@ -182,9 +168,9 @@ column_names  row_count  distinct_count  null_count
 {c_phone}     6384       6384            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{c_custkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{c_phone}     0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{c_acctbal}   1.00           6384.00 <==    0.00                +Inf <==            0.00            1.00
+{c_custkey}   1.00           6384.00 <==    0.00                +Inf <==            0.00            1.00
+{c_phone}     1.00           6384.00 <==    0.00                +Inf <==            0.00            1.00
 
 ----Stats for q22_select_5----
 column_names  row_count  distinct_count  null_count
