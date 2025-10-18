@@ -2147,6 +2147,32 @@ func (cr *commandRegistry) buildOpentelemetryStopCmd() *cobra.Command {
 	}
 }
 
+func (cr *commandRegistry) buildParcaAgentStartCmd() *cobra.Command {
+	parcaAgentStartCmd := &cobra.Command{
+		Use:   "parca-agent-start <cluster>",
+		Short: "Install and start the Parca Agent",
+		Long:  "Install and start the Parca Agent",
+		Args:  cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StartParcaAgent(context.Background(), config.Logger, args[0], parcaAgentConfig)
+		}),
+	}
+	initParcaAgentStartCmdFlags(parcaAgentStartCmd)
+	return parcaAgentStartCmd
+}
+
+func (cr *commandRegistry) buildParcaAgentStopCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "parca-agent-stop <cluster>",
+		Short: "Stop the Parca Agent",
+		Long:  "Stop the Parca Agent",
+		Args:  cobra.ExactArgs(1),
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			return roachprod.StopParcaAgent(context.Background(), config.Logger, args[0])
+		}),
+	}
+}
+
 func (cr *commandRegistry) buildFetchLogsCmd() *cobra.Command {
 	fetchLogsCmd := &cobra.Command{
 		Use:     "fetchlogs <cluster> <destination (optional)> [flags]",

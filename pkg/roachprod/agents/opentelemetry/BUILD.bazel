@@ -10,7 +10,7 @@ go_library(
         "files/opentelemetry-config.yaml.tmpl",
         "files/opentelemetry-env.conf.tmpl",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry",
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/install",
