@@ -13,31 +13,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// ClearRangeThresholdPointKeys is the threshold (as number of point keys)
-	// beyond which we'll clear range data using a Pebble range tombstone rather
-	// than individual Pebble point tombstones.
-	//
-	// It is expensive for there to be many Pebble range tombstones in the same
-	// sstable because all of the tombstones in an sstable are loaded whenever the
-	// sstable is accessed. So we avoid using range deletion unless there is some
-	// minimum number of keys. The value here was pulled out of thin air. It might
-	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix Pebble to handle large numbers of range tombstones in
-	// an sstable better.
-	ClearRangeThresholdPointKeys = 64
+// MergedTombstoneReplicaID is the replica ID written into the RangeTombstone
+// for replicas of a range which is known to have been merged. This value
+// should prevent any messages from stale replicas of that range from ever
+// resurrecting merged replicas. Whenever merging or subsuming a replica we
+// know new replicas can never be created so this value is used even if we
+// don't know the current replica ID.
+const MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-	// MergedTombstoneReplicaID is the replica ID written into the RangeTombstone
-	// for replicas of a range which is known to have been merged. This value
-	// should prevent any messages from stale replicas of that range from ever
-	// resurrecting merged replicas. Whenever merging or subsuming a replica we
-	// know new replicas can never be created so this value is used even if we
-	// don't know the current replica ID.
-	MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
-)
+// clearRangeThresholdPointKeys is the value of ClearRangeThresholdPointKeys().
+// Can be overridden only in tests, in order to deterministically force using
+// ClearRawRange instead of point clears, when destroying replicas.
+var clearRangeThresholdPointKeys = 64
+
+// ClearRangeThresholdPointKeys returns the threshold (as number of point keys)
+// beyond which we'll clear range data using a Pebble range tombstone rather
+// than individual Pebble point tombstones.
+//
+// It is expensive for there to be many Pebble range tombstones in the same
+// sstable because all of the tombstones in an sstable are loaded whenever the
+// sstable is accessed. So we avoid using range deletion unless there is some
+// minimum number of keys. The value here was pulled out of thin air. It might
+// be better to make this dependent on the size of the data being deleted. Or
+// perhaps we should fix Pebble to handle large numbers of range tombstones in
+// an sstable better.
+func ClearRangeThresholdPointKeys() int {
+	return clearRangeThresholdPointKeys
+}
 
 // clearRangeDataOptions specify which parts of a Replica are to be destroyed.
 type clearRangeDataOptions struct {
@@ -84,7 +90,7 @@ func clearRangeData(
 		UnreplicatedByRangeID: opts.clearUnreplicatedByRangeID,
 	})
 
-	pointKeyThreshold := ClearRangeThresholdPointKeys
+	pointKeyThreshold := ClearRangeThresholdPointKeys()
 	if opts.mustUseClearRange {
 		pointKeyThreshold = 1
 	}
@@ -251,4 +257,22 @@ func RemoveStaleRHSFromSplit(
 		// See also: https://github.com/cockroachdb/cockroach/issues/94933
 		clearUnreplicatedByRangeID: true,
 	})
+}
+
+// TestingForceClearRange changes the value of ClearRangeThresholdPointKeys to
+// 1, which effectively forces ClearRawRange in the replica destruction path,
+// instead of point deletions. This can be used for making the storage
+// operations in tests deterministic.
+//
+// The caller must call the returned function at the end of the test, to restore
+// the default value.
+func TestingForceClearRange() func() {
+	if !buildutil.CrdbTestBuild {
+		panic("test-only function")
+	}
+	old := clearRangeThresholdPointKeys
+	clearRangeThresholdPointKeys = 1 // forces ClearRawRange
+	return func() {
+		clearRangeThresholdPointKeys = old
+	}
 }
