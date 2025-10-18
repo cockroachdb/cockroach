@@ -528,7 +528,12 @@ hosts file.
 									color.HiGreenString(""))
 							}
 						} else {
-							fmt.Fprintf(tw, "\t(-)")
+							fmt.Fprintf(tw, "\t%s\t%s\t%s\t%s\t%s\t",
+								color.HiGreenString(""),
+								color.HiGreenString(""),
+								color.HiWhiteString(""),
+								color.HiWhiteString(""),
+								color.HiGreenString(""))
 						}
 						fmt.Fprintf(tw, "\n")
 					}
