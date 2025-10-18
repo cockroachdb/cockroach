@@ -1999,7 +1999,19 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	}()
 
 	if cf.spec.ProgressConfig != nil && cf.spec.ProgressConfig.PerTableProtectedTimestamps {
-		return cf.managePerTableProtectedTimestamps(ctx, txn, &ptsEntries, highwater)
+		updatedPerTablePTS, err :=
+			cf.managePerTableProtectedTimestamps(ctx, txn, &ptsEntries, highwater)
+		if err != nil {
+			return false, err
+		}
+
+		updatedSystemTablesPTS, err :=
+			cf.advanceSystemTablesProtectedTimestamp(ctx, txn, &ptsEntries, highwater, pts)
+		if err != nil {
+			return false, err
+		}
+
+		return updatedPerTablePTS || updatedSystemTablesPTS, nil
 	}
 
 	return cf.advanceProtectedTimestamp(ctx, progress, pts, highwater)
@@ -2023,14 +2035,13 @@ func (cf *changeFrontier) managePerTableProtectedTimestamps(
 			return frontier.Frontier()
 		}()
 
-		if ptsEntries.ProtectedTimestampRecords[tableID] != uuid.Nil {
+		if ptsEntries.TableRecords[tableID] != uuid.Nil {
 			if updated, err := cf.advancePerTableProtectedTimestampRecord(ctx, ptsEntries, tableID, tableHighWater, pts); err != nil {
 				return false, err
 			} else if updated {
 				updatedPerTablePTS = true
 			}
 		} else {
-			// TODO(#152448): Do not include system table protections in these records.
 			// TODO(#153894): Newly added/dropped tables should be caught and
 			// protected when starting the frontier, not here.
 			tableIDsToCreate[tableID] = tableHighWater
@@ -2061,7 +2072,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 	tableHighWater hlc.Timestamp,
 	pts protectedts.Storage,
 ) (updated bool, err error) {
-	rec, err := pts.GetRecord(ctx, ptsEntries.ProtectedTimestampRecords[tableID])
+	rec, err := pts.GetRecord(ctx, ptsEntries.TableRecords[tableID])
 	if err != nil {
 		return false, err
 	}
@@ -2071,7 +2082,7 @@ func (cf *changeFrontier) advancePerTableProtectedTimestampRecord(
 		return false, nil
 	}
 
-	if err := pts.UpdateTimestamp(ctx, ptsEntries.ProtectedTimestampRecords[tableID], tableHighWater); err != nil {
+	if err := pts.UpdateTimestamp(ctx, ptsEntries.TableRecords[tableID], tableHighWater); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -2083,19 +2094,19 @@ func (cf *changeFrontier) createPerTableProtectedTimestampRecords(
 	tableIDsToCreate map[descpb.ID]hlc.Timestamp,
 	pts protectedts.Storage,
 ) error {
-	if ptsEntries.ProtectedTimestampRecords == nil {
-		ptsEntries.ProtectedTimestampRecords = make(map[descpb.ID]uuid.UUID)
+	if ptsEntries.TableRecords == nil {
+		ptsEntries.TableRecords = make(map[descpb.ID]uuid.UUID)
 	}
 	for tableID, tableHighWater := range tableIDsToCreate {
 		targets, err := cf.createPerTablePTSTargets(tableID)
 		if err != nil {
 			return err
 		}
-		ptr := createProtectedTimestampRecord(
+		ptr := createUserTablesProtectedTimestampRecord(
 			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, targets, tableHighWater,
 		)
 		uuid := ptr.ID.GetUUID()
-		ptsEntries.ProtectedTimestampRecords[tableID] = uuid
+		ptsEntries.TableRecords[tableID] = uuid
 		if err := pts.Protect(ctx, ptr); err != nil {
 			return err
 		}
@@ -2124,6 +2135,49 @@ func (cf *changeFrontier) createPerTablePTSTargets(
 	return targets, nil
 }
 
+func (cf *changeFrontier) advanceSystemTablesProtectedTimestamp(
+	ctx context.Context,
+	txn isql.Txn,
+	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
+	timestamp hlc.Timestamp,
+	pts protectedts.Storage,
+) (updated bool, err error) {
+	if ptsEntries.SystemTablesRecord == uuid.Nil {
+		// All changefeeds using per-table PTS records should have a system tables
+		// PTS record. If they are missing one, it should be made when starting the
+		// changefeed.
+		return false, errors.AssertionFailedf("expected system tables PTS record to be present")
+	}
+
+	rec, err := pts.GetRecord(ctx, ptsEntries.SystemTablesRecord)
+	if err != nil {
+		return false, err
+	}
+
+	if !makeSystemTablesTargetToProtect().Equal(rec.Target) {
+		if preservePTSTargets := cf.knobs.PreservePTSTargets != nil && cf.knobs.PreservePTSTargets(); preservePTSTargets {
+			return false, nil
+		}
+		if err := cf.remakeSystemTablesPTSRecord(ctx, txn, pts, ptsEntries, timestamp); err != nil {
+			return false, err
+		}
+		log.VEventf(ctx, 2, "remade PTS record %v to include all targets", ptsEntries.SystemTablesRecord)
+		return true, nil
+	}
+
+	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
+	if rec.Timestamp.AddDuration(ptsUpdateLag).After(timestamp) {
+		return false, nil
+	}
+
+	if err := pts.UpdateTimestamp(ctx, ptsEntries.SystemTablesRecord, timestamp); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// advanceProtectedTimestamp advances the single PTS record for changefeeds that
+// are not using per-table protected timestamps.
 func (cf *changeFrontier) advanceProtectedTimestamp(
 	ctx context.Context,
 	progress *jobspb.ChangefeedProgress,
@@ -2131,7 +2185,9 @@ func (cf *changeFrontier) advanceProtectedTimestamp(
 	timestamp hlc.Timestamp,
 ) (updated bool, err error) {
 	if progress.ProtectedTimestampRecord == uuid.Nil {
-		ptr := createProtectedTimestampRecord(
+		// For non-per-table protected timestamps, system tables are protected in
+		// the single PTS record for the changefeed with all other targets.
+		ptr := createCombinedProtectedTimestampRecord(
 			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, timestamp,
 		)
 		progress.ProtectedTimestampRecord = ptr.ID.GetUUID()
@@ -2159,7 +2215,7 @@ func (cf *changeFrontier) advanceProtectedTimestamp(
 	// If we've identified more tables that need to be protected since this
 	// changefeed was created, it will be missing here. If so, we "migrate" it
 	// to include all the appropriate targets.
-	if !makeTargetToProtect(cf.targets).Equal(rec.Target) {
+	if !makeCombinedTargetToProtect(cf.targets).Equal(rec.Target) {
 		if preservePTSTargets := cf.knobs.PreservePTSTargets != nil && cf.knobs.PreservePTSTargets(); preservePTSTargets {
 			return false, nil
 		}
@@ -2190,7 +2246,7 @@ func (cf *changeFrontier) remakePTSRecord(
 	resolved hlc.Timestamp,
 ) error {
 	prevRecordId := progress.ProtectedTimestampRecord
-	ptr := createProtectedTimestampRecord(
+	ptr := createCombinedProtectedTimestampRecord(
 		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, cf.targets, resolved,
 	)
 	if err := pts.Protect(ctx, ptr); err != nil {
@@ -2205,6 +2261,29 @@ func (cf *changeFrontier) remakePTSRecord(
 		progress.ProtectedTimestampRecord, prevRecordId, resolved)
 
 	return nil
+}
+
+func (cf *changeFrontier) remakeSystemTablesPTSRecord(
+	ctx context.Context,
+	txn isql.Txn,
+	pts protectedts.Storage,
+	ptsEntries *cdcprogresspb.ProtectedTimestampRecords,
+	resolved hlc.Timestamp,
+) error {
+	ptr := createSystemTablesProtectedTimestampRecord(
+		ctx, cf.FlowCtx.Codec(), cf.spec.JobID, resolved,
+	)
+	if err := pts.Protect(ctx, ptr); err != nil {
+		return err
+	}
+	prevRecordId := ptsEntries.SystemTablesRecord
+	if err := pts.Release(ctx, prevRecordId); err != nil {
+		return err
+	}
+	ptsEntries.SystemTablesRecord = ptr.ID.GetUUID()
+	log.Eventf(ctx, "created new system tables pts record %v to replace old pts record %v at %v",
+		ptsEntries.SystemTablesRecord, prevRecordId, resolved)
+	return writeChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, ptsEntries, txn, cf.spec.JobID)
 }
 
 func (cf *changeFrontier) maybeEmitResolved(ctx context.Context, newResolved hlc.Timestamp) error {
