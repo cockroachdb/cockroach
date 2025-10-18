@@ -838,13 +838,16 @@ func (b *builderState) WrapExpression(tableID catid.DescID, expr tree.Expr) *scp
 
 // ComputedColumnExpression implements the scbuildstmt.TableHelpers interface.
 func (b *builderState) ComputedColumnExpression(
-	tbl *scpb.Table, d *tree.ColumnTableDef, exprContext tree.SchemaExprContext,
+	tbl *scpb.Table,
+	d *tree.ColumnTableDef,
+	exprContext tree.SchemaExprContext,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn schemaexpr.ColumnLookupFn,
 ) (tree.Expr, *types.T) {
 	_, _, ns := scpb.FindNamespace(b.QueryByID(tbl.TableID))
 	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(tbl), tree.Name(ns.Name))
 	b.ensureDescriptor(tbl.TableID)
-	// TODO(postamar): this doesn't work when referencing newly added columns.
-	expr, typ, err := schemaexpr.ValidateComputedColumnExpression(
+	expr, typ, err := schemaexpr.ValidateComputedColumnExpressionWithLookup(
 		b.ctx,
 		b.descCache[tbl.TableID].desc.(catalog.TableDescriptor),
 		d,
@@ -852,15 +855,10 @@ func (b *builderState) ComputedColumnExpression(
 		exprContext,
 		b.semaCtx,
 		b.clusterSettings.Version.ActiveVersion(b.ctx),
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
 	)
 	if err != nil {
-		// This may be referencing newly added columns, so cheat and return
-		// a not implemented error.
-		if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
-
-			panic(errors.Wrapf(errors.WithSecondaryError(scerrors.NotImplementedError(d), err),
-				"computed column validation error"))
-		}
 		panic(err)
 	}
 	parsedExpr, err := parser.ParseExpr(expr)
