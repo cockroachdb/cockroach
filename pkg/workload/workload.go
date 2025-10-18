@@ -419,7 +419,8 @@ func (l requiresCCLBinaryDataLoader) InitialDataLoad(
 type QueryLoad struct {
 	// WorkerFns is one function per worker. It is to be called once per unit of
 	// work to be done.
-	WorkerFns []func(context.Context) error
+	WorkerFns     []func(context.Context) error
+	ChangefeedFns []func(context.Context) error
 
 	// Close, if set, is called before the process exits, giving workloads a
 	// chance to print some information or perform cleanup.
