@@ -4,6 +4,7 @@ go_library(
     name = "admission",
     srcs = [
         "admission.go",
+        "cpu_time_token_filler.go",
         "cpu_time_token_granter.go",
         "disk_bandwidth.go",
         "elastic_cpu_grant_coordinator.go",
@@ -58,6 +59,7 @@ go_library(
 go_test(
     name = "admission_test",
     srcs = [
+        "cpu_time_token_filler_test.go",
         "cpu_time_token_granter_test.go",
         "disk_bandwidth_test.go",
         "elastic_cpu_granter_test.go",
