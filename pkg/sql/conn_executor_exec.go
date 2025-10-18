@@ -1198,6 +1198,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		if (retErr != nil || payloadHasError(retPayload)) && portal.isPausable() {
 			updateRetErrAndPayload(retErr, retPayload)
 			portal.pauseInfo.resumableFlow.cleanup.run(ctx)
+			portal.pauseInfo.resumableFlow.flow = nil
 			portal.pauseInfo.dispatchToExecutionEngine.cleanup.run(ctx)
 			portal.pauseInfo.execStmtInOpenState.cleanup.run(ctx)
 		}
@@ -2685,6 +2686,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			}
 			if retErr != nil || res.Err() != nil {
 				ppInfo.resumableFlow.cleanup.run(ctx)
+				ppInfo.resumableFlow.flow = nil
 				ppInfo.dispatchToExecutionEngine.cleanup.run(ctx)
 			}
 		}
