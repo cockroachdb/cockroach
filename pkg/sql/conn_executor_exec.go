@@ -1694,6 +1694,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			}
 		}
 
+		// Note that here we process the cleanup function (which will append it
+		// to the cleanup queue) without a defer since there is no more code
+		// relevant to pausable portals model below.
 		processCleanupFunc(func() {
 			cancelQueryCtx := ctx
 			if portal.isPausable() {
@@ -2772,9 +2775,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 					defer planner.curPlan.close(ctx)
 				} else {
 					ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-					ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-						ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-					})
+					defer func() {
+						ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+							ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
+						})
+					}()
 				}
 			} else {
 				defer planner.curPlan.close(ctx)
@@ -2921,6 +2926,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		// We need to ensure that we're using the planner bound to the first-time
 		// execution of a portal.
 		curPlanner := *planner
+		// Note that here we append the cleanup function without a defer since
+		// there is no more code relevant to pausable portals model below.
 		ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
 			populateQueryLevelStats(ctx, &curPlanner, ex.server.cfg, ppInfo.dispatchToExecutionEngine.queryStats, &ex.cpuStatsCollector)
 			ppInfo.dispatchToExecutionEngine.stmtFingerprintID = ex.recordStatementSummary(
