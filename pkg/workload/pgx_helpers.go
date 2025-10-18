@@ -39,6 +39,9 @@ type MultiConnPool struct {
 
 	// Caching DNS resolver
 	resolver *dnscache.Resolver
+
+	// cancel stops any background work owned by the pool (e.g., DNS refresh).
+	cancel context.CancelFunc
 }
 
 // MultiConnPoolCfg encapsulates the knobs passed to NewMultiConnPool.
@@ -142,6 +145,12 @@ func NewMultiConnPool(
 	m := &MultiConnPool{}
 	m.mu.preparedStatements = map[string]string{}
 
+	// Create an internal context to manage background goroutines owned by the pool
+	// independently of the caller's context. This ensures Close() reliably
+	// terminates all background activity to avoid goroutine leaks in tests.
+	poolCtx, cancel := context.WithCancel(ctx)
+	m.cancel = cancel
+
 	maxConnLifetime := 300 * time.Second
 	if cfg.MaxConnLifetime > 0 {
 		maxConnLifetime = cfg.MaxConnLifetime
@@ -186,7 +195,7 @@ func NewMultiConnPool(
 						ClearUnused:      true,
 						PersistOnFailure: true,
 					})
-				case <-ctx.Done():
+				case <-poolCtx.Done():
 					return
 				}
 			}
@@ -285,6 +294,9 @@ func (m *MultiConnPool) Get() *pgxpool.Pool {
 
 // Close closes all the pools.
 func (m *MultiConnPool) Close() {
+	if m.cancel != nil {
+		m.cancel()
+	}
 	for _, p := range m.Pools {
 		p.Close()
 	}
