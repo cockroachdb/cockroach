@@ -5,7 +5,11 @@
 
 package lease
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // ReadTimestamp is a wrapper for the transaction timestamp
 // that allows us to support locked timestamps for leasing.
@@ -17,6 +21,8 @@ type ReadTimestamp interface {
 	// GetBaseTimestamp returns the original read timestamp for
 	// the transaction.
 	GetBaseTimestamp() hlc.Timestamp
+	// Release releases the read timestamp.
+	Release(ctx context.Context)
 }
 
 // TimestampToReadTimestamp converts a hlc.Timestamp into a ReadTimestamp,
@@ -31,6 +37,7 @@ func TimestampToReadTimestamp(timestamp hlc.Timestamp) ReadTimestamp {
 type LeaseTimestamp struct {
 	ReadTimestamp  hlc.Timestamp
 	LeaseTimestamp hlc.Timestamp
+	handle         *closeTimeStampHandle
 }
 
 // GetTimestamp implements ReadTimestamp.
@@ -44,6 +51,13 @@ func (ls LeaseTimestamp) GetTimestamp() hlc.Timestamp {
 // GetBaseTimestamp implements ReadTimestamp.
 func (ls LeaseTimestamp) GetBaseTimestamp() hlc.Timestamp {
 	return ls.ReadTimestamp
+}
+
+// Release implements ReadTimestamp
+func (ls LeaseTimestamp) Release(ctx context.Context) {
+	if ls.handle != nil {
+		ls.handle.release(ctx)
+	}
 }
 
 var _ ReadTimestamp = LeaseTimestamp{}

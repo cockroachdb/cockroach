@@ -91,6 +91,13 @@ func (l *descriptorSet) findNewest() *descriptorVersionState {
 	return l.data[len(l.data)-1]
 }
 
+func (l *descriptorSet) findPrevious() *descriptorVersionState {
+	if len(l.data) < 2 {
+		return nil
+	}
+	return l.data[len(l.data)-2]
+}
+
 func (l *descriptorSet) findPreviousToExpire(dropped bool) *descriptorVersionState {
 	// If there are no versions, then no previous version exists.
 	if len(l.data) == 0 {

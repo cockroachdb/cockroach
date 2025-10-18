@@ -218,7 +218,9 @@ func (f fakeLeaseManager) GetLeaseGeneration() int64 {
 	return 0
 }
 
-func (f fakeLeaseManager) GetReadTimestamp(timestamp hlc.Timestamp) lease.ReadTimestamp {
+func (f fakeLeaseManager) GetReadTimestamp(
+	_ context.Context, timestamp hlc.Timestamp,
+) lease.ReadTimestamp {
 	return lease.TimestampToReadTimestamp(timestamp)
 }
 
