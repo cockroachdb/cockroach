@@ -655,6 +655,7 @@ func TestDecommissionSelf(t *testing.T) {
 	skip.UnderDeadlockWithIssue(t, 112918)
 
 	// Set up test cluster.
+	testutils.SetVModule(t, "queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5,allocator=3,decommission=5")
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 7, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -681,10 +682,12 @@ func TestDecommissionSelf(t *testing.T) {
 		NodeIDs:          decomNodeIDs,
 		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 	})
+	log.Dev.Infof(ctx, "setting nodes %v to decommissioning, got %d status responses", decomNodeIDs, len(resp.Status))
 	require.NoError(t, err)
 	require.Len(t, resp.Status, len(decomNodeIDs))
 	for i, nodeID := range decomNodeIDs {
 		status := resp.Status[i]
+		log.Dev.Infof(ctx, "node %d has status: %v", nodeID, status)
 		require.Equal(t, nodeID, status.NodeID)
 		// Liveness entries may not have been updated yet.
 		require.Contains(t, []livenesspb.MembershipStatus{
@@ -699,6 +702,7 @@ func TestDecommissionSelf(t *testing.T) {
 		NodeIDs:          decomNodeIDs,
 		TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 	})
+	log.Dev.Infof(ctx, "setting nodes %v to decommissioned, got %d status responses", decomNodeIDs, len(resp.Status))
 	require.NoError(t, err)
 	require.Empty(t, resp.Status)
 
@@ -713,9 +717,20 @@ func TestDecommissionSelf(t *testing.T) {
 			}
 		}
 		require.Eventually(t, func() bool {
-			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
-			return ok && liveness.Membership == expect
-		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+			nodeLiveness := srv.NodeLiveness().(*liveness.NodeLiveness)
+			if nodeLiveness == nil {
+				log.Dev.Infof(ctx, "node %d liveness is nil", srv.NodeID())
+				return false
+			}
+			liveness, ok := nodeLiveness.GetLiveness(srv.NodeID())
+			livenessFromCache := nodeLiveness.GetNodeVitalityFromCache(srv.NodeID())
+			if !ok || liveness.Membership != expect {
+				log.Dev.Infof(ctx, "node %d: found=%v, current=%v, expected=%v, livenessFromCache=%v", srv.NodeID(), ok, liveness.Membership, expect, livenessFromCache)
+				return false
+			}
+			log.Dev.Infof(ctx, "node %d found expected status %v, livenessFromCache: %v", srv.NodeID(), expect, livenessFromCache)
+			return true
+		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", srv.NodeID(), expect)
 	}
 }
 
