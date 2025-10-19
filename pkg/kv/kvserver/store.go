@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"math"
@@ -1568,6 +1569,12 @@ func NewStore(
 	s.replRankings = NewReplicaRankings()
 	s.replRankingsByTenant = NewReplicaRankingsMap()
 
+	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
+	// unnecessary elections when ticks are temporarily delayed and piled up.
+	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
+		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
+		cfg.RaftElectionTimeoutTicks)
+
 	s.raftRecvQueues.mon = mon.NewUnlimitedMonitor(ctx, mon.Options{
 		Name:     mon.MakeName("raft-receive-queue"),
 		CurCount: s.metrics.RaftRcvdQueuedBytes,
@@ -1594,12 +1601,6 @@ func NewStore(
 		},
 		cfg.RangeLogWriter,
 	)
-
-	// NB: buffer up to RaftElectionTimeoutTicks in Raft scheduler to avoid
-	// unnecessary elections when ticks are temporarily delayed and piled up.
-	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s,
-		cfg.RaftSchedulerConcurrency, cfg.RaftSchedulerShardSize, cfg.RaftSchedulerConcurrencyPriority,
-		cfg.RaftElectionTimeoutTicks)
 
 	// Run a log SyncWaiter loop for every 32 raft scheduler goroutines.
 	// Experiments on c5d.12xlarge instances (48 vCPUs, the largest single-socket
@@ -3455,6 +3456,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	// visiting, so load it once up front for all nodes.
 	livenessMap := s.cfg.NodeLiveness.ScanNodeVitalityFromCache()
 	kvflowSendStats := rac2.RangeSendStreamStats{}
+	s.raftRecvQueues.qDecider.logStuff(ctx)
+	s.raftRecvQueues.logStuff(ctx)
 	var perStreamSendQueueStats map[kvflowcontrol.Stream]int64
 	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
 		metrics := rep.Metrics(ctx, now, livenessMap, clusterNodes)
@@ -3578,11 +3581,20 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		return true // more
 	})
 	if len(perStreamSendQueueStats) > 0 {
+		var streams []kvflowcontrol.Stream
+		for k := range perStreamSendQueueStats {
+			streams = append(streams, k)
+		}
+		slices.SortFunc(streams, func(a, b kvflowcontrol.Stream) int {
+			return cmp.Or(cmp.Compare(a.StoreID, b.StoreID),
+				cmp.Compare(a.TenantID.InternalValue, b.TenantID.InternalValue))
+		})
 		var b strings.Builder
-		for k, bytes := range perStreamSendQueueStats {
+		for _, k := range streams {
+			bytes := perStreamSendQueueStats[k]
 			fmt.Fprintf(&b, "%s: %s ", k.String(), humanize.Bytes(uint64(bytes)))
 		}
-		log.KvExec.Infof(ctx, "%s", redact.SafeString(b.String()))
+		log.KvExec.Infof(ctx, "send-queue-bytes: %s", redact.SafeString(b.String()))
 	}
 
 	s.metrics.RaftLeaderCount.Update(raftLeaderCount)

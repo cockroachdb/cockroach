@@ -113,6 +113,7 @@ func (q *raftReceiveQueue) drainLocked() ([]raftRequestInfo, bool) {
 	var infos []raftRequestInfo
 	if len(q.mu.otherInfos) == 0 {
 		if len(q.mu.msgAppInfos) == 0 || q.mu.qDecision == raftQDequeueOther {
+			q.mu.queuedAtRaftScheduler = false
 			return nil, false
 		}
 		// Common case on followers: only MsgApps in the queue.
@@ -274,6 +275,30 @@ type raftReceiveQueues struct {
 
 func (qs *raftReceiveQueues) Load(rangeID roachpb.RangeID) (*raftReceiveQueue, bool) {
 	return qs.m.Load(rangeID)
+}
+
+func (qs *raftReceiveQueues) logStuff(ctx context.Context) {
+	numRangesInOther := 0
+	numMsgAppMsgs := 0
+	numOtherMsgs := 0
+	qs.m.Range(func(_ roachpb.RangeID, q *raftReceiveQueue) bool {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		if q.mu.qDecision == raftQDequeueOther {
+			numRangesInOther++
+		}
+		numMsgAppMsgs += len(q.mu.msgAppInfos)
+		numOtherMsgs += len(q.mu.otherInfos)
+		if len(q.mu.otherInfos) > 0 && !q.mu.queuedAtRaftScheduler {
+			log.KvExec.Infof(ctx, "raftReceiveQueues: other msgs but not in raft scheduler")
+		}
+		if len(q.mu.msgAppInfos) > 0 && q.mu.qDecision == raftQDequeueAll && !q.mu.queuedAtRaftScheduler {
+			log.KvExec.Infof(ctx, "raftReceiveQueues: msgapps but not in raft scheduler")
+		}
+		return true
+	})
+	log.KvExec.Infof(ctx, "raftReceiveQueues: numRangesDecisionOther=%d, numMsgAppMsgs=%d, numOtherMsgs=%d",
+		numRangesInOther, numMsgAppMsgs, numOtherMsgs)
 }
 
 func (qs *raftReceiveQueues) LoadOrCreate(
@@ -1539,6 +1564,13 @@ func (w *storeRaftQDecider) waiter() {
 		}
 	}
 	dequeueBurst(math.MaxInt64)
+}
+
+func (w *storeRaftQDecider) logStuff(ctx context.Context) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	log.KvExec.Infof(ctx, "storeRaftQDecider: waiting: %d, burstBytesToDrain: %s",
+		len(w.mu.waiting), humanize.Bytes(uint64(w.mu.burstBytesToDrain)))
 }
 
 type storeRaftQDecision uint8

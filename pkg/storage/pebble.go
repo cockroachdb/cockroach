@@ -2584,13 +2584,17 @@ func (p *Pebble) TryWaitForMemTableStallHeadroom(doWait bool) (ok bool, allowedB
 	// Don't go too low wrt threshold to avoid waiting. If
 	// MemTableStopWritesThreshold is the expected 16, this will give us 8.
 	threshold := max(3, p.cfg.opts.MemTableStopWritesThreshold/2)
-	ok = p.db.TryWaitForMemTableCount(threshold, true)
+	ok = p.db.TryWaitForMemTableCount(threshold, doWait)
 	if !ok {
+		log.KvExec.Infof(context.Background(), "TryWaitForMemTableStallHeadroom(%d, %t): %t",
+			threshold, doWait, ok)
 		return false, 0
 	}
 	// Allow a burst of half the headroom.
 	allowedBurst =
 		int64(max(1, (p.cfg.opts.MemTableStopWritesThreshold-threshold)/2)) * int64(p.cfg.opts.MemTableSize)
+	log.KvExec.Infof(context.Background(), "TryWaitForMemTableStallHeadroom(%d, %t): %t, %d",
+		threshold, doWait, ok, allowedBurst)
 	return true, allowedBurst
 }
 

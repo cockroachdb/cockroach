@@ -356,6 +356,8 @@ func (b *blockedStreamLogger) observeStream(
 		}
 		deductionKindFunc("regular", regularStats)
 		deductionKindFunc("elastic", elasticStats)
+		fmt.Fprintf(&bb, " reg: %s, elastic: %s, inflight: %s", pprintTokens(regularTokens),
+			pprintTokens(elasticTokens), pprintTokens(inflightTokens))
 		log.KvDistribution.Infof(context.Background(), "%s", redact.SafeString(bb.String()))
 	} else if b.blockedCount == streamStatsCountCap+1 {
 		log.KvDistribution.Infof(context.Background(), "skipped logging some streams that were blocked")

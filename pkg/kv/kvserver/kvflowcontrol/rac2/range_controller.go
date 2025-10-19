@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 )
 
 // RangeController provides flow control for replication traffic in KV, for a
@@ -1361,14 +1360,14 @@ func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
 				cmp.Compare(a.tokensEval, b.tokensEval), cmp.Compare(a.replicaID, b.replicaID))
 		})
 		var b strings.Builder
-		fmt.Fprintf(&b, "deny-send-q r%s: ", rc.opts.RangeID.String())
 		for i := range candidateDenySendQScores {
 			score := candidateDenySendQScores[i]
 			fmt.Fprintf(&b, "%s: %s,%s,", score.stream.String(),
-				humanize.Bytes(uint64(score.bucketedTokensSend)),
-				humanize.Bytes(uint64(score.tokensEval)))
+				pprintTokens(score.bucketedTokensSend),
+				pprintTokens(score.tokensEval))
 		}
-		log.KvExec.Infof(ctx, "%s", redact.SafeString(b.String()))
+		log.KvExec.Infof(ctx, "deny-send-q r%s: %s", rc.opts.RangeID.String(),
+			redact.SafeString(b.String()))
 	}
 	voterSets := rc.mu.voterSets
 	for i := range voterSets {
