@@ -82,12 +82,16 @@ const (
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
+	// Fields below are initialized when creating the PreparedPortal and aren't
+	// modified later.
 	Name  string
 	Stmt  *prep.Statement
 	Qargs tree.QueryArguments
 
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
+
+	// Fields below might be updated throughout the PreparedPortal's lifecycle.
 
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
@@ -141,6 +145,16 @@ func (ex *connExecutor) makePreparedPortal(
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
 }
 
+func (ex *connExecutor) disablePortalPausability(portal *PreparedPortal) {
+	portal.portalPausablity = PortalPausabilityDisabled
+	portal.pauseInfo = nil
+	// Since the PreparedPortal is stored by value in the map, we need to
+	// explicitly update it. (Note that PreparedPortal.pauseInfo is stored by
+	// pointer, so modifications to portalPauseInfo will be reflected in the map
+	// automatically.)
+	ex.extraTxnState.prepStmtsNamespace.portals[portal.Name] = *portal
+}
+
 // accountForCopy updates the state to account for the copy of the
 // PreparedPortal (p is the copy).
 func (p *PreparedPortal) accountForCopy(
@@ -175,23 +189,28 @@ func (p *PreparedPortal) isPausable() bool {
 	return p != nil && p.pauseInfo != nil
 }
 
-// cleanupFuncStack stores cleanup functions for a portal. The clean-up
+// cleanupFuncQueue stores cleanup functions for a portal. The clean-up
 // functions are added during the first-time execution of a portal. When the
 // first-time execution is finished, we mark isComplete to true.
-type cleanupFuncStack struct {
-	stack      []func(context.Context)
+//
+// Generally, cleanup functions should be added in a defer (assuming that
+// originally they were deferred as well). The functions will be appended to the
+// end of the queue, which preserves the order of their execution if pausable
+// portals model wasn't used.
+type cleanupFuncQueue struct {
+	queue      []func(context.Context)
 	isComplete bool
 }
 
-func (n *cleanupFuncStack) appendFunc(f func(context.Context)) {
-	n.stack = append(n.stack, f)
+func (n *cleanupFuncQueue) appendFunc(f func(context.Context)) {
+	n.queue = append(n.queue, f)
 }
 
-func (n *cleanupFuncStack) run(ctx context.Context) {
-	for i := 0; i < len(n.stack); i++ {
-		n.stack[i](ctx)
+func (n *cleanupFuncQueue) run(ctx context.Context) {
+	for i := 0; i < len(n.queue); i++ {
+		n.queue[i](ctx)
 	}
-	*n = cleanupFuncStack{}
+	*n = cleanupFuncQueue{}
 }
 
 // instrumentationHelperWrapper wraps the instrumentation helper.
@@ -226,23 +245,23 @@ type portalPauseInfo struct {
 	// When closing a portal, we need to follow the reverse order of its execution,
 	// which means running the cleanup functions of the four structs in the
 	// following order:
-	//   - exhaustPortal.cleanup
-	//   - execStmtInOpenState.cleanup
-	//   - dispatchToExecutionEngine.cleanup
 	//   - resumableFlow.cleanup
+	//   - dispatchToExecutionEngine.cleanup
+	//   - execStmtInOpenState.cleanup
+	//   - exhaustPortal.cleanup
 	//
 	// If an error occurs in any of these functions, we run the cleanup functions of
 	// this layer and its children layers, and propagate the error to the parent
 	// layer. For example, if an error occurs in execStmtInOpenStateCleanup(), we
 	// run the cleanup functions in the following order:
-	//   - execStmtInOpenState.cleanup
-	//   - dispatchToExecutionEngine.cleanup
 	//   - resumableFlow.cleanup
+	//   - dispatchToExecutionEngine.cleanup
+	//   - execStmtInOpenState.cleanup
 	//
 	// When exiting connExecutor.execStmtInOpenState(), we finally run the
 	// exhaustPortal.cleanup function in connExecutor.execPortal().
 	exhaustPortal struct {
-		cleanup cleanupFuncStack
+		cleanup cleanupFuncQueue
 	}
 
 	// TODO(sql-session): replace certain fields here with planner.
@@ -266,7 +285,7 @@ type portalPauseInfo struct {
 		// retErr is needed for the cleanup steps as we will have to check the latest
 		// encountered error, so this field should be updated for each execution.
 		retErr  error
-		cleanup cleanupFuncStack
+		cleanup cleanupFuncQueue
 	}
 
 	dispatchReadCommittedStmtToExecutionEngine struct {
@@ -295,7 +314,7 @@ type portalPauseInfo struct {
 		// queryStats stores statistics on query execution. It is incremented for
 		// each execution of the portal.
 		queryStats *topLevelQueryStats
-		cleanup    cleanupFuncStack
+		cleanup    cleanupFuncQueue
 	}
 
 	resumableFlow struct {
@@ -307,7 +326,7 @@ type portalPauseInfo struct {
 		// We need this as when re-executing the portal, we are reusing the flow
 		// with the new receiver, but not re-generating the physical plan.
 		outputTypes []*types.T
-		cleanup     cleanupFuncStack
+		cleanup     cleanupFuncQueue
 	}
 }
 
