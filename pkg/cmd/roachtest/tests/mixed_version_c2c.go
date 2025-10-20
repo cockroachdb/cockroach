@@ -280,16 +280,17 @@ func (cm *c2cMixed) WorkloadHook(ctx context.Context) {
 		Flag("warehouses", 500)
 	cm.workloadStopper = cm.sourceMvt.Workload("tpcc", cm.c.WorkloadNode(), tpccInitCmd, tpccRunCmd)
 
-	readerTenantName := fmt.Sprintf("%s-readonly", destTenantName)
-
-	tpccStandbyRunCmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
-		Arg("{pgurl%s:%s}", cm.c.Range(cm.sp.srcNodes+1, cm.sp.srcNodes+cm.sp.dstNodes), readerTenantName).
-		Option("tolerate-errors").
-		Flag("warehouses", 500).
-		Flag("mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1")
-
-	cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd)
-
+	// TODO(jeffswenson): re-enable this once we can configure the pgwire retry limit.
+	// readerTenantName := fmt.Sprintf("%s-readonly", destTenantName)
+	//
+	// tpccStandbyRunCmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
+	// 	Arg("{pgurl%s:%s}", cm.c.Range(cm.sp.srcNodes+1, cm.sp.srcNodes+cm.sp.dstNodes), readerTenantName).
+	// 	Option("tolerate-errors").
+	// 	Flag("warehouses", 500).
+	// 	Flag("mix", "newOrder=0,payment=0,orderStatus=1,delivery=0,stockLevel=1")
+	//
+	// cm.readOnlyWorkloadStopper = cm.destMvt.Workload("tpcc-read-only", cm.c.WorkloadNode(), nil, tpccStandbyRunCmd)
+	cm.readOnlyWorkloadStopper = func() {}
 }
 
 func (cm *c2cMixed) LatencyHook(ctx context.Context) {
