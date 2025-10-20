@@ -115,6 +115,10 @@ func (b *bank) ConnFlags() *workload.ConnFlags { return b.connFlags }
 func (b *bank) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
+			if b.rows < 2 {
+				// We need at least two rows to do any transfers.
+				return errors.Errorf(`Value of rows must be greater than one; was %d`, b.rows)
+			}
 			if b.rows < b.ranges {
 				return errors.Errorf(
 					"Value of 'rows' (%d) must be greater than or equal to value of 'ranges' (%d)",
