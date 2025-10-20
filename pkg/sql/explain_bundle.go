@@ -894,9 +894,12 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		for _, addFK := range addFKs {
 			fmt.Fprintf(&buf, "%s;\n", addFK)
 		}
-		// Include FK constraints that were skipped in commented out form.
-		for _, skipFK := range skipFKs {
-			fmt.Fprintf(&buf, "-- %s;\n", skipFK)
+		if len(skipFKs) > 0 {
+			// Include FK constraints that were skipped in commented out form.
+			fmt.Fprintf(&buf, "-- NOTE: these FKs are active and are only commented out for ease of bundle recreation.\n--\n")
+			for _, skipFK := range skipFKs {
+				fmt.Fprintf(&buf, "-- %s;\n", skipFK)
+			}
 		}
 	}
 	for i := range views {
