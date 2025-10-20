@@ -15,13 +15,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,6 +128,284 @@ func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
 		return errors.Errorf("the following descriptor ids are invalid\n%v", invalidIDs)
 	}
 	return nil
+}
+
+// CheckInspectDatabase runs INSPECT DATABASE in parallel on user databases
+// to verify consistency. System databases (system, postgres, defaultdb) are
+// excluded. All INSPECT jobs run concurrently under a time budget. Once the
+// budget is exceeded, we check if any errors were found. And return success if
+// none.
+//
+// If the cluster version does not support INSPECT (requires v25.4+), the
+// check is skipped and returns nil without error.
+func CheckInspectDatabase(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, timeout time.Duration,
+) error {
+	databases, err := discoverUserDatabases(ctx, db)
+	if err != nil {
+		return err
+	}
+	if len(databases) == 0 {
+		l.Printf("No user databases found, skipping INSPECT check")
+		return nil
+	}
+
+	l.Printf("Found %d user databases to INSPECT: %v", len(databases), databases)
+	l.Printf("INSPECT timeout budget: %s total", timeout)
+
+	if err := launchInspectJobs(ctx, l, db, databases); err != nil {
+		// If INSPECT is not supported due to cluster version, skip the check.
+		if isFeatureNotSupportedError(err) {
+			l.Printf("INSPECT not supported on this cluster version (requires v25.4+), skipping validation")
+			return nil
+		}
+		return err
+	}
+
+	jobIDs, err := fetchInspectJobIDs(ctx, db, len(databases))
+	if err != nil {
+		return err
+	}
+	l.Printf("Found %d INSPECT jobs: %v", len(jobIDs), jobIDs)
+
+	waitForInspectJobCompletion(ctx, l, db, jobIDs, timeout)
+
+	totalErrors, errorDetails, err := collectInspectErrors(ctx, db, jobIDs)
+	if err != nil {
+		return err
+	}
+
+	if totalErrors > 0 {
+		return errors.Errorf("INSPECT found %d consistency errors:%s", totalErrors, errorDetails)
+	}
+
+	l.Printf("INSPECT validation completed successfully (0 errors across %d jobs)", len(jobIDs))
+	return nil
+}
+
+// discoverUserDatabases queries pg_database to find all user databases,
+// excluding the system database.
+func discoverUserDatabases(ctx context.Context, db *gosql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT datname FROM pg_database
+		WHERE datname NOT IN ('system')
+		ORDER BY datname`)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query databases")
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var dbName string
+		if err := rows.Scan(&dbName); err != nil {
+			return nil, err
+		}
+		databases = append(databases, dbName)
+	}
+	return databases, rows.Err()
+}
+
+// isStatementTimeoutError returns true if the error is a statement timeout error.
+// Statement timeout errors are expected when launching INSPECT jobs since we only
+// want to start the job, not wait for it to complete.
+func isStatementTimeoutError(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.QueryCanceled
+	}
+	return false
+}
+
+// isFeatureNotSupportedError returns true if the error is a feature not supported error.
+// This can occur when the cluster version is not yet upgraded to support INSPECT.
+func isFeatureNotSupportedError(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.FeatureNotSupported
+	}
+	return false
+}
+
+// launchInspectJobs launches INSPECT DATABASE commands in parallel for all
+// provided databases using task manager for concurrency control. Each INSPECT
+// command enables the inspect command for that connection. Statement timeout
+// errors are ignored as they indicate the job was successfully started.
+// Feature not supported errors are returned to the caller, indicating the
+// cluster version does not support INSPECT.
+func launchInspectJobs(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, databases []string,
+) error {
+	// Make the INSPECT jobs go as fast as possible.
+	if _, err := db.ExecContext(ctx,
+		"SET CLUSTER SETTING sql.inspect.admission_control.enabled = off"); err != nil {
+		return errors.Wrap(err, "failed to disable INSPECT admission control")
+	}
+
+	statementTimeout := 5 * time.Second
+	tm := task.NewManager(ctx, l)
+	g := tm.NewErrorGroup()
+
+	for _, dbName := range databases {
+		dbName := dbName
+		g.Go(func(ctx context.Context, l *logger.Logger) error {
+			l.Printf("Launching INSPECT DATABASE %s", dbName)
+
+			statements := []string{
+				"SET enable_inspect_command = true",
+				fmt.Sprintf("SET statement_timeout = '%s'", statementTimeout.String()),
+				fmt.Sprintf("INSPECT DATABASE %s", lexbase.EscapeSQLIdent(dbName)),
+			}
+
+			var stmtErr error
+			for _, stmt := range statements {
+				if _, err := db.ExecContext(ctx, stmt); err != nil {
+					stmtErr = err
+					break
+				}
+			}
+
+			// Always reset statement timeout back to default.
+			if _, err := db.ExecContext(ctx, "RESET statement_timeout"); err != nil {
+				l.Printf("Warning: failed to reset statement timeout: %v", err)
+			}
+
+			// Check for errors from the statements loop.
+			if stmtErr != nil {
+				// Statement timeout is expected - it means the job started but didn't complete
+				// within the timeout. The job is still running in the background.
+				if !isStatementTimeoutError(stmtErr) {
+					l.Printf("INSPECT DATABASE %s failed to start: %v", dbName, stmtErr)
+					return errors.Wrapf(stmtErr, "failed to start INSPECT DATABASE %s", dbName)
+				}
+			}
+
+			l.Printf("INSPECT DATABASE %s started", dbName)
+			return nil
+		})
+	}
+	return g.WaitE()
+}
+
+// fetchInspectJobIDs queries SHOW JOBS to retrieve the job IDs of the most
+// recently started INSPECT jobs.
+func fetchInspectJobIDs(ctx context.Context, db *gosql.DB, expectedCount int) ([]int64, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT job_id
+		FROM [SHOW JOBS]
+		WHERE job_type = 'INSPECT'
+		ORDER BY started DESC
+		LIMIT %d`, expectedCount))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to query INSPECT job IDs")
+	}
+	defer rows.Close()
+
+	var jobIDs []int64
+	for rows.Next() {
+		var jobID int64
+		if err := rows.Scan(&jobID); err != nil {
+			return nil, err
+		}
+		jobIDs = append(jobIDs, jobID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(jobIDs) == 0 {
+		return nil, errors.New("no INSPECT jobs were found after launching")
+	}
+	return jobIDs, nil
+}
+
+// waitForInspectJobCompletion polls SHOW JOBS until all INSPECT jobs complete
+// or the timeout is reached. Logs progress periodically.
+func waitForInspectJobCompletion(
+	ctx context.Context, l *logger.Logger, db *gosql.DB, jobIDs []int64, timeout time.Duration,
+) {
+	deadline := timeutil.Now().Add(timeout)
+	pollInterval := 5 * time.Second
+	logEvery := Every(30 * time.Second)
+
+	for timeutil.Now().Before(deadline) {
+		time.Sleep(pollInterval)
+
+		placeholders := make([]string, len(jobIDs))
+		args := make([]interface{}, len(jobIDs))
+		for i, jobID := range jobIDs {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args[i] = jobID
+		}
+
+		var pendingCount int
+		countQuery := fmt.Sprintf(`
+			SELECT count(*)
+			FROM [SHOW JOBS]
+			WHERE job_id IN (%s)
+			  AND status NOT IN ('succeeded', 'failed', 'canceled')`,
+			strings.Join(placeholders, ", "))
+
+		if err := db.QueryRowContext(ctx, countQuery, args...).Scan(&pendingCount); err != nil {
+			l.Printf("Warning: failed to check job status: %v", err)
+			return
+		}
+
+		if pendingCount == 0 {
+			l.Printf("All INSPECT jobs completed")
+			return
+		}
+
+		if logEvery.ShouldLog() {
+			l.Printf("Waiting for %d INSPECT jobs to complete (%s remaining)",
+				pendingCount, deadline.Sub(timeutil.Now()).Round(time.Second))
+		}
+	}
+
+	l.Printf("INSPECT timeout reached, checking for errors anyway")
+}
+
+// collectInspectErrors queries SHOW INSPECT ERRORS for each job and returns
+// the total error count and formatted error details.
+func collectInspectErrors(ctx context.Context, db *gosql.DB, jobIDs []int64) (int, string, error) {
+	totalErrors := 0
+	var errorDetails strings.Builder
+
+	for _, jobID := range jobIDs {
+		var errorCount int
+		if err := db.QueryRowContext(ctx,
+			fmt.Sprintf("SELECT count(*) FROM [SHOW INSPECT ERRORS FOR JOB %d]", jobID),
+		).Scan(&errorCount); err != nil {
+			return 0, "", errors.Wrapf(err, "failed to query INSPECT errors for job %d", jobID)
+		}
+
+		if errorCount > 0 {
+			totalErrors += errorCount
+			if err := func() error {
+				rows, err := db.QueryContext(ctx, fmt.Sprintf(`
+					SELECT database_name, schema_name, table_name, error_type, details
+					FROM [SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS]`, jobID))
+				if err != nil {
+					return errors.Wrapf(err, "failed to fetch error details for job %d", jobID)
+				}
+				defer rows.Close()
+
+				fmt.Fprintf(&errorDetails, "\n  Job %d:", jobID)
+				for rows.Next() {
+					var dbName, schemaName, tableName, errorType, details string
+					if err := rows.Scan(&dbName, &schemaName, &tableName, &errorType, &details); err != nil {
+						return err
+					}
+					fmt.Fprintf(&errorDetails, "\n    - %s.%s.%s: %s (%s)",
+						dbName, schemaName, tableName, errorType, details)
+				}
+				return rows.Err()
+			}(); err != nil {
+				return 0, "", err
+			}
+		}
+	}
+	return totalErrors, errorDetails.String(), nil
 }
 
 // validateTokensReturned ensures that all RACv2 tokens are returned to the pool
