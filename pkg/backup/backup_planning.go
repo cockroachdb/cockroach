@@ -38,10 +38,6 @@ import (
 )
 
 const (
-	// backupPartitionDescriptorPrefix is the file name prefix for serialized
-	// BackupPartitionDescriptor protos.
-	backupPartitionDescriptorPrefix = "BACKUP_PART"
-
 	deprecatedPrivilegesBackupPreamble = "The existing privileges are being deprecated " +
 		"in favour of a fine-grained privilege model explained here " +
 		"https://www.cockroachlabs.com/docs/stable/backup.html#required-privileges. In a future release, to run"

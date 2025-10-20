@@ -19,6 +19,10 @@ const (
 	// LATEST files will be stored as we no longer want to overwrite it.
 	LatestHistoryDirectory = backupMetadataDirectory + "/" + "latest"
 
+	// BackupPartitionDescriptorPrefix is the file name prefix for serialized
+	// BackupPartitionDescriptor protos.
+	BackupPartitionDescriptorPrefix = "BACKUP_PART"
+
 	// DateBasedIncFolderName is the date format used when creating sub-directories
 	// storing incremental backups for auto-appendable backups.
 	// It is exported for testing backup inspection tooling.
