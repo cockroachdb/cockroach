@@ -525,7 +525,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range tr.getAvailableNodes(service.descriptor) {
+	for _, node := range tr.getAvailableNodes(service.descriptor) {
 		group.GoCtx(func(ctx context.Context) error {
 			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -534,7 +534,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 					node, service.descriptor.Name, err,
 				)
 			}
-			newBinaryVersions[j] = bv
+			newBinaryVersions[node-1] = bv
 			return nil
 		})
 	}
@@ -556,7 +556,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range tr.getAvailableNodes(service.descriptor) {
+	for _, node := range tr.getAvailableNodes(service.descriptor) {
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -566,7 +566,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 				)
 			}
 
-			newClusterVersions[j] = cv
+			newClusterVersions[node-1] = cv
 			return nil
 		})
 	}
