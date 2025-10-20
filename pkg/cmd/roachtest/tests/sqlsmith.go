@@ -29,43 +29,21 @@ import (
 
 func registerSQLSmith(r registry.Registry) {
 	const numNodes = 4
-	const tpchName = "tpch-sf1"
-	const tpccName = "tpcc"
 	setups := map[string]sqlsmith.Setup{
 		"empty":                     sqlsmith.Setups["empty"],
 		"seed":                      sqlsmith.Setups["seed"],
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
-		tpchName: func(r *rand.Rand) []string {
+		"tpch-sf1": func(r *rand.Rand) []string {
 			return []string{`
-RESTORE TABLE tpch.* FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
-WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
+RESTORE TABLE tpch.* FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup_25_3?AUTH=implicit'
+WITH into_db = 'defaultdb';
 `}
 		},
-		tpccName: func(r *rand.Rand) []string {
-			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
-			var stmts []string
-			for _, t := range []string{
-				"customer",
-				"district",
-				"history",
-				"item",
-				"new_order",
-				"order",
-				"order_line",
-				"stock",
-				"warehouse",
-			} {
-				stmts = append(
-					stmts,
-					fmt.Sprintf(`
-RESTORE TABLE tpcc.%s FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
-WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
-`,
-						t, version,
-					),
-				)
-			}
-			return stmts
+		"tpcc": func(r *rand.Rand) []string {
+			return []string{`
+RESTORE TABLE tpcc.* FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/version=25.3,fks=true,seed=1,warehouses=1?AUTH=implicit'
+WITH into_db = 'defaultdb';
+`}
 		},
 	}
 	settings := map[string]sqlsmith.SettingFunc{
@@ -312,11 +290,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 	}
 
 	register := func(setup, setting string) {
-		var skip string
-		switch setup {
-		case tpchName, tpccName:
-			skip = "153489. uses ancient fixture"
-		}
 		var clusterSpec spec.ClusterSpec
 		if strings.Contains(setting, "multi-region") {
 			clusterSpec = r.MakeClusterSpec(numNodes, spec.Geo())
@@ -335,7 +308,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
-			Skip:             skip,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

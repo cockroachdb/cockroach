@@ -295,7 +295,7 @@ func (g *movr) Hooks() workload.Hooks {
 				if _, err := db.Exec(fkStmt); err != nil {
 					// If the statement failed because the fk already exists,
 					// ignore it. Return the error for any other reason.
-					const duplicateFKErr = "columns cannot be used by multiple foreign key constraints"
+					const duplicateFKErr = "duplicate constraint name"
 					if !strings.Contains(err.Error(), duplicateFKErr) {
 						return err
 					}
