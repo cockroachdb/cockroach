@@ -1118,7 +1118,7 @@ func (ir *IntentResolver) resolveIntents(
 		case <-ctx.Done():
 			return kvpb.NewError(ctx.Err())
 		case <-ir.stopper.ShouldQuiesce():
-			return kvpb.NewErrorf("stopping")
+			return kvpb.NewError(&kvpb.NodeUnavailableError{})
 		}
 	}
 	return nil
