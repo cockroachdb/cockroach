@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +36,10 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
 )
+
+var RaftQueueDeciderEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly, "kv.raft.queue_decider.enabled",
+	"todo", true)
 
 var (
 	logRaftRecvQueueFullEvery = log.Every(1 * time.Second)
@@ -1346,6 +1352,7 @@ type engineForStoreRaftQDecider interface {
 type storeRaftQDecider struct {
 	eng       engineForStoreRaftQDecider
 	scheduler raftSchedulerForStoreRaftQDecider
+	st        *cluster.Settings
 	mu        struct {
 		syncutil.Mutex
 		// NB: for simplicity, we don't bother with ordering this queue.
@@ -1359,11 +1366,12 @@ type storeRaftQDecider struct {
 }
 
 func newStoreRaftQDecider(
-	eng engineForStoreRaftQDecider, scheduler raftSchedulerForStoreRaftQDecider,
+	eng engineForStoreRaftQDecider, scheduler raftSchedulerForStoreRaftQDecider, st *cluster.Settings,
 ) *storeRaftQDecider {
 	w := &storeRaftQDecider{
 		eng:       eng,
 		scheduler: scheduler,
+		st:        st,
 	}
 	w.mu.waiting = map[*raftReceiveQueue]struct{}{}
 	w.mu.queueCond = sync.NewCond(&w.mu.Mutex)
@@ -1396,7 +1404,8 @@ func (w *storeRaftQDecider) updateDecisionQLocked(q *raftReceiveQueue) {
 	if len(w.mu.waiting) == 0 {
 		now := crtime.NowMono()
 		haveHeadroom := true
-		if now.Sub(w.mu.lastHeadroomAvailableSampleTime) >= 50*time.Millisecond {
+		if now.Sub(w.mu.lastHeadroomAvailableSampleTime) >= 50*time.Millisecond &&
+			RaftQueueDeciderEnabled.Get(&w.st.SV) {
 			w.mu.lastHeadroomAvailableSampleTime = now
 			haveHeadroom, _ = w.eng.TryWaitForMemTableStallHeadroom(false)
 		}

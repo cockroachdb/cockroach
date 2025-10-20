@@ -1580,7 +1580,7 @@ func NewStore(
 		CurCount: s.metrics.RaftRcvdQueuedBytes,
 		Settings: cfg.Settings,
 	})
-	s.raftRecvQueues.qDecider = newStoreRaftQDecider(s.TODOEngine(), s.scheduler)
+	s.raftRecvQueues.qDecider = newStoreRaftQDecider(s.TODOEngine(), s.scheduler, cfg.Settings)
 	s.cfg.KVFlowWaitForEvalConfig.RegisterWatcher(func(wc rac2.WaitForEvalCategory) {
 		// When the system is configured with rac2.AllWorkWaitsForEval, RACv2 is
 		// running in a mode where all senders are using send token pools for all
