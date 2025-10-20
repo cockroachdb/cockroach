@@ -86,6 +86,8 @@ func TestTablesetBasic(t *testing.T) {
 			db.Exec(t, "DROP TABLE IF EXISTS exclude_me")
 			db.Exec(t, "DROP TABLE IF EXISTS exclude_me_also")
 			db.Exec(t, "DROP TABLE IF EXISTS foober")
+			db.Exec(t, "DROP SCHEMA IF EXISTS foo")
+			db.Exec(t, "DROP DATABASE IF EXISTS bar")
 		}
 
 		mkTable := func(name string) {
@@ -289,6 +291,21 @@ func TestTablesetBasic(t *testing.T) {
 			assert.Zero(t, diffs[0].Dropped.Name)
 			assert.Equal(t, "foo", diffs[0].Added.Name)
 			assert.False(t, unchanged)
+		})
+		// TODO(#?): what do we do if the database is dropped? will that just result in all the tables being dropped? we may have to handle it specially.
+		t.Run("schemas and databases ignored", func(t *testing.T) {
+			defer cleanup()
+
+			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			defer shutdown()
+
+			db.Exec(t, "CREATE SCHEMA foo")
+			db.Exec(t, "CREATE DATABASE bar")
+
+			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			require.NoError(t, err)
+			assert.Empty(t, diffs)
+			assert.True(t, unchanged)
 		})
 		// NOTE(#issue): offline tables are not supported currently.
 	})
