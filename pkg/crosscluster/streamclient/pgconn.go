@@ -138,7 +138,7 @@ func uriWithInlineTLSCertsRemoved(remote url.URL) (url.URL, *tlsCerts, error) {
 }
 
 func (c *tlsCerts) addTLSCertsToConfig(tlsConfig *tls.Config) {
-	if c == nil {
+	if c == nil || tlsConfig == nil {
 		return
 	}
 
