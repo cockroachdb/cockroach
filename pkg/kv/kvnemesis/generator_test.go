@@ -77,7 +77,11 @@ func TestRandStep(t *testing.T) {
 		return make([]roachpb.ReplicationTarget, rng.Intn(config.NumNodes)+1),
 			make([]roachpb.ReplicationTarget, rng.Intn(config.NumNodes)+1)
 	}
-	g, err := MakeGenerator(config, getReplicasFn, 0)
+	n := nodes{
+		running: map[int]struct{}{1: {}, 2: {}, 3: {}},
+		stopped: make(map[int]struct{}),
+	}
+	g, err := MakeGenerator(config, getReplicasFn, 0, &n)
 	require.NoError(t, err)
 
 	keys := make(map[string]struct{})
@@ -422,6 +426,16 @@ func TestRandStep(t *testing.T) {
 			counts.Fault.AddNetworkPartition++
 		case *RemoveNetworkPartitionOperation:
 			counts.Fault.RemoveNetworkPartition++
+		case *StopNodeOperation:
+			counts.Fault.StopNode++
+			n.mu.Lock()
+			n.stopped[int(o.NodeId)] = struct{}{}
+			n.mu.Unlock()
+		case *RestartNodeOperation:
+			counts.Fault.RestartNode++
+			n.mu.Lock()
+			n.running[int(o.NodeId)] = struct{}{}
+			n.mu.Unlock()
 		default:
 			t.Fatalf("%T", o)
 		}

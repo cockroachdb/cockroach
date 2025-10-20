@@ -406,7 +406,11 @@ type FaultConfig struct {
 	// RemoveNetworkPartition is an operation that simulates healing a network
 	// partition.
 	RemoveNetworkPartition int
-	// Disk stalls and node crashes belong here.
+	// StopNode is an operation that stops a randomly chosen node.
+	StopNode int
+	// RestartNode is an operation that restarts a randomly chosen node.
+	RestartNode int
+	// Disk stalls and other faults belong here.
 }
 
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
@@ -531,6 +535,8 @@ func newAllOperationsConfig() GeneratorConfig {
 		Fault: FaultConfig{
 			AddNetworkPartition:    1,
 			RemoveNetworkPartition: 1,
+			StopNode:               1,
+			RestartNode:            1,
 		},
 	}}
 }
@@ -625,10 +631,12 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
 
-	// Network partitions can result in unavailability and need to be enabled with
-	// care by specific test variants.
+	// Network partitions and node restarts can result in unavailability and need
+	// to be enabled with care by specific test variants.
 	config.Ops.Fault.AddNetworkPartition = 0
 	config.Ops.Fault.RemoveNetworkPartition = 0
+	config.Ops.Fault.StopNode = 0
+	config.Ops.Fault.RestartNode = 0
 	return config
 }
 
@@ -679,7 +687,7 @@ type Generator struct {
 
 // MakeGenerator constructs a Generator.
 func MakeGenerator(
-	config GeneratorConfig, replicasFn GetReplicasFn, mode TestMode,
+	config GeneratorConfig, replicasFn GetReplicasFn, mode TestMode, n *nodes,
 ) (*Generator, error) {
 	if config.NumNodes <= 0 {
 		return nil, errors.Errorf(`NumNodes must be positive got: %d`, config.NumNodes)
@@ -716,6 +724,7 @@ func MakeGenerator(
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
 		partitions:       p,
+		nodes:            n,
 		mode:             mode,
 	}
 	return g, nil
@@ -755,6 +764,9 @@ type generator struct {
 	// between nodes.
 	partitions
 
+	// nodes contains the sets of running and stopped nodes.
+	nodes *nodes
+
 	// mode is the test mode (e.g. Liveness or Safety). The generator needs it in
 	// order to set a timeout for range lookups under safety mode.
 	mode TestMode
@@ -768,6 +780,52 @@ type connection struct {
 type partitions struct {
 	healthy     map[connection]struct{}
 	partitioned map[connection]struct{}
+}
+
+// nodes contains the sets of running and stopped nodes. This struct is shared
+// between the generator and the applier to make sure nodes are promptly marked
+// as running/stopped when operations are generated/applied. The generator uses
+// removeRandRunning and removeRandStopped to pick nodes to stop/restart, and
+// the applier uses setRunning and setStopped to update the sets when operations
+// are actually applied. This is important because there could be a gap of
+// multiple seconds between generating a stop/restart operation and a node fully
+// stopping/restarting.
+type nodes struct {
+	mu      syncutil.RWMutex
+	running map[int]struct{}
+	stopped map[int]struct{}
+}
+
+func randNodeFromMap(m map[int]struct{}, rng *rand.Rand) int {
+	return maps.Keys(m)[rng.Intn(len(m))]
+}
+
+func (n *nodes) removeRandRunning(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	nodeID := randNodeFromMap(n.running, rng)
+	delete(n.running, nodeID)
+	return nodeID
+}
+
+func (n *nodes) removeRandStopped(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	nodeID := randNodeFromMap(n.stopped, rng)
+	delete(n.stopped, nodeID)
+	return nodeID
+}
+
+func (n *nodes) setRunning(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.running[nodeID] = struct{}{}
+}
+
+func (n *nodes) setStopped(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.stopped[nodeID] = struct{}{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -851,6 +909,12 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
 	addOpGen(&allowed, addRandNetworkPartition, g.Config.Ops.Fault.AddNetworkPartition)
 	addOpGen(&allowed, removeRandNetworkPartition, g.Config.Ops.Fault.RemoveNetworkPartition)
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, stopRandNode, g.Config.Ops.Fault.StopNode)
+	}
+	if len(g.nodes.stopped) > 0 {
+		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
+	}
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -1759,6 +1823,16 @@ func removeRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
 	return removeNetworkPartition(randConn.from, randConn.to)
 }
 
+func stopRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return stopNode(randNode)
+}
+
+func restartRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandStopped(rng)
+	return restartNode(randNode)
+}
+
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
@@ -2378,6 +2452,14 @@ func removeNetworkPartition(from int, to int) Operation {
 	return Operation{
 		RemoveNetworkPartition: &RemoveNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
 	}
+}
+
+func stopNode(nodeID int) Operation {
+	return Operation{StopNode: &StopNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func restartNode(nodeID int) Operation {
+	return Operation{RestartNode: &RestartNodeOperation{NodeId: int32(nodeID)}}
 }
 
 type countingRandSource struct {

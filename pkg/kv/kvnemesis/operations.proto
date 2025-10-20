@@ -192,6 +192,16 @@ message RemoveNetworkPartitionOperation {
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
+message StopNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message RestartNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -226,6 +236,8 @@ message Operation {
   CPutOperation cput = 26 [(gogoproto.customname) = "CPut"];
   AddNetworkPartitionOperation addNetworkPartition = 27;
   RemoveNetworkPartitionOperation removeNetworkPartition = 28;
+  StopNodeOperation stopNode = 29;
+  RestartNodeOperation restartNode = 30;
 }
 
 enum ResultType {

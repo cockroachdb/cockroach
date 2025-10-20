@@ -27,6 +27,11 @@ type Logger interface {
 	WriteFile(basename string, contents string) string
 }
 
+type Restarter interface {
+	StopServer(idx int)
+	RestartServer(idx int) error
+}
+
 // Env manipulates the environment (cluster settings, zone configurations) that
 // the Applier operates in.
 type Env struct {
@@ -34,6 +39,7 @@ type Env struct {
 	Tracker     *SeqTracker
 	L           Logger
 	Partitioner *rpc.Partitioner
+	Restarter   Restarter
 }
 
 func (e *Env) anyNode() *gosql.DB {
