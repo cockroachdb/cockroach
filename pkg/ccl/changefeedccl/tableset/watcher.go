@@ -254,20 +254,27 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		setErr(func() error {
 			var table, prevTable Table
 			var err error
+			var ok bool
 
 			if kv.Value.IsPresent() {
-				table, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
+				table, ok, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
 				if err != nil {
 					return err
+				}
+				if !ok {
+					return nil
 				}
 			}
 
 			if kv.PrevValue.IsPresent() {
-				kvpb := roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
-				kvpb.Value.Timestamp = kv.Value.Timestamp
-				prevTable, err = w.kvToTable(ctx, kvpb, dec)
+				pv := kv.PrevValue
+				pv.Timestamp = kv.Value.Timestamp
+				prevTable, ok, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: pv}, dec)
 				if err != nil {
 					return err
+				}
+				if !ok {
+					return nil
 				}
 			}
 
@@ -465,8 +472,8 @@ func (w *Watcher) updateResolvedLocked(ctx context.Context, ts hlc.Timestamp) er
 		return errors.AssertionFailedf("resolved %s is less than current resolved %s", ts, w.mu.resolved)
 	}
 
-	// the lag seems to be about 3s, coinciding with the default value of kv.closed_timestamp.target_duration.
-	// this is probably fine since the changefeed data will have the same lag anyway.
+	// The lag seems to be about 3s, coinciding with the default value of kv.closed_timestamp.target_duration.
+	// This is probably fine since the changefeed data will have the same lag anyway.
 	if log.V(2) {
 		log.Changefeed.Infof(ctx, "updateResolved@%d %s -> %s", timeutil.Now().Unix(), w.mu.resolved, ts)
 	}
@@ -488,31 +495,41 @@ func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
 
 func (w *Watcher) kvToTable(
 	ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder,
-) (Table, error) {
+) (_ Table, ok bool, _ error) {
 	if log.V(2) {
 		log.Changefeed.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
 	}
 
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
+	}
+
+	if log.V(2) {
+		log.Changefeed.Infof(ctx, "row: %s", row.DebugString())
 	}
 
 	var tableID descpb.ID
-	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		switch col.Name {
-		case "id":
-			tableID = descpb.ID(tree.MustBeDInt(d))
-		}
+	idCol, err := row.DatumNamed("id")
+	if err != nil {
+		return Table{}, false, err
+	}
+	err = idCol.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		tableID = descpb.ID(tree.MustBeDInt(d))
 		return nil
 	})
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
 	}
 
 	nameInfo, err := catalogkeys.DecodeNameMetadataKey(w.execCfg.Codec, kv.Key)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
+	}
+
+	// Tables always have a parent ID and schema ID. If this doesn't, it's not a table.
+	if nameInfo.ParentID == 0 || nameInfo.ParentSchemaID == 0 {
+		return Table{}, false, nil
 	}
 
 	table := Table{
@@ -520,7 +537,7 @@ func (w *Watcher) kvToTable(
 		ID:       tableID,
 	}
 
-	return table, nil
+	return table, true, nil
 }
 
 func mkConsumerID(id int64) int64 {
