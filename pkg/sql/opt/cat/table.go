@@ -300,7 +300,7 @@ type HistogramBucket struct {
 
 	// DistinctRange is the estimated number of distinct values between the upper
 	// bound of the previous bucket and UpperBound (both boundaries are
-	// exclusive).
+	// exclusive). The first bucket should always have DistinctRange=0.
 	DistinctRange float64
 
 	// UpperBound is the upper bound of the bucket.
