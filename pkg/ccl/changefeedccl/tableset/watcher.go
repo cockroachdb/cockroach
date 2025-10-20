@@ -254,20 +254,27 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		setErr(func() error {
 			var table, prevTable Table
 			var err error
+			var ok bool
 
 			if kv.Value.IsPresent() {
-				table, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
+				table, ok, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
 				if err != nil {
 					return err
+				}
+				if !ok {
+					return nil
 				}
 			}
 
 			if kv.PrevValue.IsPresent() {
-				kvpb := roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
-				kvpb.Value.Timestamp = kv.Value.Timestamp
-				prevTable, err = w.kvToTable(ctx, kvpb, dec)
+				pv := kv.PrevValue
+				pv.Timestamp = kv.Value.Timestamp
+				prevTable, ok, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: pv}, dec)
 				if err != nil {
 					return err
+				}
+				if !ok {
+					return nil
 				}
 			}
 
@@ -488,31 +495,47 @@ func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
 
 func (w *Watcher) kvToTable(
 	ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder,
-) (Table, error) {
+) (_ Table, ok bool, _ error) {
 	if log.V(2) {
 		log.Changefeed.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
 	}
 
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
 	}
 
+	var notATable bool
 	var tableID descpb.ID
 	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		switch col.Name {
 		case "id":
 			tableID = descpb.ID(tree.MustBeDInt(d))
+		// Ensure that parentID and parentSchemaID are not 0, as they indicate a database or schema and not a table.
+		case "parentID":
+			parentID := descpb.ID(tree.MustBeDInt(d))
+			if parentID == 0 {
+				notATable = true
+			}
+		case "parentSchemaID":
+			parentSchemaID := descpb.ID(tree.MustBeDInt(d))
+			if parentSchemaID == 0 {
+				notATable = true
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
+	}
+
+	if notATable {
+		return Table{}, false, nil
 	}
 
 	nameInfo, err := catalogkeys.DecodeNameMetadataKey(w.execCfg.Codec, kv.Key)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
 	}
 
 	table := Table{
@@ -520,7 +543,7 @@ func (w *Watcher) kvToTable(
 		ID:       tableID,
 	}
 
-	return table, nil
+	return table, true, nil
 }
 
 func mkConsumerID(id int64) int64 {
