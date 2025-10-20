@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
@@ -66,6 +68,8 @@ import (
 const EnableCloudBillingAccountingEnvVar = "COCKROACH_ENABLE_CLOUD_BILLING_ACCOUNTING"
 
 var EnableCloudBillingAccounting = envutil.EnvOrDefaultBool(EnableCloudBillingAccountingEnvVar, false)
+
+var errDatabaseTargetsChanged = changefeedbase.MarkRetryableError(errors.New("database targets changed"))
 
 type changeAggregator struct {
 	execinfra.ProcessorBase
@@ -1110,6 +1114,15 @@ type changeFrontier struct {
 	usageWgCancel context.CancelFunc
 
 	targets changefeedbase.Targets
+
+	// tsWatcher watches the namespace for database-level changefeeds to ensure
+	// no new tables are added before we checkpoint/update the high watermark.
+	tsWatcher       *tableset.Watcher
+	tsWatcherCancel context.CancelFunc
+	tsWatcherWg     sync.WaitGroup
+	// We're not allowed to move the processor to draining from the tsWatcher's goroutine,
+	// so we use an atomic pointer to store the error and check it in Next().
+	tsDiedErr atomic.Value
 }
 
 const (
@@ -1519,6 +1532,41 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)
 	}
 
+	// If this is a database-level changefeed, start a tableset watcher that
+	// lets us know of any tableset changes.
+	if cf.spec.Feed.IsDatabaseLevelChangefeed() {
+		wFilter, err := tableset.NewFilterFromChangefeedDetails(cf.spec.Feed)
+		if err != nil {
+			log.Changefeed.Warningf(cf.Ctx(), "moving to draining due to error getting database target specification filter list: %v", err)
+			cf.MoveToDraining(err)
+			return
+		}
+		execCfg := cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+		cf.tsWatcher = tableset.NewWatcher(wFilter, execCfg, cf.FlowCtx.Cfg.ChangefeedMonitor, int64(cf.spec.JobID))
+
+		wctx, cancel := context.WithCancel(ctx)
+		cf.tsWatcherCancel = cancel
+		cf.tsWatcherWg.Add(1)
+		// Start the watcher at the frontier timestamp, or, if it's zero, the
+		// statement time. (The frontier ts can be zero if the changefeed is
+		// just starting up, but we don't want to use that for the tableset
+		// watcher).
+		startWatcherTS := cf.frontier.Frontier()
+		if startWatcherTS.IsEmpty() {
+			startWatcherTS = cf.spec.Feed.StatementTime
+		}
+		go func(initialTS hlc.Timestamp) {
+			defer cf.tsWatcherWg.Done()
+			log.Changefeed.Infof(cf.Ctx(), "starting tableset watcher with initialTS=%s", initialTS)
+			if err := cf.tsWatcher.Start(wctx, initialTS); err != nil {
+				if !errors.Is(err, context.Canceled) {
+					cf.tsDiedErr.Store(err)
+					return
+				}
+			}
+		}(startWatcherTS)
+	}
+
 	func() {
 		cf.metrics.mu.Lock()
 		defer cf.metrics.mu.Unlock()
@@ -1605,6 +1653,12 @@ func (cf *changeFrontier) close() {
 	cf.usageWgCancel()
 	cf.usageWg.Wait()
 
+	// Stop tableset watcher if running.
+	if cf.tsWatcherCancel != nil {
+		cf.tsWatcherCancel()
+		cf.tsWatcherWg.Wait()
+	}
+
 	if cf.InternalClose() {
 		if cf.metrics != nil {
 			cf.closeMetrics()
@@ -1634,6 +1688,13 @@ func (cf *changeFrontier) closeMetrics() {
 // Next is part of the RowSource interface.
 func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	for cf.State == execinfra.StateRunning {
+		// Check for errors from the tableset watcher.
+		if err := cf.tsDiedErr.Load(); err != nil {
+			log.Dev.Warningf(cf.Ctx(), "moving to draining due to error in tableset watcher: %v", err)
+			cf.MoveToDraining(err.(error))
+			break
+		}
+
 		if !cf.passthroughBuf.IsEmpty() {
 			return cf.ProcessRowHelper(cf.passthroughBuf.Pop()), nil
 		} else if !cf.resolvedBuf.IsEmpty() {
@@ -1877,6 +1938,44 @@ func (cf *changeFrontier) checkpointJobProgress(
 			return changefeedbase.MarkRetryableError(errors.New("cf.knobs.RaiseRetryableError"))
 		}
 	}
+	// For database-level changefeeds, before advancing the high-water (or
+	// writing span-level checkpoints), ensure that no new tables have been
+	// added up to the frontier timestamp. This guarantees we don't persist a
+	// checkpoint that would cause us to miss data from newly added tables.
+	var tablesToAdd []tableset.AddedTable
+	// NOTE: cf.tsWatcher is only set for db-level changefeeds.
+	if cf.tsWatcher != nil {
+		// N.B. this call is not idempotent. If this code changes to be in a
+		// place where it might be retried during the lifetime of the watcher,
+		// things will be wrong. The watcher makes a best-effort attempt to
+		// catch this error but even so.
+		unchanged, diffs, err := cf.tsWatcher.PopUnchangedUpTo(ctx, frontier)
+		if err != nil {
+			return err
+		}
+		if !unchanged {
+			tablesToAdd = diffs.Adds()
+			// Add new tables to the frontier and persist it, if there are any.
+			if len(tablesToAdd) > 0 {
+				// If there are changes, we'll only advance the frontier to the creation time of the first added table.
+				frontier = tablesToAdd[0].AsOf
+				for _, table := range tablesToAdd {
+					tableKey := cf.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).Codec.TablePrefix(uint32(table.Table.ID))
+					rs := jobspb.ResolvedSpan{
+						Timestamp: table.AsOf,
+						Span:      roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()},
+					}
+					// Sanity check: table doesn't currently exist in tableFrontier.
+					if tableFrontier := cf.frontier.GetFrontier(table.Table.ID); tableFrontier != nil {
+						return errors.AssertionFailedf("table %d (%+v) already exists in frontier with timestamp %s", table.Table.ID, table.Table.NameInfo, tableFrontier.Frontier())
+					}
+					if _, err := cf.frontier.ForwardResolvedSpan(rs); err != nil {
+						return errors.Wrapf(err, "forwarding resolved span for newly added table in db-level feed")
+					}
+				}
+			}
+		}
+	}
 
 	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
 	if updateRunStatus {
@@ -1916,6 +2015,13 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			ju.UpdateProgress(progress)
 
+			// Persist new tables to the frontier.
+			if len(tablesToAdd) > 0 {
+				if err := cf.persistFrontier(ctx, txn); err != nil {
+					return err
+				}
+			}
+
 			return nil
 		}); err != nil {
 			return err
@@ -1932,6 +2038,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(spanLevelCheckpoint)
 
+	if len(tablesToAdd) > 0 {
+		return errors.Wrapf(errDatabaseTargetsChanged, "(progress saved) before checkpoint at %s: %v", frontier, tablesToAdd)
+	}
+
 	return nil
 }
 
@@ -1947,13 +2057,17 @@ func (cf *changeFrontier) maybePersistFrontier(ctx context.Context) error {
 
 	timer := cf.sliMetrics.Timers.FrontierPersistence.Start()
 	if err := cf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
+		return cf.persistFrontier(ctx, txn)
 	}); err != nil {
 		return err
 	}
 	persistDuration := timer.End()
 	cf.frontierPersistenceLimiter.doneSave(persistDuration)
 	return nil
+}
+
+func (cf *changeFrontier) persistFrontier(ctx context.Context, txn isql.Txn) error {
+	return jobfrontier.Store(ctx, txn, cf.spec.JobID, "coordinator", cf.frontier)
 }
 
 // manageProtectedTimestamps periodically advances the protected timestamp for
