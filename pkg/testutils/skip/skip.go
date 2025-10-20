@@ -127,7 +127,7 @@ func UnderShort(t SkippableTest, args ...interface{}) {
 // UnderStress skips this test when running under stress.
 func UnderStress(t SkippableTest, args ...interface{}) {
 	t.Helper()
-	if DevStress() {
+	if Stress() {
 		maybeSkip(t, "disabled under stress", args...)
 	}
 }
@@ -136,7 +136,7 @@ func UnderStress(t SkippableTest, args ...interface{}) {
 // given issue ID as the reason.
 func UnderStressWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Helper()
-	if DevStress() {
+	if Stress() {
 		maybeSkip(t, withIssue("disabled under stress", githubIssueID), args...)
 	}
 }
@@ -191,7 +191,7 @@ func UnderDuressWithIssue(t SkippableTest, githubIssueID int, args ...interface{
 // Duress captures the conditions that currently lead us to believe that tests
 // may be slower than normal.
 func Duress() bool {
-	return util.RaceEnabled || DevStress() || syncutil.DeadlockEnabled
+	return util.RaceEnabled || Stress() || syncutil.DeadlockEnabled
 }
 
 // UnderBench returns true iff a test is currently running under `go
@@ -225,7 +225,7 @@ func OnArch(t SkippableTest, arch string, args ...interface{}) {
 
 func testConfig() string {
 	configs := []string{}
-	if DevStress() {
+	if Stress() {
 		configs = append(configs, "stress")
 	}
 	if util.RaceEnabled {
