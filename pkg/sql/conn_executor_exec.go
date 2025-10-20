@@ -2740,31 +2740,42 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if ppInfo := getPausablePortalInfo(planner); ppInfo != nil {
 		if !ppInfo.dispatchToExecutionEngine.cleanup.isComplete {
 			ctx, err = ex.makeExecPlan(ctx, planner)
-			// TODO(janexing): This is a temporary solution to disallow procedure
-			// call statements that contain mutations for pausable portals. Since
-			// relational.CanMutate is not yet propagated from the function body
-			// via builder.BuildCall(), we must temporarily disallow all
-			// TCL statements, which includes the CALL statements.
-			// This should be removed once CanMutate is fully propagated.
-			// (pending https://github.com/cockroachdb/cockroach/issues/147568)
-			isTCL := planner.curPlan.stmt.AST.StatementType() == tree.TypeTCL
-			if flags := planner.curPlan.flags; err == nil && (isTCL || flags.IsSet(planFlagContainsMutation) || flags.IsSet(planFlagIsDDL)) {
-				telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
-				// We don't allow mutations in a pausable portal. Set it back to
-				// an un-pausable (normal) portal.
-				planner.pausablePortal.pauseInfo = nil
-				err = res.RevokePortalPausability()
-				// If this plan is a transaction control statement, we don't
-				// even execute it but just early exit.
-				if isTCL {
-					err = errors.CombineErrors(err, ErrStmtNotSupportedForPausablePortal)
+			if err == nil {
+				// TODO(janexing): This is a temporary solution to disallow procedure
+				// call statements that contain mutations for pausable portals. Since
+				// relational.CanMutate is not yet propagated from the function body
+				// via builder.BuildCall(), we must temporarily disallow all
+				// TCL statements, which includes the CALL statements.
+				// This should be removed once CanMutate is fully propagated.
+				// (pending https://github.com/cockroachdb/cockroach/issues/147568)
+				isTCL := planner.curPlan.stmt.AST.StatementType() == tree.TypeTCL
+				// We don't allow mutations in a pausable portal.
+				notReadOnly := isTCL || planner.curPlan.flags.IsSet(planFlagContainsMutation) || planner.curPlan.flags.IsSet(planFlagIsDDL)
+				// We don't allow sub / post queries for pausable portal.
+				hasSubOrPostQuery := len(planner.curPlan.subqueryPlans) != 0 || len(planner.curPlan.cascades) != 0 ||
+					len(planner.curPlan.checkPlans) != 0 || len(planner.curPlan.triggers) != 0
+				if notReadOnly || hasSubOrPostQuery {
+					if notReadOnly {
+						telemetry.Inc(sqltelemetry.NotReadOnlyStmtsTriedWithPausablePortals)
+					} else {
+						telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
+					}
+					// This stmt is not supported via the pausable portals model
+					// - set it back to an un-pausable (normal) portal.
+					planner.pausablePortal.pauseInfo = nil
+					err = res.RevokePortalPausability()
+					// If this plan is a transaction control statement, we don't
+					// even execute it but just early exit.
+					if isTCL {
+						err = errors.CombineErrors(err, ErrStmtNotSupportedForPausablePortal)
+					}
+					defer planner.curPlan.close(ctx)
+				} else {
+					ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
+					ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
+						ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
+					})
 				}
-				defer planner.curPlan.close(ctx)
-			} else {
-				ppInfo.dispatchToExecutionEngine.planTop = planner.curPlan
-				ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(func(ctx context.Context) {
-					ppInfo.dispatchToExecutionEngine.planTop.close(ctx)
-				})
 			}
 		} else {
 			planner.curPlan = ppInfo.dispatchToExecutionEngine.planTop
@@ -2820,31 +2831,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	var afterGetPlanDistribution func()
 	if getPausablePortalInfo(planner) != nil {
-		if len(planner.curPlan.subqueryPlans) == 0 &&
-			len(planner.curPlan.cascades) == 0 &&
-			len(planner.curPlan.checkPlans) == 0 &&
-			len(planner.curPlan.triggers) == 0 {
-			// We don't allow a distributed plan for pausable portals.
-			origDistSQLMode := ex.sessionData().DistSQLMode
-			ex.sessionData().DistSQLMode = sessiondatapb.DistSQLOff
-			afterGetPlanDistribution = func() {
-				ex.sessionData().DistSQLMode = origDistSQLMode
-			}
-		} else {
-			telemetry.Inc(sqltelemetry.SubOrPostQueryStmtsTriedWithPausablePortals)
-			// We don't allow sub / post queries for pausable portal. Set it back to an
-			// un-pausable (normal) portal.
-			// With pauseInfo is nil, no cleanup function will be added to the stack
-			// and all clean-up steps will be performed as for normal portals.
-			// TODO(#115887): We may need to move resetting pauseInfo before we add
-			// the pausable portal cleanup step above.
-			planner.pausablePortal.pauseInfo = nil
-			// We need this so that the result consumption for this portal cannot be
-			// paused either.
-			if err := res.RevokePortalPausability(); err != nil {
-				res.SetError(err)
-				return nil
-			}
+		// We don't allow a distributed plan for pausable portals.
+		origDistSQLMode := ex.sessionData().DistSQLMode
+		ex.sessionData().DistSQLMode = sessiondatapb.DistSQLOff
+		afterGetPlanDistribution = func() {
+			ex.sessionData().DistSQLMode = origDistSQLMode
 		}
 	}
 	distributePlan, distSQLProhibitedErr := planner.getPlanDistribution(ctx, planner.curPlan.main)
