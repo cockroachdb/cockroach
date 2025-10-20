@@ -707,7 +707,7 @@ func TestDecommissionSelf(t *testing.T) {
 	require.Empty(t, resp.Status)
 
 	// The nodes should now have been (or soon become) decommissioned.
-	for i := 0; i < tc.NumServers(); i++ {
+	for i := tc.NumServers() - 1; i >= 0; i-- {
 		srv := tc.Server(i)
 		expect := livenesspb.MembershipStatus_ACTIVE
 		for _, nodeID := range decomNodeIDs {
@@ -724,11 +724,17 @@ func TestDecommissionSelf(t *testing.T) {
 			}
 			liveness, ok := nodeLiveness.GetLiveness(srv.NodeID())
 			livenessFromCache := nodeLiveness.GetNodeVitalityFromCache(srv.NodeID())
+			for i := 0; i < tc.NumServers(); i++ {
+				srv := tc.Server(i)
+				store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+				require.NoError(t, err)
+				log.Dev.Infof(ctx, "node %d decommissioning range count: %d", srv.NodeID(), store.Metrics().DecommissioningRangeCount.Value())
+			}
 			if !ok || liveness.Membership != expect {
-				log.Dev.Infof(ctx, "node %d: found=%v, current=%v, expected=%v, livenessFromCache=%v", srv.NodeID(), ok, liveness.Membership, expect, livenessFromCache)
+				log.Dev.Infof(ctx, "node %d: found=%v, current=%v, expected=%v, is_draining=%v, is_decommissioning=%v, is_decommissioned=%v", srv.NodeID(), ok, liveness.Membership, expect, livenessFromCache.IsDraining(), livenessFromCache.IsDecommissioning(), livenessFromCache.IsDecommissioned())
 				return false
 			}
-			log.Dev.Infof(ctx, "node %d found expected status %v, livenessFromCache: %v", srv.NodeID(), expect, livenessFromCache)
+			log.Dev.Infof(ctx, "node %d found expected, is_draining=%v, is_decommissioning=%v, is_decommissioned=%v, livenessFromCache:%v", srv.NodeID(), livenessFromCache.IsDraining(), livenessFromCache.IsDecommissioning(), livenessFromCache.IsDecommissioned(), livenessFromCache.MembershipStatus())
 			return true
 		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", srv.NodeID(), expect)
 	}
