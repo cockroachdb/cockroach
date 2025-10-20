@@ -103,7 +103,6 @@ var InFlightTokensPerStream = settings.RegisterByteSizeSetting(
 	"kvadmission.flow_controller.in_flight_tokens_per_stream",
 	"flow tokens available for in-flight work on a per-stream basis",
 	64<<20, // 64 MiB
-	validateTokenRange,
 )
 
 const (

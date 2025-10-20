@@ -1136,6 +1136,8 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 	numSets := len(voterSets)
 	var votersContributingToQuorum [2]int
 	var numOptionalForceFlushes [2]int
+	numNoSendQVoter := 0
+	numHaveSendTokensVoter := 0
 	for r, rs := range rc.replicaMap {
 		info := e.ReplicasStateInfo[r]
 		// Defensive, since we already clear the scratchEvent later in this method.
@@ -1171,6 +1173,12 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 			// Compute state and first-pass decision on force-flushing and sending
 			// the new entries.
 			rs.scratchVoterStreamState = rs.computeReplicaStreamStateRaftMuLocked(ctx, needsTokens)
+			if rs.scratchVoterStreamState.noSendQ {
+				numNoSendQVoter++
+				if rs.scratchVoterStreamState.hasSendTokens {
+					numHaveSendTokensVoter++
+				}
+			}
 			if (rs.scratchVoterStreamState.noSendQ && rs.scratchVoterStreamState.hasSendTokens) ||
 				rs.scratchVoterStreamState.forceFlushStopIndex.active() {
 				if rs.desc.IsVoterOldConfig() {
@@ -1191,6 +1199,17 @@ func (rc *rangeController) HandleRaftEventRaftMuLocked(ctx context.Context, e Ra
 				}
 			}
 		}
+	}
+	if numNoSendQVoter == 3 && numHaveSendTokensVoter == 2 {
+		// First transition into creating a send-queue.
+		var b strings.Builder
+		fmt.Fprintf(&b, "r%s: ", rc.opts.RangeID.String())
+		for _, rs := range rc.replicaMap {
+			fmt.Fprintf(&b, "%s: %t, %s:", rs.stream.String(),
+				rs.scratchVoterStreamState.hasSendTokens,
+				pprintTokens(rs.sendTokenCounter.tokens(RegularWC)))
+		}
+		log.KvExec.Infof(ctx, "deny-send-q %s", redact.SafeString(b.String()))
 	}
 	if e.MsgAppMode == MsgAppPull {
 		// Need to consider making force-flushing changes, or deny voters wanting
