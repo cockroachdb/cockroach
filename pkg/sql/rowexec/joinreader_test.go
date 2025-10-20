@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -60,8 +59,9 @@ func TestJoinReader(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create a table where each row is:
 	//
@@ -89,14 +89,14 @@ func TestJoinReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tdSecondary := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tdSecondary := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	sqlutils.CreateTable(t, sqlDB, "t2",
 		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s), INDEX bssum (b,s,sum)",
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	tdFamily := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	tdFamily := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t2")
 
 	sqlutils.CreateTable(t, sqlDB, "t3parent",
 		"a INT PRIMARY KEY",
@@ -1088,7 +1088,7 @@ func TestJoinReader(t *testing.T) {
 									Settings:    st,
 									TempStorage: tempEngine,
 								},
-								Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+								Txn:         kv.NewTxn(ctx, s.DB(), srv.NodeID()),
 								DiskMonitor: diskMonitor,
 							}
 							encRows := make(rowenc.EncDatumRows, len(c.input))
@@ -1117,7 +1117,7 @@ func TestJoinReader(t *testing.T) {
 							var fetchSpec fetchpb.IndexFetchSpec
 							if err := rowenc.InitIndexFetchSpec(
 								&fetchSpec,
-								keys.SystemSQLCodec,
+								s.Codec(),
 								td, index, fetchColIDs,
 							); err != nil {
 								t.Fatal(err)
@@ -1221,8 +1221,9 @@ func TestJoinReaderDiskSpill(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create our lookup table, with a single key which has enough rows to trigger
 	// a disk spill.
@@ -1239,7 +1240,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 		key, stringColVal, numRows); err != nil {
 		t.Fatal(err)
 	}
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
@@ -1259,7 +1260,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 			Settings:    st,
 			TempStorage: tempEngine,
 		},
-		Txn:         kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		Txn:         kv.NewTxn(ctx, s.DB(), srv.NodeID()),
 		DiskMonitor: diskMonitor,
 	}
 	// Set the memory limit to the minimum allocation size so that the row
@@ -1277,7 +1278,7 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&fetchSpec,
-		keys.SystemSQLCodec,
+		s.Codec(),
 		td,
 		td.ActiveIndexes()[1],
 		[]descpb.ColumnID{1, 2, 3},
@@ -1333,8 +1334,9 @@ func TestJoinReaderDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	sqlutils.CreateTable(
 		t,
@@ -1344,7 +1346,7 @@ func TestJoinReaderDrain(t *testing.T) {
 		1, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	st := s.ClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(context.Background(), base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
@@ -1363,10 +1365,10 @@ func TestJoinReaderDrain(t *testing.T) {
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 
-	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	rootTxn := kv.NewTxn(ctx, s.DB(), srv.NodeID())
 	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), leafInputState, nil /* header */)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), srv.NodeID(), leafInputState, nil /* header */)
 
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -1386,7 +1388,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	var fetchSpec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
 		&fetchSpec,
-		keys.SystemSQLCodec,
+		s.Codec(),
 		td, td.GetPrimaryIndex(), []descpb.ColumnID{1},
 	); err != nil {
 		t.Fatal(err)
@@ -1464,8 +1466,9 @@ func TestIndexJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create a table where each row is:
 	//
@@ -1493,8 +1496,8 @@ func TestIndexJoiner(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
-	tdf := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t2")
+	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
+	tdf := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t2")
 
 	v := [10]rowenc.EncDatum{}
 	for i := range v {
@@ -1559,7 +1562,7 @@ func TestIndexJoiner(t *testing.T) {
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
 				&fetchSpec,
-				keys.SystemSQLCodec,
+				s.Codec(),
 				c.desc, c.desc.GetPrimaryIndex(),
 				[]descpb.ColumnID{1, 2, 3, 4},
 			); err != nil {
@@ -1571,7 +1574,7 @@ func TestIndexJoiner(t *testing.T) {
 				FetchSpec:      fetchSpec,
 				SplitFamilyIDs: splitter.FamilyIDs(),
 			}
-			txn := kv.NewTxn(context.Background(), s.DB(), s.NodeID())
+			txn := kv.NewTxn(context.Background(), s.DB(), srv.NodeID())
 			runProcessorTest(
 				t,
 				execinfrapb.ProcessorCoreUnion{JoinReader: &spec},
@@ -1581,7 +1584,7 @@ func TestIndexJoiner(t *testing.T) {
 				c.outputTypes,
 				c.expected,
 				txn,
-				s.Stopper(),
+				s.AppStopper(),
 				s.DistSenderI().(*kvcoord.DistSender),
 			)
 		})
@@ -1650,11 +1653,12 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 	require.NoError(b, err)
 
 	var (
-		logScope       = log.Scope(b)
-		ctx            = context.Background()
-		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
+		logScope         = log.Scope(b)
+		ctx              = context.Background()
+		srv, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
+		s           = srv.ApplicationLayer()
 		st          = s.ClusterSettings()
 		evalCtx     = eval.MakeTestingEvalContext(st)
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
@@ -1668,7 +1672,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 		}
 	)
 	defer logScope.Close(b)
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
 	defer evalCtx.Stop(ctx)
 	defer diskMonitor.Stop(ctx)
 
@@ -1738,7 +1742,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 	createRightSideTable(bc.rightSz)
 	// Create a new txn after the table has been created.
-	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), s.NodeID())
+	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), srv.NodeID())
 	for _, reqOrdering := range bc.ordering {
 		for columnIdx, columnDef := range rightSideColumnDefs {
 			for _, numLookupRows := range bc.numLookupRows {
@@ -1785,7 +1789,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 
 								// Get the table descriptor and find the index that will provide us with
 								// the expected match ratio.
-								tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+								tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", tableName)
 								foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idx catalog.Index) bool {
 									require.Equal(b, 1, idx.NumKeyColumns(), "all indexes created in this benchmark should only contain one column")
 									return idx.GetKeyColumnName(0) == columnDef.name
@@ -1803,7 +1807,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 								var fetchSpec fetchpb.IndexFetchSpec
 								if err := rowenc.InitIndexFetchSpec(
 									&fetchSpec,
-									keys.SystemSQLCodec,
+									s.Codec(),
 									tableDesc, tableDesc.ActiveIndexes()[indexIdx],
 									[]descpb.ColumnID{descpb.ColumnID(columnIdx + 1)},
 								); err != nil {
@@ -1918,11 +1922,12 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 	require.NoError(b, err)
 
 	var (
-		logScope       = log.Scope(b)
-		ctx            = context.Background()
-		s, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
+		logScope         = log.Scope(b)
+		ctx              = context.Background()
+		srv, sqlDB, kvDB = serverutils.StartServer(b, base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{storeSpec},
 		})
+		s           = srv.ApplicationLayer()
 		st          = s.ClusterSettings()
 		evalCtx     = eval.MakeTestingEvalContext(st)
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
@@ -1936,7 +1941,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 		}
 	)
 	defer logScope.Close(b)
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
 	defer evalCtx.Stop(ctx)
 	defer diskMonitor.Stop(ctx)
 
@@ -1985,7 +1990,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 
 	createRightSideTable(tableSize, numCols)
 	// Create a new txn after the table has been created.
-	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), s.NodeID())
+	flowCtx.Txn = kv.NewTxn(ctx, s.DB(), srv.NodeID())
 	for numExprs := 1; numExprs < numCols; numExprs = numExprs << 1 {
 		benchmarkName := fmt.Sprintf("exprs=%d", numExprs)
 
@@ -1994,7 +1999,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 
 			// Get the table descriptor and find the index that will provide us with
 			// the expected match ratio.
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", tableName)
 			foundIndex := catalog.FindPublicNonPrimaryIndex(tableDesc, func(idx catalog.Index) bool {
 				return idx.NumKeyColumns() == numCols
 			})
@@ -2016,7 +2021,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 			var fetchSpec fetchpb.IndexFetchSpec
 			if err := rowenc.InitIndexFetchSpec(
 				&fetchSpec,
-				keys.SystemSQLCodec,
+				s.Codec(),
 				tableDesc, tableDesc.ActiveIndexes()[indexIdx],
 				fetchColumnIDs,
 			); err != nil {

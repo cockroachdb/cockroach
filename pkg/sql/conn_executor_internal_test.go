@@ -274,6 +274,7 @@ func startConnExecutor(
 ) {
 	// A lot of boilerplate for creating a connExecutor.
 	stopper := stop.NewStopper()
+	codec := keys.SystemSQLCodec
 	clock := hlc.NewClockForTesting(nil)
 	factory := kv.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, *kvpb.BatchRequest,
@@ -297,7 +298,7 @@ func startConnExecutor(
 	})
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
-	collectionFactory := descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec)
+	collectionFactory := descs.NewBareBonesCollectionFactory(st, codec)
 	registry := stmtdiagnostics.NewRegistry(nil, st)
 	cfg := &ExecutorConfig{
 		AmbientCtx: ambientCtx,
@@ -313,7 +314,7 @@ func startConnExecutor(
 			NodeID:           nodeID,
 			LogicalClusterID: func() uuid.UUID { return uuid.UUID{} },
 		},
-		Codec: keys.SystemSQLCodec,
+		Codec: codec,
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, st, 1, /* sqlInstanceID */
 			nil, /* rpcCtx */
@@ -339,7 +340,7 @@ func startConnExecutor(
 			nil, /* connHealthCheckerSystem */
 			nil, /* instanceConnHealthChecker */
 			nil, /* sqlInstanceDialer */
-			keys.SystemSQLCodec,
+			codec,
 			nil, /* sqlAddressResolver */
 			clock,
 		),

@@ -35,8 +35,9 @@ import (
 func TestScrubIndexPartialIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	r := sqlutils.MakeSQLRunner(db)
 
 	t.Run("missing index entry", func(t *testing.T) {
@@ -49,9 +50,9 @@ INSERT INTO t.test VALUES (2, 15);
 `)
 		defer r.Exec(t, "DROP DATABASE t")
 		values := []tree.Datum{tree.NewDInt(2), tree.NewDInt(15)}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-		if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+		if err := removeIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
@@ -77,9 +78,9 @@ INSERT INTO t.test VALUES (2, 15);
 `)
 		defer r.Exec(t, "DROP DATABASE t")
 		values := []tree.Datum{tree.NewDInt(3), tree.NewDInt(25)}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+		if err := addIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
@@ -105,9 +106,9 @@ INSERT INTO t.test VALUES (2, 15);
 `)
 		defer r.Exec(t, "DROP DATABASE t")
 		values := []tree.Datum{tree.NewDInt(3), tree.NewDInt(7)}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+		if err := addIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
@@ -133,9 +134,9 @@ INSERT INTO t.test VALUES (2, 15);
 `)
 		defer r.Exec(t, "DROP DATABASE t")
 		values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(5)}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-		if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+		if err := addIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 			t.Fatalf("unexpected error: %s", err.Error())
 		}
 		// Run SCRUB and find the index errors we created.
@@ -155,14 +156,14 @@ INSERT INTO t.test VALUES (2, 15);
 }
 
 func indexEntryForDatums(
-	row []tree.Datum, tableDesc catalog.TableDescriptor, index catalog.Index,
+	codec keys.SQLCodec, row []tree.Datum, tableDesc catalog.TableDescriptor, index catalog.Index,
 ) (rowenc.IndexEntry, error) {
 	var colIDtoRowIndex catalog.TableColMap
 	for i, c := range tableDesc.PublicColumns() {
 		colIDtoRowIndex.Set(c.GetID(), i)
 	}
 	indexEntries, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), keys.SystemSQLCodec, tableDesc, index,
+		context.Background(), codec, tableDesc, index,
 		colIDtoRowIndex, row, rowenc.EmptyVectorIndexEncodingHelper, true, /* includeEmpty */
 	)
 	if err != nil {
@@ -180,9 +181,13 @@ func indexEntryForDatums(
 // order of the public columns of the table. It further assumes that
 // the row only produces a single index entry.
 func removeIndexEntryForDatums(
-	row []tree.Datum, kvDB *kv.DB, tableDesc catalog.TableDescriptor, index catalog.Index,
+	row []tree.Datum,
+	codec keys.SQLCodec,
+	kvDB *kv.DB,
+	tableDesc catalog.TableDescriptor,
+	index catalog.Index,
 ) error {
-	entry, err := indexEntryForDatums(row, tableDesc, index)
+	entry, err := indexEntryForDatums(codec, row, tableDesc, index)
 	if err != nil {
 		return err
 	}
@@ -194,9 +199,13 @@ func removeIndexEntryForDatums(
 // order of the public columns of the table. It further assumes that the row only produces a single
 // index entry.
 func addIndexEntryForDatums(
-	row []tree.Datum, kvDB *kv.DB, tableDesc catalog.TableDescriptor, index catalog.Index,
+	row []tree.Datum,
+	codec keys.SQLCodec,
+	kvDB *kv.DB,
+	tableDesc catalog.TableDescriptor,
+	index catalog.Index,
 ) error {
-	entry, err := indexEntryForDatums(row, tableDesc, index)
+	entry, err := indexEntryForDatums(codec, row, tableDesc, index)
 	if err != nil {
 		return err
 	}
@@ -210,8 +219,9 @@ func addIndexEntryForDatums(
 func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
@@ -223,13 +233,13 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
 
 	// Delete the existing secondary k/v.
-	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+	if err := removeIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -237,7 +247,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
 
 	// Put the incorrect secondary k/v.
-	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+	if err := addIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -324,7 +334,7 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
@@ -333,7 +343,7 @@ INSERT INTO t.test VALUES (10, 2);
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
 	primaryIndexKeyPrefix := rowenc.MakeIndexKeyPrefix(
-		keys.SystemSQLCodec, tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
+		s.Codec(), tableDesc.GetID(), tableDesc.GetPrimaryIndexID())
 	primaryIndexKey, _, err := rowenc.EncodeIndexKey(
 		tableDesc, tableDesc.GetPrimaryIndex(), colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
@@ -403,8 +413,9 @@ INSERT INTO t.test VALUES (10, 2);
 func TestScrubFKConstraintFKMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, `SET autocommit_before_ddl = false`)
 
@@ -424,7 +435,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 		INSERT INTO t.child VALUES (10, 314);
 	`)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "child")
 
 	// Construct datums for the child row values (child_id, parent_id).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
@@ -432,7 +443,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 
 	// Delete the existing secondary key entry, as we will later replace
 	// it.
-	if err := removeIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+	if err := removeIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -440,7 +451,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	values[1] = tree.NewDInt(0)
 
 	// Add the new, replacement secondary index entry.
-	if err := addIndexEntryForDatums(values, kvDB, tableDesc, secondaryIndex); err != nil {
+	if err := addIndexEntryForDatums(values, s.Codec(), kvDB, tableDesc, secondaryIndex); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -524,8 +535,9 @@ ALTER TABLE t.child ADD FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent 
 func TestScrubUniqueWithoutIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Create the table and row entries.
 	if _, err := db.Exec(`
@@ -543,12 +555,12 @@ INSERT INTO db.t VALUES (1, 2), (2,3);
 
 	// Overwrite one of the values with a duplicate unique value.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(s.Codec(), tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}

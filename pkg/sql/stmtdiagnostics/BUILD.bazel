@@ -43,7 +43,6 @@ go_test(
     tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

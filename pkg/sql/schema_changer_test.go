@@ -7989,7 +7989,7 @@ func TestLeaseGenerationBumpWithSchemaChange(t *testing.T) {
 	descIDToDelay := descpb.InvalidID
 	grp := ctxgroup.WithContext(ctx)
 	var startDelayCallback func() chan struct{}
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLLeaseManager: &lease.ManagerTestingKnobs{
 				TestingOnNewVersion: func(id descpb.ID) {
@@ -8005,7 +8005,8 @@ func TestLeaseGenerationBumpWithSchemaChange(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
 	var nextValue atomic.Int64
@@ -8023,7 +8024,7 @@ func TestLeaseGenerationBumpWithSchemaChange(t *testing.T) {
 
 	runner.Exec(t, "CREATE TABLE t1(n int not null, j int not null)")
 	runner.Exec(t, "INSERT INTO t1 VALUES ($1, $2)", nextValue.Add(1), nextValue.Add(1))
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "t1")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", "t1")
 	descIDToDelay = tableDesc.GetID()
 	runner.Exec(t, "ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS(n, j)")
 	require.NoError(t, grp.Wait())

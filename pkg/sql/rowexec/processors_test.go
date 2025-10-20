@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -695,11 +694,12 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, numNodes, testClusterArgs)
 	defer tc.Stopper().Stop(ctx)
+	s := tc.ApplicationLayer(0)
 
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
-	dbConn := tc.ServerConn(0)
+	dbConn := s.SQLConn(t, serverutils.DBName("test"))
 	sqlutils.CreateTable(t, dbConn, "t", "x INT, y INT, INDEX (y)", 30, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn))
-	tableID := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t").GetID()
+	tableID := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "test", "t").GetID()
 	// onerow is a table created to test #51458. The value of the only row in this
 	// table is explicitly set to 2 so that it is routed by hash to a desired
 	// destination.
@@ -714,7 +714,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	))
 	require.NoError(t, err)
 	populateRangeCacheAndDisableBuffering(t, dbConn, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).AdvSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, s.AdvSQLAddr())
 	defer cleanup()
 
 	testCases := []struct {
@@ -795,7 +795,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 					for _, nodeIdx := range errorOrigin {
 						filters[nodeIdx].Lock()
 						filters[nodeIdx].enabled = true
-						filters[nodeIdx].keyPrefix = keys.SystemSQLCodec.TablePrefix(uint32(tableID))
+						filters[nodeIdx].keyPrefix = s.Codec().TablePrefix(uint32(tableID))
 						filters[nodeIdx].Unlock()
 					}
 					// Reset all filters for the next test case.

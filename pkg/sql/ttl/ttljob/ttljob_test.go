@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -55,12 +54,8 @@ import (
 
 var zeroDuration time.Duration
 
-type ttlServer interface {
-	JobRegistry() interface{}
-}
-
 type rowLevelTTLTestJobTestHelper struct {
-	server           ttlServer
+	server           serverutils.ApplicationLayerInterface
 	env              *jobstest.JobSchedulerTestEnv
 	testCluster      serverutils.TestClusterInterface
 	sqlDB            *sqlutils.SQLRunner
@@ -364,11 +359,11 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 				// Get the table's span to compare against
 				tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 					h.kvDB,
-					keys.SystemSQLCodec,
+					h.server.Codec(),
 					"defaultdb",
 					"tbl",
 				)
-				tableSpan := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+				tableSpan := tableDesc.PrimaryIndexSpan(h.server.Codec())
 
 				// Check if completed spans cover the entire table span
 				var spanGroup roachpb.SpanGroup
@@ -702,7 +697,7 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 				}
 				tableDesc := desctestutils.TestingGetPublicTableDescriptor(
 					th.kvDB,
-					keys.SystemSQLCodec,
+					th.server.Codec(),
 					"defaultdb", /* database */
 					tableName,
 				)
@@ -1073,7 +1068,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			if tc.numSplits > 0 {
 				tbDesc := desctestutils.TestingGetPublicTableDescriptor(
 					th.kvDB,
-					keys.SystemSQLCodec,
+					th.server.Codec(),
 					"defaultdb",
 					createTableStmt.Table.Table(),
 				)

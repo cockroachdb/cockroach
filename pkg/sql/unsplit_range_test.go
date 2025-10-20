@@ -75,7 +75,12 @@ func hasManuallySplitRangesInSpan(
 // hasManuallySplitRangesOnIndex checks whether there is any range of an index
 // has stick bit.
 func hasManuallySplitRangesOnIndex(
-	ctx context.Context, t *testing.T, kvDB *kv.DB, tableSpan roachpb.Span, indexID descpb.IndexID,
+	ctx context.Context,
+	t *testing.T,
+	codec keys.SQLCodec,
+	kvDB *kv.DB,
+	tableSpan roachpb.Span,
+	indexID descpb.IndexID,
 ) bool {
 	ranges, err := kvclient.ScanMetaKVs(ctx, kvDB.NewTxn(ctx, "drop index unsplit test"), tableSpan)
 	if err != nil {
@@ -87,7 +92,7 @@ func hasManuallySplitRangesOnIndex(
 		if err := ranges[i].ValueProto(&desc); err != nil {
 			t.Fatal(err)
 		}
-		_, _, foundIndexID, err := keys.SystemSQLCodec.DecodeIndexPrefix(roachpb.Key(desc.StartKey))
+		_, _, foundIndexID, err := codec.DecodeIndexPrefix(roachpb.Key(desc.StartKey))
 		if err != nil {
 			continue
 		}
@@ -200,7 +205,7 @@ func TestUnsplitRanges(t *testing.T) {
 		hasSplitOnKeyAfterGC bool
 		// gcSucceedFunc is called within testutils.SucceedsSoon() to make sure gc
 		// worked. Different statements need has different success condition.
-		gcSucceedFunc func(kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error
+		gcSucceedFunc func(codec keys.SQLCodec, kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error
 	}
 
 	const deprecatedTableTruncateChunkSize = 600
@@ -208,15 +213,15 @@ func TestUnsplitRanges(t *testing.T) {
 	const numKeys = 3 * numRows
 	const tableName string = "test1"
 
-	tableDropSucceed := func(kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error {
+	tableDropSucceed := func(codec keys.SQLCodec, kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error {
 		if err := descExists(sqlDB, false, tableDesc.GetID()); err != nil {
 			return err
 		}
 		return zoneExists(sqlDB, nil, tableDesc.GetID())
 	}
 
-	tableTruncateSucceed := func(kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error {
-		tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
+	tableTruncateSucceed := func(codec keys.SQLCodec, kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error {
+		tableSpan := tableDesc.TableSpan(codec)
 		if kvs, err := kvDB.Scan(context.Background(), tableSpan.Key, tableSpan.EndKey, 0); err != nil {
 			return err
 		} else if len(kvs) != 0 {
@@ -225,7 +230,7 @@ func TestUnsplitRanges(t *testing.T) {
 		return nil
 	}
 
-	indexDropSucceed := func(kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error {
+	indexDropSucceed := func(codec keys.SQLCodec, kvDB *kv.DB, sqlDB *gosql.DB, tableDesc catalog.TableDescriptor, indexSpan roachpb.Span) error {
 		if kvs, err := kvDB.Scan(context.Background(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
 			return err
 		} else if len(kvs) != 0 {
@@ -280,8 +285,9 @@ func TestUnsplitRanges(t *testing.T) {
 
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 
-		s, sqlDB, kvDB := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(context.Background())
+		srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(context.Background())
+		s := srv.ApplicationLayer()
 
 		// Speed up how long it takes for the zone config changes to propagate.
 		sqltestutils.SetShortRangeFeedIntervals(t, sqlDB)
@@ -294,15 +300,15 @@ func TestUnsplitRanges(t *testing.T) {
 		_, err := sqlDB.Exec(fmt.Sprintf(`ALTER TABLE t.%s SET (schema_locked=false)`, tableName))
 		require.NoError(t, err)
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
-		tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", tableName)
+		tableSpan := tableDesc.TableSpan(s.Codec())
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 
 		idx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 		if err != nil {
 			t.Fatal(err)
 		}
-		indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, idx.GetID())
+		indexSpan := tableDesc.IndexSpan(s.Codec(), idx.GetID())
 		tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
 		// Split the first range in the table.
@@ -310,7 +316,7 @@ func TestUnsplitRanges(t *testing.T) {
 		// Verify there are manually split ranges.
 		require.True(t, rangeIsManuallySplit(ctx, t, kvDB, tableSpan, splitKey))
 		require.True(t, hasManuallySplitRangesInSpan(ctx, t, kvDB, tableSpan))
-		require.True(t, hasManuallySplitRangesOnIndex(ctx, t, kvDB, tableSpan, idx.GetID()))
+		require.True(t, hasManuallySplitRangesOnIndex(ctx, t, s.Codec(), kvDB, tableSpan, idx.GetID()))
 
 		if _, err := sqlDB.Exec(tc.query); err != nil {
 			t.Fatal(err)
@@ -318,7 +324,7 @@ func TestUnsplitRanges(t *testing.T) {
 
 		// Check GC worked!
 		testutils.SucceedsSoon(t, func() error {
-			return tc.gcSucceedFunc(kvDB, sqlDB, tableDesc, indexSpan)
+			return tc.gcSucceedFunc(s.Codec(), kvDB, sqlDB, tableDesc, indexSpan)
 		})
 		tests.CheckKeyCount(t, kvDB, tableSpan, tc.allKeyCntAfterGC)
 		// There should be always zero keys left since dropping index/table/database or
@@ -329,7 +335,7 @@ func TestUnsplitRanges(t *testing.T) {
 		require.Equal(t, tc.hasSplitOnTableAfterGC, hasManuallySplitRangesInSpan(ctx, t, kvDB, tableSpan))
 		// This should be always false since dropping index/table/database or
 		// truncating table all remove index "foo".
-		require.False(t, hasManuallySplitRangesOnIndex(ctx, t, kvDB, tableSpan, idx.GetID()))
+		require.False(t, hasManuallySplitRangesOnIndex(ctx, t, s.Codec(), kvDB, tableSpan, idx.GetID()))
 	}
 
 	for _, tc := range testCases {
