@@ -257,6 +257,7 @@ func uploadBinaryVersion(
 	v *Version,
 ) (string, error) {
 	dstBinary := BinaryPathForVersion(t, v, binary)
+	l.Printf("Attempting to download %s to nodes as %s", dstBinary, nodes)
 	var defaultBinary string
 	var isOverridden bool
 	switch binary {

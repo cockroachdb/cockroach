@@ -212,7 +212,7 @@ func StageApplication(
 	if err != nil {
 		return err
 	}
-
+	l.Printf("StageApplication %s with version %s for os %s and arch %s", applicationName, version, os, arch)
 	switch applicationName {
 	case "cockroach":
 		err := stageRemoteBinary(
