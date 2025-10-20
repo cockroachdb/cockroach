@@ -28,9 +28,10 @@ import (
 
 // Applier executes Steps.
 type Applier struct {
-	env *Env
-	dbs []*kv.DB
-	mu  struct {
+	env   *Env
+	dbs   []*kv.DB
+	nodes *nodes
+	mu    struct {
 		dbIdx int
 		syncutil.Mutex
 		txns map[string]*kv.Txn
@@ -38,10 +39,11 @@ type Applier struct {
 }
 
 // MakeApplier constructs an Applier that executes against the given DBs.
-func MakeApplier(env *Env, dbs ...*kv.DB) *Applier {
+func MakeApplier(env *Env, n *nodes, dbs ...*kv.DB) *Applier {
 	a := &Applier{
-		env: env,
-		dbs: dbs,
+		env:   env,
+		dbs:   dbs,
+		nodes: n,
 	}
 	a.mu.txns = make(map[string]*kv.Txn)
 	return a
@@ -63,7 +65,7 @@ func (a *Applier) Apply(ctx context.Context, step *Step) (trace tracingpb.Record
 		}
 		trace = collectAndFinish()
 	}()
-	applyOp(recCtx, a.env, db, &step.Op)
+	a.applyOp(recCtx, db, &step.Op)
 	return collectAndFinish(), nil
 }
 
@@ -120,7 +122,7 @@ func exceptContextCanceled(err error) bool {
 		strings.Contains(err.Error(), "query execution canceled")
 }
 
-func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
+func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
 		*PutOperation,
@@ -146,10 +148,10 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		err := db.AdminTransferLease(ctx, o.Key, o.Target)
 		o.Result = resultInit(ctx, err)
 	case *ChangeSettingOperation:
-		err := changeClusterSettingInEnv(ctx, env, o)
+		err := changeClusterSettingInEnv(ctx, a.env, o)
 		o.Result = resultInit(ctx, err)
 	case *ChangeZoneOperation:
-		err := updateZoneConfigInEnv(ctx, env, o.Type)
+		err := updateZoneConfigInEnv(ctx, a.env, o.Type)
 		o.Result = resultInit(ctx, err)
 	case *BarrierOperation:
 		var err error
@@ -162,10 +164,20 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	case *FlushLockTableOperation:
 		o.Result = resultInit(ctx, db.FlushLockTable(ctx, o.Key, o.EndKey))
 	case *AddNetworkPartitionOperation:
-		err := env.Partitioner.AddPartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		err := a.env.Partitioner.AddPartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
 		o.Result = resultInit(ctx, err)
 	case *RemoveNetworkPartitionOperation:
-		err := env.Partitioner.RemovePartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		err := a.env.Partitioner.RemovePartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
+	case *StopNodeOperation:
+		serverID := int(o.NodeId) - 1
+		a.env.Restarter.StopServer(serverID)
+		a.nodes.setStopped(int(o.NodeId))
+		o.Result = resultInit(ctx, nil)
+	case *RestartNodeOperation:
+		serverID := int(o.NodeId) - 1
+		err := a.env.Restarter.RestartServer(serverID)
+		a.nodes.setRunning(int(o.NodeId))
 		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between

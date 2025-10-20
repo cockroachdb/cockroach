@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"strconv"
 	"testing"
 	"time"
 
@@ -32,8 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -53,7 +57,7 @@ var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
 	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner, mode TestMode,
-) base.TestClusterArgs {
+) (base.TestClusterArgs, stop.Closer) {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		DisableRaftLogQueue:                   true,
 		AllowUnsynchronizedReplicationChanges: true,
@@ -244,8 +248,11 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
+	reg := fs.NewStickyRegistry()
+	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
-		ServerArgs: commonServerArgs,
+		ReusableListenerReg: lisReg,
+		ServerArgs:          commonServerArgs,
 		ServerArgsPerNode: func() map[int]base.TestServerArgs {
 			perNode := make(map[int]base.TestServerArgs)
 			for i := 0; i < cfg.numNodes; i++ {
@@ -259,6 +266,11 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 				perNodeServerArgs.Locality = roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("n%d", nodeId)}},
 				}
+				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{StickyVFSRegistry: reg}
+				perNodeServerArgs.StoreSpecs = append(
+					perNodeServerArgs.StoreSpecs,
+					base.StoreSpec{InMemory: true, StickyVFSID: strconv.Itoa(nodeId)},
+				)
 				perNode[i] = perNodeServerArgs
 			}
 			return perNode
@@ -269,7 +281,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		cfg.testArgs(&args)
 	}
 
-	return args
+	return args, stop.CloserFn(lisReg.Close)
 }
 
 func randWithSeed(
@@ -470,7 +482,7 @@ func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
 	testKVNemesisImpl(t, cfg)
 }
 
-func TestKVNemesisMultiNode_Faults_Safety(t *testing.T) {
+func TestKVNemesisMultiNode_Partition_Safety(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -500,7 +512,7 @@ func TestKVNemesisMultiNode_Faults_Safety(t *testing.T) {
 	})
 }
 
-func TestKVNemesisMultiNode_Faults_Liveness(t *testing.T) {
+func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -534,6 +546,38 @@ func TestKVNemesisMultiNode_Faults_Liveness(t *testing.T) {
 			// fail for two reasons: (1) r1 can become uvavailable (we can fix this by
 			// setting the right zone configs), and (2) if a partition races with the
 			// split, the range ID allocator can get stuck waiting for a response.
+			cfg.Ops.Split = SplitConfig{}
+		},
+	})
+}
+
+// For the restart test variant, there is only a liveness sub-variant. In safety
+// mode, it's possible that a range loses quorum while still receiving writes;
+// if an additional node is stopped in this scenario, the StopServer call (in
+// particular the call to stop.Quiesce) can hang indefinitely due to a write
+// being stuck waiting for quorum. See the comment in TestCluster.stopServers
+// for more details.
+func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Liveness,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.StopNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+			// TODO(mira): Similar issue to Partition_Liveness, except the failure
+			// mode (2) here looks like "could not allocate ID; system is draining".
 			cfg.Ops.Split = SplitConfig{}
 		},
 	})
@@ -607,9 +651,9 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	ctx := context.Background()
 	tr := &SeqTracker{}
 	var partitioner rpc.Partitioner
-	tc := testcluster.StartTestCluster(
-		t, cfg.numNodes, cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode),
-	)
+	args, closer := cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode)
+	tc := testcluster.StartTestCluster(t, cfg.numNodes, args)
+	tc.Stopper().AddCloser(closer)
 	defer tc.Stopper().Stop(ctx)
 	for i := 0; i < cfg.numNodes; i++ {
 		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
@@ -651,7 +695,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner}
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, Restarter: tc}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	for i := 0; i < cfg.numNodes; i++ {
@@ -718,6 +762,23 @@ func setAndVerifyZoneConfigs(
 			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
 	)
 
+	// Ensure the liveness and meta ranges are also constrained appropriately.
+	sqlRunner.Exec(
+		t, `ALTER RANGE meta CONFIGURE ZONE USING 
+			num_replicas = 3, 
+			num_voters = 3,
+			constraints = '{"+node=n1": 1, "+node=n2": 1}',
+			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
+	)
+
+	sqlRunner.Exec(
+		t, `ALTER RANGE liveness CONFIGURE ZONE USING 
+			num_replicas = 3, 
+			num_voters = 3,
+			constraints = '{"+node=n1": 1, "+node=n2": 1}',
+			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
+	)
+
 	// Wait for zone configs to propagate to all span config subscribers.
 	require.NoError(t, tc.WaitForZoneConfigPropagation())
 
@@ -737,7 +798,7 @@ func setAndVerifyZoneConfigs(
 							Key:    desc.StartKey.AsRawKey(),
 							EndKey: desc.EndKey.AsRawKey(),
 						}
-						if replicaSpan.Overlaps(dataSpan) {
+						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 2 {
 							overlappingReplicas = append(overlappingReplicas, replica)
 						}
 						return true // continue
