@@ -172,3 +172,9 @@ var _ redact.SafeFormatter = (*RowLevelTTLProcessorProgress)(nil)
 func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.SafeString(redact.SafeString(r.String()))
 }
+
+// IsDatabaseLevelChangefeed returns true if the changefeed is a database-level changefeed.
+func (d *ChangefeedDetails) IsDatabaseLevelChangefeed() bool {
+	return len(d.TargetSpecifications) == 1 &&
+		d.TargetSpecifications[0].Type == ChangefeedTargetSpecification_DATABASE
+}
