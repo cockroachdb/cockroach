@@ -279,7 +279,7 @@ func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 		// Test that fully qualified table names outside of the target database will
 		// cause an error.
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES fizz.buzz.foo`,
-			`table "fizz.buzz.foo" must be in target database "d"`)
+			`table "fizz.buzz.foo" must be in target database "d"`) // TODO: this is an assertionfailed which it shouldnt be as that looks scary in the logs and its a config error.
 
 		// Table patterns are not supported.
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo.*`,

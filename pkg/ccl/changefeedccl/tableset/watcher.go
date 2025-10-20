@@ -47,6 +47,36 @@ type Filter struct {
 	ExcludeTables map[string]struct{}
 }
 
+func NewFilterFromChangefeedDetails(details jobspb.ChangefeedDetails) (Filter, error) {
+	if len(details.TargetSpecifications) != 1 {
+		return Filter{}, errors.AssertionFailedf("expected one database target specification")
+	}
+	dbDescID := details.TargetSpecifications[0].DescID
+	if dbDescID == 0 {
+		return Filter{}, errors.AssertionFailedf("database descriptor ID is 0")
+	}
+	filterList := details.TargetSpecifications[0].FilterList
+	if filterList == nil {
+		return Filter{}, errors.AssertionFailedf("filter list is nil")
+	}
+
+	filteredTables := make(map[string]struct{})
+	for table := range filterList.Tables {
+		filteredTables[table] = struct{}{}
+	}
+
+	var wFilter Filter
+	switch filterList.FilterType {
+	case tree.ExcludeFilter:
+		wFilter = Filter{DatabaseID: dbDescID, ExcludeTables: filteredTables}
+	case tree.IncludeFilter:
+		wFilter = Filter{DatabaseID: dbDescID, IncludeTables: filteredTables}
+	default:
+		return Filter{}, errors.AssertionFailedf("expected exclude or include filter")
+	}
+	return wFilter, nil
+}
+
 func (f Filter) String() string {
 	return fmt.Sprintf("Filter{database_id=%d, include_tables=%v, exclude_tables=%v}",
 		f.DatabaseID, slices.Collect(maps.Keys(f.IncludeTables)),
@@ -96,6 +126,30 @@ func compareTableDiffsByTS(a, b TableDiff) int {
 	return a.AsOf.Compare(b.AsOf)
 }
 
+type AddedTable struct {
+	Table Table
+	AsOf  hlc.Timestamp
+}
+
+type TableDiffs []TableDiff
+
+func (d TableDiffs) Adds() []AddedTable {
+	var adds []AddedTable
+	for _, diff := range d {
+		if diff.Added.ID != 0 {
+			adds = append(adds, AddedTable{Table: diff.Added, AsOf: diff.AsOf})
+		}
+	}
+	return adds
+}
+
+func (d TableDiffs) Frontier() hlc.Timestamp {
+	if len(d) == 0 {
+		return hlc.Timestamp{}
+	}
+	return d[0].AsOf
+}
+
 type TableSet struct {
 	Tables []Table
 	AsOf   hlc.Timestamp
@@ -111,6 +165,11 @@ type Watcher struct {
 	mon     *mon.BytesMonitor
 	acc     mon.BoundAccount // set on Start
 	started bool
+
+	// lastPoppedFrontier is the last frontier timestamp that was passed to
+	// PopUnchangedUpTo(). It's used to detect invalid uses of
+	// PopUnchangedUpTo(). It's not perfect but it's better than nothing.
+	lastPoppedFrontier hlc.Timestamp
 
 	mu struct {
 		syncutil.Mutex
@@ -375,12 +434,22 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	}
 }
 
+var errRepeatedPopCall = errors.AssertionFailedf(
+	"PopUnchangedUpTo called with non-advancing timestamp: upTo is less than or equal to lastPoppedFrontier; this indicates a bug in the caller",
+)
+
 // PopUnchangedUpTo returns true if the tableset is unchanged between when it
 // (or popDiffsUpTo()) was last called (or the initialTS) and the given timestamp
 // [inclusive, exclusive). It discards data older than the last call to it
 func (w *Watcher) PopUnchangedUpTo(
 	ctx context.Context, upTo hlc.Timestamp,
-) (unchanged bool, diffs []TableDiff, err error) {
+) (unchanged bool, diffs TableDiffs, err error) {
+	// Check that the frontier is advancing.
+	if upTo.Compare(w.lastPoppedFrontier) <= 0 {
+		return false, nil, errors.Wrapf(errRepeatedPopCall, "upTo=%s, lastPoppedFrontier=%s", upTo, w.lastPoppedFrontier)
+	}
+	w.lastPoppedFrontier = upTo
+
 	// TODO: we technically dont need to wait for resolved here if there already
 	// are diffs buffered > upTo. But this seems tricky to implement rn.
 
