@@ -106,14 +106,10 @@ statement ok
 CREATE INDEX idx_c1 ON bar (c1);
 CREATE INDEX idx_c3 ON bar (c3);
 
-statement error pq: index "bar@idx_c1" does not belong to table "foo"
+statement error pq: index "bar@idx_c1" is not on table "test.public.foo"
 INSPECT TABLE foo WITH OPTIONS INDEX (bar@idx_c1);
 
-# TODO(148365): The table name should be used to disambiguate.
-statement error index name "idx_c1" is ambiguous \(found in test.public.foo and test.public.bar\)
-INSPECT TABLE bar WITH OPTIONS INDEX (idx_c1);
-
-statement error index "dbfake.foo.idx_c1" does not belong to database "test"
+statement error pq: index "dbfake.foo.idx_c1" is not in database "test"
 INSPECT DATABASE test WITH OPTIONS INDEX (dbfake.foo.idx_c1);
 
 statement error pq: index name "idx_c1" is ambiguous \(found in test.public.foo and test.public.bar\)
@@ -219,5 +215,137 @@ succeeded  2
 
 statement ok
 DROP TABLE t2;
+
+subtest end
+
+subtest database_resolve_indexes
+
+statement ok
+CREATE DATABASE dbfoo;
+CREATE TABLE dbfoo.public.t2 (c1 INT, INDEX idx_c1 (c1));
+CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
+
+
+statement ok
+SET enable_inspect_command = true;
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (t1@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (t2@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (public.t1@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.t1@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.t2@idx_c1);
+
+statement ok
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.public.t1@idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (public.idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.idx_c1);
+
+statement error pq: index name "idx_c1" is ambiguous \(found in dbfoo.public.t2 and dbfoo.public.t1\)
+INSPECT DATABASE dbfoo WITH OPTIONS INDEX (dbfoo.public.idx_c1);
+
+statement ok
+DROP DATABASE dbfoo;
+
+subtest schema_catalog_collision
+
+statement ok
+CREATE DATABASE ambiguous;
+CREATE SCHEMA ambiguous.ambiguous;
+CREATE TABLE ambiguous.ambiguous.t1 (c1 INT, INDEX idx_c1 (c1));
+
+# The duplicated names of the schema and the catalog means the database parameter doesn't help with resolution.
+statement error pq: index "idx_c1" does not exist
+INSPECT DATABASE ambiguous WITH OPTIONS INDEX (ambiguous.idx_c1);
+
+statement ok
+DROP DATABASE ambiguous;
+subtest end
+
+subtest end
+
+subtest table_resolve_indexes
+
+statement ok
+CREATE DATABASE dbfoo;
+CREATE DATABASE dbbar;
+CREATE SCHEMA dbfoo.s1;
+CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
+CREATE TABLE dbfoo.s1.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+CREATE TABLE dbbar.public.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+CREATE TABLE dbbar.public.t2 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+
+statement ok
+SET enable_inspect_command = true;
+
+subtest all_forms
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (t1@idx_c1);
+
+statement error pq: index "s1.t1@idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.t1@idx_c1);
+
+statement error pq: index "dbfoo.s1.t1@idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (idx_c1);
+
+statement error pq: index "s1.idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (s1.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.idx_c1);
+
+statement error pq: index "dbfoo.s1.idx_c1" is not on table "dbfoo.public.t1"
+INSPECT TABLE dbfoo.t1 WITH OPTIONS INDEX (dbfoo.s1.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.s1.t1@idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (s1.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.idx_c1);
+
+statement ok
+INSPECT TABLE dbfoo.s1.t1 WITH OPTIONS INDEX (dbfoo.s1.idx_c1);
+
+subtest end
+
+statement ok
+DROP DATABASE dbfoo;
 
 subtest end
