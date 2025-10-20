@@ -37,7 +37,7 @@ func setupProgressTestInfra(
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 
-	registry := s.JobRegistry().(*jobs.Registry)
+	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 
 	// Create a job using INSPECT details
 	record := jobs.Record{
@@ -445,7 +445,7 @@ func TestInspectProgressTracker_ProgressFlushConditions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx, s, _, _, cleanup := setupProgressTestInfra(t)
+	ctx, s, registry, _, cleanup := setupProgressTestInfra(t)
 	defer cleanup()
 
 	const totalChecks = 1000
@@ -573,7 +573,7 @@ func TestInspectProgressTracker_ProgressFlushConditions(t *testing.T) {
 				Username: username.TestUserName(),
 			}
 
-			freshJob, err := s.JobRegistry().(*jobs.Registry).CreateJobWithTxn(ctx, record, s.JobRegistry().(*jobs.Registry).MakeJobID(), nil)
+			freshJob, err := registry.CreateJobWithTxn(ctx, record, registry.MakeJobID(), nil)
 			require.NoError(t, err)
 
 			freshTracker := newInspectProgressTracker(freshJob, &s.ClusterSettings().SV, s.InternalDB().(isql.DB))
