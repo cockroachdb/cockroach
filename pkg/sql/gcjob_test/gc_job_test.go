@@ -91,9 +91,10 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 			return nil
 		},
 	}
-	s, db, kvDB := serverutils.StartServer(t, params)
+	srv, db, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	// The deferred call to unblock the GC job needs to run before the deferred
 	// call to stop the TestServer. Otherwise, the quiesce step of shutting down
 	// can hang forever waiting for the GC job.
@@ -648,10 +649,11 @@ func TestDropWithDeletedDescriptor(t *testing.T) {
 				},
 			}
 		}
-		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs: knobs,
 		})
-		defer s.Stopper().Stop(ctx)
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 		defer cancel()
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 

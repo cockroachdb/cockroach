@@ -66,7 +66,7 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	ctx := context.Background()
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			// Disable all schema change execution.
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -76,7 +76,8 @@ func TestWriteResumeSpan(t *testing.T) {
 			},
 		},
 	})
-	defer server.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRunner.Exec(t, `SET create_table_with_schema_locked=false`)
@@ -97,7 +98,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
 	}
 
-	registry := server.JobRegistry().(*jobs.Registry)
+	registry := s.JobRegistry().(*jobs.Registry)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
@@ -175,7 +176,7 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := sqltestutils.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			return TestingWriteResumeSpan(
 				ctx,
 				txn,
@@ -215,7 +216,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	var got []roachpb.Span
-	if err := sqltestutils.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		got, _, _, err = rowexec.GetResumeSpans(
 			ctx, registry, txn, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err

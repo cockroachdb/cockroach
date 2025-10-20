@@ -90,8 +90,9 @@ func TestSchemaChangeProcess(t *testing.T) {
 
 	params, _ := createTestServerParamsAllowTenants()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// The descriptor changes made must have an immediate effect
 	// so disable leases on tables.
@@ -6499,7 +6500,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
-					scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+					scJob, err := s.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 					if err != nil {
 						return err
 					}
@@ -6584,7 +6585,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 				RunBeforeResume: func(jobID jobspb.JobID) error {
-					scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+					scJob, err := s.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 					if err != nil {
 						return err
 					}
@@ -6658,7 +6659,7 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 				// `channel` below.
 				lockHeld := true
 				jobControlMu.Lock()
-				scJob, err := s.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				scJob, err := s.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
 				if err != nil {
 					jobControlMu.Unlock()
 					return err
@@ -6790,7 +6791,7 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 
 	var registry *jobs.Registry
 	var scJobID jobspb.JobID
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeResume: func(jobID jobspb.JobID) error {
 				job, err := registry.LoadJob(ctx, jobID)
@@ -6804,7 +6805,8 @@ func TestJobsWithoutMutationsAreCancelable(t *testing.T) {
 			},
 		}},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	registry = s.JobRegistry().(*jobs.Registry)
 
