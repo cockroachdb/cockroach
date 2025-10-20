@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -425,8 +424,9 @@ func TestCanCloneTableWithUDT(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE test;
 CREATE TYPE test.t AS ENUM ('hello');
@@ -434,7 +434,7 @@ CREATE TABLE test.tt (x test.t);
 `); err != nil {
 		t.Fatal(err)
 	}
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "tt")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "tt")
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
 		if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
@@ -523,8 +523,9 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		},
 	}
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	if _, err := sqlDB.Exec(`
 	CREATE DATABASE test;
 	USE test;
@@ -533,7 +534,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 	typDesc := desctestutils.TestingGetTypeDescriptor(
-		kvDB, keys.SystemSQLCodec, "test", "public", "greeting",
+		kvDB, s.Codec(), "test", "public", "greeting",
 	)
 	oid := fmt.Sprintf("%d", catid.TypeIDToOID(typDesc.GetID()))
 	for _, tc := range testdata {
@@ -541,7 +542,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		if _, err := sqlDB.Exec(create); err != nil {
 			t.Fatal(err)
 		}
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 		found := tc.getExpr(desc)
 		expected := os.Expand(tc.expectedExpr, expander{"OID": oid}.mapping)
 		if expected != found {
@@ -589,8 +590,9 @@ func TestSerializedUDTsInView(t *testing.T) {
 		},
 	}
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	if _, err := sqlDB.Exec(`
 	CREATE DATABASE test;
 	USE test;
@@ -599,7 +601,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 		t.Fatal(err)
 	}
 	typDesc := desctestutils.TestingGetTypeDescriptor(
-		kvDB, keys.SystemSQLCodec, "test", "public", "greeting",
+		kvDB, s.Codec(), "test", "public", "greeting",
 	)
 	oid := fmt.Sprintf("%d", catid.TypeIDToOID(typDesc.GetID()))
 	for _, tc := range testdata {
@@ -607,7 +609,7 @@ func TestSerializedUDTsInView(t *testing.T) {
 		if _, err := sqlDB.Exec(create); err != nil {
 			t.Fatal(err)
 		}
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "v")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "v")
 		foundViewQuery := desc.GetViewQuery()
 		expected := os.Expand(tc.expectedExpr, expander{"OID": oid}.mapping)
 		if expected != foundViewQuery {

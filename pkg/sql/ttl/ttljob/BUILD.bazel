@@ -89,7 +89,6 @@ go_test(
         "//pkg/jobs/jobfrontier",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",

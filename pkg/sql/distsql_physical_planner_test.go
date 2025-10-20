@@ -1372,15 +1372,16 @@ func TestPartitionSpans(t *testing.T) {
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
 	// DistSQLPlanner will not plan flows on them.
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				MinimumNumberOfGatewayPartitions: 1,
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry())
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), srv.Stopper(), metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
 	mockInstances := make(mockAddressResolver)
 	for i := 1; i <= 10; i++ {
@@ -1459,7 +1460,7 @@ func TestPartitionSpans(t *testing.T) {
 						TestingKnobs: execinfra.TestingKnobs{MinimumNumberOfGatewayPartitions: 1},
 					},
 				},
-				codec:     keys.SystemSQLCodec,
+				codec:     s.Codec(),
 				nodeDescs: mockGossip,
 			}
 
@@ -1468,7 +1469,7 @@ func TestPartitionSpans(t *testing.T) {
 				require.NoError(t, locFilter.Set(tc.locFilter))
 			}
 			evalCtx := &eval.Context{
-				Codec: keys.SystemSQLCodec,
+				Codec: s.Codec(),
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{
 						DistsqlPlanGatewayBias: 2,
@@ -1761,6 +1762,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
+	codec := keys.SystemSQLCodec
 
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
@@ -1815,14 +1817,14 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				return true
 			},
 		},
-		codec: keys.SystemSQLCodec,
+		codec: codec,
 	}
 
 	ctx := context.Background()
 	// This test is specific to gossip-based planning.
 	useGossipPlanning.Override(ctx, &st.SV, true)
 	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: keys.SystemSQLCodec, Settings: st}},
+		ctx, &extendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
 		nil /* planner */, nil /* txn */, FullDistribution,
 	)
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)

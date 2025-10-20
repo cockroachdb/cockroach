@@ -193,7 +193,7 @@ func (r *rowDisposer) NumRowsDisposed() int {
 //
 //	makeFetchSpec(t, table, "idx_c", "a,b,c")
 func makeFetchSpec(
-	t testing.TB, table catalog.TableDescriptor, indexName string, colNames string,
+	t testing.TB, codec keys.SQLCodec, table catalog.TableDescriptor, indexName, colNames string,
 ) fetchpb.IndexFetchSpec {
 	index, err := catalog.MustFindIndexByName(table, indexName)
 	if err != nil {
@@ -210,7 +210,7 @@ func makeFetchSpec(
 		}
 	}
 	var fetchSpec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&fetchSpec, keys.SystemSQLCodec, table, index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(&fetchSpec, codec, table, index, colIDs); err != nil {
 		t.Fatal(err)
 	}
 	return fetchSpec
