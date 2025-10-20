@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -25,6 +26,7 @@ func AddChangefeedToQueryLoad(
 	ctx context.Context,
 	gen workload.ConnFlagser,
 	dbName string,
+	resolvedTarget time.Duration,
 	urls []string,
 	reg *histogram.Registry,
 	ql *workload.QueryLoad,
@@ -32,6 +34,14 @@ func AddChangefeedToQueryLoad(
 	cfg := workload.MultiConnPoolCfg{
 		Method:              gen.ConnFlags().Method,
 		MaxTotalConnections: 2,
+	}
+	cfLatency := reg.GetHandle().Get("changefeed")
+	// TODO(ssd): This metric makes no sense has a histogram. The idea that every
+	// metric we might want to report is a histogram is baked in pretty deeply so
+	// I'll address that in a different PR (maybe)
+	var cfResolved *histogram.NamedHistogram
+	if resolvedTarget > 0 {
+		cfResolved = reg.GetHandle().Get("changefeed-resolved")
 	}
 
 	mcp, err := workload.NewMultiConnPool(ctx, cfg, urls...)
@@ -51,8 +61,6 @@ func AddChangefeedToQueryLoad(
 		return err
 	}
 
-	cfLatency := reg.GetHandle().Get("changefeed")
-
 	var sessionID string
 	if err := conn.QueryRow(ctx, "SHOW session_id").Scan(&sessionID); err != nil {
 		return errors.Wrap(err, "getting session_id")
@@ -68,6 +76,11 @@ func AddChangefeedToQueryLoad(
 		return err
 	}
 
+	var cursorStr string
+	if err := conn.QueryRow(ctx, "SELECT cluster_logical_timestamp()").Scan(&cursorStr); err != nil {
+		return err
+	}
+
 	tableNames := strings.Builder{}
 	for i, table := range gen.Tables() {
 		if i == 0 {
@@ -77,8 +90,23 @@ func AddChangefeedToQueryLoad(
 		}
 	}
 
-	stmt := fmt.Sprintf("EXPERIMENTAL CHANGEFEED FOR %s WITH updated, no_initial_scan, schema_change_policy=nobackfill",
-		tableNames.String())
+	opts := []string{
+		"updated",
+		"no_initial_scan",
+		"schema_change_policy=nobackfill",
+		"cursor=$1",
+	}
+	args := []any{
+		cursorStr,
+	}
+	if resolvedTarget > 0 {
+		opts = append(opts, []string{"resolved=$2", "min_checkpoint_frequency=$2"}...)
+		args = append(args, resolvedTarget.String())
+	}
+	stmt := fmt.Sprintf(
+		"CREATE CHANGEFEED FOR %s WITH %s",
+		tableNames.String(), strings.Join(opts, ","),
+	)
 	cfCtx, cancel := context.WithCancel(ctx)
 
 	var doneErr error
@@ -97,33 +125,57 @@ func AddChangefeedToQueryLoad(
 			return false
 		}
 		var err error
-		rows, err = conn.Query(cfCtx, stmt)
+		rows, err = conn.Query(cfCtx, stmt, args...)
 		return maybeMarkDone(err)
 	}
-	ql.WorkerFns = append(ql.WorkerFns, func(ctx context.Context) error {
+
+	var lastResolved hlc.Timestamp
+
+	ql.ChangefeedFns = append(ql.ChangefeedFns, func(ctx context.Context) error {
 		if doneErr != nil {
 			return doneErr
 		}
 		if maybeSetupRows() {
 			return doneErr
 		}
+
 		if rows.Next() {
 			values, err := rows.Values()
 			if maybeMarkDone(err) {
 				return doneErr
 			}
 			type updatedJSON struct {
-				Updated string `json:"updated"`
+				Updated  string `json:"updated"`
+				Resolved string `json:"resolved"`
 			}
 			var v updatedJSON
 			if maybeMarkDone(json.Unmarshal(values[2].([]byte), &v)) {
 				return doneErr
 			}
-			updated, err := hlc.ParseHLC(v.Updated)
-			if maybeMarkDone(err) {
-				return doneErr
+			if v.Updated != "" {
+				updated, err := hlc.ParseHLC(v.Updated)
+				if maybeMarkDone(err) {
+					return doneErr
+				}
+				cfLatency.Record(timeutil.Since(updated.GoTime()))
+			} else if v.Resolved != "" {
+				resolved, err := hlc.ParseHLC(v.Resolved)
+				if maybeMarkDone(err) {
+					return doneErr
+				}
+				if resolved.Less(lastResolved) {
+					return errors.Errorf("resolved timestamp %s is less than last resolved timestamp %s", resolved, lastResolved)
+				}
+				lastResolved = resolved
+			} else {
+				return errors.Errorf("failed to parse CHANGEFEED event: %s", values[2])
 			}
-			cfLatency.Record(timeutil.Since(updated.GoTime()))
+			// Resolved timestamps arrived infrequently. Always record the time since
+			// our lastResolved so that we don't get long periods of 0 in the
+			// histogram.
+			if cfResolved != nil {
+				cfResolved.Record(timeutil.Since(lastResolved.GoTime()))
+			}
 			return nil
 		}
 		if maybeMarkDone(rows.Err()) {
