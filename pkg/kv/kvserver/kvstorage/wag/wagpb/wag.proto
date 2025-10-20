@@ -104,8 +104,10 @@ message Mutation {
 // Ingestion describes a Pebble ingestion.
 message Ingestion {
   repeated string SSTs = 1;
-  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.SharedTable shared_tables = 2;
-  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.ExternalTable external_tables = 3;
+  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.SharedTable shared_tables = 2 [
+    (gogoproto.nullable) = false];
+  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.ExternalTable external_tables = 3 [
+    (gogoproto.nullable) = false];
 
   // TODO(pav-kv): add the excise span, to mirror the IngestAndExciseFiles call
   // on storage.Engine.
