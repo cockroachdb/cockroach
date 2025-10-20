@@ -106,9 +106,23 @@ func RunNemesis(
 		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
 	}
 
-	dataSpan := GeneratorDataSpan()
+	n := nodes{
+		running: make(map[int]struct{}),
+		stopped: make(map[int]struct{}),
+	}
+	for i := 1; i <= config.NumNodes; i++ {
+		// In liveness mode, we don't allow stopping and restarting the two
+		// protected nodes (node 1 and node 2), so we don't include them in the set
+		// of running nodes at all.
+		protectedNode := i == 1 || i == 2
+		if mode == Liveness && protectedNode {
+			continue
+		}
+		n.running[i] = struct{}{}
+	}
 
-	g, err := MakeGenerator(config, newGetReplicasFn(dbs...), mode)
+	dataSpan := GeneratorDataSpan()
+	g, err := MakeGenerator(config, newGetReplicasFn(dbs...), mode, &n)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +132,7 @@ func RunNemesis(
 	if mode == Liveness && len(applierDBs) >= 2 {
 		applierDBs = applierDBs[:2]
 	}
-	a := MakeApplier(env, applierDBs...)
+	a := MakeApplier(env, &n, applierDBs...)
 	w, err := Watch(ctx, env, dbs, dataSpan)
 	if err != nil {
 		return nil, err
@@ -182,6 +196,9 @@ func RunNemesis(
 		return nil, err
 	}
 	env.Partitioner.EnablePartitions(false)
+	for i := 0; i < config.NumNodes; i++ {
+		_ = env.Restarter.RestartServer(i)
+	}
 
 	allSteps := make(steps, 0, numSteps)
 	for _, steps := range stepsByWorker {
