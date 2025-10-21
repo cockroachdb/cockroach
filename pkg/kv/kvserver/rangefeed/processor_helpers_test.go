@@ -211,6 +211,7 @@ type processorTestHelper struct {
 	rts                      *resolvedTimestamp
 	syncEventC               func()
 	sendSpanSync             func(*roachpb.Span)
+	rawScheduler             *Scheduler
 	scheduler                *ClientScheduler
 	toBufferedStreamIfNeeded func(s Stream) Stream
 }
@@ -348,7 +349,7 @@ func withSettings(st *cluster.Settings) option {
 	}
 }
 
-func withPushTxnsIntervalAge(interval, age time.Duration) option {
+func withPushTxnsIntervalAge(age time.Duration) option {
 	return func(config *testConfig) {
 		config.PushTxnsAge = age
 	}
@@ -451,6 +452,7 @@ func newTestProcessor(
 		h.sendSpanSync = func(span *roachpb.Span) {
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
+		h.rawScheduler = sch
 		h.scheduler = &p.scheduler
 		switch cfg.feedType {
 		case scheduledProcessorWithUnbufferedSender:

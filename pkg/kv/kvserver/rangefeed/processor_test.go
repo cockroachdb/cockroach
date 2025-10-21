@@ -927,8 +927,8 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 	})
 }
 
-// TestProcessorTxnPushDisabled tests that processors don't attempt txn pushes
-// when disabled.
+// TestProcessorTxnPushDisabled tests that the TxnPushNotifier doesn't send txn
+// push notifications when disabled.
 func TestProcessorTxnPushDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -951,12 +951,6 @@ func TestProcessorTxnPushDisabled(t *testing.T) {
 	PushTxnsEnabled.Override(ctx, &st.SV, false)
 
 	// Set up a txn pusher and processor that errors on any pushes.
-	//
-	// TODO(kv): We don't test the scheduled processor here, since the setting
-	// instead controls the Store.startRangefeedTxnPushNotifier() loop which sits
-	// outside of the processor and can't be tested with this test harness. Write
-	// a new test when the legacy processor is removed and the scheduled processor
-	// is used by default.
 	var tp testTxnPusher
 	tp.mockPushTxns(func(ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, bool, error) {
 		err := errors.Errorf("unexpected txn push for txns=%v ts=%s", txns, ts)
@@ -965,8 +959,15 @@ func TestProcessorTxnPushDisabled(t *testing.T) {
 	})
 
 	p, h, stopper := newTestProcessor(t, withSettings(st), withPusher(&tp),
-		withPushTxnsIntervalAge(pushInterval, time.Millisecond))
+		withPushTxnsIntervalAge(time.Millisecond))
 	defer stopper.Stop(ctx)
+
+	notifier := NewTxnPushNotifier(
+		pushInterval,
+		st, h.rawScheduler,
+		func(f func(i int64)) { f(p.ID()) },
+	)
+	require.NoError(t, notifier.Start(ctx, stopper))
 
 	// Move the resolved ts forward to just before the txn timestamp.
 	rts := ts.Add(-1, 0)
