@@ -1979,7 +1979,10 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 		if !p.resumableFlow.cleanup.isComplete {
 			p.resumableFlow.cleanup.appendFunc(func(ctx context.Context) {
-				p.resumableFlow.flow.Cleanup(ctx)
+				if p.resumableFlow.flow != nil {
+					p.resumableFlow.flow.Cleanup(ctx)
+					p.resumableFlow.flow = nil
+				}
 			})
 		}
 	}
