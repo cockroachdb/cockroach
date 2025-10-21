@@ -1368,6 +1368,13 @@ func TestLogic_sqlsmith(
 	runLogicTest(t, "sqlsmith")
 }
 
+func TestLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
+}
+
 func TestLogic_statement_statistics_errors(
 	t *testing.T,
 ) {
