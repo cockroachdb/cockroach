@@ -52,6 +52,18 @@ func AddChangefeedToQueryLoad(
 	if err != nil {
 		return err
 	}
+	var rangefeedEnabled bool
+	if err := conn.QueryRow(ctx, "SHOW CLUSTER SETTING kv.rangefeed.enabled").Scan(&rangefeedEnabled); err != nil {
+		return err
+	}
+	if !rangefeedEnabled {
+		// This will fail if the workload is running against a secondary tenant,
+		// which cannot modify cluster settings but generally have rangefeeds
+		// enabled by default.
+		if _, err := conn.Exec(ctx, "SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+			return err
+		}
+	}
 	if _, err := conn.Exec(ctx, fmt.Sprintf("USE %q", dbName)); err != nil {
 		return err
 	}
