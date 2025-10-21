@@ -868,7 +868,39 @@ func TestDeleteTerminalJobByID(t *testing.T) {
 		require.NoError(t, r.DeleteTerminalJobByID(ctx, j.ID()))
 		assertValidDeletion(j.ID())
 	})
+}
 
+func TestCleanupCorruptJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	r := s.ApplicationLayer().JobRegistry().(*Registry)
+
+	// Create a SQL STATS COMPACTION job in running state with proper job_info records.
+	jobID := r.MakeJobID()
+	db.Exec(t, `INSERT INTO system.jobs (id, status, created, job_type) VALUES ($1, 'running', now(), $2)`, jobID, jobspb.TypeAutoSQLStatsCompaction.String())
+	db.Exec(t, `INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, 'legacy_payload', 'payload')`, jobID)
+
+	// Job has info records, so CleanupCorruptJobs should do nothing.
+	require.NoError(t, r.CleanupCorruptJobs(ctx))
+
+	var count int
+	db.QueryRow(t, "SELECT count(*) FROM system.jobs WHERE id = $1", jobID).Scan(&count)
+	require.Equal(t, 1, count)
+
+	// Delete the job_info records to corrupt the running job.
+	db.Exec(t, "DELETE FROM system.job_info WHERE job_id = $1", jobID)
+
+	// Now CleanupCorruptJobs should delete the corrupt job.
+	require.NoError(t, r.CleanupCorruptJobs(ctx))
+
+	db.QueryRow(t, "SELECT count(*) FROM system.jobs WHERE id = $1", jobID).Scan(&count)
+	require.Zero(t, count)
 }
 
 // TestRunWithoutLoop tests that Run calls will trigger the execution of a
@@ -1077,7 +1109,6 @@ func TestJobIdleness(t *testing.T) {
 			})
 		}
 	})
-
 }
 
 // TestDisablingJobAdoptionClearsClaimSessionID tests that jobs adopted by a
