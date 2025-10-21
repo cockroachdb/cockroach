@@ -49,9 +49,6 @@ func (s *mockGCSProvider) GetObject(i *release.GetObjectInput) (*release.GetObje
 
 func (s *mockGCSProvider) PutObject(i *release.PutObjectInput) error {
 	url := fmt.Sprintf(`gs://%s/%s`, s.Bucket(), *i.Key)
-	if i.CacheControl != nil {
-		url += `/` + *i.CacheControl
-	}
 	if i.Body != nil {
 		bytes, err := io.ReadAll(i.Body)
 		if err != nil {
@@ -207,122 +204,122 @@ func TestPublish(t *testing.T) {
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.LATEST REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/workload.LATEST/no-cache REDIRECT /cockroach/workload.1234567890abcdef",
+				"gs://edge-binaries-bucket/workload/workload.LATEST REDIRECT /cockroach/workload.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64-fips.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64-fips.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64-fips.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64-fips.LATEST REDIRECT /cockroach/cockroach.linux-gnu-amd64-fips.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64-fips.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64-fips.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64-fips.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64-fips.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64-fips.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64-fips.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64-fips.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64-fips.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64-fips.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64-fips.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64-fips.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64-fips.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-arm64.LATEST REDIRECT /cockroach/cockroach.linux-gnu-arm64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-arm64.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-arm64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-arm64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-arm64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-arm64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-arm64.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-arm64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/workload.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/workload/workload.linux-gnu-arm64.LATEST REDIRECT /cockroach/workload.linux-gnu-arm64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-s390x.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-s390x.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-s390x.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-s390x.LATEST REDIRECT /cockroach/cockroach.linux-gnu-s390x.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-s390x.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-s390x.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-s390x.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-s390x.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-s390x.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-s390x.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-s390x.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-s390x.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-s390x.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-s390x.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-s390x.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-s390x.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-s390x.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-s390x.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-s390x.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-s390x.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxs390xbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-s390x.LATEST/no-cache REDIRECT /cockroach/workload.linux-gnu-s390x.1234567890abcdef",
+				"gs://edge-binaries-bucket/workload/workload.linux-gnu-s390x.LATEST REDIRECT /cockroach/workload.linux-gnu-s390x.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.darwin-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-amd64.LATEST REDIRECT /cockroach/cockroach.darwin-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.darwin-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-amd64.LATEST REDIRECT /cockroach/cockroach-sql.darwin-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.darwin-amd64.1234567890abcdef.dylib CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-amd64.1234567890abcdef.dylib",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST REDIRECT /cockroach/lib/libgeos.darwin-amd64.1234567890abcdef.dylib",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.darwin-amd64.1234567890abcdef.dylib CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.1234567890abcdef.dylib",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.1234567890abcdef.dylib",
 				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-arm64.unsigned.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-arm64.unsigned.LATEST/no-cache REDIRECT /cockroach/cockroach.darwin-arm64.unsigned.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-arm64.unsigned.LATEST REDIRECT /cockroach/cockroach.darwin-arm64.unsigned.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-arm64.unsigned.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-arm64.unsigned.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.darwin-arm64.unsigned.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-arm64.unsigned.LATEST REDIRECT /cockroach/cockroach-sql.darwin-arm64.unsigned.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach.windows-amd64.1234567890abcdef.exe CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.windows-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.windows-amd64.1234567890abcdef.exe",
+				"gs://edge-binaries-bucket/cockroach/cockroach.windows-amd64.LATEST REDIRECT /cockroach/cockroach.windows-amd64.1234567890abcdef.exe",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.windows-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.windows-amd64.LATEST REDIRECT /cockroach/cockroach-sql.windows-amd64.1234567890abcdef.exe",
 			},
 			platforms: release.DefaultPlatforms(),
 		},
@@ -347,24 +344,24 @@ func TestPublish(t *testing.T) {
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.LATEST REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/workload.LATEST/no-cache REDIRECT /cockroach/workload.1234567890abcdef",
+				"gs://edge-binaries-bucket/workload/workload.LATEST REDIRECT /cockroach/workload.1234567890abcdef",
 			},
 			platforms: release.Platforms{release.PlatformLinux},
 		},
@@ -398,68 +395,110 @@ func TestPublish(t *testing.T) {
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.LATEST REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/workload.LATEST/no-cache REDIRECT /cockroach/workload.1234567890abcdef",
+				"gs://edge-binaries-bucket/workload/workload.LATEST REDIRECT /cockroach/workload.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64-fips.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64-fips.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-amd64-fips.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64-fips.LATEST REDIRECT /cockroach/cockroach.linux-gnu-amd64-fips.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64-fips.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64-fips.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64-fips.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64-fips.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64-fips.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64-fips.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64-fips.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64-fips.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64-fips.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64-fips.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-fips-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxfipsbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64-fips.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64-fips.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64-fips.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-arm64.LATEST REDIRECT /cockroach/cockroach.linux-gnu-arm64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-arm64.LATEST REDIRECT /cockroach/cockroach-sql.linux-gnu-arm64.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-arm64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-arm64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-arm64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-arm64.so.LATEST REDIRECT /cockroach/lib/libgeos.linux-gnu-arm64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-unknown-linux-gnu -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.so.LATEST REDIRECT /cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxarmbase --norun_validations",
-				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/workload.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/workload/workload.linux-gnu-arm64.LATEST REDIRECT /cockroach/workload.linux-gnu-arm64.1234567890abcdef",
 			},
 			platforms: release.Platforms{release.PlatformLinux, release.PlatformLinuxFIPS, release.PlatformLinuxArm},
+		},
+		{
+			name: `release linux-amd64 on release branch`,
+			flags: edgeRunFlags{
+				branch: "release-25.4",
+				sha:    "1234567890abcdef",
+			},
+			expectedCmds: []string{
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel run @go_sdk//:bin/go -- tool nm ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
+				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=crosslinuxbase",
+			},
+			expectedPuts: []string{
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-amd64.release-25.4 REDIRECT /cockroach/cockroach.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-amd64.release-25.4 REDIRECT /cockroach/cockroach-sql.linux-gnu-amd64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-amd64.so.release-25.4 REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-pc-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-amd64.so.release-25.4 REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/workload.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxbase --norun_validations",
+				"gs://edge-binaries-bucket/workload/workload.release-25.4 REDIRECT /cockroach/workload.1234567890abcdef",
+			},
+			platforms: release.Platforms{release.PlatformLinux},
 		},
 	}
 	for _, test := range tests {
