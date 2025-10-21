@@ -75,6 +75,7 @@ func TestWriteResumeSpan(t *testing.T) {
 				},
 			},
 		},
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156127),
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()

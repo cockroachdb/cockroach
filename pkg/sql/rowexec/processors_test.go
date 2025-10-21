@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -505,6 +506,11 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	origDB0 := tc.ServerConn(0)
 	sqlutils.CreateTable(t, origDB0, "t",
 		"x INT PRIMARY KEY",
@@ -694,6 +700,11 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(ctx, t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
 	dbConn := s.SQLConn(t, serverutils.DBName("test"))
 	sqlutils.CreateTable(t, dbConn, "t", "x INT, y INT, INDEX (y)", 30, sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowIdxFn))
@@ -716,8 +727,12 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	defer cleanup()
 
 	testCases := []struct {
-		query           string
-		expectedPlanURL string
+		query string
+		// The plans are the same, but if we have multi-tenant deployment, then
+		// the tenant prefix is included into spans of TableReaders which are
+		// encoded into the URL, so we need to have different expectations.
+		systemPlanURL string
+		tenantPlanURL string
 		// overrideErrorOrigin if non-nil, defines special request filtering
 		// behavior.
 		// The default behavior is to enable uncertainty errors for a single random
@@ -725,18 +740,21 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 		overrideErrorOrigin []int
 	}{
 		{
-			query:           "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEld9u2jAUh-_3FNaRpraTKbHD30iVqApT6Sh0gLRJFapcYiBqiJltVKqKd58CdC0J8UjWslwgTJwvv2N_5jyD-uWDA71Gq3HRR14wEuhrt3ONbhs_b1rnzTY6rjd7_d73Fka9y_ObxgnaTP2ynqfReQ9pgq46zfZmQFGnjTQ5XaAzpOnpYoB-XDa6jTW81fzWQEd1j40lmzqfjwBDIFzeZlOuwLkFAhgoYLBhgGEmxZArJWR463k1sekuwLEweMFsrsOfBxiGQnJwnkF72ufgQJ_d-7zLmctl3gIMLtfM81d4XdN3swf-BBguhD-fBspBC4zCcW_GwlEuTywYLDGIud684pV8_4QmTE22mTUCg-UAg9JszMEhb3I36-BYS5wtun3w6DQS3U6M_sqdB0K6XHJ3izwIn_zblB31XzI1uRJewGW-tB3V5yN9XCMnZ9IbT1bfAENnrh1UI7hGcc3GtUKk-tfK7EhlpX-obEfstsiJWb4aXYKdUQqRKNWtKGR_P0haP_LEyuXp-9pNsqYv_I_0UcELiekPIHj5IwUvb1VG998XmnpfqJV7V6Vo1ujFg0eP-lRMjH4Anyof6VMlTRfrcjUTgeJ7_R9akTflSFgnd8d8vW5KzOWQ30gxXM1dDzsr0Modlyu9vkvXg2bwcktpydn0TxPen1RKJpXSkarJJEKjKJKiPPoWZacjlZJJ1XSkajKJFKMoGkVZb1G2YaUqUZRtRBFri2UZTShkdYqkIxmcKqcjmZyKmVDM6lQhHcngFImtuRllkip2_EqZpYqpXs5qQuwgm0kGE2Kim0kmE2L7V8lqQuwgm0kmE2JnxowymRA7NNWsJlAr7DgjXzzeeS44YG2u3I6PlwvCB9hYhW2vNxGPK27_aRY2rRHzFcdwzR54nWsup17gKe0NwdFyzpfLT78DAAD__5SzAcM=",
+			query:         "SELECT * FROM t AS t1 JOIN t AS t2 ON t1.x = t2.x",
+			systemPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzEld9u2jAUh-_3FNaRpraTKbHD30iVqApT6Sh0gLRJFapcYiBqiJltVKqKd58CdC0J8UjWslwgTJwvv2N_5jyD-uWDA71Gq3HRR14wEuhrt3ONbhs_b1rnzTY6rjd7_d73Fka9y_ObxgnaTP2ynqfReQ9pgq46zfZmQFGnjTQ5XaAzpOnpYoB-XDa6jTW81fzWQEd1j40lmzqfjwBDIFzeZlOuwLkFAhgoYLBhgGEmxZArJWR463k1sekuwLEweMFsrsOfBxiGQnJwnkF72ufgQJ_d-7zLmctl3gIMLtfM81d4XdN3swf-BBguhD-fBspBC4zCcW_GwlEuTywYLDGIud684pV8_4QmTE22mTUCg-UAg9JszMEhb3I36-BYS5wtun3w6DQS3U6M_sqdB0K6XHJ3izwIn_zblB31XzI1uRJewGW-tB3V5yN9XCMnZ9IbT1bfAENnrh1UI7hGcc3GtUKk-tfK7EhlpX-obEfstsiJWb4aXYKdUQqRKNWtKGR_P0haP_LEyuXp-9pNsqYv_I_0UcELiekPIHj5IwUvb1VG998XmnpfqJV7V6Vo1ujFg0eP-lRMjH4Anyof6VMlTRfrcjUTgeJ7_R9akTflSFgnd8d8vW5KzOWQ30gxXM1dDzsr0Modlyu9vkvXg2bwcktpydn0TxPen1RKJpXSkarJJEKjKJKiPPoWZacjlZJJ1XSkajKJFKMoGkVZb1G2YaUqUZRtRBFri2UZTShkdYqkIxmcKqcjmZyKmVDM6lQhHcngFImtuRllkip2_EqZpYqpXs5qQuwgm0kGE2Kim0kmE2L7V8lqQuwgm0kmE2JnxowymRA7NNWsJlAr7DgjXzzeeS44YG2u3I6PlwvCB9hYhW2vNxGPK27_aRY2rRHzFcdwzR54nWsup17gKe0NwdFyzpfLT78DAAD__5SzAcM=",
+			tenantPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElW9P6jocx5_fV9H8khv1psja8XeJCUa4ES-CF0jOSQwxlRVYHCunLRFjeO8nY3iUjfWwHf_sgVLafdpv-ym_Z1A_fHBg0Oq0LobICyYC_dvvXaPb1vebznm7i46b7cFw8H8Ho8Hl-U3rBG2H_hON0-h8gDRBV712d9ugqNdFmpyu0BnS9HQ1Qt8uW_1WBO-0_2uho6bHppLNnb-PAEMgXN5lc67AuQUCGChgsGGEYSHFmCslZNj1vBnYdlfgWBi8YLHU4dcjDGMhOTjPoD3tc3BgyO593ufM5bJoAQaXa-b5G7xu6LvFA38CDBfCX84D5aAVRmF7sGBhq0isSpEUon9FYsFojUEs9Xa611nun9CMqdkuv0FgtB5hUJpNOTjkTYZ2ExxrjfPFsL80Bo3FsFNjvHKXgZAul9zdIY_CN383ZM9eXDI1uxJewGWxsrtUn0_0cYOcnElvOtt8Agy9pXZQg-AGxQ0bN0qx9K_J7Fiyyh8k27PsriiIRbEe34K9SynFllLfWQo53BWSz5UisV50oe9rPcmbpPTVSeLil1KTfIL41Y8Uv7qTjB5-RjTnGdHtGdF3VY3mjVH-0hhxz8qpMT7Bs9pHelbLUgH7XC1EoPhBv59WbKYCCXNyd8qjfVNiKcf8RorxZmzU7G1AG49crnTUS6NGO3jpUlpyNv9VwA8nVdJJlWykejqJ0DiKZIhH36LsbKRKOqmejVRPJ5FyHEXjKOstyjbsVC2Oso0oYu2wLKMJpbxOkWwkg1PVbCSTUwkTynmdKmUjGZwiiT03o0xSJa5fJbdUCdWreU1IXGQzyWBCQnQzyWRC4vxqeU1IXGQzyWRC4s6YUSYTEpemntcEaoUVZ-KLxzvPBQes7VPY8-flgfAFNlVh2RvMxOOGO3xahEVrwnzFMVyzB97kmsu5F3hKe2NwtFzy9fqvnwEAAP__ZdgPjQ==",
 		},
 		{
-			query:           "SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.x = t2.y",
-			expectedPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1v2jwUgO_fX2Ed6VW3yZTY4TPSJKqSqWlpwgjTJlWoyojLvIY4sx0VVPHfpwBdIW0iwkWbCyTHh8ePfY5PHkH9icAC3x7Y52PE4zuBvoy8a3Rj_xgOzhwXfeg7_tj_OsDIvzgb2h_RNvTTJk6jMx9pghzXtUdo4HlX34bo0nPc7QxFnos0OV2gz0jT0-UEfb-wR_ZmpYFzZaOTPg9mMphb_58AhliEzA3mTIF1AwQwUMBgwgRDIsWUKSVkNvW4DnTCBVgGBh4nqc5eTzBMhWRgPYLmOmJgwTj4GbERC0Im6wZgCJkOeLTG656-Te7ZEjCciyidx8pCC4yysZ8E2ahWJwZMVhhEqp-XUDqYMbDIjpPTB8tY4cO1LgWPt1bmS6vlLQ8XgGEgxH2aoN-Cx0jEFuqRXdclRlI88LDQkOYMzSMNW4Xn9kKwsXeYgMFLdeaNexT3mrhnFsqaOdlWoeyzYxoLGTLJwj3ByeqV7biiJpJ6Nxf4ukojp9LdUyGHFxypWnB1YtTq9PCaI1XMdjLaeLOaaxxp2H6PmmvvydLDE00rJ5oatYOzTKto7Zxh882y3DzSsPMeWe5UaYMjphIRK3ZQ4zByK9VI1opYOGObvqVEKqdsKMV0HbsZemvQ-kXIlN7Mks3AiZ-mlJYsmP_7zuySSCmJFpPMPImWksw9EtkltfIks3x3RoXtNUpRzWISyZOapaRWMamRJ7WOPah2ntQuJXWKnWie1CkldYtJzType-zuOlm530Xi4ZaHYIGxfWqv_Dw9kP0hmKnszvm_xMMaO14m2Y25CyLFMFwH96zPNJNzHnOl-RQsLVO2Wv33NwAA___OinSA",
+			query:         "SELECT * FROM t AS t1 INNER LOOKUP JOIN t AS t2 ON t1.x = t2.y",
+			systemPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1v2jwUgO_fX2Ed6VW3yZTY4TPSJKqSqWlpwgjTJlWoyojLvIY4sx0VVPHfpwBdIW0iwkWbCyTHh8ePfY5PHkH9icAC3x7Y52PE4zuBvoy8a3Rj_xgOzhwXfeg7_tj_OsDIvzgb2h_RNvTTJk6jMx9pghzXtUdo4HlX34bo0nPc7QxFnos0OV2gz0jT0-UEfb-wR_ZmpYFzZaOTPg9mMphb_58AhliEzA3mTIF1AwQwUMBgwgRDIsWUKSVkNvW4DnTCBVgGBh4nqc5eTzBMhWRgPYLmOmJgwTj4GbERC0Im6wZgCJkOeLTG656-Te7ZEjCciyidx8pCC4yysZ8E2ahWJwZMVhhEqp-XUDqYMbDIjpPTB8tY4cO1LgWPt1bmS6vlLQ8XgGEgxH2aoN-Cx0jEFuqRXdclRlI88LDQkOYMzSMNW4Xn9kKwsXeYgMFLdeaNexT3mrhnFsqaOdlWoeyzYxoLGTLJwj3ByeqV7biiJpJ6Nxf4ukojp9LdUyGHFxypWnB1YtTq9PCaI1XMdjLaeLOaaxxp2H6PmmvvydLDE00rJ5oatYOzTKto7Zxh882y3DzSsPMeWe5UaYMjphIRK3ZQ4zByK9VI1opYOGObvqVEKqdsKMV0HbsZemvQ-kXIlN7Mks3AiZ-mlJYsmP_7zuySSCmJFpPMPImWksw9EtkltfIks3x3RoXtNUpRzWISyZOapaRWMamRJ7WOPah2ntQuJXWKnWie1CkldYtJzType-zuOlm530Xi4ZaHYIGxfWqv_Dw9kP0hmKnszvm_xMMaO14m2Y25CyLFMFwH96zPNJNzHnOl-RQsLVO2Wv33NwAA___OinSA",
+			tenantPlanURL: "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzElV1v2jwUgO_fX2Ed6VW3yZTY4TPSJKqSqWkpYYRpkypUZcRlXkOc2Y4KqvjvUwhdIW0iyEWbC5Djw-PHPseHR1B_QrDAswf2-QTx6E6gL2P3Gt3YP0aDM2eIPvQdb-J9HWDkXZyN7I9oG_opi9PozEOaIGc4tMdo4LpX30bo0nWG2xmK3CHS5HSJPiNNT1dT9P3CHtvZSgPnykYnfe7Ppb-w_j8BDJEI2NBfMAXWDRDAQAGDCVMMsRQzppSQ6dTjJtAJlmAZGHgUJzp9PcUwE5KB9Qia65CBBRP_Z8jGzA-YrBuAIWDa5-EGr3v6Nr5nK8BwLsJkESkLLTFKx17sp6M6MVp1Usu-6sSA6RqDSPTzckr7cwYW2fFz-mAZa3y44qXg0dbQfGm4uuXBEjAMhLhPYvRb8AiJyEI9suu9wkiKBx4UGtKcoVnRsFV4hi8EG3sHCxjcRKfeuEdxr4l7ZqGsmZNtFco-OyaRkAGTLNgTnK5f2c5Q1ERc7-YCX1dp5FS6eyrk8OIj1YqvToyn-qOH1x85xnInu403q79GRcP2e9Rfe0-WHp50WjHpdJt0enDG6TGKO-fZfLOMNysadt4j451j2uOYqVhEih3UUIzcSjWStigWzFnWz5RI5IyNpJhtYrOhuwFtXgRM6WyWZAMneppSWjJ_8e__Z5dESkm0mGTmSbSUZO6RyC6plSeZ5bszjtheoxTVLCaRPKlZSmoVkxp5UqvqQbXzpHYpqVPsRPOkTimpW0xq5kndqrvrpOV-F4qHWx6ABcb2qb3y8fRA-gN_rtI75_0SDxvsZBWnN-bODxXDcO3fsz7TTC54xJXmM7C0TNh6_d_fAAAA__9DSXtl",
 		},
 		{
 			// Reproduction of not propagating errors to all outputs of the
 			// hash router (#51458).
 			query:               "SELECT * FROM t JOIN onerow ON t.x = onerow.x",
-			expectedPlanURL:     "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lW9P4koUxt_fTzE5yY16M0inFPA2McEIN-JFcIFkNzHEjPQAjaXDzkwjxvDdN21xpYV2Kf7pC2WY098855knhxdQPz2wYdDqtC6HxPUngvzX792Qu9aP285Fu0uOm-3BcPCtQ8ng6uK2dULWpf_EdZpc99pdInyU4on0ukSfLsn5en26HJHvV61-KwZ32v-3yFHT5VPJ5_bfR0DBFw52-RwV2HfAgIIJFCoworCQYoxKCRluvUSFbWcJtkHB9ReBDr8eURgLiWC_gHa1h2DDkD942EfuoCwbQMFBzV0vwuuGvl884jNQuBReMPeVTZaUhOvBgoerUpkZMFpREIFeH_FGfngmM65mSWaDwWg1oqA0nyLYbEN3uwm2saIZ0t-4gS-kgxKdBHkUvvmnkh39X3E1uxauj7JsJaV6ONHHDXZyLt3pLPoEFHqBtkmD0YZJG5VU629tVVJtWe9oa4fmriiJRbme7n-nFCslpZ6QwvYPBysajjIzSmXzY_PBMtV_QT6qn5aPaqItc_9LMQtfimmUPvRGzEOlV5LHxAOwEf_bbmJj5rxLvpmSX8mU_wWBqn1aoGqZA2eHoj6qhfAV7jVPjNRJJRY2ic4UY9OUCOQYb6UYR7XxsheBovA4qHS8u160_dctpSXy-e-fgf1JVjbJKkaqZ5PO0iSWJhmbJDObxMw0ysxFnSVQRq5RlUMtZ8VIOZZXi5FyLP83TbIOtrySRlUPNWrr8vJJOUbVipFyjGJbOagVaM_cRG0ZlU-yskn1YqR6NolthbN-cBCscFxNPPF07zpgg7F-Sjv-vD4QvsCnKpyZg5l4irjD50U48SbcU0jhhj9iEzXKueu7SrtjsLUMcLX661cAAAD__3vS9aQ=",
+			systemPlanURL:       "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lW9P4koUxt_fTzE5yY16M0inFPA2McEIN-JFcIFkNzHEjPQAjaXDzkwjxvDdN21xpYV2Kf7pC2WY098855knhxdQPz2wYdDqtC6HxPUngvzX792Qu9aP285Fu0uOm-3BcPCtQ8ng6uK2dULWpf_EdZpc99pdInyU4on0ukSfLsn5en26HJHvV61-KwZ32v-3yFHT5VPJ5_bfR0DBFw52-RwV2HfAgIIJFCoworCQYoxKCRluvUSFbWcJtkHB9ReBDr8eURgLiWC_gHa1h2DDkD942EfuoCwbQMFBzV0vwuuGvl884jNQuBReMPeVTZaUhOvBgoerUpkZMFpREIFeH_FGfngmM65mSWaDwWg1oqA0nyLYbEN3uwm2saIZ0t-4gS-kgxKdBHkUvvmnkh39X3E1uxauj7JsJaV6ONHHDXZyLt3pLPoEFHqBtkmD0YZJG5VU629tVVJtWe9oa4fmriiJRbme7n-nFCslpZ6QwvYPBysajjIzSmXzY_PBMtV_QT6qn5aPaqItc_9LMQtfimmUPvRGzEOlV5LHxAOwEf_bbmJj5rxLvpmSX8mU_wWBqn1aoGqZA2eHoj6qhfAV7jVPjNRJJRY2ic4UY9OUCOQYb6UYR7XxsheBovA4qHS8u160_dctpSXy-e-fgf1JVjbJKkaqZ5PO0iSWJhmbJDObxMw0ysxFnSVQRq5RlUMtZ8VIOZZXi5FyLP83TbIOtrySRlUPNWrr8vJJOUbVipFyjGJbOagVaM_cRG0ZlU-yskn1YqR6NolthbN-cBCscFxNPPF07zpgg7F-Sjv-vD4QvsCnKpyZg5l4irjD50U48SbcU0jhhj9iEzXKueu7SrtjsLUMcLX661cAAAD__3vS9aQ=",
+			tenantPlanURL:       "Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lW9r4kwUxd8_n2K48NB2GWsmRtMNFCzVpXatdlXYhSJlaq4aGjPuzEgtxe--JLHbJpqspn_ywjhm8pt7zj1cn0D99sGBfrPdPB8QLxgL8q3XvSI3zV_X7bNWhxw2Wv1B_0ebkv7F2XXziKy3fon3aXLZbXWICFCKB9LtEH28JKfr9fFySH5eNHvNGNxufW-Sg4bHJ5LPnP8PgEIgXOzwGSpwboABBRMoVGBIYS7FCJUSMnz0FG1suUtwDApeMF_o8OchhZGQCM4TaE_7CA4M-J2PPeQuyrIBFFzU3PMjvK7r2_k9PgKFc-EvZoFyyJKScN2f83BVZkatzErxrcwMGK4oiIVeH_dyyt0jmXI1TfLrDIarIQWl-QTBYa80tBrgGCuaIeOFuwiEdFGimyAPwzf_tWWLFxdcTS-FF6AsW8lSfRzrwzo7OpXeZBp9AwrdhXZIndG6SeuVlPQXWZWULOsNsrbU3BElMS_baf1bS7FSpdiJUtjuQWHFglJmxnNWzPfNCstU8glZqX5YVqoJWebuDTILNshcN8h81-6YRWVUksfEQ7Ie3zYFJdTY8Vyy3yjFTEmpZEr5hKDVPixotcyhtKWiHqq5CBTuNHOM1EklFopEd4KxaUos5AivpRhFe-NlNwJFQXJR6fjpetEKnh8pLZHP_v5V7E6ysknWfiQ7m3SSJrE0yXhNMrNJzEyjzFzUSQJl5BpVKWo524-UY3l1P1KO5V_TJKuw5ZU0qlrUqI3m5ZNyjKrtR8oxim3koLaHPPM1asOofJKVTbL3I9nZJLYRTrtwEKxwXI198XDrueCAsb5KWz6eLwhf4BMVzsz-VDxE3MHjPJx4Y-4rpHDF77GBGuXMCzylvRE4Wi5wtfrvTwAAAP__elP-2A==",
 			overrideErrorOrigin: []int{0},
 		},
 	}
@@ -777,10 +795,14 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						rows.Next()
 						var actualPlanURL string
 						require.NoError(t, rows.Scan(&actualPlanURL))
-						if testCase.expectedPlanURL != actualPlanURL {
+						expectedPlanURL := testCase.systemPlanURL
+						if tc.StartedDefaultTestTenant() {
+							expectedPlanURL = testCase.tenantPlanURL
+						}
+						if expectedPlanURL != actualPlanURL {
 							return errors.Newf(
 								"DistSQL plans didn't match:\nexpected:%s\nactual: %s",
-								testCase.expectedPlanURL, actualPlanURL,
+								expectedPlanURL, actualPlanURL,
 							)
 						}
 						return nil
