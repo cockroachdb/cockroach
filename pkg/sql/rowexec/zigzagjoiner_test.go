@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -681,8 +680,8 @@ func TestZigzagJoiner(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.desc, func(t *testing.T) {
-			st := cluster.MakeTestingClusterSettings()
-			evalCtx := eval.MakeTestingEvalContext(st)
+			st := s.ClusterSettings()
+			evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 			defer evalCtx.Stop(ctx)
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -755,7 +754,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), srv.NodeID())
