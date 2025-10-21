@@ -5059,7 +5059,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 
 		// Force a GC of the table. This should cause both
 		// versions of the table to be deleted.
-		forceTableGC(t, s.SystemServer, sqlDB, "d", "foo")
+		forceTableGC(t, s.SystemServer, "d", "foo")
 
 		// Resume our changefeed normally.
 		atomic.StoreInt32(&shouldWait, 0)
@@ -5161,7 +5161,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 
 		// Force a GC of the table. This should cause both older versions of the
 		// table to be deleted, with the middle version being lost to the changefeed.
-		forceTableGC(t, s.SystemServer, sqlDB, "system", "descriptor")
+		forceTableGC(t, s.SystemServer, "system", "descriptor")
 
 		// Resume our changefeed normally.
 		atomic.StoreInt32(&shouldWait, 0)
