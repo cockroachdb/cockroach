@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -45,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v4"
@@ -204,7 +201,7 @@ func TestDataDriven(t *testing.T) {
 
 								s := srv.ApplicationLayer()
 
-								url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+								url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 								defer cleanup()
 								var sqlConnCtx clisqlclient.Context
 								conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -271,7 +268,7 @@ func TestCopyFromTransaction(t *testing.T) {
 		// of the COPY can be lost, which can then cause the COPY to fail.
 		kvcoord.PipelinedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 
-		url, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+		url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("copytest"), serverutils.User(username.RootUser))
 		defer cleanup()
 		var sqlConnCtx clisqlclient.Context
 
@@ -422,11 +419,10 @@ func TestCopyFromTimeout(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		s.AdvSQLAddr(),
-		"TestCopyFromTimeout",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestCopyFromTimeout"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -487,12 +483,12 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		srv.ApplicationLayer().AdvSQLAddr(),
-		"TestShowQueriesIncludesCopy",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestShowQueriesIncludesCopy"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -655,8 +651,9 @@ func TestTinyRows(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	url, cleanup := pgurlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("copytest"), serverutils.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -814,20 +811,20 @@ func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(b, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup, err := pgurlutils.PGUrlE(
-		s.AdvSQLAddr(),
-		"BenchmarkCopyEndToEnd", /* prefix */
-		url.User(username.RootUser),
+	pgURL, cleanup := s.PGUrl(
+		b,
+		serverutils.CertsDirPrefix("BenchmarkCopyEndToEnd"),
+		serverutils.User(username.RootUser),
 	)
-	require.NoError(b, err)
-	s.Stopper().AddCloser(stop.CloserFn(cleanup))
+	defer cleanup()
 
-	_, err = db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
+	_, err := db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
 	require.NoError(b, err)
 
 	conn, err := pgx.Connect(ctx, pgURL.String())

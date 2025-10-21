@@ -8,7 +8,6 @@ package sql_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,16 +39,16 @@ func TestSessionMigration(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "session_migration"), func(t *testing.T, path string) {
-		s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
 		openConnFunc := func() *pgx.Conn {
-			pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
-				s.AdvSQLAddr(),
-				"StartServer", /* prefix */
-				url.User(username.RootUser),
+			pgURL, cleanupGoDB := s.PGUrl(
+				t,
+				serverutils.CertsDirPrefix("StartServer"),
+				serverutils.User(username.RootUser),
 			)
-			require.NoError(t, err)
 			pgURL.Path = "defaultdb"
 
 			config, err := pgx.ParseConfig(pgURL.String())
@@ -59,10 +57,7 @@ func TestSessionMigration(t *testing.T) {
 			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 
-			s.Stopper().AddCloser(
-				stop.CloserFn(func() {
-					cleanupGoDB()
-				}))
+			s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
 
 			return conn
 		}
@@ -74,10 +69,10 @@ func TestSessionMigration(t *testing.T) {
 		require.NoError(t, err)
 
 		openUserConnFunc := func(user string) *pgx.Conn {
-			pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
-				s.AdvSQLAddr(),
-				"StartServer", /* prefix */
-				url.User(user),
+			pgURL, cleanupGoDB := s.PGUrl(
+				t,
+				serverutils.CertsDirPrefix("StartServer"),
+				serverutils.User(user),
 			)
 			require.NoError(t, err)
 			pgURL.Path = "defaultdb"
@@ -88,10 +83,7 @@ func TestSessionMigration(t *testing.T) {
 			conn, err := pgx.ConnectConfig(ctx, config)
 			require.NoError(t, err)
 
-			s.Stopper().AddCloser(
-				stop.CloserFn(func() {
-					cleanupGoDB()
-				}))
+			s.AppStopper().AddCloser(stop.CloserFn(func() { cleanupGoDB() }))
 
 			return conn
 		}

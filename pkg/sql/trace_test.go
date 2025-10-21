@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -240,8 +238,9 @@ func TestTrace(t *testing.T) {
 							//
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
-							pgURL, cleanup := pgurlutils.PGUrl(
-								t, cluster.Server(i).AdvSQLAddr(), "TestTrace", url.User(username.RootUser))
+							pgURL, cleanup := cluster.ApplicationLayer(i).PGUrl(
+								t, serverutils.CertsDirPrefix("TestTrace"), serverutils.User(username.RootUser),
+							)
 							defer cleanup()
 							q := pgURL.Query()
 							// This makes it easier to test with the `tracing` sesssion var.
