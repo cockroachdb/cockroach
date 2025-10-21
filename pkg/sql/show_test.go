@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -659,14 +658,14 @@ func TestShowQueriesDelegatesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := pgurlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		s.AdvSQLAddr(),
-		"TestShowQueriesDelegatesInternal",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestShowQueriesDelegatesInternal"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 

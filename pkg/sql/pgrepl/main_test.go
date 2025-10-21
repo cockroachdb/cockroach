@@ -8,7 +8,6 @@ package pgrepl
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -41,10 +39,11 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "pgrepl_datadriven_test", url.User(username.RootUser))
+	pgURL, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("pgrepl_datadriven_test"), serverutils.User(username.RootUser))
 	defer cleanup()
 
 	cfg, err := pgx.ParseConfig(pgURL.String())

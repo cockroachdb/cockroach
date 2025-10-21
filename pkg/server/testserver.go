@@ -516,6 +516,7 @@ func (ts *testServer) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, er
 		ts.cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -544,6 +545,7 @@ func (ts *testServer) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func()
 		ts.cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -1039,6 +1041,7 @@ func (t *testTenant) SQLConnE(opts ...serverutils.SQLConnOption) (*gosql.DB, err
 		t.Cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 
@@ -1073,6 +1076,7 @@ func (t *testTenant) PGUrlE(opts ...serverutils.SQLConnOption) (url.URL, func(),
 		t.Cfg.Insecure,
 		options.ClientCerts,
 		options.CertsDirPrefix,
+		options.CertName,
 	)
 }
 

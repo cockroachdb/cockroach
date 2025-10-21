@@ -10,7 +10,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -397,10 +395,10 @@ func TestProcessorBaseContext(t *testing.T) {
 }
 
 func getPGXConnAndCleanupFunc(
-	ctx context.Context, t *testing.T, servingSQLAddr string,
+	ctx context.Context, t *testing.T, s serverutils.ApplicationLayerInterface,
 ) (*pgx.Conn, func()) {
 	t.Helper()
-	pgURL, cleanup := pgurlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
 	pgURL.Path = "test"
 	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -536,7 +534,7 @@ func TestDrainingProcessorSwallowsUncertaintyError(t *testing.T) {
 	}
 
 	populateRangeCacheAndDisableBuffering(t, origDB0, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.Server(0).AdvSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 	defer cleanup()
 
 	// Run with the vectorize off and on.
@@ -714,7 +712,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 	))
 	require.NoError(t, err)
 	populateRangeCacheAndDisableBuffering(t, dbConn, "t")
-	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, s.AdvSQLAddr())
+	defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, s)
 	defer cleanup()
 
 	testCases := []struct {

@@ -213,7 +213,6 @@ go_test(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/distsqlutils",
-        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
