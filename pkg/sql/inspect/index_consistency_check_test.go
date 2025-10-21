@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -115,6 +116,8 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow test")
+
 	issueLogger := &testIssueCollector{}
 	ctx := context.Background()
 	const numNodes = 3
@@ -140,7 +143,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	r := sqlutils.MakeSQLRunner(db)
 
-	for _, tc := range []struct {
+	testCases := []struct {
 		// desc is a description of the test case.
 		desc string
 		// splitRangeDDL is the DDL to split the table into multiple ranges. The
@@ -321,13 +324,30 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			// No corruptionTargetIndex specified, no corruption
 			missingIndexEntrySelector: "", // No corruption
 		},
-	} {
-		t.Run(tc.desc, func(t *testing.T) {
-			issueLogger.reset()
-			r.ExecMultiple(t,
-				`DROP DATABASE IF EXISTS test`,
-				`CREATE DATABASE test`,
-				`CREATE TABLE test.t (
+	}
+	hashConfigs := []struct {
+		name    string
+		enabled bool
+	}{
+		{name: "hash-enabled", enabled: true},
+		{name: "hash-disabled", enabled: false},
+	}
+	for _, hashCfg := range hashConfigs {
+		hashCfg := hashCfg
+		t.Run(hashCfg.name, func(t *testing.T) {
+			r.Exec(t, "SET CLUSTER SETTING sql.inspect.index_consistency_hash.enabled = $1", hashCfg.enabled)
+			t.Cleanup(func() {
+				r.Exec(t, "SET CLUSTER SETTING sql.inspect.index_consistency_hash.enabled = true")
+			})
+
+			for _, tc := range testCases {
+				tc := tc
+				t.Run(tc.desc, func(t *testing.T) {
+					issueLogger.reset()
+					r.ExecMultiple(t,
+						`DROP DATABASE IF EXISTS test`,
+						`CREATE DATABASE test`,
+						`CREATE TABLE test.t (
 					a INT,
 					b INT,
 					c INT NOT NULL,
@@ -337,7 +357,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				  PRIMARY KEY (a, d),
 					FAMILY fam0 (a, b, c, d, e, f)
 				)`,
-				`INSERT INTO test.t (a, b, c, d, e, f)
+						`INSERT INTO test.t (a, b, c, d, e, f)
 				SELECT
 					gs1 AS a,
 					gs1 * 10 AS b,
@@ -346,93 +366,93 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 					'e_' || gs1::STRING AS e,
 					gs1 * 1.5 AS f
 				FROM generate_series(1, 1000) AS gs1;`,
-			)
+					)
 
-			// Split the values and relocate leases so that the INSPECT job ends up
-			// running in parallel across multiple nodes.
-			r.ExecMultiple(t, tc.splitRangeDDL)
-			ranges, err := db.Query(`
+					// Split the values and relocate leases so that the INSPECT job ends up
+					// running in parallel across multiple nodes.
+					r.ExecMultiple(t, tc.splitRangeDDL)
+					ranges, err := db.Query(`
 				WITH r AS (SHOW RANGES FROM TABLE test.t WITH DETAILS)
         SELECT range_id FROM r ORDER BY 1`)
-			require.NoError(t, err)
-			t.Cleanup(func() {
-				require.NoError(t, ranges.Close())
-			})
-			for i := 0; ranges.Next(); i++ {
-				var rangeID int
-				err = ranges.Scan(&rangeID)
-				require.NoError(t, err)
-				relocate := fmt.Sprintf("ALTER RANGE %d RELOCATE LEASE TO %d", rangeID, (i%numNodes)+1)
-				r.Exec(t, relocate)
-			}
-
-			r.ExecMultiple(t, tc.indexDDL...)
-
-			// Execute any post-index SQL
-			if tc.postIndexSQL != "" {
-				r.Exec(t, tc.postIndexSQL)
-			}
-
-			// Get timestamp before corruption if needed
-			var expectedASOFTime time.Time
-
-			if tc.useTimestampBeforeCorruption {
-				// Get timestamp before corruption
-				r.QueryRow(t, "SELECT now()::timestamp").Scan(&expectedASOFTime)
-				expectedASOFTime = expectedASOFTime.UTC()
-
-				// Sleep for 1 millisecond to ensure corruption happens after timestamp
-				// This should be long enough to guarantee a different timestamp
-				time.Sleep(1 * time.Millisecond)
-			}
-
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
-
-			// Select target index based on corruptionTargetIndex with bounds checking
-			indexes := tableDesc.PublicNonPrimaryIndexes()
-			targetIndexPos := tc.corruptionTargetIndex
-			if targetIndexPos < 0 || targetIndexPos >= len(indexes) {
-				targetIndexPos = 0 // Default to first index for safety/backward compatibility
-			}
-			secIndex := indexes[targetIndexPos]
-
-			// Apply test-specific corruption based on configured selectors:
-			// - If missingIndexEntrySelector is set, we delete the secondary index entries
-			//   for all rows matching the predicate. This simulates missing index entries
-			//   (i.e., primary rows with no corresponding secondary index key).
-			// - If danglingIndexEntryInsertQuery is set, we evaluate the query to produce
-			//   synthetic rows and manually insert their secondary index entries without
-			//   inserting matching primary rows. This simulates dangling entries
-			//   (i.e., secondary index keys pointing to non-existent primary keys).
-			if tc.missingIndexEntrySelector != "" {
-				rows, err := ie.QueryBufferedEx(ctx, "missing-index-entry-query-filter", nil /* no txn */, sessiondata.NodeUserSessionDataOverride,
-					`SELECT * FROM test.t WHERE `+tc.missingIndexEntrySelector)
-				require.NoError(t, err)
-				require.Greater(t, len(rows), 0,
-					"filter '%s' matched no rows - check that values exist in table data",
-					tc.missingIndexEntrySelector)
-				t.Logf("Corrupting %d rows that match filter by deleting secondary index keys: %s", len(rows), tc.missingIndexEntrySelector)
-				for _, row := range rows {
-					err = deleteSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
 					require.NoError(t, err)
-				}
-			}
-			if tc.danglingIndexEntryInsertQuery != "" {
-				rows, err := ie.QueryBufferedEx(ctx, "dangling-index-insert-query", nil, /* no txn */
-					sessiondata.NodeUserSessionDataOverride, tc.danglingIndexEntryInsertQuery)
-				require.NoError(t, err)
-				require.Greater(t, len(rows), 0,
-					"danglingIndexEntryInsertQuery '%s' returned no rows - check query syntax",
-					tc.danglingIndexEntryInsertQuery)
-				t.Logf("Corrupting %d rows by inserting keys into secondary index returned by this query: %s",
-					len(rows), tc.danglingIndexEntryInsertQuery)
-				for _, row := range rows {
-					err = insertSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
-					require.NoError(t, err)
-				}
-			}
-			r.Exec(t,
-				`INSERT INTO test.t (a, b, c, d, e, f)
+					t.Cleanup(func() {
+						require.NoError(t, ranges.Close())
+					})
+					for i := 0; ranges.Next(); i++ {
+						var rangeID int
+						err = ranges.Scan(&rangeID)
+						require.NoError(t, err)
+						relocate := fmt.Sprintf("ALTER RANGE %d RELOCATE LEASE TO %d", rangeID, (i%numNodes)+1)
+						r.Exec(t, relocate)
+					}
+
+					r.ExecMultiple(t, tc.indexDDL...)
+
+					// Execute any post-index SQL
+					if tc.postIndexSQL != "" {
+						r.Exec(t, tc.postIndexSQL)
+					}
+
+					// Get timestamp before corruption if needed
+					var expectedASOFTime time.Time
+
+					if tc.useTimestampBeforeCorruption {
+						// Get timestamp before corruption
+						r.QueryRow(t, "SELECT now()::timestamp").Scan(&expectedASOFTime)
+						expectedASOFTime = expectedASOFTime.UTC()
+
+						// Sleep for 1 millisecond to ensure corruption happens after timestamp
+						// This should be long enough to guarantee a different timestamp
+						time.Sleep(1 * time.Millisecond)
+					}
+
+					tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
+
+					// Select target index based on corruptionTargetIndex with bounds checking
+					indexes := tableDesc.PublicNonPrimaryIndexes()
+					targetIndexPos := tc.corruptionTargetIndex
+					if targetIndexPos < 0 || targetIndexPos >= len(indexes) {
+						targetIndexPos = 0 // Default to first index for safety/backward compatibility
+					}
+					secIndex := indexes[targetIndexPos]
+
+					// Apply test-specific corruption based on configured selectors:
+					// - If missingIndexEntrySelector is set, we delete the secondary index entries
+					//   for all rows matching the predicate. This simulates missing index entries
+					//   (i.e., primary rows with no corresponding secondary index key).
+					// - If danglingIndexEntryInsertQuery is set, we evaluate the query to produce
+					//   synthetic rows and manually insert their secondary index entries without
+					//   inserting matching primary rows. This simulates dangling entries
+					//   (i.e., secondary index keys pointing to non-existent primary keys).
+					if tc.missingIndexEntrySelector != "" {
+						rows, err := ie.QueryBufferedEx(ctx, "missing-index-entry-query-filter", nil /* no txn */, sessiondata.NodeUserSessionDataOverride,
+							`SELECT * FROM test.t WHERE `+tc.missingIndexEntrySelector)
+						require.NoError(t, err)
+						require.Greater(t, len(rows), 0,
+							"filter '%s' matched no rows - check that values exist in table data",
+							tc.missingIndexEntrySelector)
+						t.Logf("Corrupting %d rows that match filter by deleting secondary index keys: %s", len(rows), tc.missingIndexEntrySelector)
+						for _, row := range rows {
+							err = deleteSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
+							require.NoError(t, err)
+						}
+					}
+					if tc.danglingIndexEntryInsertQuery != "" {
+						rows, err := ie.QueryBufferedEx(ctx, "dangling-index-insert-query", nil, /* no txn */
+							sessiondata.NodeUserSessionDataOverride, tc.danglingIndexEntryInsertQuery)
+						require.NoError(t, err)
+						require.Greater(t, len(rows), 0,
+							"danglingIndexEntryInsertQuery '%s' returned no rows - check query syntax",
+							tc.danglingIndexEntryInsertQuery)
+						t.Logf("Corrupting %d rows by inserting keys into secondary index returned by this query: %s",
+							len(rows), tc.danglingIndexEntryInsertQuery)
+						for _, row := range rows {
+							err = insertSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
+							require.NoError(t, err)
+						}
+					}
+					r.Exec(t,
+						`INSERT INTO test.t (a, b, c, d, e, f)
 				SELECT
 					gs1 AS a,
 					gs1 * 10 AS b,
@@ -441,112 +461,114 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 					'e_' || gs1::STRING AS e,
 					gs1 * 1.5 AS f
 				FROM generate_series(1001, 2000) AS gs1;`,
-			)
+					)
 
-			_, err = db.Exec(`SET enable_inspect_command=true`)
-			require.NoError(t, err)
+					_, err = db.Exec(`SET enable_inspect_command=true`)
+					require.NoError(t, err)
 
-			// If not using timestamp before corruption, get current timestamp
-			if !tc.useTimestampBeforeCorruption {
-				// Convert relative timestamp to absolute timestamp using CRDB
-				r.QueryRow(t, "SELECT (now() + '-1us')::timestamp").Scan(&expectedASOFTime)
-				expectedASOFTime = expectedASOFTime.UTC()
-			}
+					// If not using timestamp before corruption, get current timestamp
+					if !tc.useTimestampBeforeCorruption {
+						// Convert relative timestamp to absolute timestamp using CRDB
+						r.QueryRow(t, "SELECT (now() + '-1us')::timestamp").Scan(&expectedASOFTime)
+						expectedASOFTime = expectedASOFTime.UTC()
+					}
 
-			// Use the absolute timestamp in nanoseconds for inspect command
-			absoluteTimestamp := fmt.Sprintf("'%d'", expectedASOFTime.UnixNano())
-			inspectQuery := fmt.Sprintf(`INSPECT TABLE test.t AS OF SYSTEM TIME %s WITH OPTIONS INDEX ALL`, absoluteTimestamp)
-			_, err = db.Query(inspectQuery)
-			if tc.expectedErrRegex == "" {
-				require.NoError(t, err)
-				require.Equal(t, 0, issueLogger.numIssuesFound())
-				return
-			}
+					// Use the absolute timestamp in nanoseconds for inspect command
+					absoluteTimestamp := fmt.Sprintf("'%d'", expectedASOFTime.UnixNano())
+					inspectQuery := fmt.Sprintf(`INSPECT TABLE test.t AS OF SYSTEM TIME %s WITH OPTIONS INDEX ALL`, absoluteTimestamp)
+					_, err = db.Query(inspectQuery)
+					if tc.expectedErrRegex == "" {
+						require.NoError(t, err)
+						require.Equal(t, 0, issueLogger.numIssuesFound())
+						return
+					}
 
-			require.Error(t, err)
-			require.Regexp(t, tc.expectedErrRegex, err.Error())
+					require.Error(t, err)
+					require.Regexp(t, tc.expectedErrRegex, err.Error())
 
-			numExpected := len(tc.expectedIssues)
-			numFound := issueLogger.numIssuesFound()
+					numExpected := len(tc.expectedIssues)
+					numFound := issueLogger.numIssuesFound()
 
-			dumpAllFoundIssues := func() {
-				t.Log("Dumping all found issues:")
-				for i := 0; i < numFound; i++ {
-					t.Logf("  [%d] %s", i, issueLogger.issue(i))
-				}
-			}
-
-			// The number of expected and actual issues must match exactly.
-			// If they don't, dump all found issues for debugging and fail.
-			if numExpected != numFound {
-				t.Logf("Mismatch in number of issues: expected %d, found %d", numExpected, numFound)
-				dumpAllFoundIssues()
-				t.Fatalf("expected %d issues, but found %d", numExpected, numFound)
-			}
-
-			// For each expected issue, ensure it was found.
-			for i, expectedIssue := range tc.expectedIssues {
-				foundIssue := issueLogger.findIssue(expectedIssue.ErrorType, expectedIssue.PrimaryKey)
-				if foundIssue == nil {
-					t.Logf("Expected issue not found: %q", expectedIssue)
-					dumpAllFoundIssues()
-					t.Fatalf("expected issue %d (%q) not found", i, expectedIssue)
-				}
-				require.NotEqual(t, 0, foundIssue.DatabaseID, "expected issue to have a database ID: %s", expectedIssue)
-				require.NotEqual(t, 0, foundIssue.SchemaID, "expected issue to have a schema ID: %s", expectedIssue)
-				require.NotEqual(t, 0, foundIssue.ObjectID, "expected issue to have an object ID: %s", expectedIssue)
-				require.Equal(t, expectedASOFTime, foundIssue.AOST.UTC())
-
-				// Additional validation for internal errors
-				if foundIssue.ErrorType == "internal_error" {
-					require.NotNil(t, foundIssue.Details, "internal error should have details")
-
-					// Validate patterns if provided for this specific issue
-					if tc.expectedInternalErrorPatterns != nil && i < len(tc.expectedInternalErrorPatterns) &&
-						tc.expectedInternalErrorPatterns[i] != nil {
-						expectedPatterns := tc.expectedInternalErrorPatterns[i]
-
-						// Validate each expected pattern
-						for detailKey, expectedPattern := range expectedPatterns {
-							redactableKey := redact.RedactableString(detailKey)
-							require.Contains(t, foundIssue.Details, redactableKey, "internal error should contain detail key: %s", detailKey)
-
-							detailValue, ok := foundIssue.Details[redactableKey].(string)
-							require.True(t, ok, "detail value for key %s should be a string", detailKey)
-							require.Regexp(t, expectedPattern, detailValue,
-								"detail %s should match pattern %s, got: %s", detailKey, expectedPattern, detailValue)
+					dumpAllFoundIssues := func() {
+						t.Log("Dumping all found issues:")
+						for i := 0; i < numFound; i++ {
+							t.Logf("  [%d] %s", i, issueLogger.issue(i))
 						}
 					}
-				}
 
-				// Validate Details if provided in expected issue
-				if expectedIssue.Details != nil {
-					require.NotNil(t, foundIssue.Details, "issue should have details when expected")
-
-					// Check that all expected detail keys and values match
-					for expectedKey, expectedValue := range expectedIssue.Details {
-						require.Contains(t, foundIssue.Details, expectedKey,
-							"issue should contain detail key: %s", expectedKey)
-
-						actualValue := foundIssue.Details[expectedKey]
-						require.Equal(t, expectedValue, actualValue,
-							"detail %s should be %v, got %v", expectedKey, expectedValue, actualValue)
+					// The number of expected and actual issues must match exactly.
+					// If they don't, dump all found issues for debugging and fail.
+					if numExpected != numFound {
+						t.Logf("Mismatch in number of issues: expected %d, found %d", numExpected, numFound)
+						dumpAllFoundIssues()
+						t.Fatalf("expected %d issues, but found %d", numExpected, numFound)
 					}
-				}
-			}
 
-			// Validate job status matches expected outcome
-			var jobID int64
-			var jobStatus string
-			var fractionCompleted float64
-			r.QueryRow(t, `SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobID, &jobStatus, &fractionCompleted)
+					// For each expected issue, ensure it was found.
+					for i, expectedIssue := range tc.expectedIssues {
+						foundIssue := issueLogger.findIssue(expectedIssue.ErrorType, expectedIssue.PrimaryKey)
+						if foundIssue == nil {
+							t.Logf("Expected issue not found: %q", expectedIssue)
+							dumpAllFoundIssues()
+							t.Fatalf("expected issue %d (%q) not found", i, expectedIssue)
+						}
+						require.NotEqual(t, 0, foundIssue.DatabaseID, "expected issue to have a database ID: %s", expectedIssue)
+						require.NotEqual(t, 0, foundIssue.SchemaID, "expected issue to have a schema ID: %s", expectedIssue)
+						require.NotEqual(t, 0, foundIssue.ObjectID, "expected issue to have an object ID: %s", expectedIssue)
+						require.Equal(t, expectedASOFTime, foundIssue.AOST.UTC())
 
-			if tc.expectedErrRegex == "" {
-				require.Equal(t, "succeeded", jobStatus, "expected job to succeed when no issues found")
-				require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
-				requireCheckCountsMatch(t, r, jobID)
-			} else {
-				require.Equal(t, "failed", jobStatus, "expected job to fail when inconsistencies found")
+						// Additional validation for internal errors
+						if foundIssue.ErrorType == "internal_error" {
+							require.NotNil(t, foundIssue.Details, "internal error should have details")
+
+							// Validate patterns if provided for this specific issue
+							if tc.expectedInternalErrorPatterns != nil && i < len(tc.expectedInternalErrorPatterns) &&
+								tc.expectedInternalErrorPatterns[i] != nil {
+								expectedPatterns := tc.expectedInternalErrorPatterns[i]
+
+								// Validate each expected pattern
+								for detailKey, expectedPattern := range expectedPatterns {
+									redactableKey := redact.RedactableString(detailKey)
+									require.Contains(t, foundIssue.Details, redactableKey, "internal error should contain detail key: %s", detailKey)
+
+									detailValue, ok := foundIssue.Details[redactableKey].(string)
+									require.True(t, ok, "detail value for key %s should be a string", detailKey)
+									require.Regexp(t, expectedPattern, detailValue,
+										"detail %s should match pattern %s, got: %s", detailKey, expectedPattern, detailValue)
+								}
+							}
+						}
+
+						// Validate Details if provided in expected issue
+						if expectedIssue.Details != nil {
+							require.NotNil(t, foundIssue.Details, "issue should have details when expected")
+
+							// Check that all expected detail keys and values match
+							for expectedKey, expectedValue := range expectedIssue.Details {
+								require.Contains(t, foundIssue.Details, expectedKey,
+									"issue should contain detail key: %s", expectedKey)
+
+								actualValue := foundIssue.Details[expectedKey]
+								require.Equal(t, expectedValue, actualValue,
+									"detail %s should be %v, got %v", expectedKey, expectedValue, actualValue)
+							}
+						}
+					}
+
+					// Validate job status matches expected outcome
+					var jobID int64
+					var jobStatus string
+					var fractionCompleted float64
+					r.QueryRow(t, `SELECT job_id, status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`).Scan(&jobID, &jobStatus, &fractionCompleted)
+
+					if tc.expectedErrRegex == "" {
+						require.Equal(t, "succeeded", jobStatus, "expected job to succeed when no issues found")
+						require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
+						requireCheckCountsMatch(t, r, jobID)
+					} else {
+						require.Equal(t, "failed", jobStatus, "expected job to fail when inconsistencies found")
+					}
+				})
 			}
 		})
 	}
