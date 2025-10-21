@@ -12773,3 +12773,36 @@ func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
+
+func TestDatabaseLevelChangefeedChangingTableset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFnAdd := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+		defer closeFeed(t, foo)
+
+		var wg sync.WaitGroup
+		numTables := 10
+		wg.Add(numTables)
+		for i := 0; i < numTables; i++ {
+			go func() {
+				defer wg.Done()
+				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE foo%d (a INT PRIMARY KEY, b STRING)`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo%d VALUES (0, 'initial')`, i))
+				sqlDB.Exec(t, fmt.Sprintf(`UPSERT INTO foo%d VALUES (0, 'updated')`, i))
+			}()
+		}
+		wg.Wait()
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
+		})
+
+	}
+	cdcTest(t, testFnAdd)
+}

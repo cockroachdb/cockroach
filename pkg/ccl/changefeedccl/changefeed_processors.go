@@ -378,7 +378,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if ca.knobs.OverrideExecCfg != nil {
 		execCfg = ca.knobs.OverrideExecCfg(execCfg)
 	}
-	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg)
+	ca.targets, err = AllTargets(ctx, ca.spec.Feed, execCfg, *ca.spec.SchemaTs)
 	if err != nil {
 		log.Changefeed.Warningf(ca.Ctx(), "moving to draining due to error getting targets: %v", err)
 		ca.MoveToDraining(err)
@@ -1352,7 +1352,7 @@ func newChangeFrontierProcessor(
 	if cf.knobs.OverrideExecCfg != nil {
 		execCfg = cf.knobs.OverrideExecCfg(execCfg)
 	}
-	targets, err := AllTargets(ctx, spec.Feed, execCfg)
+	targets, err := AllTargets(ctx, spec.Feed, execCfg, *spec.SchemaTs)
 	if err != nil {
 		return nil, err
 	}

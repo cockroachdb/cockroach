@@ -448,7 +448,7 @@ func generateAndValidateNewTargets(
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg())
+	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg(), statementTime)
 	if err != nil {
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
