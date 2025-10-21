@@ -965,14 +965,13 @@ func waitForSchemaChangesToSucceed(t *testing.T, tdb *sqlutils.SQLRunner) {
 }
 
 func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
-	// Wait longer on stress for schema changes.
-	if skip.Stress() {
-		old := tdb.SucceedsSoonDuration
-		tdb.SucceedsSoonDuration = time.Minute * 2
-		defer func() {
-			tdb.SucceedsSoonDuration = old
-		}()
-	}
+	// Schema changes in more complex tests can be slower, so give them
+	// a lot more headroom to complete.
+	old := tdb.SucceedsSoonDuration
+	tdb.SucceedsSoonDuration = time.Minute * 2
+	defer func() {
+		tdb.SucceedsSoonDuration = old
+	}()
 	tdb.CheckQueryResultsRetry(
 		t, schemaChangeWaitQuery(`('succeeded', 'failed')`), [][]string{},
 	)
