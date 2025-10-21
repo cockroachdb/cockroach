@@ -27,10 +27,9 @@ func TestInspectMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, `
@@ -44,7 +43,7 @@ func TestInspectMetrics(t *testing.T) {
 		INSERT INTO db.t VALUES (1, 2), (2, 3);
 	`)
 
-	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	metrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
 
 	initialRuns := metrics.Runs.Count()
@@ -68,7 +67,7 @@ func TestInspectMetrics(t *testing.T) {
 		tree.NewDInt(1), // id
 		tree.NewDInt(2), // val
 	}
-	err := deleteSecondaryIndexEntry(ctx, row, kvDB, tableDesc, secIndex)
+	err := deleteSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
 	require.NoError(t, err)
 
 	// Second run: with corruption, should detect the missing index entry.

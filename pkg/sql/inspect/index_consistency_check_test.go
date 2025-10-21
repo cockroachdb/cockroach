@@ -51,14 +51,14 @@ func requireCheckCountsMatch(t *testing.T, r *sqlutils.SQLRunner, jobID int64) {
 // Returns the encoded index entry, expecting exactly one entry to be produced.
 // Returns an error if the encoding fails or if multiple index entries are generated.
 func encodeSecondaryIndexEntry(
-	row []tree.Datum, tableDesc catalog.TableDescriptor, index catalog.Index,
+	codec keys.SQLCodec, row []tree.Datum, tableDesc catalog.TableDescriptor, index catalog.Index,
 ) (rowenc.IndexEntry, error) {
 	var colIDtoRowIndex catalog.TableColMap
 	for i, c := range tableDesc.PublicColumns() {
 		colIDtoRowIndex.Set(c.GetID(), i)
 	}
 	indexEntries, err := rowenc.EncodeSecondaryIndex(
-		context.Background(), keys.SystemSQLCodec, tableDesc, index,
+		context.Background(), codec, tableDesc, index,
 		colIDtoRowIndex, row, rowenc.EmptyVectorIndexEncodingHelper, true, /* includeEmpty */
 	)
 	if err != nil {
@@ -77,12 +77,13 @@ func encodeSecondaryIndexEntry(
 // if multiple entries are produced.
 func deleteSecondaryIndexEntry(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	row []tree.Datum,
 	kvDB *kv.DB,
 	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
 ) error {
-	entry, err := encodeSecondaryIndexEntry(row, tableDesc, index)
+	entry, err := encodeSecondaryIndexEntry(codec, row, tableDesc, index)
 	if err != nil {
 		return err
 	}
@@ -96,12 +97,13 @@ func deleteSecondaryIndexEntry(
 // if multiple entries are produced.
 func insertSecondaryIndexEntry(
 	ctx context.Context,
+	codec keys.SQLCodec,
 	row []tree.Datum,
 	kvDB *kv.DB,
 	tableDesc catalog.TableDescriptor,
 	index catalog.Index,
 ) error {
-	entry, err := encodeSecondaryIndexEntry(row, tableDesc, index)
+	entry, err := encodeSecondaryIndexEntry(codec, row, tableDesc, index)
 	if err != nil {
 		return err
 	}
@@ -119,7 +121,6 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 	cl := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				Inspect: &sql.InspectTestingKnobs{
 					InspectIssueLogger: issueLogger,
@@ -131,11 +132,12 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 		},
 	})
 	defer cl.Stopper().Stop(ctx)
+	s := cl.ApplicationLayer(0)
 
-	db := cl.ServerConn(0)
-	kvDB := cl.Server(0).DB()
-	codec := cl.Server(0).Codec()
-	ie := cl.Server(0).InternalExecutor().(*sql.InternalExecutor)
+	db := s.SQLConn(t)
+	kvDB := s.DB()
+	codec := s.Codec()
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
 	r := sqlutils.MakeSQLRunner(db)
 
 	for _, tc := range []struct {
@@ -411,7 +413,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 					tc.missingIndexEntrySelector)
 				t.Logf("Corrupting %d rows that match filter by deleting secondary index keys: %s", len(rows), tc.missingIndexEntrySelector)
 				for _, row := range rows {
-					err = deleteSecondaryIndexEntry(ctx, row, kvDB, tableDesc, secIndex)
+					err = deleteSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
 					require.NoError(t, err)
 				}
 			}
@@ -425,7 +427,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 				t.Logf("Corrupting %d rows by inserting keys into secondary index returned by this query: %s",
 					len(rows), tc.danglingIndexEntryInsertQuery)
 				for _, row := range rows {
-					err = insertSecondaryIndexEntry(ctx, row, kvDB, tableDesc, secIndex)
+					err = insertSecondaryIndexEntry(ctx, codec, row, kvDB, tableDesc, secIndex)
 					require.NoError(t, err)
 				}
 			}
