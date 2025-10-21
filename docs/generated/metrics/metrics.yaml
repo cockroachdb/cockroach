@@ -8747,6 +8747,22 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.rows_read.count
+      exported_name: sql_statements_rows_read_count
+      description: Number of rows read by SQL statements from primary and secondary indexes
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.rows_read.count.internal
+      exported_name: sql_statements_rows_read_count_internal
+      description: Number of rows read by SQL statements from primary and secondary indexes (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.stats.activity.update.latency
       exported_name: sql_stats_activity_update_latency
       description: The latency of updates made by the SQL activity updater job. Includes failed update attempts

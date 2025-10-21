@@ -625,6 +625,7 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
 			TxnRetryCount:                     metric.NewCounter(getMetricMeta(MetaTxnRetry, internal)),
 			StatementRetryCount:               metric.NewCounter(getMetricMeta(MetaStatementRetry, internal)),
+			StatementRowsRead:                 metric.NewCounter(getMetricMeta(MetaStatementRowsRead, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
