@@ -534,7 +534,15 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, description, localState, resultsCh, nil, targets)
+		initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, p, details, localState)
+		if err != nil {
+			return err
+		}
+		maybeCfKnobs, haveKnobs := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+		if haveKnobs && maybeCfKnobs.AfterComputeDistChangefeedTimestamps != nil {
+			maybeCfKnobs.AfterComputeDistChangefeedTimestamps(ctx)
+		}
+		err = startDistChangefeed(ctx, p, 0 /* jobID */, schemaTS, details, description, initialHighWater, localState, resultsCh, nil, targets)
 		if err == nil {
 			log.Changefeed.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -744,7 +752,7 @@ func createChangefeedJobRecord(
 		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("unknown changefeed level: %s", changefeedStmt.Level)
 	}
 
-	targets, err := AllTargets(ctx, details, p.ExecCfg())
+	targets, err := AllTargets(ctx, details, p.ExecCfg(), statementTime)
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
@@ -1757,13 +1765,22 @@ func (b *changefeedResumer) resumeWithRetries(
 
 			confPoller := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
-			targets, err := AllTargets(ctx, details, execCfg)
+			initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, jobExec, details, localState)
+			if err != nil {
+				return err
+			}
+			maybeCfKnobs, haveKnobs := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+			if haveKnobs && maybeCfKnobs.AfterComputeDistChangefeedTimestamps != nil {
+				maybeCfKnobs.AfterComputeDistChangefeedTimestamps(ctx)
+			}
+			targets, err := AllTargets(ctx, details, execCfg, schemaTS)
 			if err != nil {
 				return err
 			}
 			g.GoCtx(func(ctx context.Context) error {
 				defer close(confPoller)
-				return distChangefeedFlow(ctx, jobExec, jobID, details, description, localState, startedCh, onTracingEvent, targets)
+				return startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
+					initialHighWater, localState, startedCh, onTracingEvent, targets)
 			})
 			g.GoCtx(func(ctx context.Context) error {
 				t := time.NewTicker(15 * time.Second)
@@ -2012,7 +2029,12 @@ func (b *changefeedResumer) OnFailOrCancel(
 
 	var numTargets uint
 	if b.job != nil {
-		targets, err := AllTargets(ctx, b.job.Details().(jobspb.ChangefeedDetails), execCfg)
+		targetsTS := progress.GetHighWater()
+		if targetsTS == nil || targetsTS.IsEmpty() {
+			details := b.job.Details().(jobspb.ChangefeedDetails)
+			targetsTS = &details.StatementTime
+		}
+		targets, err := AllTargets(ctx, b.job.Details().(jobspb.ChangefeedDetails), execCfg, *targetsTS)
 		if err != nil {
 			return err
 		}
