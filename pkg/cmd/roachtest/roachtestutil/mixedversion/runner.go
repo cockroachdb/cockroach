@@ -525,16 +525,26 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for _, node := range tr.getAvailableNodes(service.descriptor) {
+	// We still attempt to refresh binary versions on nodes we expect to be unavailable:
+	// 	1. Some failure injections are overly conservative in marking nodes as
+	//	   unavailable out of caution (e.g. network partitions).
+	//	2. The monitor returns the roachprod node ID, which may be offset compared
+	//		 to what the mixed-version test expects, e.g. a multi cluster test where
+	//		 node 1 may be the 5th VM in the roachprod cluster.
+	availableNodes := tr.getAvailableNodes(service.descriptor)
+	for j, node := range service.descriptor.Nodes {
 		group.GoCtx(func(ctx context.Context) error {
 			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
+				if !availableNodes.Contains(node) {
+					return nil
+				}
 				return fmt.Errorf(
 					"failed to get binary version for node %d (%s): %w",
 					node, service.descriptor.Name, err,
 				)
 			}
-			newBinaryVersions[node-1] = bv
+			newBinaryVersions[j] = bv
 			return nil
 		})
 	}
@@ -556,17 +566,28 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for _, node := range tr.getAvailableNodes(service.descriptor) {
+	// We still attempt to refresh cluster versions on nodes we expect to be unavailable:
+	// 	1. Some failure injections are overly conservative in marking nodes as
+	//	   unavailable out of caution (e.g. network partitions).
+	//	2. The monitor returns the roachprod node ID, which may be offset compared
+	//		 to what the mixed-version test expects, e.g. a multi cluster test where
+	//		 node 1 may be the 5th VM in the roachprod cluster.
+	availableNodes := tr.getAvailableNodes(service.descriptor)
+	for j, node := range service.descriptor.Nodes {
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
+				if !availableNodes.Contains(node) {
+					return nil
+				}
+
 				return fmt.Errorf(
 					"failed to get cluster version for node %d (%s): %w",
 					node, service.descriptor.Name, err,
 				)
 			}
 
-			newClusterVersions[node-1] = cv
+			newClusterVersions[j] = cv
 			return nil
 		})
 	}
