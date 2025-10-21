@@ -319,6 +319,11 @@ type replicateKV struct {
 	// preparing writing statements. This is necessary to get the workload running
 	// properly on a read only standby tenant.
 	readOnly bool
+
+	// uniform makes the kv workload use a uniform key instead of zipfian.
+	// Bidirectional LDR tests should probably use uniform to reduce conflict
+	// rate.
+	uniform bool
 }
 
 func (kv replicateKV) sourceInitCmd(tenantName string, nodes option.NodeListOption) string {
@@ -342,7 +347,7 @@ func (kv replicateKV) sourceRunCmd(tenantName string, nodes option.NodeListOptio
 		MaybeFlag(kv.debugRunDuration > 0, "duration", kv.debugRunDuration).
 		MaybeFlag(kv.maxQPS > 0, "max-rate", kv.maxQPS).
 		MaybeFlag(kv.readOnly, "prepare-read-only", true).
-		Option("zipfian").
+		MaybeOption(!kv.uniform, "zipfian").
 		Arg("{pgurl%s:%s}", nodes, tenantName).
 		WithEqualsSyntax()
 	return cmd.String()
