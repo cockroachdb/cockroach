@@ -349,3 +349,32 @@ statement ok
 DROP DATABASE dbfoo;
 
 subtest end
+
+subtest refcursor_stored_column
+
+statement ok
+CREATE TABLE refcursor_tbl (id INT PRIMARY KEY, a INT, c REFCURSOR);
+
+statement ok
+INSERT INTO refcursor_tbl VALUES (1, 10, 'cursor1'), (2, 20, 'cursor2');
+
+# Verify that we cannot index the refcursor. They can only be included
+# in an index as stored columns.
+statement error pq: unimplemented: column c has type refcursor, which is not indexable
+CREATE INDEX idx_refcursor ON refcursor_tbl (c);
+
+statement ok
+CREATE INDEX idx_refcursor ON refcursor_tbl (a) STORING (c);
+
+statement ok
+INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+DROP TABLE refcursor_tbl;
+
+subtest end
