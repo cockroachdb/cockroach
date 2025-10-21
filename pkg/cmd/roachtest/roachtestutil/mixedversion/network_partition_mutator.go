@@ -212,7 +212,7 @@ func (m networkPartitionMutator) Generate(
 	// from its followers but still heart beating to node liveness may cause indefinite
 	// unavailability.
 	leaderLeasesEnabled := false
-	for i, upgrade := range upgrades {
+	for _, upgrade := range upgrades {
 		// If leader leases are not yet enabled, check if we can enable them now.
 		if !leaderLeasesEnabled {
 			var leaderLeasesMut []mutation
@@ -235,9 +235,12 @@ func (m networkPartitionMutator) Generate(
 		// For each upgrade, we inject a partition with 50% probability,
 		// except for the final upgrade. This is the most important one to
 		// test so we always inject one.
-		if i != len(upgrades)-1 && rng.Float64() < 0.5 {
-			continue
-		}
+		//
+		// TODO(darryl): for now these mutators are opt in only so we temporarily
+		// inject partitions with 100% probability per upgrade to increase signal.
+		//if i != len(upgrades)-1 && rng.Float64() < 0.5 {
+		//	continue
+		//}
 
 		mut, err := m.generatePartition(rng, upgrade, idx, planner, protectedNodes, f)
 		if err != nil {
