@@ -471,7 +471,7 @@ type errorInjector struct {
 }
 
 func (i *errorInjector) MaybeError(op errorfs.Op) error {
-	if i.startInjecting && op.Kind.ReadOrWrite() == errorfs.OpIsWrite &&
+	if i.startInjecting && op.Kind.IsWrite() &&
 		!strings.HasPrefix(op.Path, "TEST") && i.rand.Float64() < i.prob {
 		return errors.WithStack(errorfs.ErrInjected)
 	}
