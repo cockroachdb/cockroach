@@ -134,10 +134,35 @@ func indexMatchesTable(index *TableIndexName, table TableName) bool {
 	return true
 }
 
+// IsDetached returns the value of the DETACHED option, if set.
+// Returns false if DETACHED is not specified.
+// Conflicts are handled by validate(), so this simply returns the first
+// DETACHED value found.
+func (n *InspectOptions) IsDetached() bool {
+	for _, option := range *n {
+		if opt, ok := option.(*InspectOptionDetached); ok {
+			return bool(opt.Detached)
+		}
+	}
+	return false
+}
+
 // HasIndexAll checks if the options include an INDEX ALL option.
 func (n *InspectOptions) HasIndexAll() bool {
 	for _, option := range *n {
 		if _, ok := option.(*InspectOptionIndexAll); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// HasIndexOption checks if the options include an INDEX option with
+// specific index names (i.e., INDEX (name1, name2, ...)).
+// This does NOT include INDEX ALL - use HasIndexAll() for that.
+func (n *InspectOptions) HasIndexOption() bool {
+	for _, option := range *n {
+		if _, ok := option.(*InspectOptionIndex); ok {
 			return true
 		}
 	}
@@ -156,13 +181,23 @@ func (n *Inspect) Validate() error {
 // validate checks for internal consistency of options on the INSPECT command.
 func (n *InspectOptions) validate() error {
 	var hasOptionIndex, hasOptionIndexAll bool
+	var detachedSeen bool
+	var detachedVal bool
 
 	for _, option := range *n {
-		switch option.(type) {
+		switch opt := option.(type) {
 		case *InspectOptionIndex:
 			hasOptionIndex = true
 		case *InspectOptionIndexAll:
 			hasOptionIndexAll = true
+		case *InspectOptionDetached:
+			optVal := bool(opt.Detached)
+			if detachedSeen && optVal != detachedVal {
+				return pgerror.Newf(pgcode.Syntax,
+					"conflicting INSPECT options: DETACHED specified with different values")
+			}
+			detachedSeen = true
+			detachedVal = optVal
 		default:
 			return fmt.Errorf("unknown inspect option: %T", option)
 		}
@@ -224,3 +259,23 @@ type InspectOptionIndexAll struct{}
 func (n *InspectOptionIndexAll) Format(ctx *FmtCtx) {
 	ctx.WriteString("INDEX ALL")
 }
+
+// InspectOptionDetached keeps track of state for the DETACHED option.
+type InspectOptionDetached struct {
+	Detached DBool
+}
+
+// inspectOptionType implements InspectOption.
+func (*InspectOptionDetached) inspectOptionType() {}
+
+// Format implements the NodeFormatter interface.
+func (n *InspectOptionDetached) Format(ctx *FmtCtx) {
+	if bool(n.Detached) {
+		ctx.WriteString("DETACHED")
+		return
+	}
+	ctx.WriteString("DETACHED = false")
+}
+
+// String implements fmt.Stringer.
+func (n *InspectOptionDetached) String() string { return AsString(n) }
