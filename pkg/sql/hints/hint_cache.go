@@ -147,8 +147,6 @@ func NewStatementHintsCache(
 func (c *StatementHintsCache) Start(
 	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
 ) error {
-	// TODO(drewk): in a follow-up commit, block until the initial scan is done
-	// so that statements without hints don't have to check the LRU cache.
 	return c.startRangefeedInternal(ctx, sysTableResolver)
 }
 
@@ -393,7 +391,7 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 // retrieving them.
 func (c *StatementHintsCache) MaybeGetStatementHints(
 	ctx context.Context, statementFingerprint string,
-) (hints []hintpb.StatementHint, ids []int64) {
+) (hints []hintpb.StatementHintUnion, ids []int64) {
 	hash := fnv.New64()
 	_, err := hash.Write([]byte(statementFingerprint))
 	if err != nil {
@@ -451,7 +449,7 @@ func (c *StatementHintsCache) maybeWaitForRefreshLocked(
 // released while reading from the db, and then reacquired.
 func (c *StatementHintsCache) addCacheEntryLocked(
 	ctx context.Context, statementHash int64, statementFingerprint string,
-) (hints []hintpb.StatementHint, ids []int64) {
+) (hints []hintpb.StatementHintUnion, ids []int64) {
 	c.mu.AssertHeld()
 
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -516,7 +514,7 @@ func (c *StatementHintsCache) getStatementHintsFromDB(
 		datums := it.Cur()
 		rowID := int64(tree.MustBeDInt(datums[0]))
 		fingerprint := string(tree.MustBeDString(datums[1]))
-		hint, err := hintpb.NewStatementHint([]byte(tree.MustBeDBytes(datums[2])))
+		hint, err := hintpb.FromBytes([]byte(tree.MustBeDBytes(datums[2])))
 		if err != nil {
 			return err
 		}
@@ -543,7 +541,7 @@ type cacheEntry struct {
 	// be duplicate entries in the fingerprints slice.
 	// TODO(drewk): consider de-duplicating the fingerprint strings to reduce
 	// memory usage.
-	hints        []hintpb.StatementHint
+	hints        []hintpb.StatementHintUnion
 	fingerprints []string
 	ids          []int64
 }
@@ -552,7 +550,7 @@ type cacheEntry struct {
 // fingerprint, or nil if they don't exist. The results are in order of row ID.
 func (entry *cacheEntry) getMatchingHints(
 	statementFingerprint string,
-) (hints []hintpb.StatementHint, ids []int64) {
+) (hints []hintpb.StatementHintUnion, ids []int64) {
 	for i := range entry.hints {
 		if entry.fingerprints[i] == statementFingerprint {
 			hints = append(hints, entry.hints[i])

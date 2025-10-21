@@ -12,6 +12,15 @@ import "gogoproto/gogo.proto";
 // that can be applied to statements with a given fingerprint using the
 // system.statement_hints table.
 message StatementHintUnion {
-  // TODO: add a field for each type of statement hint.
-  // oneof value {}
+  option (gogoproto.onlyone) = true;
+
+  InjectHints inject_hints = 1;
+}
+
+// InjectHints applies inline query plan hints (join and index hints) from the
+// DonorSQL field to the hinted statement. The DonorSQL string must have
+// the same syntactical structure as the hinted statement, with only the
+// addition of inline hints.
+message InjectHints {
+  string donor_sql = 1 [(gogoproto.customname) = "DonorSQL"];
 }

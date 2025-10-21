@@ -539,11 +539,13 @@ func checkIDOrder(t *testing.T, ids []int64) {
 	}
 }
 
-// insertStatementHint inserts an empty statement hint into the
+// insertStatementHint inserts a random statement hint into the
 // system.statement_hints table.
 func insertStatementHint(t *testing.T, r *sqlutils.SQLRunner, fingerprint string) {
-	emptyHint := &hintpb.StatementHintUnion{}
-	hintBytes, err := emptyHint.ToBytes()
+	// TODO(drewk,michae2): randomly choose the hint type once we support others.
+	var hint hintpb.StatementHintUnion
+	hint.SetValue(&hintpb.InjectHints{})
+	hintBytes, err := hintpb.ToBytes(hint)
 	require.NoError(t, err)
 	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2)`
 	r.Exec(t, insertStmt, fingerprint, hintBytes)
