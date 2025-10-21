@@ -244,6 +244,21 @@ func (mr *MetricsRecorder) AppRegistry() *metric.Registry {
 	return mr.mu.appRegistry
 }
 
+// NodeRegistry returns the metric registry for node-level metrics.
+func (mr *MetricsRecorder) NodeRegistry() *metric.Registry {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	return mr.mu.logRegistry
+}
+
+// StoreRegistry returns the metric registry for store-level metrics
+// corresponding to the provided store ID.
+func (mr *MetricsRecorder) StoreRegistry(id roachpb.StoreID) *metric.Registry {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	return mr.mu.storeRegistries[id]
+}
+
 // AddNode adds various metric registries an initialized server, along
 // with its descriptor and start time.
 // The registries are:
