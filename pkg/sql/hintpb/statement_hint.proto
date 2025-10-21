@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 syntax = "proto3";
-package hints;
+package hintpb;
 
 import "gogoproto/gogo.proto";
 
