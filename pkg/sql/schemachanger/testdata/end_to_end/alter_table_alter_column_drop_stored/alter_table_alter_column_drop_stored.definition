@@ -1,0 +1,28 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT AS (i + 1) STORED);
+----
+
+# Ensure that inserts with and without values will succeed.
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES ($stageKey);
+DELETE FROM t WHERE i = $stageKey;
+INSERT INTO t VALUES ($stageKey, $stageKey + 1);
+UPDATE t SET j = j + 1;
+----
+
+# Validate that column expression is enforced initially
+stage-exec phase=PostCommitNonRevertiblePhase stage=1
+INSERT INTO t(i) VALUES(-1, 0)
+----
+pq: failed to satisfy CHECK constraint .*
+
+
+# One row is expected to be added after each stage.
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*)=$successfulStageCount FROM t;
+----
+true
+
+test
+ALTER TABLE t ALTER COLUMN j DROP STORED
+----
