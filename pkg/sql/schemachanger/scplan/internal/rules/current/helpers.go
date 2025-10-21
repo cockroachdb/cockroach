@@ -272,9 +272,10 @@ func isColumnNotNull(e scpb.Element) bool {
 	}
 	return false
 }
+
 func isColumnTypeDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression, *scpb.ColumnComputeExpression:
+	case *scpb.SequenceOwner, *scpb.ColumnDefaultExpression, *scpb.ColumnOnUpdateExpression, *scpb.ColumnComputeExpression, *scpb.ColumnHidden:
 		return true
 	}
 	return false

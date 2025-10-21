@@ -57,6 +57,11 @@ ColumnFamily :  TableID
 ColumnFamily :  FamilyID
 ColumnFamily :  Name
 
+object ColumnHidden
+
+ColumnHidden :  TableID
+ColumnHidden :  ColumnID
+
 object ColumnName
 
 ColumnName :  TableID
@@ -568,6 +573,7 @@ Column <|-- ColumnComment
 Column <|-- ColumnComputeExpression
 Column <|-- ColumnDefaultExpression
 Table <|-- ColumnFamily
+Column <|-- ColumnHidden
 Column <|-- ColumnName
 Column <|-- ColumnNotNull
 Column <|-- ColumnOnUpdateExpression

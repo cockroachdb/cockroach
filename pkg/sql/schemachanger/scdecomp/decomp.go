@@ -543,7 +543,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	column := &scpb.Column{
 		TableID:                           tbl.GetID(),
 		ColumnID:                          col.GetID(),
-		IsHidden:                          col.IsHidden(),
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
@@ -590,6 +589,16 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 				columnType.ComputeExpr = expr
 			}
 		}
+
+		if columnType.ElementCreationMetadata.In_26_1OrLater { // FIXME: in In_26_1OrLater when available
+			w.ev(scpb.Status_PUBLIC, &scpb.ColumnHidden{
+				TableID:  tbl.GetID(),
+				ColumnID: col.GetID(),
+			})
+		} else {
+			column.IsHidden = col.IsHidden()
+		}
+
 		w.ev(scpb.Status_PUBLIC, columnType)
 	}
 	if !col.IsNullable() {

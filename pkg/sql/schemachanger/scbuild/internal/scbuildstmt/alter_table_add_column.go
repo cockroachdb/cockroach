@@ -112,7 +112,6 @@ func alterTableAddColumn(
 		col: &scpb.Column{
 			TableID:                 tbl.TableID,
 			ColumnID:                desc.ID,
-			IsHidden:                desc.Hidden,
 			IsInaccessible:          desc.Inaccessible,
 			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
 		},
@@ -273,6 +272,17 @@ func alterTableAddColumn(
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
 	}
+	if d.Hidden {
+		if spec.colType.ElementCreationMetadata.In_26_1OrLater { // FIXME: 26.1 when available
+			spec.hidden = &scpb.ColumnHidden{
+				TableID:  tbl.TableID,
+				ColumnID: spec.col.ColumnID,
+			}
+		} else {
+			spec.col.IsHidden = true
+		}
+	}
+
 	// Add secondary indexes for this column.
 	backing := addColumn(b, spec, t)
 	if idx != nil {
@@ -441,6 +451,7 @@ type addColumnSpec struct {
 	compute          *scpb.ColumnComputeExpression
 	transientCompute *scpb.ColumnComputeExpression
 	comment          *scpb.ColumnComment
+	hidden           *scpb.ColumnHidden
 	unique           bool
 	notNull          bool
 }
@@ -476,6 +487,9 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
+		}
+		if spec.hidden != nil {
+			b.Add(spec.hidden)
 		}
 		// Don't need to modify primary indexes for virtual columns.
 		if spec.colType.IsVirtual {
