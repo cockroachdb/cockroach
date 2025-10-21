@@ -1720,14 +1720,21 @@ func maybeUseExternalConnection(
 	}
 }
 
-func forceTableGC(
-	t testing.TB,
-	tsi serverutils.TestServerInterface,
-	sqlDB *sqlutils.SQLRunner,
-	database, table string,
-) {
+func forceTableGC(t testing.TB, tsi serverutils.TestServerInterface, database, table string) {
 	t.Helper()
 	if err := tsi.ForceTableGC(context.Background(), database, table, tsi.Clock().Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func forceTableGCAtTimestamp(
+	t testing.TB,
+	tsi serverutils.TestServerInterface,
+	database, table string,
+	timestamp hlc.Timestamp,
+) {
+	t.Helper()
+	if err := tsi.ForceTableGC(context.Background(), database, table, timestamp); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -2002,12 +2009,12 @@ func runWithAndWithoutRegression141453(
 					var blockPop atomic.Bool
 					popCh := make(chan struct{})
 					return kvevent.BlockingBufferTestingKnobs{
-						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+						BeforeAdd: func(ctx context.Context, e kvevent.Event) (_ context.Context, _ kvevent.Event, shouldAdd bool) {
 							if e.Type() == kvevent.TypeResolved &&
 								e.Resolved().BoundaryType == jobspb.ResolvedSpan_RESTART {
 								blockPop.Store(true)
 							}
-							return ctx, e
+							return ctx, e, true
 						},
 						BeforePop: func() {
 							if blockPop.Load() {

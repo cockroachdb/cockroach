@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1204,6 +1205,223 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestCachedEventDescriptorGivesUpdatedTimestamp is a regression test for
+// #156091. It tests that when a changefeed with a cdc query receives events
+// from the KVFeed out of order, even across table descriptor versions, the
+// query will be replanned at a timestamp we know has not been garbage collected.
+// Previously, we would get an old timestamp from the cached event descriptor
+// and if the db descriptor version had changed and been GC'd, this replan would
+// fail, failing the changefeed.
+func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// Making sure there's only one worker so that there is a single event
+		// descriptor cache. This means that the later events will use the
+		// cached event descriptor and its outdated timestamp, to properly
+		// reproduce the issue.
+		changefeedbase.EventConsumerWorkers.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
+
+		/*
+			The situation from issue #156091 that we are trying to reproduce here
+			happens when a changefeed is replanning a CDC query for a table descriptor
+			version it has seen before. In that case, it replans the query at the
+			timestamp (stored in the cache) of the first event it saw for that table
+			descriptor version.
+
+			That's problematic because that could be well before the highwater for
+			the feed and therefore not protected by PTS. Even though our protected
+			timestamp system ensures that the relevant table descriptor version has
+			not been GC'd (since it is still used by the event we're processing),
+			there is no such guarantee that the *DB* descriptor version from that
+			time (which wasn't around at the time of that event) has not been GC'd.
+			If we try to fetch the DB descriptor version (as we do when replanning
+			a CDC query) and it has already been GC'd, the CDC query replan will
+			fail, and the changefeed with it.
+
+			So, in order to reproduce this we require that
+			a) KV events must come out of order so that we are both doing a CDC
+			query replan AND that the timestamp for that replan comes from the
+			EventDescriptor cache.
+			b) the DB descriptor version has changed between the event that seeded
+			the cache and the later event that shares that table descriptor version
+			and finally
+			c) that the old DB descriptor version has been garbage collected.
+
+			Ultimately the series of events will be
+			1. We see event 1 with table descriptor version 1 and DB descriptor
+			version 1. This is processed by the changefeeed seeding the event
+			descriptor cache at T_0.
+			2. We update the DB descriptor version to version 2.
+			3. We garbage collect the descriptor table through time T_0 and with it
+			DB descriptor version 1.
+			4. We make an update causing event 2 with the same table descriptor version
+			as event 1 (table descriptor version 1) but whose kv event will only
+			come through after event 3's.
+			5. We update the table descriptor version (to version 2) and make an
+			update (event 3).
+			6. The KV event for event 3 comes in first, causing the changefeed's
+			current table version to be table version 2.
+			7. The KV event for event 2 comes in out of order causing a replan of
+			the CDC query to happen (back to table descriptor version 1).
+
+			If we return the timestamp from the first event we saw on table descriptor
+			version 1, this replan will try to fetch the DB descriptor at time T_0
+			(when event 1 happened)	which has been garbage collected and would fail
+			the feed.
+		*/
+		var dbDescTS atomic.Value
+		dbDescTS.Store(hlc.Timestamp{})
+		var hasGCdDBDesc atomic.Bool
+		var kvEvents []kvevent.Event
+		var hasProcessedAllEvents atomic.Bool
+		beforeAddKnob := func(ctx context.Context, e kvevent.Event) (_ context.Context, _ kvevent.Event, shouldAdd bool) {
+			// Since we are going to be ignoring some KV events, we don't send
+			// resolved events to avoid violating changefeed guarantees.
+			// Since this test also depends on specific GC behavior, we handle GC
+			// ourselves.
+			if e.Type() == kvevent.TypeResolved {
+				resolvedTimestamp := e.Timestamp()
+
+				// We need to wait for the resolved timestamp to move past the
+				// first kv event so that we know it's safe to GC the first database
+				// descriptor version.
+				if !hasGCdDBDesc.Load() {
+					dbDescTSVal := dbDescTS.Load().(hlc.Timestamp)
+					if !dbDescTSVal.IsEmpty() && dbDescTSVal.Less(resolvedTimestamp) {
+						t.Logf("GCing database descriptor table at timestamp: %s", dbDescTSVal)
+						forceTableGCAtTimestamp(t, s.SystemServer, "system", "descriptor", dbDescTSVal)
+						hasGCdDBDesc.Store(true)
+					}
+				}
+
+				// We use the resolved events to know when we can stop the test.
+				if len(kvEvents) > 2 && resolvedTimestamp.After(kvEvents[2].Timestamp()) {
+					hasProcessedAllEvents.Store(true)
+				}
+
+				// Do not send any of the resolved events.
+				return ctx, e, false
+			}
+
+			if e.Type() == kvevent.TypeKV {
+				if len(kvEvents) > 0 && e.Timestamp() == kvEvents[0].Timestamp() {
+					// Ignore duplicates of the first kv event which may come while
+					// we're waiting to GC the first database descriptor version.
+					return ctx, e, false
+				}
+
+				kvEvents = append(kvEvents, e)
+				switch len(kvEvents) {
+				case 1:
+					// Event 1 is sent as normal to seed the event descriptor cache.
+					t.Logf("Event 1 timestamp: %s", kvEvents[0].Timestamp())
+					return ctx, kvEvents[0], true
+				case 2:
+					// Event 2 is stored in kvEvents and we will send it later.
+					// Sending it after event 3, which has a different table
+					// descriptor version, will cause CDC query replan.
+					return ctx, e, false
+				case 3:
+					// Event 3 is sent as normal to replan the CDC query with the
+					// new table descriptor version.
+					t.Logf("Event 3 timestamp: %s", kvEvents[2].Timestamp())
+					return ctx, kvEvents[2], true
+				case 4:
+					// Now we send event 2 *after* we've sent event 3. This should
+					// cause a CDC query replan with a cached event descriptor,
+					// since the table version is the same as event 1. If we use
+					// the timestamp of event 1, that replan will fail to fetch
+					// the GC'd DB descriptor version failing the changefeed.
+					// This is what we saw in issue #156091.
+					t.Logf("Event 2 timestamp: %s", kvEvents[1].Timestamp())
+					return ctx, kvEvents[1], true
+				default:
+					// We do not need to send any more events after events
+					// 1, 2 and 3 have been processed.
+					return ctx, e, false
+				}
+			}
+
+			return ctx, e, true
+		}
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+			return kvevent.BlockingBufferTestingKnobs{
+				BeforeAdd: beforeAddKnob,
+			}
+		}
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH resolved = '10ms' AS SELECT * FROM foo`)
+		defer closeFeed(t, foo)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		// Change the database descriptor version by granting permission to a user.
+		sqlDB.Exec(t, `CREATE USER testuser`)
+		sqlDB.Exec(t, `GRANT CREATE ON DATABASE d TO testuser`)
+
+		// Fetch the cluster logical timestamp so that we can make sure the
+		// resolved timestamp has moved past it and it's safe to GC the
+		// descriptor table (specifically the first database descriptor version).
+		var dbDescTSString string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&dbDescTSString)
+		dbDescTSParsed, err := hlc.ParseHLC(dbDescTSString)
+		require.NoError(t, err)
+		dbDescTS.Store(dbDescTSParsed)
+		t.Logf("Timestamp after DB descriptor version change: %s", dbDescTSParsed)
+
+		testutils.SucceedsSoon(t, func() error {
+			if !hasGCdDBDesc.Load() {
+				return errors.New("database descriptor table not GCed")
+			}
+			return nil
+		})
+
+		// This event will be delayed by the KVFeed until after event 3 has been sent.
+		// Instead of sending it out, we GC the descriptor table including the
+		// old database descriptor version.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		// Change the table descriptor version by granting permission to a user.
+		sqlDB.Exec(t, `GRANT CREATE ON TABLE foo TO testuser`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+
+		// Since we skip processing the KV event for event 2, we will replace
+		// the KV event for event 4 the stored one for event 2. This event is
+		// not itself relevant to the test, but helps us send the KV events out
+		// of order.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+
+		// Wait for changefeed events 1, 2 and 3 to be processed. If the feed
+		// has failed, stop waiting and fail the test immediately.
+		testutils.SucceedsSoon(t, func() error {
+			var errorStr string
+			sqlDB.QueryRow(t, `SELECT error FROM [SHOW CHANGEFEED JOBS] WHERE job_id = $1`, foo.(cdctest.EnterpriseTestFeed).JobID()).Scan(&errorStr)
+			if errorStr != "" {
+				t.Fatalf("changefeed error: %s", errorStr)
+				return nil
+			}
+			if !hasProcessedAllEvents.Load() {
+				return errors.New("events not processed")
+			}
+			return nil
+		})
+	}
+
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
 }
 
 func fetchRoleMembers(

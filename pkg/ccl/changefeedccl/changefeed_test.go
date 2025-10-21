@@ -6785,7 +6785,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 
 		// Force a GC of the table. This should cause both
 		// versions of the table to be deleted.
-		forceTableGC(t, s.SystemServer, sqlDB, "d", "foo")
+		forceTableGC(t, s.SystemServer, "d", "foo")
 
 		// Resume our changefeed normally.
 		atomic.StoreInt32(&shouldWait, 0)
@@ -6842,7 +6842,7 @@ func TestChangefeedOutdatedCursor(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE f (a INT PRIMARY KEY)`)
 		outdatedTS := s.Server.Clock().Now().AsOfSystemTime()
 		sqlDB.Exec(t, `INSERT INTO f VALUES (1)`)
-		forceTableGC(t, s.SystemServer, sqlDB, "system", "descriptor")
+		forceTableGC(t, s.SystemServer, "system", "descriptor")
 		createChangefeed :=
 			fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE f with cursor = '%s'`, outdatedTS)
 		expectedErrorSubstring :=
@@ -6968,7 +6968,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 
 		// Force a GC of the table. This should cause both older versions of the
 		// table to be deleted, with the middle version being lost to the changefeed.
-		forceTableGC(t, s.SystemServer, sqlDB, "system", "descriptor")
+		forceTableGC(t, s.SystemServer, "system", "descriptor")
 
 		// Do an unnecessary version bump on the descriptor, which will purge old
 		// versions of the descriptor that the lease manager may have cached for
