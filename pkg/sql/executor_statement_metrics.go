@@ -83,6 +83,11 @@ type EngineMetrics struct {
 	// StatementRetryCount counts the number of automatic statement retries that
 	// have occurred under READ COMMITTED isolation.
 	StatementRetryCount *metric.Counter
+
+	// StatementIndexRowsRead counts the number of rows read by SQL statements
+	// from primary and secondary indexes. Note that some secondary indexes can
+	// have multiple index rows per primary index row (e.g. inverted and vector).
+	StatementIndexRowsRead *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
@@ -196,6 +201,10 @@ func (ex *connExecutor) recordStatementSummary(
 	if automaticRetryStmtCount > 0 {
 		autoRetryReason = planner.autoRetryStmtReason
 	}
+
+	// Update SQL statement metrics.
+	ex.metrics.EngineMetrics.StatementIndexRowsRead.Inc(stats.rowsRead)
+
 	if ex.statsCollector.EnabledForTransaction() {
 		recordedStmtStats := &sqlstats.RecordedStmtStats{
 			FingerprintID:        stmtFingerprintID,
