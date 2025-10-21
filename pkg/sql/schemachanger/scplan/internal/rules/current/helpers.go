@@ -146,6 +146,19 @@ func isWithTypeT(element scpb.Element) bool {
 	return err == nil
 }
 
+// isWithExpressionOrHasReferences returns true if `element` has an embedded
+// type or has references to types inside.
+func isWithTypeTOrHasReferences(element scpb.Element) bool {
+	if isWithTypeT(element) {
+		return true
+	}
+	switch element.(type) {
+	case *scpb.TriggerDeps:
+		return true
+	}
+	return false
+}
+
 func getExpression(element scpb.Element) (*scpb.Expression, error) {
 	switch e := element.(type) {
 	case *scpb.ColumnType:
@@ -210,6 +223,19 @@ func getExpression(element scpb.Element) (*scpb.Expression, error) {
 func isWithExpression(element scpb.Element) bool {
 	_, err := getExpression(element)
 	return err == nil
+}
+
+// isWithExpressionOrHasReferences returns true if `element` has an embedded
+// expression or has references to either types, functions or relations.
+func isWithExpressionOrHasReferences(element scpb.Element) bool {
+	if isWithExpression(element) {
+		return true
+	}
+	switch element.(type) {
+	case *scpb.TriggerDeps:
+		return true
+	}
+	return false
 }
 
 func isTypeDescriptor(element scpb.Element) bool {

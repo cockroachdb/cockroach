@@ -19,7 +19,7 @@ StatementPhase stage 1 of 1 with 9 MutationType ops
     [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
-    [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.AddTrigger
       Trigger:
@@ -92,7 +92,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
     [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
-    [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, PUBLIC], PUBLIC] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
@@ -104,7 +104,7 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
     [[TriggerTiming:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
     [[TriggerFunctionCall:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
-    [[TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.AddTrigger
       Trigger:
@@ -174,7 +174,7 @@ deps
 CREATE TRIGGER t1_tg BEFORE INSERT OR UPDATE OR DELETE ON defaultdb.t1 FOR EACH ROW EXECUTE FUNCTION g();
 ----
 - from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
-  to:   [TriggerDeps:{DescID: 104, TriggerID: 1}, PUBLIC]
+  to:   [TriggerDeps:{DescID: 104, TriggerID: 1, ReferencedFunctionIDs: [105]}, PUBLIC]
   kind: Precedence
   rule: trigger public before its dependents
 - from: [Trigger:{DescID: 104, TriggerID: 1}, PUBLIC]
