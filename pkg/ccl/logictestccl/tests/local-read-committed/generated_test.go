@@ -2120,6 +2120,13 @@ func TestReadCommittedLogic_srfs(
 	runLogicTest(t, "srfs")
 }
 
+func TestReadCommittedLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
+}
+
 func TestReadCommittedLogic_statement_source(
 	t *testing.T,
 ) {
