@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -46,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -698,17 +700,107 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, Restarter: tc}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
-	for i := 0; i < cfg.numNodes; i++ {
-		t.Logf("[%d] proposed: %d", i,
-			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsProposed.Count())
-		t.Logf("[%d] reproposed unchanged: %d", i,
-			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposed.Count())
-		t.Logf("[%d] reproposed with new LAI: %d", i,
-			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposedLAI.Count())
-	}
+	logMetricsReport(t, tc)
 
 	require.NoError(t, err, `%+v`, err)
 	require.Zero(t, len(failures), "kvnemesis detected failures") // they've been logged already
+}
+
+func logMetricsReport(t testing.TB, tc *testcluster.TestCluster) {
+	// Store-level metrics from kvserver
+	storeMetrics := []string{
+		// Raft command metrics
+		"raft.commands.proposed",
+		"raft.commands.reproposed.new-lai",
+		"raft.commands.reproposed.unchanged",
+		// Transaction metrics
+		"txn.server_side.1PC.success",
+		"txnrecovery.successes.committed",
+		"txnwaitqueue.deadlocks_total",
+	}
+
+	// Client-side transaction metrics from kvcoord
+	clientMetrics := []string{
+		"txn.aborts",
+		"txn.durations",
+		"txn.restarts.writetooold",
+		"txn.restarts.serializable",
+		"txn.restarts.readwithinuncertainty",
+	}
+
+	numNodes := tc.NumServers()
+	nodeMetrics := make([]map[string]string, numNodes)
+	for i := 0; i < numNodes; i++ {
+		nodeMetrics[i] = make(map[string]string)
+		processMetric := func(name string, v interface{}) {
+			switch val := v.(type) {
+			case *metric.Counter:
+				nodeMetrics[i][name] = fmt.Sprintf("%d", val.Count())
+			case *metric.Gauge:
+				nodeMetrics[i][name] = fmt.Sprintf("%d", val.Value())
+			case metric.IHistogram:
+				// TODO(mira): Currently, histograms are assumed to store values of type
+				// time duration.
+				snapshot := val.CumulativeSnapshot()
+				makePretty := func(nanos float64) time.Duration {
+					return time.Duration(nanos).Round(time.Millisecond)
+				}
+				meanDur := makePretty(snapshot.Mean())
+				p99Dur := makePretty(snapshot.ValueAtQuantile(99))
+				nodeMetrics[i][name] = fmt.Sprintf("μ=%v p99=%v", meanDur, p99Dur)
+			default:
+				nodeMetrics[i][name] = fmt.Sprintf("unknown:%T", v)
+			}
+		}
+
+		// Collect store-level metrics.
+		stores := tc.Server(i).StorageLayer().GetStores().(*kvserver.Stores)
+		firstStoreID := tc.Server(i).StorageLayer().GetFirstStoreID()
+		storeRegistry := stores.GetStoreMetricRegistry(firstStoreID)
+
+		storeMetricsMap := make(map[string]struct{}, len(storeMetrics))
+		for _, m := range storeMetrics {
+			storeMetricsMap[m] = struct{}{}
+		}
+		storeRegistry.Select(
+			storeMetricsMap, func(name string, v interface{}) {
+				processMetric(name, v)
+			},
+		)
+
+		// Collect client-side metrics.
+		serverRegistry := tc.Server(i).StorageLayer().MetricsRecorder().AppRegistry()
+		clientMetricsMap := make(map[string]struct{}, len(clientMetrics))
+		for _, m := range clientMetrics {
+			clientMetricsMap[m] = struct{}{}
+		}
+		serverRegistry.Select(
+			clientMetricsMap, func(name string, v interface{}) {
+				processMetric(name, v)
+			},
+		)
+	}
+
+	allMetrics := append(storeMetrics, clientMetrics...)
+	header := fmt.Sprintf("%-35s", "Metric")
+	for i := 0; i < numNodes; i++ {
+		header += fmt.Sprintf(" | %-20s", fmt.Sprintf("Node %d", i+1))
+	}
+	t.Log(header)
+
+	separator := strings.Repeat("-", 35)
+	for i := 0; i < numNodes; i++ {
+		separator += "-+-" + strings.Repeat("-", 20)
+	}
+	t.Log(separator)
+
+	for _, metricName := range allMetrics {
+		row := fmt.Sprintf("%-35s", metricName)
+		for i := 0; i < numNodes; i++ {
+			row += fmt.Sprintf(" | %-20s", nodeMetrics[i][metricName])
+		}
+		t.Log(row)
+	}
 }
 
 // TestRunReproductionSteps is a helper that allows quickly running a kvnemesis
