@@ -2355,9 +2355,11 @@ func (d *BackupRestoreTestDriver) deleteUserTableSST(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
 	var sstPath string
+	var startPretty, endPretty string
+	var sizeBytes, numRows int
 	if err := db.QueryRowContext(
 		ctx,
-		`SELECT path FROM
+		`SELECT path, start_pretty, end_pretty, size_bytes, rows FROM
 		(
 			SELECT row_number() OVER (), * FROM
 			[SHOW BACKUP FILES FROM LATEST IN $1]
@@ -2366,14 +2368,17 @@ func (d *BackupRestoreTestDriver) deleteUserTableSST(
 		ORDER BY row_number DESC
 		LIMIT 1`,
 		collection.uri(),
-	).Scan(&sstPath); err != nil {
+	).Scan(&sstPath, &startPretty, &endPretty, &sizeBytes, &numRows); err != nil {
 		return errors.Wrapf(err, "failed to get SST path from %s", collection.uri())
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse backup collection URI %q", collection.uri())
 	}
-	l.Printf("deleting sst %s at %s", sstPath, uri)
+	l.Printf(
+		"deleting sst %s at %s: covering %d bytes and %d rows in [%s, %s)",
+		sstPath, uri, sizeBytes, numRows, startPretty, endPretty,
+	)
 	storage, err := cloud.ExternalStorageFromURI(
 		ctx,
 		collection.uri(),
