@@ -898,15 +898,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
-	// If we are intentionally using an invalid child type, then it doesn't make
-	// sense to validate if the rows validate the constraint.
-	rowsSatisfyConstraint := true
-	if !fetchInvalidChild {
-		rowsSatisfyConstraint, err = og.rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
@@ -918,12 +909,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{})
 
-	// TODO(fqazi): We need to do after the fact validation for foreign key violations
-	// errors. Due to how adding foreign key constraints are implemented with a
-	// separate job validating the constraint, we can't at transaction time predict,
-	// perfectly if an error is expected. We can confirm post transaction with a time
-	// travel query.
-	_ = rowsSatisfyConstraint
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
@@ -3093,7 +3078,6 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	// we will need to evaluate generated expressions below.
 	hasUniqueConstraints := false
 	hasUniqueConstraintsMutations := false
-	fkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
 		// constraints in the database.
@@ -3108,24 +3092,17 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		if err != nil {
 			return nil, err
 		}
-		// Verify if the new row will violate fk constraints by checking the constraints and rows
-		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
-		if err != nil {
-			return nil, err
-		}
-
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+		{code: pgcode.ForeignKeyViolation, condition: true},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
 	})
-	og.expectedCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+	og.potentialCommitErrors.addAll(codesWithConditions{
+		{code: pgcode.ForeignKeyViolation, condition: true},
 	})
 
 	var formattedRows []string
