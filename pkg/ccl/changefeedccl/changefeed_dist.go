@@ -56,35 +56,16 @@ const (
 	changeFrontierProcName   = `changefntr`
 )
 
-// distChangefeedFlow plans and runs a distributed changefeed.
-//
-// One or more ChangeAggregator processors watch table data for changes. These
-// transform the changed kvs into changed rows and either emit them to a sink
-// (such as kafka) or, if there is no sink, forward them in columns 1,2,3 (where
-// they will be eventually returned directly via pgwire). In either case,
-// periodically a span will become resolved as of some timestamp, meaning that
-// no new rows will ever be emitted at or below that timestamp. These span-level
-// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
-// column 0.
-//
-// The flow will always have exactly one ChangeFrontier processor which all the
-// ChangeAggregators feed into. It collects all span-level resolved timestamps
-// and aggregates them into a changefeed-level resolved timestamp, which is the
-// minimum of the span-level resolved timestamps. This changefeed-level resolved
-// timestamp is emitted into the changefeed sink (or returned to the gateway if
-// there is no sink) whenever it advances. ChangeFrontier also updates the
-// progress of the changefeed's corresponding system job.
-func distChangefeedFlow(
+// computeDistChangefeedTimestamps computes the initialHighWater and schemaTS
+// for a changefeed run, and mutates localState.progress when appropriate
+// (e.g., to set the high-water if initial scan should be skipped). It also
+// invokes testing knobs that observe the initial high-water.
+func computeDistChangefeedTimestamps(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
-	description string,
 	localState *cachedState,
-	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
-	targets changefeedbase.Targets,
-) error {
+) (initialHighWater hlc.Timestamp, schemaTS hlc.Timestamp, _ error) {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
 
@@ -100,7 +81,7 @@ func distChangefeedFlow(
 		// cursor but we have a request to not have an initial scan.
 		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
-			return err
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
@@ -108,27 +89,22 @@ func distChangefeedFlow(
 		}
 	}
 
-	var initialHighWater hlc.Timestamp
-	schemaTS := details.StatementTime
-	{
-		if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-			initialHighWater = *h
-			// If we have a high-water set, use it to compute the spans, since the
-			// ones at the statement time may have been garbage collected by now.
-			schemaTS = initialHighWater
-		}
-
-		// We want to fetch the target spans as of the timestamp following the
-		// highwater unless the highwater corresponds to a timestamp of an initial
-		// scan. This logic is irritatingly complex but extremely important. Namely,
-		// we may be here because the schema changed at the current resolved
-		// timestamp. However, an initial scan should be performed at exactly the
-		// timestamp specified; initial scans can be created at the timestamp of a
-		// schema change and thus should see the side-effect of the schema change.
-		isRestartAfterCheckpointOrNoInitialScan := progress.GetHighWater() != nil
-		if isRestartAfterCheckpointOrNoInitialScan {
-			schemaTS = schemaTS.Next()
-		}
+	schemaTS = details.StatementTime
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		initialHighWater = *h
+		// If we have a high-water set, use it to compute the spans, since the
+		// ones at the statement time may have been garbage collected by now.
+		schemaTS = initialHighWater
+	}
+	// We want to fetch the target spans as of the timestamp following the
+	// highwater unless the highwater corresponds to a timestamp of an initial
+	// scan. This logic is irritatingly complex but extremely important. Namely,
+	// we may be here because the schema changed at the current resolved
+	// timestamp. However, an initial scan should be performed at exactly the
+	// timestamp specified; initial scans can be created at the timestamp of a
+	// schema change and thus should see the side-effect of the schema change.
+	if progress.GetHighWater() != nil {
+		schemaTS = schemaTS.Next()
 	}
 
 	if knobs, ok := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
@@ -136,8 +112,7 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
-	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
+	return initialHighWater, schemaTS, nil
 }
 
 func fetchTableDescriptors(
@@ -225,7 +200,24 @@ func fetchSpansForTables(
 		sd, tableDescs[0], initialHighwater, target, sc)
 }
 
-// startDistChangefeed starts distributed changefeed execution.
+// startDistChangefeed plans and runs a distributed changefeed.
+//
+// One or more ChangeAggregator processors watch table data for changes. These
+// transform the changed kvs into changed rows and either emit them to a sink
+// (such as kafka) or, if there is no sink, forward them in columns 1,2,3 (where
+// they will be eventually returned directly via pgwire). In either case,
+// periodically a span will become resolved as of some timestamp, meaning that
+// no new rows will ever be emitted at or below that timestamp. These span-level
+// resolved timestamps are emitted as a marshaled `jobspb.ResolvedSpan` proto in
+// column 0.
+//
+// The flow will always have exactly one ChangeFrontier processor which all the
+// ChangeAggregators feed into. It collects all span-level resolved timestamps
+// and aggregates them into a changefeed-level resolved timestamp, which is the
+// minimum of the span-level resolved timestamps. This changefeed-level resolved
+// timestamp is emitted into the changefeed sink (or returned to the gateway if
+// there is no sink) whenever it advances. ChangeFrontier also updates the
+// progress of the changefeed's corresponding system job.
 func startDistChangefeed(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -270,7 +262,7 @@ func startDistChangefeed(
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -395,6 +387,7 @@ func makePlan(
 	trackedSpans []roachpb.Span,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
+	schemaTS hlc.Timestamp,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -535,6 +528,7 @@ func makePlan(
 				Description:         description,
 				ProgressConfig:      progressConfig,
 				ResolvedSpans:       resolvedSpans,
+				SchemaTS:            &schemaTS,
 			}
 		}
 
@@ -551,6 +545,7 @@ func makePlan(
 			Description:         description,
 			ProgressConfig:      progressConfig,
 			ResolvedSpans:       resolvedSpans,
+			SchemaTS:            &schemaTS,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
