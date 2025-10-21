@@ -7044,6 +7044,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		// Create the data table; it will only contain a single row with multiple
 		// versions.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE USER joe`)
 
 		counter := 0
 		upsertRow := func() {
@@ -7073,6 +7074,15 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		// Force a GC of the table. This should cause both older versions of the
 		// table to be deleted, with the middle version being lost to the changefeed.
 		forceTableGC(t, s.SystemServer, sqlDB, "system", "descriptor")
+
+		// Do an unnecessary version bump on the descriptor, which will purge old
+		// versions of the descriptor that the lease manager may have cached for
+		// historical queries. When schema_locked support is active, the act of
+		// detecting polling inside pauseOrResumePolling can cause old versions
+		// to be cached. The historical descriptors are cleared everytime a
+		// version bump occurs, otherwise this test can flake if the prior versions
+		// need to decode a row is already cached.
+		waitForSchemaChange(t, sqlDB, "ALTER TABLE foo OWNER TO joe")
 
 		// Resume our changefeed normally.
 		atomic.StoreInt32(&shouldWait, 0)
