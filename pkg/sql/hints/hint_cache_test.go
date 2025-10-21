@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -541,7 +542,7 @@ func checkIDOrder(t *testing.T, ids []int64) {
 // insertStatementHint inserts an empty statement hint into the
 // system.statement_hints table.
 func insertStatementHint(t *testing.T, r *sqlutils.SQLRunner, fingerprint string) {
-	emptyHint := &hints.StatementHintUnion{}
+	emptyHint := &hintpb.StatementHintUnion{}
 	hintBytes, err := emptyHint.ToBytes()
 	require.NoError(t, err)
 	const insertStmt = `INSERT INTO system.statement_hints ("fingerprint", "hint") VALUES ($1, $2)`
