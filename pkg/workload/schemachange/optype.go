@@ -346,6 +346,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTableDropNotNull:             clusterversion.V25_3,
 	alterTableRLS:                     clusterversion.V25_2,
 	alterTypeDropValue:                clusterversion.MinSupported,
+	alterTableDropStored:              clusterversion.V25_4,
 	commentOn:                         clusterversion.MinSupported,
 	createFunction:                    clusterversion.MinSupported,
 	createIndex:                       clusterversion.MinSupported,
