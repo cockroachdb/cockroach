@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -50,7 +49,7 @@ type result struct {
 // input rows, and checks that the generated stats match what we expect.
 func runSampleAggregator(
 	t *testing.T,
-	server serverutils.TestServerInterface,
+	server serverutils.ApplicationLayerInterface,
 	sqlDB *gosql.DB,
 	st *cluster.Settings,
 	evalCtx *eval.Context,
@@ -68,7 +67,6 @@ func runSampleAggregator(
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			DB:       server.InternalDB().(descs.DB),
-			Gossip:   gossip.MakeOptionalGossip(server.GossipI().(*gossip.Gossip)),
 		},
 	}
 	// Override the default memory limit. If memLimitBytes is small but
@@ -296,11 +294,12 @@ func TestSampleAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer server.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	st := s.ClusterSettings()
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(context.Background())
 
 	type sampAggTestCase struct {
@@ -444,7 +443,7 @@ func TestSampleAggregator(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			runSampleAggregator(
-				t, server, sqlDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
+				t, s, sqlDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
 				tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
 				tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
 			)

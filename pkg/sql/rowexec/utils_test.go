@@ -33,6 +33,7 @@ import (
 // with the given inputs, and asserts that the outputted rows are as expected.
 func runProcessorTest(
 	t *testing.T,
+	codec keys.SQLCodec,
 	core execinfrapb.ProcessorCoreUnion,
 	post execinfrapb.PostProcessSpec,
 	inputTypes []*types.T,
@@ -47,7 +48,7 @@ func runProcessorTest(
 	out := &distsqlutils.RowBuffer{}
 
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(codec, st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := execinfra.FlowCtx{
 		Cfg:     &execinfra.ServerConfig{Settings: st, Stopper: stopper, DistSender: distSender},

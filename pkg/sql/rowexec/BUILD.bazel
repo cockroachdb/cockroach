@@ -164,7 +164,6 @@ go_test(
     }),
     deps = [
         "//pkg/base",
-        "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -173,6 +172,7 @@ go_test(
         "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/multitenant/tenantcapabilitiespb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
