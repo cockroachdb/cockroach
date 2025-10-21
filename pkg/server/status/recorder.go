@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	// Import the logmetrics package to trigger its own init function, which inits and injects
 	// metrics functionality into pkg/util/log.
 	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
@@ -452,15 +453,19 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		timestampNanos: now.UnixNano(),
 	}
 	recorder.record(&data)
+	recorder.recordChildx(&data)
 	// Now record the app metrics for the system tenant.
 	recorder.registry = mr.mu.appRegistry
 	recorder.record(&data)
+	recorder.recordChildx(&data)
 	// Now record the log metrics.
 	recorder.registry = mr.mu.logRegistry
 	recorder.record(&data)
+	recorder.recordChildx(&data)
 	// Now record the system metrics.
 	recorder.registry = mr.mu.sysRegistry
 	recorder.record(&data)
+	recorder.recordChildx(&data)
 
 	// Record time series from app-level registries for secondary tenants.
 	for tenantID, r := range mr.mu.tenantRegistries {
@@ -875,6 +880,55 @@ func (rr registryRecorder) recordChild(
 			}
 			*dest = append(*dest, tspb.TimeSeriesData{
 				Name:   fmt.Sprintf(rr.format, prom.GetName(false /* useStaticLabels */)),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+		}
+		promIter.Each(m.Label, processChildMetric)
+	})
+}
+
+// recordChild filters the metrics in the registry down to those provided in
+// the metricsFilter argument, and iterates through any child metrics that
+// may exist on said metric. up to 100
+//
+// NB: Only available for Counter and Gauge metrics.
+func (rr registryRecorder) recordChildx(
+	dest *[]tspb.TimeSeriesData,
+) {
+	labels := rr.registry.GetLabels()
+	rr.registry.Each(func(name string, v interface{}) {
+		prom, ok := v.(metric.PrometheusExportable)
+		if !ok {
+			return
+		}
+		promIter, ok := v.(metric.PrometheusIterable)
+		if !ok {
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
+
+		processChildMetric := func(metric *prometheusgo.Metric) {
+			childmetricname := prom.GetName(false /* useStaticLabels */)
+			for _, label := range metric.Label {
+				childmetricname = fmt.Sprintf("%s___%s_%q_jason", childmetricname, label.GetName(), label.GetValue())
+			}
+			var value float64
+			if metric.Gauge != nil {
+				value = *metric.Gauge.Value
+			} else if metric.Counter != nil {
+				value = *metric.Counter.Value
+			} else {
+				return
+			}
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   fmt.Sprintf(rr.format, childmetricname),
 				Source: rr.source,
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
