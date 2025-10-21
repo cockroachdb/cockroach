@@ -213,8 +213,6 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		return nil // we aren't narrowing anything; no-op
 	}
 
-	// TODO(sep-raft-log): read from the state machine engine here.
-	reader := storage.Reader(s.todoEng)
 	for _, span := range rditer.Select(0, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			RSpan:      roachpb.RSpan{Key: s.desc.EndKey, EndKey: endKey},
@@ -224,9 +222,7 @@ func (s *snapWriteBuilder) clearResidualDataOnNarrowSnapshot(ctx context.Context
 		},
 	}) {
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys,
-			)
+			return w.ClearRawRange(span.Key, span.EndKey, true /* pointKeys */, true /* rangeKeys */)
 		}); err != nil {
 			return err
 		}
