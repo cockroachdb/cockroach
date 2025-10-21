@@ -74,6 +74,7 @@ const (
 // timestamp is emitted into the changefeed sink (or returned to the gateway if
 // there is no sink) whenever it advances. ChangeFrontier also updates the
 // progress of the changefeed's corresponding system job.
+
 func distChangefeedFlow(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
@@ -85,6 +86,24 @@ func distChangefeedFlow(
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 	targets changefeedbase.Targets,
 ) error {
+	initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, execCtx, details, localState)
+	if err != nil {
+		return err
+	}
+	return startDistChangefeed(
+		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
+}
+
+// computeDistChangefeedTimestamps computes the initialHighWater and schemaTS
+// for a changefeed run, and mutates localState.progress when appropriate
+// (e.g., to set the high-water if initial scan should be skipped). It also
+// invokes testing knobs that observe the initial high-water.
+func computeDistChangefeedTimestamps(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.ChangefeedDetails,
+	localState *cachedState,
+) (initialHighWater hlc.Timestamp, schemaTS hlc.Timestamp, _ error) {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
 
@@ -100,7 +119,7 @@ func distChangefeedFlow(
 		// cursor but we have a request to not have an initial scan.
 		initialScanType, err := opts.GetInitialScanType()
 		if err != nil {
-			return err
+			return hlc.Timestamp{}, hlc.Timestamp{}, err
 		}
 		if noHighWater && initialScanType == changefeedbase.NoInitialScan {
 			// If there is a cursor, the statement time has already been set to it.
@@ -108,27 +127,22 @@ func distChangefeedFlow(
 		}
 	}
 
-	var initialHighWater hlc.Timestamp
-	schemaTS := details.StatementTime
-	{
-		if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
-			initialHighWater = *h
-			// If we have a high-water set, use it to compute the spans, since the
-			// ones at the statement time may have been garbage collected by now.
-			schemaTS = initialHighWater
-		}
-
-		// We want to fetch the target spans as of the timestamp following the
-		// highwater unless the highwater corresponds to a timestamp of an initial
-		// scan. This logic is irritatingly complex but extremely important. Namely,
-		// we may be here because the schema changed at the current resolved
-		// timestamp. However, an initial scan should be performed at exactly the
-		// timestamp specified; initial scans can be created at the timestamp of a
-		// schema change and thus should see the side-effect of the schema change.
-		isRestartAfterCheckpointOrNoInitialScan := progress.GetHighWater() != nil
-		if isRestartAfterCheckpointOrNoInitialScan {
-			schemaTS = schemaTS.Next()
-		}
+	schemaTS = details.StatementTime
+	if h := progress.GetHighWater(); h != nil && !h.IsEmpty() {
+		initialHighWater = *h
+		// If we have a high-water set, use it to compute the spans, since the
+		// ones at the statement time may have been garbage collected by now.
+		schemaTS = initialHighWater
+	}
+	// We want to fetch the target spans as of the timestamp following the
+	// highwater unless the highwater corresponds to a timestamp of an initial
+	// scan. This logic is irritatingly complex but extremely important. Namely,
+	// we may be here because the schema changed at the current resolved
+	// timestamp. However, an initial scan should be performed at exactly the
+	// timestamp specified; initial scans can be created at the timestamp of a
+	// schema change and thus should see the side-effect of the schema change.
+	if progress.GetHighWater() != nil {
+		schemaTS = schemaTS.Next()
 	}
 
 	if knobs, ok := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
@@ -136,8 +150,7 @@ func distChangefeedFlow(
 			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
 		}
 	}
-	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent, targets)
+	return initialHighWater, schemaTS, nil
 }
 
 func fetchTableDescriptors(
@@ -270,7 +283,7 @@ func startDistChangefeed(
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -391,6 +404,7 @@ func makePlan(
 	trackedSpans []roachpb.Span,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
+	schemaTS hlc.Timestamp,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -511,6 +525,7 @@ func makePlan(
 				Description:         description,
 				ProgressConfig:      progressConfig,
 				ResolvedSpans:       resolvedSpans,
+				SchemaTS:            &schemaTS,
 			}
 		}
 
@@ -527,6 +542,7 @@ func makePlan(
 			Description:         description,
 			ProgressConfig:      progressConfig,
 			ResolvedSpans:       resolvedSpans,
+			SchemaTS:            &schemaTS,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
