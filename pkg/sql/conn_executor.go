@@ -613,6 +613,12 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
+			SQLJason: aggmetric.NewSQLHistogram(metric.HistogramOptions{
+				Mode:         metric.HistogramModePreferHdrLatency,
+				Metadata:     getMetricMeta(MetaSQLJason, internal),
+				Duration:     6 * metricsSampleInterval,
+				BucketConfig: metric.IOLatencyBuckets,
+			}),
 			SQLTxnsOpen:         aggmetric.NewSQLGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
 			SQLActiveStatements: aggmetric.NewSQLGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
 			SQLContendedTxns:    metric.NewCounter(getMetricMeta(MetaSQLTxnContended, internal)),

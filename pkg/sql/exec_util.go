@@ -945,6 +945,15 @@ var (
 		Category:    metric.Metadata_SQL,
 		HowToUse:    `These high-level metrics provide a latency histogram of all executed SQL transactions. These metrics provide an overview of the current SQL workload.`,
 	}
+	MetaSQLJason = metric.Metadata{
+		Name:        "sql.jason",
+		Help:        "Jason's duplicate of SQL transaction latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+		Essential:   true,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `This is Jason's custom duplicate of sql.txn.latency for testing aggmetric child labels.`,
+	}
 	MetaSQLTxnsOpen = metric.Metadata{
 		Name:        "sql.txns.open",
 		Help:        "Number of currently open user SQL transactions",

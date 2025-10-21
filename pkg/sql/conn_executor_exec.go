@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -4243,6 +4244,8 @@ func (ex *connExecutor) recordTransactionFinish(
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1,
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(elapsedTime.Nanoseconds(),
+		ex.sessionData().Database, ex.sessionData().ApplicationName)
+	ex.metrics.EngineMetrics.SQLJason.RecordValue(elapsedTime.Nanoseconds(),
 		ex.sessionData().Database, ex.sessionData().ApplicationName)
 	ex.metrics.EngineMetrics.TxnRetryCount.Inc(int64(ex.state.mu.autoRetryCounter))
 

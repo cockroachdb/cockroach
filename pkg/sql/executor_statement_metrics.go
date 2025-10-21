@@ -49,6 +49,7 @@ type EngineMetrics struct {
 	SQLServiceLatencyHistorical metric.IHistogram
 
 	SQLTxnLatency       *aggmetric.SQLHistogram
+	SQLJason            *aggmetric.SQLHistogram
 	SQLTxnsOpen         *aggmetric.SQLGauge
 	SQLActiveStatements *aggmetric.SQLGauge
 	SQLContendedTxns    *metric.Counter
