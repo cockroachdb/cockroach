@@ -52,6 +52,9 @@ func AddChangefeedToQueryLoad(
 	if err != nil {
 		return err
 	}
+	if _, err := conn.Exec(ctx, "SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return err
+	}
 	if _, err := conn.Exec(ctx, fmt.Sprintf("USE %q", dbName)); err != nil {
 		return err
 	}
