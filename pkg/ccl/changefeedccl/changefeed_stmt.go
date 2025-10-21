@@ -726,7 +726,7 @@ func createChangefeedJobRecord(
 		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("unknown changefeed level: %s", changefeedStmt.Level)
 	}
 
-	targets, err := AllTargets(ctx, details, p.ExecCfg())
+	targets, err := AllTargetsWithTS(ctx, details, p.ExecCfg(), statementTime)
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
@@ -1739,7 +1739,13 @@ func (b *changefeedResumer) resumeWithRetries(
 
 			confPoller := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
-			targets, err := AllTargets(ctx, details, execCfg)
+			var changefeedStartTS hlc.Timestamp
+			if h := localState.progress.GetHighWater(); h != nil && !h.IsEmpty() {
+				changefeedStartTS = *h
+			} else {
+				changefeedStartTS = details.StatementTime
+			}
+			targets, err := AllTargetsWithTS(ctx, details, execCfg, changefeedStartTS)
 			if err != nil {
 				return err
 			}

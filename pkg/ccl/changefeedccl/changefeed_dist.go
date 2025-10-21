@@ -270,7 +270,7 @@ func startDistChangefeed(
 		}
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, localState.drainingNodes, schemaTS)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -391,6 +391,7 @@ func makePlan(
 	trackedSpans []roachpb.Span,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
+	schemaTS hlc.Timestamp,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		sv := &execCtx.ExecCfg().Settings.SV
@@ -511,6 +512,7 @@ func makePlan(
 				Description:         description,
 				ProgressConfig:      progressConfig,
 				ResolvedSpans:       resolvedSpans,
+				SchemaTs:            &schemaTS,
 			}
 		}
 
@@ -527,6 +529,7 @@ func makePlan(
 			Description:         description,
 			ProgressConfig:      progressConfig,
 			ResolvedSpans:       resolvedSpans,
+			SchemaTs:            &schemaTS,
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {
