@@ -1724,12 +1724,12 @@ func GetReverseJobID(
 	var jobID jobspb.JobID
 	testutils.SucceedsSoon(t, func() error {
 		err := db.DB.QueryRowContext(ctx, `
-            SELECT id 
-            FROM system.jobs 
-            WHERE job_type = 'LOGICAL REPLICATION' 
+            SELECT id
+            FROM system.jobs
+            WHERE job_type = 'LOGICAL REPLICATION'
             AND id != $1
             AND created > $2
-            ORDER BY created DESC 
+            ORDER BY created DESC
             LIMIT 1`,
 			parentID, created).Scan(&jobID)
 		if err != nil {
@@ -2815,4 +2815,47 @@ func TestGetWriterType(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
+}
+
+func TestLogicalReplicationExternalConnWithoutDBName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "CREATE TABLE a.public.foo (x INT PRIMARY KEY)")
+	dbA.Exec(t, "INSERT INTO a.public.foo SELECT * FROM generate_series(1, 10)")
+	dbA.Exec(t, "CREATE USER userA WITH PASSWORD '123'")
+	dbA.Exec(t, "GRANT REPLICATIONSOURCE, REPLICATIONDEST ON TABLE a.public.foo TO userA")
+	dbAURL := replicationtestutils.GetExternalConnectionURI(
+		t, s, s, serverutils.ClientCerts(false), serverutils.UserPassword("userA", "123"),
+	)
+
+	dbB.Exec(t, "CREATE USER userB WITH PASSWORD '123'")
+	dbB.Exec(t, "GRANT CREATE ON DATABASE b TO userB")
+	dbBURL := replicationtestutils.GetExternalConnectionURI(
+		t, s, s, serverutils.ClientCerts(false), serverutils.UserPassword("userB", "123"),
+	)
+
+	dbBAsUser := sqlutils.MakeSQLRunner(s.SQLConn(
+		t,
+		serverutils.DBName("b"),
+		serverutils.ClientCerts(false),
+		serverutils.UserPassword("userB", "123"),
+	))
+
+	var jobID jobspb.JobID
+	dbBAsUser.QueryRow(
+		t,
+		"CREATE LOGICALLY REPLICATED TABLE b.public.foo FROM TABLE a.public.foo ON $1 WITH BIDIRECTIONAL ON $2",
+		dbAURL.String(),
+		dbBURL.String(),
+	).Scan(&jobID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobID)
+
+	reverseJobID := GetReverseJobID(ctx, t, dbA, jobID)
+	WaitUntilReplicatedTime(t, s.Clock().Now(), dbA, reverseJobID)
 }
