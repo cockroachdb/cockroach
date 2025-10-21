@@ -1543,13 +1543,14 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
 	defer func() {
 		t.Log("unblocking GC")
 		close(unblockGC)
 	}()
-	codec := s.ApplicationLayer().Codec()
+	s := srv.ApplicationLayer()
+	codec := s.Codec()
 
 	if _, err := sqlDB.Exec(`
 SET create_table_with_schema_locked=false;

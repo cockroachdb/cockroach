@@ -1786,6 +1786,7 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 			Settings: st,
 		})
 	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	r := sqlutils.MakeSQLRunner(db)
 
@@ -1802,7 +1803,7 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	}()
 	var id int
 	r.QueryRow(t, "SELECT 't1'::REGCLASS::OID;").Scan(&id)
-	lm := srv.LeaseManager().(*Manager)
+	lm := s.LeaseManager().(*Manager)
 
 	// Note: We only need to hold old leases because the logic for doing this
 	// automatically is not merged yet. Once it is merged, the release of them
@@ -1817,7 +1818,7 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	defer releaseHeldDescriptors()
 
 	getDescriptorVersion := func() descpb.DescriptorVersion {
-		ts := lm.GetReadTimestamp(srv.Clock().Now())
+		ts := lm.GetReadTimestamp(s.Clock().Now())
 		state := lm.findDescriptorState(descpb.ID(id), false)
 		require.NotNilf(t, state, "the descriptor was not leased yet")
 		ld, _, err := state.findForTimestamp(ctx, ts)
@@ -1869,12 +1870,12 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 	tc := serverutils.StartCluster(
 		t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Settings:          st,
+				Settings: st,
+				// Avoid using tenants since async tenant migration steps can acquire
+				// leases on our user tables.
 				DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
 			},
 			ServerArgsPerNode: map[int]base.TestServerArgs{2: {
-				// Avoid using tenants since async tenant migration steps can acquire
-				// leases on our user tables.
 				Knobs: base.TestingKnobs{
 					SQLLeaseManager: &ManagerTestingKnobs{
 						TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
@@ -1907,8 +1908,6 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 		_, err := node1Conn.Exec("ALTER TABLE d1.public.t1 ADD COLUMN n2 int DEFAULT 364")
 		return err
 	})
-	go func() {
-	}()
 	lm := tc.Server(2).LeaseManager().(*Manager)
 	assertDescriptorsCount := func(expectedCount int) {
 		state := lm.findDescriptorState(descpb.ID(id), false)
