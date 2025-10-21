@@ -1513,6 +1513,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaStatementRowsRead = metric.Metadata{
+		Name:        "sql.statements.rows_read.count",
+		Help:        "Number of rows read by SQL statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
