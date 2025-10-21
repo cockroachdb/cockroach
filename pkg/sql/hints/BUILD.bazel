@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "hints",
-    srcs = ["hint_cache.go"],
+    srcs = [
+        "hint_cache.go",
+        "hint_table.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/hints",
     visibility = ["//visibility:public"],
     deps = [
@@ -20,6 +23,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/hintpb",
+        "//pkg/sql/isql",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
@@ -42,6 +46,7 @@ go_test(
     size = "medium",
     srcs = [
         "hint_cache_test.go",
+        "hint_table_test.go",
         "main_test.go",
     ],
     exec_properties = select({
@@ -58,6 +63,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/hintpb",
+        "//pkg/sql/isql",
         "//pkg/sql/randgen",
         "//pkg/sql/stats",
         "//pkg/testutils",
