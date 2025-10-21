@@ -23,15 +23,34 @@ type inspectLogger interface {
 	hasIssues() bool
 }
 
-// inspectLoggers manages a collection of inspectLogger instances.
-type inspectLoggers []inspectLogger
+// inspectLoggerBundle fan-outs logged inspect issues to a slice of loggers while
+// tracking aggregate state about the issues encountered.
+type inspectLoggerBundle struct {
+	loggers             []inspectLogger
+	sawInternalIssue    atomic.Bool
+	sawNonInternalIssue atomic.Bool
+}
 
-var _ inspectLogger = inspectLoggers{}
+var _ inspectLogger = (*inspectLoggerBundle)(nil)
 
-func (l inspectLoggers) logIssue(ctx context.Context, issue *inspectIssue) error {
+// newInspectLoggerBundle constructs a bundle that delegates to the provided loggers.
+func newInspectLoggerBundle(loggers ...inspectLogger) *inspectLoggerBundle {
+	return &inspectLoggerBundle{loggers: loggers}
+}
+
+// logIssue implements the inspectLogger interface.
+func (l *inspectLoggerBundle) logIssue(ctx context.Context, issue *inspectIssue) error {
+	if issue == nil {
+		return errors.AssertionFailedf("issue is nil")
+	}
+	if issue.ErrorType == InternalError {
+		l.sawInternalIssue.Store(true)
+	} else {
+		l.sawNonInternalIssue.Store(true)
+	}
+
 	var retErr error
-
-	for _, logger := range l {
+	for _, logger := range l.loggers {
 		if err := logger.logIssue(ctx, issue); err != nil {
 			retErr = errors.CombineErrors(retErr, err)
 		}
@@ -39,13 +58,20 @@ func (l inspectLoggers) logIssue(ctx context.Context, issue *inspectIssue) error
 	return retErr
 }
 
-func (l inspectLoggers) hasIssues() bool {
-	for _, logger := range l {
-		if logger.hasIssues() {
-			return true
-		}
+// hasIssues implements the inspectLogger interface.
+func (l *inspectLoggerBundle) hasIssues() bool {
+	if l == nil {
+		return false
 	}
-	return false
+	return l.sawInternalIssue.Load() || l.sawNonInternalIssue.Load()
+}
+
+// sawOnlyInternalIssues reports whether every recorded issue was an internal error.
+func (l *inspectLoggerBundle) sawOnlyInternalIssues() bool {
+	if l == nil {
+		return false
+	}
+	return l.sawInternalIssue.Load() && !l.sawNonInternalIssue.Load()
 }
 
 // metricsLogger increments metrics when issues are logged.
