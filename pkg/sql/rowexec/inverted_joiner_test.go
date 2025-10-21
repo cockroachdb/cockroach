@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -624,7 +623,7 @@ func TestInvertedJoiner(t *testing.T) {
 		testCases[i] = initCommonFields(c)
 	}
 
-	st := cluster.MakeTestingClusterSettings()
+	st := s.ClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +631,7 @@ func TestInvertedJoiner(t *testing.T) {
 	defer tempEngine.Close()
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
@@ -764,13 +763,13 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
-	st := cluster.MakeTestingClusterSettings()
+	st := s.ClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)

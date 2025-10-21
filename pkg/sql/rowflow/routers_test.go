@@ -789,7 +789,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		Increment: 1,
 		Settings:  st,
 	})
-	evalCtx := eval.MakeTestingEvalContextWithMon(st, monitor)
+	evalCtx := eval.MakeTestingEvalContextWithMon(keys.SystemSQLCodec, st, monitor)
 	defer evalCtx.Stop(ctx)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,

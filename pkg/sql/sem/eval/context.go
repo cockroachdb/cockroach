@@ -458,19 +458,31 @@ func MakeTestingEvalContext(st *cluster.Settings) Context {
 		Name:     mon.MakeName("test-monitor"),
 		Settings: st,
 	})
-	return MakeTestingEvalContextWithMon(st, monitor)
+	return MakeTestingEvalContextWithMon(keys.SystemSQLCodec, st, monitor)
+}
+
+// MakeTestingEvalContextWithCodec is the same as MakeTestingEvalContext but
+// allows overriding keys.SystemSQLCodec.
+func MakeTestingEvalContextWithCodec(codec keys.SQLCodec, st *cluster.Settings) Context {
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("test-monitor"),
+		Settings: st,
+	})
+	return MakeTestingEvalContextWithMon(codec, st, monitor)
 }
 
 // MakeTestingEvalContextWithMon returns an EvalContext with the given
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
-func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
+func MakeTestingEvalContextWithMon(
+	codec keys.SQLCodec, st *cluster.Settings, monitor *mon.BytesMonitor,
+) Context {
 	sessionData := &sessiondata.SessionData{}
 	// Set defaults that match what the session variables system expects.
 	// allow_unsafe_internals defaults to true.
 	sessionData.AllowUnsafeInternals = true
 	ctx := Context{
-		Codec:            keys.SystemSQLCodec,
+		Codec:            codec,
 		Txn:              &kv.Txn{},
 		SessionDataStack: sessiondata.NewStack(sessionData),
 		Settings:         st,
