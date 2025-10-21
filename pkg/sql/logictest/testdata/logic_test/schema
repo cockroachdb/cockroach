@@ -1517,3 +1517,48 @@ statement error pgcode 42601 pq: .*empty schema name
 CREATE SCHEMA "";
 
 subtest end
+
+
+# Regression test for #154248, which ensures that during cascade drops of schemas,
+# we will clean up triggers before functions that reference them.
+subtest drop_schema_with_triggers
+
+statement ok
+CREATE SCHEMA drop_schema_with_triggers;
+
+statement ok
+CREATE TYPE drop_schema_with_triggers.typ_1 AS ENUM ('foo');
+
+statement ok
+CREATE TYPE typ_2_drop_schema_with_triggers AS ENUM ('foo');
+
+statement ok
+CREATE TABLE drop_schema_with_triggers.t1 (
+	n INT8 PRIMARY KEY, j INT8 UNIQUE
+);
+
+statement ok
+CREATE TABLE t2_drop_schema_with_triggers (
+	n
+		INT8 PRIMARY KEY,
+	j
+		INT8 REFERENCES drop_schema_with_triggers.t1 (j)
+);
+
+statement ok
+CREATE FUNCTION drop_schema_with_triggers.trigger_function_w4_520()
+	RETURNS TRIGGER
+	LANGUAGE plpgsql
+	AS $$ BEGIN SELECT 'foo'::drop_schema_with_triggers.typ_1, 'foo'::public.typ_2_drop_schema_with_triggers FROM drop_schema_with_triggers.t1;RETURN NEW;END; $$;
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER trigger_w4_521 BEFORE UPDATE OR DELETE ON drop_schema_with_triggers.t1 FOR EACH ROW EXECUTE FUNCTION drop_schema_with_triggers.trigger_function_w4_520();
+
+skipif config local-mixed-25.2
+skipif config local-mixed-25.3
+skipif config local-legacy-schema-changer
+statement ok
+DROP SCHEMA drop_schema_with_triggers CASCADE;
+
+subtest end

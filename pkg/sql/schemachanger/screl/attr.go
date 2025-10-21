@@ -370,6 +370,8 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TriggerDeps)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(TriggerID, "TriggerID"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesRoutineIDs"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
 	),
 	// Policy elements
 	rel.EntityMapping(t((*scpb.Policy)(nil)),

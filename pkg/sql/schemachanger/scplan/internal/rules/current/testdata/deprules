@@ -3532,7 +3532,7 @@ deprules
     - $referenced-descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.EnumType']
     - $referenced-descriptor[DescID] = $fromDescID
     - $referencing-via-type[ReferencedTypeIDs] CONTAINS $fromDescID
-    - $referencing-via-type[Type] = '*scpb.ColumnType'
+    - $referencing-via-type[Type] IN ['*scpb.ColumnType', '*scpb.TriggerDeps']
     - toAbsent($referenced-descriptor-Target, $referencing-via-type-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-type-Node[CurrentStatus] = ABSENT
@@ -3565,7 +3565,7 @@ deprules
     - $referencing-via-expr-Node[CurrentStatus] = ABSENT
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-Target, $referenced-descriptor-Node)
     - joinTargetNode($referencing-via-expr, $referencing-via-expr-Target, $referencing-via-expr-Node)
-- name: descriptor drop right before removing dependent with function refs in columns
+- name: descriptor drop right before removing dependent with function refs in columns / triggers
   from: referenced-descriptor-Node
   kind: SameStagePrecedence
   to: referencing-via-function-Node
@@ -3573,7 +3573,7 @@ deprules
     - $referenced-descriptor[Type] = '*scpb.Function'
     - $referenced-descriptor[DescID] = $fromDescID
     - $referencing-via-function[ReferencedFunctionIDs] CONTAINS $fromDescID
-    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.TriggerDeps', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
     - toAbsent($referenced-descriptor-Target, $referencing-via-function-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-function-Node[CurrentStatus] = ABSENT
@@ -5025,6 +5025,60 @@ deprules
     - $dependent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - toAbsent($trigger dependency-Target, $column-Target)
+    - $trigger dependency-Node[CurrentStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - transient($trigger dependency-Target, $column-Target)
+    - $trigger dependency-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - $trigger dependency-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $trigger dependency-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - $trigger dependency-Target[TargetStatus] = ABSENT
+    - $trigger dependency-Node[CurrentStatus] = ABSENT
+    - $column-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: trigger removed before dependents
   from: trigger-Node
   kind: Precedence
@@ -8614,7 +8668,7 @@ deprules
     - $referenced-descriptor[Type] IN ['*scpb.AliasType', '*scpb.CompositeType', '*scpb.EnumType']
     - $referenced-descriptor[DescID] = $fromDescID
     - $referencing-via-type[ReferencedTypeIDs] CONTAINS $fromDescID
-    - $referencing-via-type[Type] = '*scpb.ColumnType'
+    - $referencing-via-type[Type] IN ['*scpb.ColumnType', '*scpb.TriggerDeps']
     - toAbsent($referenced-descriptor-Target, $referencing-via-type-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-type-Node[CurrentStatus] = ABSENT
@@ -8647,7 +8701,7 @@ deprules
     - $referencing-via-expr-Node[CurrentStatus] = ABSENT
     - joinTargetNode($referenced-descriptor, $referenced-descriptor-Target, $referenced-descriptor-Node)
     - joinTargetNode($referencing-via-expr, $referencing-via-expr-Target, $referencing-via-expr-Node)
-- name: descriptor drop right before removing dependent with function refs in columns
+- name: descriptor drop right before removing dependent with function refs in columns / triggers
   from: referenced-descriptor-Node
   kind: SameStagePrecedence
   to: referencing-via-function-Node
@@ -8655,7 +8709,7 @@ deprules
     - $referenced-descriptor[Type] = '*scpb.Function'
     - $referenced-descriptor[DescID] = $fromDescID
     - $referencing-via-function[ReferencedFunctionIDs] CONTAINS $fromDescID
-    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
+    - $referencing-via-function[Type] IN ['*scpb.CheckConstraintUnvalidated', '*scpb.ColumnComputeExpression', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnType', '*scpb.PolicyUsingExpr', '*scpb.PolicyWithCheckExpr', '*scpb.TriggerDeps', '*scpb.UniqueWithoutIndexConstraintUnvalidated']
     - toAbsent($referenced-descriptor-Target, $referencing-via-function-Target)
     - $referenced-descriptor-Node[CurrentStatus] = DROPPED
     - $referencing-via-function-Node[CurrentStatus] = ABSENT
@@ -10107,6 +10161,60 @@ deprules
     - $dependent-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($trigger, $trigger-Target, $trigger-Node)
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - toAbsent($trigger dependency-Target, $column-Target)
+    - $trigger dependency-Node[CurrentStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - transient($trigger dependency-Target, $column-Target)
+    - $trigger dependency-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - $trigger dependency-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $trigger dependency-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = ABSENT
+    - $column-Node[CurrentStatus] = WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
+- name: trigger references cleaned before columns
+  from: trigger dependency-Node
+  kind: Precedence
+  to: column-Node
+  query:
+    - $trigger dependency[Type] = '*scpb.TriggerDeps'
+    - $column[Type] = '*scpb.Column'
+    - trigger refers to column(*scpb.TriggerDeps, *scpb.Column)($trigger dependency, $column)
+    - $trigger dependency-Target[TargetStatus] = ABSENT
+    - $trigger dependency-Node[CurrentStatus] = ABSENT
+    - $column-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = TRANSIENT_WRITE_ONLY
+    - joinTargetNode($trigger dependency, $trigger dependency-Target, $trigger dependency-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: trigger removed before dependents
   from: trigger-Node
   kind: Precedence
