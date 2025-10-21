@@ -853,7 +853,6 @@ func maybeCreateAndAddShardCol(
 			ColumnID:                shardColID,
 			TypeT:                   newTypeT(types.Int),
 			IsVirtual:               true,
-			IsNullable:              false,
 			ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
 		},
 		notNull: true,

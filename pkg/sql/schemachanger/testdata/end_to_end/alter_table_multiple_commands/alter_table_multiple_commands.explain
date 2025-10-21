@@ -38,7 +38,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":4,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":4,"Name":"p","TableID":104}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":4,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":4,"TableID":104}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":4,"TableID":104}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"TableID":104}
@@ -119,7 +119,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":4,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":4,"Name":"p","TableID":104}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":4,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":4,"TableID":104}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":4,"TableID":104}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":2,"IndexID":2,"IsUnique":true,"SourceIndexID":1,"TableID":104,"TemporaryIndexID":3}}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}

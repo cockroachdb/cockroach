@@ -274,7 +274,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -307,7 +306,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -355,7 +353,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: true
     tableId: 108
     type:
@@ -386,7 +383,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 108
     type:
@@ -416,7 +412,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -446,7 +441,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -476,7 +470,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -506,7 +499,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 108
     type:
@@ -536,7 +528,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 108
     type:
@@ -1089,7 +1080,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1168,7 +1158,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1232,7 +1221,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1296,7 +1284,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: true
     tableId: 111
     type:
@@ -1359,7 +1346,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 111
     type:
@@ -1389,7 +1375,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1419,7 +1404,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1449,7 +1433,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1479,7 +1462,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: false
     tableId: 111
     type:
@@ -1509,7 +1491,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: false
     isVirtual: false
     tableId: 111
     type:
@@ -1539,7 +1520,6 @@ ElementState:
       in231OrLater: true
       in243OrLater: true
     familyId: 0
-    isNullable: true
     isVirtual: true
     tableId: 111
     type:

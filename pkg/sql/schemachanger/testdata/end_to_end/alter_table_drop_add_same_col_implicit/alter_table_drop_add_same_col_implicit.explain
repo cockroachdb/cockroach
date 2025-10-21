@@ -29,7 +29,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"i","TableID":104}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}
@@ -84,7 +84,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":3,"TableID":104}}
  │              ├── SetColumnName {"ColumnID":3,"Name":"i","TableID":104}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsNullable":true,"TableID":104}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":1,"Kind":2,"Ordinal":1,"TableID":104}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":104}
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":104}

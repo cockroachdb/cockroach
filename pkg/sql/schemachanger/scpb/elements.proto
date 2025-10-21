@@ -241,13 +241,7 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Deprecated
-  // We changed element modelling for NOT NULL constraint in V23_1 and thus
-  // deprecated `is_nullable`. The new way is to handle NOT NULL constraint
-  // through a newly introduced `ColumnNotNull` element. This change is
-  // necessary to support adding/dropping NOT NULL constraint on an existing
-  // column.
-  bool is_nullable = 5 [deprecated = true];
+  reserved 5;
   // Deprecated
   // compute expression is now handled as a separate element (see ColumnComputeExpression).
   Expression compute_expr = 6 [deprecated = true];

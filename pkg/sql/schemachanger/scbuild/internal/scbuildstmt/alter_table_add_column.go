@@ -141,7 +141,6 @@ func alterTableAddColumn(
 	spec.colType = &scpb.ColumnType{
 		TableID:                 tbl.TableID,
 		ColumnID:                spec.col.ColumnID,
-		IsNullable:              desc.Nullable,
 		IsVirtual:               desc.Virtual,
 		ElementCreationMetadata: scdecomp.NewElementCreationMetadata(b.EvalCtx().Settings.Version.ActiveVersion(b)),
 	}
