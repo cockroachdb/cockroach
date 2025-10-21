@@ -282,6 +282,16 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 		ctx, e = b.knobs.BeforeAdd(ctx, e)
 	}
 
+	if b.knobs.BeforeAddSpecial != nil {
+		// fmt.Println("doing a before add special")
+		shouldAdd := true
+		ctx, e, shouldAdd = b.knobs.BeforeAddSpecial(ctx, e)
+		if !shouldAdd {
+			// fmt.Println("BeforeAddSpecial returning early")
+			return nil
+		}
+	}
+
 	if log.V(2) {
 		log.Infof(ctx, "Add event: %s", e.String())
 	}

@@ -175,8 +175,20 @@ func (e *familyEvaluator) eval(
 	}
 
 	havePrev := prevRow.IsInitialized()
+	// if e.currDesc != nil {
+	// 	fmt.Println("in eval, e.currDesc", e.currDesc.Version, e.currDesc.SchemaTS)
+	// } else {
+	// 	fmt.Println("in eval, e.currDesc is nil")
+	// }
+	// if updatedRow.EventDescriptor != nil {
+	// 	fmt.Println("in eval, updatedRow.EventDescriptor", updatedRow.EventDescriptor.Version, updatedRow.EventDescriptor.SchemaTS)
+	// } else {
+	// 	fmt.Println("in eval, updatedRow.EventDescriptor is nil")
+	// }
 	if !(sameVersion(e.currDesc, updatedRow.EventDescriptor) &&
 		(!havePrev || sameVersion(e.prevDesc, prevRow.EventDescriptor))) {
+
+		fmt.Println("descriptor versions changed; re-initializing")
 		// Descriptor versions changed; re-initialize.
 		if err := e.closeErr(); err != nil {
 			return cdcevent.Row{}, err
@@ -186,8 +198,10 @@ func (e *familyEvaluator) eval(
 		e.currDesc, e.prevDesc = updatedRow.EventDescriptor, prevRow.EventDescriptor
 
 		if err := e.planAndRun(ctx); err != nil {
+			fmt.Println("error planning and running", err)
 			return cdcevent.Row{}, err
 		}
+		fmt.Println("done planning and running")
 	}
 
 	// Setup context.
@@ -283,8 +297,10 @@ func (e *familyEvaluator) preparePlan(
 	// Perform cleanup of the previous plan if there is one.
 	e.performCleanup()
 
+	// breadcrumb: here's where we get the schema timestamp for the descriptor.
 	err = withPlanner(ctx, e.execCfg, e.statementTS, e.user, e.currDesc.SchemaTS, e.sessionData,
 		func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error {
+			fmt.Println("in preparePlan running txn at timestamp", e.currDesc.SchemaTS)
 			e.cleanup = cleanup
 			e.rowEvalCtx = rowEvalContextFromEvalContext(&execCtx.ExtendedEvalContext().Context)
 			e.rowEvalCtx.withDiff = e.withDiff

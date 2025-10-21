@@ -398,6 +398,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
+	fmt.Println(" --- newEventConsumer ---")
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.FlowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
 		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)

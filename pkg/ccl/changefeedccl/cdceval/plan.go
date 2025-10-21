@@ -170,6 +170,7 @@ func withPlanner(
 	fn func(ctx context.Context, execCtx sql.JobExecContext, cleanup func()) error,
 ) error {
 	return sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		// breadcrumb: here's where we set the schema timestamp for the transaction.
 		if err := txn.KV().SetFixedTimestamp(ctx, schemaTS); err != nil {
 			return err
 		}

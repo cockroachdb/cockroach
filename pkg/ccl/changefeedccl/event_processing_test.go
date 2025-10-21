@@ -220,6 +220,48 @@ func BenchmarkShardingByKey(b *testing.B) {
 	}
 }
 
+// // breadcrumb: maybe add a test here
+
+/*
+Test order:
+- Create DB with table
+- Create changefeed
+- Insert row 0 (to cache the event descriptor at time t0)
+- Change DB descriptor version (By granting permission to a user)
+- Garbage collect the old descriptor version/advance pts
+
+- Insert row 1
+- TableDescriptor Change (By granting permission to a user)
+- Insert row 2
+
+- KV events out of order, 2 then 1
+- KV event for 1 will cause a replan,
+   which will use the cached timestamp (t0) for that descriptor versionand
+   will replan trying to get the db descriptor (at that same timestamp t0)
+   which will fail because the descriptor version at t0 was garbage collected
+*/
+
+// func TestEventProcessing(t *testing.T) {
+// 	defer leaktest.AfterTest(t)()
+// 	defer log.Scope(t).Close(t)
+
+// 	details := jobspb.ChangefeedDetails{
+// 		TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
+// 			{
+// 				Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
+// 				TableID:           1,
+// 				FamilyName:        "fam",
+// 				StatementTimeName: "t1",
+// 			},
+// 		},
+// 	}
+// 	c := kvEventToRowConsumer{
+// 		details:              makeChangefeedConfigFromJobDetails(details),
+// 		topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
+// 	}
+// 	c.ConsumeEvent(context.Background(), makeKVEvent("a", "b", hlc.Timestamp{WallTime: 1}, jobspb.DescriptorVersion_BASE))
+// }
+
 func makeKVEventKeyOnly(rng *rand.Rand, upper int) kvevent.Event {
 	testTableID := 42
 

@@ -234,7 +234,7 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	"the number of workers to use when processing events: <0 disables, "+
 		"0 assigns a reasonable default, >0 assigns the setting value. for experimental/core "+
 		"changefeeds and changefeeds using parquet format, this is disabled",
-	0,
+	1,
 	settings.WithPublic)
 
 // EventConsumerWorkerQueueSize specifies the maximum number of events a worker buffer.

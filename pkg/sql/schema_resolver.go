@@ -146,6 +146,7 @@ func (sr *schemaResolver) LookupObject(
 		}
 	}
 
+	// breadcrumb: the transaction comes from the schema resolver.
 	b := sr.descCollection.ByName(sr.txn)
 	if !sr.skipDescriptorCache && !flags.RequireMutable {
 		// The caller requires this descriptor to *not* be leased,
@@ -161,6 +162,7 @@ func (sr *schemaResolver) LookupObject(
 	if flags.IncludeOffline {
 		b = b.WithOffline()
 	}
+	// breadcrumb: this is where we get the getter, so where is the transaction from?
 	g := b.MaybeGet()
 	tn := tree.MakeQualifiedTypeName(dbName, scName, obName)
 	switch flags.DesiredObjectKind {

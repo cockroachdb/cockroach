@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -839,6 +840,554 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 		// Ensure the old pts record was deleted.
 		_, err = readPTSRecord(ctx, t, execCfg, ptp, oldRecordID)
 		require.ErrorContains(t, err, "does not exist")
+	}
+
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+/*
+Test order:
+- Create DB with table
+- Create changefeed
+- Insert row 0 (to cache the event descriptor at time t0)
+- Change DB descriptor version (By granting permission to a user)
+- Garbage collect the old descriptor version/advance pts
+
+- Insert row 1
+- TableDescriptor Change (By granting permission to a user)
+- Insert row 2
+
+- KV events out of order, 2 then 1
+- KV event for 1 will cause a replan,
+   which will use the cached timestamp (t0) for that descriptor versionand
+   will replan trying to get the db descriptor (at that same timestamp t0)
+   which will fail because the descriptor version at t0 was garbage collected
+*/
+
+func TestProtectedTimestampGarbageCollection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// Test order:
+		// - Create a new DB with table
+		// sqlDB.Exec(t, `CREATE DATABASE testdb`)
+		// sqlDB.Exec(t, `USE testdb`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		// - Create changefeed
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved = '20ms'`)
+		defer closeFeed(t, foo)
+
+		// - Insert row 0 (to cache the event descriptor at time t0)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		// - Change DB descriptor version (By granting permission to a user)
+		sqlDB.Exec(t, `CREATE USER testuser; GRANT CREATE ON DATABASE d TO testuser;`)
+		// - Garbage collect the old descriptor version/advance pts
+		// TODO: Really make sure it happens
+		sqlDB.Exec(t, `ALTER DATABASE d CONFIGURE ZONE USING gc.ttlseconds = 1`)
+
+		sqlDB.Exec(t, `ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+
+		time.Sleep(2 * time.Second)
+
+		// knobs := s.TestingKnobs.
+		// 	DistSQL.(*execinfra.TestingKnobs).
+		// 	Changefeed.(*TestingKnobs)
+
+		// knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+		// 	return kvevent.BlockingBufferTestingKnobs{
+		// 		BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+		// 			fmt.Println("BeforeAdd", e.String())
+		// 			return ctx, e
+		// 		},
+		// 	}
+		// }
+
+		// - Insert row 1
+		// TODO:mess with this further to make it happen out of order
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2); GRANT CREATE ON TABLE foo TO testuser; INSERT INTO foo VALUES (3)`)
+		// // - TableDescriptor Change (By granting permission to a user)
+		// sqlDB.Exec(t, `GRANT CREATE ON TABLE foo TO testuser`)
+		// // - Insert row 2
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+
+		// - KV events out of order, 2 then 1 (crossing fingers for this, just run a bunch until it happens)
+		// - KV event for 1 will cause a replan,
+		//    which will use the cached timestamp (t0) for that descriptor versionand
+		//    will replan trying to get the db descriptor (at that same timestamp t0) which will fail because the descriptor version at t0 was garbage collected
+	}
+
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+// breadcrumb my second test
+func TestProtectedTimestampGarbageCollectionDescriptorVersions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Useful for debugging.
+	require.NoError(t, log.SetVModule("spanconfigstore=2,store=2,reconciler=3,mvcc_gc_queue=2,kvaccessor=2"))
+
+	settings := cluster.MakeTestingClusterSettings()
+	spanconfigjob.ReconciliationJobCheckpointInterval.Override(ctx, &settings.SV, 1*time.Second)
+
+	// Keep track of where the spanconfig reconciler is up to.
+	lastReconcilerCheckpoint := atomic.Value{}
+	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
+
+	// knobs := s.TestingKnobs.
+	// 	DistSQL.(*execinfra.TestingKnobs).
+	// 	Changefeed.(*TestingKnobs)
+
+	// knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+	// 	return kvevent.BlockingBufferTestingKnobs{
+	// 		BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+	// 			fmt.Println("BeforeAdd", e.String())
+	// 			return ctx, e
+	// 		},
+	// 	}
+	// }
+
+	var kvEvents []kvevent.Event
+	var shouldSendResolved atomic.Bool
+	shouldSendResolved.Store(true)
+
+	s, db, stopServer := startTestFullServer(t, feedTestOptions{
+		knobsFn: func(knobs *base.TestingKnobs) {
+			knobs.DistSQL = &execinfra.TestingKnobs{
+				Changefeed: &TestingKnobs{
+					MakeKVFeedToAggregatorBufferKnobs: func() kvevent.BlockingBufferTestingKnobs {
+						return kvevent.BlockingBufferTestingKnobs{
+							BeforeAddSpecial: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event, bool) {
+								if e.Type() == kvevent.TypeKV {
+									// fmt.Println("Seeing a kv event with key", e.KV().Key)
+									kvEvents = append(kvEvents, e)
+									switch len(kvEvents) {
+									case 1:
+										return ctx, kvEvents[0], true
+									case 2:
+										// fmt.Println("not sending row 2")
+										return ctx, kvEvents[0], false
+									case 3:
+										// fmt.Println("sending row 3")
+										// we need to make sure we send resolved events before this
+										// to trigger GC, but then once we start doing this trickery
+										// resolved timestamps may cause some errors so suppress them.
+										shouldSendResolved.Store(false)
+										return ctx, kvEvents[2], true
+									case 4:
+										// fmt.Println("sending row 2 instead of 4")
+										return ctx, kvEvents[1], true
+									default:
+										return ctx, kvEvents[len(kvEvents)-2], true
+									}
+								}
+
+								if e.Type() == kvevent.TypeResolved {
+									if shouldSendResolved.Load() {
+										// fmt.Println("sending resolved @", e.Resolved().Timestamp)
+										return ctx, e, true
+									}
+									fmt.Println("AMF: Not sending resolved")
+									return ctx, e, false
+								}
+
+								return ctx, e, true
+							},
+						}
+					},
+				},
+			}
+			if knobs.SpanConfig == nil {
+				knobs.SpanConfig = &spanconfig.TestingKnobs{}
+			}
+			scKnobs := knobs.SpanConfig.(*spanconfig.TestingKnobs)
+			scKnobs.JobOnCheckpointInterceptor = func(lastCheckpoint hlc.Timestamp) error {
+				// now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+				// t.Logf("reconciler checkpoint %s (%s)", lastCheckpoint, now.GoTime().Sub(lastCheckpoint.GoTime()))
+				lastReconcilerCheckpoint.Store(lastCheckpoint)
+				return nil
+			}
+			scKnobs.SQLWatcherCheckpointNoopsEveryDurationOverride = 1 * time.Second
+		},
+		settings: settings,
+	})
+
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `CREATE TABLE testDB.foo (a INT PRIMARY KEY)`)
+
+	printDBDescriptors := func() {
+		var descBytes []byte
+		rows := sqlDB.Query(t, `SELECT descriptor FROM system.descriptor ORDER BY id DESC`)
+		for rows.Next() {
+			require.NoError(t, rows.Scan(&descBytes))
+			var desc descpb.Descriptor
+			require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
+			if desc.GetDatabase() != nil && desc.GetDatabase().GetName() == "testdb" {
+				fmt.Println("------>> database descriptor", desc.String())
+			}
+		}
+	}
+	printDBDescriptorsAsOfSystemTime := func(asOf string) {
+		var descBytes []byte
+		query := fmt.Sprintf(`SELECT descriptor FROM system.descriptor AS OF SYSTEM TIME '%s' ORDER BY id DESC`, asOf)
+		fmt.Println("AMF: query", query)
+		rows := sqlDB.Query(t, query)
+		for rows.Next() {
+			require.NoError(t, rows.Scan(&descBytes))
+			var desc descpb.Descriptor
+			require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
+			if desc.GetDatabase() != nil && desc.GetDatabase().GetName() == "testdb" {
+				fmt.Println("------>> database descriptor", desc.String())
+			}
+		}
+	}
+	printDBDescriptors()
+
+	var jobID jobspb.JobID
+	// changefeed using cdc query
+	sqlDB.QueryRow(t, `CREATE CHANGEFEED INTO 'null://' AS SELECT * FROM testDB.foo`).Scan(&jobID)
+	waitForJobStatus(sqlDB, t, jobID, `running`)
+
+	// - Insert row 0 (to cache the event descriptor at time t0)
+	sqlDB.Exec(t, `INSERT INTO testDB.foo VALUES (1)`)
+
+	fmt.Println("AMF: Fine until here")
+
+	// store the cluster logical timestamp
+	var beforeDBDescriptorVersionTS string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeDBDescriptorVersionTS)
+	fmt.Println("beforeDBDescriptorVersionTS %s", beforeDBDescriptorVersionTS)
+	beforeDBDescriptorVersionHLC, err := hlc.ParseHLC(beforeDBDescriptorVersionTS)
+	require.NoError(t, err)
+	fmt.Println("beforeDBDescriptorVersionHLC", beforeDBDescriptorVersionHLC)
+	// and in as of system time
+	fmt.Println("AS OF SYSTEM TIME =", beforeDBDescriptorVersionHLC.AsOfSystemTime())
+
+	// - Change DB descriptor version (By granting permission to a user)
+	sqlDB.Exec(t, `CREATE USER testuser; GRANT CREATE ON DATABASE testDB TO testuser;`)
+
+	// store the cluster logical timestamp
+	// time.Sleep(1 * time.Second) // Apparently this is problematic?
+	// log
+	fmt.Println("This is where we get the new DB descriptor version")
+	printDBDescriptors()
+	// - Garbage collect the old descriptor version/advance pts
+	// TODO: Really make sure it happens
+	// sqlDB.Exec(t, `ALTER DATABASE d CONFIGURE ZONE USING gc.ttlseconds = 1`)
+
+	// sqlDB.Exec(t, `ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+
+	// Set GC TTL to a small value to make the tables GC'd. We need to set this
+	// *after* we set the PTS record so that we dont GC the tables before
+	// the PTS is applied/picked up.
+	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	sqlDB.Exec(t, `ALTER DATABASE testDB CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	sqlDB.Exec(t, `ALTER TABLE testDB.foo CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	fmt.Println("AMF: After ALTER TABLE testDB.foo CONFIGURE ZONE USING gc.ttlseconds = 1")
+	printDBDescriptors()
+
+	// make sure there's time for us to send the resolved events.
+	time.Sleep(5 * time.Second)
+
+	sqlDB.Exec(t, `INSERT INTO testDB.foo VALUES (2)`)
+	fmt.Println("inserted row 2")
+	sqlDB.Exec(t, `GRANT CREATE ON TABLE testDB.foo TO testuser`)
+	fmt.Println("granted create on table foo to testuser")
+
+	// The following code was shameless stolen from
+	// TestShowTenantFingerprintsProtectsTimestamp which almost
+	// surely copied it from the 2-3 other tests that have
+	// something similar.  We should put this in a helper. We have
+	// ForceTableGC, but in ad-hoc testing that appeared to bypass
+	// the PTS record making it useless for this test.
+	//
+	// TODO(ssd): Make a helper that does this.
+	refreshPTSReaderCache := func(asOf hlc.Timestamp, tableName, databaseName string) {
+		tableID, err := s.QueryTableID(ctx, username.RootUserName(), tableName, databaseName)
+		require.NoError(t, err)
+		tableKey := s.Codec().TablePrefix(uint32(tableID))
+		store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+		require.NoError(t, err)
+		var repl *kvserver.Replica
+		testutils.SucceedsSoon(t, func() error {
+			repl = store.LookupReplica(roachpb.RKey(tableKey))
+			if repl == nil {
+				return errors.New("could not find replica")
+			}
+			return nil
+		})
+		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
+		t.Logf("updating PTS reader cache to %s", asOf)
+		require.NoError(
+			t,
+			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+		)
+		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+	}
+	gcTestTableRange := func(tableName, databaseName string) {
+		row := sqlDB.QueryRow(t, fmt.Sprintf("SELECT range_id FROM [SHOW RANGES FROM TABLE %s.%s]", tableName, databaseName))
+		var rangeID int64
+		row.Scan(&rangeID)
+		refreshPTSReaderCache(s.Clock().Now(), tableName, databaseName)
+		t.Logf("enqueuing range %d (table %s.%s) for mvccGC", rangeID, tableName, databaseName)
+		sqlDB.Exec(t, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID)
+	}
+
+	// Sleep for enough time to pass the configured GC threshold (1 second).
+	time.Sleep(10 * time.Second)
+
+	// Wait for the spanconfigs to be reconciled.
+	now := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	t.Logf("waiting for spanconfigs to be reconciled")
+	testutils.SucceedsWithin(t, func() error {
+		lastCheckpoint := lastReconcilerCheckpoint.Load().(hlc.Timestamp)
+		if lastCheckpoint.Less(now) {
+			return errors.Errorf("last checkpoint %s is not less than now %s", lastCheckpoint, now)
+		}
+		t.Logf("last reconciler checkpoint ok at %s", lastCheckpoint)
+		return nil
+	}, 1*time.Minute)
+
+	t.Logf("GC'ing system tables")
+	gcTestTableRange("system", "descriptor")
+	gcTestTableRange("system", "zones")
+	gcTestTableRange("system", "comments")
+	gcTestTableRange("system", "role_members")
+	gcTestTableRange("system", "users")
+	gcTestTableRange("system", "descriptor")
+	gcTestTableRange("system", "descriptor")
+	time.Sleep(10 * time.Second)
+	// gcTestTableRange("testDB", "foo")
+
+	// printDBDescriptors()
+	fmt.Println("AMF I hope to god this fails to do the as of system time query on the descriptor table")
+	printDBDescriptorsAsOfSystemTime(beforeDBDescriptorVersionHLC.AsOfSystemTime())
+
+	sqlDB.Exec(t, `INSERT INTO testDB.foo VALUES (3)`)
+	fmt.Println("inserted row 3")
+	sqlDB.Exec(t, `INSERT INTO testDB.foo VALUES (4)`)
+	fmt.Println("inserted row 4")
+
+	var res string
+	sqlDB.QueryRow(t, `SELECT status FROM [SHOW CHANGEFEED JOBS]`).Scan(&res)
+	// fmt.Println("show changefeed jobs status", res)
+
+	if res != "running" {
+		t.Fatal("changefeed is not running")
+	}
+
+	var errStr string
+	sqlDB.QueryRow(t, `SELECT error FROM [SHOW CHANGEFEED JOBS]`).Scan(&errStr)
+	// fmt.Println("show changefeed jobs error", errStr)
+	// // do all at once so that it's more likely to be out of order
+	// sqlDB.Exec(t, `INSERT INTO foo VALUES (2); GRANT CREATE ON TABLE foo TO testuser; INSERT INTO foo VALUES (3)`)
+	time.Sleep(2 * time.Second) // for the second event to be emitted by cdc
+}
+
+// breadcrumb
+// This test we're about to write should fail on an as of system time query on the descriptor table
+// because the descriptor table is GC'd.
+func TestProtectedTimestampGarbageCollectionWorks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	spanconfigjob.ReconciliationJobCheckpointInterval.Override(ctx, &settings.SV, 1*time.Second)
+
+	_, db, stopServer := startTestFullServer(t, feedTestOptions{
+		knobsFn: func(knobs *base.TestingKnobs) {
+			knobs.DistSQL = &execinfra.TestingKnobs{
+				Changefeed: &TestingKnobs{
+					MakeKVFeedToAggregatorBufferKnobs: func() kvevent.BlockingBufferTestingKnobs {
+						return kvevent.BlockingBufferTestingKnobs{
+							BeforeAddSpecial: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event, bool) {
+								return ctx, e, true
+							},
+						}
+					},
+				},
+			}
+		},
+		settings: settings,
+	})
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE testDB`)
+	sqlDB.Exec(t, `CREATE TABLE testDB.foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO testDB.foo VALUES (1)`)
+
+	// Set GC TTL to a small value to make the tables GC'd.
+	sqlDB.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	sqlDB.Exec(t, `ALTER DATABASE d CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	sqlDB.Exec(t, `ALTER DATABASE testDB CONFIGURE ZONE USING gc.ttlseconds = 1`)
+	sqlDB.Exec(t, `ALTER TABLE testDB.foo CONFIGURE ZONE USING gc.ttlseconds = 1`)
+
+	// Get the cluster logical timestamp
+	var beforeDBDescriptorVersionTS string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeDBDescriptorVersionTS)
+	beforeDBDescriptorVersionHLC, err := hlc.ParseHLC(beforeDBDescriptorVersionTS)
+	require.NoError(t, err)
+
+	sqlDB.Exec(t, `CREATE USER testuser`)
+	sqlDB.Exec(t, `GRANT CREATE ON DATABASE testDB TO testuser`)
+	sqlDB.Exec(t, `GRANT CREATE ON TABLE testDB.foo TO testuser`)
+
+	// Wait for the spanconfigs to be reconciled.
+	time.Sleep(10 * time.Second)
+
+	// Run the as of system time query on the descriptor table
+	var descBytes []byte
+	rows := sqlDB.Query(t, fmt.Sprintf(`SELECT descriptor FROM system.descriptor AS OF SYSTEM TIME '%s' ORDER BY id DESC`, beforeDBDescriptorVersionHLC.AsOfSystemTime()))
+	for rows.Next() {
+		require.NoError(t, rows.Scan(&descBytes))
+		var desc descpb.Descriptor
+		require.NoError(t, protoutil.Unmarshal(descBytes, &desc))
+	}
+}
+
+/*
+Test order:
+- Create DB with table
+- Create changefeed
+- Insert row 1 (to cache the event descriptor at time t1)
+- Change DB descriptor version (By granting permission to a user)
+- Garbage collect the old descriptor version/advance pts
+
+- Insert row 2
+- TableDescriptor Change (By granting permission to a user)
+- Insert row 3
+
+- KV events out of order, 2 then 1
+- KV event for 2 will cause a replan,
+   which will use the cached timestamp (t1) for that descriptor versionand
+   will replan trying to get the db descriptor (at that same timestamp t1)
+   which will fail because the descriptor version at t0 was garbage collected
+*/
+
+// One more try with the testFn thing
+func TestIsThisIt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		spanconfigjob.ReconciliationJobCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1*time.Second,
+		)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		shouldSendResolved := atomic.Bool{}
+		shouldSendResolved.Store(true)
+		kvEvents := []kvevent.Event{}
+		hasProcessedEvents := atomic.Bool{}
+		knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+			return kvevent.BlockingBufferTestingKnobs{
+				BeforeAddSpecial: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event, bool) {
+					if e.Type() == kvevent.TypeKV {
+						kvEvents = append(kvEvents, e)
+						switch len(kvEvents) {
+						case 1:
+							return ctx, kvEvents[0], true
+						case 2:
+							fmt.Println("GCing cheekily @ timestamp", e.KV().Value.Timestamp.Prev())
+							forceTableGCAtTimestamp(t, s.SystemServer, sqlDB, "system", "descriptor", e.KV().Value.Timestamp.Prev())
+							time.Sleep(2 * time.Second) // for the gc to take effect
+							return ctx, kvEvents[0], false
+						case 3:
+							shouldSendResolved.Store(false)
+							return ctx, kvEvents[2], true
+						case 4:
+							// this is gonna be the earlier event that messes us up,
+							// give leases 10 seconds to expire
+							// time.Sleep(10 * time.Second)
+							return ctx, kvEvents[1], true
+						default:
+							hasProcessedEvents.Store(true)
+							return ctx, kvEvents[len(kvEvents)-2], true
+						}
+					}
+
+					if e.Type() == kvevent.TypeResolved {
+						// if shouldSendResolved.Load() {
+						// 	// Garbage collect the descriptor table at this ts
+						// 	// fmt.Println("GCing @ timestamp", e.Resolved().Timestamp)
+						// 	// forceTableGCAtTimestamp(t, s.SystemServer, sqlDB, "system", "descriptor", e.Resolved().Timestamp)
+						// 	return ctx, e, true
+						// }
+						return ctx, e, false
+					}
+
+					return ctx, e, true
+				},
+			}
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT * FROM foo`)
+		defer closeFeed(t, foo)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		time.Sleep(1 * time.Second)
+
+		// get timestamp
+		var beforeDBDescriptorVersionTS string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeDBDescriptorVersionTS)
+		beforeDBDescriptorVersionHLC, err := hlc.ParseHLC(beforeDBDescriptorVersionTS)
+		require.NoError(t, err)
+
+		// change the descriptor version of the db by granting permission to a user
+		sqlDB.Exec(t, `CREATE USER testuser`)
+		sqlDB.Exec(t, `GRANT CREATE ON DATABASE d TO testuser`)
+
+		// GC
+		// We'll do it now since we can probably assume event one got processed by now.
+		// becayse we slept and all.
+		forceTableGCAtTimestamp(t, s.SystemServer, sqlDB, "system", "descriptor", beforeDBDescriptorVersionHLC)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		sqlDB.Exec(t, `GRANT CREATE ON TABLE foo TO testuser`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5)`)
+
+		// wait for the events to be processed
+		testutils.SucceedsSoon(t, func() error {
+			if !hasProcessedEvents.Load() {
+				return errors.New("events not processed")
+			}
+			return nil
+		})
+
+		// check changefeed status
+		var res string
+		sqlDB.QueryRow(t, `SELECT status FROM [SHOW CHANGEFEED JOBS]`).Scan(&res)
+		fmt.Println("changefeed status", res)
+		if res != "running" {
+			var errorStr string
+			sqlDB.QueryRow(t, `SELECT error FROM [SHOW CHANGEFEED JOBS]`).Scan(&errorStr)
+			fmt.Println("changefeed err", errorStr)
+			t.Fatal("changefeed is not running")
+		}
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)

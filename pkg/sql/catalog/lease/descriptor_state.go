@@ -99,6 +99,8 @@ func (t *descriptorState) findForTimestamp(
 		return nil, false, errRenewLease
 	}
 
+	// return nil, false, errReadOlderVersion
+
 	// Walk back the versions to find one that is valid for the timestamp.
 	for i := len(t.mu.active.data) - 1; i >= 0; i-- {
 		// Check to see if the ModificationTime is valid.

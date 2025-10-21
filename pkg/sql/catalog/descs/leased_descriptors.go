@@ -192,8 +192,13 @@ func (ld *leasedDescriptors) getByName(
 		return desc, false, nil
 	}
 
+	// breadcrumb: the timestamp comes from the transaction.
 	readTimestamp := txn.ReadTimestamp()
+	// fmt.Println("trying to read with read timestamp", readTimestamp)
 	ldesc, err := ld.lm.AcquireByName(ctx, readTimestamp, parentID, parentSchemaID, name)
+	// if name == "d" {
+	// 	fmt.Println("acquired descriptor by name", ldesc, "name", name, "readTimestamp", readTimestamp)
+	// }
 	const setTxnDeadline = true
 	return ld.getResult(ctx, txn, setTxnDeadline, ldesc, err)
 }

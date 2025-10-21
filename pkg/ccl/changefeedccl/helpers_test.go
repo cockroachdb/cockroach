@@ -786,6 +786,7 @@ func expectErrCreatingFeed(
 
 func closeFeed(t testing.TB, f cdctest.TestFeed) {
 	if err := f.Close(); err != nil {
+		fmt.Println("error closing feed", err)
 		t.Fatal(err)
 	}
 }
@@ -1211,6 +1212,19 @@ func forceTableGC(
 ) {
 	t.Helper()
 	if err := tsi.ForceTableGC(context.Background(), database, table, tsi.Clock().Now()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func forceTableGCAtTimestamp(
+	t testing.TB,
+	tsi serverutils.TestServerInterface,
+	sqlDB *sqlutils.SQLRunner,
+	database, table string,
+	timestamp hlc.Timestamp,
+) {
+	t.Helper()
+	if err := tsi.ForceTableGC(context.Background(), database, table, timestamp); err != nil {
 		t.Fatal(err)
 	}
 }

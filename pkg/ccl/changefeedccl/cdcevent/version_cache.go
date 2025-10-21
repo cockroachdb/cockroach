@@ -16,7 +16,7 @@ var DefaultCacheConfig = cache.Config{
 	// TODO: If we find ourselves thrashing here in changefeeds on many tables,
 	// we can improve performance by eagerly evicting versions using Resolved notifications.
 	// A old Version with a timestamp entirely before a notification can be safely evicted.
-	ShouldEvict: func(size int, _ interface{}, _ interface{}) bool { return size > 1024 },
+	ShouldEvict: func(size int, _ interface{}, _ interface{}) bool { return size > 1024*1024 },
 }
 
 // CacheKey is the key for the event caches.
