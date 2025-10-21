@@ -5,24 +5,29 @@
 
 package hintpb
 
-import "github.com/cockroachdb/cockroach/pkg/util/protoutil"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/errors"
+)
 
-type StatementHint interface {
-	protoutil.Message
-}
-
-// NewStatementHint converts the raw bytes from system.statement_hints into a
+// FromBytes converts the raw bytes from system.statement_hints into a
 // StatementHintUnion object.
-func NewStatementHint(bytes []byte) (*StatementHintUnion, error) {
-	res := &StatementHintUnion{}
-	if err := protoutil.Unmarshal(bytes, res); err != nil {
-		return nil, err
+func FromBytes(bytes []byte) (StatementHintUnion, error) {
+	res := StatementHintUnion{}
+	if err := protoutil.Unmarshal(bytes, &res); err != nil {
+		return StatementHintUnion{}, err
+	}
+	if res.GetValue() == nil {
+		return StatementHintUnion{}, errors.New("invalid hint bytes: no value set")
 	}
 	return res, nil
 }
 
 // ToBytes converts the StatementHintUnion to a raw bytes representation that
 // can be inserted into the system.statement_hints table.
-func (hint *StatementHintUnion) ToBytes() ([]byte, error) {
-	return protoutil.Marshal(hint)
+func ToBytes(hint StatementHintUnion) ([]byte, error) {
+	if hint.GetValue() == nil {
+		return nil, errors.New("cannot convert empty hint to bytes")
+	}
+	return protoutil.Marshal(&hint)
 }
