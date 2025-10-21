@@ -123,6 +123,8 @@ type TestingKnobs struct {
 	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
 	// to pass to the constructor of the kv feed to change aggregator buffer.
 	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs
+
+	TablesetChangingCallback func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
