@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -60,9 +61,27 @@ func (m *ChangeAggregatorSpec) User() username.SQLUsername {
 	return m.UserProto.Decode()
 }
 
+// GetSchemaTS returns the schema timestamp to use. If SchemaTS is nil or empty,
+// it returns a pointer to Feed.StatementTime; otherwise it returns SchemaTS.
+func (m *ChangeAggregatorSpec) GetSchemaTS() *hlc.Timestamp {
+	if m.SchemaTS == nil || m.SchemaTS.IsEmpty() {
+		return &m.Feed.StatementTime
+	}
+	return m.SchemaTS
+}
+
 // User accesses the user field.
 func (m *ChangeFrontierSpec) User() username.SQLUsername {
 	return m.UserProto.Decode()
+}
+
+// GetSchemaTS returns the schema timestamp to use. If SchemaTS is nil or empty,
+// it returns a pointer to Feed.StatementTime; otherwise it returns SchemaTS.
+func (m *ChangeFrontierSpec) GetSchemaTS() *hlc.Timestamp {
+	if m.SchemaTS == nil || m.SchemaTS.IsEmpty() {
+		return &m.Feed.StatementTime
+	}
+	return m.SchemaTS
 }
 
 func (m *GenerativeSplitAndScatterSpec) User() username.SQLUsername {

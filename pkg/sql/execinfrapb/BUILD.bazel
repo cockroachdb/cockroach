@@ -35,6 +35,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/encoding",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/optional",
         "//pkg/util/protoutil",
