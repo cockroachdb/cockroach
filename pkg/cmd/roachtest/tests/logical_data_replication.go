@@ -90,7 +90,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 					spec.VolumeSize(100),
 				},
 			},
-			ldrConfig: ldrConfig{mode: ModeValidated},
+			ldrConfig: ldrConfig{},
 			run:       TestLDRBasic,
 		},
 		{
