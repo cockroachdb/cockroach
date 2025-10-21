@@ -283,12 +283,9 @@ func TestTenantProcessDebugging(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode)
 			require.Contains(t, string(body), "tenant does not have capability to debug the running process")
 
-			_, err = db.Exec(`ALTER TENANT processdebug GRANT CAPABILITY can_debug_process=true`)
-			require.NoError(t, err)
-
-			serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilitiespb.ID]string{
-				tenantcapabilitiespb.CanDebugProcess: "true",
-			}, "")
+			require.NoError(t, s.GrantTenantCapabilities(
+				ctx, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanDebugProcess: "true"}))
 		}
 		resp, err := httpClient.Get(url.String())
 		require.NoError(t, err)
@@ -326,12 +323,9 @@ func TestTenantProcessDebugging(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode)
 			require.Contains(t, string(body), "tenant does not have capability to debug the running process")
 
-			_, err = db.Exec(`ALTER TENANT processdebug GRANT CAPABILITY can_debug_process=true`)
-			require.NoError(t, err)
-
-			serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilitiespb.ID]string{
-				tenantcapabilitiespb.CanDebugProcess: "true",
-			}, "")
+			require.NoError(t, s.GrantTenantCapabilities(
+				ctx, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanDebugProcess: "true"}))
 		}
 		resp, err := httpClient.Get(url.String())
 		require.NoError(t, err)
