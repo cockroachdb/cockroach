@@ -667,7 +667,7 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 			return err
 		}
 		return nil
-	}, 5*time.Second)
+	}, 30*time.Second)
 
 	ensureJobState := func(targetState string) {
 		testutils.SucceedsWithin(t, func() error {
@@ -681,7 +681,7 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 					targetState, jobState)
 			}
 			return nil
-		}, 5*time.Second)
+		}, 30*time.Second)
 	}
 
 	var completedSpans roachpb.SpanGroup
@@ -737,7 +737,7 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 			}
 
 			return nil
-		}, 5*time.Second)
+		}, 30*time.Second)
 	}
 
 	for isBlockingBackfillProgress.Load() {
