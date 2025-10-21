@@ -7,7 +7,6 @@ package sql
 
 import (
 	"context"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -502,6 +502,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 		step = 1
 	}
 	expirationTime := kvserverbase.SplitByLoadMergeDelay.Get(execCfg.SV()).Nanoseconds()
+	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
 		// returned.
@@ -513,7 +514,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 
 		// Jitter the expiration time by 20% up or down from the default.
 		maxJitter := expirationTime / 5
-		jitter := rand.Int63n(maxJitter*2) - maxJitter
+		jitter := rng.Int63n(maxJitter*2) - maxJitter
 		expirationTime += jitter
 
 		log.Dev.Infof(ctx, "truncate sending split request for key %s", sp)

@@ -111,6 +111,9 @@ var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
 func (s storage) jitteredLeaseDuration() time.Duration {
 	leaseDuration := LeaseDuration.Get(&s.settings.SV)
 	jitterFraction := LeaseJitterFraction.Get(&s.settings.SV)
+	// TODO(yuzefovich): it would probably be worth replacing this usage of
+	// global rand with rng tied to the 'storage' object. It's not clear whether
+	// we need concurrency safety or not.
 	return time.Duration(float64(leaseDuration) * (1 - jitterFraction +
 		2*jitterFraction*rand.Float64()))
 }

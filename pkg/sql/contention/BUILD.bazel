@@ -29,6 +29,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/metric",
+        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
