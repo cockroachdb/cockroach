@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -1477,6 +1478,7 @@ func (i *intentInterleavingIter) assertInvariants() error {
 // changes to unsafe keys retrieved from MVCCIterators.
 type unsafeMVCCIterator struct {
 	MVCCIterator
+	rng           *rand.Rand
 	keyBuf        []byte
 	rawKeyBuf     []byte
 	rawMVCCKeyBuf []byte
@@ -1485,7 +1487,8 @@ type unsafeMVCCIterator struct {
 // gcassert:inline
 func maybeWrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
 	if util.RaceEnabled {
-		return &unsafeMVCCIterator{MVCCIterator: iter}
+		rng, _ := randutil.NewPseudoRand()
+		return &unsafeMVCCIterator{MVCCIterator: iter, rng: rng}
 	}
 	return iter
 }
@@ -1547,7 +1550,7 @@ func (i *unsafeMVCCIterator) UnsafeRawMVCCKey() []byte {
 }
 
 func (i *unsafeMVCCIterator) mangleBufs() {
-	if rand.Intn(2) == 0 {
+	if i.rng.Intn(2) == 0 {
 		for _, b := range [3][]byte{i.keyBuf, i.rawKeyBuf, i.rawMVCCKeyBuf} {
 			for i := range b {
 				b[i] = 0
