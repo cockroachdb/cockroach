@@ -35,6 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type noopRaftSchedulerForDequeuePacer struct{}
+
+func (n noopRaftSchedulerForDequeuePacer) EnqueueRaftRequest(id roachpb.RangeID) {}
+
 func TestRaftReceiveQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -45,7 +49,8 @@ func TestRaftReceiveQueue(t *testing.T) {
 		CurCount: g,
 		Settings: st,
 	})
-	qs := raftReceiveQueues{mon: m}
+	qs := raftReceiveQueues{mon: m, dequeuePacer: newStoreRaftDequeuePacer(
+		noopEngineForDequeuePacer{}, noopRaftSchedulerForDequeuePacer{}, st)}
 
 	const r1 = roachpb.RangeID(1)
 	const r5 = roachpb.RangeID(5)
@@ -77,7 +82,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 		require.True(t, appended)
 		require.True(t, shouldQ)
 		require.Equal(t, n1, size)
-		require.Equal(t, n1, q1.acc.Used())
+		require.Equal(t, n1, q1.memoryUsedForTesting())
 		// NB: the monitor allocates in chunks so it will have allocated more than n1.
 		// We don't check these going forward, as we've now verified that they're hooked up.
 		require.GreaterOrEqual(t, m.AllocBytes(), n1)
@@ -89,7 +94,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 		require.True(t, ok)
 		require.Len(t, sl, 1)
 		require.Equal(t, e1, sl[0].req)
-		require.Zero(t, q1.acc.Used())
+		require.Zero(t, q1.memoryUsedForTesting())
 	}
 
 	// Append a first element (again).
@@ -97,7 +102,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 		shouldQ, _, appended := q1.Append(e1, nil /* stream */)
 		require.True(t, shouldQ)
 		require.True(t, appended)
-		require.Equal(t, n1, q1.acc.Used())
+		require.Equal(t, n1, q1.memoryUsedForTesting())
 	}
 
 	// Add a second element.
@@ -105,21 +110,21 @@ func TestRaftReceiveQueue(t *testing.T) {
 		shouldQ, _, appended := q1.Append(e1, nil /* stream */)
 		require.False(t, shouldQ) // not first entry in queue
 		require.True(t, appended)
-		require.Equal(t, 2*n1, q1.acc.Used())
+		require.Equal(t, 2*n1, q1.memoryUsedForTesting())
 	}
 
 	// Now interleave creation of a second queue.
 	q5, loaded := qs.LoadOrCreate(r5, 1 /* maxLen */)
 	{
 		require.False(t, loaded)
-		require.Zero(t, q5.acc.Used())
+		require.Zero(t, q5.memoryUsedForTesting())
 		shouldQ, _, appended := q5.Append(e5, nil /* stream */)
 		require.True(t, appended)
 		require.True(t, shouldQ)
 
 		// No accidental misattribution of bytes between the queues.
-		require.Equal(t, 2*n1, q1.acc.Used())
-		require.Equal(t, n5, q5.acc.Used())
+		require.Equal(t, 2*n1, q1.memoryUsedForTesting())
+		require.Equal(t, n5, q5.memoryUsedForTesting())
 	}
 
 	// Delete the queue. Post deletion, even if someone still has a handle
@@ -130,8 +135,8 @@ func TestRaftReceiveQueue(t *testing.T) {
 		shouldQ, _, appended := q1.Append(e1, nil /* stream */)
 		require.False(t, appended)
 		require.False(t, shouldQ)
-		require.Zero(t, q1.acc.Used())
-		require.Equal(t, n5, q5.acc.Used()) // we didn't touch q5
+		require.Zero(t, q1.memoryUsedForTesting())
+		require.Equal(t, n5, q5.memoryUsedForTesting()) // we didn't touch q5
 	}
 }
 
@@ -238,7 +243,8 @@ func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
 		CurCount: g,
 		Settings: st,
 	})
-	qs := raftReceiveQueues{mon: m}
+	qs := raftReceiveQueues{mon: m, dequeuePacer: newStoreRaftDequeuePacer(
+		noopEngineForDequeuePacer{}, noopRaftSchedulerForDequeuePacer{}, st)}
 	// checkingMu is locked in write mode when checking that the values of
 	// enforceMaxLen across all the queues is the expected value.
 	var checkingMu syncutil.RWMutex
@@ -301,7 +307,8 @@ func TestRaftReceiveQueuesEnforceMaxLen(t *testing.T) {
 		CurCount: g,
 		Settings: st,
 	})
-	qs := raftReceiveQueues{mon: m}
+	qs := raftReceiveQueues{mon: m, dequeuePacer: newStoreRaftDequeuePacer(
+		noopEngineForDequeuePacer{}, noopRaftSchedulerForDequeuePacer{}, st)}
 	qs.SetEnforceMaxLen(false)
 	q, _ := qs.LoadOrCreate(1, 2)
 	var s RaftMessageResponseStream
