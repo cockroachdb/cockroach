@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
@@ -532,6 +533,7 @@ type feedArgs struct {
 	sinkURIOverride string
 	cdcFeatureFlags
 	kafkaArgs kafkaFeedArgs
+	cursor    string
 }
 
 // kafkaFeedArgs are args that are specific to kafkaSink changefeeds.
@@ -1931,7 +1933,7 @@ func configureDBForMultiTablePTSBenchmark(db *gosql.DB) error {
 
 func getDiagramProcessors(ctx context.Context, db *gosql.DB) ([]any, error) {
 	var diagramURL string
-	diagramQuery := `SELECT value 
+	diagramQuery := `SELECT value
 	FROM system.job_info ji
 	INNER JOIN system.jobs j ON ji.job_id = j.id
 	WHERE j.job_type = 'CHANGEFEED' AND ji.info_key LIKE '~dsp-diag-url-%'`
@@ -2059,9 +2061,9 @@ func registerCDC(r registry.Registry) {
 			ct.runTPCCWorkload(tpccArgs{warehouses: 20})
 
 			var err error
-			_, err = ct.DB().Exec(`ALTER DATABASE tpcc 
-CONFIGURE ZONE USING 
-	constraints = '{+region=us-west1: 1, +region=us-east1: 1}', 
+			_, err = ct.DB().Exec(`ALTER DATABASE tpcc
+CONFIGURE ZONE USING
+	constraints = '{+region=us-west1: 1, +region=us-east1: 1}',
 	lease_preferences = '[[+region=us-west1]]', num_replicas = 3`)
 			require.NoError(t, err)
 
@@ -3227,6 +3229,102 @@ CONFIGURE ZONE USING
 			})
 		}
 	}
+
+	r.Add(registry.TestSpec{
+		Name:             "cdc/repro-gc-issue",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			stopWorkload := make(chan struct{})
+
+			db := sqlutils.MakeSQLRunner(ct.DB())
+			db.Exec(t, `select crdb_internal.set_vmodule('event_processing=3')`)
+			db.Exec(t, `SET CLUSTER SETTING changefeed.node_throttle_config = '{"MessageRate": 100}'`)
+
+			db.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			db.Exec(t, `ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1`)
+			db.Exec(t, `CREATE USER testuser`)
+			db.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY, data STRING)`)
+
+			time.Sleep(5 * time.Second)
+			var tsStr string
+			db.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsStr)
+			ts, err := hlc.ParseHLC(tsStr)
+			if err != nil {
+				t.Fatalf("failed to parse timestamp: %v", err)
+			}
+			t.L().Printf("initial timestamp: %s", ts)
+
+			db.Exec(t, `INSERT INTO t (id, data) select g, 'data' || g::text from generate_series(1, 100000) g RETURNING cluster_logical_timestamp()`)
+			db.Exec(t, `ALTER TABLE t SPLIT AT (SELECT * FROM generate_series(1, 100000, 100))`)
+
+			// do permissions changes forever
+			ct.workloadWg.Add(1)
+			ct.mon.Go(func(ctx context.Context) error {
+				defer ct.workloadWg.Done()
+				for i := 0; ; i++ {
+					select {
+					case <-stopWorkload:
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					default:
+						time.Sleep(100 * time.Millisecond)
+					}
+					if i%2 == 0 {
+						db.Exec(t, `GRANT SELECT ON TABLE t TO testuser`)
+						db.Exec(t, `GRANT CREATE ON DATABASE defaultdb TO testuser`)
+					} else {
+						db.Exec(t, `REVOKE SELECT ON TABLE t FROM testuser`)
+						db.Exec(t, `REVOKE CREATE ON DATABASE defaultdb FROM testuser`)
+					}
+					if i%10 == 0 {
+						t.L().Printf("did 10 permissions changes")
+					}
+				}
+			})
+
+			ct.workloadWg.Add(1)
+			ct.mon.Go(func(ctx context.Context) error {
+				defer ct.workloadWg.Done()
+				for i := 0; ; i++ {
+					select {
+					case <-stopWorkload:
+						return nil
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(1 * time.Second):
+					}
+					db.Exec(t, `update t set data = data || 'updated'`)
+				}
+			})
+
+			// TODO: there are no catchup ranges. something's not right here..
+
+			// try this for 15 minutes
+			for start := timeutil.Now(); start.Add(15*time.Minute).After(timeutil.Now()) && ctx.Err() == nil; {
+				t.L().Printf("running feed")
+				endTime := timeutil.Now().Add(1 * time.Minute).UnixNano()
+
+				var jobID int64
+				db.QueryRow(t, `CREATE CHANGEFEED INTO 'null://' WITH initial_scan='no', updated, resolved, end_time=$1, cursor=$2, metrics_label=$3 AS SELECT * FROM t`,
+					endTime, ts.Prev().AsOfSystemTime(), fmt.Sprintf("'feed_%s'", timeutil.Now().Format(time.TimeOnly))).Scan(&jobID)
+
+				db.Exec(t, `SHOW JOB WHEN COMPLETE $1`, jobID)
+			}
+
+			close(stopWorkload)
+			ct.waitForWorkload()
+		},
+	})
+
 }
 
 const (
