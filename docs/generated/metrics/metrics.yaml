@@ -8953,9 +8953,25 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.bytes_read.count
+      exported_name: sql_statements_bytes_read_count
+      description: Number of bytes read by SQL statements
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.bytes_read.count.internal
+      exported_name: sql_statements_bytes_read_count_internal
+      description: Number of bytes read by SQL statements (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.statements.rows_read.count
       exported_name: sql_statements_rows_read_count
-      description: Number of rows read by SQL statements from primary and secondary indexes
+      description: Number of rows read by SQL statements
       y_axis_label: SQL Statements
       type: COUNTER
       unit: COUNT
@@ -8963,7 +8979,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.statements.rows_read.count.internal
       exported_name: sql_statements_rows_read_count_internal
-      description: Number of rows read by SQL statements from primary and secondary indexes (internal queries)
+      description: Number of rows read by SQL statements (internal queries)
       y_axis_label: SQL Internal Statements
       type: COUNTER
       unit: COUNT
