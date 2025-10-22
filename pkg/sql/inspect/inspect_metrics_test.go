@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,6 +76,10 @@ func TestInspectMetrics(t *testing.T) {
 	_, err = db.Exec("INSPECT TABLE db.t")
 	require.Error(t, err, "INSPECT should fail when corruption is detected")
 	require.Contains(t, err.Error(), "INSPECT found inconsistencies")
+	var pqErr *pq.Error
+	require.True(t, errors.As(err, &pqErr), "expected pq.Error, got %T", err)
+	require.NotEmpty(t, pqErr.Hint, "expected error to have a hint")
+	require.Regexp(t, "SHOW INSPECT ERRORS FOR JOB [0-9]+ WITH DETAILS", pqErr.Hint)
 	require.Equal(t, initialRuns+2, metrics.Runs.Count(),
 		"Runs counter should increment for each job execution")
 	require.Equal(t, initialRunsWithIssues+1, metrics.RunsWithIssues.Count(),

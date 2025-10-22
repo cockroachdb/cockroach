@@ -26,10 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
-const expectedInspectFoundInconsistencies = "INSPECT found inconsistencies"
+const (
+	expectedInspectFoundInconsistencies = "INSPECT found inconsistencies"
+	expectedInspectInternalErrors       = "INSPECT encountered internal errors"
+)
 
 // requireCheckCountsMatch verifies that the job's total check count equals its completed check count.
 // This is used to verify that progress tracking correctly counted all checks.
@@ -231,7 +235,7 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 			expectedIssues: []inspectIssue{
 				{ErrorType: "internal_error"},
 			},
-			expectedErrRegex: expectedInspectFoundInconsistencies,
+			expectedErrRegex: expectedInspectInternalErrors,
 			expectedInternalErrorPatterns: []map[string]string{
 				{
 					"error_message": "error decoding.*float64",
@@ -465,6 +469,10 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 
 			require.Error(t, err)
 			require.Regexp(t, tc.expectedErrRegex, err.Error())
+			var pqErr *pq.Error
+			require.True(t, errors.As(err, &pqErr), "expected pq.Error, got %T", err)
+			require.NotEmpty(t, pqErr.Hint, "expected error to have a hint")
+			require.Regexp(t, "SHOW INSPECT ERRORS FOR JOB [0-9]+ WITH DETAILS", pqErr.Hint)
 
 			numExpected := len(tc.expectedIssues)
 			numFound := issueLogger.numIssuesFound()

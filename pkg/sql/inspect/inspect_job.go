@@ -105,8 +105,8 @@ func (c *inspectResumer) OnFailOrCancel(
 	execCfg := jobExecCtx.ExecCfg()
 	c.maybeCleanupProtectedTimestamp(ctx, execCfg)
 
-	// Record RunsWithIssues metric if the job failed due to finding inconsistencies.
-	if jobErr != nil && errors.Is(jobErr, errInspectFoundInconsistencies) {
+	// Record RunsWithIssues metric if the job failed due to finding issues (including internal errors).
+	if errors.Is(jobErr, errInspectFoundInconsistencies) || errors.Is(jobErr, errInspectInternalErrors) {
 		execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics).RunsWithIssues.Inc(1)
 	}
 	return nil
