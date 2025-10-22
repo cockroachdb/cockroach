@@ -15,6 +15,10 @@ WHERE job_type = 'INSPECT'
 ORDER BY created DESC
 LIMIT 1
 
+# Make job adoption faster. This is needed to speed up DETACHED jobs.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms';
+
 statement ok
 CREATE TABLE foo (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 
@@ -27,6 +31,9 @@ INSPECT DATABASE test;
 statement ok
 SET enable_inspect_command = true;
 
+subtest transaction_behavior
+
+# Test that regular INSPECT cannot run within a transaction.
 statement ok
 BEGIN;
 
@@ -36,7 +43,77 @@ INSPECT TABLE foo;
 statement ok
 ROLLBACK;
 
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED
+
+# Wait for the detached job to eventually succeed.
+query T retry
+SELECT status FROM last_inspect_job
+----
+succeeded
+
+# Test that DETACHED INSPECT can run inside a transaction.
 statement ok
+BEGIN;
+
+statement notice NOTICE: INSPECT job [0-9]+ queued; will start after the current transaction commits
+INSPECT TABLE foo WITH OPTIONS DETACHED
+
+# Verify the job isn't committed yet. It will stay in the running stage because we haven't committed it yet.
+query T
+SELECT status FROM last_inspect_job
+----
+running
+
+statement ok
+COMMIT;
+
+# Wait for the new job to eventually succeed.
+query T retry
+SELECT status FROM last_inspect_job
+----
+succeeded
+
+subtest end
+
+subtest inspect_options
+
+# Test DETACHED option validation.
+
+# Failure if both DETACHED and DETACHED = FALSE are specified.
+statement error pq: conflicting INSPECT options: DETACHED specified with different values
+INSPECT TABLE foo WITH OPTIONS DETACHED, DETACHED = FALSE
+
+# DETACHED = TRUE is the same as DETACHED.
+# Both should check all indexes (2 total: idx_c1 and idx_c2).
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED = TRUE
+
+query TI retry
+SELECT * FROM last_inspect_job
+----
+succeeded  2
+
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED
+
+query TI retry
+SELECT * FROM last_inspect_job
+----
+succeeded  2
+
+# DETACHED = TRUE with a specific index (verify the number of checks).
+statement notice NOTICE: INSPECT job [0-9]+ running in the background
+INSPECT TABLE foo WITH OPTIONS DETACHED = TRUE, INDEX (idx_c1)
+
+query TI retry
+SELECT * FROM last_inspect_job
+----
+succeeded  1
+
+# Test regular (non-detached) inspect operations.
+
+statement notice NOTICE: waiting for INSPECT job to complete: [0-9]+\nIf the statement is canceled, the job will continue in the background.
 INSPECT TABLE foo;
 
 query TI
@@ -122,6 +199,8 @@ query TI
 SELECT * FROM last_inspect_job;
 ----
 succeeded  3
+
+subtest end
 
 subtest permissions
 

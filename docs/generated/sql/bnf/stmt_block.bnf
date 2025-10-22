@@ -3643,6 +3643,9 @@ only_signed_fconst ::=
 inspect_option ::=
 	'INDEX' 'ALL'
 	| 'INDEX' '(' table_index_name_list ')'
+	| 'DETACHED'
+	| 'DETACHED' '=' 'TRUE'
+	| 'DETACHED' '=' 'FALSE'
 
 virtual_cluster_name ::=
 	'VIRTUAL_CLUSTER_NAME'

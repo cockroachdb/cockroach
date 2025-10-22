@@ -32,6 +32,14 @@ INSPECT DATABASE x AS OF SYSTEM TIME _ WITH OPTIONS INDEX (index_name_1, index_n
 INSPECT DATABASE _ AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (_, _) -- identifiers removed
 
 parse
+INSPECT DATABASE x WITH OPTIONS DETACHED, INDEX (index_name)
+----
+INSPECT DATABASE x WITH OPTIONS DETACHED, INDEX (index_name)
+INSPECT DATABASE x WITH OPTIONS DETACHED, INDEX (index_name) -- fully parenthesized
+INSPECT DATABASE x WITH OPTIONS DETACHED, INDEX (index_name) -- literals removed
+INSPECT DATABASE _ WITH OPTIONS DETACHED, INDEX (_) -- identifiers removed
+
+parse
 INSPECT TABLE x WITH OPTIONS INDEX (index_name)
 ----
 INSPECT TABLE x WITH OPTIONS INDEX (index_name)
@@ -78,6 +86,14 @@ INSPECT TABLE x WITH OPTIONS INDEX (index_name_1, index_name_2)
 INSPECT TABLE x WITH OPTIONS INDEX (index_name_1, index_name_2) -- fully parenthesized
 INSPECT TABLE x WITH OPTIONS INDEX (index_name_1, index_name_2) -- literals removed
 INSPECT TABLE _ WITH OPTIONS INDEX (_, _) -- identifiers removed
+
+parse
+INSPECT TABLE x WITH OPTIONS DETACHED
+----
+INSPECT TABLE x WITH OPTIONS DETACHED
+INSPECT TABLE x WITH OPTIONS DETACHED -- fully parenthesized
+INSPECT TABLE x WITH OPTIONS DETACHED -- literals removed
+INSPECT TABLE _ WITH OPTIONS DETACHED -- identifiers removed
 
 parse
 INSPECT TABLE db.schema.t1 WITH OPTIONS INDEX (index_name)
