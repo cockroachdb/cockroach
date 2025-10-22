@@ -23,6 +23,7 @@ import (
 
 type metadataForwarder interface {
 	forwardMetadata(metadata *execinfrapb.ProducerMetadata)
+	forwardQueryStats(stats topLevelQueryStats)
 }
 
 type planNodeToRowSource struct {
@@ -59,7 +60,7 @@ var planNodeToRowSourcePool = sync.Pool{
 
 func newPlanNodeToRowSource(
 	source planNode, params runParams, firstNotWrapped planNode,
-) *planNodeToRowSource {
+) (*planNodeToRowSource, error) {
 	p := planNodeToRowSourcePool.Get().(*planNodeToRowSource)
 	*p = planNodeToRowSource{
 		ProcessorBase:   p.ProcessorBase,
@@ -84,7 +85,44 @@ func newPlanNodeToRowSource(
 	} else {
 		p.row = make(rowenc.EncDatumRow, len(p.outputTypes))
 	}
-	return p
+	// Find any planNodes that need a way to propagate metadata before we get to
+	// the firstNotWrapped - this planNodeToRowSource adapter will be the
+	// forwarder for all of them.
+	var setForwarder func(parent planNode) error
+	setForwarder = func(parent planNode) error {
+		switch t := parent.(type) {
+		case *applyJoinNode:
+			t.forwarder = p
+		case *recursiveCTENode:
+			t.forwarder = p
+		}
+		for i, n := 0, parent.InputCount(); i < n; i++ {
+			child, err := parent.Input(i)
+			if err != nil {
+				return err
+			}
+			if child == p.firstNotWrapped {
+				// Once we get to the firstNotWrapped, we stop the recursion
+				// since all remaining planNodes aren't our responsibility.
+				return nil
+			}
+			if err = setForwarder(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	err := setForwarder(p.node)
+	if err != nil {
+		p.Release()
+		return nil, err
+	}
+	// Also check if this is the first planNodeToRowSource adapter we've created
+	// for this plan, and update the planner if so.
+	if params.p.routineMetadataForwarder == nil {
+		params.p.routineMetadataForwarder = p
+	}
+	return p, nil
 }
 
 // MustBeStreaming implements the execinfra.Processor interface.
@@ -221,6 +259,20 @@ func (p *planNodeToRowSource) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 // trailing metadata and expect us to forward it further.
 func (p *planNodeToRowSource) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
+}
+
+// forwardQueryStats will be called by any local planNodes that run "inner"
+// plans with the query stats for those plans.
+func (p *planNodeToRowSource) forwardQueryStats(stats topLevelQueryStats) {
+	meta := execinfrapb.GetProducerMeta()
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.BytesRead = stats.bytesRead
+	meta.Metrics.RowsRead = stats.rowsRead
+	meta.Metrics.RowsWritten = stats.rowsWritten
+	// stats.networkEgressEstimate and stats.clientTime are ignored since they
+	// only matter at the "true" top-level query (and actually should be zero
+	// here anyway).
+	p.forwardMetadata(meta)
 }
 
 func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetadata {

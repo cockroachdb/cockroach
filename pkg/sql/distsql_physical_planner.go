@@ -4343,7 +4343,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 
 	// Copy the evalCtx.
 	evalCtx := *planCtx.ExtendedEvalCtx
-	wrapper := newPlanNodeToRowSource(
+	wrapper, err := newPlanNodeToRowSource(
 		n,
 		runParams{
 			extendedEvalCtx: &evalCtx,
@@ -4351,6 +4351,9 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		},
 		firstNotWrapped,
 	)
+	if err != nil {
+		return nil, err
+	}
 	if !wrapper.rowsAffected && planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected {
 		// Return an error if the receiver expects to get the number of rows
 		// affected, but the planNode returns something else.

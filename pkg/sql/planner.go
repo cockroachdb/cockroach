@@ -236,6 +236,16 @@ type planner struct {
 
 	sqlCursors sqlCursors
 
+	// routineMetadataForwarder is used to propagate ProducerMetadata out of the
+	// routine execution. It'll be set to the first planNodeToRowSource adapter
+	// (i.e. the closest to the DistSQLReceiver).
+	// TODO(yuzefovich): this is rather ugly, but the routines are expressions,
+	// so we don't have easy access to the DistSQL infrastructure. Additionally,
+	// we don't want to mutate the eval.Context for this. It seems fine given
+	// that we only have local plans with routines and there should be no
+	// concurrency.
+	routineMetadataForwarder metadataForwarder
+
 	storedProcTxnState storedProcTxnStateAccessor
 
 	createdSequences createdSequences
@@ -975,6 +985,7 @@ func (p *planner) resetPlanner(
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil
+	p.routineMetadataForwarder = nil
 	p.autoRetryCounter = 0
 	p.autoRetryStmtReason = nil
 	p.autoRetryStmtCounter = 0
