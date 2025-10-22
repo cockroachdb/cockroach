@@ -733,11 +733,16 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			// Set up the closed timestamp timing such that, when we block a merge and
 			// transfer the RHS lease, the closed timestamp advances over the LHS
 			// lease but not over the RHS lease.
+			//
+			// NB: We want to ensure that the closed timestamp on the LHS is less than
+			// the lease start time for the RHS after the lease transfer. To ensure
+			// this holds and doesn't flake, we increase the target duration to 10
+			// seconds.
 			tc, _, _ := setupClusterForClosedTSTesting(ctx, t, 5*time.Second, 100*time.Millisecond, clusterArgs, "cttest", "kv")
 			defer tc.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 			sqlDB.ExecMultiple(t, strings.Split(`
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5s';
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '100ms';
 SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '100ms';
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
