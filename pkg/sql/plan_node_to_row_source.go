@@ -21,10 +21,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type metadataForwarder interface {
-	forwardMetadata(metadata *execinfrapb.ProducerMetadata)
-}
-
 type planNodeToRowSource struct {
 	execinfra.ProcessorBase
 
@@ -50,6 +46,7 @@ type planNodeToRowSource struct {
 var _ execinfra.LocalProcessor = &planNodeToRowSource{}
 var _ execreleasable.Releasable = &planNodeToRowSource{}
 var _ execopnode.OpNode = &planNodeToRowSource{}
+var _ metadataForwarder = &planNodeToRowSource{}
 
 var planNodeToRowSourcePool = sync.Pool{
 	New: func() interface{} {
@@ -59,7 +56,7 @@ var planNodeToRowSourcePool = sync.Pool{
 
 func newPlanNodeToRowSource(
 	source planNode, params runParams, firstNotWrapped planNode,
-) *planNodeToRowSource {
+) (*planNodeToRowSource, error) {
 	p := planNodeToRowSourcePool.Get().(*planNodeToRowSource)
 	*p = planNodeToRowSource{
 		ProcessorBase:   p.ProcessorBase,
@@ -84,7 +81,39 @@ func newPlanNodeToRowSource(
 	} else {
 		p.row = make(rowenc.EncDatumRow, len(p.outputTypes))
 	}
-	return p
+	// Find any planNodes that need a way to propagate metadata before we get to
+	// the firstNotWrapped - this planNodeToRowSource adapter will be the
+	// forwarder for all of them.
+	var setForwarder func(parent planNode) error
+	setForwarder = func(parent planNode) error {
+		switch t := parent.(type) {
+		case *applyJoinNode:
+			t.forwarder = p
+		case *recursiveCTENode:
+			t.forwarder = p
+		}
+		for i, n := 0, parent.InputCount(); i < n; i++ {
+			child, err := parent.Input(i)
+			if err != nil {
+				return err
+			}
+			if child == p.firstNotWrapped {
+				// Once we get to the firstNotWrapped, we stop the recursion
+				// since all remaining planNodes aren't our responsibility.
+				return nil
+			}
+			if err = setForwarder(child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	err := setForwarder(p.node)
+	if err != nil {
+		p.Release()
+		return nil, err
+	}
+	return p, nil
 }
 
 // MustBeStreaming implements the execinfra.Processor interface.
