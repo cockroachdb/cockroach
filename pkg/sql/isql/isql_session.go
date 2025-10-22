@@ -72,11 +72,23 @@ type Session interface {
 	// err := session.ModifySession(ctx, func(mutator sessionmutator.SessionDataMutator) {
 	// 	mutator.SetApplicationName("my_app")
 	// 	mutator.SetDatabase("my_database")
+	ModifySession(ctx context.Context, mutate func(mutator sessionmutator.SessionDataMutator)) error
+
+	// Savepoint creates a savepoint within an existing transaction and executes
+	// the given function. If the function returns an error, the savepoint is
+	// rolled back. If the function succeeds, the savepoint is released.
+	// SavePoints must be used within a transaction.
+	//
+	// Example:
+	// err := session.Txn(ctx, func(ctx context.Context) error {
+	// 	return session.Savepoint(ctx, func(ctx context.Context) error {
+	// 		return session.ExecutePrepared(ctx, stmt, []tree.Datum{tree.NewDInt(1)})
+	// 	})
 	// })
 	// if err != nil {
 	// 	return err
 	// }
-	ModifySession(ctx context.Context, mutate func(mutator sessionmutator.SessionDataMutator)) error
+	Savepoint(ctx context.Context, do func(context.Context) error) error
 
 	// Close closes the session and cleans up internal resources.
 	Close(ctx context.Context)
