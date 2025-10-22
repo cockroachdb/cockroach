@@ -967,8 +967,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
 	}
-	cfg.opts.TargetByteDeletionRate = func() int {
-		return int(baselineDeletionRate.Get(&cfg.settings.SV))
+	cfg.opts.DeletionPacing.BaselineRate = func() uint64 {
+		return uint64(baselineDeletionRate.Get(&cfg.settings.SV))
 	}
 	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
 		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
