@@ -234,6 +234,10 @@ var PlanClampedHistogramSelectivityCounter = telemetry.GetCounterOnce("sql.plan.
 // a histogram to a minimum value.
 var PlanClampedInequalitySelectivityCounter = telemetry.GetCounterOnce("sql.plan.clamped-inequality-selectivity")
 
+// StatementHintsCounter is to be incremented whenever external statement hints
+// are used.
+var StatementHintsCounter = telemetry.GetCounterOnce("sql.session.statement-hints")
+
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
 // values for the join reorder limit is quite small.
