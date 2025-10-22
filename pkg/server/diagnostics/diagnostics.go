@@ -149,9 +149,9 @@ func addInfoToURL(
 }
 
 // randomly shift `d` to be up to `jitterSeconds` shorter or longer.
-func addJitter(d time.Duration) time.Duration {
+func addJitter(d time.Duration, rng *rand.Rand) time.Duration {
 	const jitterSeconds = 120
-	j := time.Duration(rand.Intn(jitterSeconds*2)-jitterSeconds) * time.Second
+	j := time.Duration(rng.Intn(jitterSeconds*2)-jitterSeconds) * time.Second
 	return d + j
 }
 

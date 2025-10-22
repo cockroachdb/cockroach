@@ -1104,7 +1104,6 @@ func (r *testRunner) runWorker(
 						setting string
 						label   string
 					}{
-						{setting: "kv.rangefeed.buffered_sender.enabled", label: "metamorphicBufferedSender"},
 						{setting: "kv.transaction.write_buffering.enabled", label: "metamorphicWriteBuffering"},
 					} {
 						enable := prng.Intn(2) == 0

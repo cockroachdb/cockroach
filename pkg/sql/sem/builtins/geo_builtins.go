@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/twpayne/go-geom"
@@ -2200,11 +2199,10 @@ Flags shown square brackets after the geometry type have the following meaning:
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "npoints", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
 				npoints := int(tree.MustBeDInt(args[1]))
-				seed := timeutil.Now().Unix()
-				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
+				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, evalCtx.GetRNG())
 				if err != nil {
 					if errors.Is(err, geomfn.ErrGenerateRandomPointsInvalidPoints) {
 						return tree.DNull, nil

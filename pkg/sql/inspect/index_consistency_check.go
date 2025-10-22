@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -106,6 +107,8 @@ func (c *indexConsistencyCheck) Start(
 		colToIdx.Set(colID, -1)
 	}
 
+	joinColumns := append([]catalog.Column(nil), pkColumns...)
+
 	// Collect all of the columns we are fetching from the index. This
 	// includes the columns involved in the index: columns, extra columns,
 	// and store columns.
@@ -120,6 +123,12 @@ func (c *indexConsistencyCheck) Start(
 		}
 		col := c.tableDesc.PublicColumns()[pos]
 		otherColumns = append(otherColumns, col)
+		if col.GetType().Family() == types.RefCursorFamily {
+			// Refcursor values do not support equality comparison, so we cannot use
+			// them in the join predicates that detect inconsistencies.
+			return
+		}
+		joinColumns = append(joinColumns, col)
 	})
 
 	c.columns = append(pkColumns, otherColumns...)
@@ -203,7 +212,8 @@ func (c *indexConsistencyCheck) Start(
 	}
 
 	checkQuery := c.createIndexCheckQuery(
-		colNames(pkColumns), colNames(otherColumns), c.tableDesc.GetID(), c.secIndex, c.priIndex.GetID(), predicate,
+		colNames(pkColumns), colNames(otherColumns), colNames(joinColumns),
+		c.tableDesc.GetID(), c.secIndex, c.priIndex.GetID(), predicate,
 	)
 
 	// Wrap the query with AS OF SYSTEM TIME to ensure it uses the specified timestamp
@@ -451,7 +461,7 @@ func (c *indexConsistencyCheck) loadCatalogInfo(ctx context.Context) error {
 //     - Rows in primary index missing from secondary index
 //     - Rows in secondary index missing from primary index
 func (c *indexConsistencyCheck) createIndexCheckQuery(
-	pkColumns, otherColumns []string,
+	pkColumns, otherColumns, lookupColumns []string,
 	tableID descpb.ID,
 	index catalog.Index,
 	primaryIndexID descpb.IndexID,
@@ -460,9 +470,9 @@ func (c *indexConsistencyCheck) createIndexCheckQuery(
 	allColumns := append(pkColumns, otherColumns...)
 
 	// Build join conditions using helper function
-	lookupClause := buildJoinConditions(allColumns, "pri", "sec")
+	lookupClause := buildJoinConditions(lookupColumns, "pri", "sec")
 	mergeClause := buildJoinConditions(pkColumns, "pri", "sec")
-	reverseLookupClause := buildJoinConditions(allColumns, "sec", "pri")
+	reverseLookupClause := buildJoinConditions(lookupColumns, "sec", "pri")
 	reverseMergeClause := buildJoinConditions(pkColumns, "sec", "pri")
 
 	// If there are no non-primary-key columns, we don't need to split by NULL/non-NULL
