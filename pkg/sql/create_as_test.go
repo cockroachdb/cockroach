@@ -83,12 +83,17 @@ func TestCreateAsVTable(t *testing.T) {
 					`"".crdb_internal.gossip_liveness`:                {},
 					`"".crdb_internal.gossip_nodes`:                   {},
 					`"".crdb_internal.kv_flow_controller`:             {},
+					`"".crdb_internal.kv_flow_controller_v2`:          {},
 					`"".crdb_internal.kv_flow_control_handles`:        {},
+					`"".crdb_internal.kv_flow_control_handles_v2`:     {},
 					`"".crdb_internal.kv_flow_token_deductions`:       {},
+					`"".crdb_internal.kv_flow_token_deductions_v2`:    {},
 					`"".crdb_internal.kv_node_status`:                 {},
 					`"".crdb_internal.kv_node_liveness`:               {},
 					`"".crdb_internal.kv_store_status`:                {},
 					`"".crdb_internal.node_tenant_capabilities_cache`: {},
+					`"".crdb_internal.store_liveness_support_for`:     {},
+					`"".crdb_internal.store_liveness_support_from`:    {},
 					`"".crdb_internal.tenant_usage_details`:           {},
 				}
 				if _, ok := onlySystemTenant[fqName]; ok {

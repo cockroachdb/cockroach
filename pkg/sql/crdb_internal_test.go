@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -122,7 +122,8 @@ func TestRangeLocalityBasedOnNodeIDs(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "1"}}},
+				Locality:          roachpb.Locality{Tiers: []roachpb.Tier{{Key: "node", Value: "1"}}},
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 			ReplicationMode: base.ReplicationAuto,
 		},
@@ -581,6 +582,11 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.Background())
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	// Create a table with 3 rows, split them into 3 ranges with each node
 	// having one.
 	db := tc.ServerConn(gatewayNodeID)
@@ -855,13 +861,17 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156145),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '10ms'")
 	require.NoError(t, err)
 	rangeKey := "/Local/Range/Table/106/1/-1704619207610523008/RangeDescriptor"
 	rangeKeyEscaped := fmt.Sprintf("\"%s\"", rangeKey)
-	s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+	s.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
 		BlockingEvent: kvpb.ContentionEvent{
 			Key: roachpb.Key(rangeKey),
 			TxnMeta: enginepb.TxnMeta{
@@ -1367,33 +1377,27 @@ func TestInternalSystemJobsAccess(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
 		},
 	})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	rootDB := sqlutils.MakeSQLRunner(db)
 
 	// Even though this test modifies the system.jobs table and asserts its contents, we
 	// do not disable background job creation nor job adoption. This is because creating
 	// users requires jobs to be created and run. Thus, this test only creates jobs of type
 	// jobspb.TypeImport and overrides the import resumer.
-	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
+	registry := s.JobRegistry().(*jobs.Registry)
 	registry.TestingWrapResumerConstructor(jobspb.TypeImport, func(r jobs.Resumer) jobs.Resumer {
 		return &fakeResumer{}
 	})
 
 	asUser := func(user string, f func(userDB *sqlutils.SQLRunner)) {
-		pgURL := url.URL{
-			Scheme: "postgres",
-			User:   url.UserPassword(user, "test"),
-			Host:   s.AdvSQLAddr(),
-		}
-		db2, err := gosql.Open("postgres", pgURL.String())
-		assert.NoError(t, err)
-		defer db2.Close()
+		db2 := s.SQLConn(t, serverutils.UserPassword(user, "test"), serverutils.ClientCerts(false))
 		userDB := sqlutils.MakeSQLRunner(db2)
 
 		f(userDB)

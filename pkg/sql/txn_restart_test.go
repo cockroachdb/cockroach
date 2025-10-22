@@ -1253,7 +1253,8 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	}
 
 	testKey := []byte("test_key")
-	var s serverutils.TestServerInterface
+	var s serverutils.ApplicationLayerInterface
+	var nodeID roachpb.NodeID
 	var clockUpdate, restartDone int32
 	testingResponseFilter := func(
 		ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
@@ -1280,7 +1281,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn := ba.Txn.Clone()
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
-						txn.UpdateObservedTimestamp(s.NodeID(), now)
+						txn.UpdateObservedTimestamp(nodeID, now)
 						return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
@@ -1298,9 +1299,10 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
-	var sqlDB *gosql.DB
-	s, sqlDB, _ = serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s = srv.ApplicationLayer()
+	nodeID = srv.NodeID()
 
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`

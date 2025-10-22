@@ -583,14 +583,16 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 	skip.UnderRace(t, "slow timing sensitive test")
 
 	ctx := context.Background()
+	// backfillProgressCompletedCh will be used to communicate completed spans
+	// with the tenant prefix removed, if applicable.
 	backfillProgressCompletedCh := make(chan []roachpb.Span)
 	const numRows = 100
 	const numSpans = 20
 	var isBlockingBackfillProgress atomic.Bool
-	isBlockingBackfillProgress.Store(true)
+	var codec keys.SQLCodec
 
 	// Start the server with testing knob.
-	tc, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -599,6 +601,18 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 				BulkAdderFlushesEveryBatch: true,
 				RunBeforeIndexBackfillProgressUpdate: func(ctx context.Context, completed []roachpb.Span) {
 					if isBlockingBackfillProgress.Load() {
+						if toRemove := len(codec.TenantPrefix()); toRemove > 0 {
+							// Remove the tenant prefix from completed spans.
+							updated := make([]roachpb.Span, len(completed))
+							for i := range updated {
+								sp := completed[i]
+								updated[i] = roachpb.Span{
+									Key:    append(roachpb.Key(nil), sp.Key[toRemove:]...),
+									EndKey: append(roachpb.Key(nil), sp.EndKey[toRemove:]...),
+								}
+							}
+							completed = updated
+						}
 						select {
 						case <-ctx.Done():
 						case backfillProgressCompletedCh <- completed:
@@ -625,7 +639,11 @@ func TestIndexBackfillerResumePreservesProgress(t *testing.T) {
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	codec = s.Codec()
+	isBlockingBackfillProgress.Store(true)
 
 	_, err := db.Exec(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = 10`)
 	require.NoError(t, err)

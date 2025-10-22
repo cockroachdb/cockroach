@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -540,6 +541,11 @@ func TestTraceDistSQL(t *testing.T) {
 	})
 	defer cluster.Stopper().Stop(ctx)
 
+	if cluster.DefaultTenantDeploymentMode().IsExternal() {
+		cluster.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
 	// TODO(yuzefovich): tracing in the vectorized engine is very limited since
 	// only wrapped processors and the materializers use it outside of the
@@ -567,7 +573,11 @@ func TestTraceDistSQL(t *testing.T) {
 	require.NotNil(t, anonTagGroup)
 	val, ok := anonTagGroup.FindTag("node")
 	require.True(t, ok)
-	require.Equal(t, "2", val)
+	expected := "2"
+	if cluster.DefaultTenantDeploymentMode().IsExternal() {
+		expected = "sql2"
+	}
+	require.Equal(t, expected, val)
 }
 
 // Test the sql.trace.stmt.enable_threshold cluster setting.
@@ -594,12 +604,9 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Settings: settings,
-	})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	appLogsSpy := logtestutils.NewLogSpy(
 		t,
@@ -664,15 +671,15 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sql.TraceTxnThreshold.Override(ctx, &settings.SV, tc.threshold)
-			sql.TraceTxnSampleRate.Override(ctx, &settings.SV, tc.sampleRate)
+			sql.TraceTxnThreshold.Override(ctx, &s.ClusterSettings().SV, tc.threshold)
+			sql.TraceTxnSampleRate.Override(ctx, &s.ClusterSettings().SV, tc.sampleRate)
 			log.FlushAllSync()
 			appLogsSpy.Reset()
 			r := sqlutils.MakeSQLRunner(db)
 
 			if tc.exptToTraceEventually {
 				if tc.checkJaegerOutput {
-					sql.TraceTxnOutputJaegerJSON.Override(ctx, &settings.SV, true)
+					sql.TraceTxnOutputJaegerJSON.Override(ctx, &s.ClusterSettings().SV, true)
 					testutils.SucceedsSoon(t, func() error {
 						r.Exec(t, "SELECT pg_sleep(0.01)")
 						log.FlushAllSync()
@@ -685,7 +692,7 @@ func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
 						return nil
 					})
 				} else if tc.checkExcludeInternal {
-					sql.TraceTxnIncludeInternal.Override(ctx, &settings.SV, false)
+					sql.TraceTxnIncludeInternal.Override(ctx, &s.ClusterSettings().SV, false)
 					log.FlushAllSync()
 					appLogsSpy.Reset() // Clear logs after setting the cluster setting
 
