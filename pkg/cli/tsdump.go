@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,7 @@ var debugTimeSeriesDumpOpts = struct {
 	noOfUploadWorkers      int
 	retryFailedRequests    bool
 	disableDeltaProcessing bool
+	discoverChildMetrics   bool
 	ddMetricInterval       int64 // interval for datadoginit format only
 }{
 	format:                 tsDumpText,
@@ -69,6 +71,7 @@ var debugTimeSeriesDumpOpts = struct {
 	yaml:                   "/tmp/tsdump.yaml",
 	retryFailedRequests:    false,
 	disableDeltaProcessing: false, // delta processing enabled by default
+	discoverChildMetrics:   false, // child metric discovery disabled by default
 
 	// default to 10 seconds interval for datadoginit.
 	// This is based on the scrape interval that is currently set accross all managed clusters
@@ -199,7 +202,13 @@ will then convert it to the --format requested in the current invocation.
 
 			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
 			adminClient := conn.NewAdminClient()
-			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
+			
+			var names []string
+			if debugTimeSeriesDumpOpts.discoverChildMetrics {
+				names, err = discoverTimeSeriesNamesFromStorage(ctx, conn)
+			} else {
+				names, err = serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
+			}
 			if err != nil {
 				return err
 			}
@@ -761,4 +770,110 @@ func (m *tsDumpFormat) Set(s string) error {
 		return fmt.Errorf("invalid value for --format: %s", s)
 	}
 	return nil
+}
+
+// discoverTimeSeriesNamesFromStorage expands known metric names to include 
+// child metrics that follow the pattern {original_name}___{labels}_jason.
+// This approach scans the time series key space to find all metrics that start
+// with the known metric names.
+func discoverTimeSeriesNamesFromStorage(
+	ctx context.Context, conn rpcConn,
+) ([]string, error) {
+	// Get the traditional metadata-based names
+	adminClient := conn.NewAdminClient()
+	baseNames, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Use the time series client to scan for child metrics
+	tsClient := conn.NewTimeSeriesClient()
+	
+	// Create a set to store all discovered names (base + children)
+	allNames := make(map[string]struct{})
+	
+	// Add all base names
+	for _, name := range baseNames {
+		allNames[name] = struct{}{}
+	}
+	
+	// For each base name, discover child metrics by scanning with a prefix
+	for _, baseName := range baseNames {
+		childNames, err := discoverChildMetrics(ctx, tsClient, baseName)
+		if err != nil {
+			// Continue on error, just log it
+			fmt.Fprintf(os.Stderr, "Warning: failed to discover child metrics for %s: %v\n", baseName, err)
+			continue
+		}
+		
+		// Add discovered child names
+		for _, childName := range childNames {
+			allNames[childName] = struct{}{}
+		}
+	}
+	
+	// Convert set back to sorted slice
+	result := make([]string, 0, len(allNames))
+	for name := range allNames {
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	
+	return result, nil
+}
+
+// discoverChildMetrics scans the time series database for metrics that start with
+// the given base name, effectively finding child metrics with labels.
+func discoverChildMetrics(ctx context.Context, tsClient tspb.RPCTimeSeriesClient, baseName string) ([]string, error) {
+	// Try to dump with a very small time range just to see what names exist
+	// We use a recent time range to avoid scanning too much data
+	endTime := timeutil.Now().UnixNano()
+	startTime := endTime - (5 * time.Minute).Nanoseconds() // Last 5 minutes
+	
+	dumpReq := &tspb.DumpRequest{
+		StartNanos: startTime,
+		EndNanos:   endTime,
+		Names:      []string{baseName}, // Start with the exact name
+		Resolutions: []tspb.TimeSeriesResolution{
+			tspb.TimeSeriesResolution_RESOLUTION_10S,
+		},
+	}
+	
+	stream, err := tsClient.DumpRaw(ctx, dumpReq)
+	if err != nil {
+		return nil, err
+	}
+	
+	nameSet := make(map[string]struct{})
+	
+	// Process the stream to collect all metric names we see
+	for {
+		kv, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		
+		// Decode the key to get the metric name
+		metricName, _, _, _, err := ts.DecodeDataKey(kv.Key)
+		if err != nil {
+			continue // Skip invalid keys
+		}
+		
+		// Check if this name starts with our raw name + "___" (indicating a child metric)
+		if strings.HasPrefix(metricName, baseName+"___") {
+			// This is a child metric, add the full prefixed name back
+			nameSet[metricName] = struct{}{}
+		}
+	}
+	
+	// Convert to slice
+	result := make([]string, 0, len(nameSet))
+	for name := range nameSet {
+		result = append(result, name)
+	}
+	
+	return result, nil
 }
