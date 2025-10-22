@@ -29,6 +29,7 @@ go_test(
     name = "keys_test",
     size = "small",
     srcs = [
+        "doc_test.go",
         "keys_test.go",
         "printer_test.go",
         "sql_test.go",
