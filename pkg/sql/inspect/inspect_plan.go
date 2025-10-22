@@ -11,11 +11,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -25,12 +27,21 @@ import (
 func inspectTypeCheck(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (matched bool, header colinfo.ResultColumns, _ error) {
-	_, ok := stmt.(*tree.Inspect)
+	inspectStmt, ok := stmt.(*tree.Inspect)
 	if !ok {
 		return false, nil, nil
 	}
 
-	return true, jobs.InspectJobExecutionResultHeader, nil
+	// Determine header based on DETACHED option to ensure consistency in
+	// local-prepared mode where plans are cached.
+	detached := inspectStmt.Options.IsDetached()
+	if detached {
+		header = jobs.DetachedJobExecutionResultHeader
+	} else {
+		header = jobs.InspectJobExecutionResultHeader
+	}
+
+	return true, header, nil
 }
 
 // inspectRun represents the runtime state of an execution of INSPECT.
@@ -72,8 +83,8 @@ func newInspectRun(
 		return inspectRun{}, errors.AssertionFailedf("unexpected INSPECT type received, got: %v", stmt.Typ)
 	}
 
-	if len(stmt.Options) == 0 || stmt.Options.HasIndexAll() {
-		// No options or INDEX ALL specified - inspect all indexes.
+	if !stmt.Options.HasIndexOption() || stmt.Options.HasIndexAll() {
+		// No INDEX options or INDEX ALL specified - inspect all indexes.
 		switch stmt.Typ {
 		case tree.InspectTable:
 			checks, err := sql.InspectChecksForTable(ctx, p, run.table)
@@ -166,7 +177,9 @@ func inspectPlanHook(
 		return nil, nil, false, err
 	}
 
-	if !p.ExtendedEvalContext().TxnIsSingleStmt {
+	detached := inspectStmt.Options.IsDetached()
+
+	if !detached && !p.ExtendedEvalContext().TxnIsSingleStmt {
 		return nil, nil, false, pgerror.Newf(pgcode.InvalidTransactionState,
 			"cannot run within a multi-statement transaction")
 	}
@@ -174,6 +187,30 @@ func inspectPlanHook(
 	run, err := newInspectRun(ctx, inspectStmt, p)
 	if err != nil {
 		return nil, nil, false, err
+	}
+
+	if detached {
+		fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
+			jobID := p.ExecCfg().JobRegistry.MakeJobID()
+			jr := makeInspectJobRecord(tree.AsString(stmt), jobID, run.checks, run.asOfTimestamp)
+			if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+				ctx, jr, jobID, p.InternalSQLTxn(),
+			); err != nil {
+				return err
+			}
+			var notice pgnotice.Notice
+			if p.ExtendedEvalContext().TxnImplicit {
+				notice = pgnotice.Newf("INSPECT job %d running in the background", jobID)
+			} else {
+				notice = pgnotice.Newf("INSPECT job %d queued; will start after the current transaction commits", jobID)
+			}
+			if err := p.SendClientNotice(ctx, notice, true /* immediateFlush */); err != nil {
+				return err
+			}
+			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+			return nil
+		}
+		return fn, jobs.DetachedJobExecutionResultHeader, false, nil
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
@@ -186,6 +223,14 @@ func inspectPlanHook(
 			return err
 		}
 
+		if err = p.SendClientNotice(
+			ctx,
+			pgnotice.Newf("waiting for INSPECT job to complete: %s\nIf the statement is canceled, the job will continue in the background.", sj.ID()),
+			true, /* immediateFlush */
+		); err != nil {
+			return err
+		}
+
 		if err := sj.AwaitCompletion(ctx); err != nil {
 			return err
 		}
@@ -193,6 +238,27 @@ func inspectPlanHook(
 	}
 
 	return fn, jobs.InspectJobExecutionResultHeader, false, nil
+}
+
+func makeInspectJobRecord(
+	description string, jobID jobspb.JobID, checks []*jobspb.InspectDetails_Check, asOf hlc.Timestamp,
+) jobs.Record {
+	descIDs := catalog.DescriptorIDSet{}
+	for _, check := range checks {
+		descIDs.Add(check.TableID)
+	}
+	return jobs.Record{
+		JobID:       jobID,
+		Description: description,
+		Details: jobspb.InspectDetails{
+			Checks: checks,
+			AsOf:   asOf,
+		},
+		Progress:      jobspb.InspectProgress{},
+		CreatedBy:     nil,
+		Username:      username.NodeUserName(),
+		DescriptorIDs: descIDs.Ordered(),
+	}
 }
 
 func init() {

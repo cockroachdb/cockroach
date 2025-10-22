@@ -7939,6 +7939,18 @@ inspect_option:
   {
     $$.val = &tree.InspectOptionIndex{IndexNames: $3.newTableIndexNames()}
   }
+| DETACHED
+  {
+    $$.val = &tree.InspectOptionDetached{Detached: *tree.MakeDBool(true)}
+  }
+| DETACHED '=' TRUE
+  {
+    $$.val = &tree.InspectOptionDetached{Detached: *tree.MakeDBool(true)}
+  }
+| DETACHED '=' FALSE
+  {
+    $$.val = &tree.InspectOptionDetached{Detached: *tree.MakeDBool(false)}
+  }
 
 // %Help: SHOW INSPECT ERRORS - list errors recorded by one INSPECT run
 // %Category: Misc
