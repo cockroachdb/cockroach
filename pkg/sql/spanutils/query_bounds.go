@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,10 +85,25 @@ func SpanToQueryBounds(
 	numFamilies int,
 	span roachpb.Span,
 	alloc *tree.DatumAlloc,
+	asOf hlc.Timestamp,
 ) (bounds QueryBounds, hasRows bool, _ error) {
 	partialStartKey := span.Key
 	partialEndKey := span.EndKey
-	startKeyValues, err := kvDB.Scan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+
+	var startKeyValues []kv.KeyValue
+	var err error
+	if asOf.IsEmpty() {
+		startKeyValues, err = kvDB.Scan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+	} else {
+		err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetFixedTimestamp(ctx, asOf); err != nil {
+				return err
+			}
+			var scanErr error
+			startKeyValues, scanErr = txn.Scan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+			return scanErr
+		})
+	}
 	if err != nil {
 		return bounds, false, errors.Wrapf(err, "scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
 	}
@@ -95,7 +111,20 @@ func SpanToQueryBounds(
 	if len(startKeyValues) == 0 {
 		return bounds, false, nil
 	}
-	endKeyValues, err := kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+
+	var endKeyValues []kv.KeyValue
+	if asOf.IsEmpty() {
+		endKeyValues, err = kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+	} else {
+		err = kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetFixedTimestamp(ctx, asOf); err != nil {
+				return err
+			}
+			var scanErr error
+			endKeyValues, scanErr = txn.ReverseScan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+			return scanErr
+		})
+	}
 	if err != nil {
 		return bounds, false, errors.Wrapf(err, "reverse scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
 	}
