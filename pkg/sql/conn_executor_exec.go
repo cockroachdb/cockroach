@@ -574,6 +574,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		ast = stmt.Statement.AST
 	}
 
+	if len(stmt.Hints) > 0 {
+		telemetry.Inc(sqltelemetry.StatementHintsCounter)
+	}
+
 	// This goroutine is the only one that can modify txnState.mu.priority and
 	// txnState.mu.autoRetryCounter, so we don't need to get a mutex here.
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
@@ -1472,6 +1476,10 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			ih.SetDiscardRows()
 		}
 		vars.ast = vars.stmt.Statement.AST
+	}
+
+	if len(vars.stmt.Hints) > 0 {
+		telemetry.Inc(sqltelemetry.StatementHintsCounter)
 	}
 
 	// For pausable portal, the instrumentation helper needs to be set up only
