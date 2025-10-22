@@ -481,6 +481,12 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
+	//
+	// TODO(pav-kv): introduce an invariant that only one of RangeTombstone and
+	// RaftReplicaID keys can be set. Today, if RangeTombstone and RaftReplicaID
+	// both exist then the ReplicaID leads the tombstone. In fact, we would be
+	// better off with only one key that contains both IDs, because they are
+	// tightly related.
 	{
 		logEvery := log.Every(10 * time.Second)
 		var i int
