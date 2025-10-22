@@ -234,11 +234,6 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 
 	var allowRequest chan struct{}
 	var allowRequestOpen bool
-	defer func() {
-		if allowRequestOpen {
-			close(allowRequest)
-		}
-	}()
 
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	var params base.TestClusterArgs
@@ -252,6 +247,13 @@ func testAtMostOneRunningCreateStatsImpl(t *testing.T, errorOnConcurrentCreateSt
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
+
+	defer func() {
+		if allowRequestOpen {
+			close(allowRequest)
+		}
+	}()
+
 	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
@@ -385,11 +387,6 @@ func testBackgroundAutoPartialStatsImpl(t *testing.T, errorOnConcurrentCreateSta
 
 	var allowRequest chan struct{}
 	var allowRequestOpen bool
-	defer func() {
-		if allowRequestOpen {
-			close(allowRequest)
-		}
-	}()
 
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	var params base.TestClusterArgs
@@ -403,6 +400,13 @@ func testBackgroundAutoPartialStatsImpl(t *testing.T, errorOnConcurrentCreateSta
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
+
+	defer func() {
+		if allowRequestOpen {
+			close(allowRequest)
+		}
+	}()
+
 	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
