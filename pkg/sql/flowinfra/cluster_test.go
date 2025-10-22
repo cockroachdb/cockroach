@@ -506,6 +506,10 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 // Test that DistSQL reads fill the BatchRequest.Header.GatewayNodeID field with
 // the ID of the gateway (as opposed to the ID of the node that created the
 // batch). Important to lease follow-the-workload transfers.
+//
+// Note that in single tenant and shared-process modes, GatewayNodeID field is
+// set on the kvclient side (i.e. in the SQL pod) whereas in external-process
+// mode it's set on the kvserver side (i.e. in the storage pod).
 func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -522,8 +526,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase:       "test",
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109392),
+				UseDatabase: "test",
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
@@ -531,10 +534,10 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 							if !ok {
 								return nil
 							}
-							if !strings.HasPrefix(
-								scanReq.Key.String(),
-								fmt.Sprintf("/Table/%d/1", tableID.Load()),
-							) {
+							pkPrefix := fmt.Sprintf("/Table/%d/1", tableID.Load())
+							tenantPKPrefix := fmt.Sprintf("/Tenant/%d%s", serverutils.TestTenantID().InternalValue, pkPrefix)
+							if !strings.HasPrefix(scanReq.Key.String(), pkPrefix) &&
+								!strings.HasPrefix(scanReq.Key.String(), tenantPKPrefix) {
 								return nil
 							}
 
@@ -551,6 +554,13 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
+
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(
+			context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"},
+		)
+	}
 
 	db := tc.ServerConn(0)
 	sqlutils.CreateTable(t, db, "t",
