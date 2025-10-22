@@ -198,6 +198,15 @@ WHERE dump.variable IS NULL OR dump2.variable IS NULL OR dump.variable != dump2.
 					return err.Error()
 				}
 				return ret
+			case "change_session_size":
+				// Only the system layer can change the session size cluster
+				// setting.
+				query := fmt.Sprintf("SET CLUSTER SETTING sql.session_transfer.max_session_size = '%s'", d.CmdArgs[0].Key)
+				_, err := srv.SystemLayer().SQLConn(t).Exec(query)
+				if err != nil {
+					return err.Error()
+				}
+				return ""
 
 			case "error":
 				var errorRE string

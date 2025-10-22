@@ -98,7 +98,7 @@ func (n *showTraceReplicaNode) Close(ctx context.Context) {
 	n.input.Close(ctx)
 }
 
-var nodeStoreRangeRE = regexp.MustCompile(`^\[n(\d+),s(\d+),r(\d+)/`)
+var nodeStoreRangeRE = regexp.MustCompile(`^\[n(\d+),(?:tenant=\d+,)?s(\d+),r(\d+)/`)
 
 var replicaMsgRE = regexp.MustCompile(
 	strings.Join([]string{
