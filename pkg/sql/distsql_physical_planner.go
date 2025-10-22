@@ -4371,7 +4371,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	// expecting is in fact RowsAffected. RowsAffected statements return a single
 	// row with the number of rows affected by the statement, and are the only
 	// types of statement where it's valid to invoke a plan's fast path.
-	wrapper := newPlanNodeToRowSource(
+	wrapper, err := newPlanNodeToRowSource(
 		n,
 		runParams{
 			extendedEvalCtx: &evalCtx,
@@ -4380,6 +4380,9 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		useFastPath,
 		firstNotWrapped,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	localProcIdx := p.AddLocalProcessor(wrapper)
 	var input []execinfrapb.InputSyncSpec

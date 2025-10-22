@@ -35,6 +35,10 @@ type applyJoinNode struct {
 	// The data source with no outer columns.
 	singleInputPlanNode
 
+	// forwarder allows propagating the ProducerMetadata towards the
+	// DistSQLReceiver.
+	forwarder metadataForwarder
+
 	// pred represents the join predicate.
 	pred *joinPredicate
 
@@ -248,12 +252,13 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	}
 	plan := p.(*planComponents)
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
-	if err := runPlanInsidePlan(
-		ctx, params, plan, rowResultWriter,
-		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
-	); err != nil {
+	queryStats, err := runPlanInsidePlan(
+		ctx, params, plan, rowResultWriter, nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
+	)
+	if err != nil {
 		return err
 	}
+	forwardInnerQueryStats(a.forwarder, queryStats)
 	a.run.rightRowsIterator = newRowContainerIterator(ctx, a.run.rightRows)
 	return nil
 }
@@ -267,7 +272,7 @@ func runPlanInsidePlan(
 	resultWriter rowResultWriter,
 	deferredRoutineSender eval.DeferredRoutineSender,
 	stmtForDistSQLDiagram string,
-) error {
+) (topLevelQueryStats, error) {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
 	recv := MakeDistSQLReceiver(
@@ -286,6 +291,11 @@ func runPlanInsidePlan(
 	// before we can produce any "outer" rows to be returned to the client, so
 	// we make sure to unset pausablePortal field on the planner.
 	plannerCopy.pausablePortal = nil
+	// Avoid any possible metadata confusion by unsetting the
+	// routineMetadataForwarder (if there is a routine in the inner plan that
+	// needs it, then the plannerCopy will be updated during the inner plan
+	// setup).
+	plannerCopy.routineMetadataForwarder = nil
 
 	// planner object embeds the extended eval context, so we will modify that
 	// (which won't affect the outer planner's extended eval context), and we'll
@@ -301,6 +311,8 @@ func runPlanInsidePlan(
 		// return from this method (after the main query is executed).
 		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
+		// Note that planAndRunSubquery updates recv.stats with top-level
+		// subquery stats.
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
 			&plannerCopy,
@@ -311,7 +323,7 @@ func runPlanInsidePlan(
 			false, /* skipDistSQLDiagramGeneration */
 			params.p.mustUseLeafTxn(),
 		) {
-			return resultWriter.Err()
+			return recv.stats, resultWriter.Err()
 		}
 	}
 
@@ -338,10 +350,10 @@ func runPlanInsidePlan(
 
 	// Check if there was an error interacting with the resultWriter.
 	if recv.commErr != nil {
-		return recv.commErr
+		return recv.stats, recv.commErr
 	}
 	if resultWriter.Err() != nil {
-		return resultWriter.Err()
+		return recv.stats, resultWriter.Err()
 	}
 
 	plannerCopy.autoCommit = false
@@ -358,10 +370,10 @@ func runPlanInsidePlan(
 	// need to update the plan for cleanup purposes before proceeding.
 	*plan = plannerCopy.curPlan.planComponents
 	if recv.commErr != nil {
-		return recv.commErr
+		return recv.stats, recv.commErr
 	}
 
-	return resultWriter.Err()
+	return recv.stats, resultWriter.Err()
 }
 
 func (a *applyJoinNode) Values() tree.Datums {

@@ -1005,6 +1005,15 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
+	if len(flows) == 1 && evalCtx.Txn != nil && evalCtx.Txn.Type() == kv.RootTxn {
+		// If we have a fully local plan and a RootTxn, we don't expect any
+		// concurrency, so it's safe to use the DistSQLReceiver to push the
+		// metadata into directly from routines.
+		if planCtx.planner != nil {
+			planCtx.planner.routineMetadataForwarder = recv
+		}
+	}
+
 	if finishedSetupFn != nil {
 		finishedSetupFn(flow)
 	}
@@ -1130,6 +1139,8 @@ type DistSQLReceiver struct {
 		pushCallback func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata)
 	}
 }
+
+var _ metadataForwarder = &DistSQLReceiver{}
 
 // rowResultWriter is a subset of CommandResult to be used with the
 // DistSQLReceiver. It's implemented by RowResultWriter.
@@ -1501,6 +1512,35 @@ func (r *DistSQLReceiver) checkConcurrentError() {
 		r.SetError(err)
 	default:
 	}
+}
+
+type metadataForwarder interface {
+	forwardMetadata(metadata *execinfrapb.ProducerMetadata)
+}
+
+// forwardInnerQueryStats propagates the query stats of "inner" plans as
+// metadata via the forwarder.
+func forwardInnerQueryStats(f metadataForwarder, stats topLevelQueryStats) {
+	if !buildutil.CrdbTestBuild && f == nil {
+		// Safety measure in production builds in case the forwarder is nil for
+		// some reason.
+		return
+	}
+	meta := execinfrapb.GetProducerMeta()
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.BytesRead = stats.bytesRead
+	meta.Metrics.RowsRead = stats.rowsRead
+	meta.Metrics.RowsWritten = stats.rowsWritten
+	// stats.networkEgressEstimate and stats.clientTime are ignored since they
+	// only matter at the "true" top-level query (and actually should be zero
+	// here anyway).
+	f.forwardMetadata(meta)
+}
+
+func (r *DistSQLReceiver) forwardMetadata(metadata *execinfrapb.ProducerMetadata) {
+	// Note that we don't use pushMeta method directly in order to go through
+	// the testing callback path.
+	r.Push(nil /* row */, metadata)
 }
 
 // pushMeta takes in non-empty metadata object and pushes it to the result
