@@ -236,3 +236,5 @@ jobs:
 
           **Next Steps:**
           Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+
+          gh pr edit ${{ github.event.pull_request.number }} --add-label "o-AI-Review-Potential-Issue-Detected"
