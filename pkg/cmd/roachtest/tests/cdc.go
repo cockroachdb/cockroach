@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -3246,7 +3247,7 @@ CONFIGURE ZONE USING
 
 			db := sqlutils.MakeSQLRunner(ct.DB())
 			db.Exec(t, `select crdb_internal.set_vmodule('event_processing=3')`)
-			db.Exec(t, `SET CLUSTER SETTING changefeed.node_throttle_config = '{"MessageRate": 100}'`)
+			db.Exec(t, `SET CLUSTER SETTING changefeed.node_throttle_config = '{"MessageRate": 1000}'`)
 
 			db.Exec(t, `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 1`)
 			db.Exec(t, `ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1`)
@@ -3265,11 +3266,19 @@ CONFIGURE ZONE USING
 			db.Exec(t, `INSERT INTO t (id, data) select g, 'data' || g::text from generate_series(1, 100000) g RETURNING cluster_logical_timestamp()`)
 			db.Exec(t, `ALTER TABLE t SPLIT AT (SELECT * FROM generate_series(1, 100000, 100))`)
 
+			// wait for the first feed to start before we start messing with things
+			startMessingWithThings := atomic.Bool{}
+
 			// do permissions changes forever
 			ct.workloadWg.Add(1)
 			ct.mon.Go(func(ctx context.Context) error {
 				defer ct.workloadWg.Done()
 				for i := 0; ; i++ {
+					if !startMessingWithThings.Load() {
+						time.Sleep(1 * time.Second)
+						continue
+					}
+
 					select {
 					case <-stopWorkload:
 						return nil
@@ -3302,6 +3311,11 @@ CONFIGURE ZONE USING
 						return ctx.Err()
 					case <-time.After(1 * time.Second):
 					}
+
+					if !startMessingWithThings.Load() {
+						continue
+					}
+
 					db.Exec(t, `update t set data = data || 'updated'`)
 				}
 			})
@@ -3316,6 +3330,8 @@ CONFIGURE ZONE USING
 				var jobID int64
 				db.QueryRow(t, `CREATE CHANGEFEED INTO 'null://' WITH initial_scan='no', updated, resolved, end_time=$1, cursor=$2, metrics_label=$3 AS SELECT * FROM t`,
 					endTime, ts.Prev().AsOfSystemTime(), fmt.Sprintf("'feed_%s'", timeutil.Now().Format(time.TimeOnly))).Scan(&jobID)
+
+				startMessingWithThings.Store(true)
 
 				db.Exec(t, `SHOW JOB WHEN COMPLETE $1`, jobID)
 			}
