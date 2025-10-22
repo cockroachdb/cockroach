@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -150,7 +149,11 @@ func TestShowRangesWithDetails(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156145),
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
@@ -245,22 +248,23 @@ func TestShowRangesUnavailableReplicas(t *testing.T) {
 
 	const numNodes = 3
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
 	tc := testcluster.StartTestCluster(
 		// Manual replication will prevent the leaseholder for the unavailable range
 		// from moving a different node.
 		t, numNodes, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				Settings: st,
+				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156145),
 			},
 		},
 	)
 	defer tc.Stopper().Stop(ctx)
 
+	systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold='1s'`)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.replica_raft.leaderless_unavailable_threshold='5s'`)
+
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold='1s'`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.replica_raft.leaderless_unavailable_threshold='5s'`)
 	sqlDB.Exec(t, `CREATE TABLE t (x INT PRIMARY KEY)`)
 	// Split the table's range to have a better chance of moving some leaseholders
 	// off of node 1 in the scatter below.

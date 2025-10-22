@@ -13,9 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -37,7 +35,6 @@ func TestIndexMutationKVOps(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := createTestServerParamsAllowTenants()
-	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(143114)
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.SQLEvalContext = &eval.TestingKnobs{
@@ -45,9 +42,10 @@ func TestIndexMutationKVOps(t *testing.T) {
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "index_mutations"), func(t *testing.T, path string) {
-		s, sqlDB, kvDB := serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(ctx)
+		srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
 		defer lease.TestingDisableTableLeases()()
+		s := srv.ApplicationLayer()
 		_, err := sqlDB.Exec("CREATE DATABASE t; USE t")
 		require.NoError(t, err)
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
@@ -79,9 +77,8 @@ func TestIndexMutationKVOps(t *testing.T) {
 					}
 					return nil
 				}
-				codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
-				tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", tableName)
-				err = mutateIndexByName(kvDB, codec, tableDesc, name, mutFn, state)
+				tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, s.Codec(), "t", tableName)
+				err = mutateIndexByName(kvDB, s.Codec(), tableDesc, name, mutFn, state)
 				require.NoError(t, err)
 			case "statement":
 				_, err := sqlDB.Exec(td.Input)
@@ -93,7 +90,13 @@ func TestIndexMutationKVOps(t *testing.T) {
 				require.NoError(t, err)
 				_, err = sqlDB.Exec("SET TRACING=off")
 				require.NoError(t, err)
-				return getKVTrace(t, sqlDB)
+				tr := getKVTrace(t, sqlDB)
+				if srv.StartedDefaultTestTenant() {
+					// If we started the test tenant, then remove the
+					// corresponding tenant prefix from all keys.
+					tr = strings.ReplaceAll(tr, fmt.Sprintf("/Tenant/%d", serverutils.TestTenantID().InternalValue), "")
+				}
+				return tr
 			default:
 				td.Fatalf(t, "unknown directive: %s", td.Cmd)
 			}
