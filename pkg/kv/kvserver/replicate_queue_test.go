@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -2188,6 +2189,12 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// NB: Ensure that tables created by the test start off on their own range.
+	// This ensures that any span config changes made by the test don't have to
+	// first induce a split, which is a known source of flakiness.
+	spanconfigstore.StorageCoalesceAdjacentSetting.Override(ctx, &st.SV, false)
+	spanconfigstore.TenantCoalesceAdjacentSetting.Override(ctx, &st.SV, false)
 
 	// Create 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
 	const numNodes = 7
@@ -2195,6 +2202,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	regions := [numNodes]int{1, 1, 1, 2, 2, 3, 3}
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
+			Settings: st,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{
