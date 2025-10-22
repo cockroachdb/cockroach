@@ -231,6 +231,16 @@ func TestAccessCheckServer(t *testing.T) {
 			Passes:     false,
 			LogsDenied: true,
 		},
+		{
+			// test nested delegates
+			Query:  "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS]",
+			Passes: true,
+		},
+		{
+			// unexpected unsafe builtin access
+			Query:  "SELECT col_description(0, 0)",
+			Passes: true,
+		},
 	} {
 		t.Run(fmt.Sprintf("query=%s,internal=%t,allowUnsafe=%t", test.Query, test.Internal, test.AllowUnsafeInternals), func(t *testing.T) {
 			accessedSpy.Reset()
