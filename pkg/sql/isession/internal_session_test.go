@@ -538,3 +538,77 @@ func tcTableNotFound(
 	_, err = session.Prepare(ctx, "table-not-found-select", stmt, nil)
 	require.ErrorContains(t, err, "relation \"defaultdb.non_existent_table\" does not exist")
 }
+
+func TestSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := s.SQLConn(t)
+	_, err := db.Exec("CREATE TABLE test (id INT PRIMARY KEY, val INT)")
+	require.NoError(t, err)
+
+	idb := s.InternalDB().(descs.DB)
+	session, err := idb.Session(ctx, "test-session")
+	require.NoError(t, err)
+	defer session.Close(ctx)
+
+	insertStmt, err := parser.ParseOne("INSERT INTO defaultdb.test VALUES ($1, $2)")
+	require.NoError(t, err)
+
+	insertPrepared, err := session.Prepare(ctx, "insert", insertStmt, []*types.T{types.Int, types.Int})
+	require.NoError(t, err)
+
+	selectStmt, err := parser.ParseOne("SELECT id, val FROM defaultdb.test ORDER BY id")
+	require.NoError(t, err)
+
+	selectPrepared, err := session.Prepare(ctx, "select", selectStmt, nil)
+	require.NoError(t, err)
+
+	// Create a a three deep savepoint and rollback the inner two savepoints.
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return session.Savepoint(ctx, func(ctx context.Context) error {
+			_, err := session.ExecutePrepared(ctx, insertPrepared, tree.Datums{
+				tree.NewDInt(tree.DInt(1)),
+				tree.NewDInt(tree.DInt(10)),
+			})
+			if err != nil {
+				return err
+			}
+			err = session.Savepoint(ctx, func(ctx context.Context) error {
+				_, err := session.ExecutePrepared(ctx, insertPrepared, tree.Datums{
+					tree.NewDInt(tree.DInt(2)),
+					tree.NewDInt(tree.DInt(20)),
+				})
+				if err != nil {
+					return err
+				}
+				return session.Savepoint(ctx, func(ctx context.Context) error {
+					_, err := session.ExecutePrepared(ctx, insertPrepared, tree.Datums{
+						tree.NewDInt(tree.DInt(3)),
+						tree.NewDInt(tree.DInt(30)),
+					})
+					if err != nil {
+						return err
+					}
+					// Rollback this innermost savepoint
+					return errors.New("rollback innermost savepoint")
+				})
+			})
+			// The second savepoint should fail due to the nested savepoint rollback
+			require.ErrorContains(t, err, "rollback innermost savepoint")
+			return nil
+		})
+	})
+	require.NoError(t, err)
+
+	// Verify final state - only first insert should be committed
+	rows, err := session.QueryPrepared(ctx, selectPrepared, nil)
+	require.NoError(t, err)
+	require.Equal(t, []tree.Datums{
+		{tree.NewDInt(tree.DInt(1)), tree.NewDInt(tree.DInt(10))},
+	}, rows)
+}

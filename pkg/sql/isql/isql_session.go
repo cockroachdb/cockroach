@@ -64,6 +64,22 @@ type Session interface {
 	// }
 	Txn(ctx context.Context, do func(context.Context) error) error
 
+	// Savepoint creates a savepoint within an existing transaction and executes
+	// the given function. If the function returns an error, the savepoint is
+	// rolled back. If the function succeeds, the savepoint is released.
+	// Savepoints must be used within a transaction.
+	//
+	// Example:
+	// err := session.Txn(ctx, func(ctx context.Context) error {
+	// 	return session.Savepoint(ctx, func(ctx context.Context) error {
+	// 		return session.ExecutePrepared(ctx, stmt, []tree.Datum{tree.NewDInt(1)})
+	// 	})
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+	Savepoint(ctx context.Context, do func(context.Context) error) error
+
 	// Close closes the session and cleans up internal resources.
 	Close(ctx context.Context)
 }
