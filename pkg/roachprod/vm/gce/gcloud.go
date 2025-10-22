@@ -1847,7 +1847,8 @@ func (p *Provider) Create(
 			return nil, err
 		}
 	}
-	return vmList, propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD, providerOpts.PDVolumeCount)
+	return vmList, propagateDiskLabels(l, project, labels, zoneToHostNames, opts.SSDOpts.UseLocalSSD,
+		providerOpts.PDVolumeCount, providerOpts.BootDiskOnly)
 }
 
 // computeGrowDistribution computes the distribution of new nodes across the
@@ -2019,7 +2020,7 @@ func (p *Provider) Grow(
 		labelsJoined += fmt.Sprintf("%s=%s", key, value)
 	}
 	err = propagateDiskLabels(l, project, labelsJoined, zoneToHostNames, len(vms[0].LocalDisks) != 0,
-		len(vms[0].NonBootAttachedVolumes))
+		len(vms[0].NonBootAttachedVolumes), false /* bootDiskOnly: always false here since we probe the VMs. */)
 	if err != nil {
 		return nil, err
 	}
@@ -2511,7 +2512,9 @@ func propagateDiskLabels(
 	zoneToHostNames map[string][]string,
 	useLocalSSD bool,
 	pdVolumeCount int,
+	bootDiskOnly bool,
 ) error {
+
 	g := newLimitedErrorGroup()
 
 	l.Printf("Propagating labels across all disks")
@@ -2539,7 +2542,7 @@ func propagateDiskLabels(
 				return nil
 			})
 
-			if !useLocalSSD {
+			if !useLocalSSD && !bootDiskOnly {
 				// The persistent disks are already created. The disks are suffixed with an offset
 				// which starts from 1. A total of "pdVolumeCount" disks are created.
 				g.Go(func() error {

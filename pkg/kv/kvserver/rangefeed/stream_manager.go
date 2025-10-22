@@ -108,7 +108,7 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 	case *UnbufferedSender:
 		return NewPerRangeEventSink(rangeID, streamID, sender)
 	default:
-		log.KvDistribution.Fatalf(context.Background(), "unexpected sender type %T", sm)
+		log.KvExec.Fatalf(context.Background(), "unexpected sender type %T", sm)
 		return nil
 	}
 }
@@ -133,7 +133,7 @@ func (sm *StreamManager) OnError(streamID int64) {
 // DisconnectStream disconnects the stream with the given streamID.
 func (sm *StreamManager) DisconnectStream(streamID int64, err *kvpb.Error) {
 	if err == nil {
-		log.KvDistribution.Fatalf(context.Background(),
+		log.KvExec.Fatalf(context.Background(),
 			"unexpected: DisconnectStream called with nil error")
 		return
 	}
@@ -166,7 +166,7 @@ func (sm *StreamManager) AddStream(streamID int64, d Disconnector) {
 		return
 	}
 	if _, ok := sm.streams.m[streamID]; ok {
-		log.KvDistribution.Fatalf(context.Background(), "stream %d already exists", streamID)
+		log.KvExec.Fatalf(context.Background(), "stream %d already exists", streamID)
 	}
 	sm.streams.m[streamID] = d
 	sm.metrics.ActiveMuxRangeFeed.Inc(1)
@@ -209,7 +209,7 @@ func (sm *StreamManager) Stop(ctx context.Context) {
 	sm.sender.cleanup(ctx)
 	sm.streams.Lock()
 	defer sm.streams.Unlock()
-	log.KvDistribution.VInfof(ctx, 2, "stopping stream manager: disconnecting %d streams", len(sm.streams.m))
+	log.KvExec.VInfof(ctx, 2, "stopping stream manager: disconnecting %d streams", len(sm.streams.m))
 	rangefeedClosedErr := kvpb.NewError(
 		kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED))
 	sm.metrics.ActiveMuxRangeFeed.Dec(int64(len(sm.streams.m)))
@@ -228,7 +228,7 @@ func (sm *StreamManager) Stop(ctx context.Context) {
 // sender.run may also finish without sending anything to the channel.
 func (sm *StreamManager) Error() <-chan error {
 	if sm.errCh == nil {
-		log.KvDistribution.Fatalf(context.Background(), "StreamManager.Error called before StreamManager.Start")
+		log.KvExec.Fatalf(context.Background(), "StreamManager.Error called before StreamManager.Start")
 	}
 	return sm.errCh
 }

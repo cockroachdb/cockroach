@@ -196,7 +196,7 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 	// If the registration has a catch-up scan, run it.
 	if err := br.maybeRunCatchUpScan(ctx); err != nil {
 		err = errors.Wrap(err, "catch-up scan failed")
-		log.KvDistribution.Errorf(ctx, "%v", err)
+		log.KvExec.Errorf(ctx, "%v", err)
 		return err
 	}
 
@@ -229,7 +229,7 @@ func (br *bufferedRegistration) outputLoop(ctx context.Context) error {
 
 		if overflowed {
 			if wasOverflowedOnFirstIteration && br.shouldLogOverflow(oneCheckpointWithTimestampSent) {
-				log.KvDistribution.Warningf(ctx, "rangefeed %s overflowed during catch up scan from %s (useful checkpoint sent: %v)",
+				log.KvExec.Warningf(ctx, "rangefeed %s overflowed during catch up scan from %s (useful checkpoint sent: %v)",
 					br.span, br.catchUpTimestamp, oneCheckpointWithTimestampSent)
 			}
 
