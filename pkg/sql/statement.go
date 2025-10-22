@@ -8,6 +8,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
@@ -87,6 +89,9 @@ func makeStatement(
 			hintStmtFingerprint = formatStatementHideConstants(e.Statement, fmtFlags)
 		}
 		hints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint)
+		if len(hints) > 0 {
+			telemetry.Inc(sqltelemetry.StatementHintsCounter)
+		}
 	}
 	return Statement{
 		Statement:       parserStmt,
@@ -110,6 +115,9 @@ func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.I
 	// https://google.github.io/sqlcommenter/spec/#format for more details.
 	if cl != 0 {
 		tags = sqlcommenter.ExtractQueryTags(comments[cl-1])
+	}
+	if len(prepared.Hints) > 0 {
+		telemetry.Inc(sqltelemetry.StatementHintsCounter)
 	}
 	return Statement{
 		Statement:       prepared.Statement,
