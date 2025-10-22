@@ -191,37 +191,37 @@ func (r *baseRegistration) assertEvent(ctx context.Context, event *kvpb.RangeFee
 	switch t := event.GetValue().(type) {
 	case *kvpb.RangeFeedValue:
 		if t.Key == nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedValue.Key: %v", t)
 		}
 		if t.Value.RawBytes == nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.RawBytes: %v", t)
 		}
 		if t.Value.Timestamp.IsEmpty() {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedValue.Value.Timestamp: %v", t)
 		}
 	case *kvpb.RangeFeedCheckpoint:
 		if t.Span.Key == nil {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedCheckpoint.Span.Key: %v", t)
 		}
 	case *kvpb.RangeFeedSSTable:
 		if len(t.Data) == 0 {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Data: %v", t)
 		}
 		if len(t.Span.Key) == 0 {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Span: %v", t)
 		}
 		if t.WriteTS.IsEmpty() {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedSSTable.Timestamp: %v", t)
 		}
 	case *kvpb.RangeFeedDeleteRange:
 		if len(t.Span.Key) == 0 || len(t.Span.EndKey) == 0 {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty key in RangeFeedDeleteRange.Span: %v", t)
 		}
 		if t.Timestamp.IsEmpty() {
-			log.KvDistribution.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
+			log.KvExec.Fatalf(ctx, "unexpected empty RangeFeedDeleteRange.Timestamp: %v", t)
 		}
 	default:
-		log.KvDistribution.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.KvExec.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 }
 
@@ -263,7 +263,7 @@ func (r *baseRegistration) maybeStripEvent(
 			// observed all values up to the checkpoint timestamp over a given
 			// key span if any updates to that span have been filtered out.
 			if !t.Span.Contains(r.span) {
-				log.KvDistribution.Fatalf(ctx, "registration span %v larger than checkpoint span %v", r.span, t.Span)
+				log.KvExec.Fatalf(ctx, "registration span %v larger than checkpoint span %v", r.span, t.Span)
 			}
 			t = copyOnWrite().(*kvpb.RangeFeedCheckpoint)
 			t.Span = r.span
@@ -278,7 +278,7 @@ func (r *baseRegistration) maybeStripEvent(
 		// SSTs are always sent in their entirety, it is up to the caller to
 		// filter out irrelevant entries.
 	default:
-		log.KvDistribution.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.KvExec.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 	return ret
 }
@@ -364,7 +364,7 @@ func (reg *registry) Register(ctx context.Context, r registration) {
 	r.setID(reg.nextID())
 	if err := reg.tree.Insert(r, false /* fast */); err != nil {
 		// TODO(erikgrinaker): these errors should arguably be returned.
-		log.KvDistribution.Fatalf(ctx, "%v", err)
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -400,7 +400,7 @@ func (reg *registry) PublishToOverlapping(
 		// surprising. Revisit this once RangeFeed has more users.
 		minTS = hlc.MaxTimestamp
 	default:
-		log.KvDistribution.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
+		log.KvExec.Fatalf(ctx, "unexpected RangeFeedEvent variant: %v", t)
 	}
 
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
@@ -468,13 +468,13 @@ func (reg *registry) remove(ctx context.Context, toDelete []interval.Interface) 
 	} else if len(toDelete) == 1 {
 		reg.updateMetricsOnUnregistration(toDelete[0].(registration))
 		if err := reg.tree.Delete(toDelete[0], false /* fast */); err != nil {
-			log.KvDistribution.Fatalf(ctx, "%v", err)
+			log.KvExec.Fatalf(ctx, "%v", err)
 		}
 	} else if len(toDelete) > 1 {
 		for _, i := range toDelete {
 			reg.updateMetricsOnUnregistration(i.(registration))
 			if err := reg.tree.Delete(i, true /* fast */); err != nil {
-				log.KvDistribution.Fatalf(ctx, "%v", err)
+				log.KvExec.Fatalf(ctx, "%v", err)
 			}
 		}
 		reg.tree.AdjustRanges()
