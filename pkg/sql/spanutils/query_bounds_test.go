@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -202,7 +203,7 @@ func TestSpanToQueryBounds(t *testing.T) {
 			actualBounds, actualHasRows, err := spanutils.SpanToQueryBounds(ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, 1, roachpb.Span{
 				Key:    startKey,
 				EndKey: endKey,
-			}, &alloc)
+			}, &alloc, hlc.Timestamp{})
 
 			// Verify results.
 			require.NoError(t, err)
@@ -423,6 +424,7 @@ func TestSpanToQueryBoundsCompositeKeys(t *testing.T) {
 						EndKey: endKey,
 					},
 					&alloc,
+					hlc.Timestamp{},
 				)
 
 				// Verify results.
