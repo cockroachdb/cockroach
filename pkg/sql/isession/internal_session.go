@@ -52,6 +52,25 @@ var (
 		AST: &tree.RollbackTransaction{},
 		SQL: "ROLLBACK",
 	}
+
+	savePointBegin = statements.Statement[tree.Statement]{
+		AST: &tree.Savepoint{
+			Name: tree.Name("internal_session"),
+		},
+		SQL: "SAVEPOINT internal_session",
+	}
+	savePointRelease = statements.Statement[tree.Statement]{
+		AST: &tree.ReleaseSavepoint{
+			Savepoint: tree.Name("internal_session"),
+		},
+		SQL: "RELEASE SAVEPOINT internal_session",
+	}
+	savePointRollback = statements.Statement[tree.Statement]{
+		AST: &tree.RollbackToSavepoint{
+			Savepoint: tree.Name("internal_session"),
+		},
+		SQL: "ROLLBACK TO SAVEPOINT internal_session",
+	}
 )
 
 var _ isql.Session = &InternalSession{}
@@ -113,6 +132,33 @@ func (i *InternalSession) Txn(ctx context.Context, do func(ctx context.Context) 
 	}
 
 	return err
+}
+
+func (i *InternalSession) Savepoint(ctx context.Context, do func(ctx context.Context) error) error {
+	if i.poison != nil {
+		return i.poison
+	}
+
+	if err := i.executeStatement(ctx, savePointBegin); err != nil {
+		return errors.Wrap(err, "failed to create savepoint")
+	}
+
+	innerErr := do(ctx)
+	if innerErr != nil {
+		savePointErr := i.executeStatement(ctx, savePointRollback)
+		if savePointErr != nil {
+			// Return the rollback error as primary since it indicates a more
+			// serious problem than the original error.
+			return errors.CombineErrors(savePointErr, innerErr)
+		}
+		return innerErr
+	}
+
+	if err := i.executeStatement(ctx, savePointRelease); err != nil {
+		return errors.Wrap(err, "failed to release the savepoint")
+	}
+
+	return nil
 }
 
 func (i *InternalSession) Prepare(
@@ -233,7 +279,7 @@ func (i *InternalSession) executeStatement(
 		return errors.Wrap(err, "unable to push sync statement")
 	}
 	_, _, err = i.readResults(ctx)
-	return errors.Wrap(err, "unable to execute raw statement")
+	return errors.Wrapf(err, "unable to execute raw statement %s", stmt.SQL)
 }
 
 func (i *InternalSession) readResults(ctx context.Context) ([]tree.Datums, int, error) {
