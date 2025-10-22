@@ -6,8 +6,12 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,10 +41,26 @@ type Statement struct {
 	Prepared *prep.Statement
 
 	QueryTags []sqlcommenter.QueryTag
+
+	// Hints are any external statement hints from the system.statement_hints
+	// table that could apply to this statement, based on the statement
+	// fingerprint.
+	Hints []hintpb.StatementHintUnion
+
+	// HintIDs are the IDs of any external statement hints, which are used for
+	// invalidation of cached plans.
+	HintIDs []int64
 }
 
+// makeStatement creates a Statement with the metadata necessary to execute the
+// statement, including any external statement hints from the statement hints
+// cache.
 func makeStatement(
-	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID, fmtFlags tree.FmtFlags,
+	ctx context.Context,
+	parserStmt statements.Statement[tree.Statement],
+	queryID clusterunique.ID,
+	fmtFlags tree.FmtFlags,
+	statementHintsCache *hints.StatementHintsCache,
 ) Statement {
 	comments := parserStmt.Comments
 	cl := len(comments)
@@ -51,16 +71,36 @@ func makeStatement(
 	if cl != 0 {
 		tags = sqlcommenter.ExtractQueryTags(comments[cl-1])
 	}
-
+	stmtNoConstants := formatStatementHideConstants(parserStmt.AST, fmtFlags)
+	var hints []hintpb.StatementHintUnion
+	var hintIDs []int64
+	if statementHintsCache != nil {
+		hintStmtFingerprint := stmtNoConstants
+		switch e := parserStmt.AST.(type) {
+		case *tree.CopyTo:
+			hintStmtFingerprint = formatStatementHideConstants(e.Statement, fmtFlags)
+		case *tree.Explain:
+			hintStmtFingerprint = formatStatementHideConstants(e.Statement, fmtFlags)
+		case *tree.ExplainAnalyze:
+			hintStmtFingerprint = formatStatementHideConstants(e.Statement, fmtFlags)
+		case *tree.Prepare:
+			hintStmtFingerprint = formatStatementHideConstants(e.Statement, fmtFlags)
+		}
+		hints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint)
+	}
 	return Statement{
 		Statement:       parserStmt,
-		StmtNoConstants: formatStatementHideConstants(parserStmt.AST, fmtFlags),
+		StmtNoConstants: stmtNoConstants,
 		StmtSummary:     formatStatementSummary(parserStmt.AST, fmtFlags),
 		QueryID:         queryID,
 		QueryTags:       tags,
+		Hints:           hints,
+		HintIDs:         hintIDs,
 	}
 }
 
+// makeStatementFromPrepared creates a Statement using the metadata from the
+// prepared statement.
 func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.ID) Statement {
 	comments := prepared.Comments
 	cl := len(comments)
@@ -79,6 +119,8 @@ func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.I
 		StmtSummary:     prepared.StatementSummary,
 		QueryID:         queryID,
 		QueryTags:       tags,
+		Hints:           prepared.Hints,
+		HintIDs:         prepared.HintIDs,
 	}
 }
 
