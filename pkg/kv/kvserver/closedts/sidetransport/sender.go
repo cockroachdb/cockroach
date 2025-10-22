@@ -653,7 +653,7 @@ func (b *updatesBuf) Push(ctx context.Context, update *ctpb.Update) {
 	if b.sizeLocked() != 0 {
 		lastIdx := b.lastIdxLocked()
 		if prevSeq := b.mu.data[lastIdx].SeqNum; prevSeq != update.SeqNum-1 {
-			log.KvDistribution.Fatalf(ctx, "bad sequence number; expected %d, got %d", prevSeq+1, update.SeqNum)
+			log.KvExec.Fatalf(ctx, "bad sequence number; expected %d, got %d", prevSeq+1, update.SeqNum)
 		}
 	}
 
@@ -762,7 +762,7 @@ func (b *updatesBuf) GetBySeq(ctx context.Context, seqNum ctpb.SeqNum) (*ctpb.Up
 			continue
 		}
 		if seqNum > lastSeq+1 {
-			log.KvDistribution.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
+			log.KvExec.Fatalf(ctx, "skipping sequence numbers; requested: %d, last: %d", seqNum, lastSeq)
 		}
 		idx := (b.mu.head + (int)(seqNum-firstSeq)) % len(b.mu.data)
 		return b.mu.data[idx], true
@@ -963,7 +963,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 				if err := r.maybeConnect(ctx, stopper); err != nil {
 					if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) && everyN.ShouldLog() {
-						log.KvDistribution.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
+						log.KvExec.Infof(ctx, "side-transport failed to connect to n%d: %s", r.nodeID, err)
 					}
 					time.Sleep(errSleepTime)
 					continue
@@ -993,7 +993,7 @@ func (r *rpcConn) run(ctx context.Context, stopper *stop.Stopper) {
 				}
 				if err := r.stream.Send(msg); err != nil {
 					if err != io.EOF && everyN.ShouldLog() {
-						log.KvDistribution.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
+						log.KvExec.Warningf(ctx, "failed to send closed timestamp message %d to n%d: %s",
 							r.lastSent, r.nodeID, err)
 					}
 					// Keep track of the fact that we need a new connection.
