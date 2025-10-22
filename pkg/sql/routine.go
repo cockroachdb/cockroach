@@ -368,10 +368,11 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
-			err = runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
 			if err != nil {
 				return err
 			}
+			forwardInnerQueryStats(g.p.routineMetadataForwarder, queryStats)
 			if openCursor {
 				return cursorHelper.createCursor(g.p)
 			}

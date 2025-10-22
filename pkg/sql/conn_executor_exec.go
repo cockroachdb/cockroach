@@ -3288,6 +3288,8 @@ type topLevelQueryStats struct {
 	// client receiving the PGWire protocol messages (as well as construcing
 	// those messages).
 	clientTime time.Duration
+	// NB: when adding another field here, consider whether
+	// forwardInnerQueryStats method needs an adjustment.
 }
 
 func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
