@@ -72,6 +72,10 @@ type EngineMetrics struct {
 	// primary and secondary indexes. Note that some secondary indexes can have
 	// multiple index rows per primary index row (e.g. inverted and vector).
 	StatementRowsRead *metric.Counter
+
+	// StatementBytesRead counts the number of bytes scanned by SQL statements
+	// from primary and secondary indexes.
+	StatementBytesRead *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
@@ -203,6 +207,7 @@ func (ex *connExecutor) recordStatementSummary(
 
 	// Update SQL statement metrics.
 	ex.metrics.EngineMetrics.StatementRowsRead.Inc(stats.rowsRead)
+	ex.metrics.EngineMetrics.StatementBytesRead.Inc(stats.bytesRead)
 
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,

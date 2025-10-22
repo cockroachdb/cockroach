@@ -1206,9 +1206,15 @@ var (
 	}
 	MetaStatementRowsRead = metric.Metadata{
 		Name:        "sql.statements.rows_read.count",
-		Help:        "Number of rows read by SQL statements from primary and secondary indexes",
+		Help:        "Number of rows read by SQL statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
+	}
+	MetaStatementBytesRead = metric.Metadata{
+		Name:        "sql.statements.bytes_read.count",
+		Help:        "Number of bytes read by SQL statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_BYTES,
 	}
 )
 

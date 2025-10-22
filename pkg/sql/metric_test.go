@@ -235,8 +235,6 @@ func TestStatementMetrics(t *testing.T) {
 		},
 	}
 
-	lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
-
 	for _, tc := range testCases {
 		t.Run(tc.query, func(t *testing.T) {
 			for _, vectorized := range []string{"off", "on"} {
@@ -246,11 +244,23 @@ func TestStatementMetrics(t *testing.T) {
 						return
 					}
 
+					// Get initial values of the counters.
+					lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
+					lastBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
+
 					runner.Exec(t, tc.query)
+
+					// Test the rows read metric.
 					actual, err := checkCounterDelta(
 						s, sql.MetaStatementRowsRead, lastRowsRead, tc.rowsRead)
 					require.NoError(t, err)
 					lastRowsRead = actual
+
+					// If there were rows read, then expect bytes read to have
+					// increased. Don't check for a specific value, since there are
+					// too many factors that can change this.
+					currBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
+					require.Greater(t, currBytesRead, lastBytesRead)
 				})
 			}
 		})
