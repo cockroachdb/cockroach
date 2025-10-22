@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/types"
@@ -187,20 +186,15 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	rng, _ := randutil.NewTestRand()
-	// This test isn't supported for external-process mode (we don't emit the
-	// misplanned range metadata there), so we have our own randomization logic
-	// that excludes that mode and gives 50% to two other modes each.
-	testTenantOption := base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
-	if rng.Float64() < 0.5 {
-		testTenantOption = base.SharedTestTenantAlwaysEnabled
-	}
 	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase:       "test",
-				DefaultTestTenant: testTenantOption,
+				UseDatabase: "test",
+				// This test isn't supported for external-process mode (we don't
+				// emit the misplanned range metadata there), so we skip the
+				// external mode only.
+				DefaultTestTenant: base.TestSkipForExternalProcessMode(),
 			},
 		})
 	defer tc.Stopper().Stop(ctx)

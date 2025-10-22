@@ -17,9 +17,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -47,6 +49,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func makeKey(codec keys.SQLCodec, key string) roachpb.Key {
+	return append(append(roachpb.Key(nil), codec.TenantPrefix()...), roachpb.Key(key)...)
+}
+
 // Test that we don't attempt to create flows in an aborted transaction.
 // Instead, a retryable error is created on the gateway. The point is to
 // simulate a race where the heartbeat loop finds out that the txn is aborted
@@ -63,21 +69,22 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	if _, err := sqlDB.ExecContext(
 		ctx, "create database test; create table test.t(a int)"); err != nil {
 		t.Fatal(err)
 	}
-	key := roachpb.Key("a")
+	key := makeKey(s.Codec(), "a")
 
 	// Plan a statement.
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
 	internalPlanner, cleanup := NewInternalPlanner(
 		"test",
-		kv.NewTxn(ctx, db, s.NodeID()),
+		kv.NewTxn(ctx, db, srv.NodeID()),
 		username.NodeUserName(),
 		&MemoryMetrics{},
 		&execCfg,
@@ -118,11 +125,11 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			Stopper:           s.AppStopper(),
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.AppStopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -218,7 +225,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		abortTxn func(uuid uuid.UUID)
 	}{}
 
-	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{
+	srv, conn, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				RunBeforeCascadesAndChecks: func(txnID uuid.UUID) {
@@ -231,7 +238,8 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Set up schemas for the test. We want a construction that results in 2 FK
@@ -243,7 +251,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 		t,
 		"create table test.child(a INT, b INT, FOREIGN KEY (a) REFERENCES test.parent1(a), FOREIGN KEY (b) REFERENCES test.parent2(b))",
 	)
-	key := roachpb.Key("a")
+	key := makeKey(s.Codec(), "a")
 
 	setupQueries := []string{
 		"insert into test.parent1 VALUES(1)",
@@ -341,11 +349,11 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			HeartbeatInterval: time.Millisecond,
 			Settings:          s.ClusterSettings(),
 			Clock:             s.Clock(),
-			Stopper:           s.Stopper(),
+			Stopper:           s.AppStopper(),
 		},
 		s.DistSenderI().(*kvcoord.DistSender),
 	)
-	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+	shortDB := kv.NewDB(ambient, tsf, s.Clock(), s.AppStopper())
 
 	iter := 0
 	// We'll trace to make sure the test isn't fooling itself.
@@ -610,13 +618,15 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 					},
 				},
 			},
-			Insecure: true,
+			Insecure:          true,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(112960),
 		}})
 	defer tc.Stopper().Stop(ctx)
+	s := tc.ApplicationLayer(0)
 
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
-	db := tc.ServerConn(0 /* idx */)
+	db := s.SQLConn(t, serverutils.DBName("test"))
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlutils.CreateTable(
 		t, db, "foo",
@@ -635,7 +645,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 	)
 
 	// Connect to the cluster via the PGWire client.
-	p, err := pgtest.NewPGTest(ctx, tc.Server(0).AdvSQLAddr(), username.RootUser)
+	p, err := pgtest.NewPGTest(ctx, s.AdvSQLAddr(), username.RootUser)
 	require.NoError(t, err)
 
 	// We disable multiple active portals here as it only supports local-only plan.
@@ -839,6 +849,11 @@ func TestSetupFlowRPCError(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	// Create a table with 30 rows, split them into 3 ranges with each node
 	// having one.
 	db := tc.ServerConn(0)
@@ -1012,7 +1027,8 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 					},
 				},
 			},
-			Insecure: true,
+			Insecure:          true,
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -1156,6 +1172,11 @@ SELECT id, details FROM jobs AS j INNER JOIN cte1 ON id = job_id WHERE id = 1;
 			},
 		}})
 	defer tc.Stopper().Stop(context.Background())
+
+	if tc.DefaultTenantDeploymentMode().IsExternal() {
+		tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
 
 	db := tc.ServerConn(0 /* idx */)
 	sqlDB := sqlutils.MakeSQLRunner(db)

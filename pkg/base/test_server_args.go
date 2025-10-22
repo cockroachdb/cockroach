@@ -326,7 +326,8 @@ type DefaultTestTenantOptions struct {
 	// warn".
 	noWarnImplicitInterfaces bool
 
-	// If test tenant is disabled, issue and label to link in log message.
+	// If test tenant is disabled, issue and label to link in log message. These
+	// can be left unset if one of the tenant modes is explicitly skipped.
 	issueNum int
 	label    string
 }
@@ -573,6 +574,12 @@ func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTena
 // problem.
 func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
 	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+// TestSkipForExternalProcessMode disables selecting the external process
+// virtual cluster for tests that are not applicable to that mode.
+func TestSkipForExternalProcessMode() DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(0 /* issueNumber */)
 }
 
 func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {

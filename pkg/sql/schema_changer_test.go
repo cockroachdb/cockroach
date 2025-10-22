@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -7847,6 +7848,10 @@ func TestMemoryMonitorErrorsDuringBackfillAreRetried(t *testing.T) {
 		}
 		tc := testcluster.StartTestCluster(t, 2, tca)
 		defer tc.Stopper().Stop(ctx)
+		if tc.DefaultTenantDeploymentMode().IsExternal() {
+			tc.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+		}
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 		tdb.Exec(t, "INSERT INTO foo VALUES (1)")

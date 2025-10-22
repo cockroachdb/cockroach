@@ -556,7 +556,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
 		//
-		// TODO(#76378): We should review this choice. Why can't we use "Random"
+		// TODO(#156124): We should review this choice. Why can't we use "Random"
 		// here? If there are specific tests that are incompatible, we can
 		// flag them to run only in a separate config.
 		UseSecondaryTenant:            Never,
