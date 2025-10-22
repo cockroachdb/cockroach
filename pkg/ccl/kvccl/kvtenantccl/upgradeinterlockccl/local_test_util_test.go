@@ -107,7 +107,7 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 		// extend the TTL by 10x to handle cases where the system is too
 		// overloaded to heartbeat at sub-second intervals.
 		ttlOverride := 250 * time.Millisecond
-		if skip.Stress() {
+		if skip.DevStress() {
 			ttlOverride *= 10
 		}
 		heartbeatOverride := ttlOverride / 10

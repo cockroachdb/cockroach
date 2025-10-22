@@ -188,8 +188,8 @@ func UnderDuressWithIssue(t SkippableTest, githubIssueID int, args ...interface{
 	}
 }
 
-// Duress catures the conditions that currently lead us to
-// believe that tests may be slower than normal.
+// Duress captures the conditions that currently lead us to believe that tests
+// may be slower than normal.
 func Duress() bool {
 	return util.RaceEnabled || Stress() || syncutil.DeadlockEnabled
 }

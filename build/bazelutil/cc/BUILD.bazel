@@ -1,0 +1,16 @@
+cc_library(
+    name = "resolver_compat",
+    srcs = ["res_compat.c"],
+    visibility = ["//visibility:public"],
+    alwayslink = True,
+)
+
+cc_library(
+    name = "resolver_libs",
+    linkopts = [
+        "-Wl,--push-state,--no-as-needed",
+        "-lresolv",
+        "-Wl,--pop-state",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -524,6 +524,14 @@ var baselineDeletionRate = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.tombstone_dense_compaction_threshold",
+	"percentage of tombstone-dense data blocks that trigger a compaction (0 = disabled)",
+	10, // 10%
+	settings.IntInRange(0, 100),
+)
+
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = func() pebble.Comparer {
@@ -961,6 +969,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	}
 	cfg.opts.TargetByteDeletionRate = func() int {
 		return int(baselineDeletionRate.Get(&cfg.settings.SV))
+	}
+	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
+		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
 	}
 	if cfg.opts.Experimental.UseDeprecatedCompensatedScore == nil {
 		cfg.opts.Experimental.UseDeprecatedCompensatedScore = func() bool {
