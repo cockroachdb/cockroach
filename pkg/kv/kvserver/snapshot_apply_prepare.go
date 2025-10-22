@@ -63,13 +63,6 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 // snapshot entry ID, and that clearing the log is applied atomically with the
 // snapshot write, or after the latter is synced.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	// TODO(pav-kv): there is no harm in keeping RangeTombstone as long as it does
-	// not exceed the ReplicaID. Since the replica exists (can be uninitialized if
-	// this is an initial snapshot), this invariant holds. Don't touch either of
-	// ReplicaID / RangeTombstone keys, and it will retain the invariant.
-	if err := w.ClearUnversioned(s.sl.RangeTombstoneKey(), storage.ClearOptions{}); err != nil {
-		return errors.Wrapf(err, "unable to clear RangeTombstone")
-	}
 	// Update HardState.
 	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
 		return errors.Wrapf(err, "unable to write HardState")
