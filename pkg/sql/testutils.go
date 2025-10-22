@@ -127,8 +127,11 @@ func (dsp *DistSQLPlanner) Exec(
 	distribute bool,
 ) error {
 	p := localPlanner.(*planner)
-	p.stmt = makeStatement(stmt, clusterunique.ID{}, /* queryID */
-		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)))
+	p.stmt = makeStatement(
+		ctx, stmt, clusterunique.ID{}, /* queryID */
+		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
+		nil, /* statementHintsCache */
+	)
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		return err
 	}

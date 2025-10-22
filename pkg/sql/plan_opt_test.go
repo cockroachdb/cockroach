@@ -652,7 +652,9 @@ func TestPlanGistControl(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.stmt = makeStatement(stmt, clusterunique.ID{}, fmtFingerprintMask)
+	p.stmt = makeStatement(
+		ctx, stmt, clusterunique.ID{}, fmtFingerprintMask, nil, /* statementHintsCache */
+	)
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -678,7 +680,9 @@ func TestPlanGistControl(t *testing.T) {
 	p = internalPlanner.(*planner)
 	p.SessionData().DisablePlanGists = true
 
-	p.stmt = makeStatement(stmt, clusterunique.ID{}, fmtFingerprintMask)
+	p.stmt = makeStatement(
+		ctx, stmt, clusterunique.ID{}, fmtFingerprintMask, nil, /* statementHintsCache */
+	)
 	if err := p.makeOptimizerPlan(ctx); err != nil {
 		t.Fatal(err)
 	}

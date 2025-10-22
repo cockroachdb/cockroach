@@ -150,6 +150,8 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Prepared.StatementNoConstants = pm.StatementNoConstants
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
+					stmt.Hints = pm.Hints
+					stmt.HintIDs = pm.HintIDs
 					if cachedData.Memo.IsOptimized() {
 						// A cache, fully optimized memo is an "ideal generic
 						// memo".

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -388,7 +389,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(prepared, queryID)
 	} else {
-		stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+		var statementHintsCache *hints.StatementHintsCache
+		if ex.executorType != executorTypeInternal {
+			statementHintsCache = ex.server.cfg.StatementHintsCache
+		}
+		stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
 	}
 
 	if len(stmt.QueryTags) > 0 {
@@ -557,6 +562,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.ExpectedTypes = ps.Columns
 		stmt.StmtNoConstants = ps.StatementNoConstants
 		stmt.StmtSummary = ps.StatementSummary
+		stmt.Hints = ps.Hints
+		stmt.HintIDs = ps.HintIDs
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -888,7 +895,12 @@ func (ex *connExecutor) execStmtInOpenState(
 				typeHints[i] = resolved
 			}
 		}
+		var statementHintsCache *hints.StatementHintsCache
+		if ex.executorType != executorTypeInternal {
+			statementHintsCache = ex.server.cfg.StatementHintsCache
+		}
 		prepStmt := makeStatement(
+			ctx,
 			statements.Statement[tree.Statement]{
 				// We need the SQL string just for the part that comes after
 				// "PREPARE ... AS",
@@ -901,6 +913,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			},
 			ex.server.cfg.GenerateID(),
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			statementHintsCache,
 		)
 		var rawTypeHints []oid.Oid
 
@@ -1256,7 +1269,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	if isExtendedProtocol {
 		vars.stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
-		vars.stmt = makeStatement(parserStmt, queryID, stmtFingerprintFmtMask)
+		var statementHintsCache *hints.StatementHintsCache
+		if ex.executorType != executorTypeInternal {
+			statementHintsCache = ex.server.cfg.StatementHintsCache
+		}
+		vars.stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
 	}
 
 	var queryTimeoutTicker *time.Timer
@@ -1443,6 +1460,8 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.ExpectedTypes = ps.Columns
 		vars.stmt.StmtNoConstants = ps.StatementNoConstants
 		vars.stmt.StmtSummary = ps.StatementSummary
+		vars.stmt.Hints = ps.Hints
+		vars.stmt.HintIDs = ps.HintIDs
 		res.ResetStmtType(ps.AST)
 
 		if e.DiscardRows {
@@ -1852,7 +1871,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				typeHints[i] = resolved
 			}
 		}
+		var statementHintsCache *hints.StatementHintsCache
+		if ex.executorType != executorTypeInternal {
+			statementHintsCache = ex.server.cfg.StatementHintsCache
+		}
 		prepStmt := makeStatement(
+			ctx,
 			statements.Statement[tree.Statement]{
 				// We need the SQL string just for the part that comes after
 				// "PREPARE ... AS",
@@ -1865,6 +1889,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			},
 			ex.server.cfg.GenerateID(),
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			statementHintsCache,
 		)
 		var rawTypeHints []oid.Oid
 
@@ -3463,8 +3488,11 @@ func (ex *connExecutor) execStmtInNoTxnState(
 		}
 
 		p := &ex.planner
-		stmt := makeStatement(parserStmt, ex.server.cfg.GenerateID(),
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)))
+		stmt := makeStatement(
+			ctx, parserStmt, ex.server.cfg.GenerateID(),
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
+			nil, /* statementHintsCache */
+		)
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
 		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
