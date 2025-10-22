@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -20,71 +21,62 @@ import (
 )
 
 // unbufferedRegistration is similar to bufferedRegistration but does not
-// internally buffer events delivered via publish(). Rather, when caught up, it
-// forwards events directly to the BufferedStream. It assumes that
-// BufferedStream's SendBuffered method is non-blocking. As a result, it does
-// not require a long-lived goroutine to move event between an internal buffer
-// and the sender.
+// internally buffer events delivered via publish() after its initial catch-up
+// scan. Rather, it sends events directly to the BufferedStream. It assumes
+// that BufferedStream's SendBuffered method is non-blocking. As a result, it
+// does not require a long-lived goroutine to move event between an internal
+// buffer and the sender.
 //
-// Note that UnbufferedRegistration needs to ensure that events sent to
-// BufferedStream from the processor during a running catchup scan are sent to
-// the client in order. To achieve this, events from catch-up scans are sent
-// using UnbufferedSend. While the catch-up scan is ongoing, live updates
-// delivered via publish() are temporarily buffered in catchUpBuf to hold them
-// until the catch-up scan is complete. After the catch-up scan is done, we know
-// that catch-up scan events have been sent to grpc stream successfully.
-// Catch-up buffer is then drained by our hopefully short-lived output loop
-// goroutine. Once the catchup buffer is fully drained, publish begins sending to
-// the buffered sender directly. unbufferedRegistration is responsible for
-// correctly handling memory reservations for data stored in the catchUpBuf.
+// Despite the name, the unbuffered registration does contain a buffer. The
+// catchUpBuf buffers live events delivered via publish() while the initial
+// catch-up scan is running. The catch-up scan sends all updates directly to the
+// sender using SendUnbuffered. When the catch-up scan is done, we then publish
+// all events in the catchUpBuf to the buffered sender and then send all future
+// events directly to the stream.
 //
-// All errors are delivered to this registration via Disonnect() which is
-// non-blocking. Disconnect sends an error to the stream and invokes any
-// necessary cleanup.
+// The unbufferedRegistration is responsible for correctly handling memory
+// reservations for data stored in the catchUpBuf.
 //
-// unbufferedRegistration is responsible for allocating and draining memory
-// catch-up buffer.
+// All errors are delivered to this registration via Disconnect() which is
+// non-blocking and responsible for cleanup.
 type unbufferedRegistration struct {
-	// Input.
 	baseRegistration
 	metrics *Metrics
 
-	// Output.
+	// stream is where any events or errors published to this registration are
+	// sent.
 	stream BufferedStream
 
-	// Internal.
 	mu struct {
 		syncutil.Mutex
 
-		// True if this catchUpBuf has overflowed, live raft events are dropped.
-		// This will cause the registration to disconnect with an error once
-		// catch-up scan is done. Once catchUpOverflowed is true, it will always be
-		// true.
+		// disconnected indicates that the registration has been disconnected. Once
+		// disconnected is true, events sent via publish() are ignored.
+		disconnected bool
+
+		// catchUpOverflowed is true if catchUpBuf overflows during the catchUpScan.
+		// Once overflowed, live raft events are dropped. This will cause the
+		// registration to disconnect with an error once catch-up scan is done. Once
+		// catchUpOverflowed is true, it will always be true.
 		catchUpOverflowed bool
+
+		// catchUpIter is created by replica under raftMu lock when registration is
+		// created if a catch-up scan is required. It is set to nil by output loop
+		// for processing and closed when done.
+		catchUpIter *CatchUpIterator
 
 		// catchUpBuf hold events published to this registration while the catch up
 		// scan is running. It is set to nil once it has been drained (because
-		// either catch-up scan succeeded or failed). If no catch-up iter is
-		// provided, catchUpBuf will be nil from the point of initialization.
+		// either catch-up scan succeeded or failed). If no catchUpIter is provided,
+		// catchUpBuf will be nil from the point of initialization.
+		//
+		// NB: Readers read from this without holding mu as there are not (and
+		// should never be) concurrent readers.
 		catchUpBuf chan *sharedEvent
 
 		// catchUpScanCancelFn is called to tear down the goroutine responsible for
 		// the catch-up scan. Can be called more than once.
 		catchUpScanCancelFn func()
-
-		// disconnected indicates that the registration is marked for disconnection
-		// and disconnection is taking place. Once disconnected is true, events sent
-		// via publish() are ignored.
-		disconnected bool
-
-		// catchUpIter is created by replica under raftMu lock when registration is
-		// created. It is set to nil by output loop for processing and closed when
-		// done.
-		catchUpIter *CatchUpIterator
-
-		// Used for testing only. Indicates that all events in catchUpBuf have been
-		// sent to BufferedStream.
-		caughtUp bool
 	}
 }
 
@@ -105,21 +97,19 @@ func newUnbufferedRegistration(
 	removeRegFromProcessor func(registration),
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
-		baseRegistration: baseRegistration{
-			streamCtx:              streamCtx,
-			span:                   span,
-			catchUpTimestamp:       startTS,
-			withDiff:               withDiff,
-			withFiltering:          withFiltering,
-			withOmitRemote:         withOmitRemote,
-			removeRegFromProcessor: removeRegFromProcessor,
-			bulkDelivery:           bulkDeliverySize,
-		},
+		baseRegistration: newBaseRegistration(
+			streamCtx,
+			span,
+			startTS,
+			withDiff,
+			withFiltering,
+			withOmitRemote,
+			bulkDeliverySize,
+			removeRegFromProcessor),
 		metrics: metrics,
 		stream:  stream,
 	}
 	br.mu.catchUpIter = catchUpIter
-	br.mu.caughtUp = true
 	if br.mu.catchUpIter != nil {
 		// A nil catchUpIter indicates we don't need a catch-up scan. We avoid
 		// initializing catchUpBuf in this case, which will result in publish()
@@ -132,8 +122,7 @@ func newUnbufferedRegistration(
 // publish sends a single event to this registration. It is called by the
 // processor if the event overlaps the span this registration is interested in.
 // Events are either stored in catchUpBuf or sent to BufferedStream directly,
-// depending on whether catch-up scan is done. publish is responsible for using
-// and releasing alloc.
+// depending on whether catch-up scan is done.
 func (ubr *unbufferedRegistration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
@@ -153,13 +142,11 @@ func (ubr *unbufferedRegistration) publish(
 			ubr.disconnectLocked(kvpb.NewError(err))
 		}
 	} else {
-		// catchUpBuf is set, put event into the catchUpBuf if
-		// there is room.
+		// catchUpBuf is set, put event into the catchUpBuf if there is room.
 		e := getPooledSharedEvent(sharedEvent{event: strippedEvent, alloc: alloc})
 		alloc.Use(ctx)
 		select {
 		case ubr.mu.catchUpBuf <- e:
-			ubr.mu.caughtUp = false
 		default:
 			// catchUpBuf exceeded and we are dropping this event. A catch up scan is
 			// needed later.
@@ -193,11 +180,7 @@ func (ubr *unbufferedRegistration) disconnectLocked(pErr *kvpb.Error) {
 		ubr.mu.catchUpScanCancelFn()
 	}
 	ubr.mu.disconnected = true
-
-	// SendError cleans up metrics and sends error back to client without
-	// blocking.
 	ubr.stream.SendError(pErr)
-	// Clean up unregisters registration from processor async.
 	ubr.removeRegFromProcessor(ubr)
 }
 
@@ -208,12 +191,9 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 	return ubr.mu.disconnected
 }
 
-// runOutputLoop is run in a goroutine. It is short-lived and responsible for
-// 1. running catch-up scan
-// 2. publishing/discarding catch-up buffer after catch-up scan is done.
-//
-// runOutputLoop runs a catch-up scan if required and then moves any events in
-// catchUpBuf from the buffer into the sender.
+// runOutputLoop is run in a goroutine. It is responsible for running the
+// catch-up scan, and then publishing any events buffered in catchUpBuf to the
+// sender (or discarding catch-up buffer in the case of an error).
 //
 // It is expected to be relatively short-lived.
 //
@@ -223,96 +203,76 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 // nolint:deferunlockcheck
 func (ubr *unbufferedRegistration) runOutputLoop(ctx context.Context, forStacks roachpb.RangeID) {
 	start := crtime.NowMono()
-	ubr.mu.Lock()
 	defer func() {
-		// Noop if publishCatchUpBuffer below returns no error.
+		// We always want to drainAllocations even if we are already disconnected.
+		// It will be a no-op if the catch up scan completed successfully.
 		ubr.drainAllocations(ctx)
 		ubr.metrics.RangefeedOutputLoopNanosForUnbufferedReg.Inc(start.Elapsed().Nanoseconds())
 	}()
 
+	ubr.mu.Lock()
 	if ubr.mu.disconnected {
 		ubr.mu.Unlock()
 		return
 	}
-
 	ctx, ubr.mu.catchUpScanCancelFn = context.WithCancel(ctx)
 	ubr.mu.Unlock()
 
 	if err := ubr.maybeRunCatchUpScan(ctx); err != nil {
-		// Important to disconnect before draining otherwise publish() might
-		// interpret this as a successful catch-up scan and send events to the
-		// underlying stream directly.
-		ubr.Disconnect(kvpb.NewError(errors.Wrap(err, "catch-up scan failed")))
+		// It is important to disconnect before draining so that (1) the drain
+		// doesn't block publish and (2) publish can't erroneously observe a nil
+		// catchUpBuf and start sending events to the underlying stream.
+		ubr.Disconnect(kvpb.NewError(err))
 		return
 	}
 
 	if err := ubr.publishCatchUpBuffer(ctx); err != nil {
-		// Important to disconnect before draining otherwise publish() might
-		// interpret this as a successful catch-up scan and send events to the
-		// underlying stream directly.
+		// It is important to disconnect before draining. See above.
 		ubr.Disconnect(kvpb.NewError(err))
 		return
 	}
-	// Success: publishCatchUpBuffer should have drained and set catchUpBuf to nil
-	// when it succeeds.
 }
 
-// drainAllocations drains catchUpBuf and release all memory held by the events
-// in catch-up buffer without publishing them. It is safe to assume that
-// catch-up buffer is empty and nil after this.
-func (ubr *unbufferedRegistration) drainAllocations(ctx context.Context) {
-	ubr.mu.Lock()
-	defer ubr.mu.Unlock()
-	// TODO(wenyihu6): Check if we can just discard without holding the lock first
-	// ? We shouldn't be reading from the buffer at the same time
-	if ubr.mu.catchUpBuf == nil {
-		// Already drained.
-		return
+// maybeRunCatchUpScan runs the catch-up scan if the catchUpIter is non-nil. It
+// promises to close catchUpIter once detached. It returns an error if catch-up
+// scan fails. Note that catch up scan bypasses BufferedStream and are sent to
+// the underlying stream directly.
+func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
+	catchUpIter := ubr.detachCatchUpIter()
+	if catchUpIter == nil {
+		return nil
 	}
 
-	func() {
-		for {
-			select {
-			case e := <-ubr.mu.catchUpBuf:
-				e.alloc.Release(ctx)
-				putPooledSharedEvent(e)
-			default:
-				// Done.
-				return
-			}
-		}
+	start := crtime.NowMono()
+	defer func() {
+		catchUpIter.Close()
+		ubr.metrics.RangeFeedCatchUpScanNanos.Inc(start.Elapsed().Nanoseconds())
 	}()
-
-	ubr.mu.catchUpBuf = nil
-	ubr.mu.caughtUp = true
+	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
+		ubr.withOmitRemote, ubr.bulkDelivery)
 }
 
-// publishCatchUpBuffer drains catchUpBuf and release all memory held by the
-// events in catch-up buffer while publishing them. Note that
-// drainAllocations should never be called concurrently with this function.
-// Caller is responsible for draining it again if error is returned.
+// publishCatchUpBuffer sends all items from catchUpBuf to the sender.
+//
+// drainAllocations should never be called concurrently with this function. The
+// caller is responsible for draining the catchUpBuf if an error is returned.
 func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) error {
-
-	// We use the unbuffered sender until we have sent a non-empty checkpoint. The
-	// goal is to inform the stream of its successful catch-up scan promptly.
-	//
-	// When under lock we always use the buffered sender to avoid blocking for
-	// too long.
-	//
-	// Once we've set shouldSendBuffered to true, we should never send an
-	// unbuffered event.
+	// We use the unbuffered sender until we have sent a non-empty checkpoint or
+	// until maxUnbufferedSends is reached. The goal is to inform the stream of
+	// its successful catch-up scan promptly. Once true, shouldSendBuffered is
+	// always true.
 	shouldSendBuffered := false
 
-	// Because the checkpoint is typically the first event in the buffer, we also
-	// only send a limited number of events before moving to the buffered sender.
+	// Because the checkpoint should typically the first event in the buffer, we
+	// limit ourselves to sending no more than the current items in the buffer or
+	// 1024 event.
 	//
 	// TODO(ssd): We are considering using the buffered sender during the catch up
 	// scan. If we do that, we must remove use of the unbuffered sender here.
 	maxUnbufferedSends := min(len(ubr.mu.catchUpBuf), 1024)
 	unbufferedSendCount := 0
 
-	publish := func(underLock bool) error {
-		shouldSendBuffered = shouldSendBuffered || underLock
+	publish := func() error {
 		for {
 			// Prioritize checking ctx.Done() so that we respond to context
 			// cancellation quickly even in the presence of a long queue.
@@ -333,7 +293,7 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 					if foundCheckpoint || unbufferedSendCount >= maxUnbufferedSends {
 						shouldSendBuffered = true
 						if !foundCheckpoint {
-							log.KvExec.Warningf(ctx, "no non-empty checkpoint found before transitioning to buffered sender")
+							log.KvExec.Infof(ctx, "no non-empty checkpoint found in %d event(s) before transitioning to buffered sender", unbufferedSendCount)
 						}
 					}
 					err = ubr.stream.SendUnbuffered(e.event)
@@ -353,13 +313,14 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 		}
 	}
 
-	// Drain without holding locks first to avoid unnecessary blocking on publish().
+	// Drain without holding locks first to avoid unnecessary blocking on
+	// publish() for too long.
 	//
 	// TODO(ssd): An unfortunate side-effect of this is that we are not
-	// coordinated with the disconnected bool. This represents what I believe is
-	// the only place where we could end up sending events to the buffered sender
-	// _after_ an error has already been delivered.
-	if err := publish(false); err != nil {
+	// coordinated with the disconnected bool, which can result in this call
+	// sending events to the buffered sender _after_ an error has already been
+	// delivered.
+	if err := publish(); err != nil {
 		return err
 	}
 
@@ -368,49 +329,71 @@ func (ubr *unbufferedRegistration) publishCatchUpBuffer(ctx context.Context) err
 
 	// Drain again with lock held to ensure that events added to the buffer while
 	// draining took place are also published.
-	if err := publish(true); err != nil {
+	//
+	// When under lock we always use the buffered sender to avoid blocking.
+	shouldSendBuffered = true
+	if err := publish(); err != nil {
 		return err
 	}
 
-	// Even if the catch-up buffer has overflowed, all events in it should still
-	// be published. Important to disconnect before setting catchUpBuf to nil.
+	// We check this after publish because even if the catch-up buffer has
+	// overflowed, all events in it should still be published.
 	if ubr.mu.catchUpOverflowed {
 		return newRetryErrBufferCapacityExceeded()
 	}
 
-	// Success.
 	ubr.mu.catchUpBuf = nil
-	ubr.mu.caughtUp = true
 	return nil
+}
+
+// drainAllocations drains catchUpBuf and release all memory held by the events
+// in catch-up buffer without publishing them. It should only be called in the
+// case of a catch-up scan failure, in which case the registration should have
+// already been disconnected.
+//
+// It is safe to assume that catch-up buffer is empty and nil after this.
+func (ubr *unbufferedRegistration) drainAllocations(ctx context.Context) {
+	if !ubr.drainAllocationsRequired() {
+		return
+	}
+
+	for {
+		select {
+		case e := <-ubr.mu.catchUpBuf:
+			e.alloc.Release(ctx)
+			putPooledSharedEvent(e)
+		default:
+			// Buffer is empty, unset catchUpBuf for good measure. But we should never
+			// be here on a connected registration.
+			ubr.mu.Lock()
+			bufLen := len(ubr.mu.catchUpBuf) // nolint:deferunlockcheck
+			ubr.mu.catchUpBuf = nil
+			ubr.mu.Unlock()
+			assertTrue(bufLen == 0, "non-empty catch up buffer after drainAllocation")
+
+			return
+		}
+	}
+}
+
+func (ubr *unbufferedRegistration) drainAllocationsRequired() bool {
+	ubr.mu.Lock()
+	defer ubr.mu.Unlock()
+	if ubr.mu.catchUpBuf == nil {
+		return false
+	}
+	assertTrue(ubr.mu.disconnected, "drainAllocations called on connected registration without a non-nil catchUpBuf")
+	return true
 }
 
 // detachCatchUpIter detaches the catchUpIter that was previously attached.
 func (ubr *unbufferedRegistration) detachCatchUpIter() *CatchUpIterator {
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
+
 	catchUpIter := ubr.mu.catchUpIter
 	ubr.mu.catchUpIter = nil
 	return catchUpIter
-}
-
-// maybeRunCatchUpScan runs the catch-up scan if catchUpIter is not nil. It
-// promises to close catchUpIter once detached. It returns an error if catch-up
-// scan fails. Note that catch up scan bypasses BufferedStream and are sent to
-// the underlying stream directly.
-func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
-	catchUpIter := ubr.detachCatchUpIter()
-	if catchUpIter == nil {
-		return nil
-	}
-	start := crtime.NowMono()
-	defer func() {
-		catchUpIter.Close()
-		ubr.metrics.RangeFeedCatchUpScanNanos.Inc(start.Elapsed().Nanoseconds())
-	}()
-
-	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
-		ubr.withOmitRemote, ubr.bulkDelivery)
-
 }
 
 // Used for testing only.
@@ -429,8 +412,6 @@ func (ubr *unbufferedRegistration) getOverflowed() bool {
 
 // Used for testing only. Wait for this registration to completely drain its
 // catchUpBuf.
-//
-// nolint:deferunlockcheck
 func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
@@ -440,7 +421,7 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	}
 	for re := retry.StartWithCtx(ctx, opts); re.Next(); {
 		ubr.mu.Lock()
-		caughtUp := len(ubr.mu.catchUpBuf) == 0 && ubr.mu.caughtUp
+		caughtUp := ubr.mu.catchUpBuf == nil
 		ubr.mu.Unlock()
 		if caughtUp {
 			return nil
@@ -449,5 +430,11 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return errors.Errorf("unbufferedRegistration %v failed to empty in time", ubr.Range())
+	return errors.Errorf("unbufferedRegistration for %v failed to drain its catch-up buffer in time", ubr.Range())
+}
+
+func assertTrue(cond bool, msg string) {
+	if buildutil.CrdbTestBuild && !cond {
+		panic(msg)
+	}
 }
