@@ -42,6 +42,8 @@ type snapWriteBuilder struct {
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
+	// TODO(pav-kv): assert that our replica already exists in storage. Note that
+	// it can be either uninitialized or initialized.
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
 	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
@@ -74,13 +76,6 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear the raft log")
-	}
-	// Write the RaftReplicaID.
-	// TODO(pav-kv): RaftReplicaID always exists here (regardless of whether it's
-	// an initialized or uninitialized replica), don't write it again. Assert this
-	// in the caller, if needed. Here we want to only touch raft engine state.
-	if err := s.sl.SetRaftReplicaID(ctx, w, s.id.ReplicaID); err != nil {
-		return errors.Wrapf(err, "unable to write RaftReplicaID")
 	}
 	// Update the log truncation state.
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {

@@ -3,7 +3,6 @@ echo
 >> sst:
 Put: 0,0 /Local/RangeID/123/u/RaftHardState (0x0169f67b757266746800): term:20 vote:0 commit:100 lead:0 lead_epoch:0 
 Delete Range: [0,0 /Local/RangeID/123/u/RaftLog (0x0169f67b757266746c00): , 0,0 /Local/RangeID/123/u"rftm" (0x0169f67b757266746d00): )
-Put: 0,0 /Local/RangeID/123/u/RaftReplicaID (0x0169f67b757266747200): replica_id:4 
 Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:100 term:20 
 Delete: 0,0 /Local/RangeID/123/u/RangeLastReplicaGCTimestamp (0x0169f67b75726c727400): 
 >> sst:
