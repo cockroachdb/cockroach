@@ -450,6 +450,8 @@ func (b *Builder) buildRoutine(
 		bodyTags = make([]string, len(stmts))
 
 		for i := range stmts {
+			// TODO(michae2): We should be checking the statement hints cache here to
+			// find any external statement hints that could apply to this statement.
 			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
 
 			// The last statement produces the output of the UDF.

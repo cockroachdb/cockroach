@@ -6,8 +6,13 @@
 package sql
 
 import (
+	"context"
+	"slices"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,10 +42,30 @@ type Statement struct {
 	Prepared *prep.Statement
 
 	QueryTags []sqlcommenter.QueryTag
+
+	// Hints are any external statement hints from the system.statement_hints
+	// table that could apply to this statement, based on the statement
+	// fingerprint.
+	Hints []hintpb.StatementHintUnion
+
+	// HintIDs are the IDs of any external statement hints, which are used for
+	// invalidation of cached plans.
+	HintIDs []int64
+
+	// HintsGeneration is the generation of the hints cache at the time the
+	// hints were retrieved, used for invalidation of cached plans.
+	HintsGeneration int64
 }
 
+// makeStatement creates a Statement with the metadata necessary to execute the
+// statement, including any external statement hints from the statement hints
+// cache.
 func makeStatement(
-	parserStmt statements.Statement[tree.Statement], queryID clusterunique.ID, fmtFlags tree.FmtFlags,
+	ctx context.Context,
+	parserStmt statements.Statement[tree.Statement],
+	queryID clusterunique.ID,
+	fmtFlags tree.FmtFlags,
+	statementHintsCache *hints.StatementHintsCache,
 ) Statement {
 	comments := parserStmt.Comments
 	cl := len(comments)
@@ -51,17 +76,27 @@ func makeStatement(
 	if cl != 0 {
 		tags = sqlcommenter.ExtractQueryTags(comments[cl-1])
 	}
-
-	return Statement{
+	s := Statement{
 		Statement:       parserStmt,
 		StmtNoConstants: tree.FormatStatementHideConstants(parserStmt.AST, fmtFlags),
 		StmtSummary:     tree.FormatStatementSummary(parserStmt.AST, fmtFlags),
 		QueryID:         queryID,
 		QueryTags:       tags,
+		HintsGeneration: -1,
 	}
+	s.ReloadHintsIfStale(ctx, fmtFlags, statementHintsCache)
+	return s
 }
 
-func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.ID) Statement {
+// makeStatementFromPrepared creates a Statement using the metadata from the
+// prepared statement.
+func makeStatementFromPrepared(
+	ctx context.Context,
+	prepared *prep.Statement,
+	queryID clusterunique.ID,
+	fmtFlags tree.FmtFlags,
+	statementHintsCache *hints.StatementHintsCache,
+) Statement {
 	comments := prepared.Comments
 	cl := len(comments)
 	var tags []sqlcommenter.QueryTag
@@ -71,7 +106,7 @@ func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.I
 	if cl != 0 {
 		tags = sqlcommenter.ExtractQueryTags(comments[cl-1])
 	}
-	return Statement{
+	s := Statement{
 		Statement:       prepared.Statement,
 		Prepared:        prepared,
 		ExpectedTypes:   prepared.Columns,
@@ -79,11 +114,53 @@ func makeStatementFromPrepared(prepared *prep.Statement, queryID clusterunique.I
 		StmtSummary:     prepared.StatementSummary,
 		QueryID:         queryID,
 		QueryTags:       tags,
+		Hints:           prepared.Hints,
+		HintIDs:         prepared.HintIDs,
+		HintsGeneration: prepared.HintsGeneration,
 	}
+	s.ReloadHintsIfStale(ctx, fmtFlags, statementHintsCache)
+	return s
 }
 
 func (s Statement) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
 	return s.AST.String()
+}
+
+// ReloadHintsIfStale reloads the external statement hints from the statement
+// hints cache if they are stale.
+func (s *Statement) ReloadHintsIfStale(
+	ctx context.Context, fmtFlags tree.FmtFlags, statementHintsCache *hints.StatementHintsCache,
+) bool {
+	var hints []hintpb.StatementHintUnion
+	var hintIDs []int64
+	var hintsGeneration int64
+	if statementHintsCache != nil {
+		hintsGeneration = statementHintsCache.GetGeneration()
+	}
+	if hintsGeneration == s.HintsGeneration {
+		return false
+	}
+	if statementHintsCache != nil {
+		hintStmtFingerprint := s.StmtNoConstants
+		switch e := s.Statement.AST.(type) {
+		case *tree.CopyTo:
+			hintStmtFingerprint = tree.FormatStatementHideConstants(e.Statement, fmtFlags)
+		case *tree.Explain:
+			hintStmtFingerprint = tree.FormatStatementHideConstants(e.Statement, fmtFlags)
+		case *tree.ExplainAnalyze:
+			hintStmtFingerprint = tree.FormatStatementHideConstants(e.Statement, fmtFlags)
+		case *tree.Prepare:
+			hintStmtFingerprint = tree.FormatStatementHideConstants(e.Statement, fmtFlags)
+		}
+		hints, hintIDs = statementHintsCache.MaybeGetStatementHints(ctx, hintStmtFingerprint)
+	}
+	if slices.Equal(hintIDs, s.HintIDs) {
+		return false
+	}
+	s.Hints = hints
+	s.HintIDs = hintIDs
+	s.HintsGeneration = hintsGeneration
+	return true
 }

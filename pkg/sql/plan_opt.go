@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -139,6 +140,8 @@ func (p *planner) prepareUsingOptimizer(
 			// Check that the type hints match (the type hints affect type checking).
 			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
+			} else if pm.HintsGeneration != stmt.Prepared.HintsGeneration && !slices.Equal(pm.HintIDs, stmt.Prepared.HintIDs) {
+				opc.log(ctx, "query cache hit but external statement hints don't match")
 			} else {
 				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
 				if err != nil {
@@ -150,6 +153,9 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Prepared.StatementNoConstants = pm.StatementNoConstants
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
+					stmt.Hints = pm.Hints
+					stmt.HintIDs = pm.HintIDs
+					stmt.HintsGeneration = pm.HintsGeneration
 					if cachedData.Memo.IsOptimized() {
 						// A cache, fully optimized memo is an "ideal generic
 						// memo".

@@ -68,8 +68,11 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			}
 
 			// Try to plan the cursor query to make sure that it's valid.
-			stmt := makeStatement(statements.Statement[tree.Statement]{AST: s.Select}, clusterunique.ID{},
-				tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)))
+			stmt := makeStatement(
+				ctx, statements.Statement[tree.Statement]{AST: s.Select}, clusterunique.ID{},
+				tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
+				nil, /* statementHintsCache */
+			)
 			pt := planTop{}
 			pt.init(&stmt, &p.instrumentation)
 			opc := &p.optPlanningCtx
