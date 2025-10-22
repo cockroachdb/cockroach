@@ -57,31 +57,35 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 
 // rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
 // of the given replica with the provided raft state. Note that it also clears
-// the raft log contents.
+// the raft log contents. All writes are generated in the engine keys order.
 //
 // The caller must make sure the log does not have entries newer than the
 // snapshot entry ID, and that clearing the log is applied atomically with the
 // snapshot write, or after the latter is synced.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	// Clearing the unreplicated state.
-	//
-	// NB: We do not expect to see range keys in the unreplicated state, so
-	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(s.id.RangeID)
-	unreplicatedStart := unreplicatedPrefixKey
-	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err := w.ClearRawRange(
-		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
-	); err != nil {
-		return errors.Wrapf(err, "error clearing the unreplicated space")
+	// TODO(pav-kv): there is no harm in keeping RangeTombstone as long as it does
+	// not exceed the ReplicaID. Since the replica exists (can be uninitialized if
+	// this is an initial snapshot), this invariant holds. Don't touch either of
+	// ReplicaID / RangeTombstone keys, and it will retain the invariant.
+	if err := w.ClearUnversioned(s.sl.RangeTombstoneKey(), storage.ClearOptions{}); err != nil {
+		return errors.Wrapf(err, "unable to clear RangeTombstone")
 	}
-
 	// Update HardState.
 	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
 		return errors.Wrapf(err, "unable to write HardState")
 	}
-	// We've cleared all the raft state above, so we are forced to write the
-	// RaftReplicaID again here.
+	// Clear the raft log. Note that there are no Pebble range keys in this span.
+	logPrefix := keys.RaftLogPrefix(s.id.RangeID)
+	raftLog := roachpb.Span{Key: logPrefix, EndKey: logPrefix.PrefixEnd()}
+	if err := w.ClearRawRange(
+		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
+		return errors.Wrapf(err, "unable to clear the raft log")
+	}
+	// Write the RaftReplicaID.
+	// TODO(pav-kv): RaftReplicaID always exists here (regardless of whether it's
+	// an initialized or uninitialized replica), don't write it again. Assert this
+	// in the caller, if needed. Here we want to only touch raft engine state.
 	if err := s.sl.SetRaftReplicaID(ctx, w, s.id.ReplicaID); err != nil {
 		return errors.Wrapf(err, "unable to write RaftReplicaID")
 	}
@@ -89,8 +93,14 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
+	// TODO(pav-kv): consider not touching this key. We are not destroying the
+	// replica, and rather moving its state forward. Seemingly, there is no need
+	// in expediting replicaGC.
+	if err := w.ClearUnversioned(s.sl.RangeLastReplicaGCTimestampKey(), storage.ClearOptions{}); err != nil {
+		return errors.Wrapf(err, "unable to write LastReplicaGCTimestamp")
+	}
 
-	s.cleared = append(s.cleared, roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd})
+	s.cleared = append(s.cleared, raftLog)
 	return nil
 }
 
