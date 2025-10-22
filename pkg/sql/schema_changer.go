@@ -451,8 +451,11 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 
 		localPlanner.MaybeReallocateAnnotations(stmt.NumAnnotations)
 		// Construct an optimized logical plan of the AS source stmt.
-		localPlanner.stmt = makeStatement(stmt, clusterunique.ID{}, /* queryID */
-			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&localPlanner.execCfg.Settings.SV)))
+		localPlanner.stmt = makeStatement(
+			ctx, stmt, clusterunique.ID{}, /* queryID */
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&localPlanner.execCfg.Settings.SV)),
+			nil, /* statementHintsCache */
+		)
 		localPlanner.optPlanningCtx.init(localPlanner)
 
 		localPlanner.runWithOptions(resolveFlags{skipCache: true}, func() {

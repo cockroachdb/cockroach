@@ -119,6 +119,8 @@ func (l *lexer) parseOne(sql string) (tree.Statement, error) {
 		return nil, err
 	}
 	l.numAnnotations = sqlStmt.NumAnnotations
+	// TODO(michae2): We should be checking the statement hints cache here to find
+	// any external statement hints that could apply to this statement.
 	return sqlStmt.AST, nil
 }
 

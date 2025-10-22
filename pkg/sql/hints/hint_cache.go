@@ -135,6 +135,7 @@ func NewStatementHintsCache(
 			return s > int(cacheSize.Get(&st.SV))
 		},
 	})
+	hintsCache.generation.Store(1)
 	return hintsCache
 }
 
