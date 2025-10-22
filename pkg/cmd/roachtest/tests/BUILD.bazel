@@ -285,6 +285,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",
         "//pkg/sql/ttl/ttlbase",
+        "//pkg/sql/vecindex/cspann",
         "//pkg/sql/vecindex/vecpb",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
