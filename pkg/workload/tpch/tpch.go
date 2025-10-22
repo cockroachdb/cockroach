@@ -308,7 +308,7 @@ func (w *tpch) Ops(
 // numExpectedRowsByQueryNumber is a mapping from query number to the number of
 // expected rows the query should return. Queries that can return different
 // number of rows depending on the fixture seed and / or scale factor are
-// excluded from this map (namely, queries 11, 13, 16, 18, 20 aren't in this
+// excluded from this map (namely, queries 4, 11, 13, 16, 18, 20 aren't in this
 // map).
 //
 // Note that earlier we tried to also check against the expected set of results
@@ -319,7 +319,6 @@ var numExpectedRowsByQueryNumber = map[int]int{
 	1:  4,
 	2:  100,
 	3:  10,
-	4:  4,
 	5:  5,
 	6:  1,
 	7:  4,
