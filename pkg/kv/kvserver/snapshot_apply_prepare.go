@@ -81,12 +81,6 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
-	// TODO(pav-kv): consider not touching this key. We are not destroying the
-	// replica, and rather moving its state forward. Seemingly, there is no need
-	// in expediting replicaGC.
-	if err := w.ClearUnversioned(s.sl.RangeLastReplicaGCTimestampKey(), storage.ClearOptions{}); err != nil {
-		return errors.Wrapf(err, "unable to write LastReplicaGCTimestamp")
-	}
 
 	s.cleared = append(s.cleared, raftLog)
 	return nil
