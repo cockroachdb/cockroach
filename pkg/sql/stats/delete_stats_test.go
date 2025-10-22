@@ -682,7 +682,6 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
-	params.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109380)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	runner := sqlutils.MakeSQLRunner(sqlDB)
