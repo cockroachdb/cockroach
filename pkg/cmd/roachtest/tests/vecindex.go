@@ -7,9 +7,11 @@ package tests
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -19,8 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/cockroach/pkg/workload/vecann"
+	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
@@ -86,6 +93,58 @@ func getOpClass(metric vecpb.DistanceMetric) string {
 		return " vector_ip_ops"
 	default:
 		return "" // L2 is default
+	}
+}
+
+// makeCanonicalKey generates 4-byte primary key from dataset index
+func makeCanonicalKey(category int, datasetIdx int) []byte {
+	key := make([]byte, 0, 6)
+	key = binary.BigEndian.AppendUint16(key, uint16(category))
+	key = binary.BigEndian.AppendUint32(key, uint32(datasetIdx))
+	return key
+}
+
+// backfillState represents the current state of index backfill
+type backfillState int32
+
+const (
+	statePreBackfill      backfillState = iota // Loading unindexed data
+	stateIndexCreating                         // CREATE INDEX issued, job not visible yet
+	stateBackfillRunning                       // Backfill job visible and running
+	stateBackfillComplete                      // Backfill done, still loading canonical rows
+	stateSteadyState                           // All done (used in Phase 2)
+)
+
+func (s backfillState) String() string {
+	switch s {
+	case statePreBackfill:
+		return "pre-backfill"
+	case stateIndexCreating:
+		return "index-creating"
+	case stateBackfillRunning:
+		return "backfill-running"
+	case stateBackfillComplete:
+		return "backfill-complete"
+	case stateSteadyState:
+		return "steady-state"
+	default:
+		return fmt.Sprintf("unknown(%d)", s)
+	}
+}
+
+// phaseString returns the inserted_phase value for the current state
+func (s backfillState) phaseString() string {
+	switch s {
+	case statePreBackfill:
+		return "initial"
+	case stateIndexCreating, stateBackfillRunning:
+		return "during-backfill"
+	case stateBackfillComplete:
+		return "post-backfill-canonical"
+	case stateSteadyState:
+		return "post-backfill"
+	default:
+		return "unknown"
 	}
 }
 
@@ -215,5 +274,178 @@ func runVectorIndex(ctx context.Context, t test.Test, c cluster.Cluster, opts ve
 	defer pool.Close()
 	require.NoError(t, pool.Ping(ctx))
 
-	t.L().Printf("=== Test completed successfully ===")
+	t.L().Printf("Creating schema and loading data")
+	testBackfillAndMerge(ctx, t, c, pool, &loader.Data, &opts, metric)
+}
+
+func testBackfillAndMerge(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	pool *pgxpool.Pool,
+	data *vecann.Dataset,
+	opts *vecIndexOptions,
+	metric vecpb.DistanceMetric,
+) {
+	batchSize := opts.preBatchSz
+	numCategories := max(opts.prefixCount, 1)
+
+	db, err := c.ConnE(ctx, t.L(), 1)
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.ExecContext(ctx, fmt.Sprintf(
+		`CREATE TABLE vecindex_test (
+				id BYTES,
+				category INT NOT NULL,
+				embedding VECTOR(%d) NOT NULL,
+				inserted_phase TEXT NOT NULL,
+				worker_id INT NOT NULL,
+				excluded BOOL DEFAULT false,
+				INDEX (excluded),
+				PRIMARY KEY (id)
+			)`, data.Dims))
+	require.NoError(t, err)
+	t.L().Printf("Table vecindex_test created")
+
+	// Shared state for workers
+	var state int32 = int32(statePreBackfill)
+	var rowsInserted int32
+	blockBackfill := make(chan struct{})
+	createIndexStartThresh := (data.TrainCount * opts.backfillPct) / 100
+
+	ci := t.NewGroup()
+
+	// Start a goroutine to create a vector index when we're signaled by one of the workers
+	ci.Go(func(ctx context.Context, l *logger.Logger) error {
+		// Wait until a worker signals us to start the CREATE INDEX
+		<-blockBackfill
+
+		atomic.StoreInt32(&state, int32(stateIndexCreating))
+		l.Printf("Executing CREATE VECTOR INDEX at %d rows", atomic.LoadInt32(&rowsInserted))
+
+		startCreateIndex := timeutil.Now()
+		opClass := getOpClass(metric)
+		var indexSQL string
+		if opts.prefixCount > 0 {
+			indexSQL = fmt.Sprintf("CREATE VECTOR INDEX vecidx ON vecindex_test (category, embedding%s)", opClass)
+		} else {
+			indexSQL = fmt.Sprintf("CREATE VECTOR INDEX vecidx ON vecindex_test (embedding%s)", opClass)
+		}
+
+		_, err := db.ExecContext(ctx, indexSQL)
+		if err != nil {
+			return errors.Wrapf(err, "Failed to create vector index")
+		} else {
+			dur := timeutil.Since(startCreateIndex).Truncate(time.Second)
+			rate := float64(data.TrainCount) / dur.Seconds()
+			l.Printf("CREATE VECTOR INDEX completed in %v (%.1f rows per second)", dur, rate)
+		}
+		return nil
+	})
+
+	t.L().Printf(
+		"Loading %d rows into %d categories (%d rows total)",
+		data.TrainCount,
+		numCategories,
+		data.TrainCount*numCategories,
+	)
+
+	var fileStart int
+	loadStart := timeutil.Now()
+	// Iterate through the data files in the data set
+	for {
+		filename := data.GetNextTrainFile()
+		hasMore, err := data.Next()
+		require.NoError(t, err)
+		if !hasMore {
+			dur := timeutil.Since(loadStart).Truncate(time.Second)
+			rate := float64(data.TrainCount) / dur.Seconds()
+			t.L().Printf("Data loaded in %v (%.1f rows per second)", dur, rate)
+			break
+		}
+		t.L().Printf("Loading data file: %s", filename)
+
+		// Create workers to load this data file and dispatch part of the file to each of them.
+		m := t.NewGroup()
+		countPerProc := (data.Train.Count / opts.workers) + 1
+		for worker := range opts.workers {
+			start := worker * countPerProc
+			end := min(start+countPerProc, data.Train.Count)
+			m.Go(func(ctx context.Context, l *logger.Logger) error {
+				conn, err := pool.Acquire(ctx)
+				require.NoError(t, err)
+				defer conn.Release()
+
+				for j := start; j < end; j += batchSize {
+					sz := min(j+batchSize, end) - j
+					ri := int(atomic.AddInt32(&rowsInserted, int32(sz)))
+					phaseStr := backfillState(atomic.LoadInt32(&state)).phaseString()
+					vectors := data.Train.Slice(j, sz)
+					err := insertVectors(ctx, conn, worker, numCategories, fileStart+j, phaseStr, vectors, false)
+					if err != nil {
+						return err
+					}
+					// If this is the batch that spanned the create index start threshold, signal the creator.
+					if ri > createIndexStartThresh-sz && ri <= createIndexStartThresh {
+						close(blockBackfill)
+					}
+				}
+				return nil
+			})
+		}
+		// Wait for this batch of loaders
+		m.Wait()
+	}
+
+	// Wait for create index to finish
+	ci.Wait()
+}
+
+func insertVectors(
+	ctx context.Context,
+	conn *pgxpool.Conn,
+	workerID int,
+	numCats int,
+	startIdx int,
+	phaseStr string,
+	vectors vector.Set,
+	excluded bool,
+) error {
+	args := make([]any, vectors.Count*numCats*5)
+	var queryBuilder strings.Builder
+	queryBuilder.Grow(100 + vectors.Count*numCats*34)
+	queryBuilder.WriteString("INSERT INTO vecindex_test " +
+		"(id, category, embedding, inserted_phase, worker_id, excluded) VALUES ")
+	rowNum := 0
+	for i := range vectors.Count {
+		for cat := range numCats {
+			if rowNum > 0 {
+				queryBuilder.WriteString(", ")
+			}
+			j := rowNum * 5
+			fmt.Fprintf(&queryBuilder, "($%d, $%d, $%d, $%d, $%d, %v)", j+1, j+2, j+3, j+4, j+5, excluded)
+			args[j] = makeCanonicalKey(cat, startIdx+i)
+			args[j+1] = cat
+			args[j+2] = vectors.At(i)
+			args[j+3] = phaseStr
+			args[j+4] = workerID
+			rowNum++
+		}
+	}
+	query := queryBuilder.String()
+
+	for {
+		_, err := conn.Exec(ctx, query, args...)
+
+		var pgErr *pgconn.PgError
+		if err != nil && errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "40001", "40P01":
+				continue
+			}
+		}
+
+		return errors.Wrapf(err, "Failed to run: %s %v", query, args)
+	}
 }
