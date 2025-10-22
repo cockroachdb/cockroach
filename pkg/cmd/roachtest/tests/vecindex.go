@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -96,12 +97,16 @@ func getOpClass(metric vecpb.DistanceMetric) string {
 	}
 }
 
-// makeCanonicalKey generates 4-byte primary key from dataset index
-func makeCanonicalKey(category int, datasetIdx int) []byte {
-	key := make([]byte, 0, 6)
+func appendCanonicalKey(key []byte, category int, datasetIdx int) []byte {
 	key = binary.BigEndian.AppendUint16(key, uint16(category))
 	key = binary.BigEndian.AppendUint32(key, uint32(datasetIdx))
 	return key
+}
+
+// makeCanonicalKey generates 4-byte primary key from dataset index
+func makeCanonicalKey(category int, datasetIdx int) []byte {
+	key := make([]byte, 0, 6)
+	return appendCanonicalKey(key, category, datasetIdx)
 }
 
 // backfillState represents the current state of index backfill
@@ -276,6 +281,9 @@ func runVectorIndex(ctx context.Context, t test.Test, c cluster.Cluster, opts ve
 
 	t.L().Printf("Creating schema and loading data")
 	testBackfillAndMerge(ctx, t, c, pool, &loader.Data, &opts, metric)
+
+	t.L().Printf("Testing recall of loaded data")
+	testRecall(ctx, t, pool, &loader.Data, &opts, metric)
 }
 
 func testBackfillAndMerge(
@@ -396,10 +404,94 @@ func testBackfillAndMerge(
 		}
 		// Wait for this batch of loaders
 		m.Wait()
+		fileStart += data.Train.Count
 	}
 
 	// Wait for create index to finish
 	ci.Wait()
+}
+
+func testRecall(
+	ctx context.Context,
+	t test.Test,
+	pool *pgxpool.Pool,
+	data *vecann.Dataset,
+	opts *vecIndexOptions,
+	metric vecpb.DistanceMetric,
+) {
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer conn.Release()
+
+	maxResults := 10
+	operator := getOperatorForMetric(metric)
+
+	var categories int
+	var searchSQL string
+	var args []any
+	var hasPrefix bool
+	if opts.prefixCount > 0 {
+		categories = opts.prefixCount
+		searchSQL = fmt.Sprintf(
+			"SELECT id FROM vecindex_test@vecidx WHERE category = $1 "+
+				"ORDER BY embedding %s $2 LIMIT %d", operator, maxResults)
+		args = make([]any, 2)
+		hasPrefix = true
+	} else {
+		categories = 1
+		searchSQL = fmt.Sprintf(
+			"SELECT id FROM vecindex_test@vecidx ORDER BY embedding %s $1 LIMIT %d", operator, maxResults)
+		args = make([]any, 1)
+	}
+
+	results := make([]cspann.KeyBytes, maxResults)
+	recalls := make([]float64, categories)
+	primaryKeys := make([]byte, maxResults*6)
+	truth := make([]cspann.KeyBytes, maxResults)
+
+	for i, beamSize := range opts.beamSizes {
+		recalls = recalls[:0]
+		minRecall := opts.minRecall[i]
+		_, err = conn.Exec(ctx, fmt.Sprintf("SET vector_search_beam_size = %d", beamSize))
+		require.NoError(t, err)
+
+		for cat := range categories {
+			var sumRecall float64
+			for j := range data.Test.Count {
+				queryVec := data.Test.At(j)
+				args = args[:0]
+				if hasPrefix {
+					args = append(args, cat)
+				}
+				args = append(args, queryVec)
+
+				rows, err := conn.Query(ctx, searchSQL, args...)
+				require.NoError(t, err)
+
+				results = results[:0]
+				for rows.Next() {
+					var id []byte
+					err = rows.Scan(&id)
+					require.NoError(t, err)
+					results = append(results, id)
+				}
+				require.NoError(t, rows.Err())
+
+				primaryKeys = primaryKeys[:0]
+				truth = truth[:0]
+				for n := range maxResults {
+					primaryKeys = appendCanonicalKey(primaryKeys, cat, int(data.Neighbors[j][n]))
+					truth = append(truth, primaryKeys[len(primaryKeys)-6:])
+				}
+
+				sumRecall += vecann.CalculateRecall(results, truth)
+			}
+			avgRecall := sumRecall / float64(data.Test.Count)
+			require.GreaterOrEqualf(t, avgRecall, minRecall, "at beam size %d", beamSize)
+			recalls = append(recalls, avgRecall)
+		}
+		t.L().Printf("beam size=%d : %v", beamSize, recalls)
+	}
 }
 
 func insertVectors(
