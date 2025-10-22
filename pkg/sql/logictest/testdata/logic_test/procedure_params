@@ -766,4 +766,19 @@ DROP PROCEDURE p;
 statement ok
 DROP SEQUENCE seq;
 
+# Regression test for not type-checking all default expressions when replacing
+# the procedure (#155859).
+statement ok
+CREATE PROCEDURE p (s STRING(1) DEFAULT NULL, d DECIMAL(1, 1) DEFAULT NULL) AS $$
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE OR REPLACE PROCEDURE p (s STRING(2) DEFAULT NULL, d DECIMAL(2, 2) DEFAULT NULL) AS $$
+  SELECT 1;
+$$ LANGUAGE SQL;
+
+statement ok
+DROP PROCEDURE p;
+
 subtest end

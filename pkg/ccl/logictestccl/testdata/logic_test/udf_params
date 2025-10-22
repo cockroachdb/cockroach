@@ -1048,4 +1048,23 @@ $$ LANGUAGE PLpgSQL;
 statement ok
 DROP PROCEDURE p;
 
+# Regression test for not type-checking all default expressions when replacing
+# the UDF (#155859).
+statement ok
+CREATE FUNCTION f (s STRING(1) DEFAULT NULL, d DECIMAL(1, 1) DEFAULT NULL) RETURNS VOID AS $$
+BEGIN
+  NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE OR REPLACE FUNCTION f (s STRING(2) DEFAULT NULL, d DECIMAL(2, 2) DEFAULT NULL) RETURNS VOID AS $$
+BEGIN
+  NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+DROP FUNCTION f;
+
 subtest end
