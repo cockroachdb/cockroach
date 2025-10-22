@@ -425,6 +425,9 @@ type ContextOptions struct {
 
 	// Locality stores the locality of this node.
 	Locality roachpb.Locality
+
+	// Use DRPC for internal node-to-node communication when true.
+	UseDRPC bool
 }
 
 // DefaultContextOptions are mostly used in tests.

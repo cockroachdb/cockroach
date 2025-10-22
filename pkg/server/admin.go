@@ -1314,7 +1314,7 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
+						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.rpcContext.UseDRPC)
 						if err == nil {
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
@@ -3678,7 +3678,7 @@ func (s *adminServer) queryTableID(
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.RPCAdminClient, error) {
-	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.cs)
+	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.rpcContext.UseDRPC)
 }
 
 func (s *adminServer) ListTracingSnapshots(

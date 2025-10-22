@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // DialSideTransportClient establishes a DRPC connection if enabled; otherwise,
@@ -21,7 +20,7 @@ func DialSideTransportClient(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
-	cs *cluster.Settings,
+	useDPRC bool,
 ) (RPCSideTransportClient, error) {
-	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCSideTransportClientAdapter, NewDRPCSideTransportClientAdapter, cs)
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCSideTransportClientAdapter, NewDRPCSideTransportClientAdapter, useDPRC)
 }

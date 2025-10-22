@@ -215,9 +215,9 @@ const (
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
 // start publishing closed timestamps.
 func NewSender(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, dialer *nodedialer.Dialer,
+	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, dialer *nodedialer.Dialer, useDRPC bool,
 ) *Sender {
-	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}))
+	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, useDRPC, connTestingKnobs{}))
 }
 
 func newSenderWithConnFactory(
@@ -823,19 +823,21 @@ type conn interface {
 // connections to other nodes using gRPC.
 type rpcConnFactory struct {
 	dialer       rpcbase.NodeDialer
+	useDRPC      bool
 	testingKnobs connTestingKnobs
 }
 
-func newRPCConnFactory(dialer rpcbase.NodeDialer, testingKnobs connTestingKnobs) connFactory {
+func newRPCConnFactory(dialer rpcbase.NodeDialer, useDRPC bool, testingKnobs connTestingKnobs) connFactory {
 	return &rpcConnFactory{
 		dialer:       dialer,
+		useDRPC:      useDRPC,
 		testingKnobs: testingKnobs,
 	}
 }
 
 // new implements the connFactory interface.
 func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
-	return newRPCConn(f.dialer, s, nodeID, f.testingKnobs)
+	return newRPCConn(f.dialer, f.useDRPC, s, nodeID, f.testingKnobs)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped
@@ -850,6 +852,7 @@ const sleepOnErr = time.Second
 type rpcConn struct {
 	log.AmbientContext
 	dialer       rpcbase.NodeDialer
+	useDRPC      bool
 	producer     *Sender
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
@@ -868,10 +871,11 @@ type rpcConn struct {
 }
 
 func newRPCConn(
-	dialer rpcbase.NodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
+	dialer rpcbase.NodeDialer, useDRPC bool, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
 ) conn {
 	r := &rpcConn{
 		dialer:       dialer,
+		useDRPC:      useDRPC,
 		producer:     producer,
 		nodeID:       nodeID,
 		testingKnobs: testingKnobs,
@@ -920,7 +924,8 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
+	// TODO(chandrat): Enable DRPC
+	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, false)
 	if err != nil {
 		return err
 	}
