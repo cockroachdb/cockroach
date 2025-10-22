@@ -45,6 +45,8 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	// TODO(pav-kv): assert that our replica already exists in storage. Note that
 	// it can be either uninitialized or initialized.
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
+	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
+	// it will be convenient to redirect it to a raft engine batch.
 	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
 	}
@@ -57,13 +59,9 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	return s.clearResidualDataOnNarrowSnapshot(ctx)
 }
 
-// rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
-// of the given replica with the provided raft state. Note that it also clears
-// the raft log contents. All writes are generated in the engine keys order.
-//
-// The caller must make sure the log does not have entries newer than the
-// snapshot entry ID, and that clearing the log is applied atomically with the
-// snapshot write, or after the latter is synced.
+// rewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log. All writes are generated in the engine keys order.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
 	// Update HardState.
 	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
