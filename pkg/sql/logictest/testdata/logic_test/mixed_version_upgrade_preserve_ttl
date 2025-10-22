@@ -13,10 +13,12 @@ CREATE TABLE tbl (
 
 upgrade all
 
-# Verify that the cluster version upgrades have begun by asserting we're no
-# longer on the previous version. Note that the first cluster upgrade is the
-# one that repairs all descriptors.
-query B retry retry_duration 90s
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# Verify that the cluster version has been upgraded and is no longer on the
+# previous version.
+query B
 SELECT version != '$initial_version' FROM [SHOW CLUSTER SETTING version]
 ----
 true
