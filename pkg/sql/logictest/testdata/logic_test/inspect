@@ -61,8 +61,9 @@ SELECT * FROM last_inspect_job;
 ----
 succeeded  1
 
+# TODO(155483): use a really old timestamp from before 'foo' was created.
 statement ok
-INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (idx_c1,idx_c2);
+INSPECT TABLE foo AS OF SYSTEM TIME '-50ms' WITH OPTIONS INDEX (idx_c1,idx_c2);
 
 query TI
 SELECT * FROM last_inspect_job;
@@ -86,7 +87,7 @@ INSPECT DATABASE test;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  28
+succeeded  2
 
 statement error index "idx_c3" does not exist
 INSPECT DATABASE test WITH OPTIONS INDEX (idx_c1, idx_c3);
