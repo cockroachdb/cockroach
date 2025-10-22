@@ -48,7 +48,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t-)}
  │         └── 53 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
@@ -147,7 +147,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │    │    │    ├── ABSENT  → PUBLIC TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
  │    │    │    ├── ABSENT  → PUBLIC TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
- │    │    │    ├── ABSENT  → PUBLIC TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │    │    │    ├── ABSENT  → PUBLIC TriggerDeps:{DescID: 104 (t-), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
  │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 104 (t-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
@@ -193,7 +193,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  TriggerTiming:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerEvents:{DescID: 104 (t-), TriggerID: 1}
  │         │    ├── PUBLIC → ABSENT  TriggerFunctionCall:{DescID: 104 (t-), TriggerID: 1}
- │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1}
+ │         │    ├── PUBLIC → ABSENT  TriggerDeps:{DescID: 104 (t-), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
  │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 104 (t-)}
  │         └── 56 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}

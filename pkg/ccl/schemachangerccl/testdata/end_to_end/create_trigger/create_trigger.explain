@@ -20,7 +20,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │         │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
- │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         └── 10 Mutation operations
@@ -43,7 +43,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │    │    │    ├── PUBLIC → ABSENT TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │    │    │    ├── PUBLIC → ABSENT TriggerEvents:{DescID: 104 (t), TriggerID: 1}
  │    │    │    ├── PUBLIC → ABSENT TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
- │    │    │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
  │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    └── 1 Mutation operation
@@ -56,7 +56,7 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │         │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
- │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         └── 13 Mutation operations
