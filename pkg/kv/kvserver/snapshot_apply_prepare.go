@@ -75,13 +75,6 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 	); err != nil {
 		return errors.Wrapf(err, "unable to clear the raft log")
 	}
-	// Write the RaftReplicaID.
-	// TODO(pav-kv): RaftReplicaID always exists here (regardless of whether it's
-	// an initialized or uninitialized replica), don't write it again. Assert this
-	// in the caller, if needed. Here we want to only touch raft engine state.
-	if err := s.sl.SetRaftReplicaID(ctx, w, s.id.ReplicaID); err != nil {
-		return errors.Wrapf(err, "unable to write RaftReplicaID")
-	}
 	// Update the log truncation state.
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return errors.Wrapf(err, "unable to write RaftTruncatedState")
