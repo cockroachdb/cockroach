@@ -3325,7 +3325,7 @@ CONFIGURE ZONE USING
 			// try this for 15 minutes
 			for start := timeutil.Now(); start.Add(15*time.Minute).After(timeutil.Now()) && ctx.Err() == nil; {
 				t.L().Printf("running feed")
-				endTime := timeutil.Now().Add(1 * time.Minute).UnixNano()
+				endTime := timeutil.Now().Add(30 * time.Second).UnixNano()
 
 				var jobID int64
 				db.QueryRow(t, `CREATE CHANGEFEED INTO 'null://' WITH initial_scan='no', updated, resolved, end_time=$1, cursor=$2, metrics_label=$3 AS SELECT * FROM t`,
@@ -3333,7 +3333,9 @@ CONFIGURE ZONE USING
 
 				startMessingWithThings.Store(true)
 
-				db.Exec(t, `SHOW JOB WHEN COMPLETE $1`, jobID)
+				cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				_, _ = ct.DB().ExecContext(cctx, `SHOW JOB WHEN COMPLETE $1`, jobID)
+				cancel()
 			}
 
 			close(stopWorkload)
