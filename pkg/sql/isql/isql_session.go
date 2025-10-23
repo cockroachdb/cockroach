@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -63,6 +64,19 @@ type Session interface {
 	// 	return err
 	// }
 	Txn(ctx context.Context, do func(context.Context) error) error
+
+	// ModifySession executes a function that mutates the session using the
+	// sessionmutator.SessionDataMutator argument.
+	//
+	// Example:
+	// err := session.ModifySession(ctx, func(mutator sessionmutator.SessionDataMutator) {
+	// 	mutator.SetApplicationName("my_app")
+	// 	mutator.SetDatabase("my_database")
+	// })
+	// if err != nil {
+	// 	return err
+	// }
+	ModifySession(ctx context.Context, mutate func(mutator sessionmutator.SessionDataMutator)) error
 
 	// Close closes the session and cleans up internal resources.
 	Close(ctx context.Context)
