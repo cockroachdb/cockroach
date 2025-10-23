@@ -1,0 +1,92 @@
+allocate remaining=5
+----
+cpuTTG canBurst noBurst
+tier0  1        1
+tier1  1        1
+
+allocate remaining=4
+----
+cpuTTG canBurst noBurst
+tier0  2        2
+tier1  2        2
+
+allocate remaining=3
+----
+cpuTTG canBurst noBurst
+tier0  3        3
+tier1  3        2
+
+allocate remaining=2
+----
+cpuTTG canBurst noBurst
+tier0  4        4
+tier1  3        2
+
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
+
+resetInterval
+----
+
+# No more tokens added due to burst budget.
+allocate remaining=5
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
+
+# clear simulates tokens being taken due to admitted work.
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# In the interval, one call to allocateTokens made already,
+# so we do not expect the full rates to end up in the buckets.
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
+
+resetInterval
+----
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# In this interval, no call to allocateTokens so far, so we do
+# expect the full rates to end up in the bucket.
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
+
+resetInterval
+----
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+allocate remaining=2
+----
+cpuTTG canBurst noBurst
+tier0  3        2
+tier1  2        1
+
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2

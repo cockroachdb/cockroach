@@ -7,7 +7,7 @@ on:
 jobs:
   claude-code-pr-review:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'O-AI-Review')
+    if: "!startsWith(github.base_ref, 'release-') && !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review')"
     permissions:
       contents: read
       pull-requests: write

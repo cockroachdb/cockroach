@@ -149,6 +149,24 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			requesters[scanResourceTier(t, d)].tookWithoutPermission(int64(v))
 			return flushAndReset(false /* init */)
 
+		case "refill":
+			// The delta & the bucket capacity are hard-coded. It is unwiedly
+			// to make them data-driven arguments, and the payoff would be
+			// low anyway.
+			var delta [numResourceTiers][numBurstQualifications]int64
+			delta[testTier0][canBurst] = 5
+			delta[testTier0][noBurst] = 4
+			delta[testTier1][canBurst] = 3
+			delta[testTier1][noBurst] = 1
+			var bucketCapacity [numResourceTiers][numBurstQualifications]int64
+			bucketCapacity[testTier0][canBurst] = 4
+			bucketCapacity[testTier0][noBurst] = 3
+			bucketCapacity[testTier1][canBurst] = 10
+			bucketCapacity[testTier1][noBurst] = 1
+			granter.refill(delta, bucketCapacity)
+			fmt.Fprintf(&buf, "refill(%v %v)\n", delta, bucketCapacity)
+			return flushAndReset(false /* init */)
+
 		// For cpuTimeTokenChildGranter, this is a NOP. Still, it will be
 		// called in production. So best to test it doesn't panic, or similar.
 		case "continue-grant-chain":

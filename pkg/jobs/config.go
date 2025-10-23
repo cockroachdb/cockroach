@@ -20,6 +20,7 @@ const (
 	adoptIntervalSettingKey    = "jobs.registry.interval.adopt"
 	cancelIntervalSettingKey   = "jobs.registry.interval.cancel"
 	gcIntervalSettingKey       = "jobs.registry.interval.gc"
+	maxAdoptionsPerLoopKey     = "jobs.registry.max_adoptions_per_loop"
 	retentionTimeSettingKey    = "jobs.retention_time"
 	cancelUpdateLimitKey       = "jobs.cancel_update_limit"
 	debugPausePointsSettingKey = "jobs.debug.pausepoints"
@@ -29,6 +30,10 @@ const (
 const (
 	// defaultAdoptInterval is the default adopt interval.
 	defaultAdoptInterval = 30 * time.Second
+
+	// defaultMaxAdoptionsPerLoop is the default maximum number of jobs a node
+	// can adopt in one adoption loop.
+	defaultMaxAdoptionsPerLoop = 10
 
 	// defaultCancelInterval is the default cancel interval.
 	defaultCancelInterval = 10 * time.Second
@@ -69,6 +74,14 @@ var (
 			"states but are not running",
 		defaultAdoptInterval,
 		settings.PositiveDuration,
+	)
+
+	maxAdoptionsPerLoop = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		maxAdoptionsPerLoopKey,
+		"the maximum number of jobs a node can adopt in one adoption loop",
+		defaultMaxAdoptionsPerLoop,
+		settings.PositiveInt,
 	)
 
 	cancelIntervalSetting = settings.RegisterDurationSetting(

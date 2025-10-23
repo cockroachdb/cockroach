@@ -61,7 +61,6 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/cidr",
-        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
