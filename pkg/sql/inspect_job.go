@@ -197,6 +197,16 @@ func isUnsupportedIndexForIndexConsistencyCheck(
 		return true
 	}
 
+	// Check if any of the index key columns are virtual columns.
+	// TODO(155841): add support for indexes on virtual columns.
+	for i := 0; i < index.NumKeyColumns(); i++ {
+		colID := index.GetKeyColumnID(i)
+		col := catalog.FindColumnByID(table, colID)
+		if col != nil && col.IsVirtual() {
+			return true
+		}
+	}
+
 	switch t := index.GetType(); t {
 	case idxtype.VECTOR:
 		return true
