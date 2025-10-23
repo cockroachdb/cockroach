@@ -90,6 +90,7 @@ func RegisterTests(r registry.Registry) {
 	registerKVContention(r)
 	registerKVGracefulDraining(r)
 	registerKVQuiescenceDead(r)
+	registerKVRangefeed(r)
 	registerKVRangeLookups(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
