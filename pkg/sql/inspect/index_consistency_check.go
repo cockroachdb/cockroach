@@ -168,7 +168,7 @@ func (c *indexConsistencyCheck) Start(
 	alloc := &tree.DatumAlloc{}
 	bounds, hasRows, err := spanutils.SpanToQueryBounds(
 		ctx, cfg.DB.KV(), cfg.Codec, pkColIDs, pkColTypes, pkColDirs,
-		len(c.tableDesc.GetFamilies()), span, alloc,
+		len(c.tableDesc.GetFamilies()), span, alloc, c.asOf,
 	)
 	if err != nil {
 		return errors.Wrap(err, "converting span to query bounds")

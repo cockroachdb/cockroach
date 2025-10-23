@@ -614,3 +614,70 @@ func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 	require.InEpsilon(t, 1.0, fractionCompleted, 0.01, "progress should reach 100%% on successful completion")
 	requireCheckCountsMatch(t, r, jobID)
 }
+
+// TestMissingIndexEntryWithHistoricalQuery verifies that INSPECT can detect
+// missing index entries when querying at a historical timestamp (AS OF SYSTEM
+// TIME), including cases where data has since been deleted.
+//
+// This test overlaps with TestDetectIndexConsistencyErrors but is kept to
+// expand coverage. It exercises scenarios that TestDetectIndexConsistencyErrors
+// missed and specifically validates INSPECT’s handling of AS OF SYSTEM TIME and
+// mixed-case table names.
+func TestMissingIndexEntryWithHistoricalQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+	codec := s.ApplicationLayer().Codec()
+
+	// Create the table and the row entry.
+	// We use a table with mixed case as a regression case for #38184.
+	r.ExecMultiple(t,
+		`CREATE DATABASE t`,
+		`CREATE TABLE t."tEst" ("K" INT PRIMARY KEY, v INT)`,
+		`CREATE INDEX secondary ON t."tEst" (v)`,
+		`INSERT INTO t."tEst" VALUES (10, 20)`,
+	)
+
+	// Construct datums for our row values (k, v).
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "tEst")
+	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+
+	// Delete the secondary index entry to create corruption.
+	err := deleteSecondaryIndexEntry(ctx, codec, values, kvDB, tableDesc, secondaryIndex)
+	require.NoError(t, err)
+
+	// Enable INSPECT command.
+	r.Exec(t, `SET enable_inspect_command = true`)
+
+	// Run INSPECT and expect it to find the missing index entry.
+	// INSPECT returns an error when inconsistencies are found.
+	_, err = db.Query(`INSPECT TABLE t."tEst" WITH OPTIONS INDEX ALL`)
+	require.Error(t, err, "expected INSPECT to return an error when inconsistencies are found")
+	require.Contains(t, err.Error(), "INSPECT found inconsistencies")
+
+	// Run again with AS OF SYSTEM TIME.
+	time.Sleep(1 * time.Millisecond)
+	_, err = db.Query(`INSPECT TABLE t."tEst" AS OF SYSTEM TIME '-1ms' WITH OPTIONS INDEX ALL`)
+	require.Error(t, err, "expected INSPECT to return an error when inconsistencies are found")
+	require.Contains(t, err.Error(), "INSPECT found inconsistencies")
+
+	// Verify that AS OF SYSTEM TIME actually operates in the past by:
+	// 1. Getting a timestamp before we delete the row
+	// 2. Deleting the entire row
+	// 3. Running INSPECT at the historical timestamp
+	// At that historical timestamp, the row existed and was corrupted, so INSPECT
+	// should still find the corruption even though the row no longer exists.
+	ts := r.QueryStr(t, `SELECT cluster_logical_timestamp()`)[0][0]
+	r.Exec(t, `DELETE FROM t."tEst"`)
+
+	_, err = db.Query(fmt.Sprintf(
+		`INSPECT TABLE t."tEst" AS OF SYSTEM TIME '%s' WITH OPTIONS INDEX ALL`, ts,
+	))
+	require.Error(t, err, "expected INSPECT to find corruption at historical timestamp")
+	require.Contains(t, err.Error(), "INSPECT found inconsistencies",
+		"INSPECT should detect the missing index entry that existed at the historical timestamp")
+}

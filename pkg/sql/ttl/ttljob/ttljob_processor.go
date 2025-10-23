@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -356,6 +357,7 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 				numFamilies,
 				span,
 				&alloc,
+				hlc.Timestamp{}, // Use current time bounds; TTL only deletes live rows.
 			); err != nil {
 				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
 			} else if hasRows {
