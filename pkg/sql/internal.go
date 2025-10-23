@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -64,12 +65,12 @@ func NewInternalSessionData(
 
 	sd := &sessiondata.SessionData{}
 	sds := sessiondata.NewStack(sd)
-	defaults := SessionDefaults(map[string]string{
+	defaults := sessionmutator.SessionDefaults(map[string]string{
 		"application_name": appName,
 	})
-	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, settings)
+	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, defaults, settings)
 
-	sdMutIterator.applyOnEachMutator(func(m sessionDataMutator) {
+	sdMutIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
 		for varName, v := range varGen {
 			if varName == "optimizer_use_histograms" {
 				// Do not use histograms when optimizing internal executor
@@ -78,7 +79,7 @@ func NewInternalSessionData(
 				continue
 			}
 			if v.Set != nil {
-				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.SessionDataMutatorBase)
 				if hasDefault {
 					if err := v.Set(ctx, m, defVal); err != nil {
 						log.Dev.Warningf(ctx, "error setting default for %s: %v", varName, err)
@@ -304,10 +305,10 @@ func (ie *InternalExecutor) initConnEx(
 
 	applicationStats := ie.s.localSqlStats.GetApplicationStats(sd.ApplicationName)
 	sds := sessiondata.NewStack(sd)
-	defaults := SessionDefaults(map[string]string{
+	defaults := sessionmutator.SessionDefaults(map[string]string{
 		"application_name": sd.ApplicationName,
 	})
-	sdMutIterator := makeSessionDataMutatorIterator(sds, defaults, ie.s.cfg.Settings)
+	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, defaults, ie.s.cfg.Settings)
 	var ex *connExecutor
 	var err error
 	if txn == nil {
@@ -380,7 +381,7 @@ func (ie *InternalExecutor) initConnEx(
 func (ie *InternalExecutor) newConnExecutorWithTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	sdMutIterator *sessionDataMutatorIterator,
+	sdMutIterator *sessionmutator.SessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	applicationStats *ssmemstorage.Container,
@@ -439,7 +440,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For
 		// sanity, set read only on the session.
-		if err := ex.dataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+		if err := ex.dataMutatorIterator.ApplyOnEachMutatorError(func(m sessionmutator.SessionDataMutator) error {
 			return m.SetReadOnly(true)
 		}); err != nil {
 			return nil, err
