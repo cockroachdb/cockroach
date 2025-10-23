@@ -1162,7 +1162,12 @@ var debugMCPCmd = &cobra.Command{
 	Short: "debug MCP server functionality",
 	Long: `
 Debug command for MCP (Model Context Protocol) server functionality.
-Provides utilities for testing and debugging MCP server operations.
+Provides utilities for decoding tsdump files.
+
+Environment Variables:
+  COCKROACH_DEBUG_MCP_INSTRUCTIONS
+    Path to a file containing custom instructions for the MCP server.
+    If not set, uses the default embedded instructions.
 `,
 	RunE: runDebugMCP,
 }
