@@ -147,7 +147,7 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 		}
 
 		allowedCatchUpDuration := time.Duration(int64(float64(catchUpDur) * float64(1.1)))
-		actualCatchUpDuration := findP99Below(metrics["changefeed-resolved"], resolvedTarget*2)
+		actualCatchUpDuration := findP99Below(metrics["changefeed-resolved"], resolvedTarget*2) - opts.catchUpInterval
 		if actualCatchUpDuration == 0 {
 			t.Fatal("changefeed never caught up")
 		} else if actualCatchUpDuration > allowedCatchUpDuration {
