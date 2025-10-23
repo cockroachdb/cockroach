@@ -2589,8 +2589,6 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		panic(errors.AssertionFailedf("unsupported command type: %T", cmd))
 	}
 
-	var advInfo advanceInfo
-
 	// We close all pausable portals and cursors when we encounter err payload,
 	// otherwise there will be leftover bytes.
 	shouldClosePausablePortalsAndCursors := func(payload fsm.EventPayload) bool {
@@ -2602,23 +2600,24 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		}
 	}
 
+	if shouldClosePausablePortalsAndCursors(payload) {
+		// We need this as otherwise, there'll be leftover bytes when
+		// txnState.finishSQLTxn() is being called, as the underlying resources of
+		// pausable portals hasn't been cleared yet.
+		ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+		if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
+			log.Warningf(ctx, "error closing cursors: %v", err)
+		}
+	}
+
+	var advInfo advanceInfo
 	// If an event was generated, feed it to the state machine.
 	if ev != nil {
 		var err error
-		if shouldClosePausablePortalsAndCursors(payload) {
-			// We need this as otherwise, there'll be leftover bytes when
-			// txnState.finishSQLTxn() is being called, as the underlying resources of
-			// pausable portals hasn't been cleared yet.
-			ex.extraTxnState.prepStmtsNamespace.closeAllPausablePortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
-			if err := ex.extraTxnState.sqlCursors.closeAll(&ex.planner, cursorCloseForTxnRollback); err != nil {
-				log.Warningf(ctx, "error closing cursors: %v", err)
-			}
-		}
 		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
 		if err != nil {
 			return err
 		}
-
 		// Massage the advancing for Sync, which is special.
 		if _, ok := cmd.(Sync); ok {
 			switch advInfo.code {
