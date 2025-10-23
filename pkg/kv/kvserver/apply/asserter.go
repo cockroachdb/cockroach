@@ -172,7 +172,7 @@ func (r *rangeAsserter) propose(
 		//
 		// TODO(erikgrinaker): consider assertions around lease request replays.
 		if cmd.MaxLeaseIndex != 0 || cmd.ClosedTimestamp != nil {
-			fail("lease request proposal with LAI=%s CTS=%s", cmd.MaxLeaseIndex, cmd.ClosedTimestamp)
+			fail("lease request proposal with LAI=%d CTS=%s", cmd.MaxLeaseIndex, cmd.ClosedTimestamp)
 		}
 
 	} else {

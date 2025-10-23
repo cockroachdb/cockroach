@@ -350,9 +350,9 @@ func runAllocationBench(
 	}
 	samples := make([]*clusterstats.ClusterStatRun, spec.samples)
 
-	t.L().Printf("cpu(%) means: average of (max-min) node cpu utilization across intervals")
-	t.L().Printf("write(%) means: average of (max-min) write disk utilization across intervals")
-	t.L().Printf("cost(gb) means: GBs sent for rebalancing operations between initial and end")
+	t.L().Printf("%s", "cpu(%) means: average of (max-min) node cpu utilization across intervals")
+	t.L().Printf("%s", "write(%) means: average of (max-min) write disk utilization across intervals")
+	t.L().Printf("%s", "cost(gb) means: GBs sent for rebalancing operations between initial and end")
 
 	for i := 0; i < spec.samples; i++ {
 		statCollector, cleanupFunc := setupAllocationBench(ctx, t, c, spec)

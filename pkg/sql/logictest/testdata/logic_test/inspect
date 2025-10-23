@@ -297,6 +297,81 @@ DROP TABLE t2;
 
 subtest end
 
+subtest inspect_virtual_column_indexes
+
+user root
+
+# Test that indexes on virtual columns are not supported for INSPECT.
+statement ok
+CREATE TABLE t_virtual (
+    c1 INT,
+    c2 INT AS (c1 + 1) VIRTUAL,
+    c3 INT,
+    INDEX idx_c2 (c2),
+    INDEX idx_c3 (c3)
+);
+
+statement ok
+INSERT INTO t_virtual (c1, c3) VALUES (1, 10), (2, 20), (3, 30);
+
+# INSPECT TABLE should skip the virtual column index and only check the regular index.
+statement ok
+INSPECT TABLE t_virtual AS OF SYSTEM TIME '-1us';
+
+# Verify only one check was created (for idx_c3, the regular index).
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Explicitly specifying the virtual column index should fail.
+statement error pq: index "idx_c2" on table "t_virtual" is not supported for index consistency checking
+INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c2);
+
+# Explicitly specifying the regular index should succeed.
+statement ok
+INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c3);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Test with multiple virtual columns in the same index.
+statement ok
+CREATE TABLE t_multi_virtual (
+    c1 INT,
+    c2 INT AS (c1 + 1) VIRTUAL,
+    c3 INT AS (c1 * 2) VIRTUAL,
+    c4 INT,
+    INDEX idx_virtual_combo (c2, c3),
+    INDEX idx_regular (c4)
+);
+
+statement ok
+INSERT INTO t_multi_virtual (c1, c4) VALUES (1, 100);
+
+# Should skip the index with virtual columns and only check the regular index.
+statement ok
+INSPECT TABLE t_multi_virtual AS OF SYSTEM TIME '-1us';
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Explicitly specifying the index with virtual columns should fail.
+statement error pq: index "idx_virtual_combo" on table "t_multi_virtual" is not supported for index consistency checking
+INSPECT TABLE t_multi_virtual WITH OPTIONS INDEX (idx_virtual_combo);
+
+statement ok
+DROP TABLE t_virtual;
+
+statement ok
+DROP TABLE t_multi_virtual;
+
+subtest end
+
 subtest database_resolve_indexes
 
 statement ok
