@@ -109,6 +109,15 @@ var bugfix149481Enabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithVisibility(settings.Reserved))
 
+// ChildMetricsTimeSeriesEnabled controls whether to collect high-cardinality child metrics
+// into the time series database. This is separate from ChildMetricsEnabled which controls
+// Prometheus exports, allowing independent control of child metrics collection vs export.
+var ChildMetricsTimeSeriesEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "timeseries.child_metrics.enabled",
+	"enables the collection of high-cardinality child metrics into the time series database",
+	false,
+	settings.WithPublic)
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -453,19 +462,15 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		timestampNanos: now.UnixNano(),
 	}
 	recorder.record(&data)
-	recorder.recordChildx(&data)
 	// Now record the app metrics for the system tenant.
 	recorder.registry = mr.mu.appRegistry
 	recorder.record(&data)
-	recorder.recordChildx(&data)
 	// Now record the log metrics.
 	recorder.registry = mr.mu.logRegistry
 	recorder.record(&data)
-	recorder.recordChildx(&data)
 	// Now record the system metrics.
 	recorder.registry = mr.mu.sysRegistry
 	recorder.record(&data)
-	recorder.recordChildx(&data)
 
 	// Record time series from app-level registries for secondary tenants.
 	for tenantID, r := range mr.mu.tenantRegistries {
@@ -505,6 +510,91 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		}
 	}
 	atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
+	return data
+}
+
+// GetChildMetricsData serializes only child metrics for consumption by
+// CockroachDB's time series system. This implements a specialized DataSource
+// interface for high-cardinality child metrics collection.
+func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
+	// Check if child metrics time series collection is enabled via cluster setting
+	if !ChildMetricsTimeSeriesEnabled.Get(&mr.settings.SV) {
+		return nil
+	}
+
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
+	if mr.mu.nodeRegistry == nil {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetChildMetricsData() called before NodeID allocation")
+		}
+		return nil
+	}
+
+	data := make([]tspb.TimeSeriesData, 0)
+
+	// Record child metrics from node-level registries only
+	now := mr.clock.Now()
+	recorder := registryRecorder{
+		registry:       mr.mu.nodeRegistry,
+		format:         nodeTimeSeriesPrefix,
+		source:         mr.mu.desc.NodeID.String(),
+		timestampNanos: now.UnixNano(),
+	}
+	recorder.recordChildx(&data)
+	
+	// Record child metrics from app registry for system tenant
+	recorder.registry = mr.mu.appRegistry
+	recorder.recordChildx(&data)
+	
+	// Record child metrics from log registry
+	recorder.registry = mr.mu.logRegistry
+	recorder.recordChildx(&data)
+	
+	// Record child metrics from system registry
+	recorder.registry = mr.mu.sysRegistry
+	recorder.recordChildx(&data)
+
+	// Record child metrics from app-level registries for secondary tenants
+	for tenantID, r := range mr.mu.tenantRegistries {
+		tenantRecorder := registryRecorder{
+			registry:       r,
+			format:         nodeTimeSeriesPrefix,
+			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+			timestampNanos: now.UnixNano(),
+		}
+		tenantRecorder.recordChildx(&data)
+	}
+
+	// Record child metrics from store-level registries
+	tIDLabel := multitenant.TenantIDLabel
+	for storeID, r := range mr.mu.storeRegistries {
+		storeRecorder := registryRecorder{
+			registry:       r,
+			format:         storeTimeSeriesPrefix,
+			source:         storeID.String(),
+			timestampNanos: now.UnixNano(),
+		}
+		storeRecorder.recordChildx(&data)
+
+		// Record child metrics for secondary tenant store metrics
+		for tenantID := range mr.mu.tenantRegistries {
+			tenantStoreRecorder := registryRecorder{
+				registry:       r,
+				format:         storeTimeSeriesPrefix,
+				source:         tsutil.MakeTenantSource(storeID.String(), tenantID.String()),
+				timestampNanos: now.UnixNano(),
+			}
+			tenantIDStr := tenantID.String()
+			tenantStoreRecorder.recordChild(&data, kvbase.TenantsStorageMetricsSet, &prometheusgo.LabelPair{
+				Name:  &tIDLabel,
+				Value: &tenantIDStr,
+			})
+		}
+	}
+
 	return data
 }
 
@@ -893,14 +983,18 @@ func (rr registryRecorder) recordChild(
 	})
 }
 
-// recordChild filters the metrics in the registry down to those provided in
+// recordChildx filters the metrics in the registry down to those provided in
 // the metricsFilter argument, and iterates through any child metrics that
-// may exist on said metric. up to 100
+// may exist on said metric. Records up to 1000 child metrics to prevent
+// unbounded memory usage and performance issues.
 //
 // NB: Only available for Counter and Gauge metrics.
 func (rr registryRecorder) recordChildx(
 	dest *[]tspb.TimeSeriesData,
 ) {
+	const maxChildMetrics = 1000
+	var childMetricsCount int
+
 	labels := rr.registry.GetLabels()
 	rr.registry.Each(func(name string, v interface{}) {
 		prom, ok := v.(metric.PrometheusExportable)
@@ -915,6 +1009,10 @@ func (rr registryRecorder) recordChildx(
 		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
 
 		processChildMetric := func(metric *prometheusgo.Metric) {
+			if childMetricsCount >= maxChildMetrics {
+				return // Stop processing once we hit the limit
+			}
+
 			childmetricname := prom.GetName(false /* useStaticLabels */)
 			for _, label := range metric.Label {
 				childmetricname = fmt.Sprintf("%s___%s_%q_jason", childmetricname, label.GetName(), label.GetValue())
@@ -937,6 +1035,7 @@ func (rr registryRecorder) recordChildx(
 					},
 				},
 			})
+			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
 	})

@@ -2006,8 +2006,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
-	// high cardinality metrics collector
-	s.tsDB.PollSource(
+	// high cardinality child metrics collector - uses dedicated interface and poller
+	s.tsDB.PollChildMetricsSource(
 		s.cfg.AmbientCtx, s.recorder, base.DefaultHighCardinalityMetricsSampleInterval, ts.Resolution1m, s.stopper,
 	)
 
