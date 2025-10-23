@@ -28,12 +28,8 @@ minimal latency disruption and no manual intervention; supports
 **strongly-consistent** ACID transactions; and provides a familiar
 **SQL** API for structuring, manipulating, and querying data.
 
-For more details, see our [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
+For more details, see our [product overview](https://www.cockroachlabs.com/product/overview/), [FAQ](https://cockroachlabs.com/docs/stable/frequently-asked-questions.html) or [architecture document](
 https://www.cockroachlabs.com/docs/stable/architecture/overview.html).
-
-<p align="center">
-  <a href='https://www.youtube.com/watch?v=VgXiMcbGwzQ'> <img src='docs/media/explainer-video-preview.png' width='70%'> </a>
-</p>
 
 ## Docs
 
