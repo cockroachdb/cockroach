@@ -158,7 +158,6 @@ func IterateIDPrefixKeys(
 	msg protoutil.Message,
 	f func(_ roachpb.RangeID) error,
 ) error {
-	rangeID := roachpb.RangeID(1)
 	// NB: Range-ID local keys have no versions and no intents.
 	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
@@ -168,55 +167,35 @@ func IterateIDPrefixKeys(
 	}
 	defer iter.Close()
 
-	for {
-		bumped := false
-		mvccKey := storage.MakeMVCCMetadataKey(keyFn(rangeID))
-		iter.SeekGE(mvccKey)
+	for rangeID := roachpb.RangeID(1); ; {
+		rangeIDKey := keyFn(rangeID)
+		iter.SeekGE(storage.MakeMVCCMetadataKey(rangeIDKey))
 
-		if ok, err := iter.Valid(); !ok {
+		if ok, err := iter.Valid(); !ok || err != nil {
 			return err
 		}
 
-		unsafeKey := iter.UnsafeKey()
-
-		if !bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
-			// Left the local keyspace, so we're done.
-			return nil
-		}
-
-		curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey.Key)
-		if err != nil {
-			return err
-		}
-
-		if curRangeID > rangeID {
-			// `bumped` is always `false` here, but let's be explicit.
-			if !bumped {
-				rangeID = curRangeID
-				bumped = true
+		unsafeKey := iter.UnsafeKey().Key
+		if comp := unsafeKey.Compare(rangeIDKey); comp > 0 { // overshot
+			curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey)
+			if err != nil {
+				return err
 			}
-			mvccKey = storage.MakeMVCCMetadataKey(keyFn(rangeID))
-		}
-
-		if !unsafeKey.Key.Equal(mvccKey.Key) {
-			if !bumped {
-				// Don't increment the rangeID if it has already been incremented
-				// above, or we could skip past a value we ought to see.
-				rangeID++
-				bumped = true // for completeness' sake; continuing below anyway
-			}
+			rangeID = max(curRangeID, rangeID+1)
 			continue
+		} else if comp < 0 { // undershot
+			return errors.AssertionFailedf("SeekGE undershot key %s", rangeIDKey)
 		}
 
-		ok, err := storage.MVCCGetProto(
-			ctx, reader, unsafeKey.Key, hlc.Timestamp{}, msg, storage.MVCCGetOptions{})
-		if err != nil {
-			return err
+		// Found the key. Parse and report the value.
+		var meta enginepb.MVCCMetadata
+		if err := iter.ValueProto(&meta); err != nil {
+			return errors.Errorf("unable to unmarshal %s into MVCCMetadata", unsafeKey)
 		}
-		if !ok {
-			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
+		val := roachpb.Value{RawBytes: meta.RawBytes}
+		if err := val.GetProto(msg); err != nil {
+			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey, msg)
 		}
-
 		if err := f(rangeID); err != nil {
 			return iterutil.Map(err)
 		}
