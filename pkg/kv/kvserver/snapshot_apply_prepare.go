@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -16,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
@@ -63,24 +61,11 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 // provided state. Specifically, it rewrites HardState and RaftTruncatedState,
 // and clears the raft log. All writes are generated in the engine keys order.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	// Update HardState.
-	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
-		return errors.Wrapf(err, "unable to write HardState")
+	cleared, err := kvstorage.RewriteRaftState(ctx, w, s.sl, s.hardState, s.truncState)
+	if err != nil {
+		return err
 	}
-	// Clear the raft log. Note that there are no Pebble range keys in this span.
-	logPrefix := keys.RaftLogPrefix(s.id.RangeID)
-	raftLog := roachpb.Span{Key: logPrefix, EndKey: logPrefix.PrefixEnd()}
-	if err := w.ClearRawRange(
-		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
-	); err != nil {
-		return errors.Wrapf(err, "unable to clear the raft log")
-	}
-	// Update the log truncation state.
-	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
-		return errors.Wrapf(err, "unable to write RaftTruncatedState")
-	}
-
-	s.cleared = append(s.cleared, raftLog)
+	s.cleared = append(s.cleared, cleared)
 	return nil
 }
 

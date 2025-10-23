@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -237,6 +238,37 @@ func RemoveStaleRHSFromSplit(
 		}
 	}
 	return nil
+}
+
+// RewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log. All writes are generated in the engine keys order.
+//
+// TODO(pav-kv): get rid of the returned cleared spans.
+func RewriteRaftState(
+	ctx context.Context,
+	w storage.Writer,
+	sl StateLoader,
+	hs raftpb.HardState,
+	ts kvserverpb.RaftTruncatedState,
+) (cleared roachpb.Span, _ error) {
+	// Update HardState.
+	if err := sl.SetHardState(ctx, w, hs); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
+	}
+	// Clear the raft log. Note that there are no Pebble range keys in this span.
+	logPrefix := sl.RaftLogPrefix().Clone()
+	raftLog := roachpb.Span{Key: logPrefix, EndKey: logPrefix.PrefixEnd()}
+	if err := w.ClearRawRange(
+		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "unable to clear the raft log")
+	}
+	// Update the log truncation state.
+	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
+		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
+	}
+	return raftLog, nil
 }
 
 // TestingForceClearRange changes the value of ClearRangeThresholdPointKeys to
