@@ -39,16 +39,25 @@ func init() {
 		"transient-check-constraint", "column-type",
 		func(from, to NodeVars) rel.Clauses {
 			colID := rel.Var("columnID")
+			tableID := rel.Var("table-id")
+			oldColumnType := MkNodeVars("old-column-type")
 			return rel.Clauses{
 				from.Type((*scpb.CheckConstraint)(nil)),
 				to.Type((*scpb.ColumnType)(nil)),
-				JoinOnDescID(from, to, "table-id"),
+				JoinOnDescID(from, to, tableID),
 				to.El.AttrEqVar(screl.ColumnID, colID),
 				from.ReferencedColumnIDsContains(colID),
 				from.TargetStatus(scpb.TransientAbsent),
 				to.TargetStatus(scpb.ToPublic),
 				from.CurrentStatus(scpb.Status_TRANSIENT_VALIDATED),
 				to.CurrentStatus(scpb.Status_PUBLIC),
+				// Only apply this rule if there's an old column type being dropped,
+				// which indicates this is an ALTER COLUMN TYPE operation.
+				oldColumnType.Type((*scpb.ColumnType)(nil)),
+				oldColumnType.El.AttrEqVar(screl.DescID, tableID),
+				oldColumnType.El.AttrEqVar(screl.ColumnID, colID),
+				oldColumnType.TargetStatus(scpb.ToAbsent),
+				oldColumnType.JoinTargetNode(),
 			}
 		},
 	)
