@@ -457,6 +457,14 @@ type Planner interface {
 	// ClearTableStatsCache removes all entries from the node's table stats cache.
 	ClearTableStatsCache()
 
+	// ClearStatementHintsCache removes all entries from the node's statement
+	// hints cache.
+	ClearStatementHintsCache()
+
+	// AwaitStatementHintsCache waits for the node's statement hints cache to
+	// catch up with recent hint injections.
+	AwaitStatementHintsCache(ctx context.Context)
+
 	// RetryCounter is the number of times this statement has been retried.
 	RetryCounter() int
 

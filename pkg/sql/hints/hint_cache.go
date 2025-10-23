@@ -75,6 +75,10 @@ type StatementHintsCache struct {
 		// hintCache, not for hintedHashes.
 		// TODO(drewk): consider making this a metric.
 		numInternalQueries int
+
+		// Used to block on the rangefeed watcher frontier time in Await.
+		frontier        hlc.Timestamp
+		frontierChanged chan struct{}
 	}
 
 	// Used to start/coordinate the rangefeed.
@@ -135,7 +139,16 @@ func NewStatementHintsCache(
 			return s > int(cacheSize.Get(&st.SV))
 		},
 	})
+	hintsCache.mu.frontierChanged = make(chan struct{})
 	return hintsCache
+}
+
+// Clear removes all entries from the StatementHintsCache.
+func (c *StatementHintsCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.hintCache.Clear()
+	defer c.generation.Add(1)
 }
 
 // ============================================================================
@@ -212,6 +225,11 @@ func (c *StatementHintsCache) onUpdate(
 		// Ignore empty updates that only bump the resolved timestamp.
 		log.Dev.Info(ctx, "statement_hints rangefeed applying incremental update")
 		c.handleIncrementalUpdate(ctx, update)
+	} else {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		// Wake up any frontier waiters in Await.
+		c.wakeFrontierWaitersLocked(update.Timestamp)
 	}
 }
 
@@ -239,6 +257,9 @@ func (c *StatementHintsCache) handleInitialScan(update rangefeedcache.Update[*bu
 		// empty, but if the first attempted initial scan failed, server startup
 		// will have proceeded and some statements may have populated the cache.
 		c.mu.hintCache.Clear()
+
+		// Wake up any frontier waiters in Await.
+		c.wakeFrontierWaitersLocked(update.Timestamp)
 	}()
 }
 
@@ -271,6 +292,8 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 		c.mu.hintedHashes[ev.hash] = refreshTS
 		c.checkHashHasHintsAsync(ctx, ev.hash, refreshTS)
 	}
+	// Wake up any frontier waiters in Await.
+	c.wakeFrontierWaitersLocked(update.Timestamp)
 }
 
 // checkHashHasHintsAsync launches an async goroutine to check if there are any
@@ -353,9 +376,39 @@ func (e *bufferEvent) Timestamp() hlc.Timestamp {
 
 var _ rangefeedbuffer.Event = &bufferEvent{}
 
+// wakeFrontierWaitersLocked wakes up any goroutines in Await if the rangefeed
+// watcher frontier time has advanced.
+func (c *StatementHintsCache) wakeFrontierWaitersLocked(ts hlc.Timestamp) {
+	if ts.After(c.mu.frontier) {
+		c.mu.frontier = ts
+		close(c.mu.frontierChanged)
+		c.mu.frontierChanged = make(chan struct{})
+	}
+}
+
 // ============================================================================
 // Reading from the cache.
 // ============================================================================
+
+// Await blocks until the StatementHintsCache's rangefeed watcher catches up
+// with the present. After Await returns, MaybeGetStatementHints should
+// accurately reflect all hints that were modified before the call to Await
+// (assuming the ctx was not canceled).
+func (c *StatementHintsCache) Await(ctx context.Context) {
+	now := c.clock.Now()
+	c.mu.Lock()
+	for now.After(c.mu.frontier) {
+		frontierChanged := c.mu.frontierChanged
+		c.mu.Unlock()
+		select {
+		case <-frontierChanged:
+			c.mu.Lock()
+		case <-ctx.Done():
+			return
+		}
+	}
+	c.mu.Unlock()
+}
 
 // GetGeneration returns the current generation, which will change if any
 // modifications happen to the cache.
