@@ -26,7 +26,7 @@ import (
 // that are appropriate for the destination table.
 type eventDecoder struct {
 	decoder   cdcevent.Decoder
-	srcToDest map[descpb.ID]destinationTable
+	srcToDest map[descpb.ID]*destinationTable
 
 	// TODO(jeffswenson): clean this interface up. There's a problem with
 	// layering that requires the event decoder to know about the most recent
@@ -70,7 +70,7 @@ func newEventDecoder(
 	settings *cluster.Settings,
 	procConfigByDestID map[descpb.ID]sqlProcessorTableConfig,
 ) (*eventDecoder, error) {
-	srcToDest := make(map[descpb.ID]destinationTable, len(procConfigByDestID))
+	srcToDest := make(map[descpb.ID]*destinationTable, len(procConfigByDestID))
 	err := descriptors.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		for dstID, s := range procConfigByDestID {
 			descriptor, err := txn.Descriptors().GetLeasedImmutableTableByID(ctx, txn.KV(), dstID)
@@ -80,13 +80,16 @@ func newEventDecoder(
 
 			columns := getColumnSchema(descriptor)
 			columnNames := make([]string, 0, len(columns))
+			columnTypes := make([]*types.T, 0, len(columns))
 			for _, column := range columns {
 				columnNames = append(columnNames, column.column.GetName())
+				columnTypes = append(columnTypes, column.column.GetType().Canonical())
 			}
 
-			srcToDest[s.srcDesc.GetID()] = destinationTable{
-				id:      dstID,
-				columns: columnNames,
+			srcToDest[s.srcDesc.GetID()] = &destinationTable{
+				id:          dstID,
+				columns:     columnNames,
+				columnTypes: columnTypes,
 			}
 		}
 		return nil
@@ -185,8 +188,7 @@ func (d *eventDecoder) decodeEvent(
 		return decodedEvent{}, errors.AssertionFailedf("table %d not found", decodedRow.TableID)
 	}
 
-	row := make(tree.Datums, 0, len(dstTable.columns))
-	row, err = appendDatums(row, decodedRow, dstTable.columns)
+	row, err := dstTable.toLocalDatums(decodedRow)
 	if err != nil {
 		return decodedEvent{}, err
 	}
@@ -201,8 +203,7 @@ func (d *eventDecoder) decodeEvent(
 		return decodedEvent{}, err
 	}
 
-	prevRow := make(tree.Datums, 0, len(dstTable.columns))
-	prevRow, err = appendDatums(prevRow, decodedPrevRow, dstTable.columns)
+	prevRow, err := dstTable.toLocalDatums(decodedPrevRow)
 	if err != nil {
 		return decodedEvent{}, err
 	}
@@ -216,37 +217,43 @@ func (d *eventDecoder) decodeEvent(
 	}, nil
 }
 
-// appendDatums appends datums for the specified column names from the cdcevent.Row
-// to the datums slice and returns the updated slice.
-func appendDatums(datums tree.Datums, row cdcevent.Row, columnNames []string) (tree.Datums, error) {
-	it, err := row.DatumsNamed(columnNames)
+// toLocalDatums creates a row with the types of the datums converted to to the
+// types required by the remote descriptor. toLocalDatums takes ownerhsip of
+// the input row and may modify datums from the decoded input row.
+func (d *destinationTable) toLocalDatums(row cdcevent.Row) (tree.Datums, error) {
+	localRow := make(tree.Datums, len(d.columns))
+
+	it, err := row.DatumsNamed(d.columns)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		if dEnum, ok := d.(*tree.DEnum); ok {
-			// Override the type to Unknown to avoid a mismatched type OID error
-			// during execution. Note that Unknown is the type used by default
-			// when a SQL statement is executed without type hints.
-			//
-			// TODO(jeffswenson): this feels like the wrong place to do this,
-			// but its inspired by the implementation in queryBuilder.AddRow.
-			//
-			// Really we should be mapping from the source datum type to the
-			// destination datum type.
-			dEnum.EnumTyp = types.Unknown
+	columnIndex := 0
+	if err := it.Datum(func(datum tree.Datum, col cdcevent.ResultColumn) error {
+		typ := d.columnTypes[columnIndex]
+
+		switch d := datum.(type) {
+		case *tree.DEnum:
+			d.EnumTyp = typ
+		case *tree.DArray:
+			d.ParamTyp = typ
+		case *tree.DTuple:
+			datum = tree.NewDTuple(typ, d.D...)
 		}
-		datums = append(datums, d)
+
+		localRow[columnIndex] = datum
+
+		columnIndex += 1
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	return datums, nil
+	return localRow, nil
 }
 
 type destinationTable struct {
-	id      descpb.ID
-	columns []string
+	id          descpb.ID
+	columns     []string
+	columnTypes []*types.T
 }
