@@ -98,6 +98,12 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 		}
 	}
 
+	// Set per-changefeed memory to a low value so that we don't queue in the
+	// changefeed machinery and instead force the buffered sender to queue.
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit='1MiB'"); err != nil {
+		t.Fatal(err)
+	}
+
 	t.Status("initializing workload")
 	initCmd := fmt.Sprintf("./cockroach workload init kv --splits=%d {pgurl:1-%d}",
 		opts.splits, nodes)
