@@ -235,6 +235,10 @@ jobs:
           The three-stage Claude Code analysis has identified potential bug(s) in this PR that may warrant investigation.
 
           **Next Steps:**
-          Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+          Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+          After you review the findings, please tag the issue as follows:
+          - If the detected issue is real or was helpful in any way, please tag the issue with \`O-AI-Review-Real-Issue-Found\`
+          - If the detected issue was not helpful in any way, please tag the issue with \`O-AI-Review-Not-Helpful\`"
 
           gh pr edit ${{ github.event.pull_request.number }} --add-label "o-AI-Review-Potential-Issue-Detected"
