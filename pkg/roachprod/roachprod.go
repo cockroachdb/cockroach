@@ -31,13 +31,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/fluentbit"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -2582,7 +2583,7 @@ func StartOpenTelemetry(
 	return opentelemetry.Install(ctx, l, c, config)
 }
 
-// Stop stops the OpenTelemetry Collector on the cluster identified by clusterName.
+// StopOpenTelemetry stops the OpenTelemetry Collector on the cluster identified by clusterName.
 func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -2594,6 +2595,40 @@ func StopOpenTelemetry(ctx context.Context, l *logger.Logger, clusterName string
 	}
 
 	return opentelemetry.Stop(ctx, l, c)
+}
+
+// StartParcaAgent starts a Parca Agent on the cluster.
+func StartParcaAgent(
+	ctx context.Context, l *logger.Logger, clusterName string, config parca.Config,
+) error {
+	if config.Token == "" {
+		return errors.New("Token cannot be empty")
+	}
+
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return parca.Install(ctx, l, c, config)
+}
+
+// StopParcaAgent stops the Parca Agent on the cluster.
+func StopParcaAgent(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return parca.Stop(ctx, l, c)
 }
 
 // DestroyDNS destroys the DNS records for the given cluster.

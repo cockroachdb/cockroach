@@ -7,7 +7,7 @@ go_library(
         "files/fluent-bit.service",
         "files/fluent-bit.yaml.tmpl",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit",
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/agents/fluentbit",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/roachprod/install",

@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/fluentbit"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/fluentbit"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
@@ -101,9 +102,9 @@ var (
 
 	sshKeyUser string
 
-	fluentBitConfig fluentbit.Config
-
+	fluentBitConfig     fluentbit.Config
 	opentelemetryConfig opentelemetry.Config
+	parcaAgentConfig    parca.Config
 
 	fetchLogsTimeout time.Duration
 )
@@ -391,6 +392,11 @@ func initOpentelemetryStartCmdFlags(opentelemetryStartCmd *cobra.Command) {
 
 	opentelemetryStartCmd.Flags().StringSliceVar(&opentelemetryConfig.DatadogTags, "datadog-tags", []string{},
 		"Datadog tags as a comma-separated list in the format KEY1:VAL1,KEY2:VAL2")
+}
+
+func initParcaAgentStartCmdFlags(parcaAgentStartCmd *cobra.Command) {
+	parcaAgentStartCmd.Flags().StringVar(&parcaAgentConfig.Token, "parca-agent-token", "",
+		"Parca Agent Token")
 }
 
 func initGCCmdFlags(gcCmd *cobra.Command) {
