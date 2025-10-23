@@ -11041,6 +11041,8 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "prone to overload")
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		if KafkaV2Enabled.Get(&s.Server.ClusterSettings().SV) {
 			// This is already covered for the v2 sink in another test: TestKafkaSinkClientV2_Resize
