@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 	"sync/atomic"
@@ -45,6 +46,7 @@ type vecIndexOptions struct {
 	preBatchSz  int           // Insert batch size pre-index creation
 	beamSizes   []int         // Beamsizes to verify with
 	minRecall   []float64     // Minimum recall@10 threshold
+	rwSplit     float64       // Percentage of concurrent read/write workers that should be readers
 }
 
 // makeVecIndexTestName generates test name from configuration
@@ -167,6 +169,7 @@ func registerVectorIndex(r registry.Registry) {
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
 			minRecall:   []float64{0.76, 0.83, 0.88, 0.92, 0.94},
+			rwSplit:     .9,
 		},
 		// Local - no prefix
 		{
@@ -180,6 +183,7 @@ func registerVectorIndex(r registry.Registry) {
 			preBatchSz:  100,
 			beamSizes:   []int{16, 32, 64},
 			minRecall:   []float64{0.94, 0.95, 0.95},
+			rwSplit:     .9,
 		},
 		// Large - no prefix
 		{
@@ -193,6 +197,7 @@ func registerVectorIndex(r registry.Registry) {
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
 			minRecall:   []float64{0.64, 0.74, 0.81, 0.87, 0.90},
+			rwSplit:     .9,
 		},
 		// Standard - with prefix
 		{
@@ -206,6 +211,7 @@ func registerVectorIndex(r registry.Registry) {
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
 			minRecall:   []float64{0.76, 0.83, 0.88, 0.92, 0.94},
+			rwSplit:     .9,
 		},
 		// Local - with prefix
 		{
@@ -219,6 +225,7 @@ func registerVectorIndex(r registry.Registry) {
 			preBatchSz:  100,
 			beamSizes:   []int{16, 32, 64},
 			minRecall:   []float64{0.94, 0.95, 0.95},
+			rwSplit:     .9,
 		},
 	}
 
@@ -284,6 +291,9 @@ func runVectorIndex(ctx context.Context, t test.Test, c cluster.Cluster, opts ve
 
 	t.L().Printf("Testing recall of loaded data")
 	testRecall(ctx, t, pool, &loader.Data, &opts, metric)
+
+	t.L().Printf("Testing concurrent reads and writes")
+	testConcurrentReadsAndWrites(ctx, t, pool, &loader.Data, &opts, metric)
 }
 
 func testBackfillAndMerge(
@@ -310,7 +320,7 @@ func testBackfillAndMerge(
 				inserted_phase TEXT NOT NULL,
 				worker_id INT NOT NULL,
 				excluded BOOL DEFAULT false,
-				INDEX (excluded),
+				INDEX (excluded, worker_id),
 				PRIMARY KEY (id)
 			)`, data.Dims))
 	require.NoError(t, err)
@@ -492,6 +502,197 @@ func testRecall(
 		}
 		t.L().Printf("beam size=%d : %v", beamSize, recalls)
 	}
+}
+
+func testConcurrentReadsAndWrites(
+	ctx context.Context,
+	t test.Test,
+	pool *pgxpool.Pool,
+	data *vecann.Dataset,
+	opts *vecIndexOptions,
+	metric vecpb.DistanceMetric,
+) {
+	numWriters := max(int(math.Round((1.0-opts.rwSplit)*float64(opts.workers))), 1)
+	numReaders := opts.workers - numWriters
+
+	t.L().Printf("Running %d write workers and %d read workers for %v", numWriters, numReaders, opts.duration)
+	timer := time.NewTimer(opts.duration)
+	done := make(chan struct{})
+	workers := t.NewGroup()
+
+	// Load the first data file in the dataset and use it (only) for the write workers
+	data.Reset()
+	hasMore, err := data.Next()
+	require.NoError(t, err)
+	require.True(t, hasMore)
+	rowsPerWriter := data.Train.Count / numWriters
+
+	for writer := range numWriters {
+		workers.Go(func(ctx context.Context, l *logger.Logger) error {
+			start := writer * rowsPerWriter
+			writerRows := data.Train.Slice(start, rowsPerWriter)
+			startPKVal := data.TrainCount + start
+
+			conn, err := pool.Acquire(ctx)
+			require.NoError(t, err)
+			defer conn.Release()
+
+			var rowsWritten int
+			var nextRowOffset int
+			var deletingRows bool
+			for {
+				select {
+				case <-done:
+					var writerState strings.Builder
+					fmt.Fprintf(&writerState, "Writer %d exiting. Wrote %d rows. Currently ", writer, rowsWritten)
+					if deletingRows {
+						writerState.WriteString("deleting.")
+					} else {
+						writerState.WriteString("inserting.")
+					}
+					l.Printf(writerState.String())
+					return nil
+				default:
+					if !deletingRows {
+						if err := insertVectors(
+							ctx,
+							conn,
+							writer,
+							1, /* numCats */
+							startPKVal+nextRowOffset,
+							"steady-state",
+							writerRows.Slice(nextRowOffset, 1 /* count */),
+							true, /* excluded */
+						); err != nil {
+							return err
+						}
+						nextRowOffset++
+						rowsWritten++
+					} else {
+						_, err = conn.Exec(
+							ctx,
+							"DELETE FROM vecindex_test WHERE excluded = true AND worker_id = $1 LIMIT 10",
+							writer,
+						)
+						var pgErr *pgconn.PgError
+						if err != nil && errors.As(err, &pgErr) {
+							switch pgErr.Code {
+							case "40001", "40P01":
+								continue
+							}
+						}
+						require.NoError(t, err)
+
+						nextRowOffset += 10
+					}
+					if nextRowOffset >= writerRows.Count {
+						nextRowOffset = 0
+						deletingRows = !deletingRows
+					}
+				}
+			}
+		})
+	}
+
+	maxResults := 10
+	operator := getOperatorForMetric(metric)
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString("SELECT id FROM (SELECT excluded, id, embedding FROM vecindex_test@vecidx")
+	if opts.prefixCount > 0 {
+		// For multi-prefix tests, we only run load against category 0. This simplifies the test code and
+		// maximizes contention between readers and writers.
+		queryBuilder.WriteString(" WHERE category = 0")
+	}
+	// Fetch enough results that we should see most if not all of the canonical rows even if the writer
+	// workers have completely filled in additional copies of the dataset.
+	fmt.Fprintf(&queryBuilder, " ORDER BY embedding %s $1 LIMIT %d)", operator, maxResults*(numWriters+1))
+	queryBuilder.WriteString(" WHERE NOT excluded") // Only look at canonical rows
+	fmt.Fprintf(&queryBuilder, " ORDER BY embedding %s $1 LIMIT %d", operator, maxResults)
+	searchSQL := queryBuilder.String()
+
+	for reader := range numReaders {
+		workers.Go(func(ctx context.Context, l *logger.Logger) error {
+			results := make([]cspann.KeyBytes, maxResults)
+			primaryKeys := make([]byte, maxResults*6)
+			truth := make([]cspann.KeyBytes, maxResults)
+
+			conn, err := pool.Acquire(ctx)
+			if err != nil {
+				return err
+			}
+			defer conn.Release()
+
+			beamIdx := rand.Intn(len(opts.beamSizes))
+			minRecall := opts.minRecall[beamIdx]
+
+			var sumRecall float64
+			var searches int
+
+			_, err = conn.Exec(ctx, fmt.Sprintf("SET vector_search_beam_size = %d", opts.beamSizes[beamIdx]))
+			if err != nil {
+				return err
+			}
+
+			for {
+				select {
+				case <-done:
+					avgRecall := sumRecall / float64(searches)
+					if avgRecall < minRecall {
+						return errors.AssertionFailedf(
+							"Average recall (%f) is less than minimum (%f) for worker %d with beam size %d",
+							avgRecall,
+							minRecall,
+							reader,
+							opts.beamSizes[beamIdx],
+						)
+					}
+					l.Printf(
+						"Reader %d exiting with average recall of %.2f over %d searches with beam size %d",
+						reader,
+						avgRecall*100,
+						searches,
+						opts.beamSizes[beamIdx],
+					)
+					return nil
+				default:
+					queryIdx := rand.Intn(data.Test.Count)
+					queryVec := data.Test.At(queryIdx)
+
+					rows, err := conn.Query(ctx, searchSQL, queryVec)
+					if err != nil {
+						return err
+					}
+
+					results = results[:0]
+					for rows.Next() {
+						var id []byte
+						err = rows.Scan(&id)
+						require.NoError(t, err)
+						results = append(results, id)
+					}
+					if err = rows.Err(); err != nil {
+						return err
+					}
+
+					primaryKeys = primaryKeys[:0]
+					truth = truth[:0]
+					for n := range maxResults {
+						primaryKeys = appendCanonicalKey(primaryKeys, 0, int(data.Neighbors[queryIdx][n]))
+						truth = append(truth, primaryKeys[len(primaryKeys)-6:])
+					}
+
+					sumRecall += vecann.CalculateRecall(results, truth)
+					searches++
+				}
+			}
+		})
+	}
+
+	endTime := <-timer.C
+	t.L().Printf("Shutting down workers at %v", endTime)
+	close(done)
+
+	workers.Wait()
 }
 
 func insertVectors(
