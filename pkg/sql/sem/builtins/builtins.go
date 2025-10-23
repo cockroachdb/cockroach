@@ -9714,6 +9714,40 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.ClearStatementHintsCache()
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to clear the statement hints cache on the gateway node`,
+			Volatility: volatility.Volatile,
+		},
+	),
+	"crdb_internal.await_statement_hints_cache": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			Undocumented:     true,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				evalCtx.Planner.AwaitStatementHintsCache(ctx, evalCtx.Settings)
+				return tree.DVoidDatum, nil
+			},
+			Info:       `This function is used to await the statement hints cache on the gateway node`,
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
