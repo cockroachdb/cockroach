@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -34,7 +35,7 @@ type ConnectionStateMachine struct {
 		appStats      *ssmemstorage.Container
 		server        *Server
 		sd            *sessiondata.SessionData
-		sdMutIterator *sessionDataMutatorIterator
+		sdMutIterator *sessionmutator.SessionDataMutatorIterator
 
 		metrics MemoryMetrics
 		monitor *mon.BytesMonitor
@@ -131,8 +132,8 @@ func (s *Server) NewInternalSession(
 	applyInternalExecutorSessionExceptions(sd)
 	sd.Internal = true
 	sds := sessiondata.NewStack(sd)
-	sdMutIterator := makeSessionDataMutatorIterator(sds, args.SessionDefaults, s.cfg.Settings)
-	sdMutIterator.onDefaultIntSizeChange = func(int32) {}
+	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, args.SessionDefaults, s.cfg.Settings)
+	sdMutIterator.OnDefaultIntSizeChange = func(int32) {}
 
 	// TODO: move all of the initialization we can to `NewInternalSession` so that Init is as simple as possible.
 	csm := &ConnectionStateMachine{}
