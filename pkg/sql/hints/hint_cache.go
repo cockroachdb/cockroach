@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -75,6 +77,10 @@ type StatementHintsCache struct {
 		// hintCache, not for hintedHashes.
 		// TODO(drewk): consider making this a metric.
 		numInternalQueries int
+
+		// Used to block on the rangefeed watcher frontier time in Await.
+		frontier        hlc.Timestamp
+		frontierChanged chan struct{}
 	}
 
 	// Used to start/coordinate the rangefeed.
@@ -135,7 +141,16 @@ func NewStatementHintsCache(
 			return s > int(cacheSize.Get(&st.SV))
 		},
 	})
+	hintsCache.mu.frontierChanged = make(chan struct{})
 	return hintsCache
+}
+
+// Clear removes all entries from the StatementHintsCache.
+func (c *StatementHintsCache) Clear() {
+	defer c.generation.Add(1)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.hintCache.Clear()
 }
 
 // ============================================================================
@@ -212,6 +227,11 @@ func (c *StatementHintsCache) onUpdate(
 		// Ignore empty updates that only bump the resolved timestamp.
 		log.Dev.Info(ctx, "statement_hints rangefeed applying incremental update")
 		c.handleIncrementalUpdate(ctx, update)
+	} else {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		// Wake up any frontier waiters in Await.
+		c.wakeFrontierWaitersLocked(update.Timestamp)
 	}
 }
 
@@ -239,6 +259,9 @@ func (c *StatementHintsCache) handleInitialScan(update rangefeedcache.Update[*bu
 		// empty, but if the first attempted initial scan failed, server startup
 		// will have proceeded and some statements may have populated the cache.
 		c.mu.hintCache.Clear()
+
+		// Wake up any frontier waiters in Await.
+		c.wakeFrontierWaitersLocked(update.Timestamp)
 	}()
 }
 
@@ -250,6 +273,17 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 	defer c.generation.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	var remaining atomic.Int64
+	finishLocked := func() {
+		if remaining.Add(-1) == 0 {
+			// Wake up any frontier waiters in Await.
+			c.wakeFrontierWaitersLocked(update.Timestamp)
+		}
+	}
+	remaining.Store(1)
+	defer finishLocked()
+
 	for _, ev := range update.Events {
 		// Drop outdated entries from hintCache.
 		c.mu.hintCache.Del(ev.hash)
@@ -269,7 +303,8 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 		// one hint at that timestamp, so we could skip the DB read for insertions.
 		refreshTS := c.clock.Now()
 		c.mu.hintedHashes[ev.hash] = refreshTS
-		c.checkHashHasHintsAsync(ctx, ev.hash, refreshTS)
+		remaining.Add(1)
+		c.checkHashHasHintsAsync(ctx, ev.hash, refreshTS, finishLocked)
 	}
 }
 
@@ -278,12 +313,17 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 // to retry the table read if there is an error or a more recent rangefeed event
 // occurs.
 func (c *StatementHintsCache) checkHashHasHintsAsync(
-	ctx context.Context, hash int64, refreshTS hlc.Timestamp,
+	ctx context.Context, hash int64, refreshTS hlc.Timestamp, finishLocked func(),
 ) {
 	// It's OK to ignore the error here, since it only happens on server shutdown,
 	// in which case we don't need the cache anyway.
 	const opName = "check-statement-hints"
-	_ = c.stopper.RunAsyncTask(ctx, opName, func(ctx context.Context) {
+	if err := c.stopper.RunAsyncTask(ctx, opName, func(ctx context.Context) {
+		defer func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			finishLocked()
+		}()
 		retryOnError := retry.StartWithCtx(ctx, retry.Options{
 			InitialBackoff: 1 * time.Millisecond,
 			MaxBackoff:     10 * time.Second,
@@ -319,7 +359,10 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 				return
 			}
 		}
-	})
+	}); err != nil {
+		// The goroutine never ran. We still need to call finishLocked.
+		finishLocked()
+	}
 }
 
 // decodeHashFromStatementHintsKey decodes the query hash from a range feed
@@ -353,9 +396,42 @@ func (e *bufferEvent) Timestamp() hlc.Timestamp {
 
 var _ rangefeedbuffer.Event = &bufferEvent{}
 
+// wakeFrontierWaitersLocked wakes up any goroutines in Await if the rangefeed
+// watcher frontier time has advanced.
+func (c *StatementHintsCache) wakeFrontierWaitersLocked(ts hlc.Timestamp) {
+	if ts.After(c.mu.frontier) {
+		c.mu.frontier = ts
+		close(c.mu.frontierChanged)
+		c.mu.frontierChanged = make(chan struct{})
+	}
+}
+
 // ============================================================================
 // Reading from the cache.
 // ============================================================================
+
+// Await blocks until the StatementHintsCache's rangefeed watcher catches up
+// with the present. After Await returns, MaybeGetStatementHints should
+// accurately reflect all hints that were modified before the call to Await
+// (assuming the ctx was not canceled).
+func (c *StatementHintsCache) Await(ctx context.Context, st *cluster.Settings) {
+	targetDuration := closedts.TargetDuration.Get(&st.SV)
+	refreshInterval := kvserver.RangeFeedRefreshInterval.Get(&st.SV)
+	goodLuck := time.Second
+	waitUntil := c.clock.Now().AddDuration(targetDuration + refreshInterval + goodLuck)
+	c.mu.Lock()
+	for waitUntil.After(c.mu.frontier) {
+		frontierChanged := c.mu.frontierChanged
+		c.mu.Unlock()
+		select {
+		case <-frontierChanged:
+			c.mu.Lock()
+		case <-ctx.Done():
+			return
+		}
+	}
+	c.mu.Unlock()
+}
 
 // GetGeneration returns the current generation, which will change if any
 // modifications happen to the cache.
