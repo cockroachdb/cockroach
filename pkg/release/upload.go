@@ -183,18 +183,12 @@ func readFile(path string, dst io.Writer) error {
 	return errors.CombineErrors(err, file.Close())
 }
 
-// PutNonRelease uploads non-release related files
-//
-// Each file is uploaded to /<prefix>/<FilePath> with prefix cockroach
-// i.e. /cockroach/<FilePath>
-//
-// Then that file is uploaded again under a `latest` key
-// <prefix>/<RedirectPrefix>.<BranchName>
-// Workload "latest" objects are stored under workload/<RedirectPrefix>.<BranchName>
-// All other "latest" objects are stored under cockroach/<RedirectPrefix>.<BranchName>
+// PutNonRelease uploads non-release related files.
+// Files are uploaded to /cockroach/<FilePath> for each non release file.
+// A `latest` key is then put at cockroach/<RedirectPrefix>.<BranchName> that redirects
+// to the above file.
 func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 	const nonReleasePrefix = "cockroach"
-	const workloadPrefix = "workload"
 	for _, f := range o.Files {
 		disposition := mime.FormatMediaType("attachment", map[string]string{
 			"filename": f.FileName,
@@ -220,13 +214,7 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 		if latestSuffix == "master" {
 			latestSuffix = "LATEST"
 		}
-		var latestPrefix string
-		if strings.HasPrefix(f.RedirectPathPrefix, "workload") {
-			latestPrefix = workloadPrefix
-		} else {
-			latestPrefix = nonReleasePrefix
-		}
-		latestKey := fmt.Sprintf("%s/%s.%s", latestPrefix, f.RedirectPathPrefix, latestSuffix)
+		latestKey := fmt.Sprintf("%s/%s.%s", nonReleasePrefix, f.RedirectPathPrefix, latestSuffix)
 		// NB: The leading slash is required to make redirects work
 		// correctly since we reuse this key as the redirect location.
 		target := "/" + versionKey
