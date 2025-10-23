@@ -742,3 +742,65 @@ func TestPhysicalReplicationGatewayRoute(t *testing.T) {
 	progress := jobutils.GetJobProgress(t, systemDB, jobspb.JobID(jobID))
 	require.Empty(t, progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.PartitionConnUris)
 }
+
+func TestPhysicalReplicationStreamOfSystemTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test verifies that the span reconciliation job on a promoted standby
+	// tenant that was streaming from a system tenant is able to make progress.
+	// See https://github.com/cockroachdb/cockroach/issues/155444 for more
+	// details.
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.MultitenantSingleClusterNumNodes = 3
+	args.SrcTenantID = roachpb.SystemTenantID
+	args.SrcTenantName = "system"
+
+	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, consumerJobID := c.StartStreamReplication(ctx)
+	replicationtestutils.WaitUntilStartTimeReached(t, c.DestSysSQL, jobspb.JobID(consumerJobID))
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.Cutover(ctx, producerJobID, consumerJobID, srcTime.GoTime(), false /* async */)
+	defer c.StartDestTenant(ctx, nil /* withTestingKnobs */, 0 /* server */)()
+
+	// We speed up the span config reconciliation job manager so that it will
+	// quickly detect the missing reconciliation job on the tenant (the previous
+	// one was canceled as it was replicated) and spin up a new one.
+	c.DestSysSQL.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval = '10ms'")
+
+	registry := c.DestTenantServer.JobRegistry().(*jobs.Registry)
+	// We nudge the adoption queue to pick up the replicated stream producer job
+	// so that it will be dropped.
+	registry.TestingNudgeAdoptionQueue()
+
+	now := c.DestSysServer.Clock().Now()
+	testutils.SucceedsSoon(t, func() error {
+		var spanConfigJobID jobspb.JobID
+		rows := c.DestTenantSQL.Query(
+			t, `SELECT id FROM system.jobs WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' AND status = 'running'`,
+		)
+		defer rows.Close()
+		if !rows.Next() {
+			return errors.New("no running span config reconciliation job found")
+		}
+		if err := rows.Scan(&spanConfigJobID); err != nil {
+			return err
+		}
+		spanConfigJob, err := registry.LoadJob(ctx, spanConfigJobID)
+		require.NoError(t, err)
+		spanConfigProg := spanConfigJob.Progress().
+			Details.(*jobspb.Progress_AutoSpanConfigReconciliation).
+			AutoSpanConfigReconciliation
+
+		if spanConfigProg.Checkpoint.Less(now) {
+			return errors.Newf(
+				"waiting for span config reconciliation job to checkpoint past %v, at %v",
+				now, spanConfigProg.Checkpoint,
+			)
+		}
+		return nil
+	})
+}
