@@ -6,7 +6,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	_ "embed"
 	"encoding/gob"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/errors"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
@@ -313,254 +313,111 @@ func detectAnomalies(datapoints [][2]any, stats map[string]any) map[string]any {
 	return anomalies
 }
 
-// MCPMessage represents a JSON-RPC 2.0 message
-type MCPMessage struct {
-	JSONRPC string    `json:"jsonrpc"`
-	ID      *int      `json:"id,omitempty"`
-	Method  string    `json:"method,omitempty"`
-	Params  any       `json:"params,omitempty"`
-	Result  any       `json:"result,omitempty"`
-	Error   *MCPError `json:"error,omitempty"`
-}
-
-// MCPError represents a JSON-RPC 2.0 error
-type MCPError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-// MCPServer is a minimal MCP server implementation
-type MCPServer struct {
-	name         string
-	version      string
-	instructions string
-	tools        map[string]MCPTool
-	metrics      []MetricMetadata
-}
-
-// MCPTool represents an MCP tool
-type MCPTool struct {
-	Name        string                                      `json:"name"`
-	Description string                                      `json:"description"`
-	InputSchema map[string]any                              `json:"inputSchema"`
-	Handler     func(params map[string]any) (string, error) `json:"-"`
-}
-
-// NewMCPServer creates a new minimal MCP server
-func NewMCPServer(name, version string) *MCPServer {
-	return &MCPServer{
-		name:         name,
-		version:      version,
-		instructions: debugAgentInstructions,
-		tools:        make(map[string]MCPTool),
-	}
-}
-
-// AddTool adds a tool to the server
-func (s *MCPServer) AddTool(tool MCPTool) {
-	s.tools[tool.Name] = tool
-}
-
-// Run starts the MCP server with stdio transport
-func (s *MCPServer) Run(ctx context.Context) error {
-	fmt.Fprintf(os.Stderr, "Starting MCP server: %s v%s\n", s.name, s.version)
-	fmt.Fprintf(os.Stderr, "Available tools: %v\n", s.getToolNames())
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		response := s.handleMessage(line)
-		if response != nil {
-			if err := s.writeMessage(response); err != nil {
-				return fmt.Errorf("failed to write response: %w", err)
-			}
-		}
-	}
-
-	return scanner.Err()
-}
-
-func (s *MCPServer) getToolNames() []string {
-	names := make([]string, 0, len(s.tools))
-	for name := range s.tools {
-		names = append(names, name)
-	}
-	return names
-}
-
-func (s *MCPServer) handleMessage(line string) *MCPMessage {
-	var msg MCPMessage
-	if err := json.Unmarshal([]byte(line), &msg); err != nil {
-		errMsg := fmt.Sprintf("Parse error: %v", err)
-		return &MCPMessage{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   &MCPError{Code: -32700, Message: errMsg},
-		}
-	}
-
-	switch msg.Method {
-	case "initialize":
-		return s.handleInitialize(&msg)
-	case "tools/list":
-		return s.handleToolsList(&msg)
-	case "tools/call":
-		return s.handleToolsCall(&msg)
-	default:
-		return &MCPMessage{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   &MCPError{Code: -32601, Message: "Method not found"},
-		}
-	}
-}
-
-func (s *MCPServer) handleInitialize(msg *MCPMessage) *MCPMessage {
-	serverInfo := map[string]any{
-		"name":    s.name,
-		"version": s.version,
-	}
-
-	// Include instructions if available
-	if s.instructions != "" {
-		serverInfo["instructions"] = s.instructions
-	}
-
-	// Build tools list for capabilities
-	toolsList := make([]string, 0, len(s.tools))
-	for name := range s.tools {
-		toolsList = append(toolsList, name)
-	}
-
-	return &MCPMessage{
-		JSONRPC: "2.0",
-		ID:      msg.ID,
-		Result: map[string]any{
-			"protocolVersion": "2024-11-05",
-			"capabilities": map[string]any{
-				"tools": map[string]any{
-					"listChanged": false,
-				},
-			},
-			"serverInfo": serverInfo,
-		},
-	}
-}
-
-func (s *MCPServer) handleToolsList(msg *MCPMessage) *MCPMessage {
-	tools := make([]map[string]any, 0, len(s.tools))
-	for _, tool := range s.tools {
-		tools = append(tools, map[string]any{
-			"name":        tool.Name,
-			"description": tool.Description,
-			"inputSchema": tool.InputSchema,
-		})
-	}
-
-	return &MCPMessage{
-		JSONRPC: "2.0",
-		ID:      msg.ID,
-		Result: map[string]any{
-			"tools": tools,
-		},
-	}
-}
-
-func (s *MCPServer) handleToolsCall(msg *MCPMessage) *MCPMessage {
-	params, ok := msg.Params.(map[string]any)
-	if !ok {
-		return &MCPMessage{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   &MCPError{Code: -32602, Message: "Invalid params"},
-		}
-	}
-
-	toolName, ok := params["name"].(string)
-	if !ok {
-		return &MCPMessage{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   &MCPError{Code: -32602, Message: "Missing tool name"},
-		}
-	}
-
-	tool, exists := s.tools[toolName]
-	if !exists {
-		return &MCPMessage{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   &MCPError{Code: -32602, Message: "Tool not found"},
-		}
-	}
-
-	arguments, _ := params["arguments"].(map[string]any)
-	result, err := tool.Handler(arguments)
+// toJSON converts a value to JSON string
+func toJSON(v any) string {
+	data, err := json.Marshal(v)
 	if err != nil {
-		return &MCPMessage{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   &MCPError{Code: -32000, Message: err.Error()},
+		return fmt.Sprintf(`{"error": "failed to marshal JSON: %v"}`, err)
+	}
+	return string(data)
+}
+
+// SearchMetricsInput defines the input for the search-metrics tool
+type SearchMetricsInput struct {
+	Query string  `json:"query" jsonschema:"Search query with space-separated keywords (e.g. 'cpu usage' 'changefeed error' 'gc ttl')"`
+	Limit float64 `json:"limit,omitempty" jsonschema:"Maximum number of results to return (default and max: 50)"`
+}
+
+// QueryTSDumpInput defines the input for the query-tsdump tool
+type QueryTSDumpInput struct {
+	File    string   `json:"file" jsonschema:"Path to the tsdump file to query"`
+	Metric  string   `json:"metric,omitempty" jsonschema:"Single metric name (for backward compatibility)"`
+	Metrics []string `json:"metrics,omitempty" jsonschema:"Array of metric names to retrieve in a single scan (recommended for multiple metrics)"`
+}
+
+// debugMCPState holds the server state
+type debugMCPState struct {
+	metrics []MetricMetadata
+}
+
+// searchMetricsTool handles the search-metrics tool
+func (s *debugMCPState) searchMetricsTool(
+	ctx context.Context, req *mcp.CallToolRequest, input SearchMetricsInput,
+) (*mcp.CallToolResult, any, error) {
+	if input.Query == "" {
+		return nil, nil, fmt.Errorf("query parameter is required")
+	}
+
+	// Split query into keywords
+	keywords := strings.Fields(input.Query)
+
+	// Search for matching metrics
+	results := searchMetrics(s.metrics, keywords)
+
+	// Limit results to avoid overwhelming response
+	maxResults := 50
+	if input.Limit > 0 && int(input.Limit) < maxResults {
+		maxResults = int(input.Limit)
+	}
+
+	if len(results) > maxResults {
+		results = results[:maxResults]
+	}
+
+	// Format results
+	formattedResults := make([]map[string]any, len(results))
+	for i, m := range results {
+		formattedResults[i] = map[string]any{
+			"name":        m.Name,
+			"category":    fmt.Sprintf("%s/%s", m.Layer, m.Category),
+			"type":        m.Type,
+			"unit":        m.Unit,
+			"description": m.Description,
+			"essential":   m.Essential,
+		}
+		// Include how_to_use only if non-empty
+		if m.HowToUse != "" {
+			formattedResults[i]["how_to_use"] = m.HowToUse
 		}
 	}
 
-	return &MCPMessage{
-		JSONRPC: "2.0",
-		ID:      msg.ID,
-		Result: map[string]any{
-			"content": []map[string]any{{"type": "text", "text": result}},
-		},
-	}
-}
-
-func (s *MCPServer) writeMessage(msg *MCPMessage) error {
-	data, err := json.Marshal(msg)
-	if err != nil {
-		return err
+	result := map[string]any{
+		"total_found": len(searchMetrics(s.metrics, keywords)),
+		"returned":    len(results),
+		"query":       input.Query,
+		"keywords":    keywords,
+		"metrics":     formattedResults,
 	}
 
-	_, err = fmt.Fprintf(os.Stdout, "%s\n", data)
-	return err
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: toJSON(result)}},
+	}, nil, nil
 }
 
-// queryTSDumpTool queries a tsdump file for one or more metrics
-func (s *MCPServer) queryTSDumpTool(params map[string]any) (string, error) {
-	filePath, ok := params["file"].(string)
-	if !ok || filePath == "" {
-		return "", fmt.Errorf("file parameter is required")
+// queryTSDumpTool handles the query-tsdump tool
+func (s *debugMCPState) queryTSDumpTool(
+	ctx context.Context, req *mcp.CallToolRequest, input QueryTSDumpInput,
+) (*mcp.CallToolResult, any, error) {
+	if input.File == "" {
+		return nil, nil, fmt.Errorf("file parameter is required")
 	}
 
 	// Support both single metric (string) and multiple metrics (array)
 	var metricNames []string
-	if metricParam, ok := params["metrics"]; ok {
-		// Array of metrics
-		if metricsArray, ok := metricParam.([]any); ok {
-			for _, m := range metricsArray {
-				if metricStr, ok := m.(string); ok && metricStr != "" {
-					metricNames = append(metricNames, metricStr)
-				}
-			}
-		}
-	} else if metricParam, ok := params["metric"]; ok {
-		// Single metric (backward compatibility)
-		if metricStr, ok := metricParam.(string); ok && metricStr != "" {
-			metricNames = []string{metricStr}
-		}
+	if len(input.Metrics) > 0 {
+		metricNames = input.Metrics
+	} else if input.Metric != "" {
+		metricNames = []string{input.Metric}
 	}
 
 	if len(metricNames) == 0 {
-		// return toJSON(map[string]string{"error": "metric or metrics parameter is required"})
-		return "", fmt.Errorf("metric or metrics parameter is required")
+		return nil, nil, fmt.Errorf("metric or metrics parameter is required")
 	}
 
 	var dec *gob.Decoder
 
 	initDecoder := func() error {
-		f, err := getFileReader(filePath)
+		f, err := getFileReader(input.File)
 		if err != nil {
 			return err
 		}
@@ -568,14 +425,14 @@ func (s *MCPServer) queryTSDumpTool(params map[string]any) (string, error) {
 		return nil
 	}
 	if err := initDecoder(); err != nil {
-		return "", errors.Wrap(err, "failed to create decoder")
+		return nil, nil, errors.Wrap(err, "failed to create decoder")
 	}
 
 	// Skip metadata if present
 	_, metadataErr := tsdumpmeta.Read(dec)
 	if metadataErr != nil {
 		if err := initDecoder(); err != nil {
-			return "", errors.Wrap(err, "failed to recreate decoder")
+			return nil, nil, errors.Wrap(err, "failed to recreate decoder")
 		}
 	}
 
@@ -594,7 +451,7 @@ func (s *MCPServer) queryTSDumpTool(params map[string]any) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", errors.Wrap(err, "decode error")
+			return nil, nil, errors.Wrap(err, "decode error")
 		}
 
 		var data *tspb.TimeSeriesData
@@ -643,13 +500,15 @@ func (s *MCPServer) queryTSDumpTool(params map[string]any) (string, error) {
 done:
 	// Report results
 	if len(foundMetrics) == 0 {
-		return "", fmt.Errorf("none of the requested metrics found in file: %v", metricNames)
+		return nil, nil, fmt.Errorf("none of the requested metrics found in file: %v", metricNames)
 	}
 
 	// If only one metric was requested, return it directly (backward compatibility)
 	if len(metricNames) == 1 {
 		for _, result := range foundMetrics {
-			return toJSON(result), nil
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{&mcp.TextContent{Text: toJSON(result)}},
+			}, nil, nil
 		}
 	}
 
@@ -668,125 +527,52 @@ done:
 		result["not_found"] = notFound
 	}
 
-	return toJSON(result), nil
-}
-
-// toJSON converts a value to JSON string
-func toJSON(v any) string {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf(`{"error": "failed to marshal JSON: %v"}`, err)
-	}
-	return string(data)
-}
-
-// searchMetricsTool searches for metrics matching keywords
-func (s *MCPServer) searchMetricsTool(params map[string]any) (string, error) {
-	query, ok := params["query"].(string)
-	if !ok || query == "" {
-		return "", fmt.Errorf("query parameter is required")
-	}
-
-	// Split query into keywords
-	keywords := strings.Fields(query)
-
-	// Search for matching metrics
-	results := searchMetrics(s.metrics, keywords)
-
-	// Limit results to avoid overwhelming response
-	maxResults := 50
-	limit, ok := params["limit"].(float64)
-	if ok && int(limit) > 0 && int(limit) < maxResults {
-		maxResults = int(limit)
-	}
-
-	if len(results) > maxResults {
-		results = results[:maxResults]
-	}
-
-	// Format results
-	formattedResults := make([]map[string]any, len(results))
-	for i, m := range results {
-		formattedResults[i] = map[string]any{
-			"name":        m.Name,
-			"category":    fmt.Sprintf("%s/%s", m.Layer, m.Category),
-			"type":        m.Type,
-			"unit":        m.Unit,
-			"description": m.Description,
-			"essential":   m.Essential,
-		}
-		// Include how_to_use only if non-empty
-		if m.HowToUse != "" {
-			formattedResults[i]["how_to_use"] = m.HowToUse
-		}
-	}
-
-	return toJSON(map[string]any{
-		"total_found": len(searchMetrics(s.metrics, keywords)),
-		"returned":    len(results),
-		"query":       query,
-		"keywords":    keywords,
-		"metrics":     formattedResults,
-	}), nil
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: toJSON(result)}},
+	}, nil, nil
 }
 
 func runDebugMCP(cmd *cobra.Command, args []string) error {
-	server := NewMCPServer("cockroach-debug", "1.0.0")
-
 	// Parse embedded metrics
 	metrics, err := parseMetrics()
 	if err != nil {
 		return fmt.Errorf("failed to parse metrics: %w", err)
 	}
-	server.metrics = metrics
 	fmt.Fprintf(os.Stderr, "Loaded %d metrics into memory\n", len(metrics))
 
-	server.AddTool(MCPTool{
+	state := &debugMCPState{metrics: metrics}
+
+	// Load instructions (default embedded, or from file if env var set)
+	instructions := debugAgentInstructions
+	if instructionsPath := os.Getenv("COCKROACH_DEBUG_MCP_INSTRUCTIONS"); instructionsPath != "" {
+		customInstructions, err := os.ReadFile(instructionsPath)
+		if err != nil {
+			return fmt.Errorf("failed to read custom instructions from %s: %w", instructionsPath, err)
+		}
+		instructions = string(customInstructions)
+		fmt.Fprintf(os.Stderr, "Loaded custom instructions from %s\n", instructionsPath)
+	}
+
+	// Create MCP server
+	server := mcp.NewServer(&mcp.Implementation{
+		Name:    "cockroach-debug",
+		Version: "1.0.0",
+	}, &mcp.ServerOptions{
+		Instructions: instructions,
+	})
+
+	// Register search-metrics tool
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search-metrics",
 		Description: "Search for CockroachDB metrics by keywords. Searches across metric names, descriptions, categories, and other metadata.",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"query": map[string]any{
-					"type":        "string",
-					"description": "Search query with space-separated keywords (e.g., 'cpu usage', 'changefeed error', 'gc ttl')",
-				},
-				"limit": map[string]any{
-					"type":        "number",
-					"description": "Maximum number of results to return (default and max: 50)",
-				},
-			},
-			"required": []string{"query"},
-		},
-		Handler: server.searchMetricsTool,
-	})
+	}, state.searchMetricsTool)
 
-	server.AddTool(MCPTool{
+	// Register query-tsdump tool
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "query-tsdump",
 		Description: "Query a tsdump file for one or more metrics by name. Efficiently scans the file once to retrieve all requested metrics.",
-		InputSchema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"file": map[string]any{
-					"type":        "string",
-					"description": "Path to the tsdump file to query",
-				},
-				"metric": map[string]any{
-					"type":        "string",
-					"description": "Single metric name (for backward compatibility)",
-				},
-				"metrics": map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "string",
-					},
-					"description": "Array of metric names to retrieve in a single scan (recommended for multiple metrics)",
-				},
-			},
-			"required": []string{"file"},
-		},
-		Handler: server.queryTSDumpTool,
-	})
+	}, state.queryTSDumpTool)
 
-	return server.Run(context.Background())
+	// Run the server with stdio transport
+	return server.Run(context.Background(), &mcp.StdioTransport{})
 }
