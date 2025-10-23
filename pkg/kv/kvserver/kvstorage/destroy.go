@@ -247,25 +247,25 @@ func RemoveStaleRHSFromSplit(
 // TODO(pav-kv): get rid of the returned cleared spans.
 func RewriteRaftState(
 	ctx context.Context,
-	w storage.Writer,
+	raftWO RaftWO,
 	sl StateLoader,
 	hs raftpb.HardState,
 	ts kvserverpb.RaftTruncatedState,
 ) (cleared roachpb.Span, _ error) {
 	// Update HardState.
-	if err := sl.SetHardState(ctx, w, hs); err != nil {
+	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
 	}
 	// Clear the raft log. Note that there are no Pebble range keys in this span.
 	logPrefix := sl.RaftLogPrefix().Clone()
 	raftLog := roachpb.Span{Key: logPrefix, EndKey: logPrefix.PrefixEnd()}
-	if err := w.ClearRawRange(
+	if err := raftWO.ClearRawRange(
 		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
 	); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to clear the raft log")
 	}
 	// Update the log truncation state.
-	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
+	if err := sl.SetRaftTruncatedState(ctx, raftWO, &ts); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
 	return raftLog, nil

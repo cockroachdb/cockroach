@@ -19,6 +19,8 @@ import (
 
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
+//
+// TODO(pav-kv): move this struct to kvstorage package.
 type snapWriteBuilder struct {
 	id roachpb.FullReplicaID
 
@@ -61,7 +63,8 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 // provided state. Specifically, it rewrites HardState and RaftTruncatedState,
 // and clears the raft log. All writes are generated in the engine keys order.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	cleared, err := kvstorage.RewriteRaftState(ctx, w, s.sl, s.hardState, s.truncState)
+	cleared, err := kvstorage.RewriteRaftState(
+		ctx, kvstorage.RaftWO(w), s.sl, s.hardState, s.truncState)
 	if err != nil {
 		return err
 	}
