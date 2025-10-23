@@ -113,6 +113,11 @@ func (c *ConnectionStateMachine) Push(ctx context.Context, cmd Command) error {
 	return c.buffer.Push(ctx, cmd)
 }
 
+// SessionDataMutatorIterator returns the session data mutator iterator for this connection.
+func (c *ConnectionStateMachine) SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator {
+	return c.config.sdMutIterator
+}
+
 // NewInternalSession constructs an internal session instance.
 func (s *Server) NewInternalSession(
 	ctx context.Context,

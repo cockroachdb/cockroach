@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/crlib/crtime"
@@ -323,6 +324,20 @@ func (i *InternalSession) readResults(ctx context.Context) ([]tree.Datums, int, 
 	}
 
 	return rows, rowCount, resultErr
+}
+
+func (i *InternalSession) ModifySession(
+	ctx context.Context, mutate func(mutator sessionmutator.SessionDataMutator),
+) error {
+	if i.poison != nil {
+		return i.poison
+	}
+
+	sdMutIterator := i.csm.SessionDataMutatorIterator()
+	return sdMutIterator.ApplyOnTopMutator(func(m sessionmutator.SessionDataMutator) error {
+		mutate(m)
+		return nil
+	})
 }
 
 func (i *InternalSession) Close(ctx context.Context) {

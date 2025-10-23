@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -611,4 +612,36 @@ func TestSavepoint(t *testing.T) {
 	require.Equal(t, []tree.Datums{
 		{tree.NewDInt(tree.DInt(1)), tree.NewDInt(tree.DInt(10))},
 	}, rows)
+}
+
+func TestModifySession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := s.InternalDB().(descs.DB)
+	session, err := db.Session(ctx, "test-session")
+	require.NoError(t, err)
+	defer session.Close(ctx)
+
+	// Modify the application name using ModifySession.
+	err = session.ModifySession(ctx, func(m sessionmutator.SessionDataMutator) {
+		m.SetApplicationName("my_test_app")
+	})
+	require.NoError(t, err)
+
+	// Verify the change by querying the session variable.
+	stmt, err := parser.ParseOne("SHOW application_name")
+	require.NoError(t, err)
+
+	prepared, err := session.Prepare(ctx, "show_app", stmt, nil)
+	require.NoError(t, err)
+
+	rows, err := session.QueryPrepared(ctx, prepared, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "my_test_app", string(tree.MustBeDString(rows[0][0])))
 }
