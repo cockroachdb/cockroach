@@ -319,7 +319,7 @@ var numExpectedRowsByQueryNumber = map[int]int{
 	1:  4,
 	2:  100,
 	3:  10,
-	4:  4,
+	4:  5,
 	5:  5,
 	6:  1,
 	7:  4,
