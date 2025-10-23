@@ -1233,7 +1233,18 @@ func (p *planner) ResolveExistingObjectEx(
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
 	}
-	desc, prefix, err := resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
+	var desc catalog.Descriptor
+	var prefix catalog.ResolvedObjectPrefix
+	resolve := func() {
+		desc, prefix, err = resolver.ResolveExistingObject(ctx, p, name, lookupFlags)
+	}
+	// If an AS OF SYSTEM TIME clause is specified, we need to bypass
+	// the descriptor cache to ensure we get the correct historical value.
+	if p.extendedEvalCtx.AsOfSystemTime != nil {
+		p.runWithOptions(resolveFlags{skipCache: true}, resolve)
+	} else {
+		resolve()
+	}
 	if err != nil || desc == nil {
 		return nil, err
 	}

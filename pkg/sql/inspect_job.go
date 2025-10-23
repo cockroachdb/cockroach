@@ -104,7 +104,15 @@ func TriggerInspectJob(
 func InspectChecksForDatabase(
 	ctx context.Context, p PlanHookState, db catalog.DatabaseDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
-	tables, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().GetAllTablesInDatabase(ctx, p.Txn(), db)
+	avoidLeased := false
+	if aost := p.ExtendedEvalContext().AsOfSystemTime; aost != nil {
+		avoidLeased = true
+	}
+	byNameGetter := p.Descriptors().ByNameWithLeased(p.Txn())
+	if avoidLeased {
+		byNameGetter = p.Descriptors().ByName(p.Txn())
+	}
+	tables, err := byNameGetter.Get().GetAllTablesInDatabase(ctx, p.Txn(), db)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +168,14 @@ func InspectChecksByIndexNames(
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
+	skipCache := false
+	if aost := p.ExtendedEvalContext().AsOfSystemTime; aost != nil {
+		skipCache = true
+	}
+
 	var seenIndexes = make(map[indexKey]struct{})
 	for _, indexName := range names {
-		_, table, index, err := p.GetTableAndIndex(ctx, indexName, privilege.INSPECT, false /* skipCache */)
+		_, table, index, err := p.GetTableAndIndex(ctx, indexName, privilege.INSPECT, skipCache /* skipCache */)
 		if err != nil {
 			return nil, err
 		}
