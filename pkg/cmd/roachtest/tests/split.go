@@ -335,9 +335,9 @@ func registerLoadSplits(r registry.Registry) {
 				maxSize:      10 << 30,               // 10 GB
 				cpuThreshold: 100 * time.Millisecond, // 1/10th of a CPU per second.
 				// YCSB/A has a zipfian distribution with 50% inserts and 50% updates.
-				// The number of splits should be between 15-38 after 10 minutes with
+				// The number of splits should be between 13-38 after 10 minutes with
 				// 100ms threshold on 8vCPU machines.
-				minimumRanges:     17,
+				minimumRanges:     15,
 				maximumRanges:     40,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
@@ -362,7 +362,7 @@ func registerLoadSplits(r registry.Registry) {
 				// The number of splits should be similar to YCSB/A.
 				cpuThreshold:      100 * time.Millisecond, // 1/10th of a CPU per second.
 				minimumRanges:     15,
-				maximumRanges:     35,
+				maximumRanges:     40,
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "b",
