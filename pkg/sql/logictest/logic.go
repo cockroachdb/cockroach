@@ -3246,7 +3246,7 @@ func (t *logicTest) processSubtest(
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
 			//
-			// TODO(#76378): It seems the conditional should include `||
+			// TODO(#156124): It seems the conditional should include `||
 			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
 			// where the config specified "Random" and a test tenant was
 			// effectively created.
