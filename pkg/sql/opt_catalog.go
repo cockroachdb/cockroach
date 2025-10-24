@@ -1157,12 +1157,13 @@ func newOptTable(
 				canUseTombstones := idx.ImplicitPartitioningColumnCount() == 1 &&
 					partitionColumn.GetType().Family() == types.EnumFamily
 				ot.uniqueConstraints = append(ot.uniqueConstraints, optUniqueConstraint{
-					name:                  idx.GetName(),
-					table:                 ot.ID(),
-					columns:               idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
-					withoutIndex:          true,
-					canUseTombstones:      canUseTombstones,
-					tombstoneIndexOrdinal: idx.Ordinal(),
+					name:             idx.GetName(),
+					table:            ot.ID(),
+					columns:          idx.IndexDesc().KeyColumnIDs[idx.IndexDesc().ExplicitColumnStartIdx():],
+					withoutIndex:     true,
+					canUseTombstones: canUseTombstones,
+					// One would assume that this would be idx.Ordinal(), but they can differ during schema change
+					tombstoneIndexOrdinal: i,
 					predicate:             idx.GetPredicate(),
 					// TODO(rytaft): will we ever support an unvalidated unique constraint
 					// here?
