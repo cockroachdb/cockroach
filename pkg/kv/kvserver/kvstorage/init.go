@@ -145,14 +145,22 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	return err
 }
 
+// readKeyFn reads the given key, and unmarshals the value into the given proto.
+// Returns false if the key does not exist, or is requested out of order.
 type readKeyFn func(roachpb.Key, protoutil.Message) (bool, error)
+
+// scanRangeIDFn reports the existence of a RangeID, and allows reading
+// RangeID-local keys via the readKeyFn callback.
 type scanRangeIDFn func(roachpb.RangeID, readKeyFn) error
 
-// iterateRangeIDKeys helps visit system keys that use RangeID prefixing (such
+// iterateRangeIDKeys helps visit storage keys that use RangeID prefixing (such
 // as RaftHardStateKey, RangeTombstoneKey, and many others). Such keys could in
-// principle exist at any RangeID, and this helper efficiently discovers all the
-// keys of the desired type (as specified by the supplied `keyFn`) and, for each
-// key-value pair discovered, unmarshals it into `msg` and then invokes `f`.
+// principle exist for any RangeID.
+//
+// The helper visits all RangeIDs that have any keys, and for each range calls
+// the scanRangeID function. The implementation of this function can request any
+// subset of RangeID-local keys via the readKeyFn callback. All keys must be
+// requested in sorted order.
 //
 // Iteration stops on the first error (and will pass through that error).
 func iterateRangeIDKeys(
