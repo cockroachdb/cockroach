@@ -5,6 +5,10 @@
 # LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !local-mixed-25.2 !local-mixed-25.3
 
 
+# Helper view to show the most recent INSPECT job.
+# We order by job ID (not creation time) because jobs run with AS OF SYSTEM
+# TIME use the AOST value as their creation timestamp rather than the current
+# time.
 statement ok
 CREATE VIEW last_inspect_job AS
 SELECT status, jsonb_array_length(
@@ -12,7 +16,7 @@ SELECT status, jsonb_array_length(
   ) AS num_checks
 FROM crdb_internal.system_jobs
 WHERE job_type = 'INSPECT'
-ORDER BY created DESC
+ORDER BY id DESC
 LIMIT 1
 
 # Make job adoption faster. This is needed to speed up DETACHED jobs.
@@ -21,6 +25,9 @@ SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms';
 
 statement ok
 CREATE TABLE foo (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
+
+let $foo_created_ts
+SELECT now()
 
 statement error pq: INSPECT is an experimental feature and is disabled by default
 INSPECT TABLE foo;
@@ -138,9 +145,8 @@ SELECT * FROM last_inspect_job;
 ----
 succeeded  1
 
-# TODO(155483): use a really old timestamp from before 'foo' was created.
 statement ok
-INSPECT TABLE foo AS OF SYSTEM TIME '-50ms' WITH OPTIONS INDEX (idx_c1,idx_c2);
+INSPECT TABLE foo AS OF SYSTEM TIME '$foo_created_ts' WITH OPTIONS INDEX (idx_c1,idx_c2);
 
 query TI
 SELECT * FROM last_inspect_job;
@@ -531,5 +537,30 @@ succeeded  1
 
 statement ok
 DROP TABLE refcursor_tbl;
+
+subtest end
+
+subtest inspect_old_aost
+
+let $inspect_old_ts
+SELECT now()
+
+statement ok
+CREATE TABLE t_aost (c1 INT, INDEX idx_c1 (c1));
+
+statement ok
+INSERT INTO t_aost VALUES (1), (2), (3);
+
+# Test INSPECT with an AOST that predates the table.
+# This should fail because the table descriptor doesn't exist at that timestamp.
+statement error pq: relation "t_aost" does not exist
+INSPECT TABLE t_aost AS OF SYSTEM TIME '$inspect_old_ts' WITH OPTIONS INDEX (idx_c1);
+
+# Test INSPECT with an AOST that predates the database.
+statement error pq: database "test" does not exist
+INSPECT TABLE t_aost AS OF SYSTEM TIME '1' WITH OPTIONS INDEX (idx_c1);
+
+statement ok
+DROP TABLE t_aost;
 
 subtest end

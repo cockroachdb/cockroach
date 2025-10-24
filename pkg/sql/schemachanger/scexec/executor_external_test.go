@@ -278,7 +278,6 @@ func TestSchemaChanger(t *testing.T) {
 						TableID:                 fooTable.GetID(),
 						ColumnID:                2,
 						TypeT:                   scpb.TypeT{Type: types.Int},
-						IsNullable:              true,
 						ElementCreationMetadata: scdecomp.NewElementCreationMetadata(clusterversion.TestingClusterVersion),
 					},
 					metadata,

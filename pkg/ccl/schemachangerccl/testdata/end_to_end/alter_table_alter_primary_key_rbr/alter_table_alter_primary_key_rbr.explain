@@ -52,7 +52,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":5,"Name":"m","TableID":108}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"IsNullable":true,"TableID":108}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"TableID":108}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":5,"TableID":108}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":7,"IndexID":8,"IsUnique":true,"SourceIndexID":1,"TableID":108,"TemporaryIndexID":9}}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":8,"TableID":108}}
@@ -161,7 +161,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":5,"TableID":108}}
  │              ├── SetColumnName {"ColumnID":5,"Name":"m","TableID":108}
- │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"IsNullable":true,"TableID":108}}
+ │              ├── UpsertColumnType {"ColumnType":{"ColumnID":5,"TableID":108}}
  │              ├── AddColumnDefaultExpression {"Default":{"ColumnID":5,"TableID":108}}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":7,"IndexID":8,"IsUnique":true,"SourceIndexID":1,"TableID":108,"TemporaryIndexID":9}}
  │              ├── MaybeAddSplitForIndex {"IndexID":8,"TableID":108}

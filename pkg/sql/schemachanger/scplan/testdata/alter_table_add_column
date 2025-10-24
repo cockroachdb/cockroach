@@ -27,7 +27,6 @@ StatementPhase stage 1 of 1 with 5 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           ClosedTypeIDs:
@@ -79,7 +78,6 @@ PreCommitPhase stage 2 of 2 with 9 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           ClosedTypeIDs:
@@ -573,7 +571,6 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -601,7 +598,6 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -716,7 +712,6 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -744,7 +739,6 @@ PreCommitPhase stage 2 of 2 with 20 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -1051,7 +1045,6 @@ StatementPhase stage 1 of 1 with 11 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -1153,7 +1146,6 @@ PreCommitPhase stage 2 of 2 with 15 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -1810,7 +1802,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -1837,7 +1828,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 107
         TypeT:
           Type:
@@ -1889,7 +1879,6 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 104
         TypeT:
           Type:
@@ -1916,7 +1905,6 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 107
         TypeT:
           Type:
@@ -2482,7 +2470,6 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 109
         TypeT:
           Type:
@@ -2573,7 +2560,6 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
         ElementCreationMetadata:
           in231OrLater: true
           in243OrLater: true
-        IsNullable: true
         TableID: 109
         TypeT:
           Type:

@@ -2525,6 +2525,11 @@ func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSy
 		}
 		asOf = s.AsOf
 		forBackfill = true
+	case *tree.Inspect:
+		if s.AsOf.Expr == nil {
+			return nil, nil
+		}
+		asOf = s.AsOf
 	default:
 		return nil, nil
 	}
