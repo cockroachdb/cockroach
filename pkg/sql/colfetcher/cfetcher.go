@@ -751,8 +751,14 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
 // rows, the Batch.Length is 0.
 func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
-		if err := cf.pacer.Pace(ctx); err != nil {
-			return nil, err
+		// While Pace() is nil-safe, its contract does not require it be a total
+		// no-op when nil. We, however, are using its nil-ness specifically to
+		// reflect our prior determination of the scan's priority, so this call to
+		// Pace() should be explicitly conditional on Pacer's non-nilness.
+		if cf.pacer != nil {
+			if err := cf.pacer.Pace(ctx); err != nil {
+				return nil, err
+			}
 		}
 		if debugState {
 			log.Dev.Infof(ctx, "State %s", cf.machine.state[0])
