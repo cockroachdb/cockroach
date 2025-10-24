@@ -174,6 +174,7 @@ func (e *scheduledSQLStatsCompactionExecutor) ExecuteJob(
 ) error {
 	if err := e.createSQLStatsCompactionJob(ctx, cfg, sj, txn); err != nil {
 		e.metrics.NumFailed.Inc(1)
+		return err
 	}
 
 	e.metrics.NumStarted.Inc(1)
