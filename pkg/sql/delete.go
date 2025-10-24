@@ -232,6 +232,10 @@ func (d *deleteNode) rowsWritten() int64 {
 	return d.run.td.rowsWritten
 }
 
+func (d *deleteNode) indexRowsWritten() int64 {
+	return d.run.td.indexRowsWritten
+}
+
 func (d *deleteNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }

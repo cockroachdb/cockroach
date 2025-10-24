@@ -553,6 +553,7 @@ func makeMetrics(internal bool) Metrics {
 			StatementRetryCount:               metric.NewCounter(getMetricMeta(MetaStatementRetry, internal)),
 			StatementRowsRead:                 metric.NewCounter(getMetricMeta(MetaStatementRowsRead, internal)),
 			StatementBytesRead:                metric.NewCounter(getMetricMeta(MetaStatementBytesRead, internal)),
+			StatementIndexRowsWritten:         metric.NewCounter(getMetricMeta(MetaStatementIndexRowsWritten, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
 		ExecutedStatementCounters: makeExecutedStatementCounters(internal),
