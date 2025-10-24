@@ -246,6 +246,28 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
+	return iterateRangeDescriptorsFromDiskHelper(ctx, reader, fn, buildutil.CrdbTestBuild)
+}
+
+// IterateRangeDescriptorsFromCheckpoint is like IterateRangeDescriptorsFromDisk
+// except it is intended to be used when reading from checkpoints. Checkpoints
+// do not correspond to full stores, and as such, certain invariant checks do
+// not hold for them.
+func IterateRangeDescriptorsFromCheckpoint(
+	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
+) error {
+	return iterateRangeDescriptorsFromDiskHelper(ctx, reader, fn, false /* performInvariantChecks */)
+}
+
+// iterateRangeDescriptorsFromDisk performs the actual heavy lifting of reading
+// range descriptors from the supplied storage.Reader. The caller may specify
+// whether or not invariant checks should be performed.
+func iterateRangeDescriptorsFromDiskHelper(
+	ctx context.Context,
+	reader storage.Reader,
+	fn func(desc roachpb.RangeDescriptor) error,
+	performInvariantChecks bool,
+) error {
 	log.KvExec.Info(ctx, "beginning range descriptor iteration")
 
 	// We are going to find all range descriptor keys. This code is equivalent to
@@ -296,8 +318,11 @@ func IterateRangeDescriptorsFromDisk(
 				iter.SeekGE(storage.MVCCKey{Key: keys.RangeDescriptorKey(keys.MustAddr(startKey))})
 			} else {
 				// This case shouldn't happen in practice: we have a key that isn't
-				// associated with any range descriptor.
-				if buildutil.CrdbTestBuild {
+				// associated with any range descriptor. However, when reading from
+				// checkpoints (incomplete stores), this can happen because checkpoints
+				// only guarantee to include specific key spans and may have arbitrary
+				// keys outside those spans.
+				if performInvariantChecks {
 					return errors.AssertionFailedf("range local key %s outside of a known range", key.Key)
 				}
 				iter.NextKey()
