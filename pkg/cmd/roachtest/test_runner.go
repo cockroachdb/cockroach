@@ -1703,6 +1703,15 @@ func (r *testRunner) postTestAssertions(
 	_ = r.stopper.RunAsyncTask(ctx, "test-post-assertions", func(ctx context.Context) {
 		defer close(postAssertCh)
 
+		defer func() {
+			// Unlike the main test goroutine, we _do_ want to log t.Fatal* calls here
+			// to make it clear that the post-test assertions failed. Otherwise, the fatal
+			// will be recorded as a normal test failure.
+			if r := recover(); r != nil {
+				postAssertionErr(fmt.Errorf("post-test assertion panicked: %v", r))
+			}
+		}()
+
 		// We collect all the admin health endpoints in parallel,
 		// and select the first one that succeeds to run the validation queries
 		statuses, err := c.HealthStatus(ctx, t.L(), c.CRDBNodes())

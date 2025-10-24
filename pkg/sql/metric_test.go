@@ -8,6 +8,7 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -18,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
@@ -200,6 +203,66 @@ func TestQueryCounts(t *testing.T) {
 			}
 			if accum.transactionTimeoutCount, err = checkCounterDelta(s, sql.MetaTransactionTimeout, accum.transactionTimeoutCount, tc.transactionTimeoutCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
+			}
+		})
+	}
+}
+
+func TestStatementMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := createTestServerParamsAllowTenants()
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	s := srv.ApplicationLayer()
+
+	runner.Exec(t, `CREATE DATABASE db`)
+	runner.Exec(t, `CREATE TABLE db.t (x INT PRIMARY KEY, y INT, a STRING[], v VECTOR(2))`)
+	runner.Exec(t, `CREATE INDEX ON db.t (y)`)
+	runner.Exec(t, `CREATE INVERTED INDEX ON db.t (a)`)
+	runner.Exec(t, `CREATE VECTOR INDEX ON db.t (v)`)
+	runner.Exec(t, `INSERT INTO db.t VALUES (1, 10, ARRAY['apple', 'orange'], '[1, 2]')`)
+	runner.Exec(t, `INSERT INTO db.t VALUES (2, 20, ARRAY['banana'], '[3, 4]')`)
+	runner.Exec(t, `INSERT INTO db.t VALUES (3, 30, ARRAY['apple', 'pear', 'mango'], '[5, 6]')`)
+
+	testCases := []struct {
+		query    string
+		rowsRead int64
+		// If true, then skip metamorphic testing for this query.
+		skipMetamorphic bool
+	}{
+		{query: `SELECT * FROM db.t WHERE x = 1`, rowsRead: 1},
+		{query: `SELECT * FROM db.t WHERE x <= 2`, rowsRead: 2},
+		{query: `SELECT * FROM db.t WHERE a @> ARRAY['apple']`, rowsRead: 4},
+		{
+			query:    `SELECT * FROM db.t@t_a_idx t1, db.t t2 WHERE t1.a @> t2.a`,
+			rowsRead: 12,
+			// Skip this variation under metamorphic testing because the inverted
+			// joiner batch size can affect number of rows read.
+			skipMetamorphic: true,
+		},
+		{query: `SELECT * FROM db.t ORDER BY v <-> '[2, 2]' LIMIT 1`, rowsRead: 3},
+	}
+
+	lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
+
+	for _, tc := range testCases {
+		t.Run(tc.query, func(t *testing.T) {
+			for _, vectorized := range []string{"off", "on"} {
+				runner.Exec(t, "SET vectorize = $1", vectorized)
+				t.Run(fmt.Sprintf("vectorize = %s", vectorized), func(t *testing.T) {
+					if tc.skipMetamorphic && metamorphic.IsMetamorphicBuild() {
+						return
+					}
+
+					runner.Exec(t, tc.query)
+					actual, err := checkCounterDelta(
+						s, sql.MetaStatementRowsRead, lastRowsRead, tc.rowsRead)
+					require.NoError(t, err)
+					lastRowsRead = actual
+				})
 			}
 		})
 	}
