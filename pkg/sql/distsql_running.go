@@ -745,7 +745,7 @@ func (dsp *DistSQLPlanner) Run(
 	// the line.
 	localState.EvalContext = evalCtx
 	localState.IsLocal = planCtx.isLocal
-	localState.MustUseLeaf = planCtx.mustUseLeafTxn
+	localState.AddConcurrency(planCtx.flowConcurrency)
 	localState.Txn = txn
 	localState.LocalProcs = plan.LocalProcessors
 	localState.LocalVectorSources = plan.LocalVectorSources
@@ -768,7 +768,9 @@ func (dsp *DistSQLPlanner) Run(
 		// cannot create a LeafTxn, so we cannot parallelize scans.
 		planCtx.parallelizeScansIfLocal = false
 		for _, flow := range flows {
-			localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
+			if execinfra.HasParallelProcessors(flow) {
+				localState.AddConcurrency(distsql.ConcurrencyHasParallelProcessors)
+			}
 		}
 	} else {
 		if planCtx.isLocal && noMutations && planCtx.parallelizeScansIfLocal {
@@ -776,7 +778,9 @@ func (dsp *DistSQLPlanner) Run(
 			// have decided to parallelize the scans. If that's the case, we
 			// will need to use the Leaf txn.
 			for _, flow := range flows {
-				localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
+				if execinfra.HasParallelProcessors(flow) {
+					localState.AddConcurrency(distsql.ConcurrencyHasParallelProcessors)
+				}
 			}
 		}
 		if noMutations {
@@ -877,7 +881,7 @@ func (dsp *DistSQLPlanner) Run(
 							// Both index and lookup joins, with and without
 							// ordering, are executed via the Streamer API that has
 							// concurrency.
-							localState.HasConcurrency = true
+							localState.AddConcurrency(distsql.ConcurrencyStreamer)
 							break
 						}
 					}
@@ -1000,11 +1004,37 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
-	if len(flows) == 1 && evalCtx.Txn != nil && evalCtx.Txn.Type() == kv.RootTxn {
-		// If we have a fully local plan and a RootTxn, we don't expect any
-		// concurrency, so it's safe to use the DistSQLReceiver to push the
-		// metadata into directly from routines.
-		if planCtx.planner != nil {
+	if len(flows) == 1 && planCtx.planner != nil {
+		// We have a fully local plan, so check whether it'll be safe to use the
+		// DistSQLReceiver to push the metadata into directly from routines
+		// (which is the case when we don't have any concurrency between
+		// routines themselves as well as a routine and the "head" processor -
+		// the one pushing into the DistSQLReceiver).
+		var safe bool
+		if evalCtx.Txn != nil && evalCtx.Txn.Type() == kv.RootTxn {
+			// We have a RootTxn, so we don't expect any concurrency whatsoever.
+			safe = true
+		} else {
+			// We have a LeafTxn, so we need to examine what kind of concurrency
+			// is present in the flow.
+			var safeConcurrency distsql.ConcurrencyKind
+			// We don't care whether we use the Streamer API - it has
+			// concurrency only at the KV client level and below.
+			safeConcurrency |= distsql.ConcurrencyStreamer
+			// If we have "outer plan" concurrency, the "inner" and the
+			// "outer" plans have their own DistSQLReceivers.
+			//
+			// Note that the same is the case with parallel CHECKs concurrency,
+			// but then planCtx.planner is shared between goroutines, so we'll
+			// avoid mutating it. (We can't have routines in post-query CHECKs
+			// since only FK and UNIQUE checks are run in parallel.)
+			safeConcurrency |= distsql.ConcurrencyWithOuterPlan
+			unsafeConcurrency := ^safeConcurrency
+			if localState.GetConcurrency()&unsafeConcurrency == 0 {
+				safe = true
+			}
+		}
+		if safe {
 			planCtx.planner.routineMetadataForwarder = recv
 		}
 	}
@@ -1859,7 +1889,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			// Skip the diagram generation since on this "main" query path we
 			// can get it via the statement bundle.
 			true,  /* skipDistSQLDiagramGeneration */
-			false, /* mustUseLeafTxn */
+			false, /* innerPlansMustUseLeafTxn */
 		) {
 			return recv.commErr
 		}
@@ -1926,7 +1956,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
 	skipDistSQLDiagramGeneration bool,
-	mustUseLeafTxn bool,
+	innerPlansMustUseLeafTxn bool,
 ) bool {
 	for planIdx, subqueryPlan := range subqueryPlans {
 		if err := dsp.planAndRunSubquery(
@@ -1939,7 +1969,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			recv,
 			subqueryResultMemAcc,
 			skipDistSQLDiagramGeneration,
-			mustUseLeafTxn,
+			innerPlansMustUseLeafTxn,
 		); err != nil {
 			recv.SetError(err)
 			return false
@@ -1963,7 +1993,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	recv *DistSQLReceiver,
 	subqueryResultMemAcc *mon.BoundAccount,
 	skipDistSQLDiagramGeneration bool,
-	mustUseLeafTxn bool,
+	innerPlansMustUseLeafTxn bool,
 ) error {
 	subqueryDistribution, distSQLProhibitedErr := planner.getPlanDistribution(ctx, subqueryPlan.plan)
 	distribute := DistributionType(LocalDistribution)
@@ -1975,7 +2005,9 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	subqueryPlanCtx.stmtType = tree.Rows
 	subqueryPlanCtx.skipDistSQLDiagramGeneration = skipDistSQLDiagramGeneration
 	subqueryPlanCtx.subOrPostQuery = true
-	subqueryPlanCtx.mustUseLeafTxn = mustUseLeafTxn
+	if innerPlansMustUseLeafTxn {
+		subqueryPlanCtx.flowConcurrency = distsql.ConcurrencyWithOuterPlan
+	}
 	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
 	}
@@ -2590,7 +2622,9 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	}
 	postqueryPlanCtx.associateNodeWithComponents = associateNodeWithComponents
 	postqueryPlanCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
-	postqueryPlanCtx.mustUseLeafTxn = parallelCheck
+	if parallelCheck {
+		postqueryPlanCtx.flowConcurrency = distsql.ConcurrencyParallelChecks
+	}
 
 	postqueryPhysPlan, physPlanCleanup, err := dsp.createPhysPlan(ctx, postqueryPlanCtx, postqueryPlan)
 	defer physPlanCleanup()

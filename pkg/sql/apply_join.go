@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -321,7 +322,7 @@ func runPlanInsidePlan(
 			recv,
 			&subqueryResultMemAcc,
 			false, /* skipDistSQLDiagramGeneration */
-			params.p.mustUseLeafTxn(),
+			params.p.innerPlansMustUseLeafTxn(),
 		) {
 			return recv.stats, resultWriter.Err()
 		}
@@ -336,7 +337,9 @@ func runPlanInsidePlan(
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.distSQLProhibitedErr = distSQLProhibitedErr
 	planCtx.stmtType = recv.stmtType
-	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
+	if params.p.innerPlansMustUseLeafTxn() {
+		planCtx.flowConcurrency = distsql.ConcurrencyWithOuterPlan
+	}
 	planCtx.stmtForDistSQLDiagram = stmtForDistSQLDiagram
 
 	// Wrap PlanAndRun in a function call so that we clean up immediately.
