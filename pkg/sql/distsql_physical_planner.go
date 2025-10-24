@@ -977,7 +977,8 @@ type PlanningCtx struct {
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
 	// distSQLProhibitedErr, if set, indicates why the plan couldn't be
-	// distributed.
+	// distributed. If any part of the plan isn't distributable, then this is
+	// guaranteed to be non-nil.
 	distSQLProhibitedErr error
 	planner              *planner
 
