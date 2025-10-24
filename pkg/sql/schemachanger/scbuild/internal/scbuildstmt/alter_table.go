@@ -26,8 +26,8 @@ import (
 
 type supportedAlterTableCommand = supportedStatement
 
-// supportedAlterTableStatements tracks alter table operations fully supported by
-// declarative schema  changer. Operations marked as non-fully supported can
+// supportedAlterTableStatements tracks alter table operations fully supported
+// by declarative schema changer. Operations marked as non-fully supported can
 // only be with the use_declarative_schema_changer session variable.
 var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddColumn)(nil)):          {fn: alterTableAddColumn, on: true, checks: nil},
@@ -43,6 +43,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableDropNotNull)(nil)):        {fn: alterTableDropNotNull, on: true, checks: isV253Active},
 	reflect.TypeOf((*tree.AlterTableSetOnUpdate)(nil)):        {fn: alterTableSetOnUpdate, on: true, checks: isV254Active},
 	reflect.TypeOf((*tree.AlterTableRenameColumn)(nil)):       {fn: alterTableRenameColumn, on: true, checks: isV254Active},
+	reflect.TypeOf((*tree.AlterTableSetVisible)(nil)):         {fn: alterTableAlterColumnSetVisible, on: true, checks: isV254Active},
 }
 
 func init() {
