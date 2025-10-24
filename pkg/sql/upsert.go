@@ -107,13 +107,13 @@ func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) 
 		}
 
 		// Are we done yet with the current batch?
-		if n.run.tw.currentBatchSize >= n.run.tw.maxBatchSize ||
+		if len(n.run.tw.b.Requests()) >= n.run.tw.maxBatchSize ||
 			n.run.tw.b.ApproximateMutationBytes() >= n.run.tw.maxBatchByteSize {
 			break
 		}
 	}
 
-	if n.run.tw.currentBatchSize > 0 {
+	if len(n.run.tw.b.Requests()) > 0 {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.

@@ -59,7 +59,7 @@ func (td *tableDeleter) row(
 	mustValidateOldPKValues bool,
 	traceKV bool,
 ) error {
-	td.currentBatchSize++
+	td.rowsWritten++
 	return td.rd.DeleteRow(ctx, td.b, values, pm, vh, oth, mustValidateOldPKValues, traceKV)
 }
 
