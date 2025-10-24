@@ -148,14 +148,14 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 type readKeyFn func(roachpb.Key, protoutil.Message) (bool, error)
 type scanRangeIDFn func(roachpb.RangeID, readKeyFn) error
 
-// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such
+// iterateRangeIDKeys helps visit system keys that use RangeID prefixing (such
 // as RaftHardStateKey, RangeTombstoneKey, and many others). Such keys could in
 // principle exist at any RangeID, and this helper efficiently discovers all the
 // keys of the desired type (as specified by the supplied `keyFn`) and, for each
 // key-value pair discovered, unmarshals it into `msg` and then invokes `f`.
 //
 // Iteration stops on the first error (and will pass through that error).
-func IterateIDPrefixKeys(
+func iterateRangeIDKeys(
 	ctx context.Context, reader storage.Reader, scanRangeID scanRangeIDFn,
 ) error {
 	// NB: Range-ID local keys have no versions and no intents.
@@ -484,7 +484,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	logEvery := log.Every(10 * time.Second)
 	var i int
-	if err := IterateIDPrefixKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
+	if err := iterateRangeIDKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
 		if logEvery.ShouldLog() && i > 0 { // only log if slow
 			log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", i, len(s))
 		}

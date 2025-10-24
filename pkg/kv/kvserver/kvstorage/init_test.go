@@ -23,10 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RangeTombstoneKey) interspersed
-// with other irrelevant keys (both chosen randomly). It then verifies that IterateIDPrefixKeys
+// TestIterateRangeIDKeys lays down a number of tombstones (at keys.RangeTombstoneKey) interspersed
+// with other irrelevant keys (both chosen randomly). It then verifies that iterateRangeIDKeys
 // correctly returns only the relevant keys and values.
-func TestIterateIDPrefixKeys(t *testing.T) {
+func TestIterateRangeIDKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -100,7 +100,7 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	})
 
 	var seen []seenT
-	require.NoError(t, IterateIDPrefixKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
+	require.NoError(t, iterateRangeIDKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
 		var tombstone kvserverpb.RangeTombstone
 		if ok, err := get(keys.RangeTombstoneKey(id), &tombstone); err != nil {
 			return err
