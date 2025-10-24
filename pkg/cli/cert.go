@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -330,14 +331,35 @@ var encodeURIOpts = struct {
 	database   string
 }{}
 
+// The encode-uri command as documented takes the following arguments:
+//
+//	[postgres://][USERNAME[:PASSWORD]@]HOST
+//
+// If we attempt to run `url.Parse` on a value _without_ a scheme, url.Parse
+// will almost surely not parse it as the user expects.
+//
+// Since the goal of making the scheme optional is just flexibility in user that
+// may be copying/pasting from other tools, we naively check for the schemes we
+// expect and otherwise assume that one needs to be added.
+func maybeAddScheme(partialURI string) string {
+	for _, s := range allowedSchemes {
+		if strings.HasPrefix(partialURI, s+"://") {
+			return partialURI
+		}
+	}
+	return fmt.Sprintf("postgresql://%s", partialURI)
+}
+
+var allowedSchemes = []string{"postgres", "postgresql"}
+
 func encodeURI(cmd *cobra.Command, args []string) error {
-	pgURL, err := url.Parse(args[0])
+	pgURL, err := url.Parse(maybeAddScheme(args[0]))
 	if err != nil {
 		return err
 	}
 
-	if pgURL.Scheme == "" {
-		pgURL.Scheme = "postgresql://"
+	if !slices.Contains(allowedSchemes, pgURL.Scheme) {
+		return errors.Newf("unexpected scheme %q", pgURL.Scheme)
 	}
 
 	if encodeURIOpts.database != "" {
