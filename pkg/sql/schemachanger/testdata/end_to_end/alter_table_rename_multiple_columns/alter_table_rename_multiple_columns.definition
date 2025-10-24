@@ -1,0 +1,7 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT);
+----
+
+test
+ALTER TABLE t RENAME COLUMN j TO j_old, RENAME COLUMN k TO j, ADD COLUMN k INT AS (j + 1) STORED;
+----

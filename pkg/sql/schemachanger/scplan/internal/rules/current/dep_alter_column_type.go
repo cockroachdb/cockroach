@@ -49,6 +49,7 @@ func init() {
 				to.TargetStatus(scpb.ToPublic),
 				from.CurrentStatus(scpb.Status_TRANSIENT_VALIDATED),
 				to.CurrentStatus(scpb.Status_PUBLIC),
+				rel.And(IsAlterColumnTypeOp("table-id", colID)...),
 			}
 		},
 	)

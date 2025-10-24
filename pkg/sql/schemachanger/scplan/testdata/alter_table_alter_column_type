@@ -57,11 +57,26 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
 ops
 ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE SMALLINT;
 ----
-StatementPhase stage 1 of 1 with 1 MutationType op
+StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT4}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT2}, PUBLIC], ABSENT] -> PUBLIC
     [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [2]}, TRANSIENT_ABSENT], ABSENT] -> WRITE_ONLY
   ops:
+    *scop.UpsertColumnType
+      ColumnType:
+        ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
+          in243OrLater: true
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 21
+            width: 16
+          TypeName: INT2
     *scop.AddCheckConstraint
       CheckExpr: (CAST(CAST(c1 AS INT2) AS INT4) = c1)
       ColumnIDs:
@@ -72,14 +87,30 @@ StatementPhase stage 1 of 1 with 1 MutationType op
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT4}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT2}, PUBLIC], PUBLIC] -> ABSENT
     [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [2]}, TRANSIENT_ABSENT], WRITE_ONLY] -> ABSENT
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 3 MutationType ops
+PreCommitPhase stage 2 of 2 with 4 MutationType ops
   transitions:
+    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT2}, PUBLIC], ABSENT] -> PUBLIC
     [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [2]}, TRANSIENT_ABSENT], ABSENT] -> WRITE_ONLY
   ops:
+    *scop.UpsertColumnType
+      ColumnType:
+        ColumnID: 2
+        ElementCreationMetadata:
+          in231OrLater: true
+          in243OrLater: true
+        IsNullable: true
+        TableID: 104
+        TypeT:
+          Type:
+            family: IntFamily
+            oid: 21
+            width: 16
+          TypeName: INT2
     *scop.AddCheckConstraint
       CheckExpr: (CAST(CAST(c1 AS INT2) AS INT4) = c1)
       ColumnIDs:
@@ -123,28 +154,13 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 3 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops
   transitions:
-    [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT2}, PUBLIC], ABSENT] -> PUBLIC
     [[CheckConstraint:{DescID: 104, IndexID: 1, ConstraintID: 2, ReferencedColumnIDs: [2]}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_VALIDATED
   ops:
     *scop.MakePublicCheckConstraintValidated
       ConstraintID: 2
       TableID: 104
-    *scop.UpsertColumnType
-      ColumnType:
-        ColumnID: 2
-        ElementCreationMetadata:
-          in231OrLater: true
-          in243OrLater: true
-        IsNullable: true
-        TableID: 104
-        TypeT:
-          Type:
-            family: IntFamily
-            oid: 21
-            width: 16
-          TypeName: INT2
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
     *scop.UpdateSchemaChangerJob
