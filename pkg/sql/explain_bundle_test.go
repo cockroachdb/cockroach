@@ -1053,7 +1053,9 @@ func findBundleDownloadURL(t *testing.T, runner *sqlutils.SQLRunner, id int) str
 	return urlTemplate[:prefixLength] + "/" + strconv.Itoa(id)
 }
 
-func downloadBundle(t *testing.T, url string, dest io.Writer) {
+func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
+
+	// Download the zip to a BytesBuffer.
 	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
 	// Download the zip to a BytesBuffer.
 	resp, err := httpClient.Get(context.Background(), url)
@@ -1061,13 +1063,8 @@ func downloadBundle(t *testing.T, url string, dest io.Writer) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(dest, resp.Body)
-}
-
-func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
-	// Download the zip to a BytesBuffer.
 	var buf bytes.Buffer
-	downloadBundle(t, url, &buf)
+	_, _ = io.Copy(&buf, resp.Body)
 
 	unzip, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
