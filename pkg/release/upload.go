@@ -183,11 +183,15 @@ func readFile(path string, dst io.Writer) error {
 	return errors.CombineErrors(err, file.Close())
 }
 
-// PutNonRelease uploads non-release related files.
-// Files are uploaded to /cockroach/<FilePath> for each non release file.
-// A `latest` key is then put at cockroach/<RedirectPrefix>.<BranchName> that redirects
-// to the above file.
-// The `latest` key for workload binaries will be prefixed with /workload instead
+// PutNonRelease uploads non-release related files
+//
+// Each file is uploaded to /<prefix>/<FilePath> with prefix cockroach
+// i.e. /cockroach/<FilePath>
+//
+// Then that file is uploaded again under a `latest` key
+// <prefix>/<RedirectPrefix>.<BranchName>
+// Workload "latest" objects are stored under workload/<RedirectPrefix>.<BranchName>
+// All other "latest" objects are stored under cockroach/<RedirectPrefix>.<BranchName>
 func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 	const nonReleasePrefix = "cockroach"
 	const workloadPrefix = "workload"
