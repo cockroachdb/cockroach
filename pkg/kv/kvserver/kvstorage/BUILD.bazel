@@ -61,6 +61,7 @@ go_test(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/echotest",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
