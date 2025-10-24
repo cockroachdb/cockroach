@@ -866,15 +866,10 @@ func (dsp *DistSQLPlanner) Run(
 			// that we might have a plan where some expression (e.g. a cast to
 			// an Oid type) uses the planner's txn (which is the RootTxn), so
 			// it'd be illegal to use LeafTxns for a part of such plan.
-			// TODO(yuzefovich): this check is both excessive and insufficient.
-			// For example:
-			// - it disables the usage of the Streamer when a subquery has an
-			// Oid type, but that would have no impact on usage of the Streamer
-			// in the main query;
-			// - it might allow the usage of the Streamer even when the internal
-			// executor is used by a part of the plan, and the IE would use the
-			// RootTxn. Arguably, this would be a bug in not prohibiting the
-			// DistSQL altogether.
+			// TODO(yuzefovich): this check could be excessive. For example, it
+			// disables the usage of the Streamer when a subquery has an Oid
+			// type (due to a serialization issue), but that would have no
+			// impact on usage of the Streamer in the main query.
 			if !containsLocking && !mustUseRootTxn && planCtx.distSQLProhibitedErr == nil {
 				if evalCtx.SessionData().StreamerEnabled {
 					for _, proc := range plan.Processors {
