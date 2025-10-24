@@ -548,6 +548,10 @@ func (n *insertFastPathNode) rowsWritten() int64 {
 	return n.run.ti.rowsWritten
 }
 
+func (n *insertFastPathNode) indexRowsWritten() int64 {
+	return n.run.ti.indexRowsWritten
+}
+
 // See planner.autoCommit.
 func (n *insertFastPathNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()

@@ -143,6 +143,10 @@ func (u *updateSwapNode) rowsWritten() int64 {
 	return u.run.tu.rowsWritten
 }
 
+func (u *updateSwapNode) indexRowsWritten() int64 {
+	return u.run.tu.indexRowsWritten
+}
+
 func (u *updateSwapNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }

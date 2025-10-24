@@ -305,6 +305,10 @@ func (u *updateNode) rowsWritten() int64 {
 	return u.run.tu.rowsWritten
 }
 
+func (u *updateNode) indexRowsWritten() int64 {
+	return u.run.tu.indexRowsWritten
+}
+
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }

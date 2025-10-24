@@ -266,6 +266,7 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 		if m, ok := p.node.(mutationPlanNode); ok {
 			metrics := execinfrapb.GetMetricsMeta()
 			metrics.RowsWritten = m.rowsWritten()
+			metrics.IndexRowsWritten = m.indexRowsWritten()
 			meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
 		}
 	}
