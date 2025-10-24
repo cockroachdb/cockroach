@@ -1878,6 +1878,10 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			raftConfig := base.RaftConfig{
 				// Drop the raft tick interval so the Raft group is ticked more.
 				RaftTickInterval: 10 * time.Millisecond,
+				// Suppress timeout-based elections to avoid leadership changes in ways
+				// this test doesn't expect. See DisablePreCampaignStoreLivenessCheck,
+				// which counteracts this knob's effect on leader leases.
+				RaftElectionTimeoutTicks: 1000000,
 				// Reduce the max uncommitted entry size.
 				RaftMaxUncommittedEntriesSize: 64 << 10, // 64 KB
 				// RaftProposalQuota cannot exceed RaftMaxUncommittedEntriesSize.
@@ -1885,12 +1889,6 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 				// RaftMaxInflightMsgs * RaftMaxSizePerMsg cannot exceed RaftProposalQuota.
 				RaftMaxInflightMsgs: 16,
 				RaftMaxSizePerMsg:   1 << 10, // 1 KB
-			}
-			// Suppress timeout-based elections to avoid leadership changes in ways this
-			// test doesn't expect. For leader leases, fortification itself provides us
-			// this guarantee.
-			if leaseType != roachpb.LeaseLeader {
-				raftConfig.RaftElectionTimeoutTicks = 1000000
 			}
 
 			const numServers int = 5
@@ -1916,6 +1914,14 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 							// Refresh pending commands on every Raft group tick instead of
 							// every RaftReproposalTimeoutTicks.
 							RefreshReasonTicksPeriod: 1,
+							RaftTestingKnobs: &raft.TestingKnobs{
+								// Due to high RaftElectionTimeoutTicks, we only have one
+								// opportunity to campaign which should not be missed. Under
+								// leader leases, in a "cold" cluster, a campaign can fail due
+								// to missing store liveness support from the node's peers.
+								// Disallow this check to ensure that the campaign succeeds.
+								DisablePreCampaignStoreLivenessCheck: true,
+							},
 						},
 					},
 				}
