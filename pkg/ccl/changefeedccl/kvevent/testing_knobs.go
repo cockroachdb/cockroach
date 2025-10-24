@@ -9,7 +9,7 @@ import "context"
 
 // BlockingBufferTestingKnobs are testing knobs for blocking buffers.
 type BlockingBufferTestingKnobs struct {
-	BeforeAdd            func(ctx context.Context, e Event) (context.Context, Event)
+	BeforeAdd            func(ctx context.Context, e Event) (context.Context, Event, bool)
 	BeforePop            func()
 	BeforeDrain          func(ctx context.Context) context.Context
 	AfterDrain           func(err error)

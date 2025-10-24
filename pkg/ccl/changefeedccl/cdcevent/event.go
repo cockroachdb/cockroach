@@ -464,10 +464,10 @@ func getEventDescriptorCached(
 	cache *cache.UnorderedCache,
 ) (*EventDescriptor, error) {
 	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
-
 	if v, ok := cache.Get(idVer); ok {
 		ed := v.(*EventDescriptor)
 		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
+			ed.SchemaTS = schemaTS
 			return ed, nil
 		}
 	}

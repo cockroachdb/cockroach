@@ -1215,6 +1215,19 @@ func forceTableGC(
 	}
 }
 
+func forceTableGCAtTimestamp(
+	t testing.TB,
+	tsi serverutils.TestServerInterface,
+	sqlDB *sqlutils.SQLRunner,
+	database, table string,
+	timestamp hlc.Timestamp,
+) {
+	t.Helper()
+	if err := tsi.ForceTableGC(context.Background(), database, table, timestamp); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // All structured logs should contain this property which stores the snake_cased
 // version of the name of the message struct
 type BaseEventStruct struct {
@@ -1484,12 +1497,12 @@ func runWithAndWithoutRegression141453(
 					var blockPop atomic.Bool
 					popCh := make(chan struct{})
 					return kvevent.BlockingBufferTestingKnobs{
-						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event, bool) {
 							if e.Type() == kvevent.TypeResolved &&
 								e.Resolved().BoundaryType == jobspb.ResolvedSpan_RESTART {
 								blockPop.Store(true)
 							}
-							return ctx, e
+							return ctx, e, true
 						},
 						BeforePop: func() {
 							if blockPop.Load() {

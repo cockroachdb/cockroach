@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -839,6 +840,145 @@ func TestChangefeedMigratesProtectedTimestamps(t *testing.T) {
 		// Ensure the old pts record was deleted.
 		_, err = readPTSRecord(ctx, t, execCfg, ptp, oldRecordID)
 		require.ErrorContains(t, err, "does not exist")
+	}
+
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)
+}
+
+/*
+Test order:
+- Create DB with table
+- Create changefeed
+- Insert row 1 (to cache the event descriptor at time t1)
+- Change DB descriptor version (By granting permission to a user)
+- Garbage collect the old descriptor version/advance pts
+
+- Insert row 2
+- TableDescriptor Change (By granting permission to a user)
+- Insert row 3
+
+  - KV events out of order, 2 then 1
+  - KV event for 2 will cause a replan,
+    which will use the cached timestamp (t1) for that descriptor versionand
+    will replan trying to get the db descriptor (at that same timestamp t1)
+    which will fail because the descriptor version at t0 was garbage collected
+*/
+func TestCachedEventDescriptorGivesUpdatedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		spanconfigjob.ReconciliationJobCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1*time.Second,
+		)
+
+		// Making sure there's only one worker so that there is a single event
+		// descriptor cache. This means that the later events will use the cached
+		// event descriptor and its outdated timestamp as happened in the issue.
+		changefeedbase.EventConsumerWorkers.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 1)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		knobs := s.TestingKnobs.
+			DistSQL.(*execinfra.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+
+		shouldSendResolved := atomic.Bool{}
+		shouldSendResolved.Store(true)
+		kvEvents := []kvevent.Event{}
+		hasProcessedEvents := atomic.Bool{}
+		knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+			return kvevent.BlockingBufferTestingKnobs{
+				BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event, bool) {
+					// Since we are going to be messing with the KVFeed so much, we don't want to
+					// send resolved events and instead handle GC ourselves.
+					if e.Type() == kvevent.TypeResolved {
+						return ctx, e, false
+					}
+
+					if e.Type() == kvevent.TypeKV {
+						kvEvents = append(kvEvents, e)
+						switch len(kvEvents) {
+						case 1:
+							// Event 1 is sent as normal.
+							return ctx, kvEvents[0], true
+						case 2:
+							// Since we don't send resolved events, we need to handle GC ourselves.
+							// Now should be a safe time to GC before event 2, since event 1 has
+							// already been processed.
+							forceTableGCAtTimestamp(t, s.SystemServer, sqlDB, "system", "descriptor", e.KV().Value.Timestamp.Prev())
+
+							// Event 2 is stored and we will send it later.
+							// Don't send anything just yet.
+							return ctx, e, false
+						case 3:
+							// Send event 3 as normal.
+							shouldSendResolved.Store(false)
+							return ctx, kvEvents[2], true
+						case 4:
+							// Now we send event 2 *after* we've sent event 3.
+							// Since we haven't send a resolved event, this should be acceptable and
+							// NOT cause a changefeed failure, but it will if the timestamp from the
+							// cached event descriptor is too from event 1.
+							return ctx, kvEvents[1], true
+						default:
+							// Once we get the 5th event from the KVFeed, our changefeed should have
+							// processed the three events we needed for our test. This bool allows
+							// us to know when we can stop the test.
+							hasProcessedEvents.Store(true)
+
+							// Since we skipped adding event 2 to the KVFeed, we will be behind by
+							// one event from now on. Add the previous event to the buffer.
+							return ctx, kvEvents[len(kvEvents)-2], true
+						}
+					}
+
+					return ctx, e, true
+				},
+			}
+		}
+
+		foo := feed(t, f, `CREATE CHANGEFEED AS SELECT * FROM foo`)
+		defer closeFeed(t, foo)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		// Change the database descriptor version by granting permission to a user.
+		sqlDB.Exec(t, `CREATE USER testuser`)
+		sqlDB.Exec(t, `GRANT CREATE ON DATABASE d TO testuser`)
+
+		// This event will be delayed by the KVFeed until after event 3 has been sent.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
+
+		// Change the table descriptor version by granting permission to a user.
+		sqlDB.Exec(t, `GRANT CREATE ON TABLE foo TO testuser`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
+
+		// Since we mess with the KVFeed by delaying events until we would have
+		// seen the next one, we need to send a couple extra events to be sure
+		// that we saw events 1, 2 and 3 for this scenario.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (5)`)
+
+		// Wait for changefeed events 1, 2 and 3 to be processed.
+		testutils.SucceedsSoon(t, func() error {
+			if !hasProcessedEvents.Load() {
+				return errors.New("events not processed")
+			}
+			return nil
+		})
+
+		var res string
+		sqlDB.QueryRow(t, `SELECT status FROM [SHOW CHANGEFEED JOBS]`).Scan(&res)
+		if res != "running" {
+			var errorStr string
+			sqlDB.QueryRow(t, `SELECT error FROM [SHOW CHANGEFEED JOBS]`).Scan(&errorStr)
+			t.Logf("Changefeed error: %s", errorStr)
+			t.Fatal("Changefeed is not running")
+		}
 	}
 
 	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks)

@@ -177,6 +177,7 @@ func (e *familyEvaluator) eval(
 	havePrev := prevRow.IsInitialized()
 	if !(sameVersion(e.currDesc, updatedRow.EventDescriptor) &&
 		(!havePrev || sameVersion(e.prevDesc, prevRow.EventDescriptor))) {
+
 		// Descriptor versions changed; re-initialize.
 		if err := e.closeErr(); err != nil {
 			return cdcevent.Row{}, err
