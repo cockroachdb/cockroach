@@ -1595,8 +1595,8 @@ func TestVirtualPTSTableDeprecated(t *testing.T) {
 			Mode:      ptpb.PROTECT_AFTER,
 			DeprecatedSpans: []roachpb.Span{
 				{
-					Key:    keys.SystemSQLCodec.TablePrefix(42),
-					EndKey: keys.SystemSQLCodec.TablePrefix(42).PrefixEnd(),
+					Key:    s.Codec().TablePrefix(42),
+					EndKey: s.Codec().TablePrefix(42).PrefixEnd(),
 				},
 			},
 			MetaType: "foo",

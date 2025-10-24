@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -33,7 +32,7 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 	ctx := context.Background()
 	recCh := make(chan tracingpb.Recording, 1)
 	joinQuery := "SELECT count(1) FROM (SELECT * FROM test.b NATURAL INNER LOOKUP JOIN test.a)"
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				// Get a recording for the join query.
@@ -50,7 +49,8 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Disable the usage of the streamer since this test is designed for the old
 	// non-streamer code path.
@@ -96,7 +96,7 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 	// were on the lookup side. We expect more than one of them (it would be only
 	// one if there was no limit on the size of results).
 	rec := <-recCh
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "a")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "a")
 	tableID := desc.TableDesc().ID
 	sp, ok := rec.FindSpan("join reader")
 	require.True(t, ok)

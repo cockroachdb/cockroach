@@ -117,7 +117,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 		sqlDB.CheckQueryResults(t, "SELECT schema_name,table_name FROM [SHOW TABLES]", [][]string{{"public", "tab1"}, {"public", "tab2_rename"}})
 
 		require.NoError(t, sqltestutils.TestingDescsTxn(ctx, srv, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-			return DropIngestedExternalCatalog(ctx, &execCfg, sqlUser, written, txn, srv.JobRegistry().(*jobs.Registry), col, "test gc")
+			return DropIngestedExternalCatalog(ctx, &execCfg, sqlUser, written, txn, s.JobRegistry().(*jobs.Registry), col, "test gc")
 		}))
 		var res int
 		sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW TABLES]").Scan(&res)

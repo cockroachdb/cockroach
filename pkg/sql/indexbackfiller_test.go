@@ -482,8 +482,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 
 		// Run the testCase's setupDesc function to prepare an index backfill
 		// mutation. Also, create an associated job and set it up to be blocked.
-		lm := s.LeaseManager().(*lease.Manager)
 		tt := s.ApplicationLayer()
+		lm := tt.LeaseManager().(*lease.Manager)
 		codec := tt.Codec()
 		settings := tt.ClusterSettings()
 		execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)

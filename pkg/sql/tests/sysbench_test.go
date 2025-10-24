@@ -397,6 +397,7 @@ func (s *sysbenchSQLClient) prepConn() {
 // cluster.
 type sysbenchKV struct {
 	ctx         context.Context
+	codec       keys.SQLCodec
 	db          *kv.DB
 	pkPrefix    [sysbenchTables]roachpb.Key
 	indexPrefix [sysbenchTables]roachpb.Key
@@ -405,13 +406,15 @@ type sysbenchKV struct {
 func newSysbenchKV(nodes int, localRPCFastPath bool) sysbenchDriverConstructor {
 	return func(ctx context.Context, b *testing.B) (sysbenchDriver, func()) {
 		tc := newTestCluster(b, nodes, localRPCFastPath)
-		db := tc.Server(0).DB()
+		s := tc.ApplicationLayer(0)
+		db := s.DB()
 		cleanup := func() {
 			tc.Stopper().Stop(ctx)
 		}
 		return &sysbenchKV{
-			ctx: ctx,
-			db:  db,
+			ctx:   ctx,
+			codec: s.Codec(),
+			db:    db,
 		}, cleanup
 	}
 }
@@ -636,9 +639,9 @@ func (s *sysbenchKV) prep(rng *rand.Rand) {
 func (s *sysbenchKV) prepKeyPrefixes() {
 	const tableNumOffset = 100
 	for i := range sysbenchTables {
-		s.pkPrefix[i] = keys.SystemSQLCodec.IndexPrefix(uint32(tableNumOffset+i), 1)
+		s.pkPrefix[i] = s.codec.IndexPrefix(uint32(tableNumOffset+i), 1)
 		s.pkPrefix[i] = slices.Clip(s.pkPrefix[i])
-		s.indexPrefix[i] = keys.SystemSQLCodec.IndexPrefix(uint32(tableNumOffset+i), 2)
+		s.indexPrefix[i] = s.codec.IndexPrefix(uint32(tableNumOffset+i), 2)
 		s.indexPrefix[i] = slices.Clip(s.indexPrefix[i])
 	}
 }

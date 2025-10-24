@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -80,11 +79,12 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer aborter.Close(t)
 	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	s, mainDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, mainDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	{
-		pgURL, cleanup := pgurlutils.PGUrl(
-			t, s.AdvSQLAddr(), "TestSessionFinishRollsBackTxn", url.User(username.RootUser))
+		pgURL, cleanup := s.PGUrl(
+			t, serverutils.CertsDirPrefix("TestSessionFinishRollsBackTxn"), serverutils.User(username.RootUser))
 		defer cleanup()
 		if err := aborter.Init(pgURL); err != nil {
 			t.Fatal(err)
@@ -108,7 +108,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	for _, state := range tests {
 		t.Run(state, func(t *testing.T) {
 			// Create a low-level lib/pq connection so we can close it at will.
-			pgURL, cleanup := s.ApplicationLayer().PGUrl(t)
+			pgURL, cleanup := s.PGUrl(t)
 			defer cleanup()
 			c, err := pq.Open(pgURL.String())
 			if err != nil {
@@ -960,15 +960,16 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 
 	ctx := context.Background()
 	filter := newDynamicRequestFilter()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: filter.filter,
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
-	codec := s.ApplicationLayer().Codec()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	codec := s.Codec()
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
 	testDB.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
@@ -981,7 +982,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	// transaction state evolves appropriately.
 
 	// Use pgx so that we can introspect error codes returned from cockroach.
-	pgURL, cleanup := pgurlutils.PGUrl(t, s.AdvSQLAddr(), "", url.User("root"))
+	pgURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
 	defer cleanup()
 	conf, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -1543,9 +1544,9 @@ func TestInjectRetryErrors(t *testing.T) {
 			}
 		},
 	}
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	defer db.Close()
+	srv, db, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)
@@ -1656,8 +1657,9 @@ func TestInjectRetryErrors(t *testing.T) {
 
 		// Choose a small results_buffer_size and make sure the statement retry
 		// does not occur.
-		pgURL, cleanupFn := pgurlutils.PGUrl(
-			t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+		pgURL, cleanupFn := s.PGUrl(
+			t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser),
+		)
 		defer cleanupFn()
 		q := pgURL.Query()
 		q.Add("results_buffer_size", "4")

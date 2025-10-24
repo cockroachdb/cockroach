@@ -1828,12 +1828,13 @@ func TestDeleteOrphanedLeasesBySession(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}},
 		},
 	})
-	defer s.Stop(ctx)
+	defer srv.Stop(ctx)
+	s := srv.ApplicationLayer()
 	idb := s.InternalDB().(*sql.InternalDB)
 	ie := idb.Executor()
 	// Validate only one session exists.
@@ -2841,11 +2842,12 @@ func TestLeaseTxnDeadlineExtensionWithSession(t *testing.T) {
 		},
 	}
 
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	lm := s.LeaseManager().(*lease.Manager)
 	leasesWaitingToExpireGauge := lm.TestingSessionBasedLeasesWaitingToExpireGauge()
 	leasesExpiredGauge := lm.TestingSessionBasedLeasesExpiredGauge()
-	defer s.Stopper().Stop(ctx)
 	// Setup tables for the test.
 	_, err := sqlDB.Exec(`
 CREATE TABLE t1(val int);
@@ -3501,6 +3503,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 		},
 	})
 	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	runner.Exec(t, "CREATE TABLE t1(n int)")
 	descIDRow := runner.QueryRow(t, "SELECT 't1'::REGCLASS::INT")
@@ -3509,7 +3512,7 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	grp := ctxgroup.WithContext(ctx)
 
 	startWaiters := make(chan struct{})
-	cachedDatabaseRegions, err := regions.NewCachedDatabaseRegions(ctx, srv.DB(), srv.LeaseManager().(*lease.Manager))
+	cachedDatabaseRegions, err := regions.NewCachedDatabaseRegions(ctx, s.DB(), s.LeaseManager().(*lease.Manager))
 	require.NoError(t, err)
 
 	grp.GoCtx(func(ctx context.Context) error {
@@ -3529,13 +3532,13 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 		r := retry.StartWithCtx(ctx, retry.Options{})
 		// Wait until long waits are detected in our metrics.
 		for r.Next() {
-			if srv.MustGetSQLCounter("sql.leases.long_wait_for_no_version") == 0 {
+			if s.MustGetSQLCounter("sql.leases.long_wait_for_no_version") == 0 {
 				continue
 			}
-			if srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {
+			if s.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {
 				continue
 			}
-			if srv.MustGetSQLCounter("sql.leases.long_wait_for_one_version") == 0 {
+			if s.MustGetSQLCounter("sql.leases.long_wait_for_one_version") == 0 {
 				continue
 			}
 			break
@@ -3563,11 +3566,11 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 		r := retry.StartWithCtx(ctx, retry.Options{})
 		for r.Next() {
 			// Wait for the two versions to exist.
-			if srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {
+			if s.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant") == 0 {
 				continue
 			}
 			// Wait for there to be a single version.
-			lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
+			lm := s.LeaseManager().(*lease.Manager)
 			_, err := lm.WaitForOneVersion(ctx, descpb.ID(descID), cachedDatabaseRegions, retry.Options{})
 			return err
 		}
@@ -3577,16 +3580,16 @@ func TestLongLeaseWaitMetrics(t *testing.T) {
 	// Waits for no version of the descriptor to exist.
 	grp.GoCtx(func(ctx context.Context) error {
 		<-startWaiters
-		lm := srv.ApplicationLayer().LeaseManager().(*lease.Manager)
+		lm := s.LeaseManager().(*lease.Manager)
 		return lm.WaitForNoVersion(ctx, descpb.ID(descID), cachedDatabaseRegions, retry.Options{})
 	})
 
 	require.NoError(t, grp.Wait())
 
 	// Validate the metrics are 0 again.
-	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_no_version"))
-	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant"))
-	require.Equal(t, int64(0), srv.MustGetSQLCounter("sql.leases.long_wait_for_one_version"))
+	require.Equal(t, int64(0), s.MustGetSQLCounter("sql.leases.long_wait_for_no_version"))
+	require.Equal(t, int64(0), s.MustGetSQLCounter("sql.leases.long_wait_for_two_version_invariant"))
+	require.Equal(t, int64(0), s.MustGetSQLCounter("sql.leases.long_wait_for_one_version"))
 }
 
 // TestWaitForInitialVersionConcurrent this test is a basic sanity test that
@@ -3672,8 +3675,9 @@ func BenchmarkAcquireLeaseConcurrent(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -3710,8 +3714,9 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 	skip.UnderDuress(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	lm := s.LeaseManager().(*lease.Manager)
 	startBytes := lm.TestingGetBoundAccount().Used()
 	lastBytes := startBytes

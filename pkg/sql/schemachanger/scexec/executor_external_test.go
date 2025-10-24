@@ -92,7 +92,7 @@ func setupTestInfra(t testing.TB) (_ *testInfra, cleanup func(context.Context)) 
 		nodeID:   s.NodeID(),
 		settings: tt.ClusterSettings(),
 		db:       tt.ExecutorConfig().(sql.ExecutorConfig).InternalDB,
-		lm:       s.LeaseManager().(*lease.Manager),
+		lm:       tt.LeaseManager().(*lease.Manager),
 		cf:       tt.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory,
 		tsql:     sqlutils.MakeSQLRunner(db),
 	}, s.Stopper().Stop
