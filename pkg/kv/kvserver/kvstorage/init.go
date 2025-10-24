@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"maps"
 	"slices"
 	"time"
 
@@ -531,10 +532,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	}
 	log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", len(s), len(s))
 
-	sl := make([]Replica, 0, len(s))
-	for _, repl := range s {
-		sl = append(sl, repl)
-	}
+	sl := slices.AppendSeq(make([]Replica, 0, len(s)), maps.Values(s))
 	slices.SortFunc(sl, func(a, b Replica) int {
 		return cmp.Compare(a.RangeID, b.RangeID)
 	})
