@@ -23,9 +23,14 @@ type Pacer struct {
 	cur *ElasticCPUWorkHandle
 }
 
-// Pace will block as needed to pace work that calls it as configured. It is
-// intended to be called in a tight loop, and will attempt to minimize per-call
-// overhead. Non-nil errors are returned only if the context is canceled.
+// Pace will block as needed to pace work that calls it. It is intended to be
+// called in a tight loop, and will attempt to minimize per-call overhead.
+// Non-nil errors are returned only if the context is canceled.
+//
+// It is safe to call Pace() on a nil *Pacer, but it should not be assumed that
+// such a call will always be a no-op: Pace may elect to perform pacing any time
+// it is called, even if the *Pacer on which it is called is nil e.g. by
+// delegating to the Go runtime or other some global pacing.
 func (p *Pacer) Pace(ctx context.Context) error {
 	if p == nil {
 		return nil
