@@ -7,11 +7,13 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -23,6 +25,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
@@ -521,10 +525,10 @@ func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
 	return drpcmetadata.Add(ctx, gwRequestKey, "true")
 }
 
-// DRPCGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
+// drpcGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
 // that are invoked due to DB console requests. For these requests, we do not
 // want an uncaught panic to crash the node.
-func DRPCGatewayRequestRecoveryInterceptor(
+func drpcGatewayRequestRecoveryInterceptor(
 	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
 ) (resp interface{}, err error) {
 	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
@@ -537,4 +541,30 @@ func DRPCGatewayRequestRecoveryInterceptor(
 	}
 	resp, err = handler(ctx, req)
 	return resp, err
+}
+
+// drpcGatewayRequestCounterInterceptor is a client-side interceptor that
+// increments telemetry counters for DRPC requests originating from the HTTP
+// gateway. It checks for the gateway request marker and increments
+// a counter named after the RPC method.
+func drpcGatewayRequestCounterInterceptor(
+	ctx context.Context,
+	rpc string,
+	enc drpc.Encoding,
+	in, out drpc.Message,
+	cc *drpcclient.ClientConn,
+	invoker drpcclient.UnaryInvoker,
+) error {
+	// Check if this request originated from the DRPC HTTP gateway
+	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
+		telemetry.Inc(getDRPCGatewayEndpointCounter(rpc))
+	}
+	return invoker(ctx, rpc, enc, in, out, cc)
+}
+
+// getDRPCGatewayEndpointCounter returns a telemetry Counter corresponding to
+// the given DRPC method.
+func getDRPCGatewayEndpointCounter(method string) telemetry.Counter {
+	const counterPrefix = "http.drpc-gateway"
+	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
 }

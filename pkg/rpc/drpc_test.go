@@ -98,7 +98,7 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 			panic("test panic")
 		}
 
-		resp, err := DRPCGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
+		resp, err := drpcGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
 
 		require.Nil(t, resp)
 		require.ErrorContains(t, err, "unexpected error occurred")
@@ -118,7 +118,7 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 			}
 		}()
 
-		_, _ = DRPCGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
+		_, _ = drpcGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
 	})
 
 	// With gateway metadata but no panic - should pass through normally
@@ -131,7 +131,7 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 			return expectedResp, expectedErr
 		}
 
-		resp, err := DRPCGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
+		resp, err := drpcGatewayRequestRecoveryInterceptor(ctx, nil, "test", handler)
 
 		require.Equal(t, expectedResp, resp)
 		require.ErrorIs(t, err, expectedErr)
