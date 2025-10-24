@@ -174,41 +174,46 @@ func (c *indexConsistencyCheck) Start(
 		return errors.Wrap(err, "converting span to query bounds")
 	}
 
-	// Nothing to do if no rows exist in the span.
+	// If no rows exist in the primary index span, we still need to check for dangling
+	// secondary index entries. We run the check with an empty predicate, which will
+	// scan the entire secondary index within the span. Any secondary index entries found
+	// will be dangling since there are no corresponding primary index rows.
 	if !hasRows {
-		return nil
-	}
+		// Use empty predicate and no query arguments
+		predicate = ""
+		queryArgs = []interface{}{}
+	} else {
+		if len(bounds.Start) == 0 || len(bounds.End) == 0 {
+			return errors.AssertionFailedf("query bounds from span didn't produce start or end: %+v", bounds)
+		}
 
-	if len(bounds.Start) == 0 || len(bounds.End) == 0 {
-		return errors.AssertionFailedf("query bounds from span didn't produce start or end: %+v", bounds)
-	}
+		// Generate SQL predicate from the bounds
+		pkColNames := colNames(pkColumns)
+		// Encode column names for SQL usage
+		encodedPkColNames := make([]string, len(pkColNames))
+		for i, colName := range pkColNames {
+			encodedPkColNames[i] = encodeColumnName(colName)
+		}
+		predicate, err = spanutils.RenderQueryBounds(
+			encodedPkColNames, pkColDirs, pkColTypes,
+			len(bounds.Start), len(bounds.End), true, 1,
+		)
+		if err != nil {
+			return errors.Wrap(err, "rendering query bounds")
+		}
 
-	// Generate SQL predicate from the bounds
-	pkColNames := colNames(pkColumns)
-	// Encode column names for SQL usage
-	encodedPkColNames := make([]string, len(pkColNames))
-	for i, colName := range pkColNames {
-		encodedPkColNames[i] = encodeColumnName(colName)
-	}
-	predicate, err = spanutils.RenderQueryBounds(
-		encodedPkColNames, pkColDirs, pkColTypes,
-		len(bounds.Start), len(bounds.End), true, 1,
-	)
-	if err != nil {
-		return errors.Wrap(err, "rendering query bounds")
-	}
+		if strings.TrimSpace(predicate) == "" {
+			return errors.AssertionFailedf("query bounds from span didn't produce predicate: %+v", bounds)
+		}
 
-	if strings.TrimSpace(predicate) == "" {
-		return errors.AssertionFailedf("query bounds from span didn't produce predicate: %+v", bounds)
-	}
-
-	// Prepare query arguments: end bounds first, then start bounds
-	queryArgs = make([]interface{}, 0, len(bounds.End)+len(bounds.Start))
-	for _, datum := range bounds.End {
-		queryArgs = append(queryArgs, datum)
-	}
-	for _, datum := range bounds.Start {
-		queryArgs = append(queryArgs, datum)
+		// Prepare query arguments: end bounds first, then start bounds
+		queryArgs = make([]interface{}, 0, len(bounds.End)+len(bounds.Start))
+		for _, datum := range bounds.End {
+			queryArgs = append(queryArgs, datum)
+		}
+		for _, datum := range bounds.Start {
+			queryArgs = append(queryArgs, datum)
+		}
 	}
 
 	checkQuery := c.createIndexCheckQuery(

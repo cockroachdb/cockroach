@@ -132,6 +132,11 @@ func InspectChecksForTable(
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
+	// Skip virtual tables since they don't have physical storage to inspect.
+	if table.IsVirtualTable() {
+		return checks, nil
+	}
+
 	for _, index := range table.PublicNonPrimaryIndexes() {
 		if isUnsupportedIndexForIndexConsistencyCheck(index, table) {
 			if p != nil {

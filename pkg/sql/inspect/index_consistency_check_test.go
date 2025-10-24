@@ -560,6 +560,69 @@ func TestDetectIndexConsistencyErrors(t *testing.T) {
 	}
 }
 
+// TestDanglingIndexEntryInEmptyTable verifies that INSPECT can detect dangling
+// secondary index entries even when the primary index is completely empty.
+func TestDanglingIndexEntryInEmptyTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	codec := s.ApplicationLayer().Codec()
+
+	// Create an empty table with a secondary index.
+	_, err := db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.test (v);
+`)
+	require.NoError(t, err)
+
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "test")
+	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
+
+	// Manually insert a dangling secondary index entry for a non-existent primary key.
+	// This creates corruption: a secondary index entry pointing to primary key (10)
+	// which doesn't exist in the primary index.
+	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
+	err = insertSecondaryIndexEntry(ctx, codec, values, kvDB, tableDesc, secondaryIndex)
+	require.NoError(t, err)
+
+	// Enable INSPECT command.
+	_, err = db.Exec(`SET enable_inspect_command = true`)
+	require.NoError(t, err)
+
+	// Run INSPECT and expect it to find the dangling index entry.
+	// INSPECT should return an error when inconsistencies are found.
+	_, err = db.Query(`INSPECT TABLE t.test AS OF SYSTEM TIME '-1us' WITH OPTIONS INDEX ALL`)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "INSPECT found inconsistencies")
+
+	// Verify the error details using SHOW INSPECT ERRORS.
+	rows, err := db.Query(`SHOW INSPECT ERRORS FOR TABLE t.test WITH DETAILS`)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var errorType, dbName, schemaName, tableName, primaryKey, aost, details string
+	var jobID int64
+	found := false
+	for rows.Next() {
+		err = rows.Scan(&errorType, &dbName, &schemaName, &tableName, &primaryKey, &jobID, &aost, &details)
+		require.NoError(t, err)
+		found = true
+
+		// Verify the error is a dangling secondary index entry.
+		require.Equal(t, "dangling_secondary_index_entry", errorType)
+		require.Equal(t, "t", dbName)
+		require.Equal(t, "test", tableName)
+		require.Equal(t, "'(10)'", primaryKey)
+		// Verify details contain the expected column value.
+		require.Contains(t, details, `"v": "314"`)
+	}
+
+	require.True(t, found, "expected to find at least one inspect error, but found none")
+}
+
 func TestIndexConsistencyWithReservedWordColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
