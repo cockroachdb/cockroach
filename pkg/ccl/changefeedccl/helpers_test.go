@@ -786,7 +786,6 @@ func expectErrCreatingFeed(
 
 func closeFeed(t testing.TB, f cdctest.TestFeed) {
 	if err := f.Close(); err != nil {
-		fmt.Println("error closing feed", err)
 		t.Fatal(err)
 	}
 }
@@ -1498,12 +1497,12 @@ func runWithAndWithoutRegression141453(
 					var blockPop atomic.Bool
 					popCh := make(chan struct{})
 					return kvevent.BlockingBufferTestingKnobs{
-						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event) {
+						BeforeAdd: func(ctx context.Context, e kvevent.Event) (context.Context, kvevent.Event, bool) {
 							if e.Type() == kvevent.TypeResolved &&
 								e.Resolved().BoundaryType == jobspb.ResolvedSpan_RESTART {
 								blockPop.Store(true)
 							}
-							return ctx, e
+							return ctx, e, true
 						},
 						BeforePop: func() {
 							if blockPop.Load() {

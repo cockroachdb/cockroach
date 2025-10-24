@@ -241,14 +241,9 @@ type ByNameGetter getterBase
 func (g ByNameGetter) Database(
 	ctx context.Context, name string,
 ) (catalog.DatabaseDescriptor, error) {
-	// breadcrumb: note we're not passing a schema descriptor, purely by name.
-	// fmt.Println("looking up database by name", name)
 	desc, err := getDescriptorByName(
 		ctx, g.KV(), g.Descriptors(), nil /* db */, nil /* sc */, name, g.flags, catalog.Database,
 	)
-	// if name == "d" {
-	// 	fmt.Println("got descriptor", name, "by name", desc)
-	// }
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +619,6 @@ func (b ByNameGetterBuilder) Get() ByNameGetter {
 	return ByNameGetter(b)
 }
 
-// breadcrumb: this is where the getter comes from.
 // MaybeGet builds a ByNameGetter which returns a nil descriptor instead of
 // an error when the descriptor is not found.
 func (b ByNameGetterBuilder) MaybeGet() ByNameGetter {

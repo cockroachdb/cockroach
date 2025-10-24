@@ -381,7 +381,6 @@ func getDescriptorsFromStoreForInterval(
 		// Export request returns descriptors in decreasing modification time.
 		res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), batchRequestHeader, req)
 		if pErr != nil {
-			// fmt.Println("seeing the error we want")
 			return nil, errors.Wrapf(pErr.GoError(), "error in retrieving descs between %s, %s",
 				lowerBound, upperBound)
 		}
@@ -1090,9 +1089,6 @@ func (m *Manager) AcquireByName(
 	// Check if we have cached an ID for this name.
 	descVersion, expiration := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
-		// if name == "d" {
-		// 	fmt.Println("we have a cached desc version for our db")
-		// }
 		if descVersion.GetModificationTime().LessEq(timestamp) {
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
@@ -1116,9 +1112,6 @@ func (m *Manager) AcquireByName(
 		}
 		return validateDescriptorForReturn(leasedDesc)
 	}
-	// if name == "d" {
-	// 	fmt.Println("we DON'T have a cached desc version for our db")
-	// }
 
 	// We failed to find something in the cache, or what we found is not
 	// guaranteed to be valid by the time we use it because we don't have a
@@ -1262,15 +1255,9 @@ func (m *Manager) Acquire(
 	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
 ) (LeasedDescriptor, error) {
 	for {
-		// if id == 104 {
-		// 	fmt.Println("seeing the id we want in acquire")
-		// }
 		t := m.findDescriptorState(id, true /*create*/)
 		desc, latest, err := t.findForTimestamp(ctx, timestamp)
 		if err == nil {
-			// if id == 104 {
-			// 	fmt.Println("found existing lease in acquire")
-			// }
 			// If the latest lease is nearly expired, ensure a renewal is queued.
 			if latest {
 				durationUntilExpiry := time.Duration(desc.getExpiration(ctx).WallTime - timestamp.WallTime)
@@ -1294,11 +1281,7 @@ func (m *Manager) Acquire(
 				return nil, err
 			}
 
-		case errors.Is(err, errReadOlderVersion) || id == 104:
-			//
-			// if id == 104 {
-			// 	fmt.Println("read older version for our guy")
-			// }
+		case errors.Is(err, errReadOlderVersion):
 			// Read old versions from the store. This can block while reading.
 			versions, errRead := m.readOlderVersionForTimestamp(ctx, id, timestamp)
 			if errRead != nil {

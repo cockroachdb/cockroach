@@ -463,29 +463,20 @@ func getEventDescriptorCached(
 	schemaTS hlc.Timestamp,
 	cache *cache.UnorderedCache,
 ) (*EventDescriptor, error) {
-	// breadcrumb: I don't think we return a timestamp from here associated with the descriptor.
 	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
-	// fmt.Println("in getEventDescriptorCached, idVer", idVer, "descriptor version", desc.GetVersion(), "familyID", family.ID)
-	// fmt.Println("cache", cache)
 	if v, ok := cache.Get(idVer); ok {
-		fmt.Println("!! cache hit with desc id", idVer.ID, "VERSION", idVer.Version, "familyID", idVer.FamilyID)
 		ed := v.(*EventDescriptor)
 		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
-			fmt.Println("in getEventDescriptorCached, using cached event descriptor with old TIMESTAMP", ed.SchemaTS)
-			// fmt.Println("in getEventDescriptorCached, using cached event descriptor with NEW TIMESTAMP (fix)", ed.SchemaTS)
-			// ed.SchemaTS = schemaTS
+			ed.SchemaTS = schemaTS
 			return ed, nil
 		}
 	}
 
-	// breadcrumb: here's where we get the timestamp for the descriptor.
 	ed, err := NewEventDescriptor(desc, family, includeVirtual, keyOnly, schemaTS)
 	if err != nil {
 		return nil, err
 	}
 	cache.Add(idVer, ed)
-	// spew.Dump(cache)
-	// fmt.Println("in getEventDescriptorCached, made and cached new event descriptor with timestamp", schemaTS)
 	return ed, nil
 }
 
@@ -589,9 +580,7 @@ func (d *eventDecoder) decodeKV(
 		return Row{}, err
 	}
 
-	// breadcrumb: here's where we get the event descriptor
 	ed, err := d.getEventDescriptor(d.desc, d.family, schemaTS)
-	// fmt.Println("in decodeKV, ed version", ed.Version, "ed timestamp", ed.SchemaTS)
 	if err != nil {
 		return Row{}, err
 	}

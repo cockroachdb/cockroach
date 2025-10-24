@@ -7,7 +7,6 @@ package changefeedccl
 
 import (
 	"context"
-	"fmt"
 	"hash"
 	"hash/crc32"
 	"runtime"
@@ -313,7 +312,6 @@ func (c *kvEventToRowConsumer) topicForEvent(eventMeta cdcevent.Metadata) (Topic
 
 // ConsumeEvent manages kv event lifetime: parsing, encoding and event being emitted to the sink.
 func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Event) error {
-	// fmt.Println(" --- start consume event ---")
 	if ev.Type() != kvevent.TypeKV {
 		return errors.AssertionFailedf("expected kv ev, got %v", ev.Type())
 	}
@@ -325,7 +323,6 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		return err
 	}
 
-	// breadcrumb
 	schemaTimestamp := ev.KV().Value.Timestamp
 	prevSchemaTimestamp := schemaTimestamp
 	keyOnly := c.details.Opts.KeyOnly()
@@ -335,7 +332,6 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		prevSchemaTimestamp = schemaTimestamp.Prev()
 	}
 
-	fmt.Println("->> consume event kv", ev.KV(), "key", ev.KV().Key, "value", ev.KV().Value, "timestamp", schemaTimestamp)
 	updatedRow, err := c.decoder.DecodeKV(ctx, ev.KV(), cdcevent.CurrentRow, schemaTimestamp, keyOnly)
 	if err != nil {
 		// Column families are stored contiguously, so we'll get
@@ -348,8 +344,6 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		}
 		return err
 	}
-
-	fmt.Println("consume event decoded row", updatedRow.DebugString(), "with ED timestamp", updatedRow.EventDescriptor.SchemaTS)
 
 	// Get prev value, if necessary.
 	prevRow, err := func() (cdcevent.Row, error) {
@@ -370,9 +364,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		return err
 	}
 
-	// breadcrumb: here's where we evaluate the expression. This can trigger the replan (which is important...)
 	if c.evaluator != nil {
-		// fmt.Println("in consume event, evaluating row with ed timestamp", updatedRow.EventDescriptor.SchemaTS)
 		updatedRow, err = c.evaluator.Eval(ctx, updatedRow, prevRow)
 		if err != nil {
 			return err
@@ -387,7 +379,6 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		}
 	}
 
-	// fmt.Println(" --- end consume event ---")
 	return c.encodeAndEmit(ctx, updatedRow, prevRow, schemaTimestamp, ev.DetachAlloc())
 }
 
