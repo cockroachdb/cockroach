@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -92,7 +91,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 			// The internal planner overrides the database to "system", here we
 			// change it back.
 			{
-				ec := p.(interface{ EvalContext() *eval.Context }).EvalContext()
+				ec := p.EvalContext()
 				require.NoError(b, ec.SessionAccessor.SetSessionVar(
 					ctx, "database", "defaultdb", false,
 				))
@@ -104,12 +103,11 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				}
 			}
 
-			rs := p.(resolver.SchemaResolver)
 			uon, err := tc.name.ToUnresolvedObjectName(0)
 			require.NoError(b, err)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				desc, _, err := resolver.ResolveExistingObject(ctx, rs, &uon, tc.flags)
+				desc, _, err := resolver.ResolveExistingObject(ctx, p, &uon, tc.flags)
 				require.NoError(b, err)
 				require.NotNil(b, desc)
 			}
@@ -185,7 +183,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 			// change it back.
 			var sp tree.SearchPath
 			{
-				ec := p.(interface{ EvalContext() *eval.Context }).EvalContext()
+				ec := p.EvalContext()
 				require.NoError(b, ec.SessionAccessor.SetSessionVar(
 					ctx, "database", "defaultdb", false,
 				))
@@ -198,10 +196,9 @@ func BenchmarkResolveFunction(b *testing.B) {
 				sp = &ec.SessionData().SearchPath
 			}
 
-			rs := p.(resolver.SchemaResolver)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				fd, err := rs.ResolveFunction(ctx, tree.MakeUnresolvedFunctionName(&tc.name), sp)
+				fd, err := p.ResolveFunction(ctx, tree.MakeUnresolvedFunctionName(&tc.name), sp)
 				require.NoError(b, err)
 				require.NotNil(b, fd)
 			}

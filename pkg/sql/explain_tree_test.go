@@ -56,7 +56,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			}
 
 			sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
-			internalPlanner, cleanup := NewInternalPlanner(
+			p, cleanup := NewInternalPlanner(
 				"test",
 				kv.NewTxn(ctx, db, s.NodeID()),
 				username.NodeUserName(),
@@ -65,7 +65,6 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				sd,
 			)
 			defer cleanup()
-			p := internalPlanner.(*planner)
 
 			ih := &p.instrumentation
 			ih.codec = execCfg.Codec

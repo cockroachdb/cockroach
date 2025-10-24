@@ -194,19 +194,18 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 	var func2 *funcdesc.Mutable
 
 	var planner sql.PlanHookState
+	var cleanup func()
 
 	srv := s.ApplicationLayer()
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	setupPlanner := func() {
-		plannerAsInterface, cleanup := sql.NewInternalPlanner(
+		planner, cleanup = sql.NewInternalPlanner(
 			opName,
 			srv.DB().NewTxn(ctx, "test-allocate-descriptor-rewrite"),
 			username.NodeUserName(),
 			&sql.MemoryMetrics{},
 			&execCfg,
 			sql.NewInternalSessionData(ctx, execCfg.Settings, opName))
-		defer cleanup()
-		planner = plannerAsInterface.(sql.PlanHookState)
 	}
 
 	// This is a fairly expensive call. Individual tests should only call it
@@ -235,6 +234,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		}
 
 		setupPlanner()
+		defer cleanup()
 
 		txn := planner.InternalSQLTxn()
 		col := txn.Descriptors()

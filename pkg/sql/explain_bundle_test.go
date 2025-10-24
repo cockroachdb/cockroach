@@ -1331,7 +1331,7 @@ func TestExplainBundleEnv(t *testing.T) {
 
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	sd := NewInternalSessionData(ctx, execCfg.Settings, "test")
-	internalPlanner, cleanup := NewInternalPlanner(
+	p, cleanup := NewInternalPlanner(
 		"test",
 		kv.NewTxn(ctx, db, srv.NodeID()),
 		username.NodeUserName(),
@@ -1340,7 +1340,6 @@ func TestExplainBundleEnv(t *testing.T) {
 		sd,
 	)
 	defer cleanup()
-	p := internalPlanner.(*planner)
 	c := makeStmtEnvCollector(ctx, p, s.InternalExecutor().(*InternalExecutor), "" /* requesterUsername */)
 
 	var sb strings.Builder

@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog/externalpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
@@ -80,7 +79,7 @@ func TestExtractIngestExternalCatalog(t *testing.T) {
 			)
 			defer close()
 
-			catalog, err = ExtractExternalCatalog(ctx, planner.(resolver.SchemaResolver), txn, col, false, tableNames...)
+			catalog, err = ExtractExternalCatalog(ctx, planner, txn, col, false, tableNames...)
 			return err
 		})
 		return catalog, err

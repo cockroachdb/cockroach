@@ -22,9 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -619,14 +617,14 @@ CREATE TABLE c (a INT, INDEX idx2(a));`,
 		)
 		defer cleanup()
 
-		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		ec := planner.EvalContext()
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 		// Put a good schema before our target schema to make sure schemas are looped through.
 		searchPath := ec.SessionData().SearchPath.GetPathArray()
 		ec.SessionData().SearchPath = ec.SessionData().SearchPath.UpdatePaths(append([]string{"test_sc"}, searchPath...))
 		schemaResolver := sql.NewSkippingCacheSchemaResolver(
-			col, ec.SessionDataStack, txn.KV(), planner.(scbuild.AuthorizationAccessor),
+			col, ec.SessionDataStack, txn.KV(), planner,
 		)
 
 		// Make sure we're looking at correct default db and search path.
@@ -703,11 +701,11 @@ CREATE INDEX baz_idx ON baz (s);
 		)
 		defer cleanup()
 
-		ec := planner.(interface{ EvalContext() *eval.Context }).EvalContext()
+		ec := planner.EvalContext()
 		// Set "defaultdb" as current database.
 		ec.SessionData().Database = "defaultdb"
 		schemaResolver := sql.NewSkippingCacheSchemaResolver(
-			col, ec.SessionDataStack, txn.KV(), planner.(scbuild.AuthorizationAccessor),
+			col, ec.SessionDataStack, txn.KV(), planner,
 		)
 		// Make sure we're looking at correct default db and search path.
 		require.Equal(t, "defaultdb", schemaResolver.CurrentDatabase())

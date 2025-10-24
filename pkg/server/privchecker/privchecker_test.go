@@ -72,7 +72,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 			&execCfg,
 			sql.NewInternalSessionData(ctx, execCfg.Settings, opName),
 		)
-		return p.(sql.AuthorizationAccessor), cleanup
+		return p, cleanup
 	}
 
 	underTest := privchecker.NewChecker(

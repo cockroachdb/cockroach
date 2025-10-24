@@ -453,7 +453,7 @@ func newTenantServer(
 			sqlServer.execCfg,
 			sql.NewInternalSessionData(ctx, sqlServer.execCfg.Settings, opName),
 		)
-		return p.(sql.AuthorizationAccessor), cleanup
+		return p, cleanup
 	})
 
 	// Create the authentication RPC server (login/logout).
