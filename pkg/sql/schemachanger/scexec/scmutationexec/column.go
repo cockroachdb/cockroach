@@ -78,16 +78,6 @@ func (i *immediateVisitor) addNewColumnType(
 	col.Type = op.ColumnType.Type
 	col.Nullable = true
 	col.Virtual = op.ColumnType.IsVirtual
-	// ComputeExpr is deprecated in favor of a separate element
-	// (ColumnComputeExpression). Any changes in this if block
-	// should also be made in the AddColumnComputeExpression function.
-	if !op.ColumnType.ElementCreationMetadata.In_24_3OrLater {
-		if ce := op.ColumnType.ComputeExpr; ce != nil {
-			expr := string(ce.Expr)
-			col.ComputeExpr = &expr
-			col.UsesSequenceIds = ce.UsesSequenceIDs
-		}
-	}
 	if !col.Virtual {
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]

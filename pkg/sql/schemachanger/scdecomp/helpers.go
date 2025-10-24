@@ -134,13 +134,10 @@ func newTypeT(t *types.T) *scpb.TypeT {
 	}
 }
 
-// NewElementCreationMetadata construct a `*scpb.ElementCreationMetadata`
-// based on `clusterVersion`.
+// NewElementCreationMetadata construct a `*scpb.ElementCreationMetadata` based
+// on `clusterVersion`.
 func NewElementCreationMetadata(
 	clusterVersion clusterversion.ClusterVersion,
 ) *scpb.ElementCreationMetadata {
-	return &scpb.ElementCreationMetadata{
-		In_23_1OrLater: true,
-		In_24_3OrLater: true,
-	}
+	return &scpb.ElementCreationMetadata{}
 }

@@ -81,23 +81,6 @@ func TestAllDescIDsAndContainsDescID(t *testing.T) {
 			},
 			expected: []catid.DescID{1, 2, 3},
 		},
-		{
-			name: "computed column",
-			input: &scpb.ColumnType{
-				TableID:  1,
-				ColumnID: 10,
-				TypeT: scpb.TypeT{
-					Type:          types.AnyElement,
-					ClosedTypeIDs: []catid.DescID{2, 3},
-				},
-				ComputeExpr: &scpb.Expression{
-					Expr:            "foo",
-					UsesTypeIDs:     []catid.DescID{3, 4},
-					UsesSequenceIDs: []catid.DescID{5, 6},
-				},
-			},
-			expected: []catid.DescID{1, 2, 3, 4, 5, 6},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.ElementsMatch(t, tc.expected, AllDescIDs(tc.input).Ordered())

@@ -58,23 +58,6 @@ func migrateDeprecatedFields(
 		}
 	}
 
-	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
-	if columnType := target.GetColumnType(); columnType != nil {
-		if columnType.ComputeExpr != nil {
-			newTarget := MakeTarget(
-				AsTargetStatus(target.TargetStatus),
-				&ColumnComputeExpression{
-					TableID:    columnType.TableID,
-					ColumnID:   columnType.ColumnID,
-					Expression: *columnType.ComputeExpr,
-				},
-				&target.Metadata,
-			)
-			newTargets = append(newTargets, newTarget)
-			columnType.ComputeExpr = nil
-			migrated = true
-		}
-	}
 	return
 }
 

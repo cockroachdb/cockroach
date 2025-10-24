@@ -148,11 +148,6 @@ func isWithTypeT(element scpb.Element) bool {
 
 func getExpression(element scpb.Element) (*scpb.Expression, error) {
 	switch e := element.(type) {
-	case *scpb.ColumnType:
-		if e == nil {
-			return nil, nil
-		}
-		return e.ComputeExpr, nil
 	case *scpb.ColumnComputeExpression:
 		if e == nil {
 			return nil, nil
