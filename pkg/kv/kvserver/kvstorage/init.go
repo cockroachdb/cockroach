@@ -144,6 +144,9 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	return err
 }
 
+type readKeyFn func(roachpb.Key, protoutil.Message) (bool, error)
+type scanRangeIDFn func(roachpb.RangeID, readKeyFn) error
+
 // IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such
 // as RaftHardStateKey, RangeTombstoneKey, and many others). Such keys could in
 // principle exist at any RangeID, and this helper efficiently discovers all the
@@ -152,11 +155,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 //
 // Iteration stops on the first error (and will pass through that error).
 func IterateIDPrefixKeys(
-	ctx context.Context,
-	reader storage.Reader,
-	keyFn func(roachpb.RangeID) roachpb.Key,
-	msg protoutil.Message,
-	f func(_ roachpb.RangeID) error,
+	ctx context.Context, reader storage.Reader, scanRangeID scanRangeIDFn,
 ) error {
 	// NB: Range-ID local keys have no versions and no intents.
 	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
@@ -167,40 +166,62 @@ func IterateIDPrefixKeys(
 	}
 	defer iter.Close()
 
-	for rangeID := roachpb.RangeID(1); ; {
-		rangeIDKey := keyFn(rangeID)
-		iter.SeekGE(storage.MakeMVCCMetadataKey(rangeIDKey))
+	iter.SeekGE(storage.MakeMVCCMetadataKey(keys.LocalRangeIDPrefix.AsRawKey()))
+	iterOK, iterErr := iter.Valid()
+	if !iterOK || iterErr != nil {
+		return iterErr
+	}
 
-		if ok, err := iter.Valid(); !ok || err != nil {
-			return err
+	getKeyFn := func(key roachpb.Key, msg protoutil.Message) (bool, error) {
+		if !iterOK || iterErr != nil {
+			return iterOK, iterErr
 		}
-
 		unsafeKey := iter.UnsafeKey().Key
-		if comp := unsafeKey.Compare(rangeIDKey); comp > 0 { // overshot
-			curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey)
-			if err != nil {
-				return err
+		comp := unsafeKey.Compare(key)
+		if comp < 0 {
+			iter.SeekGE(storage.MakeMVCCMetadataKey(key))
+			if iterOK, iterErr = iter.Valid(); !iterOK || iterErr != nil {
+				return iterOK, iterErr
 			}
-			rangeID = max(curRangeID, rangeID+1)
-			continue
-		} else if comp < 0 { // undershot
-			return errors.AssertionFailedf("SeekGE undershot key %s", rangeIDKey)
+			unsafeKey = iter.UnsafeKey().Key
+			comp = unsafeKey.Compare(key)
+			if comp < 0 {
+				return false, errors.AssertionFailedf("SeekGE undershot key %s", key)
+			}
 		}
-
-		// Found the key. Parse and report the value.
+		if comp > 0 {
+			return false, nil
+		}
+		// Found the key (comp == 0). Parse and report the value.
 		var meta enginepb.MVCCMetadata
 		if err := iter.ValueProto(&meta); err != nil {
-			return errors.Errorf("unable to unmarshal %s into MVCCMetadata", unsafeKey)
+			return false, errors.Errorf("unable to unmarshal %s into MVCCMetadata", unsafeKey)
 		}
 		val := roachpb.Value{RawBytes: meta.RawBytes}
 		if err := val.GetProto(msg); err != nil {
-			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey, msg)
+			return false, errors.Errorf("unable to unmarshal %s into %T", unsafeKey, msg)
 		}
-		if err := f(rangeID); err != nil {
-			return iterutil.Map(err)
-		}
-		rangeID++
+		return true, nil
 	}
+
+	for iterOK && iterErr == nil {
+		rangeID, _, _, _, err := keys.DecodeRangeIDKey(iter.UnsafeKey().Key)
+		if err != nil {
+			return err
+		} else if err := scanRangeID(rangeID, getKeyFn); err != nil {
+			return iterutil.Map(err)
+		} else if !iterOK || iterErr != nil {
+			return iterErr
+		}
+		newRangeID, _, _, _, err := keys.DecodeRangeIDKey(iter.UnsafeKey().Key)
+		if err != nil {
+			return err
+		} else if newRangeID <= rangeID {
+			iter.SeekGE(storage.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(rangeID + 1)))
+			iterOK, iterErr = iter.Valid()
+		}
+	}
+	return iterErr
 }
 
 // ReadStoreIdent reads the StoreIdent from the store.
@@ -460,41 +481,31 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
-	{
-		logEvery := log.Every(10 * time.Second)
-		var i int
-		var msg kvserverpb.RaftReplicaID
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RaftReplicaIDKey(rangeID)
-		}, &msg, func(rangeID roachpb.RangeID) error {
-			if logEvery.ShouldLog() && i > 0 { // only log if slow
-				log.KvExec.Infof(ctx, "loaded replica ID for %d/%d replicas", i, len(s))
-			}
-			i++
-			s.setReplicaID(rangeID, msg.ReplicaID)
-			return nil
-		}); err != nil {
-			return nil, err
+	logEvery := log.Every(10 * time.Second)
+	var i int
+	if err := IterateIDPrefixKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
+		if logEvery.ShouldLog() && i > 0 { // only log if slow
+			log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", i, len(s))
 		}
-		log.KvExec.Infof(ctx, "loaded replica ID for %d/%d replicas", len(s), len(s))
-
-		logEvery = log.Every(10 * time.Second)
-		i = 0
+		i++
 		var hs raftpb.HardState
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RaftHardStateKey(rangeID)
-		}, &hs, func(rangeID roachpb.RangeID) error {
-			if logEvery.ShouldLog() && i > 0 { // only log if slow
-				log.KvExec.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
-			}
-			i++
-			s.setHardState(rangeID, hs)
-			return nil
-		}); err != nil {
-			return nil, err
+		if ok, err := get(keys.RaftHardStateKey(id), &hs); err != nil {
+			return err
+		} else if ok {
+			s.setHardState(id, hs)
 		}
-		log.KvExec.Infof(ctx, "loaded Raft state for %d/%d replicas", len(s), len(s))
+		var rID kvserverpb.RaftReplicaID
+		if ok, err := get(keys.RaftReplicaIDKey(id), &rID); err != nil {
+			return err
+		} else if ok {
+			s.setReplicaID(id, rID.ReplicaID)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
+	log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", len(s), len(s))
+
 	sl := make([]Replica, 0, len(s))
 	for _, repl := range s {
 		sl = append(sl, repl)

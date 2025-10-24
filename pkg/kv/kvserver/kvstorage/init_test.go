@@ -100,13 +100,15 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	})
 
 	var seen []seenT
-	var tombstone kvserverpb.RangeTombstone
-	require.NoError(t, IterateIDPrefixKeys(
-		ctx, eng, keys.RangeTombstoneKey, &tombstone,
-		func(rangeID roachpb.RangeID) error {
-			seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
-			return nil
-		}))
+	require.NoError(t, IterateIDPrefixKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
+		var tombstone kvserverpb.RangeTombstone
+		if ok, err := get(keys.RangeTombstoneKey(id), &tombstone); err != nil {
+			return err
+		} else if ok {
+			seen = append(seen, seenT{rangeID: id, tombstone: tombstone})
+		}
+		return nil
+	}))
 
 	require.Equal(t, wanted, seen)
 }
