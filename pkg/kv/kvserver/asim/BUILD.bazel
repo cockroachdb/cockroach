@@ -25,6 +25,7 @@ go_library(
 
 go_test(
     name = "asim_test",
+    size = "large",
     srcs = ["asim_test.go"],
     deps = [
         ":asim",
