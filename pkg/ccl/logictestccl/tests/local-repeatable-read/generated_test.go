@@ -2079,6 +2079,13 @@ func TestRepeatableReadLogic_srfs(
 	runLogicTest(t, "srfs")
 }
 
+func TestRepeatableReadLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
+}
+
 func TestRepeatableReadLogic_statement_source(
 	t *testing.T,
 ) {

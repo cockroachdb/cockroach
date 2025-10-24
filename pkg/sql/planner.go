@@ -34,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
@@ -1106,4 +1108,11 @@ func (p *planner) ProcessVectorIndexFixups(
 		return err
 	}
 	return vi.ProcessFixups(ctx)
+}
+
+// InsertStatementHint is part of the eval.Planner interface.
+func (p *planner) InsertStatementHint(
+	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+) (int64, error) {
+	return hints.InsertHintIntoDB(ctx, p.InternalSQLTxn(), statementFingerprint, hint)
 }
