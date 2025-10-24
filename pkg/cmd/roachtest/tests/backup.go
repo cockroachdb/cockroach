@@ -65,10 +65,6 @@ const (
 	AssumeRoleGCSCredentials    = "GOOGLE_CREDENTIALS_ASSUME_ROLE"
 	AssumeRoleGCSServiceAccount = "GOOGLE_SERVICE_ACCOUNT"
 
-	AzureClientIDEnvVar     = "AZURE_CLIENT_ID"
-	AzureClientSecretEnvVar = "AZURE_CLIENT_SECRET"
-	AzureTenantIDEnvVar     = "AZURE_TENANT_ID"
-
 	// rows2TiB is the number of rows to import to load 2TB of data (when
 	// replicated).
 	rows2TiB   = 65_104_166

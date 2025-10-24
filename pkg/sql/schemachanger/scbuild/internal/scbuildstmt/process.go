@@ -227,3 +227,8 @@ var isV253Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMo
 var isV254Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
 	return activeVersion.IsActive(clusterversion.V25_4)
 }
+
+var isV261Active = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
+	// change the cluster version once V26_1 is created
+	return activeVersion.IsActive(clusterversion.V25_4)
+}
