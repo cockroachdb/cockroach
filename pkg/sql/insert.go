@@ -379,6 +379,10 @@ func (n *insertNode) rowsWritten() int64 {
 	return n.run.rowsAffected()
 }
 
+func (n *insertNode) indexRowsWritten() int64 {
+	return n.run.ti.indexRowsWritten
+}
+
 func (n *insertNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
 }

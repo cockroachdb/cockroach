@@ -297,6 +297,10 @@ func (u *updateNode) rowsWritten() int64 {
 	return u.run.rowsAffected()
 }
 
+func (u *updateNode) indexRowsWritten() int64 {
+	return u.run.tu.indexRowsWritten
+}
+
 func (u *updateNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
