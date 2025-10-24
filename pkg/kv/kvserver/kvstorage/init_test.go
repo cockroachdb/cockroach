@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,15 +31,11 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
 	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	defer eng.Close()
 
 	seed := randutil.NewPseudoSeed()
-	// const seed = -1666367124291055473
-	t.Logf("seed is %d", seed)
+	t.Logf("seed: %d", seed)
 	rng := rand.New(rand.NewSource(seed))
 
 	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
@@ -64,21 +58,16 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	// Write a number of keys that should be irrelevant to the iteration in this test.
 	for i := 0; i < rangeCount; i++ {
 		rangeID := rangeIDFn()
-
 		// Grab between one and all ops, randomly.
 		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
 			key := ops[opIdx](rangeID)
 			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
-			if _, err := storage.MVCCPut(
-				ctx,
-				eng,
-				key,
-				hlc.Timestamp{},
+			_, err := storage.MVCCPut(
+				ctx, eng, key, hlc.Timestamp{},
 				roachpb.MakeValueFromString("fake value for "+key.String()),
 				storage.MVCCWriteOptions{},
-			); err != nil {
-				t.Fatal(err)
-			}
+			)
+			require.NoError(t, err)
 		}
 	}
 
@@ -88,30 +77,22 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 	}
 
 	// Next, write the keys we're planning to see again.
-	var wanted []seenT
-	{
-		used := make(map[roachpb.RangeID]struct{})
-		for {
-			rangeID := rangeIDFn()
-			if _, ok := used[rangeID]; ok {
-				// We already wrote this key, so roll the dice again.
-				continue
-			}
-
-			tombstone := kvserverpb.RangeTombstone{
-				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
-			}
-
-			used[rangeID] = struct{}{}
-			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
-
-			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(ctx, eng, tombstone))
-
-			if len(wanted) >= rangeCount {
-				break
-			}
+	wanted := make([]seenT, 0, rangeCount)
+	for used := make(map[roachpb.RangeID]struct{}); len(wanted) < rangeCount; {
+		rangeID := rangeIDFn()
+		if _, ok := used[rangeID]; ok {
+			// We already wrote this key, so roll the dice again.
+			continue
 		}
+		used[rangeID] = struct{}{}
+
+		tombstone := kvserverpb.RangeTombstone{
+			NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
+		}
+		wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
+
+		t.Logf("writing tombstone at rangeID=%d", rangeID)
+		require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(ctx, eng, tombstone))
 	}
 
 	sort.Slice(wanted, func(i, j int) bool {
@@ -120,32 +101,12 @@ func TestIterateIDPrefixKeys(t *testing.T) {
 
 	var seen []seenT
 	var tombstone kvserverpb.RangeTombstone
+	require.NoError(t, IterateIDPrefixKeys(
+		ctx, eng, keys.RangeTombstoneKey, &tombstone,
+		func(rangeID roachpb.RangeID) error {
+			seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
+			return nil
+		}))
 
-	handleTombstone := func(rangeID roachpb.RangeID) error {
-		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
-		return nil
-	}
-
-	if err := IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
-		t.Fatal(err)
-	}
-	placeholder := seenT{
-		rangeID: roachpb.RangeID(9999),
-	}
-
-	if len(wanted) != len(seen) {
-		t.Errorf("wanted %d results, got %d", len(wanted), len(seen))
-	}
-
-	for len(wanted) < len(seen) {
-		wanted = append(wanted, placeholder)
-	}
-	for len(seen) < len(wanted) {
-		seen = append(seen, placeholder)
-	}
-
-	if diff := pretty.Diff(wanted, seen); len(diff) > 0 {
-		pretty.Ldiff(t, wanted, seen)
-		t.Fatal("diff(wanted, seen) is nonempty")
-	}
+	require.Equal(t, wanted, seen)
 }
