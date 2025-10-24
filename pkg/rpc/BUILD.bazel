@@ -41,6 +41,7 @@ go_library(
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/username",
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/ts/tspb",
