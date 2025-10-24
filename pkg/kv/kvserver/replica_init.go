@@ -242,8 +242,8 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 			store.TestingKnobs().DisableSyncLogWriteToss,
 	}
 
-	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
-	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
+	r.splitQueueThrottle = util.EveryMono(splitQueueThrottleDuration)
+	r.mergeQueueThrottle = util.EveryMono(mergeQueueThrottleDuration)
 
 	onTrip := func() {
 		telemetry.Inc(telemetryTripAsync)

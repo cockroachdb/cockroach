@@ -59,7 +59,7 @@ func SetDefaultAdminUIPort(c cluster.Cluster, opts *install.StartOpts) {
 // recently a given log message has been emitted so that it can determine
 // whether it's worth logging again.
 type EveryN struct {
-	util.EveryN
+	util.EveryN[time.Time]
 }
 
 // Every is a convenience constructor for an EveryN object that allows a log

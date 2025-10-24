@@ -1115,7 +1115,7 @@ const (
 )
 
 // slowLogEveryN rate-limits the logging of slow spans
-var slowLogEveryN = log.Every(slowSpanMaxFrequency)
+var slowLogEveryN = util.Every(slowSpanMaxFrequency)
 
 // jobState encapsulates changefeed job state.
 type jobState struct {
@@ -2432,7 +2432,7 @@ type saveRateConfig struct {
 // duration it takes to save progress.
 type saveRateLimiter struct {
 	config     saveRateConfig
-	warnEveryN util.EveryN
+	warnEveryN util.EveryN[time.Time]
 
 	clock timeutil.TimeSource
 

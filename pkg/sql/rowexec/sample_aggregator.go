@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -245,14 +245,14 @@ func (s *sampleAggregator) mainLoop(
 	}
 
 	var rowsProcessed uint64
-	progressUpdates := util.Every(SampleAggregatorProgressInterval)
+	progressUpdates := util.EveryMono(SampleAggregatorProgressInterval)
 	var da tree.DatumAlloc
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
 			if meta.SamplerProgress != nil {
 				rowsProcessed += meta.SamplerProgress.RowsProcessed
-				if progressUpdates.ShouldProcess(timeutil.Now()) {
+				if progressUpdates.ShouldProcess(crtime.NowMono()) {
 					// Periodically report fraction progressed and check that the job has
 					// not been paused or canceled.
 					var fractionCompleted float32

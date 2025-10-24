@@ -43,6 +43,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
