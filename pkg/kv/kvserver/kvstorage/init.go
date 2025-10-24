@@ -417,6 +417,7 @@ type Replica struct {
 	ReplicaID roachpb.ReplicaID
 	Desc      *roachpb.RangeDescriptor // nil for uninitialized Replica
 
+	tombstone kvserverpb.RangeTombstone
 	hardState raftpb.HardState // internal to kvstorage, see migration in LoadAndReconcileReplicas
 }
 
@@ -463,9 +464,12 @@ func (m replicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
 	return ent
 }
 
-func (m replicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) {
+func (m replicaMap) setReplicaIDAndTombstone(
+	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, ts kvserverpb.RangeTombstone,
+) {
 	ent := m.getOrMake(rangeID)
 	ent.ReplicaID = replicaID
+	ent.tombstone = ts
 	m[rangeID] = ent
 }
 
@@ -508,9 +512,16 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 		}
 	}
 
-	// Load replicas from disk based on their RaftReplicaID and HardState.
+	// Scan all RangeIDs present on the store, and load ReplicaID and HardState of
+	// those that correspond to an existing replica (uninitialized or initialized).
 	//
-	// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
+	// INVARIANT: a RangeID with no replica can only have a RangeTombstone key.
+	// INVARIANT: all replicas have a persisted ReplicaID.
+	// INVARIANT: ReplicaID >= RangeTombstone.NextReplicaID.
+	//
+	// NB: RangeIDs that only have a RangeTombstone are effectively skipped here
+	// as uninteresting. If a non-RangeTombstone key is found for a RangeID, there
+	// must be a replica of this range, so we load it and check invariants later.
 	//
 	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
 	// This leads to the general desire to validate the internal consistency of the
@@ -522,17 +533,28 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 			log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", i, len(s))
 		}
 		i++
+		// NB: the keys must be requested in sorted order here.
+		buf := keys.MakeRangeIDPrefixBuf(id)
+		var ts kvserverpb.RangeTombstone
+		if ok, err := get(buf.RangeTombstoneKey(), &ts); err != nil {
+			return err
+		} else if !ok {
+			ts = kvserverpb.RangeTombstone{} // just in case it was mutated
+		}
+		// NB: the keys must be requested in sorted order here.
 		var hs raftpb.HardState
-		if ok, err := get(keys.RaftHardStateKey(id), &hs); err != nil {
+		if ok, err := get(buf.RaftHardStateKey(), &hs); err != nil {
 			return err
 		} else if ok {
 			s.setHardState(id, hs)
 		}
+		// NB: the keys must be requested in sorted order here.
 		var rID kvserverpb.RaftReplicaID
-		if ok, err := get(keys.RaftReplicaIDKey(id), &rID); err != nil {
+		if ok, err := get(buf.RaftReplicaIDKey(), &rID); err != nil {
 			return err
 		} else if ok {
-			s.setReplicaID(id, rID.ReplicaID)
+			// NB: the tombstone can be empty.
+			s.setReplicaIDAndTombstone(id, rID.ReplicaID, ts)
 		}
 		return nil
 	}); err != nil {
@@ -578,6 +600,12 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		// INVARIANT: a Replica always has a replica ID.
 		if repl.ReplicaID == 0 {
 			return nil, errors.AssertionFailedf("no RaftReplicaID for %s", repl.Desc)
+		}
+		// INVARIANT: ReplicaID >= RangeTombstone.NextReplicaID.
+		if repl.ReplicaID < repl.tombstone.NextReplicaID {
+			return nil, errors.AssertionFailedf(
+				"r%d: RaftReplicaID %d survived RangeTombstone %+v",
+				repl.RangeID, repl.ReplicaID, repl.tombstone)
 		}
 
 		if repl.Desc != nil {
