@@ -101,7 +101,7 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) (jobErr erro
 	settingValues := &execCtx.ExecCfg().Settings.SV
 	persistCheckpointsMu := struct {
 		syncutil.Mutex
-		util.EveryN
+		util.EveryN[time.Time]
 	}{}
 	persistCheckpointsMu.EveryN = util.Every(ReconciliationJobCheckpointInterval.Get(settingValues))
 

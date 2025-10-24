@@ -339,7 +339,7 @@ type FetcherInitArgs struct {
 	TraceKV bool
 	// TraceKVEvery controls how often KVs are sampled for logging with traceKV
 	// enabled.
-	TraceKVEvery               *util.EveryN
+	TraceKVEvery               *util.EveryN[time.Time]
 	ForceProductionKVBatchSize bool
 	// SpansCanOverlap indicates whether the spans in a given batch can overlap
 	// with one another. If it is true, spans that correspond to the same row must

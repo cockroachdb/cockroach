@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/tokenbucket"
 )
 
@@ -236,7 +237,7 @@ func (e *elasticCPUGranter) hasWaitingRequests() bool {
 
 // computeUtilizationMetric is part of the elasticCPULimiter interface.
 func (e *elasticCPUGranter) computeUtilizationMetric() {
-	if !e.metrics.everyInterval.ShouldProcess(timeutil.Now()) {
+	if !e.metrics.everyInterval.ShouldProcess(crtime.NowMono()) {
 		return // nothing to do
 	}
 
@@ -343,7 +344,7 @@ type elasticCPUGranterMetrics struct {
 	OverLimitDuration      metric.IHistogram
 
 	Utilization      *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
-	everyInterval    util.EveryN
+	everyInterval    util.EveryN[crtime.Mono]
 	lastCumUsedNanos int64
 }
 
@@ -365,7 +366,7 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 		}),
 		Utilization:      metric.NewGaugeFloat64(elasticCPUGranterUtilization),
 		UtilizationLimit: metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
-		everyInterval:    util.Every(elasticCPUUtilizationMetricInterval),
+		everyInterval:    util.EveryMono(elasticCPUUtilizationMetricInterval),
 	}
 
 	metrics.MaxAvailableNanos.Inc(int64(runtime.GOMAXPROCS(0)) * time.Second.Nanoseconds())

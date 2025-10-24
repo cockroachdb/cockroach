@@ -14,7 +14,7 @@ import (
 
 func TestEveryN(t *testing.T) {
 	start := timeutil.Now()
-	en := EveryN{N: time.Minute}
+	en := EveryN[time.Time]{N: time.Minute}
 	testCases := []struct {
 		t        time.Duration // time since start
 		expected bool
