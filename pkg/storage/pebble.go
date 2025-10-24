@@ -444,6 +444,14 @@ var concurrentDownloadCompactions = settings.RegisterIntSetting(
 	settings.IntWithMinimum(1),
 )
 
+var tombstoneDenseCompactionThreshold = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"storage.tombstone_dense_compaction_threshold",
+	"percentage of tombstone-dense data blocks that trigger a compaction (0 = disabled)",
+	10, // 10%
+	settings.IntInRange(0, 100),
+)
+
 // ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
 // cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
 // to guarantee snapshot-like semantics.
@@ -1227,6 +1235,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		cfg.opts.MaxConcurrentDownloads = func() int {
 			return int(concurrentDownloadCompactions.Get(&cfg.settings.SV))
 		}
+	}
+	cfg.opts.Experimental.TombstoneDenseCompactionThreshold = func() float64 {
+		return 0.01 * float64(tombstoneDenseCompactionThreshold.Get(&cfg.settings.SV))
 	}
 
 	cfg.opts.EnsureDefaults()
