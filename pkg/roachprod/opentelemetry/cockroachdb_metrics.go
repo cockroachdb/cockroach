@@ -1893,6 +1893,8 @@ var cockroachdbMetrics = map[string]string{
 	"sql_statements_rows_read_count_internal":                     "sql.statements.rows_read.count.internal",
 	"sql_statements_bytes_read_count":                             "sql.statements.bytes_read.count",
 	"sql_statements_bytes_read_count_internal":                    "sql.statements.bytes_read.count.internal",
+	"sql_statements_index_rows_written_count":                     "sql.statements.index_rows_written.count",
+	"sql_statements_index_rows_written_count_internal":            "sql.statements.index_rows_written.count.internal",
 	"sql_stats_activity_update_latency":                           "sql.stats.activity.update.latency",
 	"sql_stats_activity_update_latency_bucket":                    "sql.stats.activity.update.latency.bucket",
 	"sql_stats_activity_update_latency_count":                     "sql.stats.activity.update.latency.count",

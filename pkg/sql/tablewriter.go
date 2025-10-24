@@ -57,15 +57,20 @@ type tableWriterBase struct {
 	// maxBatchByteSize determines the maximum number of key and value bytes in
 	// the KV batch for a mutation operation.
 	maxBatchByteSize int
-	// currentBatchSize is the size of the current batch. It is updated on
-	// every row() call and is reset once a new batch is started.
+	// currentBatchSize is the size of the current SQL-level batch (i.e. not the
+	// KV-level batch). It is updated on every row() call and is reset once a new
+	// batch is started.
 	currentBatchSize int
 	// lastBatchSize is the size of the last batch. It is set to the value of
 	// currentBatchSize once the batch is flushed or finalized.
 	lastBatchSize int
-	// rowsWritten tracks the number of rows written by this tableWriterBase so
-	// far.
+	// rowsWritten tracks the number of primary index rows written by this
+	// tableWriterBase so far. This counter includes unsuccessful writes (e.g.
+	// those performed by swap mutations in the event of a nonexistent row).
 	rowsWritten int64
+	// indexRowsWritten tracks the number of primary and secondary index rows
+	// written by this tableWriterBase so far. It is always >= rowsWritten.
+	indexRowsWritten int64
 	// rowsWrittenLimit if positive indicates that
 	// `transaction_rows_written_err` is enabled. The limit will be checked in
 	// finalize() before deciding whether it is safe to auto commit (if auto
@@ -146,10 +151,13 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.tryDoResponseAdmission(ctx); err != nil {
 		return err
 	}
-	tb.initNewBatch()
+	// The mutation operators add one request to the KV batch for each index
+	// entry that's written.
+	tb.indexRowsWritten += int64(len(tb.b.Requests()))
 	tb.rowsWritten += int64(tb.currentBatchSize)
 	tb.lastBatchSize = tb.currentBatchSize
 	tb.currentBatchSize = 0
+	tb.initNewBatch()
 	return nil
 }
 
@@ -157,6 +165,7 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
 	// for response processing when finalizing.
+	tb.indexRowsWritten += int64(len(tb.b.Requests()))
 	tb.rowsWritten += int64(tb.currentBatchSize)
 	if tb.autoCommit == autoCommitEnabled &&
 		// We can only auto commit if the rows written guardrail is disabled or
