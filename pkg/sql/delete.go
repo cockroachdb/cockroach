@@ -251,6 +251,10 @@ func (d *deleteNode) rowsWritten() int64 {
 	return d.run.rowsAffected()
 }
 
+func (d *deleteNode) indexRowsWritten() int64 {
+	return d.run.td.indexRowsWritten
+}
+
 func (d *deleteNode) returnsRowsAffected() bool {
 	return !d.run.rowsNeeded
 }

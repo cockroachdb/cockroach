@@ -540,6 +540,10 @@ func (n *insertFastPathNode) rowsWritten() int64 {
 	return n.run.rowsAffected()
 }
 
+func (n *insertFastPathNode) indexRowsWritten() int64 {
+	return n.run.ti.indexRowsWritten
+}
+
 func (n *insertFastPathNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
 }
