@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -70,7 +69,7 @@ var (
 		settings.ApplicationLevel,
 		"bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled",
 		"if set, kvserver will compute an accurate stats diff for every addsstable request",
-		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", false),
+		true,
 	)
 
 	sstBatcherElasticCPUControlEnabled = settings.RegisterBoolSetting(
@@ -583,14 +582,20 @@ func (b *SSTBatcher) flushIfNeeded(ctx context.Context, nextKey roachpb.Key) err
 		// That said, only do this if we are only moderately over the flush target;
 		// if we are subtantially over the limit, just flush the partial row as we
 		// cannot buffer indefinitely.
+
+		prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
+		nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
+
+		// An error decoding either key implies it is not a valid row key and thus
+		// not the same row for our purposes; we don't care what the error is.
+		midKey := prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow)
 		if b.batch.sstWriter.DataSize < 2*flushLimit {
-			prevRow, prevErr := keys.EnsureSafeSplitKey(b.batch.endKey)
-			nextRow, nextErr := keys.EnsureSafeSplitKey(nextKey)
-			if prevErr == nil && nextErr == nil && bytes.Equal(prevRow, nextRow) {
-				// An error decoding either key implies it is not a valid row key and thus
-				// not the same row for our purposes; we don't care what the error is.
+			if midKey {
 				return nil // keep going to row boundary.
 			}
+		}
+		if midKey {
+			log.Dev.Infof(ctx, "flushing sst mid key %s due to size", b.batch.endKey)
 		}
 
 		if b.mustSyncBeforeFlush {
