@@ -153,19 +153,19 @@ query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----
 Scan /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
-Scan /Table/106/1/7/0, /Table/106/1/11/0, /Table/106/1/8/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0, /Table/106/1/12/0, /Table/106/1/3/0, /Table/106/1/9/0, /Table/106/1/4/0, /Table/106/1/6/0
+Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a;
 ----
 Scan /Table/106/2/{???-"a"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
-Scan /Table/106/1/7/0, /Table/106/1/11/0, /Table/106/1/8/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0, /Table/106/1/12/0, /Table/106/1/3/0, /Table/106/1/9/0, /Table/106/1/4/0, /Table/106/1/6/0
+Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a[*][*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*][*].b') ORDER BY a;
 ----
 Scan /Table/106/2/{???-"a"/Arr/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
-Scan /Table/106/1/7/0, /Table/106/1/11/0, /Table/106/1/8/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0, /Table/106/1/12/0, /Table/106/1/3/0, /Table/106/1/9/0, /Table/106/1/4/0, /Table/106/1/6/0
+Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b[*].c') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b[*].c') ORDER BY a;
@@ -234,7 +234,7 @@ query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----
 Scan /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
-Scan /Table/106/1/7/0, /Table/106/1/11/0, /Table/106/1/8/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0, /Table/106/1/12/0, /Table/106/1/3/0, /Table/106/1/9/0, /Table/106/1/4/0, /Table/106/1/6/0
+Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.b'), jsonb_path_query(b, '$.a.d') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') AND jsonb_path_exists(b, '$.a.d') ORDER BY a;
