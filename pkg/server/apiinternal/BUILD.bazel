@@ -17,6 +17,7 @@ go_library(
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/srverrors",
+        "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/ts/tspb",
         "//pkg/util/httputil",

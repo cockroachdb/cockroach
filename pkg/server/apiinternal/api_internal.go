@@ -7,6 +7,7 @@ package apiinternal
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -124,6 +126,7 @@ func createHandler[TReq, TResp protoutil.Message](
 	}
 	return func(w http.ResponseWriter, req *http.Request) {
 		newReq := reflect.New(msgType.Elem()).Interface().(TReq)
+		telemetry.Inc(getServerEndpointCounter(msgName))
 		if err := executeRPC(w, req, rpcMethod, newReq); err != nil {
 			ctx := req.Context()
 			writeHTTPError(ctx, w, req, err)
@@ -293,4 +296,11 @@ func selectContentType(contentTypes []string) string {
 		}
 	}
 	return httputil.JSONContentType
+}
+
+// getServerEndpointCounter returns a telemetry Counter corresponding to the
+// given RPC method.
+func getServerEndpointCounter(method string) telemetry.Counter {
+	const counterPrefix = "http.drpc"
+	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
 }
