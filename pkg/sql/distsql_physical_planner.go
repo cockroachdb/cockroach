@@ -1020,11 +1020,11 @@ type PlanningCtx struct {
 	// query).
 	subOrPostQuery bool
 
-	// mustUseLeafTxn, if set, indicates that this PlanningCtx is used to handle
+	// flowConcurrency will be non-zero when this PlanningCtx is used to handle
 	// one of the plans that will run in parallel with other plans. As such, the
 	// DistSQL planner will need to use the LeafTxn (even if it's not needed
 	// based on other "regular" factors).
-	mustUseLeafTxn bool
+	flowConcurrency distsql.ConcurrencyKind
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
