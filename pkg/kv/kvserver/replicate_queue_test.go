@@ -1091,7 +1091,6 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
@@ -1823,7 +1822,6 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
