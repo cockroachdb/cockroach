@@ -62,7 +62,6 @@ WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street';
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -79,7 +78,6 @@ WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street' LIMIT 1;
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -106,7 +104,6 @@ WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street' LIMIT 2;
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -128,7 +125,6 @@ WHERE home_region IN ('ap':::STRING, 'ca':::STRING, 'us':::STRING)
   AND address = '221B Baker Street';
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │

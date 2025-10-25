@@ -257,7 +257,6 @@ query T
 EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -735,7 +734,6 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -805,7 +803,6 @@ query T
 EXPLAIN UPSERT INTO t VALUES (3, 3, 3, 3, 3, 3, 3)
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
