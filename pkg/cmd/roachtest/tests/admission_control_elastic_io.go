@@ -85,7 +85,7 @@ func registerElasticIO(r registry.Registry) {
 				return nil
 			})
 			m.Go(func(ctx context.Context) error {
-				const subLevelMetric = "storage_l0_sublevels"
+				const ioOverloadMetric = "admission_io_overload"
 				getMetricVal := func(metricName string) (float64, error) {
 					point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), metricName)
 					if err != nil {
@@ -110,16 +110,16 @@ func registerElasticIO(r registry.Registry) {
 				}
 				now := timeutil.Now()
 				endTime := now.Add(duration)
-				// We typically see fluctuations from 1 to 5 sub-levels because the
-				// elastic IO token logic gives 1.25*compaction-bandwidth tokens at 1
-				// sub-level and 0.75*compaction-bandwidth at 5 sub-levels, with 5
-				// sub-levels being very rare. We leave some breathing room and pick a
-				// threshold of greater than 7 to fail the test. If elastic tokens are
-				// not working, the threshold of 7 will be easily breached, since
-				// regular tokens allow sub-levels to exceed 10.
-				const subLevelThreshold = 7
-				const sampleCountForL0Sublevel = 12
-				var l0SublevelCount []float64
+				// We typically see fluctuations from 0.05 to 0.25 IO overload score
+				// because the elastic IO token logic gives 1.25*compaction-bandwidth
+				// tokens at 0.05 score and 0.75*compaction-bandwidth at 0.25 score,
+				// with 0.25 score being very rare. We leave some breathing room and
+				// pick a threshold of greater than 0.35 to fail the test. If elastic
+				// tokens are not working, the threshold of 0.35 will be easily
+				// breached, since regular tokens allow the score to exceed 0.5.
+				const ioOverloadThreshold = 0.35
+				const sampleCountForIOOverload = 12
+				var ioOverloadScore []float64
 				// Sleep initially for stability to be achieved, before measuring.
 				time.Sleep(5 * time.Minute)
 				for {
@@ -129,17 +129,19 @@ func registerElasticIO(r registry.Registry) {
 					default:
 					}
 					time.Sleep(10 * time.Second)
-					val, err := getMetricVal(subLevelMetric)
+					val, err := getMetricVal(ioOverloadMetric)
 					if err != nil {
 						continue
 					}
-					l0SublevelCount = append(l0SublevelCount, val)
+					ioOverloadScore = append(ioOverloadScore, val)
 					// We want to use the mean of the last 2m of data to avoid short-lived
 					// spikes causing failures.
-					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-						latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
-						if latestSampleMeanL0Sublevels > subLevelThreshold {
-							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+					if len(ioOverloadScore) >= sampleCountForIOOverload {
+						latestSampleMeanIOOverloadScore :=
+							roachtestutil.GetMeanOverLastN(sampleCountForIOOverload, ioOverloadScore)
+						if latestSampleMeanIOOverloadScore > ioOverloadThreshold {
+							t.Fatalf("io-overload score mean %f over last %d iterations exceeded threshold",
+								latestSampleMeanIOOverloadScore, sampleCountForIOOverload)
 						}
 					}
 					if timeutil.Now().After(endTime) {
