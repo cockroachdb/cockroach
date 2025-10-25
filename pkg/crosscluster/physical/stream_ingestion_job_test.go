@@ -742,3 +742,80 @@ func TestPhysicalReplicationGatewayRoute(t *testing.T) {
 	progress := jobutils.GetJobProgress(t, systemDB, jobspb.JobID(jobID))
 	require.Empty(t, progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest.PartitionConnUris)
 }
+
+func TestPhysicalReplicationStreamOfSystemTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test verifies that the span reconciliation job on a promoted standby
+	// tenant that was streaming from a system tenant is able to make progress.
+	// See https://github.com/cockroachdb/cockroach/issues/155444 for more
+	// details.
+	ctx := context.Background()
+	primarySrv, primaryDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer primarySrv.Stopper().Stop(ctx)
+	primarySQL := sqlutils.MakeSQLRunner(primaryDB)
+
+	standbySrv, standbyDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer standbySrv.Stopper().Stop(ctx)
+	standbySysSQL := sqlutils.MakeSQLRunner(standbyDB)
+
+	primarySQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	standbySysSQL.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+
+	primarySQL.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY)")
+
+	primaryURL := replicationtestutils.GetReplicationURI(t, primarySrv, standbySrv, serverutils.User(username.RootUser))
+	standbySysSQL.Exec(t, "CREATE VIRTUAL CLUSTER standby FROM REPLICATION OF system ON $1", primaryURL.String())
+	_, consumerJobID := replicationtestutils.GetStreamJobIds(t, ctx, standbySysSQL, roachpb.TenantName("standby"))
+	replicationtestutils.WaitUntilStartTimeReached(t, standbySysSQL, jobspb.JobID(consumerJobID))
+
+	standbySysSQL.Exec(t, "ALTER TENANT standby COMPLETE REPLICATION TO LATEST")
+	jobutils.WaitForJobToSucceed(t, standbySysSQL, jobspb.JobID(consumerJobID))
+
+	standbyTenantSrv, standbyTenantConn := serverutils.StartSharedProcessTenant(
+		t, standbySrv, base.TestSharedProcessTenantArgs{TenantName: "standby"},
+	)
+	standbyTenantSQL := sqlutils.MakeSQLRunner(standbyTenantConn)
+	// We speed up the span config reconciliation job manager so that it will
+	// quickly detect the missing reconciliation job on the tenant (the previous
+	// one was canceled as it was replicated) and spin up a new one.
+	standbySysSQL.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval = '10ms'")
+
+	registry := standbyTenantSrv.JobRegistry().(*jobs.Registry)
+	// We nudge the adoption queue to pick up the replicated stream producer job
+	// so that it will be dropped.
+	registry.TestingNudgeAdoptionQueue()
+
+	now := standbySrv.Clock().Now()
+	testutils.SucceedsSoon(t, func() error {
+		var spanConfigJobID jobspb.JobID
+		rows := standbyTenantSQL.Query(
+			t, `SELECT id FROM system.jobs WHERE job_type = 'AUTO SPAN CONFIG RECONCILIATION' AND status = 'running'`,
+		)
+		defer rows.Close()
+		if !rows.Next() {
+			return errors.New("no running span config reconciliation job found")
+		}
+		if err := rows.Scan(&spanConfigJobID); err != nil {
+			return err
+		}
+		spanConfigJob, err := registry.LoadJob(ctx, spanConfigJobID)
+		require.NoError(t, err)
+		spanConfigProg := spanConfigJob.Progress().
+			Details.(*jobspb.Progress_AutoSpanConfigReconciliation).
+			AutoSpanConfigReconciliation
+
+		if spanConfigProg.Checkpoint.Less(now) {
+			return errors.Newf(
+				"waiting for span config reconciliation job to checkpoint past %v, at %v",
+				now, spanConfigProg.Checkpoint,
+			)
+		}
+		return nil
+	})
+}

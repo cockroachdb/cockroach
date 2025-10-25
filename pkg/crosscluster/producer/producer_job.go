@@ -133,6 +133,23 @@ func (p *producerJobResumer) Resume(ctx context.Context, execCtx interface{}) er
 	jobExec := execCtx.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
 
+	// If the source tenant of a PCR stream is the system tenant, then the
+	// producer job will also be copied to the destination tenant, along with the
+	// associated PTS. After cutover, this blocks span config reconciliation since
+	// a tenant cannot lay a PTS on spans that another tenant owns. The producer
+	// job of course is not needed on the destination tenant, so we check for a
+	// mismatched cluster ID here and fast-exit the job.
+	if p.job.Payload().CreationClusterID != execCfg.NodeInfo.LogicalClusterID() {
+		log.Dev.Infof(
+			ctx, "replication stream %d skipping resume on cluster %s (belongs to cluster %s)",
+			p.job.ID(), execCfg.NodeInfo.LogicalClusterID(), p.job.Payload().CreationClusterID,
+		)
+		if err := p.releaseProtectedTimestamp(ctx, execCfg); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	// Fire the timer immediately to start an initial progress check
 	p.timer.Reset(0)
 	for {
