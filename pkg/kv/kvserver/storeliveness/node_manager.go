@@ -6,6 +6,7 @@
 package storeliveness
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -23,19 +24,30 @@ type NodeContainer struct {
 	Transport       *Transport
 	Knobs           *TestingKnobs
 	HeartbeatTicker *timeutil.BroadcastTicker
+
+	HeartbeatCoordinator *HeartbeatCoordinator
 }
 
 // NewNodeContainer creates a new NodeContainer.
 func NewNodeContainer(
-	stopper *stop.Stopper, options Options, transport *Transport, knobs *TestingKnobs,
+	stopper *stop.Stopper,
+	options Options,
+	transport *Transport,
+	knobs *TestingKnobs,
+	settings *cluster.Settings,
 ) *NodeContainer {
 	ticker := timeutil.NewBroadcastTicker(options.HeartbeatInterval)
 	stopper.AddCloser(stop.CloserFn(ticker.Stop))
+
+	// Create HeartbeatCoordinator
+	coordinator := NewHeartbeatCoordinator(transport, options.HeartbeatInterval, stopper, settings)
+
 	return &NodeContainer{
-		Options:         options,
-		Transport:       transport,
-		Knobs:           knobs,
-		HeartbeatTicker: ticker,
+		Options:              options,
+		Transport:            transport,
+		Knobs:                knobs,
+		HeartbeatTicker:      ticker,
+		HeartbeatCoordinator: coordinator,
 	}
 }
 

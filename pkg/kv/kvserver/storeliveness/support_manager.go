@@ -31,10 +31,32 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var HeartbeatSmearDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_smear_duration",
+	"duration over which heartbeat messages are smeared to prevent goroutine spikes; "+
+		"all heartbeats for all nodes are sent within this window at the start of each tick",
+	10*time.Millisecond,
+)
+
+var HeartbeatBatchingDuration = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_batching_duration",
+	"duration over which heartbeat messages are batched to per-node destination queues;",
+	10*time.Millisecond,
+)
+
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
 	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
+}
+
+// BatchMessageSender extends MessageSender with the ability to send batches directly.
+// This is used by HeartbeatCoordinator to send smeared batches.
+type BatchMessageSender interface {
+	MessageSender
+	SendBatchDirect(ctx context.Context, nodeID roachpb.NodeID, messages []slpb.Message) bool
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -301,18 +323,32 @@ func (sm *SupportManager) maybeAddStores(ctx context.Context) {
 func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	// If Store Liveness is not enabled, don't send heartbeats.
 	if !sm.SupportFromEnabled(ctx) {
+		// Clear any pending heartbeats in the coordinator
+		heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
+		heartbeatCoordinator.ClearQueues()
 		return
 	}
 	if sm.knobs != nil && sm.knobs.DisableHeartbeats != nil && sm.knobs.DisableHeartbeats.Load() == sm.storeID {
+		// Clear any pending heartbeats in the coordinator
+		heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
+		heartbeatCoordinator.ClearQueues()
 		return
 	}
 	if sm.knobs != nil && sm.knobs.DisableAllHeartbeats != nil && sm.knobs.DisableAllHeartbeats.Load() {
+		// Clear any pending heartbeats in the coordinator
+		heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
+		heartbeatCoordinator.ClearQueues()
 		return
 	}
 	rsfu := sm.requesterStateHandler.checkOutUpdate()
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
+
+	// Clear any pending heartbeats before attempting to write
+	heartbeatCoordinator := sm.sender.(*HeartbeatCoordinator)
+	heartbeatCoordinator.ClearQueues()
+
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
@@ -320,18 +356,16 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	}
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
-	// Send heartbeats to each remote store.
-	successes := 0
-	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(ctx, msg); sent {
-			successes++
-		} else {
-			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
-		}
-	}
+	// Enqueue heartbeats
+	successes := heartbeatCoordinator.Enqueue(heartbeats)
+
+	// Signal coordinator (non-blocking)
+	heartbeatCoordinator.Signal()
+
+	// Update metrics immediately (actual sending happens async)
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
-	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
+	log.KvExec.VInfof(ctx, 2, "enqueued heartbeats to %d stores", successes)
 }
 
 // withdrawSupport delegates support withdrawal to supporterStateHandler.
