@@ -303,6 +303,7 @@ func TestAutoPartialStatsJobDescription(t *testing.T) {
 	// Disable automatic statistics collection.
 	sqlRunner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`)
 	sqlRunner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.enabled = false;`)
+	sqlRunner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_stats_job_auto_cleanup.enabled = false;`)
 
 	// Create a test table.
 	sqlRunner.Exec(t, `CREATE TABLE test (id INT PRIMARY KEY, value INT);`)
