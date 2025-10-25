@@ -233,13 +233,21 @@ func (b *bank) Ops(
 		hists := reg.GetHandle()
 
 		workerFn := func(ctx context.Context) error {
+			if b.rows == 0 {
+				return nil
+			}
+
 			tableIdx := rng.IntN(b.tables)
 			updateStmt := updateStmts[tableIdx]
 
-			from := rng.IntN(b.rows)
-			to := rng.IntN(b.rows - 1)
-			for from == to && b.rows != 1 {
+			from := 0
+			to := 0
+			if b.rows != 1 {
+				from = rng.IntN(b.rows)
 				to = rng.IntN(b.rows - 1)
+				for from == to {
+					to = rng.IntN(b.rows - 1)
+				}
 			}
 			amount := rand.IntN(maxTransfer)
 			start := timeutil.Now()
