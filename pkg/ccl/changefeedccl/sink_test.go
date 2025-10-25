@@ -710,6 +710,22 @@ func TestSaramaConfigOptionParsing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, sarama.KafkaVersion{}, saramaCfg.Version)
 	})
+
+	t.Run("apply parses ProducerLinger", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"ProducerLinger": "10ms"}`)
+
+		cfg, err := getSaramaConfig(opts)
+		require.NoError(t, err)
+		require.Equal(t, time.Duration(cfg.ProducerLinger), 10*time.Millisecond)
+	})
+
+	t.Run("apply errors if ProducerLinger is invalid", func(t *testing.T) {
+		opts := changefeedbase.SinkSpecificJSONConfig(`{"ProducerLinger": "invalid"}`)
+
+		_, err := getSaramaConfig(opts)
+		require.Error(t, err)
+	})
+
 	t.Run("apply errors if version is invalid", func(t *testing.T) {
 		opts := changefeedbase.SinkSpecificJSONConfig(`{"version": "invalid"}`)
 
