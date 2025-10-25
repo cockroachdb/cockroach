@@ -59,12 +59,11 @@ func TestWalk(t *testing.T) {
 			}
 		}(),
 		func() testCase {
-			v := scpb.ColumnType{ComputeExpr: &scpb.Expression{}, TypeT: scpb.TypeT{Type: types.Timestamp}}
+			v := scpb.ColumnType{TypeT: scpb.TypeT{Type: types.Timestamp}}
 			return testCase{
-				elem:           &v,
-				expIDs:         []*catid.DescID{&v.TableID},
-				expTypes:       []*types.T{types.Timestamp},
-				expExpressions: []*catpb.Expression{&v.ComputeExpr.Expr},
+				elem:     &v,
+				expIDs:   []*catid.DescID{&v.TableID},
+				expTypes: []*types.T{types.Timestamp},
 			}
 		}(),
 		func() testCase {
