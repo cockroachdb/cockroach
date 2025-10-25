@@ -215,8 +215,10 @@ func sanitizeVersionForBackup(v *clusterupgrade.Version) string {
 // hasInternalSystemJobs returns true if the cluster is expected to
 // have the `crdb_internal.system_jobs` vtable. If so, it should be
 // used instead of `system.jobs` when querying job status.
-func hasInternalSystemJobs(ctx context.Context, rng *rand.Rand, db *gosql.DB) (bool, error) {
-	cv, err := clusterupgrade.ClusterVersion(ctx, db)
+func hasInternalSystemJobs(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, db *gosql.DB,
+) (bool, error) {
+	cv, err := clusterupgrade.ClusterVersion(ctx, l, db)
 	if err != nil {
 		return false, fmt.Errorf("failed to query cluster version: %w", err)
 	}
@@ -1288,7 +1290,7 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 		}
 	}
 	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
-	if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
 		return fmt.Errorf("failed descriptor check: %w", err)
 	}
 
@@ -2210,7 +2212,7 @@ func (mvb *mixedVersionBackup) createBackupCollection(
 	backupNamePrefix := mvb.backupNamePrefix(h, label)
 	n, db := h.System.RandomDB(rng)
 	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+	internalSystemJobs, err := hasInternalSystemJobs(ctx, l, rng, db)
 	if err != nil {
 		return err
 	}
@@ -2741,7 +2743,7 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 
 	n, db := h.System.RandomDB(rng)
 	l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-	internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+	internalSystemJobs, err := hasInternalSystemJobs(ctx, l, rng, db)
 	if err != nil {
 		return err
 	}
@@ -2822,7 +2824,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 
 			n, db := h.System.RandomDB(rng)
 			l.Printf("checking existence of crdb_internal.system_jobs via node %d", n)
-			internalSystemJobs, err := hasInternalSystemJobs(ctx, rng, db)
+			internalSystemJobs, err := hasInternalSystemJobs(ctx, l, rng, db)
 			if err != nil {
 				restoreErrors = append(restoreErrors, fmt.Errorf("error checking for internal system jobs: %w", err))
 				return
