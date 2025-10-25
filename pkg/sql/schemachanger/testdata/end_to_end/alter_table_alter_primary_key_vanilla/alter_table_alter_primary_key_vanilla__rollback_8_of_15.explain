@@ -21,17 +21,17 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 17}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 17}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 17}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx-), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx-), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 8 (t_i_idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 8 (t_i_idx-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 9, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 9}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 9}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx-), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx-), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 10 (t_j_idx-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 11, ConstraintID: 5, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 11}
-      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx-), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
+      │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx-), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (k), IndexID: 12 (idx-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 12 (idx-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 13, ConstraintID: 7, SourceIndexID: 1 (t_pkey+)}
@@ -69,13 +69,13 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 16 (t_pkey-), ConstraintID: 10, TemporaryIndexID: 17, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 16 (t_pkey-)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 17}
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx-), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 1}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 8 (t_i_idx-), ConstraintID: 2, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 2, RecreateTargetIndexID: 16}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 8 (t_i_idx-)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 9}
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx-), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 4, RecreateTargetIndexID: 1}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 10 (t_j_idx-), ConstraintID: 4, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 4, RecreateTargetIndexID: 16}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 10 (t_j_idx-)}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 11}
-      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx-), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 6, RecreateTargetIndexID: 1}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 12 (idx-), ConstraintID: 6, TemporaryIndexID: 13, SourceIndexID: 1 (t_pkey+), RecreateSourceIndexID: 6, RecreateTargetIndexID: 16}
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 12 (idx-)}
       │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 13}
       │    └── 16 Mutation operations
