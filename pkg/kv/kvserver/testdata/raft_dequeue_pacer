@@ -49,19 +49,19 @@ enqueue range=1 msg=ma1 wait-for-start-wait
 engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
 start engine.TryWaitForMemTableStallHeadroom(doWait=true)
 raftReceiveQueue.Append() => shouldQ=false size=70 appended=true
-queue state: r1 other 0
+queue state: r1 skip-paused 0
 pacer state:
  lastHeadroomSampleTime: 20ms
- waiting queues (rangeID, decision, accounting-bytes): (r1 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
 
 # Drain does not drain anything.
 drain range=1
 ----
 raftReceiveQueue.Drain() => msgs=0
-queue state: r1 other 0
+queue state: r1 skip-paused 0
 pacer state:
  lastHeadroomSampleTime: 20ms
- waiting queues (rangeID, decision, accounting-bytes): (r1 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
 
 # Engine recovers, allowing the range to be dequeued. The pacer's
 # burstBytesToDrain is positive.
@@ -103,19 +103,19 @@ enqueue range=1 msg=ma1 wait-for-start-wait
 engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
 start engine.TryWaitForMemTableStallHeadroom(doWait=true)
 raftReceiveQueue.Append() => shouldQ=false size=70 appended=true
-queue state: r1 other 0
+queue state: r1 skip-paused 0
 pacer state:
  lastHeadroomSampleTime: 10ms
- waiting queues (rangeID, decision, accounting-bytes): (r1 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
 
 # Range r2 gets queued in the pacer.
 enqueue range=2 msg=ma2
 ----
 raftReceiveQueue.Append() => shouldQ=false size=109 appended=true
-queue state: r2 other 0
+queue state: r2 skip-paused 0
 pacer state:
  lastHeadroomSampleTime: 10ms
- waiting queues (rangeID, decision, accounting-bytes): (r1 other 0) (r2 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0) (r2 skip-paused 0)
 
 # Both ranges dequeued. Both are accounted for in the burstBytesToDrain.
 end-wait
@@ -165,19 +165,19 @@ enqueue range=1 msg=ma2 wait-for-start-wait
 engine.TryWaitForMemTableStallHeadroom(doWait=false) => ok=false, allowedBurst=0
 start engine.TryWaitForMemTableStallHeadroom(doWait=true)
 raftReceiveQueue.Append() => shouldQ=false size=109 appended=true
-queue state: r1 other 0
+queue state: r1 skip-paused 0
 pacer state:
  lastHeadroomSampleTime: 10ms
- waiting queues (rangeID, decision, accounting-bytes): (r1 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0)
 
 # Range r2 gets queued in the pacer.
 enqueue range=2 msg=ma2
 ----
 raftReceiveQueue.Append() => shouldQ=false size=109 appended=true
-queue state: r2 other 0
+queue state: r2 skip-paused 0
 pacer state:
  lastHeadroomSampleTime: 10ms
- waiting queues (rangeID, decision, accounting-bytes): (r1 other 0) (r2 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r1 skip-paused 0) (r2 skip-paused 0)
 
 # Range r1 is dequeued. Its bytes are accounted for in burstBytesToDrain
 end-wait
@@ -187,7 +187,7 @@ raftScheduler.EnqueueRaftRequest(r1)
 pacer state:
  lastHeadroomSampleTime: 10ms
  burstBytesToDrain: 109
- waiting queues (rangeID, decision, accounting-bytes): (r2 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r2 skip-paused 0)
 
 # Deletion of range r1 causes its bytes to be removed from accounting, and
 # another TryWait to start.
@@ -197,7 +197,7 @@ start engine.TryWaitForMemTableStallHeadroom(doWait=true)
 raftReceiveQueues.Delete()
 pacer state:
  lastHeadroomSampleTime: 10ms
- waiting queues (rangeID, decision, accounting-bytes): (r2 other 0)
+ waiting queues (rangeID, decision, accounting-bytes): (r2 skip-paused 0)
 
 # Range r2 is dequeued. Its bytes are accounted for in burstBytesToDrain.
 end-wait
