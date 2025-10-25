@@ -232,6 +232,8 @@ const (
 	// associated with a query without modifying the query or application itself.
 	V25_4_AddSystemStatementHintsTable
 
+	V26_1_SchemaChangerHiddenPlaceholder
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -294,6 +296,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_4_SystemStatsTablesAutostatsFraction: {Major: 25, Minor: 3, Internal: 12},
 
 	V25_4_AddSystemStatementHintsTable: {Major: 25, Minor: 3, Internal: 14},
+
+	V26_1_SchemaChangerHiddenPlaceholder: {Major: 26, Minor: 1, Internal: 0},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
