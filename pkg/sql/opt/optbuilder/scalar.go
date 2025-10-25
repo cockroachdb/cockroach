@@ -549,8 +549,9 @@ func (b *Builder) buildFunction(
 	if overload.HasSQLBody() {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
 	}
+	alwaysAllowAccess := b.evalCtx.TestingKnobs.AllowInternalAccess
 	if b.isUnsafeBuiltin(overload, def) {
-		if err := unsafesql.CheckInternalsAccess(b.ctx, b.evalCtx.SessionData(), b.stmt, b.evalCtx.Annotations, &b.evalCtx.Settings.SV); err != nil {
+		if err := unsafesql.CheckInternalsAccess(b.ctx, b.evalCtx.SessionData(), b.stmt, b.evalCtx.Annotations, &b.evalCtx.Settings.SV, alwaysAllowAccess); err != nil {
 			panic(err)
 		}
 	}
