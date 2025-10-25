@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dd",
+    srcs = ["dd.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/testutils/dd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "dd_test",
+    srcs = ["dd_test.go"],
+    embed = [":dd"],
+    deps = [
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
