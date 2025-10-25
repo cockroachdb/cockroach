@@ -37,16 +37,16 @@ import (
 // [\bluejay - \boar] represents the after range.
 //
 //	bear    := [18  98  101 97  114 0   1          ]
-//	        => [101 97  114 0   0   0   0   0      ]
+//	        => [101 97  114 0   1   0   0   0      ]
 //
 //	bluejay := [18  98  108 117 101 106 97  121 0 1]
-//	        => [108 117 101 106 97  121 0   0      ]
+//	        => [108 117 101 106 97  121 0   1      ]
 //
 //	boar    := [18  98  111 97  114 0   1          ]
-//	        => [111 97  114 0   0   0   0   0      ]
+//	        => [111 97  114 0   1   0   0   0      ]
 //
 //	bobcat  := [18  98  111 98  99  97  116 0   1  ]
-//	        => [111 98  99  97  116 0   0   0      ]
+//	        => [111 98  99  97  116 0   1   0      ]
 //
 // We can now find the range before/after by finding the difference between
 // the lower and upper bounds:
