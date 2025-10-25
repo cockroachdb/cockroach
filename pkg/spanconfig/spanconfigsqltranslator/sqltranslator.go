@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -29,22 +30,27 @@ var _ spanconfig.SQLTranslator = &SQLTranslator{}
 
 // SQLTranslator is the concrete implementation of spanconfig.SQLTranslator.
 type SQLTranslator struct {
-	codec keys.SQLCodec
-	knobs *spanconfig.TestingKnobs
-	txn   descs.Txn
-	pts   protectedts.Storage
+	codec    keys.SQLCodec
+	knobs    *spanconfig.TestingKnobs
+	txn      descs.Txn
+	pts      protectedts.Storage
+	settings *cluster.Settings
 }
 
 // Factory is used to construct transaction-scoped SQLTranslators.
 type Factory struct {
 	ptsProvider protectedts.Provider
 	codec       keys.SQLCodec
+	settings    *cluster.Settings
 	knobs       *spanconfig.TestingKnobs
 }
 
 // NewFactory constructs and returns a Factory.
 func NewFactory(
-	ptsProvider protectedts.Provider, codec keys.SQLCodec, knobs *spanconfig.TestingKnobs,
+	ptsProvider protectedts.Provider,
+	codec keys.SQLCodec,
+	settings *cluster.Settings,
+	knobs *spanconfig.TestingKnobs,
 ) *Factory {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
@@ -52,6 +58,7 @@ func NewFactory(
 	return &Factory{
 		ptsProvider: ptsProvider,
 		codec:       codec,
+		settings:    settings,
 		knobs:       knobs,
 	}
 }
@@ -61,10 +68,11 @@ func NewFactory(
 // internal executor and the transaction are associated with each other.
 func (f *Factory) NewSQLTranslator(txn descs.Txn) *SQLTranslator {
 	return &SQLTranslator{
-		codec: f.codec,
-		knobs: f.knobs,
-		txn:   txn,
-		pts:   f.ptsProvider.WithTxn(txn),
+		codec:    f.codec,
+		knobs:    f.knobs,
+		txn:      txn,
+		pts:      f.ptsProvider.WithTxn(txn),
+		settings: f.settings,
 	}
 }
 
@@ -249,7 +257,14 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 	switch name {
 	case zonepb.DefaultZoneName: // nothing to do.
 	case zonepb.MetaZoneName:
-		spans = append(spans, roachpb.Span{Key: keys.Meta1Span.Key, EndKey: keys.NodeLivenessSpan.Key})
+		// TODO(ibrahim): version gate this to 26.1
+		// Meta1 is not allowed to split, whereas meta2 is. We always install a
+		// split point at the start of meta2 to ensure load based splitting can
+		// apply to meta2. See
+		// https://github.com/cockroachdb/cockroach/issues/119421.
+		spans = append(spans, keys.Meta1Span)
+		spans = append(spans, roachpb.Span{Key: keys.Meta2Prefix, EndKey: keys.NodeLivenessSpan.Key})
+
 	case zonepb.LivenessZoneName:
 		spans = append(spans, keys.NodeLivenessSpan)
 	case zonepb.TimeseriesZoneName:
