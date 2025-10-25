@@ -114,12 +114,12 @@ SELECT * FROM a WHERE i < k AND i % 3 = 0
 index-join a
  ├── columns: k:1(int!null) i:2(int!null) s:3(string) t:4(string)
  ├── immutable
- ├── stats: [rows=555.556, distinct(1)=555.556, null(1)=0, distinct(2)=500, null(2)=0]
+ ├── stats: [rows=555.556, distinct(1)=555.556, null(1)=0, distinct(2)=500, null(2)=0, distinct(1,2)=555.556, null(1,2)=-1]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan a@idx,partial
       ├── columns: k:1(int!null) i:2(int!null)
-      ├── stats: [rows=555.556, distinct(1)=555.556, null(1)=0, distinct(2)=500, null(2)=0]
+      ├── stats: [rows=555.556, distinct(1)=555.556, null(1)=0, distinct(2)=500, null(2)=0, distinct(1,2)=555.556, null(1,2)=-1]
       ├── key: (1)
       └── fd: (1)-->(2)
 
@@ -206,12 +206,12 @@ index-join a
  ├── fd: (1)-->(2-4), (3)==(4), (4)==(3)
  └── select
       ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
-      ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, distinct(4)=1.0395, null(4)=0]
+      ├── stats: [rows=1.0395, distinct(3)=1.0395, null(3)=0, distinct(4)=1.0395, null(4)=0, distinct(3,4)=1.0395, null(3,4)=-1]
       ├── key: (1)
       ├── fd: (1)-->(3,4), (3)==(4), (4)==(3)
       ├── scan a@idx,partial
       │    ├── columns: k:1(int!null) s:3(string!null) t:4(string!null)
-      │    ├── stats: [rows=9.3555, distinct(1)=9.3555, null(1)=0, distinct(3)=9.3555, null(3)=0, distinct(4)=9.3555, null(4)=0]
+      │    ├── stats: [rows=9.3555, distinct(1)=9.3555, null(1)=0, distinct(3)=9.3555, null(3)=0, distinct(4)=9.3555, null(4)=0, distinct(3,4)=9.3555, null(3,4)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4), (3)==(4), (4)==(3)
       └── filters
@@ -872,7 +872,7 @@ project
       ├── inverted constraint: /7/1
       │    └── spans: ["x"/"y", "x"/"y"]
       ├── flags: force-index=partial
-      ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
+      ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0, distinct(4,7)=2.20441, null(4,7)=0]
       └── key: (1)
 
 opt
@@ -889,7 +889,7 @@ index-join inv
       ├── inverted constraint: /7/1
       │    └── spans: ["x"/"y", "x"/"y"]
       ├── flags: force-index=partial
-      ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
+      ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0, distinct(4,7)=2.20441, null(4,7)=0]
       └── key: (1)
 
 opt
@@ -916,7 +916,7 @@ project
       │         ├── inverted constraint: /7/1
       │         │    └── spans: ["x"/"y", "x"/"y"]
       │         ├── flags: force-index=partial
-      │         ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
+      │         ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0, distinct(4,7)=2.20441, null(4,7)=0]
       │         └── key: (1)
       └── filters
            └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -940,7 +940,7 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["x"/"y", "x"/"y"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
+ │         ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0, distinct(4,7)=2.20441, null(4,7)=0]
  │         └── key: (1)
  └── filters
       └── s:4 = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
@@ -964,7 +964,7 @@ select
  │         ├── inverted constraint: /7/1
  │         │    └── spans: ["x"/"y", "x"/"y"]
  │         ├── flags: force-index=partial
- │         ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0]
+ │         ├── stats: [rows=2.20441, distinct(4)=2, null(4)=0, distinct(7)=2.20441, null(7)=0, distinct(4,7)=2.20441, null(4,7)=0]
  │         └── key: (1)
  └── filters
       ├── (i:2 > 0) AND (i:2 < 10) [type=bool, outer=(2), constraints=(/2: [/1 - /9]; tight)]
@@ -1224,7 +1224,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=16.6667, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      ├── stats: [rows=16.6667, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
@@ -1251,7 +1251,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=16.6667, distinct(1)=16.6667, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=16.6667, null(7)=0]
+      │              ├── stats: [rows=16.6667, distinct(1)=16.6667, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=16.6667, null(7)=0, distinct(3,7)=16.6667, null(3,7)=0]
       │              └── key: (1,7)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
@@ -1269,7 +1269,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=5.55556, distinct(2)=5.55556, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=5.55556, distinct(2)=5.55556, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=5.55556, null(2,3)=0]
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
@@ -1296,7 +1296,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=16.6667, distinct(1)=16.6667, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=16.6667, null(7)=0]
+      │              ├── stats: [rows=16.6667, distinct(1)=16.6667, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=16.6667, null(7)=0, distinct(3,7)=16.6667, null(3,7)=0]
       │              └── key: (1,7)
       └── filters
            ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
@@ -1335,7 +1335,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=8.54701, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0]
+      ├── stats: [rows=8.54701, distinct(2)=7, null(2)=0, distinct(3)=3, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       ├── key: (1)
       ├── fd: (1)-->(2,3)
       ├── index-join spatial
@@ -1362,7 +1362,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=8.54701, distinct(1)=8.54701, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=8.54701, null(7)=0]
+      │              ├── stats: [rows=8.54701, distinct(1)=8.54701, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=8.54701, null(7)=0, distinct(3,7)=8.54701, null(3,7)=0]
       │              └── key: (1,7)
       └── filters
            └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
@@ -1378,7 +1378,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=2.849, distinct(2)=2.849, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=2.849, distinct(2)=2.849, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=2.849, null(2,3)=0]
       ├── key: (1)
       ├── fd: ()-->(3), (1)-->(2)
       ├── index-join spatial
@@ -1405,7 +1405,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"]
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
-      │              ├── stats: [rows=8.54701, distinct(1)=8.54701, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=8.54701, null(7)=0]
+      │              ├── stats: [rows=8.54701, distinct(1)=8.54701, null(1)=0, distinct(3)=3, null(3)=0, distinct(7)=8.54701, null(7)=0, distinct(3,7)=8.54701, null(3,7)=0]
       │              └── key: (1,7)
       └── filters
            ├── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool, outer=(2), immutable, constraints=(/2: (/NULL - ])]
@@ -1465,7 +1465,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -1516,7 +1516,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
@@ -1603,7 +1603,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0]
+      ├── stats: [rows=22.2222, distinct(2)=7, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111   0   11.111
       │                <--- 'banana' --- 'cherry'
       ├── key: (1)
@@ -1652,7 +1652,7 @@ project
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null)
       ├── immutable
-      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── stats: [rows=11.1111, distinct(2)=7, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=7, null(2,3)=0]
       │   histogram(3)=  0   11.111
       │                <--- 'banana'
       ├── key: (1)
