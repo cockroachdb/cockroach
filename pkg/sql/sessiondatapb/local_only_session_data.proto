@@ -743,6 +743,14 @@ message LocalOnlySessionData {
   bool enable_inspect_command = 187;
   // RowSecurity controls whether row-level security is enabled.
   bool row_security = 188;
+  // OptimizerClampLowHistogramSelectivity, when true, causes the optimizer to
+  // fall back to more pessimistic distinct-count-based estimates when the
+  // histogram-based estimate is smaller than a certain threshold.
+  bool optimizer_clamp_low_histogram_selectivity = 189;
+  // OptimizerClampInequalitySelectivity, when true, causes the optimizer to
+  // clamp the selectivity of open-ended inequality filters (e.g. <, >, !=)
+  // but not (=, BETWEEN etc.) to a minimum threshold.
+  bool optimizer_clamp_inequality_selectivity = 190;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

@@ -212,6 +212,8 @@ type Memo struct {
 	disableSlowCascadeFastPathForRBRTables     bool
 	useImprovedHoistJoinProject                bool
 	rowSecurity                                bool
+	clampLowHistogramSelectivity               bool
+	clampInequalitySelectivity                 bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -236,6 +238,10 @@ type Memo struct {
 	// set to true for the optsteps test command to prevent CheckExpr from
 	// erring with partially normalized expressions.
 	disableCheckExpr bool
+
+	// optimizationStats tracks decisions made during optimization, for example,
+	// to clamp selectivity estimates to a lower bound.
+	optimizationStats OptimizationStats
 
 	// WARNING: if you add more members, add initialization code in Init (if
 	// reusing allocated data structures is desired).
@@ -320,6 +326,8 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		disableSlowCascadeFastPathForRBRTables:     evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables,
 		useImprovedHoistJoinProject:                evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 		rowSecurity:                                evalCtx.SessionData().RowSecurity,
+		clampLowHistogramSelectivity:               evalCtx.SessionData().OptimizerClampLowHistogramSelectivity,
+		clampInequalitySelectivity:                 evalCtx.SessionData().OptimizerClampInequalitySelectivity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -496,6 +504,8 @@ func (m *Memo) IsStale(
 		m.disableSlowCascadeFastPathForRBRTables != evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables ||
 		m.useImprovedHoistJoinProject != evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject ||
 		m.rowSecurity != evalCtx.SessionData().RowSecurity ||
+		m.clampLowHistogramSelectivity != evalCtx.SessionData().OptimizerClampLowHistogramSelectivity ||
+		m.clampInequalitySelectivity != evalCtx.SessionData().OptimizerClampInequalitySelectivity ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}
@@ -693,6 +703,25 @@ func (m *Memo) FormatExpr(expr opt.Expr) string {
 	)
 	f.FormatExpr(expr)
 	return f.Buffer.String()
+}
+
+// OptimizationStats surfaces information about choices made during optimization
+// of a query for top-level observability (e.g. metrics, EXPLAIN output).
+type OptimizationStats struct {
+	// ClampedHistogramSelectivity is true if the selectivity estimate based on a
+	// histogram was prevented from dropping too low. See also the session var
+	// "optimizer_clamp_low_histogram_selectivity".
+	ClampedHistogramSelectivity bool
+	// ClampedInequalitySelectivity is true if the selectivity estimate for an
+	// inequality unbounded on one or both sides was prevented from dropping too
+	// low. See also the session var "optimizer_clamp_inequality_selectivity".
+	ClampedInequalitySelectivity bool
+}
+
+// GetOptimizationStats returns the OptimizationStats collected during a
+// previous optimization pass.
+func (m *Memo) GetOptimizationStats() *OptimizationStats {
+	return &m.optimizationStats
 }
 
 // ValuesContainer lets ValuesExpr and LiteralValuesExpr share code.
