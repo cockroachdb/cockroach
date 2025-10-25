@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
@@ -54,13 +56,13 @@ type enrichedSourceProvider struct {
 }
 
 func GetTableSchemaInfo(
-	ctx context.Context, cfg *execinfra.ServerConfig, targets changefeedbase.Targets,
+	ctx context.Context, cfg *execinfra.ServerConfig, targets changefeedbase.Targets, initialHighWater hlc.Timestamp,
 ) (map[descpb.ID]tableSchemaInfo, error) {
 	schemaInfo := make(map[descpb.ID]tableSchemaInfo)
 	execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
 	err := targets.EachTarget(func(target changefeedbase.Target) error {
 		id := target.DescID
-		td, dbd, sd, err := getDescriptors(ctx, execCfg, id)
+		td, dbd, sd, err := getDescriptors(ctx, execCfg, id, initialHighWater)
 		if err != nil {
 			return err
 		}
@@ -548,13 +550,19 @@ func init() {
 const originCockroachDB = "cockroachdb"
 
 func getDescriptors(
-	ctx context.Context, execCfg *sql.ExecutorConfig, tableID descpb.ID,
+	ctx context.Context, execCfg *sql.ExecutorConfig, tableID descpb.ID, initialHighWater hlc.Timestamp,
 ) (catalog.TableDescriptor, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, error) {
 	var tableDescriptor catalog.TableDescriptor
 	var dbDescriptor catalog.DatabaseDescriptor
 	var schemaDescriptor catalog.SchemaDescriptor
 	var err error
 	f := func(ctx context.Context, txn descs.Txn) error {
+		if initialHighWater != (hlc.Timestamp{}) {
+			fmt.Printf("getDescriptors: setting fixed timestamp to %s\n", initialHighWater)
+			if err := txn.KV().SetFixedTimestamp(ctx, initialHighWater); err != nil {
+				return err
+			}
+		}
 		byIDGetter := txn.Descriptors().ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get()
 		tableDescriptor, err = byIDGetter.Table(ctx, tableID)
 		if err != nil {
