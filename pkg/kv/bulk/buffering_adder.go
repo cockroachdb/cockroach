@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -71,6 +72,9 @@ type BufferingAdder struct {
 	// underfill tracks how much capacity was remaining in curBuf when it was
 	// flushed due to size, e.g. how much its mis-allocated entries vs slab.
 	underfill sz
+
+	bulkBytesIn *metric.Counter
+	sstCount    *metric.Counter
 }
 
 var _ kvserverbase.BulkAdder = &BufferingAdder{}
@@ -91,6 +95,7 @@ func MakeBulkAdder(
 	opts kvserverbase.BulkAdderOptions,
 	bulkMon *mon.BytesMonitor,
 	sendLimiter limit.ConcurrentRequestLimiter,
+	bulkMetrics *Metrics,
 ) (_ *BufferingAdder, retErr error) {
 	if bulkMon == nil {
 		return nil, errors.New("bulkMon must be non-nil")
@@ -162,6 +167,8 @@ func MakeBulkAdder(
 		initialSplits:  opts.InitialSplitsIfUnordered,
 		lastFlush:      timeutil.Now(),
 		curBufSummary:  kvpb.BulkOpSummary{},
+		bulkBytesIn:    bulkMetrics.BytesIn,
+		sstCount:       bulkMetrics.SSTCount,
 	}
 	b.sink.init(ctx)
 
@@ -171,6 +178,8 @@ func MakeBulkAdder(
 	// currently buffered kvs.
 	b.sink.mu.onFlush = func(batchSummary kvpb.BulkOpSummary) {
 		b.curBufSummary.Add(batchSummary)
+		// Increment SST count for each batch flushed.
+		b.sstCount.Inc(1)
 	}
 	return b, nil
 }
@@ -209,6 +218,7 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 	}
 
 	need := sz(len(key) + len(value))
+	b.bulkBytesIn.Inc(int64(need))
 	// Check if this KV can fit in the buffer resizing it if needed and able.
 	if b.curBuf.fits(ctx, need, sz(b.maxBufferLimit()), &b.memAcc) {
 		return b.curBuf.append(key, value)
