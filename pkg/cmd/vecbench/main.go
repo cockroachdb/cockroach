@@ -206,15 +206,9 @@ type vectorBench struct {
 func newVectorBench(ctx context.Context, stopper *stop.Stopper, datasetName string) *vectorBench {
 	// Derive the distance metric from the dataset name, assuming certain naming
 	// conventions.
-	var distanceMetric vecpb.DistanceMetric
-	if strings.HasSuffix(datasetName, "-euclidean") {
-		distanceMetric = vecpb.L2SquaredDistance
-	} else if strings.HasSuffix(datasetName, "-ip") || strings.HasSuffix(datasetName, "-dot") {
-		distanceMetric = vecpb.InnerProductDistance
-	} else if strings.HasSuffix(datasetName, "-angular") {
-		distanceMetric = vecpb.CosineDistance
-	} else {
-		panic(errors.Newf("can't derive distance metric for dataset %s", datasetName))
+	distanceMetric, err := vecann.DeriveDistanceMetric(datasetName)
+	if err != nil {
+		panic(err)
 	}
 
 	return &vectorBench{
@@ -286,7 +280,7 @@ func (vb *vectorBench) SearchIndex() {
 				truth[neighbor] = primaryKey
 			}
 
-			sumRecall += calculateRecall(prediction, truth)
+			sumRecall += vecann.CalculateRecall(prediction, truth)
 			sumVectors += float64(stats.QuantizedVectorCount)
 			sumLeafVectors += float64(stats.QuantizedLeafVectorCount)
 			sumFullVectors += float64(stats.FullVectorCount)
@@ -578,26 +572,6 @@ func newVectorProvider(
 	}
 
 	return provider, nil
-}
-
-// calculateRecall returns the percentage overlap of the predicted set with the
-// truth set. If the predicted set has fewer items than the truth set, it is
-// treated as if the predicted set has missing/incorrect items that reduce the
-// recall rate.
-func calculateRecall(prediction, truth []cspann.KeyBytes) float64 {
-	predictionMap := make(map[string]bool, len(prediction))
-	for _, p := range prediction {
-		predictionMap[string(p)] = true
-	}
-
-	var intersect float64
-	for _, t := range truth {
-		_, ok := predictionMap[string(t)]
-		if ok {
-			intersect++
-		}
-	}
-	return intersect / float64(len(truth))
 }
 
 func roundDuration(duration time.Duration) time.Duration {

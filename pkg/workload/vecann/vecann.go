@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -386,4 +388,39 @@ func (w *vectorWorker) doSearch(ctx context.Context) error {
 // zipfian distribution.
 func (w *vectorWorker) genGroup() int {
 	return int(w.zipf.Uint64())
+}
+
+// DeriveDistanceMetric extracts the distance metric from the dataset name suffix.
+// Returns an error if the metric cannot be determined.
+func DeriveDistanceMetric(datasetName string) (vecpb.DistanceMetric, error) {
+	if strings.HasSuffix(datasetName, "-euclidean") {
+		return vecpb.L2SquaredDistance, nil
+	} else if strings.HasSuffix(datasetName, "-ip") || strings.HasSuffix(datasetName, "-dot") {
+		return vecpb.InnerProductDistance, nil
+	} else if strings.HasSuffix(datasetName, "-angular") {
+		return vecpb.CosineDistance, nil
+	}
+	return 0, errors.Newf("cannot derive distance metric for dataset: %s", datasetName)
+}
+
+// CalculateRecall computes the recall between prediction and ground truth results.
+// Recall = (intersection size) / (truth set size).
+// Keys are compared as byte slices. Uses cspann.KeyBytes which is an alias for []byte.
+func CalculateRecall(prediction, truth []cspann.KeyBytes) float64 {
+	if len(truth) == 0 {
+		return 0.0
+	}
+
+	predictionMap := make(map[string]bool, len(prediction))
+	for _, p := range prediction {
+		predictionMap[string(p)] = true
+	}
+
+	var intersect float64
+	for _, t := range truth {
+		if predictionMap[string(t)] {
+			intersect++
+		}
+	}
+	return intersect / float64(len(truth))
 }
