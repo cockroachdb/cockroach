@@ -656,7 +656,11 @@ message RestoreDetails {
 
   bool experimental_copy = 37;
 
-  // NEXT ID: 38.
+	// DroppedDescsOnFail is set once the restore job has cleaned up descriptors
+	// on cancel/failure.
+	bool dropped_descs_on_fail = 38;
+
+  // NEXT ID: 39.
 }
 
 

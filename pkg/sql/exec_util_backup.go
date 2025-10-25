@@ -86,6 +86,10 @@ type BackupRestoreTestingKnobs struct {
 	// RunBeforeDownloadCleanup is called before we cleanup after all external
 	// files have been download.
 	RunBeforeDownloadCleanup func() error
+
+	// AfterRevertRestoreDropDescriptors is called after a reverting restore
+	// drops its descriptors.
+	AfterRevertRestoreDropDescriptors func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
