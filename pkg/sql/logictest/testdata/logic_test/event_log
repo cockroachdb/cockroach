@@ -1,7 +1,7 @@
 # Legacy schema changer is skipped because mutation IDs throughout log
 # entries will differ. "event_log_legacy" file is for the legacy schema changer.
 # LogicTest: !local-legacy-schema-changer
-# knob-opt: sync-event-log
+# knob-opt: sync-event-log allow-unsafe
 
 # For some reason, some of the queries produce non-deterministic results if
 # distsql_workmem value is randomized, so we'll override it to the production

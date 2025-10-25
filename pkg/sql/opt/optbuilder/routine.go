@@ -51,6 +51,11 @@ func (b *Builder) buildUDF(
 		))
 	}
 
+	// builtins should have access to unsafe internals
+	if o.Type == tree.BuiltinRoutine {
+		defer b.DisableUnsafeInternalCheck()()
+	}
+
 	// Check for execution privileges for user-defined overloads. Built-in
 	// overloads do not need to be checked.
 	if o.Type == tree.UDFRoutine {
