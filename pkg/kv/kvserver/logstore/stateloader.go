@@ -135,6 +135,11 @@ func (sl StateLoader) SetRaftTruncatedState(
 	)
 }
 
+// ClearRaftTruncatedState clears the RaftTruncatedState.
+func (sl StateLoader) ClearRaftTruncatedState(writer storage.Writer) error {
+	return writer.ClearUnversioned(sl.RaftTruncatedStateKey(), storage.ClearOptions{})
+}
+
 // LoadHardState loads the HardState.
 func (sl StateLoader) LoadHardState(
 	ctx context.Context, reader storage.Reader,

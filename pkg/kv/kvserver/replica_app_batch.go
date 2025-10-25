@@ -309,15 +309,18 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	}
 
 	if res.Split != nil {
-		// Splits require a new HardState to be written to the new RHS
-		// range (and this needs to be atomic with the main batch). This
-		// cannot be constructed at evaluation time because it differs
-		// on each replica (votes may have already been cast on the
-		// uninitialized replica). Write this new hardstate to the batch too.
+		// Splits require a new HardState to be written for the new RHS replica,
+		// atomically with the main batch. This cannot be constructed at evaluation
+		// time because it differs on each replica (votes may have already been cast
+		// on the uninitialized replica). Write this new HardState to the batch too.
 		// See https://github.com/cockroachdb/cockroach/issues/20629.
 		//
-		// Alternatively if we discover that the RHS has already been removed
-		// from this store, clean up its data.
+		// Alternatively if we discover that the RHS has already been removed from
+		// this store, clean up its data.
+		//
+		// NB: another reason why we shouldn't write HardState at evaluation time is
+		// that it belongs to the log engine, whereas the evaluated batch must
+		// contain only state machine updates.
 		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
@@ -330,9 +333,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		if res.Split.SplitTrigger.ManualSplit {
 			reason = kvpb.RangeFeedRetryError_REASON_MANUAL_RANGE_SPLIT
 		}
-		b.r.disconnectRangefeedWithReason(
-			reason,
-		)
+		b.r.disconnectRangefeedWithReason(reason)
 	}
 
 	if merge := res.Merge; merge != nil {
