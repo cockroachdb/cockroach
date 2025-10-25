@@ -1,0 +1,436 @@
+# Test case that queues ma1 (MsgApp) followed by o1 (non-MsgApp), then drains.
+init
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=true size=68 appended=true
+queue state:
+ msgApps: [ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=false size=47 appended=true
+queue state:
+ msgApps: [ma1]
+ otherMsgs: [o1]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [o1 ma1]
+pacer.DrainingMsgApps calls 1
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that queues ma1 (MsgApp) drains and queues ma2 (MsgApp) and o1
+# (non-MsgApp) and checks o1, ma2 are not clobbered by recycle.
+init
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=true size=68 appended=true
+queue state:
+ msgApps: [ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [ma1]
+pacer.DrainingMsgApps calls 1
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+# Transitioning from empty to non-empty with low-priority-override, hence the
+# MaybePause call.
+append msg=ma2
+----
+shouldQ=true size=97 appended=true
+pacer.MaybePause calls 1
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=false size=47 appended=true
+queue state:
+ msgApps: [ma2]
+ otherMsgs: [o1]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: [ma2]
+ otherMsgs: [o1]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.DrainingMsgApps calls 1
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that queues o1 (non-MsgApp) drains and queues o2 (non-MsgApp) and
+# ma1, and checks ma1 and o2 are not clobbered by recycle.
+init
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=true size=47 appended=true
+queue state:
+ msgApps: []
+ otherMsgs: [o1]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [o1]
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o2
+----
+shouldQ=true size=47 appended=true
+queue state:
+ msgApps: []
+ otherMsgs: [o2]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=false size=68 appended=true
+queue state:
+ msgApps: [ma1]
+ otherMsgs: [o2]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: [ma1]
+ otherMsgs: [o2]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.DrainingMsgApps calls 1
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that drains only non-MsgApps and drains MsgApps on destroy.
+init
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+# Transitioning from empty to non-empty with low-priority-override, hence the
+# MaybePause call.
+append msg=ma2
+----
+shouldQ=true size=97 appended=true
+pacer.MaybePause calls 1
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=false size=68 appended=true
+queue state:
+ msgApps: [ma2 ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+overwrite-decision decision=other
+----
+queue state:
+ msgApps: [ma2 ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: other, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=false size=47 appended=true
+queue state:
+ msgApps: [ma2 ma1]
+ otherMsgs: [o1]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: other, accountingBytes: 0
+
+# Only o1 drains.
+drain
+----
+drained msgs: [o1]
+queue state:
+ msgApps: [ma2 ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: other, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: [ma2 ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: other, accountingBytes: 0
+
+# The MsgApps are drained because queue is being destroyed.
+destroy
+----
+pacer.DrainingMsgApps calls 1
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+# Test case that drains only non-MsgApps and drains MsgApps when the decision
+# changes.
+init
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+# Transitioning from empty to non-empty with low-priority-override, hence the
+# MaybePause call.
+append msg=ma2
+----
+shouldQ=true size=97 appended=true
+pacer.MaybePause calls 1
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+overwrite-decision decision=other
+----
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: other, accountingBytes: 0
+
+append msg=o1
+----
+shouldQ=false size=47 appended=true
+queue state:
+ msgApps: [ma2]
+ otherMsgs: [o1]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: other, accountingBytes: 0
+
+# Only o1 drains.
+drain
+----
+drained msgs: [o1]
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: other, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: other, accountingBytes: 0
+
+overwrite-decision decision=all
+----
+queue state:
+ msgApps: [ma2]
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+append msg=o2
+----
+shouldQ=true size=47 appended=true
+queue state:
+ msgApps: [ma2]
+ otherMsgs: [o2]
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [o2 ma2]
+pacer.DrainingMsgApps calls 1
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+append msg=ma1
+----
+shouldQ=true size=68 appended=true
+queue state:
+ msgApps: [ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: [ma1]
+ otherMsgs: []
+ queuedAtRaftScheduler: true
+ lastDrainedFromOtherMsgs: true
+ pacer: decision: all, accountingBytes: 0
+
+drain
+----
+drained msgs: [ma1]
+pacer.DrainingMsgApps calls 1
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+recycle
+----
+queue state:
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
+
+destroy
+----
+pacer.Deregister calls 1
+queue state:
+ destroyed
+ msgApps: []
+ otherMsgs: []
+ queuedAtRaftScheduler: false
+ lastDrainedFromOtherMsgs: false
+ pacer: decision: all, accountingBytes: 0
