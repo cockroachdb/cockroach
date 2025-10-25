@@ -14,6 +14,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	// Ensure that sql/parser.ParseDoBlockFn is injected from the PLpgSQL
+	// parser.
+	_ "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	// Import builtins.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
