@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -1049,7 +1048,7 @@ func TestJoinReader(t *testing.T) {
 			expected:         "[[0 1]]",
 		},
 	}
-	st := cluster.MakeTestingClusterSettings()
+	st := s.ClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
@@ -1079,7 +1078,7 @@ func TestJoinReader(t *testing.T) {
 						}
 						t.Run(fmt.Sprintf("%d/reqOrdering=%t/%s/smallBatch=%t/cont=%t",
 							i, reqOrdering, c.description, smallBatch, outputContinuation), func(t *testing.T) {
-							evalCtx := eval.MakeTestingEvalContext(st)
+							evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 							defer evalCtx.Stop(ctx)
 							flowCtx := execinfra.FlowCtx{
 								EvalCtx: &evalCtx,
@@ -1242,14 +1241,14 @@ CREATE TABLE test.t (a INT, s STRING, INDEX (a, s))`); err != nil {
 	}
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
-	st := cluster.MakeTestingClusterSettings()
+	st := s.ClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -1360,7 +1359,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(context.Background())
 	diskMonitor := execinfra.NewTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
@@ -1577,6 +1576,7 @@ func TestIndexJoiner(t *testing.T) {
 			txn := kv.NewTxn(context.Background(), s.DB(), srv.NodeID())
 			runProcessorTest(
 				t,
+				s.Codec(),
 				execinfrapb.ProcessorCoreUnion{JoinReader: &spec},
 				c.post,
 				types.TwoIntCols,
@@ -1660,7 +1660,7 @@ func benchmarkJoinReader(b *testing.B, bc JRBenchConfig) {
 		})
 		s           = srv.ApplicationLayer()
 		st          = s.ClusterSettings()
-		evalCtx     = eval.MakeTestingEvalContext(st)
+		evalCtx     = eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
@@ -1929,7 +1929,7 @@ func BenchmarkJoinReaderLookupStress(b *testing.B) {
 		})
 		s           = srv.ApplicationLayer()
 		st          = s.ClusterSettings()
-		evalCtx     = eval.MakeTestingEvalContext(st)
+		evalCtx     = eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 		diskMonitor = execinfra.NewTestDiskMonitor(ctx, st)
 		flowCtx     = execinfra.FlowCtx{
 			EvalCtx: &evalCtx,

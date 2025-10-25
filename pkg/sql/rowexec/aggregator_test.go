@@ -389,7 +389,15 @@ func TestAggregator(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	test := MakeProcessorTest(DefaultProcessorTestConfig())
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	test := MakeProcessorTest(ProcessorTestConfig{
+		FlowCtx: &execinfra.FlowCtx{
+			Cfg:     &execinfra.ServerConfig{Settings: st},
+			EvalCtx: &evalCtx,
+			Mon:     evalCtx.TestingMon,
+		},
+	})
 	defer test.Close(ctx)
 	test.RunTestCases(ctx, t, testCases)
 }
