@@ -104,14 +104,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 464.259997
+ ├── cost: 464.26
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── stats: [rows=1666.67, distinct(1)=1666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=1666.67, null(1,2)=0]
- │    ├── cost: 464.049997
+ │    ├── cost: 464.05
  │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
@@ -120,7 +120,7 @@ limit
  │    │    ├── columns: k:1!null i:2 s:3 d:4!null
  │    │    ├── constraint: /1: [/6 - ]
  │    │    ├── stats: [rows=33333.3, distinct(1)=33333.3, null(1)=0]
- │    │    ├── cost: 452.019998
+ │    │    ├── cost: 452.02
  │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
@@ -138,14 +138,14 @@ limit
  ├── columns: k:1!null i:2!null s:3 d:4!null
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
- ├── cost: 446.739807
+ ├── cost: 446.74
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── cardinality: [0 - 450]
  │    ├── stats: [rows=22.5, distinct(1)=22.5, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=22.5, null(1,2)=0]
- │    ├── cost: 446.529807
+ │    ├── cost: 446.53
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -154,7 +154,7 @@ limit
  │    │    ├── constraint: /1: [/1 - /450]
  │    │    ├── cardinality: [0 - 450]
  │    │    ├── stats: [rows=450, distinct(1)=450, null(1)=0]
- │    │    ├── cost: 442.009807
+ │    │    ├── cost: 442.01
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 400.00
@@ -640,7 +640,7 @@ index-join t
       ├── columns: k:1!null b:3
       ├── flags: no-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
-      ├── cost: 34341.4524
+      ├── cost: 34341.4523
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(3)
@@ -659,7 +659,7 @@ index-join t
       ├── columns: k:1!null b:3
       ├── flags: avoid-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
-      ├── cost: 34341.4524
+      ├── cost: 34341.4523
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(3)
@@ -702,7 +702,7 @@ index-join t
       ├── columns: k:1!null b:3
       ├── flags: force-index=b_partial avoid-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
-      ├── cost: 34341.4524
+      ├── cost: 34341.4523
       ├── cost-flags: full-scan-penalty unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(3)

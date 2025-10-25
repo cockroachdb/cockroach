@@ -222,7 +222,7 @@ with &2 (q)
  │              └── f-k-checks-item: child(c) -> parent(p)
  │                   └── anti-join (hash)
  │                        ├── columns: c:14(int!null)
- │                        ├── stats: [rows=1e-10]
+ │                        ├── stats: [rows=1]
  │                        ├── fd: ()-->(14)
  │                        ├── with-scan &1
  │                        │    ├── columns: c:14(int!null)

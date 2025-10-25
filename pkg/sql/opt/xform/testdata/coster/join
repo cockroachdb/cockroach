@@ -518,16 +518,16 @@ SELECT * FROM abc WHERE c = 1
 ----
 index-join abc
  ├── columns: a:1!null b:2 c:3!null
- ├── stats: [rows=9.9505, distinct(3)=1, null(3)=0]
- ├── cost: 88.5890464
+ ├── stats: [rows=9.9, distinct(3)=1, null(3)=0]
+ ├── cost: 88.2310014
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
       ├── columns: a:1!null c:3!null
       ├── constraint: /3/1: [/1 - /1]
-      ├── stats: [rows=9.9505, distinct(3)=1, null(3)=0]
-      ├── cost: 28.3685202
+      ├── stats: [rows=9.9, distinct(3)=1, null(3)=0]
+      ├── cost: 28.3160002
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(3)
@@ -929,7 +929,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 16.08
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -969,7 +969,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 4.02001206
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -1021,7 +1021,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 10.05
                 ├── key: ()
                 ├── fd: ()-->(7)
@@ -1108,14 +1108,14 @@ WHERE
 project
  ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
  ├── stats: [rows=99]
- ├── cost: 2869.62001
+ ├── cost: 2869.62
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(3)
  └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
       ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
       ├── key columns: [4] = [29]
       ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(29)=8.56179, null(29)=0]
-      ├── cost: 2868.61001
+      ├── cost: 2868.61
       ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(3), (4)==(29), (29)==(4)
       ├── select
@@ -1183,15 +1183,15 @@ SELECT i, f FROM e WHERE i = 3;
 ----
 index-join e
  ├── columns: i:2!null f:5
- ├── stats: [rows=1.00001, distinct(2)=1, null(2)=0]
- ├── cost: 25.1825714
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0]
+ ├── cost: 25.1825
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2)
  └── scan e@id
       ├── columns: k:1!null i:2!null
       ├── constraint: /2/4/1: [/3 - /3]
-      ├── stats: [rows=1.00001, distinct(2)=1, null(2)=0]
-      ├── cost: 19.0650105
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0]
+      ├── cost: 19.065
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2)

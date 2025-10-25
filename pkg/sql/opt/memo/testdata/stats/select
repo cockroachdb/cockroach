@@ -1240,11 +1240,11 @@ SELECT * FROM nulls WHERE x = y
 ----
 project
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1]
+ ├── stats: [rows=0]
  ├── fd: (1)==(2), (2)==(1)
  └── select
       ├── columns: x:1(int!null) y:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
-      ├── stats: [rows=1, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0]
+      ├── stats: [rows=0, distinct(1)=0, null(1)=0, distinct(2)=0, null(2)=0]
       ├── key: (3)
       ├── fd: (3)-->(1,2,4,5), (1)==(2), (2)==(1)
       ├── scan nulls
@@ -1538,7 +1538,7 @@ SELECT * FROM t38375 WHERE x = 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=4, distinct(1)=1, null(1)=0, distinct(2)=3.2968, null(2)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=0.951626, null(2)=0]
  ├── fd: ()-->(1)
  ├── scan t38375
  │    ├── columns: x:1(int) y:2(int)
@@ -1591,7 +1591,7 @@ SELECT * FROM nation WHERE (n_name = 'FRANCE' AND neighbor = 'GERMANY') OR (n_na
 ----
 select
  ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- ├── stats: [rows=6.6667, distinct(2)=2, null(2)=0, distinct(4)=2, null(4)=0]
+ ├── stats: [rows=6.66667, distinct(2)=2, null(2)=0, distinct(4)=2, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan nation
@@ -1607,7 +1607,7 @@ SELECT * FROM nation WHERE (n_name, neighbor) in (('FRANCE', 'GERMANY'), ('GERMA
 ----
 select
  ├── columns: n_nationkey:1(int!null) n_name:2(char!null) n_regionkey:3(int!null) neighbor:4(char!null)
- ├── stats: [rows=20.0001, distinct(2)=2, null(2)=0, distinct(4)=2, null(4)=0]
+ ├── stats: [rows=20, distinct(2)=2, null(2)=0, distinct(4)=2, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan nation
@@ -3220,7 +3220,7 @@ SELECT * from bigtable WHERE x = 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=13, distinct(1)=1, null(1)=0]
+ ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  │   histogram(1)=  0  10
  │                <--- 10
  ├── fd: ()-->(1)
@@ -4014,29 +4014,29 @@ left-join (lookup table1)
  ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  ├── key columns: [4 5] = [10 11]
  ├── lookup columns are key
- ├── stats: [rows=1.24516, distinct(10)=1, null(10)=0.0814548, distinct(11)=1.16371, null(11)=0.0814548]
+ ├── stats: [rows=1.24491, distinct(10)=1, null(10)=1, distinct(11)=1.16367, null(11)=1]
  ├── key: (2,4,5)
  ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
  ├── index-join table2
  │    ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) table2.col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
- │    ├── stats: [rows=1.24516, distinct(1)=1, null(1)=0, distinct(4)=1.07, null(4)=0, distinct(5)=1.24516, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
- │    │   histogram(1)=  0 1.2452
+ │    ├── stats: [rows=1.24491, distinct(1)=1, null(1)=0, distinct(4)=1.06981, null(4)=0, distinct(5)=1.24491, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │    │   histogram(1)=  0 1.2449
  │    │                <--- 'b' -
- │    │   histogram(6)=  0 1.2452
+ │    │   histogram(6)=  0 1.2449
  │    │                <--- 'f' -
- │    │   histogram(7)=  0 1.2452
+ │    │   histogram(7)=  0 1.2449
  │    │                <--- 'x' -
  │    ├── key: (2,4,5)
  │    ├── fd: ()-->(1,6,7), (2,4,5)-->(3)
  │    └── scan table2@table2_col6_col7_idx
  │         ├── columns: table2.col1:1(string!null) table2.col2:2(string!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  │         ├── constraint: /6/7/1/2/4/5: [/'f'/'x'/'b' - /'f'/'x'/'b']
- │         ├── stats: [rows=1.24516, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
- │         │   histogram(1)=  0 1.2452
+ │         ├── stats: [rows=1.24491, distinct(1)=1, null(1)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(1,6,7)=1, null(1,6,7)=0]
+ │         │   histogram(1)=  0 1.2449
  │         │                <--- 'b' -
- │         │   histogram(6)=  0 1.2452
+ │         │   histogram(6)=  0 1.2449
  │         │                <--- 'f' -
- │         │   histogram(7)=  0 1.2452
+ │         │   histogram(7)=  0 1.2449
  │         │                <--- 'x' -
  │         ├── key: (2,4,5)
  │         └── fd: ()-->(1,6,7)

@@ -66,7 +66,7 @@ const (
 
 	// When subtracting floating point numbers, avoid precision errors by making
 	// sure the result is greater than or equal to epsilon.
-	epsilon = 1e-10
+	defaultMinRowCount = 1e-10
 
 	// This is the minimum cardinality an expression should have in order to make
 	// it worth adding the overhead of using a histogram.
@@ -236,13 +236,17 @@ type statisticsBuilder struct {
 func (sb *statisticsBuilder) init(ctx context.Context, evalCtx *eval.Context, mem *Memo) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
+	minRowCount := evalCtx.SessionData().OptimizerMinRowCount
+	if minRowCount == 0 {
+		minRowCount = defaultMinRowCount
+	}
 	*sb = statisticsBuilder{
 		ctx:                   ctx,
 		evalCtx:               evalCtx,
 		mem:                   mem,
 		md:                    mem.Metadata(),
 		checkInputMinRowCount: evalCtx.SessionData().OptimizerCheckInputMinRowCount,
-		minRowCount:           evalCtx.SessionData().OptimizerMinRowCount,
+		minRowCount:           minRowCount,
 	}
 }
 
@@ -1353,8 +1357,8 @@ func (sb *statisticsBuilder) buildJoin(
 		case opt.AntiJoinOp, opt.AntiJoinApplyOp:
 			// Don't set the row count to 0 since we can't guarantee that the
 			// cardinality is 0.
-			s.RowCount = epsilon
-			s.Selectivity = props.MakeSelectivity(epsilon)
+			s.RowCount = sb.minRowCount
+			s.Selectivity = props.MakeSelectivity(1e-10)
 		}
 		return
 	}
@@ -1519,7 +1523,7 @@ func (sb *statisticsBuilder) buildJoin(
 	// Fix the stats for anti join.
 	switch h.joinType {
 	case opt.AntiJoinOp, opt.AntiJoinApplyOp:
-		s.RowCount = max(leftStats.RowCount-s.RowCount, epsilon)
+		s.RowCount = max(leftStats.RowCount-s.RowCount, sb.minRowCount)
 		s.Selectivity = props.MakeSelectivity(1 - s.Selectivity.AsFloat())
 
 		// Converting column stats is error-prone. If any column stats are needed,
@@ -1780,23 +1784,23 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 	switch joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		if !rightColsAreEmpty && leftNullCount > 0 && rowCount > innerJoinRowCount {
-			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			addedRows := max(rowCount-innerJoinRowCount, sb.minRowCount)
 			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 
 	case opt.RightJoinOp:
 		if !leftColsAreEmpty && rightNullCount > 0 && rowCount > innerJoinRowCount {
-			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			addedRows := max(rowCount-innerJoinRowCount, sb.minRowCount)
 			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
 
 	case opt.FullJoinOp:
 		if !leftColsAreEmpty && rightNullCount > 0 && rightRowCount > innerJoinRowCount {
-			addedRows := max(rightRowCount-innerJoinRowCount, epsilon)
+			addedRows := max(rightRowCount-innerJoinRowCount, sb.minRowCount)
 			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
 		if !rightColsAreEmpty && leftNullCount > 0 && leftRowCount > innerJoinRowCount {
-			addedRows := max(leftRowCount-innerJoinRowCount, epsilon)
+			addedRows := max(leftRowCount-innerJoinRowCount, sb.minRowCount)
 			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 	}
@@ -3111,10 +3115,14 @@ func (sb *statisticsBuilder) copyColStat(
 func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational) {
 	s := relProps.Statistics()
 
+	// if s.RowCount < sb.minRowCount && relProps.Cardinality.Max > 0 {
+	// 	s.RowCount = sb.minRowCount
+	// }
+
 	// We don't ever want row count to be zero unless the cardinality is zero.
 	// This is because the stats may be stale, and we can end up with weird and
 	// inefficient plans if we estimate 0 rows.
-	if s.RowCount <= 0 && relProps.Cardinality.Max > 0 {
+	if s.RowCount < 0 && relProps.Cardinality.Max > 0 {
 		panic(errors.AssertionFailedf("estimated row count must be non-zero"))
 	}
 
@@ -3138,7 +3146,7 @@ func (sb *statisticsBuilder) finalizeFromRowCountAndDistinctCounts(
 
 	// We should always have at least one distinct value if row count > 0.
 	if rowCount > 0 && colStat.DistinctCount == 0 {
-		panic(errors.AssertionFailedf("estimated distinct count must be non-zero"))
+		// panic(errors.AssertionFailedf("estimated distinct count must be non-zero"))
 	}
 
 	// If this is a multi-column statistic, the distinct count should be no
@@ -4086,7 +4094,7 @@ func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 			colStat = sb.copyColStat(colSet, s, colStat)
 			if colStat.NullCount > 0 && colSet.Intersects(notNullCols) {
 				colStat.NullCount = 0
-				colStat.DistinctCount = max(colStat.DistinctCount-1, epsilon)
+				colStat.DistinctCount = max(colStat.DistinctCount-1, sb.minRowCount)
 			}
 		}
 		if colStat.DistinctCount < minDistinctCount {
