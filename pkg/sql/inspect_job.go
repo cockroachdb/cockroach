@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -225,6 +226,22 @@ func isUnsupportedIndexForIndexConsistencyCheck(
 		return true
 	case idxtype.INVERTED:
 		return true
+	}
+
+	// Check if the primary key contains LTREE[] arrays. LTREE[] arrays don't
+	// support inequality comparison operators (<, >, <=, >=) which are required
+	// for generating span-based query predicates.
+	// TODO(156121): add support for indexes with LTREE[] primary keys.
+	primaryIndex := table.GetPrimaryIndex()
+	for i := 0; i < primaryIndex.NumKeyColumns(); i++ {
+		colID := primaryIndex.GetKeyColumnID(i)
+		col := catalog.FindColumnByID(table, colID)
+		if col != nil && col.GetType().Family() == types.ArrayFamily {
+			elemType := col.GetType().ArrayContents()
+			if elemType != nil && elemType.Family() == types.LTreeFamily {
+				return true
+			}
+		}
 	}
 
 	return false
