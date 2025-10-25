@@ -535,6 +535,136 @@ func (ep *fakeGetMultiregionConfigPlanner) GetRangeDescByID(
 	return
 }
 
+// TestBuildPredicateToExprMapping tests the BuildPredicateToExprMapping helper function.
+func TestBuildPredicateToExprMapping(t *testing.T) {
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(context.Background(), &evalCtx, nil /* catalog */)
+	md := f.Metadata()
+
+	testCat := testcat.New()
+	_, err := testCat.ExecuteDDL("CREATE TABLE test (id INT, active BOOL, INDEX (id) WHERE active)")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tn := tree.NewUnqualifiedTableName("test")
+	tabID := md.AddTable(testCat.Table(tn), tn)
+
+	activeCol := tabID.ColumnID(1)
+	predicate := &memo.VariableExpr{Col: activeCol, Typ: types.Bool}
+
+	existingPredicates := make(map[int]opt.ScalarExpr)
+	existingPredicates[1] = predicate
+
+	table := testCat.Table(tn)
+
+	predicateMap := md.BuildPredicateToExprMapping(table, existingPredicates)
+
+	if len(predicateMap) != 1 {
+		t.Fatalf("expected 1 predicate in mapping, got %d", len(predicateMap))
+	}
+
+	// Get the predicate string from the index.
+	idx := table.Index(1)
+	predStr, hasPred := idx.Predicate()
+	if !hasPred {
+		t.Fatal("expected index 1 to have a predicate")
+	}
+
+	if expr, found := predicateMap[predStr]; !found {
+		t.Errorf("expected predicate string %q to be in mapping", predStr)
+	} else if expr != predicate {
+		t.Errorf("expected mapped expression to match original")
+	}
+
+	emptyPredicates := make(map[int]opt.ScalarExpr)
+	emptyMap := md.BuildPredicateToExprMapping(table, emptyPredicates)
+	if len(emptyMap) != 0 {
+		t.Errorf("expected empty mapping for empty predicates, got %d entries", len(emptyMap))
+	}
+}
+
+// TestMatchPredicatesInNewTable tests the MatchPredicatesInNewTable helper function.
+func TestMatchPredicatesInNewTable(t *testing.T) {
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var f norm.Factory
+	f.Init(context.Background(), &evalCtx, nil /* catalog */)
+	md := f.Metadata()
+
+	testCat := testcat.New()
+	_, err := testCat.ExecuteDDL(`
+		CREATE TABLE old_table (
+			id INT PRIMARY KEY, 
+			active BOOL, 
+			INDEX idx_active (id) WHERE active
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = testCat.ExecuteDDL(`
+		CREATE TABLE new_table (
+			id INT PRIMARY KEY, 
+			active BOOL, 
+			extra STRING,
+			INDEX idx_active (id) WHERE active,
+			INDEX idx_extra (extra) WHERE active
+		)
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oldTableName := tree.NewUnqualifiedTableName("old_table")
+	newTableName := tree.NewUnqualifiedTableName("new_table")
+
+	oldTableID := md.AddTable(testCat.Table(oldTableName), oldTableName)
+	activeCol := oldTableID.ColumnID(1)
+	activePredicate := &memo.VariableExpr{Col: activeCol, Typ: types.Bool}
+
+	// Create predicate mapping as if from old table.
+	oldTable := testCat.Table(oldTableName)
+	oldIdx := oldTable.Index(1)
+	predStr, hasPred := oldIdx.Predicate()
+	if !hasPred {
+		t.Fatal("expected old table index to have predicate")
+	}
+
+	predicateMap := map[string]opt.ScalarExpr{
+		predStr: activePredicate,
+	}
+
+	newTable := testCat.Table(newTableName)
+	newPredicates := md.MatchPredicatesInNewTable(newTable, predicateMap)
+
+	expectedMatches := 2 // Both idx_active and idx_extra have "active" predicate
+	if len(newPredicates) != expectedMatches {
+		t.Fatalf("expected %d matched predicates, got %d", expectedMatches, len(newPredicates))
+	}
+
+	for ord, expr := range newPredicates {
+		if expr != activePredicate {
+			t.Errorf("expected predicate at ordinal %d to match original expression", ord)
+		}
+	}
+
+	emptyMap := make(map[string]opt.ScalarExpr)
+	emptyResults := md.MatchPredicatesInNewTable(newTable, emptyMap)
+	if len(emptyResults) != 0 {
+		t.Errorf("expected no matches for empty predicate map, got %d", len(emptyResults))
+	}
+
+	nonMatchingMap := map[string]opt.ScalarExpr{
+		"nonexistent > 0": activePredicate,
+	}
+	noMatches := md.MatchPredicatesInNewTable(newTable, nonMatchingMap)
+	if len(noMatches) != 0 {
+		t.Errorf("expected no matches for non-matching predicates, got %d", len(noMatches))
+	}
+}
+
 // Optimizer is part of the cat.Catalog interface.
 func (ep *fakeGetMultiregionConfigPlanner) Optimizer() interface{} {
 	return nil
