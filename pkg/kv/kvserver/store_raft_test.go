@@ -330,10 +330,10 @@ func TestRaftReceiveQueuesEnforceMaxLen(t *testing.T) {
 
 func decisionStr(d raftDequeueDecision) string {
 	switch d {
-	case raftDequeueAllMsgs:
+	case raftDequeueAll:
 		return "all"
-	case raftDequeueOtherMsgs:
-		return "other"
+	case raftDequeueSkipPaused:
+		return "skip-paused"
 	}
 	panic("unknown decision")
 }
@@ -351,9 +351,12 @@ func TestRaftReceiveDequeue(t *testing.T) {
 		Settings: st,
 	})
 	pacer := newStoreRaftDequeuePacer(noopEngineForDequeuePacer{}, noopRaftSchedulerForDequeuePacer{}, st)
-	pacer.testingMaybePauseCh = make(chan *raftReceiveQueue, 100)
-	pacer.testingDrainingCh = make(chan *raftReceiveQueue, 100)
-	pacer.testingDeregisterCh = make(chan *raftReceiveQueue, 100)
+	pacer.testingKnobs.pauseCh = make(chan *raftReceiveQueue, 100)
+	pacer.testingKnobs.drainingCh = make(chan *raftReceiveQueue, 100)
+	pacer.testingKnobs.deregisterCh = make(chan *raftReceiveQueue, 100)
+	// NB: we don't start the pacer since we are not testing the behavior of its
+	// goroutine.
+
 	qs := raftReceiveQueues{mon: m, dequeuePacer: pacer}
 	qs.SetEnforceMaxLen(false)
 
@@ -428,13 +431,13 @@ func TestRaftReceiveDequeue(t *testing.T) {
 	}
 	var b strings.Builder
 	builderStr := func(t *testing.T) string {
-		if count := countAndEmptyCh(pacer.testingMaybePauseCh); count > 0 {
-			fmt.Fprintf(&b, "pacer.MaybePause calls %d\n", count)
+		if count := countAndEmptyCh(pacer.testingKnobs.pauseCh); count > 0 {
+			fmt.Fprintf(&b, "pacer.Pause calls %d\n", count)
 		}
-		if count := countAndEmptyCh(pacer.testingDrainingCh); count > 0 {
+		if count := countAndEmptyCh(pacer.testingKnobs.drainingCh); count > 0 {
 			fmt.Fprintf(&b, "pacer.DrainingMsgApps calls %d\n", count)
 		}
-		if count := countAndEmptyCh(pacer.testingDeregisterCh); count > 0 {
+		if count := countAndEmptyCh(pacer.testingKnobs.deregisterCh); count > 0 {
 			fmt.Fprintf(&b, "pacer.Deregister calls %d\n", count)
 		}
 		fmt.Fprintf(&b, "queue state:\n")
@@ -442,14 +445,13 @@ func TestRaftReceiveDequeue(t *testing.T) {
 		if q.mu.destroyed {
 			fmt.Fprintf(&b, " destroyed\n")
 		}
-		msgsStr, size := printMsgSliceAndSize(t, q.mu.msgAppInfos)
-		require.Equal(t, size, q.mu.msgAppAcc.Used())
-		fmt.Fprintf(&b, " msgApps: %s\n", msgsStr)
-		msgsStr, size = printMsgSliceAndSize(t, q.mu.otherMsgInfos)
-		require.Equal(t, size, q.mu.otherAcc.Used())
-		fmt.Fprintf(&b, " otherMsgs: %s\n", msgsStr)
+		msgsStr, size := printMsgSliceAndSize(t, q.mu.normalMsgStream)
+		require.Equal(t, size, q.mu.normalMsgStreamAcc.Used())
+		fmt.Fprintf(&b, " normal-stream: %s\n", msgsStr)
+		msgsStr, size = printMsgSliceAndSize(t, q.mu.pausedMsgStream)
+		require.Equal(t, size, q.mu.pausedMsgStreamAcc.Used())
+		fmt.Fprintf(&b, " paused-stream: %s\n", msgsStr)
 		fmt.Fprintf(&b, " queuedAtRaftScheduler: %t\n", q.mu.queuedAtRaftScheduler)
-		fmt.Fprintf(&b, " lastDrainedFromOtherMsgs: %t\n", q.mu.lastDrainedFromOtherMsgs)
 		fmt.Fprintf(&b, " pacer: decision: %s, accountingBytes: %d\n",
 			decisionStr(q.mu.pacerDequeueDecision), q.mu.pacerDequeueAccountingBytes)
 		q.mu.Unlock()
@@ -493,27 +495,19 @@ func TestRaftReceiveDequeue(t *testing.T) {
 				qs.Delete(r1)
 				return builderStr(t)
 
-			case "overwrite-decision":
-				var decisionStr string
-				d.ScanArgs(t, "decision", &decisionStr)
-				var decision raftDequeueDecision
-				switch decisionStr {
-				case "all":
-					decision = raftDequeueAllMsgs
-				case "other":
-					decision = raftDequeueOtherMsgs
-				default:
-					t.Fatalf("unknown decision %s", decisionStr)
-				}
+			case "next-should-pause-says-yes":
+				pacer.mu.Lock()
+				// Fake the pacer into thinking that it already has queues waiting.
+				pacer.mu.waiting[&raftReceiveQueue{}] = struct{}{}
+				pacer.mu.Unlock()
+				return ""
+
+			case "transition-to-dequeue-all":
 				q.mu.Lock()
-				q.mu.pacerDequeueDecision = decision
+				q.mu.pacerDequeueDecision = raftDequeueAll
 				// Fix up the pacer state so invariant checking doesn't panic.
 				pacer.mu.Lock()
-				if decision == raftDequeueOtherMsgs {
-					pacer.mu.waiting[q] = struct{}{}
-				} else {
-					delete(pacer.mu.waiting, q)
-				}
+				delete(pacer.mu.waiting, q)
 				pacer.mu.Unlock()
 				q.mu.Unlock()
 				return builderStr(t)
@@ -538,6 +532,7 @@ type testEngineForDequeuePacer struct {
 	allowedBurst          int64
 	startWaitCh           chan struct{}
 	endWaitCh             chan struct{}
+	endedWaitCh           chan struct{}
 }
 
 func (t *testEngineForDequeuePacer) TryWaitForMemTableStallHeadroom(
@@ -558,6 +553,7 @@ func (t *testEngineForDequeuePacer) TryWaitForMemTableStallHeadroom(
 	fmt.Fprintf(t.b,
 		"end engine.TryWaitForMemTableStallHeadroom(doWait=true) => ok=true, allowedBurst=%d\n",
 		t.allowedBurst)
+	t.endedWaitCh <- struct{}{}
 	return true, t.allowedBurst
 }
 
@@ -581,14 +577,15 @@ func TestStoreRaftDequeuePacer(t *testing.T) {
 			b:                     &b,
 			returnValueWhenNoWait: true,
 			allowedBurst:          100,
-			startWaitCh:           make(chan struct{}, 1),
-			endWaitCh:             make(chan struct{}, 1),
+			startWaitCh:           make(chan struct{}),
+			endWaitCh:             make(chan struct{}),
+			endedWaitCh:           make(chan struct{}),
 		}
 		st = cluster.MakeTestingClusterSettings()
 		p = newStoreRaftDequeuePacer(eng, scheduler, st)
 		now = engineHeadroomPollingInterval
 		p.nowMono = crtimeNow
-		p.testingDequeueBurstCh = make(chan struct{})
+		p.testingKnobs.dequeueBurstCh = make(chan struct{})
 		g := metric.NewGauge(metric.Metadata{})
 		m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
 			Name:     mon.MakeName("test"),
@@ -695,13 +692,14 @@ func TestStoreRaftDequeuePacer(t *testing.T) {
 				q, _ := qs.LoadOrCreate(roachpb.RangeID(rangeID), 10 /* maxLen */)
 				qs.Delete(roachpb.RangeID(rangeID))
 				q.mu.Lock()
-				require.Equal(t, raftDequeueAllMsgs, q.mu.pacerDequeueDecision)
+				require.Equal(t, raftDequeueAll, q.mu.pacerDequeueDecision)
 				require.Zero(t, q.mu.pacerDequeueAccountingBytes)
 				q.mu.Unlock()
 				if d.HasArg("wait-for-start-wait") {
 					<-eng.startWaitCh
 				}
 				fmt.Fprintf(&b, "raftReceiveQueues.Delete()\n")
+				fmt.Fprintf(&b, "queue state: %s\n", printQueueState(q))
 				return builderStr()
 
 			case "advance-time":
@@ -720,7 +718,10 @@ func TestStoreRaftDequeuePacer(t *testing.T) {
 
 			case "end-wait":
 				eng.endWaitCh <- struct{}{}
-				<-p.testingDequeueBurstCh
+				<-eng.endedWaitCh
+				if !d.HasArg("do-not-wait-for-dequeue-burst") {
+					<-p.testingKnobs.dequeueBurstCh
+				}
 				if d.HasArg("wait-for-start-wait") {
 					<-eng.startWaitCh
 				}
