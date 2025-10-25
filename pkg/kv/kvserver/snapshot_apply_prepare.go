@@ -43,6 +43,8 @@ type snapWriteBuilder struct {
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
+	// TODO(sep-raft-log): rewriteRaftState now only touches raft engine keys, so
+	// it will be convenient to redirect it to a raft engine batch.
 	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
 	}
@@ -55,42 +57,28 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	return s.clearResidualDataOnNarrowSnapshot(ctx)
 }
 
-// rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
-// of the given replica with the provided raft state. Note that it also clears
-// the raft log contents.
-//
-// The caller must make sure the log does not have entries newer than the
-// snapshot entry ID, and that clearing the log is applied atomically with the
-// snapshot write, or after the latter is synced.
+// rewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears the raft log. All writes are generated in the engine keys order.
 func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Writer) error {
-	// Clearing the unreplicated state.
-	//
-	// NB: We do not expect to see range keys in the unreplicated state, so
-	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(s.id.RangeID)
-	unreplicatedStart := unreplicatedPrefixKey
-	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
-	if err := w.ClearRawRange(
-		unreplicatedStart, unreplicatedEnd, true /* pointKeys */, false, /* rangeKeys */
-	); err != nil {
-		return errors.Wrapf(err, "error clearing the unreplicated space")
-	}
-
 	// Update HardState.
 	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
 		return errors.Wrapf(err, "unable to write HardState")
 	}
-	// We've cleared all the raft state above, so we are forced to write the
-	// RaftReplicaID again here.
-	if err := s.sl.SetRaftReplicaID(ctx, w, s.id.ReplicaID); err != nil {
-		return errors.Wrapf(err, "unable to write RaftReplicaID")
+	// Clear the raft log. Note that there are no Pebble range keys in this span.
+	logPrefix := keys.RaftLogPrefix(s.id.RangeID)
+	raftLog := roachpb.Span{Key: logPrefix, EndKey: logPrefix.PrefixEnd()}
+	if err := w.ClearRawRange(
+		raftLog.Key, raftLog.EndKey, true /* pointKeys */, false, /* rangeKeys */
+	); err != nil {
+		return errors.Wrapf(err, "unable to clear the raft log")
 	}
 	// Update the log truncation state.
 	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
 
-	s.cleared = append(s.cleared, roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd})
+	s.cleared = append(s.cleared, raftLog)
 	return nil
 }
 
