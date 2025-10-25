@@ -1,0 +1,102 @@
+### Define config bounds that allow two regions and hava a fallback.
+
+bounds name=foo
+constraint_bounds: <
+    allowed: <key: "region" value: "gcp-us-west2">
+    allowed: <key: "region" value: "gcp-europe-west1">
+    fallback: <constraints: <key: "region" value: "gcp-europe-west1">>
+>
+----
+
+bounds-fields bounds=foo
+----
+range_min_bytes: *
+range_max_bytes: *
+global_reads: *
+num_voters: *
+num_replicas: *
+gc.ttlseconds: *
+constraints: {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}
+voter_constraints: {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}
+lease_preferences: {allowed: [{+region=gcp-europe-west1}, {+region=gcp-us-west2}], fallback: [[{+region=gcp-europe-west1}]]}
+
+
+### Define a config with empty voter constraints and replica constraints in the
+### two allowed regions. It satisfies the config bounds above.
+
+config name=empty-voter-constraints
+num_voters: 5
+num_replicas: 5
+constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "gcp-europe-west1">
+>
+constraints: <
+  num_replicas: 2
+  constraints: <key: "region" value: "gcp-us-west2">
+>
+voter_constraints: <>
+----
+
+conforms bounds=foo config=empty-voter-constraints
+----
+true
+
+### Define a config with missing voter constraints and replica constraints in
+### the two allowed regions. It should satisfy the config bounds, same as
+### empty voter constraints does.
+### See https://github.com/cockroachdb/cockroach/issues/143524.
+
+config name=missing-voter-constraints
+num_voters: 5
+num_replicas: 5
+constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "gcp-europe-west1">
+>
+constraints: <
+  num_replicas: 2
+  constraints: <key: "region" value: "gcp-us-west2">
+>
+----
+
+conforms bounds=foo config=missing-voter-constraints
+----
+true
+
+### Test the same behavior for constraints field.
+
+config name=empty-constraints
+num_voters: 5
+num_replicas: 5
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "gcp-europe-west1">
+>
+voter_constraints: <
+  num_replicas: 2
+  constraints: <key: "region" value: "gcp-us-west2">
+>
+constraints: <>
+----
+
+conforms bounds=foo config=empty-constraints
+----
+true
+
+config name=missing-constraints
+num_voters: 5
+num_replicas: 5
+voter_constraints: <
+  num_replicas: 3
+  constraints: <key: "region" value: "gcp-europe-west1">
+>
+voter_constraints: <
+  num_replicas: 2
+  constraints: <key: "region" value: "gcp-us-west2">
+>
+----
+
+conforms bounds=foo config=missing-constraints
+----
+true
