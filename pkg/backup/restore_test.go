@@ -318,3 +318,55 @@ func TestRestoreDuplicateTempTables(t *testing.T) {
 	result := sqlDB.QueryStr(t, `SELECT table_name FROM [SHOW TABLES] ORDER BY table_name`)
 	require.Equal(t, [][]string{{"permanent_table"}}, result)
 }
+
+func TestRestoreRetryRevert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	droppedDescs := make(chan struct{})
+	jobPaused := make(chan struct{})
+	testKnobs := &sql.BackupRestoreTestingKnobs{
+		AfterRevertRestoreDropDescriptors: func() error {
+			close(droppedDescs)
+			<-jobPaused
+			return nil
+		},
+	}
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = testKnobs
+
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithParams(params),
+	)
+	defer cleanupFn()
+
+	// We create a variety of descriptors to ensure that missing descriptors
+	// during drop do not break revert.
+	sqlDB.Exec(t, "CREATE DATABASE foo")
+	sqlDB.Exec(t, "USE foo")
+	sqlDB.Exec(t, "CREATE OR REPLACE FUNCTION bar(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL;")
+	sqlDB.Exec(t, "CREATE TYPE baz AS ENUM ('a', 'b', 'c')")
+	sqlDB.Exec(t, "CREATE TABLE qux (x INT)")
+	sqlDB.Exec(t, "BACKUP DATABASE foo INTO 'nodelocal://1/backup'")
+
+	// We need restore to publish descriptors so that they will be cleaned up
+	// during restore.
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_publishing_descriptors'")
+
+	var restoreID jobspb.JobID
+	sqlDB.QueryRow(
+		t, "RESTORE DATABASE foo FROM LATEST IN 'nodelocal://1/backup' WITH detached, new_db_name='foo_restored'",
+	).Scan(&restoreID)
+
+	jobutils.WaitForJobToPause(t, sqlDB, restoreID)
+
+	sqlDB.Exec(t, "CANCEL JOB $1", restoreID)
+	<-droppedDescs
+	sqlDB.Exec(t, "PAUSE JOB $1", restoreID)
+	jobutils.WaitForJobToPause(t, sqlDB, restoreID)
+	close(jobPaused)
+	testKnobs.AfterRevertRestoreDropDescriptors = nil
+
+	sqlDB.Exec(t, "RESUME JOB $1", restoreID)
+	jobutils.WaitForJobToCancel(t, sqlDB, restoreID)
+}
