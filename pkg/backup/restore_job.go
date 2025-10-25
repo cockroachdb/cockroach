@@ -2820,6 +2820,13 @@ func (r *restoreResumer) OnFailOrCancel(
 		return err
 	}
 
+	testingKnobs := execCfg.BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.AfterRevertRestoreDropDescriptors != nil {
+		if err := testingKnobs.AfterRevertRestoreDropDescriptors(); err != nil {
+			return err
+		}
+	}
+
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
@@ -2862,6 +2869,12 @@ func (r *restoreResumer) dropDescriptors(
 	// No need to mark the tables as dropped if they were not even created in the
 	// first place.
 	if !details.PrepareCompleted {
+		return nil
+	}
+
+	// Descriptors have already been dropped once before, this is a retry of the
+	// cleanup.
+	if details.DroppedDescsOnFail {
 		return nil
 	}
 
@@ -3186,7 +3199,8 @@ func (r *restoreResumer) dropDescriptors(
 		return errors.Wrap(err, "dropping tables created at the start of restore caused by fail/cancel")
 	}
 
-	return nil
+	details.DroppedDescsOnFail = true
+	return errors.Wrap(r.job.WithTxn(txn).SetDetails(ctx, details), "checkpointing dropped descs on fail")
 }
 
 // removeExistingTypeBackReferences removes back references from types that
