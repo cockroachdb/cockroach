@@ -147,13 +147,13 @@ func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) 
 		}
 
 		// Are we done yet with the current batch?
-		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize ||
+		if len(u.run.tu.b.Requests()) >= u.run.tu.maxBatchSize ||
 			u.run.tu.b.ApproximateMutationBytes() >= u.run.tu.maxBatchByteSize {
 			break
 		}
 	}
 
-	if u.run.tu.currentBatchSize > 0 {
+	if len(u.run.tu.b.Requests()) > 0 {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.

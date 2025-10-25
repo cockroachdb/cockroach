@@ -598,7 +598,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 				// Periodically flush out the batches, so that we don't issue gigantic
 				// raft commands.
-				if ti.currentBatchSize >= ti.maxBatchSize ||
+				if len(ti.b.Requests()) >= ti.maxBatchSize ||
 					ti.b.ApproximateMutationBytes() >= ti.maxBatchByteSize {
 					if err := ti.flushAndStartNewBatch(params.ctx); err != nil {
 						return err

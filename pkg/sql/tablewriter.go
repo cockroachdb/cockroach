@@ -56,9 +56,6 @@ type tableWriterBase struct {
 	// maxBatchByteSize determines the maximum number of key and value bytes in
 	// the KV batch for a mutation operation.
 	maxBatchByteSize int
-	// currentBatchSize is the size of the current batch. It is updated on
-	// every row() call and is reset once a new batch is started.
-	currentBatchSize int
 	// rowsWritten tracks the number of rows written by this tableWriterBase so
 	// far. This counter includes unsuccessful writes (e.g. those performed by
 	// swap mutations in the event of a nonexistent row).
@@ -141,8 +138,6 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 		return err
 	}
 	tb.initNewBatch()
-	tb.rowsWritten += int64(tb.currentBatchSize)
-	tb.currentBatchSize = 0
 	return nil
 }
 
@@ -150,7 +145,6 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	// NB: unlike flushAndStartNewBatch, we don't bother with admission control
 	// for response processing when finalizing.
-	tb.rowsWritten += int64(tb.currentBatchSize)
 	if tb.autoCommit == autoCommitEnabled &&
 		// We can only auto commit if the rows written guardrail is disabled or
 		// we haven't exceeded the specified limit (the optimizer is responsible

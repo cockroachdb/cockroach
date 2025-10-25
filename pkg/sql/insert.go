@@ -336,13 +336,13 @@ func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) 
 		}
 
 		// Are we done yet with the current batch?
-		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize ||
+		if len(n.run.ti.b.Requests()) >= n.run.ti.maxBatchSize ||
 			n.run.ti.b.ApproximateMutationBytes() >= n.run.ti.maxBatchByteSize {
 			break
 		}
 	}
 
-	if n.run.ti.currentBatchSize > 0 {
+	if len(n.run.ti.b.Requests()) > 0 {
 		if !lastBatch {
 			// We only run/commit the batch if there were some rows processed
 			// in this batch.

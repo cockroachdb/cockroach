@@ -172,7 +172,7 @@ func (tu *tableUpserter) row(
 	oth row.OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
-	tu.currentBatchSize++
+	tu.rowsWritten++
 	tu.onModifiedRow()
 
 	// Consult the canary column to determine whether to insert or update. For

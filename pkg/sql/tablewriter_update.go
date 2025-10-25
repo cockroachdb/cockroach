@@ -55,7 +55,7 @@ func (tu *tableUpdater) rowForUpdate(
 	mustValidateOldPKValues bool,
 	traceKV bool,
 ) (tree.Datums, error) {
-	tu.currentBatchSize++
+	tu.rowsWritten++
 	return tu.ru.UpdateRow(
 		ctx, tu.b, oldValues, updateValues, pm, vh, oth, mustValidateOldPKValues, traceKV,
 	)

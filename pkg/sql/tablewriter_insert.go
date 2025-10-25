@@ -51,7 +51,7 @@ func (ti *tableInserter) row(
 	oth row.OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
-	ti.currentBatchSize++
+	ti.rowsWritten++
 	return ti.ri.InsertRow(ctx, &ti.putter, values, pm, vh, oth, row.CPutOp, traceKV)
 }
 
