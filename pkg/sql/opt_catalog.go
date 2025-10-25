@@ -744,13 +744,9 @@ func (oc *optCatalog) codec() keys.SQLCodec {
 	return oc.planner.ExecCfg().Codec
 }
 
-// DisableUnsafeInternalCheck sets the planners skipUnsafeInternalsCheck
-// to true, and returns a function which reverses it to false.
+// DisableUnsafeInternalCheck forwards the call to the planner.
 func (oc *optCatalog) DisableUnsafeInternalCheck() func() {
-	oc.planner.skipUnsafeInternalsCheck = true
-	return func() {
-		oc.planner.skipUnsafeInternalsCheck = false
-	}
+	return oc.planner.DisableUnsafeInternalsCheck()
 }
 
 // optView is a wrapper around catalog.TableDescriptor that implements
