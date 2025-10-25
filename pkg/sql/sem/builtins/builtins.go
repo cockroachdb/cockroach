@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/randgen/randgencfg"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
@@ -9683,6 +9684,34 @@ WHERE object_id = table_descriptor_id
 				}
 				return tree.NewDLTree(lca), nil
 			},
+		},
+	),
+
+	"crdb_internal.inject_hint": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "statement_fingerprint", Typ: types.String},
+				{Name: "donor_sql", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				stmtFingerprint := string(tree.MustBeDString(args[0]))
+				donorSQL := string(tree.MustBeDString(args[1]))
+				var hint hintpb.StatementHintUnion
+				hint.SetValue(&hintpb.InjectHints{DonorSQL: donorSQL})
+				hintID, err := evalCtx.Planner.InsertStatementHint(ctx, stmtFingerprint, hint)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(hintID)), nil
+			},
+			Info: "This function is used to build a serialized statement hint to be inserted into" +
+				" the system.statement_hints table. It returns the hint ID of the newly created hint.",
+			Volatility: volatility.Volatile,
 		},
 	),
 }

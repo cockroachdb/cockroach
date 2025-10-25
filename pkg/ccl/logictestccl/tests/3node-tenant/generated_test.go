@@ -2108,6 +2108,13 @@ func TestTenantLogic_srfs(
 	runLogicTest(t, "srfs")
 }
 
+func TestTenantLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
+}
+
 func TestTenantLogic_statement_source(
 	t *testing.T,
 ) {

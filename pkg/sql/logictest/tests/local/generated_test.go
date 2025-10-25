@@ -2334,6 +2334,13 @@ func TestLogic_srfs(
 	runLogicTest(t, "srfs")
 }
 
+func TestLogic_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "statement_hint_builtins")
+}
+
 func TestLogic_statement_source(
 	t *testing.T,
 ) {
