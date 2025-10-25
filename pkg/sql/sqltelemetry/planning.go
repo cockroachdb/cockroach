@@ -122,6 +122,10 @@ var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt
 // EXPLAIN (GIST) is run.
 var ExplainGist = telemetry.GetCounterOnce("sql.plan.explain-gist")
 
+// ExplainFingerprint is to be incremented whenever
+// EXPLAIN (FINGERPRINT) is run.
+var ExplainFingerprint = telemetry.GetCounterOnce("sql.plan.explain-fingerprint")
+
 // CreateStatisticsUseCounter is to be incremented whenever a non-automatic
 // run of CREATE STATISTICS occurs.
 var CreateStatisticsUseCounter = telemetry.GetCounterOnce("sql.plan.stats.created")
