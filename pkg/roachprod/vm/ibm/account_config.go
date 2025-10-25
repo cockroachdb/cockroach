@@ -121,7 +121,7 @@ func (p *Provider) configureCloudAccountFull(cc *ibmCloudConfig) error {
 	// Create a transit gateway for the account in the first region.
 	tgID, err := p.getOrCreateTransitGateway(supportedRegions[0])
 	if err != nil {
-		return errors.Wrap(err, "failed to create transit gateway")
+		return errors.Wrap(err, "failed to get or create transit gateway")
 	}
 
 	for region := range p.regions {
