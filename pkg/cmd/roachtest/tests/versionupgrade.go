@@ -96,12 +96,37 @@ DROP TABLE splitmerge.t;
 	},
 }
 
-func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
+type versionUpgradeChaosOpts struct {
+	protectedNodePartition bool
+	singlePartition        bool
+}
+
+func runVersionUpgrade(
+	ctx context.Context, t test.Test, c cluster.Cluster, chaosOpts versionUpgradeChaosOpts,
+) {
 	testCtx := ctx
 	opts := []mixedversion.CustomOption{
 		mixedversion.AlwaysUseFixtures,
 		mixedversion.AlwaysUseLatestPredecessors,
 	}
+
+	if chaosOpts.protectedNodePartition {
+		opts = append([]mixedversion.CustomOption{
+			mixedversion.EnableHooksDuringFailureInjection,
+			mixedversion.WithProtectedNodeNetworkPartition(),
+			mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment, mixedversion.SharedProcessDeployment),
+		},
+			opts...)
+	}
+	if chaosOpts.singlePartition {
+		opts = append([]mixedversion.CustomOption{
+			mixedversion.EnableHooksDuringFailureInjection,
+			mixedversion.WithSingleNetworkPartition(),
+			mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment, mixedversion.SharedProcessDeployment),
+		},
+			opts...)
+	}
+
 	if c.IsLocal() {
 		localTimeout := 30 * time.Minute
 		var cancel context.CancelFunc
@@ -123,7 +148,8 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// Verify that backups can be created in various configurations. This is
 				// important to test because changes in system tables might cause backups to
 				// fail in mixed-version clusters.
-				dest := fmt.Sprintf("nodelocal://1/%d", timeutil.Now().UnixNano())
+				randomNode := h.AvailableNodes().RandNode()[0]
+				dest := fmt.Sprintf("nodelocal://%d/%d", randomNode, timeutil.Now().UnixNano())
 				return h.Exec(rng, `BACKUP INTO $1`, dest)
 			} else {
 				// Skip the backup step in separate-process deployments, since nodelocal
@@ -150,6 +176,41 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	)
 
 	mvt.Run()
+}
+
+func registerVersionUpgradeChaos(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:    "version-upgrade/chaos/protected-node-partition",
+		Owner:   registry.OwnerTestEng,
+		Cluster: r.MakeClusterSpec(4),
+		// Disabled on IBM because s390x is only built on master
+		// and version upgrade is impossible to test as of 05/2025.
+		CompatibleClouds:  registry.AllClouds.NoIBM(),
+		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
+		Randomized:        true,
+		Monitor:           true,
+		NonReleaseBlocker: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runVersionUpgrade(ctx, t, c, versionUpgradeChaosOpts{protectedNodePartition: true})
+		},
+		Timeout: 2 * time.Hour,
+	})
+	r.Add(registry.TestSpec{
+		Name:    "version-upgrade/chaos/single-partition",
+		Owner:   registry.OwnerTestEng,
+		Cluster: r.MakeClusterSpec(4),
+		// Disabled on IBM because s390x is only built on master
+		// and version upgrade is impossible to test as of 05/2025.
+		CompatibleClouds:  registry.AllClouds.NoIBM(),
+		Suites:            registry.Suites(registry.MixedVersion, registry.Nightly),
+		Randomized:        true,
+		Monitor:           true,
+		NonReleaseBlocker: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runVersionUpgrade(ctx, t, c, versionUpgradeChaosOpts{singlePartition: true})
+		},
+		Timeout: 2 * time.Hour,
+	})
 }
 
 // uploadCockroach is a thin wrapper around

@@ -581,6 +581,22 @@ func DisableAllFailureInjectionMutators() CustomOption {
 	}
 }
 
+func WithProtectedNodeNetworkPartition() CustomOption {
+	return func(opts *testOptions) {
+		DisableMutators(SingleNetworkPartition)(opts)
+		DisableMutators(ClusterSettingMutator("kv.expiration_leases_only.enabled"))(opts)
+		WithMutatorProbability(ProtectedNodeNetworkPartition, 1.0)(opts)
+	}
+}
+
+func WithSingleNetworkPartition() CustomOption {
+	return func(opts *testOptions) {
+		DisableMutators(ProtectedNodeNetworkPartition)(opts)
+		DisableMutators(ClusterSettingMutator("kv.expiration_leases_only.enabled"))(opts)
+		WithMutatorProbability(SingleNetworkPartition, 1.0)(opts)
+	}
+}
+
 // WithTag allows callers give the mixedversion test instance a
 // `tag`. The tag is used as prefix in the log messages emitted by
 // this upgrade test. This is only useful when running multiple
