@@ -451,7 +451,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	p.sessionDataMutatorIterator.paramStatusUpdater = res
+	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
 
@@ -1337,7 +1337,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	p.sessionDataMutatorIterator.paramStatusUpdater = res
+	p.sessionDataMutatorIterator.ParamStatusUpdater = res
 	p.noticeSender = res
 	ih := &p.instrumentation
 
@@ -2331,7 +2331,7 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 		return err
 	}
 	after := ex.sessionDataStack.Top()
-	if ex.dataMutatorIterator.paramStatusUpdater != nil {
+	if ex.dataMutatorIterator.ParamStatusUpdater != nil {
 		for _, param := range bufferableParamStatusUpdates {
 			if param.sv.Equal == nil {
 				return errors.AssertionFailedf("Equal for %s must be set", param.name)
@@ -2340,18 +2340,18 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 				return errors.AssertionFailedf("GetFromSessionData for %s must be set", param.name)
 			}
 			if !param.sv.Equal(before, after) {
-				ex.dataMutatorIterator.paramStatusUpdater.BufferParamStatusUpdate(
+				ex.dataMutatorIterator.ParamStatusUpdater.BufferParamStatusUpdate(
 					param.name,
 					param.sv.GetFromSessionData(after),
 				)
 			}
 		}
 	}
-	if before.DefaultIntSize != after.DefaultIntSize && ex.dataMutatorIterator.onDefaultIntSizeChange != nil {
-		ex.dataMutatorIterator.onDefaultIntSizeChange(after.DefaultIntSize)
+	if before.DefaultIntSize != after.DefaultIntSize && ex.dataMutatorIterator.OnDefaultIntSizeChange != nil {
+		ex.dataMutatorIterator.OnDefaultIntSizeChange(after.DefaultIntSize)
 	}
-	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.onApplicationNameChange != nil {
-		ex.dataMutatorIterator.onApplicationNameChange(after.ApplicationName)
+	if before.ApplicationName != after.ApplicationName && ex.dataMutatorIterator.OnApplicationNameChange != nil {
+		ex.dataMutatorIterator.OnApplicationNameChange(after.ApplicationName)
 	}
 	return nil
 }

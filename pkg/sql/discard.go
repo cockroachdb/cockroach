@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/errors"
 )
 
@@ -51,9 +52,9 @@ func (n *discardNode) startExec(params runParams) error {
 		params.p.preparedStatements.DeleteAll(params.ctx)
 
 		// DISCARD SEQUENCES
-		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.data.SequenceState = sessiondata.NewSequenceState()
-			m.initSequenceCache()
+		params.p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+			m.Data.SequenceState = sessiondata.NewSequenceState()
+			m.InitSequenceCache()
 		})
 
 		// DISCARD TEMP
@@ -63,9 +64,9 @@ func (n *discardNode) startExec(params runParams) error {
 		}
 
 	case tree.DiscardModeSequences:
-		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.data.SequenceState = sessiondata.NewSequenceState()
-			m.initSequenceCache()
+		params.p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+			m.Data.SequenceState = sessiondata.NewSequenceState()
+			m.InitSequenceCache()
 		})
 	case tree.DiscardModeTemp:
 		err := deleteTempTables(params.ctx, params.p)

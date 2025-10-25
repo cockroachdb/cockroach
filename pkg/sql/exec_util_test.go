@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
@@ -100,7 +101,7 @@ func TestSessionDefaultsSafeFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	session := SessionDefaults(make(map[string]string))
+	session := sessionmutator.SessionDefaults(make(map[string]string))
 	session["database"] = "test"
 	session["statement_timeout"] = "250ms"
 	session["disallow_full_table_scans"] = "true"

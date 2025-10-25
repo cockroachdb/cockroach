@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -92,7 +93,7 @@ var (
 func (p *planner) InsertTemporarySchema(
 	tempSchemaName string, databaseID descpb.ID, schemaID descpb.ID,
 ) {
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
+	p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
 		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(databaseID), uint32(schemaID))
 	})
