@@ -9,10 +9,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -52,6 +54,9 @@ func AddChangefeedToQueryLoad(
 	if err != nil {
 		return err
 	}
+	if _, err := conn.Exec(ctx, "SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return err
+	}
 	if _, err := conn.Exec(ctx, fmt.Sprintf("USE %q", dbName)); err != nil {
 		return err
 	}
@@ -80,6 +85,8 @@ func AddChangefeedToQueryLoad(
 	if err := conn.QueryRow(ctx, "SELECT cluster_logical_timestamp()").Scan(&cursorStr); err != nil {
 		return err
 	}
+
+	log.Dev.Infof(ctx, "cursor: %s", cursorStr)
 
 	tableNames := strings.Builder{}
 	for i, table := range gen.Tables() {
@@ -123,6 +130,11 @@ func AddChangefeedToQueryLoad(
 	maybeSetupRows := func() (done bool) {
 		if rows != nil {
 			return false
+		}
+		log.Dev.Infof(ctx, "creating changefeed with stmt: %s with args %v", stmt, args)
+		if epoch, parseErr := strconv.ParseInt(cursorStr, 10, 64); parseErr == nil {
+			t := time.Unix(epoch, 0).UTC()
+			log.Dev.Infof(ctx, "starting a changefeed after %s", time.Since(t))
 		}
 		var err error
 		rows, err = conn.Query(cfCtx, stmt, args...)
