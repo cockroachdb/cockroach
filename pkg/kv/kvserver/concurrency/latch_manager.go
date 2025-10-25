@@ -27,6 +27,10 @@ func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard
 	return lg, nil
 }
 
+func (m *latchManagerImpl) AcquireFromEmpty(spans *spanset.SpanSet) (latchGuard, error) {
+	return m.m.AcquireFromEmpty(spans)
+}
+
 func (m *latchManagerImpl) AcquireOptimistic(req Request) latchGuard {
 	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy, req.Batch)
 	return lg
