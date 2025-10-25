@@ -34,7 +34,10 @@ var Enabled = settings.RegisterBoolSetting(
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
+	// TODO: Change the funciton name to something that means "enqueue" messages
+	// for sending.
 	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
+	SendAllMessages(ctx context.Context)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -329,6 +332,8 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
 		}
 	}
+
+	sm.sender.SendAllMessages(ctx)
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
 	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
@@ -426,6 +431,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	for _, response := range responses {
 		_ = sm.sender.SendAsync(ctx, response)
 	}
+	sm.sender.SendAllMessages(ctx)
 	log.KvExec.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
 
