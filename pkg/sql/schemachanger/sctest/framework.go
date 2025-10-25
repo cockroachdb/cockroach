@@ -8,8 +8,10 @@ package sctest
 import (
 	"context"
 	gosql "database/sql"
+	"flag"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -647,6 +649,12 @@ func (cs CumulativeTestCaseSpec) run(t *testing.T, fn func(t *testing.T)) bool {
 	return t.Run(fmt.Sprintf("%s_stage_%d_of_%d", prefix, cs.StageOrdinal, cs.StagesCount), fn)
 }
 
+// runAllCumulative use to disable sampling for tests for cumalative tests.
+var runAllCumulative = flag.Bool(
+	"run-all-cumulative", false,
+	"if true, run all cumulative instead of a random subset",
+)
+
 // cumulativeTestForEachPostCommitStage invokes `tf` once for each stage in the
 // PostCommitPhase.
 func cumulativeTestForEachPostCommitStage(
@@ -655,6 +663,7 @@ func cumulativeTestForEachPostCommitStage(
 	factory TestServerFactory,
 	prepFn func(t *testing.T, spec CumulativeTestSpec, dbName string),
 	tf func(t *testing.T, spec CumulativeTestCaseSpec),
+	enableSampling bool,
 ) {
 	testFunc := func(t *testing.T, spec CumulativeTestSpec) {
 		// Skip this test if any of the stmts is not fully supported.
@@ -719,6 +728,14 @@ func cumulativeTestForEachPostCommitStage(
 		var hasFailed bool
 		if prepFn != nil {
 			prepFn(t, spec, dbName)
+		}
+		// If sampling is enabled limit the number of stages executed.
+		if enableSampling && len(testCases) > maxStagesToTest && !(*runAllCumulative) {
+			// Shuffle and pick up to maxStagesToTest.
+			rand.Shuffle(len(testCases), func(i, j int) {
+				testCases[i], testCases[j] = testCases[j], testCases[i]
+			})
+			testCases = testCases[:maxStagesToTest]
 		}
 		for _, tc := range testCases {
 			fn := func(t *testing.T) {
