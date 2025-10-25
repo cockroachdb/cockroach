@@ -4276,7 +4276,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.RdbBloomFilterPrefixChecked.Update(m.Filter.Hits + m.Filter.Misses)
 	sm.RdbMemtableTotalSize.Update(int64(m.MemTable.Size))
 	sm.RdbFlushes.Update(m.Flush.Count)
-	sm.RdbFlushedBytes.Update(int64(m.Levels[0].TableBytesFlushed + m.Levels[0].BlobBytesFlushed))
+	sm.RdbFlushedBytes.Update(int64(m.Levels[0].TablesFlushed.Bytes + m.Levels[0].BlobBytesFlushed))
 	sm.RdbCompactions.Update(m.Compact.Count)
 	sm.RdbIngestedBytes.Update(int64(m.IngestedBytes()))
 	compactedRead, compactedWritten := m.CompactedBytes()
@@ -4323,16 +4323,16 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.SecondaryCacheEvictions.Update(m.SecondaryCacheMetrics.Evictions)
 	sm.SecondaryCacheWriteBackFails.Update(m.SecondaryCacheMetrics.WriteBackFailures)
 	sm.RdbL0Sublevels.Update(int64(m.Levels[0].Sublevels))
-	sm.RdbL0NumFiles.Update(m.Levels[0].TablesCount)
-	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].TableBytesFlushed + m.Levels[0].BlobBytesFlushed))
+	sm.RdbL0NumFiles.Update(int64(m.Levels[0].Tables.Count))
+	sm.RdbL0BytesFlushed.Update(int64(m.Levels[0].TablesFlushed.Bytes + m.Levels[0].BlobBytesFlushed))
 	sm.FlushableIngestCount.Update(int64(m.Flush.AsIngestCount))
 	sm.FlushableIngestTableCount.Update(int64(m.Flush.AsIngestTableCount))
 	sm.FlushableIngestTableSize.Update(int64(m.Flush.AsIngestBytes))
 	sm.IngestCount.Update(int64(m.Ingest.Count))
 	sm.ValueSeparationBytesReferenced.Update(int64(m.BlobFiles.ReferencedValueSize))
 	sm.ValueSeparationBytesUnreferenced.Update(int64(m.BlobFiles.ValueSize - m.BlobFiles.ReferencedValueSize))
-	sm.ValueSeparationBlobFileCount.Update(int64(m.BlobFiles.LiveCount))
-	sm.ValueSeparationBlobFileSize.Update(int64(m.BlobFiles.LiveSize))
+	sm.ValueSeparationBlobFileCount.Update(int64(m.BlobFiles.Live.All.Count))
+	sm.ValueSeparationBlobFileSize.Update(int64(m.BlobFiles.Live.All.Bytes))
 	sm.ValueSeparationValueRetrievalCount.Update(int64(m.Iterator.ValueRetrievalCount))
 	// NB: `UpdateIfHigher` is used here since there is a race in pebble where
 	// sometimes the WAL is rotated but metrics are retrieved prior to the update
@@ -4350,10 +4350,10 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
-	sm.SSTableZombieBytes.Update(int64(m.Table.ZombieSize))
-	count, size := m.RemoteTablesTotal()
-	sm.SSTableRemoteBytes.Update(int64(size))
-	sm.SSTableRemoteCount.Update(int64(count))
+	sm.SSTableZombieBytes.Update(int64(m.Table.Zombie.All.Bytes))
+	remoteTables := m.RemoteTablesTotal()
+	sm.SSTableRemoteBytes.Update(int64(remoteTables.Bytes))
+	sm.SSTableRemoteCount.Update(int64(remoteTables.Count))
 
 	c := m.Table.Compression
 	c.MergeWith(&m.BlobFiles.Compression)
@@ -4381,8 +4381,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
 	for level, stats := range m.Levels {
-		sm.RdbBytesIngested[level].Update(int64(stats.TableBytesIngested))
-		sm.RdbLevelSize[level].Update(stats.TablesSize)
+		sm.RdbBytesIngested[level].Update(int64(stats.TablesIngested.Bytes))
+		sm.RdbLevelSize[level].Update(int64(stats.Tables.Bytes))
 		sm.RdbLevelScore[level].Update(stats.Score)
 	}
 	tot := m.Total()
