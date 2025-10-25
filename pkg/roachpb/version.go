@@ -234,6 +234,7 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 	{25, 1}: {25, 2},
 	{25, 2}: {25, 3},
 	{25, 3}: {25, 4},
+	{25, 4}: {26, 1},
 }
 
 // ReleaseSeries obtains the release series for the given version. Specifically:

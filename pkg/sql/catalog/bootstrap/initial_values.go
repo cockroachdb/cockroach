@@ -79,6 +79,13 @@ var initialValuesFactoryByKey = map[clusterversion.Key]initialValuesFactoryFn{
 		nonSystem:     v25_3_tenant_keys,
 		nonSystemHash: v25_3_tenant_sha256,
 	}.build,
+
+	clusterversion.V25_4: hardCodedInitialValues{
+		system:        v25_4_system_keys,
+		systemHash:    v25_4_system_sha256,
+		nonSystem:     v25_4_tenant_keys,
+		nonSystemHash: v25_4_tenant_sha256,
+	}.build,
 }
 
 // buildLatestInitialValues is the default initial value factory.
@@ -160,3 +167,15 @@ var v25_3_tenant_keys string
 
 //go:embed data/25_3_tenant.sha256
 var v25_3_tenant_sha256 string
+
+//go:embed data/25_4_system.keys
+var v25_4_system_keys string
+
+//go:embed data/25_4_system.sha256
+var v25_4_system_sha256 string
+
+//go:embed data/25_4_tenant.keys
+var v25_4_tenant_keys string
+
+//go:embed data/25_4_tenant.sha256
+var v25_4_tenant_sha256 string
