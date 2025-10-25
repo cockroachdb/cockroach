@@ -1159,10 +1159,14 @@ func (r *Registry) cleanupOldJobs(ctx context.Context, olderThan time.Time) erro
 		var done bool
 		var err error
 		done, maxID, err = r.cleanupOldJobsPage(ctx, olderThan, maxID, cleanupPageSize)
-		if err != nil || done {
+		if err != nil {
 			return err
 		}
+		if done {
+			break
+		}
 	}
+	return r.CleanupCorruptJobs(ctx)
 }
 
 // AbandonedJobInfoRowsCleanupQuery is used by the CLI command
@@ -1215,6 +1219,36 @@ func (r *Registry) cleanupOldJobsPage(
 	return len(candidates) < pageSize, candidates[len(candidates)-1], nil
 }
 
+const findCorruptJobsQuery = `
+SELECT id
+FROM system.jobs
+LEFT JOIN system.job_info ON system.jobs.id = system.job_info.job_id
+WHERE system.job_info.job_id IS NULL AND system.jobs.job_type = 'AUTO SQL STATS COMPACTION'
+`
+
+// CleanupCorruptJobs is a temporary cleanup function that deletes corrupt
+// `AUTO SQL STATS COMPACTION` jobs. This function exists to clean up after
+// #155165.
+//
+// TODO(jeffswenson): in a separate PR we should run this as a migration so we
+// can guarantee the issue was cleaned up as of a specific version.
+func (r *Registry) CleanupCorruptJobs(ctx context.Context) error {
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		datums, err := txn.QueryBuffered(ctx, "get-corrupt-jobs", txn.KV(), findCorruptJobsQuery)
+		if err != nil {
+			return errors.Wrap(err, "querying for broken sql activity stats compaction jobs")
+		}
+		for _, row := range datums {
+			id := jobspb.JobID(tree.MustBeDInt(row[0]))
+			log.Dev.Errorf(ctx, "resetting broken sql activity stats compaction job %d", id)
+			if err := r.deleteJob(ctx, txn, id); err != nil {
+				return errors.Wrapf(err, "deleting broken sql activity stats compaction job %d", id)
+			}
+		}
+		return nil
+	})
+}
+
 // DeleteTerminalJobByID deletes the given job ID if it is in a
 // terminal state. If it is is in a non-terminal state, an error is
 // returned. This API should not be used.
@@ -1231,26 +1265,30 @@ func (r *Registry) DeleteTerminalJobByID(ctx context.Context, id jobspb.JobID) e
 		state := State(*row[0].(*tree.DString))
 		switch state {
 		case StateSucceeded, StateCanceled, StateFailed:
-			_, err := txn.Exec(
-				ctx, "delete-job", txn.KV(), "DELETE FROM system.jobs WHERE id = $1", id,
-			)
-			if err != nil {
-				return err
-			}
-			for _, tbl := range jobMetadataTables {
-				_, err = txn.Exec(
-					ctx, redact.RedactableString("delete-job-"+tbl), txn.KV(),
-					"DELETE FROM system."+tbl+" WHERE job_id = $1", id,
-				)
-				if err != nil {
-					return err
-				}
-			}
-			return nil
+			return r.deleteJob(ctx, txn, id)
 		default:
 			return errors.Newf("job %d has non-terminal state: %q", id, state)
 		}
 	})
+}
+
+func (r *Registry) deleteJob(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+	_, err := txn.Exec(
+		ctx, "delete-job", txn.KV(), "DELETE FROM system.jobs WHERE id = $1", id,
+	)
+	if err != nil {
+		return err
+	}
+	for _, tbl := range jobMetadataTables {
+		_, err = txn.Exec(
+			ctx, redact.RedactableString("delete-job-"+tbl), txn.KV(),
+			"DELETE FROM system."+tbl+" WHERE job_id = $1", id,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
