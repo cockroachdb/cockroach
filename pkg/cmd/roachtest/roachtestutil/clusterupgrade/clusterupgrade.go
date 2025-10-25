@@ -257,6 +257,7 @@ func uploadBinaryVersion(
 	v *Version,
 ) (string, error) {
 	dstBinary := BinaryPathForVersion(t, v, binary)
+	l.Printf("Attempting to download %s to nodes as %s", dstBinary, nodes)
 	var defaultBinary string
 	var isOverridden bool
 	switch binary {
@@ -286,6 +287,7 @@ func uploadBinaryVersion(
 		dir := filepath.Dir(dstBinary)
 		// Avoid staging the binary if it already exists.
 		if err := c.RunE(ctx, option.WithNodes(nodes), "test -e", dstBinary); err == nil {
+			l.Printf("binary %s already exists on nodes %s", dstBinary, nodes) // expecting this line to print
 			return dstBinary, nil
 		}
 
