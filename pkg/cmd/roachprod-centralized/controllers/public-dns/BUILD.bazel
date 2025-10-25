@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "public-dns",
+    srcs = ["public_dns.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/controllers/public-dns",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/controllers",
+        "//pkg/cmd/roachprod-centralized/controllers/public-dns/types",
+        "//pkg/cmd/roachprod-centralized/services/public-dns/types",
+        "@com_github_gin_gonic_gin//:gin",
+    ],
+)
+
+go_test(
+    name = "public-dns_test",
+    srcs = ["public_dns_test.go"],
+    embed = [":public-dns"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/app",
+        "//pkg/cmd/roachprod-centralized/services/public-dns/mocks",
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+    ],
+)
