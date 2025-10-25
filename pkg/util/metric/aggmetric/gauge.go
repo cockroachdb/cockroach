@@ -65,9 +65,6 @@ func (g *AggGauge) GetName(useStaticLabels bool) string { return g.g.GetName(use
 // GetHelp is part of the metric.Iterable interface.
 func (g *AggGauge) GetHelp() string { return g.g.GetHelp() }
 
-// GetMeasurement is part of the metric.Iterable interface.
-func (g *AggGauge) GetMeasurement() string { return g.g.GetMeasurement() }
-
 // GetUnit is part of the metric.Iterable interface.
 func (g *AggGauge) GetUnit() metric.Unit { return g.g.GetUnit() }
 
@@ -277,9 +274,6 @@ func (g *AggGaugeFloat64) GetName(useStaticLabels bool) string { return g.g.GetN
 
 // GetHelp is part of the metric.Iterable interface.
 func (g *AggGaugeFloat64) GetHelp() string { return g.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (g *AggGaugeFloat64) GetMeasurement() string { return g.g.GetMeasurement() }
 
 // GetUnit is part of the metric.Iterable interface.
 func (g *AggGaugeFloat64) GetUnit() metric.Unit { return g.g.GetUnit() }
