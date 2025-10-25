@@ -218,6 +218,13 @@ func TestExecBuild_explain_env(
 	runExecBuildLogicTest(t, "explain_env")
 }
 
+func TestExecBuild_explain_fingerprint(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "explain_fingerprint")
+}
+
 func TestExecBuild_explain_gist(
 	t *testing.T,
 ) {

@@ -129,6 +129,9 @@ define ExplainPrivate {
 
     # StmtType stores the type of the statement return we are explaining.
     StmtType StatementReturnType
+
+    # Fingerprint stores the statement fingerprint for EXPLAIN (FINGERPRINT).
+    Fingerprint string
 }
 
 # ShowTraceForSession returns the current session traces.
