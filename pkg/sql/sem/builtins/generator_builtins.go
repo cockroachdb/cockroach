@@ -68,7 +68,7 @@ func init() {
 	}
 }
 
-const DefaultSpanStatsSpanLimit = 1000
+const DefaultSpanStatsSpanLimit = 25
 
 // SpanStatsBatchLimit registers the maximum number of spans allowed in a
 // span stats request payload.
