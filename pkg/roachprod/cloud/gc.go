@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/IBM/go-sdk-core/v5/core"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -34,12 +35,12 @@ import (
 var errNoSlackClient = fmt.Errorf("no Slack client")
 
 type status struct {
-	good    []*Cluster
-	warn    []*Cluster
-	destroy []*Cluster
+	good    []*cloudcluster.Cluster
+	warn    []*cloudcluster.Cluster
+	destroy []*cloudcluster.Cluster
 }
 
-func (s *status) add(c *Cluster, now time.Time) {
+func (s *status) add(c *cloudcluster.Cluster, now time.Time) {
 	exp := c.ExpiresAt()
 	// Clusters without VMs shouldn't exist and are likely dangling resources.
 	if c.IsEmptyCluster() {
@@ -68,7 +69,7 @@ func (s *status) notificationHash() string {
 	// Use stdlib hash function, since we don't need any crypto guarantees
 	hash := fnv.New32a()
 
-	for i, list := range [][]*Cluster{s.good, s.warn, s.destroy} {
+	for i, list := range [][]*cloudcluster.Cluster{s.good, s.warn, s.destroy} {
 		_, _ = hash.Write([]byte{byte(i)})
 
 		var data []string
@@ -128,7 +129,7 @@ func findUserChannel(client *slack.Client, email string) (string, error) {
 	return u.ID, nil
 }
 
-func slackClusterExpirationDate(c *Cluster) string {
+func slackClusterExpirationDate(c *cloudcluster.Cluster) string {
 	return fmt.Sprintf("<!date^%[1]d^{date_short_pretty} {time}|%[2]s>",
 		c.GCAt().Unix(),
 		c.LifetimeRemaining().Round(time.Second))
@@ -173,7 +174,7 @@ func postStatus(
 		}
 	}
 
-	makeStatusFields := func(clusters []*Cluster, elideExpiration bool) []slack.AttachmentField {
+	makeStatusFields := func(clusters []*cloudcluster.Cluster, elideExpiration bool) []slack.AttachmentField {
 		var names []string
 		var expirations []string
 		for _, c := range clusters {
@@ -220,8 +221,8 @@ func postStatus(
 	}
 	if len(s.destroy) > 0 {
 		// N.B. split into empty and non-empty clusters; use a different Title for empty cluster, and elide expiration.
-		var emptyClusters []*Cluster
-		var nonEmptyClusters []*Cluster
+		var emptyClusters []*cloudcluster.Cluster
+		var nonEmptyClusters []*cloudcluster.Cluster
 		for _, c := range s.destroy {
 			if c.IsEmptyCluster() {
 				emptyClusters = append(emptyClusters, c)
