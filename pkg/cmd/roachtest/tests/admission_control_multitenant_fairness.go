@@ -344,7 +344,7 @@ func runMultiTenantFairness(
 	}
 
 	ok, maxLatencyDelta := floatsWithinPercentage(meanLatencies, failThreshold)
-	t.L().Printf("max-latency-delta=%d% mean-latency-per-tenant=%v\n", int(maxLatencyDelta*100), meanLatencies)
+	t.L().Printf("max-latency-delta=%d%% mean-latency-per-tenant=%v\n", int(maxLatencyDelta*100), meanLatencies)
 	if !ok {
 		// TODO(irfansharif): Same as above -- this is a weak assertion.
 		t.L().Printf("latency not within expectations: %f > %f %v", maxLatencyDelta, failThreshold, meanLatencies)

@@ -302,7 +302,7 @@ func gracefulClose(ctx context.Context, toClose io.ReadCloser) {
 	const respExtraReadLimit = 4096
 	_, _ = io.CopyN(io.Discard, toClose, respExtraReadLimit)
 	if err := toClose.Close(); err != nil {
-		log.Changefeed.VInfof(ctx, 2, "failure to close schema registry connection", err)
+		log.Changefeed.VInfof(ctx, 2, "failure to close schema registry connection: %+v", err)
 	}
 }
 
