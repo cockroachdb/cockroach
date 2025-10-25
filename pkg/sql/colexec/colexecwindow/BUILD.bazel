@@ -57,6 +57,7 @@ go_test(
     ],
     embed = [":colexecwindow"],
     deps = [
+        "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
         "//pkg/settings/cluster",
@@ -78,6 +79,7 @@ go_test(
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "//pkg/testutils/colcontainerutils",
+        "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
