@@ -30,6 +30,10 @@ type recursiveCTENode struct {
 	// The input plan node is for the initial query.
 	singleInputPlanNode
 
+	// forwarder allows propagating the ProducerMetadata towards the
+	// DistSQLReceiver.
+	forwarder metadataForwarder
+
 	genIterationFn exec.RecursiveCTEIterationFn
 	// iterationCount tracks the number of invocations of genIterationFn.
 	iterationCount int
@@ -148,12 +152,14 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := runPlanInsidePlan(
+	queryStats, err := runPlanInsidePlan(
 		planAndRunCtx, params, newPlan.(*planComponents), rowResultWriter(n),
 		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
-	); err != nil {
+	)
+	if err != nil {
 		return false, err
 	}
+	forwardInnerQueryStats(n.forwarder, queryStats)
 
 	n.iterator = newRowContainerIterator(params.ctx, n.workingRows)
 	n.currentRow, err = n.iterator.Next()

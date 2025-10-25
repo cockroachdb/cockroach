@@ -3956,6 +3956,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.noticeSender = nil
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.sqlCursors = ex.getCursorAccessor()
+	p.routineMetadataForwarder = nil
 	p.storedProcTxnState = ex.getStoredProcTxnStateAccessor()
 	p.createdSequences = ex.getCreatedSequencesAccessor()
 
