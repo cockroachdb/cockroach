@@ -255,6 +255,15 @@ func (f *MultiFrontier[P]) Frontiers() iter.Seq2[P, ReadOnlyFrontier] {
 	}
 }
 
+// GetFrontier returns the frontier for the given partition if it is present
+// in the heap and nil otherwise.
+func (f *MultiFrontier[P]) GetFrontier(partition P) ReadOnlyFrontier {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.mu.frontiers.get(partition)
+}
+
 // partitionedMultiFrontierHeap is a wrapper around multiFrontierHeap
 // that provides convenience methods so that frontiers can be
 // accessed by their partition. It is not safe for concurrent use.

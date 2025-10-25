@@ -86,6 +86,8 @@ func TestTablesetBasic(t *testing.T) {
 			db.Exec(t, "DROP TABLE IF EXISTS exclude_me")
 			db.Exec(t, "DROP TABLE IF EXISTS exclude_me_also")
 			db.Exec(t, "DROP TABLE IF EXISTS foober")
+			db.Exec(t, "DROP SCHEMA IF EXISTS foo")
+			db.Exec(t, "DROP DATABASE IF EXISTS bar")
 		}
 
 		mkTable := func(name string) {
@@ -290,8 +292,64 @@ func TestTablesetBasic(t *testing.T) {
 			assert.Equal(t, "foo", diffs[0].Added.Name)
 			assert.False(t, unchanged)
 		})
+		// TODO(#?): what do we do if the database is dropped? will that just result in all the tables being dropped? we may have to handle it specially.
+		t.Run("schemas and databases ignored", func(t *testing.T) {
+			defer cleanup()
+
+			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			defer shutdown()
+
+			db.Exec(t, "CREATE SCHEMA foo")
+			db.Exec(t, "CREATE DATABASE bar")
+
+			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			require.NoError(t, err)
+			assert.Empty(t, diffs)
+			assert.True(t, unchanged)
+		})
 		// NOTE(#issue): offline tables are not supported currently.
 	})
+}
+
+func TestTablesetNonIdempotentProtection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sdb)
+	db.Exec(t, "SELECT crdb_internal.set_vmodule('watcher=100')")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	mm := mon.NewMonitor(mon.Options{
+		Name:      mon.MakeName("test-mm"),
+		Limit:     1024 * 1024,
+		Increment: 128,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(1024*2024))
+	defer mm.Stop(ctx)
+
+	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
+	filter := tableset.Filter{DatabaseID: dbID}
+	watcher := tableset.NewWatcher(filter, &execCfg, mm, 42)
+
+	db.Exec(t, "CREATE TABLE foo (id int primary key)")
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return watcher.Start(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	})
+
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	_, _, err := watcher.PopUnchangedUpTo(ctx, ts)
+	require.NoError(t, err)
+
+	_, _, err = watcher.PopUnchangedUpTo(ctx, ts)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "PopUnchangedUpTo called with non-advancing timestamp")
 }
 
 func getDatabaseID(
