@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
@@ -85,6 +86,10 @@ type TestingKnobs struct {
 	// SpanPartitionsCallback is called with the span partition
 	// when the changefeed is planned.
 	SpanPartitionsCallback func([]sql.SpanPartition)
+
+	// RangeDistributionStrategyCallback is called with the resolved
+	// range distribution strategy when the changefeed is planned.
+	RangeDistributionStrategyCallback func(changefeedbase.ChangefeedRangeDistributionStrategy)
 
 	// PreserveDeprecatedPts is used to prevent a changefeed from upgrading
 	// its PTS record from the deprecated style to the new style.
