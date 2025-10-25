@@ -55,7 +55,7 @@ func TestParseProvisioningSource(t *testing.T) {
 		},
 	}
 
-	for _, method := range []string{"ldap", "jwt_token"} {
+	for _, method := range []string{"ldap", "jwt_token", "oidc"} {
 		t.Run(method, func(t *testing.T) {
 			for _, tt := range sharedTests {
 				t.Run(tt.name, func(t *testing.T) {
@@ -83,6 +83,15 @@ func TestParseProvisioningSource(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, source)
 		require.Equal(t, "jwt_token", source.authMethod)
+		require.Equal(t, "https://accounts.google.com", source.idp.String())
+	})
+
+	// Test case specific to oidc allowing https
+	t.Run("oidc/valid_https_source", func(t *testing.T) {
+		source, err := ParseProvisioningSource("oidc:https://accounts.google.com")
+		require.NoError(t, err)
+		require.NotNil(t, source)
+		require.Equal(t, "oidc", source.authMethod)
 		require.Equal(t, "https://accounts.google.com", source.idp.String())
 	})
 
@@ -159,7 +168,7 @@ func TestValidateSource(t *testing.T) {
 		},
 	}
 
-	for _, method := range []string{"ldap", "jwt_token"} {
+	for _, method := range []string{"ldap", "jwt_token", "oidc"} {
 		t.Run(method, func(t *testing.T) {
 			for _, tt := range sharedTests {
 				t.Run(tt.name, func(t *testing.T) {
@@ -185,6 +194,11 @@ func TestValidateSource(t *testing.T) {
 
 	t.Run("ldap/https_source_is_valid_by_current_implementation", func(t *testing.T) {
 		err := ValidateSource("ldap:https://accounts.google.com")
+		require.NoError(t, err)
+	})
+
+	t.Run("oidc/valid_https_source", func(t *testing.T) {
+		err := ValidateSource("oidc:https://accounts.google.com")
 		require.NoError(t, err)
 	})
 
