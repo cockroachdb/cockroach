@@ -12115,6 +12115,9 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// TestChangefeedProtectedTimestampUpdate tests that a changefeed will update
+// its protected timestamp record when the high watermark advances and update
+// the related metrics.
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -12189,7 +12192,7 @@ WITH resolved='10ms', min_checkpoint_frequency='10ms', no_initial_scan`
 				); err != nil {
 					return err
 				}
-				ptsRecordID := ptsEntries.ProtectedTimestampRecords[descpb.ID(tableID)]
+				ptsRecordID := ptsEntries.TableRecords[descpb.ID(tableID)]
 				ts = getTimestampFromPTSRecord(ptsRecordID)
 				return nil
 			})
