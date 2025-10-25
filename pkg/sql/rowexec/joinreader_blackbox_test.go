@@ -100,5 +100,9 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 	tableID := desc.TableDesc().ID
 	sp, ok := rec.FindSpan("join reader")
 	require.True(t, ok)
-	require.Greater(t, tracing.CountLogMessages(sp, fmt.Sprintf("Scan /Table/%d", tableID)), 1)
+	var tenantPrefix string
+	if srv.StartedDefaultTestTenant() {
+		tenantPrefix = fmt.Sprintf("/Tenant/%s", serverutils.TestTenantID())
+	}
+	require.Greater(t, tracing.CountLogMessages(sp, fmt.Sprintf("Scan %s/Table/%d", tenantPrefix, tableID)), 1)
 }

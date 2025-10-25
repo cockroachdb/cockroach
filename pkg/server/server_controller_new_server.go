@@ -238,6 +238,10 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.Config.Insecure = kvServerCfg.Config.Insecure
 	baseCfg.Config.User = kvServerCfg.Config.User
 	baseCfg.Config.DisableTLSForHTTP = kvServerCfg.Config.DisableTLSForHTTP
+	// Note that since the shared-process tenant doesn't have its own pre-serve
+	// handler, only AcceptSQLWithoutTLS of the _system_ tenant matters, so this
+	// particular inherited value is meaningless, but we choose to keep it for
+	// consistency with the system tenant.
 	baseCfg.Config.AcceptSQLWithoutTLS = kvServerCfg.Config.AcceptSQLWithoutTLS
 	baseCfg.Config.RPCHeartbeatInterval = kvServerCfg.Config.RPCHeartbeatInterval
 	baseCfg.Config.RPCHeartbeatTimeout = kvServerCfg.Config.RPCHeartbeatTimeout

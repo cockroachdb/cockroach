@@ -202,7 +202,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t VALUES (3, false, repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/3/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/3/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -215,8 +215,8 @@ func TestPerfLogging(t *testing.T) {
 		},
 		{
 			query:       `INSERT INTO t VALUES (5, false, repeat('x', 2048))`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/5/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/5/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/5/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/5/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -244,14 +244,14 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t VALUES (2, false, 'x') ON CONFLICT (i) DO UPDATE SET s = repeat('x', 1024)`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (2, false, 'x') ON CONFLICT (i) DO UPDATE SET s = repeat('x', 2048)`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/2/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/2/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -265,14 +265,14 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `UPSERT INTO t VALUES (2, false, repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPSERT INTO t VALUES (2, false, repeat('x', 2048))`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/2/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/2/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -286,14 +286,14 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `UPDATE t SET s = repeat('x', 1024) WHERE i = 2`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE t SET s = repeat('x', 2048) WHERE i = 2`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/2/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/2/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -321,7 +321,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
 			logExpected: true,
 			breakHere:   true,
 			channel:     channel.SQL_INTERNAL_PERF,
@@ -329,14 +329,14 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `CREATE TABLE t2 (i, s, PRIMARY KEY (i)) AS SELECT i, s FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `ALTER TABLE t2 ADD COLUMN z STRING DEFAULT repeat('z', 2048)`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/4/0›"`,
 			logExpected: true,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
@@ -364,14 +364,14 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO u VALUES (1, 1, repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/1/1/1›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/1/1/1›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO u VALUES (2, 2, repeat('x', 2048))`,
-			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key /Table/\d+/1/2/1/1 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key (/Tenant/\d+)?/Table/\d+/1/2/1/1 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -385,7 +385,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `UPDATE u SET i = i + 1 WHERE i = 1`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -398,15 +398,15 @@ func TestPerfLogging(t *testing.T) {
 		},
 		{
 			query:       `UPDATE u SET s = repeat('x', 2048) WHERE i = 2`,
-			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key /Table/\d+/1/2/1/1 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key (/Tenant/\d+)?/Table/\d+/1/2/1/1 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `CREATE TABLE u2 (i, j, s, PRIMARY KEY (i), FAMILY f1 (i, j), FAMILY f2 (s)) AS SELECT i, j, repeat(s, 2048) FROM u`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
 			channel:     channel.SQL_INTERNAL_PERF,
 		},
@@ -419,8 +419,8 @@ func TestPerfLogging(t *testing.T) {
 		},
 		{
 			query:       `UPDATE u2 SET i = i + 1 WHERE i = 2`,
-			errRe:       `row larger than max row size: table \d+ family 1 primary key /Table/\d+/1/3/1/1 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/3/1/1›"`,
+			errRe:       `row larger than max row size: table \d+ family 1 primary key (/Tenant/\d+)?/Table/\d+/1/3/1/1 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/3/1/1›"`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -723,8 +723,9 @@ func TestPerfLogging(t *testing.T) {
 	defer cleanup()
 
 	// Start a SQL server.
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 	// TODO(fqazi): Enable with MVCC back filler support, since max_row_size is
 	// not properly enforced right now.
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")

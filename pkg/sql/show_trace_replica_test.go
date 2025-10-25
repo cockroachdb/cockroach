@@ -50,12 +50,13 @@ func TestShowTraceReplica(t *testing.T) {
 			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: []string{node}}},
 		}
 	}
-	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
-		0: tsArgs(`n1`),
-		1: tsArgs(`n2`),
-		2: tsArgs(`n3`),
-		3: tsArgs(`n4`),
-	}}
+	tcArgs := base.TestClusterArgs{
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: tsArgs(`n1`),
+			1: tsArgs(`n2`),
+			2: tsArgs(`n3`),
+			3: tsArgs(`n4`),
+		}}
 	tc := testcluster.StartTestCluster(t, numNodes, tcArgs)
 	defer tc.Stopper().Stop(ctx)
 

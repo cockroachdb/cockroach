@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -972,9 +971,11 @@ func TestShowSessionPrivileges(t *testing.T) {
 
 	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
-	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create four users: one with no special permissions, one with the
 	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
@@ -1000,17 +1001,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 		{"adminuser", true, nil},
 	}
 	for i, tc := range users {
-		pgURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(tc.username),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(tc.username), serverutils.ClientCerts(false))
 		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
 		// Ensure the session is open.
@@ -1056,9 +1047,11 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 	ctx, cancel := context.WithCancel(context.Background())
-	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create four users: one with no special permissions, one with the
 	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
@@ -1092,17 +1085,7 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 		{"bothperms", true, true, nil},
 	}
 	for i, tc := range users {
-		pgURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(tc.username),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(tc.username), serverutils.ClientCerts(false))
 		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
 		// Ensure the session is open.
@@ -1217,9 +1200,11 @@ func TestShowRedactedSessions(t *testing.T) {
 	params, _ := createTestServerParamsAllowTenants()
 	params.Insecure = true
 	ctx, cancel := context.WithCancel(context.Background())
-	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create four users: one with no special permissions, one with the
 	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
@@ -1253,17 +1238,7 @@ func TestShowRedactedSessions(t *testing.T) {
 		{"bothperms", true, true, nil},
 	}
 	for i, tc := range users {
-		pgURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(tc.username),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(tc.username), serverutils.ClientCerts(false))
 		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
 		// Ensure the session is open.

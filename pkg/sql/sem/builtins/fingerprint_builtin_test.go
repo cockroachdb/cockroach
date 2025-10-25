@@ -39,7 +39,7 @@ func TestFingerprint(t *testing.T) {
 	var mu syncutil.Mutex
 	var numExportResponses int
 	var numSSTsInExportResponses int
-	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
@@ -57,7 +57,12 @@ func TestFingerprint(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	makeKey := func(k string) roachpb.Key {
+		return append(append(roachpb.Key(nil), s.Codec().TenantPrefix()...), roachpb.Key(k)...)
+	}
 
 	resetVars := func() {
 		mu.Lock()
@@ -69,7 +74,7 @@ func TestFingerprint(t *testing.T) {
 	returnPointAndRangeKeys := func(eng storage.Engine) ([]storage.MVCCKeyValue, []storage.MVCCRangeKey) {
 		var rangeKeys []storage.MVCCRangeKey
 		var pointKeys []storage.MVCCKeyValue
-		for _, kvI := range storageutils.ScanKeySpan(t, eng, roachpb.Key("a"), roachpb.Key("z")) {
+		for _, kvI := range storageutils.ScanKeySpan(t, eng, makeKey("a"), makeKey("z")) {
 			switch kv := kvI.(type) {
 			case storage.MVCCRangeKeyValue:
 				rangeKeys = append(rangeKeys, kv.RangeKey)
@@ -88,7 +93,7 @@ func TestFingerprint(t *testing.T) {
 		aost := endTime.AsOfSystemTime()
 		var fingerprint int64
 		query := fmt.Sprintf(`SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES],$3::DECIMAL, $4) AS OF SYSTEM TIME '%s'`, aost)
-		require.NoError(t, sqlDB.QueryRow(query, roachpb.Key(startKey), roachpb.Key(endKey),
+		require.NoError(t, sqlDB.QueryRow(query, makeKey(startKey), makeKey(endKey),
 			startTime.AsOfSystemTime(), allRevisions).Scan(&fingerprint))
 		return fingerprint
 	}
@@ -105,7 +110,7 @@ func TestFingerprint(t *testing.T) {
 		require.Zero(t, fingerprint)
 	})
 
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
 	eng := store.TODOEngine()
 
@@ -113,14 +118,14 @@ func TestFingerprint(t *testing.T) {
 	txn := db.NewTxn(ctx, "test-point-keys")
 	pointKeysTS := hlc.Timestamp{WallTime: timeutil.Now().Round(time.Microsecond).UnixNano()}
 	require.NoError(t, txn.SetFixedTimestamp(ctx, pointKeysTS))
-	require.NoError(t, txn.Put(ctx, "a", "value"))
-	require.NoError(t, txn.Put(ctx, "b", "value"))
-	require.NoError(t, txn.Put(ctx, "c", "value"))
-	require.NoError(t, txn.Put(ctx, "d", "value"))
+	require.NoError(t, txn.Put(ctx, makeKey("a"), "value"))
+	require.NoError(t, txn.Put(ctx, makeKey("b"), "value"))
+	require.NoError(t, txn.Put(ctx, makeKey("c"), "value"))
+	require.NoError(t, txn.Put(ctx, makeKey("d"), "value"))
 	require.NoError(t, txn.Commit(ctx))
 
 	// Run a scan to force intent resolution.
-	_, err = db.Scan(ctx, "a", "z", 0)
+	_, err = db.Scan(ctx, makeKey("a"), makeKey("z"), 0)
 	require.NoError(t, err)
 
 	pointKeys, rangeKeys := returnPointAndRangeKeys(eng)
@@ -144,7 +149,7 @@ func TestFingerprint(t *testing.T) {
 	//
 	// ts1	value		value		value		value
 	//				a				b				c				d
-	require.NoError(t, db.DelRangeUsingTombstone(ctx, "a", "c"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey("a"), makeKey("c")))
 	pointKeys, rangeKeys = returnPointAndRangeKeys(eng)
 	require.Len(t, pointKeys, 4)
 	require.Len(t, rangeKeys, 1)
@@ -152,7 +157,7 @@ func TestFingerprint(t *testing.T) {
 	// Note, the timestamp comparison is a noop here but we need the timestamp for
 	// future AOST fingerprint queries.
 	require.Equal(t, []storage.MVCCRangeKey{
-		storageutils.RangeKeyWithTS("a", "c", rangeKey1Timestamp),
+		storageutils.RangeKeyWithTS(string(makeKey("a")), string(makeKey("c")), rangeKey1Timestamp),
 	}, rangeKeys)
 
 	// Fingerprint the point and range keys.
@@ -176,16 +181,16 @@ func TestFingerprint(t *testing.T) {
 	//
 	// ts1	value		value		value		value
 	//				a				b				c				d
-	require.NoError(t, db.DelRangeUsingTombstone(ctx, "b", "d"))
+	require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey("b"), makeKey("d")))
 	pointKeys, rangeKeys = returnPointAndRangeKeys(eng)
 	require.Len(t, pointKeys, 4)
 	require.Len(t, rangeKeys, 4)
 	rangeKey2Timestamp := rangeKeys[1].Timestamp
 	require.Equal(t, []storage.MVCCRangeKey{
-		storageutils.RangeKeyWithTS("a", "b", rangeKey1Timestamp),
-		storageutils.RangeKeyWithTS("b", "c", rangeKey2Timestamp),
-		storageutils.RangeKeyWithTS("b", "c", rangeKey1Timestamp),
-		storageutils.RangeKeyWithTS("c", "d", rangeKey2Timestamp),
+		storageutils.RangeKeyWithTS(string(makeKey("a")), string(makeKey("b")), rangeKey1Timestamp),
+		storageutils.RangeKeyWithTS(string(makeKey("b")), string(makeKey("c")), rangeKey2Timestamp),
+		storageutils.RangeKeyWithTS(string(makeKey("b")), string(makeKey("c")), rangeKey1Timestamp),
+		storageutils.RangeKeyWithTS(string(makeKey("c")), string(makeKey("d")), rangeKey2Timestamp),
 	}, rangeKeys)
 
 	// Even with the fragmentation of the first range key, our fingerprint for the
@@ -202,7 +207,7 @@ func TestFingerprint(t *testing.T) {
 	require.Equal(t, 1, numSSTsInExportResponses)
 	require.Equal(t, 1, numExportResponses)
 
-	require.NoError(t, db.AdminSplit(ctx, "c", hlc.MaxTimestamp))
+	require.NoError(t, db.AdminSplit(ctx, makeKey("c"), hlc.MaxTimestamp))
 
 	resetVars()
 	fingerprintPostSplit := fingerprint(t, "a", "z", pointKeysTS.Add(int64(-time.Microsecond), 0),
