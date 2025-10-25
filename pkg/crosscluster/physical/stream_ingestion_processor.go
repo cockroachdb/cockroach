@@ -784,7 +784,7 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 	}
 
 	if sip.logBufferEvery.ShouldLog() {
-		log.Dev.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
+		log.VEventf(sip.Ctx(), 2, "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
 	}
 
 	if sip.buffer.shouldFlushOnSize(sip.Ctx(), sv) {
