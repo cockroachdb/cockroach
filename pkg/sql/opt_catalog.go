@@ -68,6 +68,8 @@ type optCatalog struct {
 
 	// tn is a temporary name used during resolution to avoid heap allocation.
 	tn tree.TableName
+
+	useCanary bool
 }
 
 var _ cat.Catalog = (*optCatalog)(nil)
@@ -687,6 +689,8 @@ func (oc *optCatalog) dataSourceForTable(
 		}
 		var err error
 		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+		tabID := desc.GetID()
+		_ = tabID
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
@@ -940,6 +944,8 @@ type optTable struct {
 	rlsEnabled bool
 	rlsForced  bool
 	policies   cat.Policies
+
+	canaryWindow time.Duration
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
@@ -1223,6 +1229,8 @@ func newOptTable(
 	ot.rlsEnabled = desc.IsRowLevelSecurityEnabled()
 	ot.rlsForced = desc.IsRowLevelSecurityForced()
 	ot.policies = getOptPolicies(desc.GetPolicies())
+
+	ot.canaryWindow = desc.GetCanaryWindowSize()
 
 	// Synthesize any check constraints for user defined types.
 	var synthesizedChecks []optCheckConstraint
@@ -1629,6 +1637,11 @@ func (ot *optTable) IsRowLevelSecurityEnabled() bool { return ot.rlsEnabled }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optTable) IsRowLevelSecurityForced() bool { return ot.rlsForced }
+
+// CanaryWindowSize is part of the cat.Table interface.
+func (ot *optTable) CanaryWindowSize() time.Duration {
+	return ot.canaryWindow
+}
 
 // Policies is part of the cat.Table interface.
 func (ot *optTable) Policies() *cat.Policies {
@@ -2057,6 +2070,10 @@ type optTableStat struct {
 }
 
 var _ cat.TableStatistic = &optTableStat{}
+
+func (os *optTableStat) ID() uint64 {
+	return os.stat.StatisticID
+}
 
 func (os *optTableStat) init(
 	ctx context.Context, tab *optTable, stat *stats.TableStatistic,
@@ -2776,6 +2793,12 @@ func (ot *optVirtualTable) IsRowLevelSecurityEnabled() bool { return false }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRowLevelSecurityForced() bool { return false }
+
+// CanaryWindowSize is part of the cat.Table interface.
+// TODO: think about the actual number.
+func (ot *optVirtualTable) CanaryWindowSize() time.Duration {
+	return 0
+}
 
 // Policies is part of the cat.Table interface.
 func (ot *optVirtualTable) Policies() *cat.Policies { return nil }

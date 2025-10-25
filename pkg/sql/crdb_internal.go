@@ -3708,6 +3708,10 @@ CREATE TABLE crdb_internal.create_statements (
 				return err
 			}
 
+			if err := showSetCanaryWindow(&name, table, alterStmts); err != nil {
+				return err
+			}
+
 			if err = showRowLevelSecurityStatements(ctx, &name, table, p.EvalContext(), &p.semaCtx, p.SessionData(), rlsStmts); err != nil {
 				return err
 			}

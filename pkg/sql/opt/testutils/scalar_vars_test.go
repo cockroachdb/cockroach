@@ -11,7 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,8 +38,9 @@ func TestScalarVars(t *testing.T) {
 		return buf.String()
 	}
 
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	vars := "a int, b string not null, c decimal"
-	md.Init()
+	md.Init(&evalCtx)
 	if err := sv.Init(&md, strings.Split(vars, ", ")); err != nil {
 		t.Fatal(err)
 	}

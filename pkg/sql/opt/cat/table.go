@@ -205,6 +205,9 @@ type Table interface {
 
 	// Policies returns all the policies defined for this table.
 	Policies() *Policies
+
+	// CanaryWindowSize returns the canary window size for the table.
+	CanaryWindowSize() time.Duration
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
@@ -284,6 +287,8 @@ type TableStatistic interface {
 
 	// IsAuto returns true if this statistic was collected automatically.
 	IsAuto() bool
+
+	ID() uint64
 }
 
 // HistogramBucket contains the data for a single histogram bucket. Note

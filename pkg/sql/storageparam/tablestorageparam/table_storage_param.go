@@ -116,6 +116,50 @@ func floatFromDatum(
 	return s, nil
 }
 
+func intervalFromDatum(
+	ctx context.Context, evalCtx *eval.Context, key string, datum tree.Datum,
+) (*tree.DInterval, error) {
+	var d *tree.DInterval
+	if stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum); err == nil {
+		d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
+		if err != nil {
+			return nil, pgerror.Wrapf(
+				err,
+				pgcode.InvalidParameterValue,
+				`value of %q must be an interval`,
+				key,
+			)
+		}
+		if d == nil {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				`value of %q must be an interval`,
+				key,
+			)
+		}
+	} else {
+		var ok bool
+		d, ok = datum.(*tree.DInterval)
+		if !ok || d == nil {
+			return nil, pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				`value of %q must be an interval`,
+				key,
+			)
+		}
+	}
+
+	if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`value of %q must be at least zero`,
+			key,
+		)
+	}
+
+	return d, nil
+}
+
 func (po *Setter) hasRowLevelTTL() bool {
 	return po.UpdatedRowLevelTTL != nil
 }
@@ -216,42 +260,9 @@ var tableParams = map[string]tableParam{
 	},
 	`ttl_expire_after`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
-			var d *tree.DInterval
-			if stringVal, err := paramparse.DatumAsString(ctx, evalCtx, key, datum); err == nil {
-				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
-				if err != nil {
-					return pgerror.Wrapf(
-						err,
-						pgcode.InvalidParameterValue,
-						`value of %q must be an interval`,
-						key,
-					)
-				}
-				if d == nil {
-					return pgerror.Newf(
-						pgcode.InvalidParameterValue,
-						`value of %q must be an interval`,
-						key,
-					)
-				}
-			} else {
-				var ok bool
-				d, ok = datum.(*tree.DInterval)
-				if !ok || d == nil {
-					return pgerror.Newf(
-						pgcode.InvalidParameterValue,
-						`value of %q must be an interval`,
-						key,
-					)
-				}
-			}
-
-			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
-				return pgerror.Newf(
-					pgcode.InvalidParameterValue,
-					`value of %q must be at least zero`,
-					key,
-				)
+			d, err := intervalFromDatum(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
 			rowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
@@ -431,7 +442,7 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if err := tabledesc.ValidateTTLRowStatsPollInterval(key, d); err != nil {
+			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
@@ -626,6 +637,23 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			po.TableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
+			return nil
+		},
+	},
+	"canary_window": {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
+				return err
+			}
+			po.TableDesc.CanaryWindowSize = d
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.CanaryWindowSize = 0
 			return nil
 		},
 	},

@@ -908,10 +908,11 @@ type Table struct {
 
 	homeRegion string
 
-	rlsEnabled   bool
-	rlsForced    bool
-	policies     cat.Policies
-	nextPolicyID descpb.PolicyID
+	rlsEnabled       bool
+	rlsForced        bool
+	canaryWindowSize time.Duration
+	policies         cat.Policies
+	nextPolicyID     descpb.PolicyID
 }
 
 var _ cat.Table = &Table{}
@@ -1221,6 +1222,9 @@ func (tt *Table) IsRowLevelSecurityEnabled() bool { return tt.rlsEnabled }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (tt *Table) IsRowLevelSecurityForced() bool { return tt.rlsForced }
+
+// CanaryWindowSize is part of the cat.Table interface.
+func (tt *Table) CanaryWindowSize() time.Duration { return tt.canaryWindowSize }
 
 // Policies is part of the cat.Table interface.
 func (tt *Table) Policies() *cat.Policies {
@@ -1676,6 +1680,10 @@ func (ts *TableStat) HistogramType() *types.T {
 	}
 	ts.histogramType = tree.MustBeStaticallyKnownType(colTypeRef)
 	return ts.histogramType
+}
+
+func (ts *TableStat) ID() uint64 {
+	return ts.js.ID
 }
 
 // IsPartial is part of the cat.TableStatistic interface.
