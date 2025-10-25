@@ -1079,6 +1079,20 @@ func (p *planner) ClearTableStatsCache() {
 	}
 }
 
+// ClearStatementHintsCache is part of the eval.Planner interface.
+func (p *planner) ClearStatementHintsCache() {
+	if p.execCfg.StatementHintsCache != nil {
+		p.execCfg.StatementHintsCache.Clear()
+	}
+}
+
+// AwaitStatementHintsCache is part of the eval.Planner interface.
+func (p *planner) AwaitStatementHintsCache(ctx context.Context) {
+	if p.execCfg.StatementHintsCache != nil {
+		p.execCfg.StatementHintsCache.Await(ctx)
+	}
+}
+
 // mustUseLeafTxn returns true if inner plans must use a leaf transaction.
 func (p *planner) mustUseLeafTxn() bool {
 	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1

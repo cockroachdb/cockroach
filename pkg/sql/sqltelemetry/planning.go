@@ -220,6 +220,10 @@ var PlanTypeAutoCustomCounter = telemetry.GetCounterOnce("sql.plan.type.auto-cus
 // used when plan_cache_mode=auto.
 var PlanTypeAutoGenericCounter = telemetry.GetCounterOnce("sql.plan.type.auto-generic")
 
+// StatementHintsCounter is to be incremented whenever external statement hints
+// are used.
+var StatementHintsCounter = telemetry.GetCounterOnce("sql.session.statement-hints")
+
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable
 // values for the join reorder limit is quite small.

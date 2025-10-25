@@ -335,6 +335,8 @@ func (b *Builder) buildView(
 		if !ok {
 			panic(errors.AssertionFailedf("expected SELECT statement"))
 		}
+		// TODO(michae2): We should be checking the statement hints cache here to
+		// find any external statement hints that could apply to the view statement.
 
 		b.views[view] = sel
 

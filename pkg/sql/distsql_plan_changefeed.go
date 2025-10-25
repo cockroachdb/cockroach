@@ -78,11 +78,14 @@ func PlanCDCExpression(
 		opt.apply(&cfg)
 	}
 
-	p.stmt = makeStatement(statements.Statement[tree.Statement]{
-		AST: cdcExpr,
-		SQL: tree.AsString(cdcExpr),
-	}, clusterunique.ID{}, /* queryID */
+	p.stmt = makeStatement(
+		ctx,
+		statements.Statement[tree.Statement]{
+			AST: cdcExpr,
+			SQL: tree.AsString(cdcExpr),
+		}, clusterunique.ID{}, /* queryID */
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
+		nil, /* statementHintsCache */
 	)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)

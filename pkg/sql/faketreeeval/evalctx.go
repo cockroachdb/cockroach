@@ -578,6 +578,12 @@ func (ep *DummyEvalPlanner) ClearQueryPlanCache() {}
 // ClearTableStatsCache is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
 
+// ClearStatementHintsCache is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ClearStatementHintsCache() {}
+
+// AwaitStatementHintsCache is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AwaitStatementHintsCache(ctx context.Context) {}
+
 // RetryCounter is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) RetryCounter() int {
 	return 0
