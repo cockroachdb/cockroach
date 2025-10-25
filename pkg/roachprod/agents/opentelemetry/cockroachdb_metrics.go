@@ -2448,6 +2448,8 @@ var cockroachdbMetrics = map[string]string{
     "storeliveness_support_from_stores": "storeliveness.support_from.stores",
     "storeliveness_support_withdraw_failures": "storeliveness.support_withdraw.failures",
     "storeliveness_support_withdraw_successes": "storeliveness.support_withdraw.successes",
+    "storeliveness_transport_batches_received": "storeliveness.transport.batches_received",
+    "storeliveness_transport_batches_sent": "storeliveness.transport.batches_sent",
     "storeliveness_transport_receive_dropped": "storeliveness.transport.receive_dropped",
     "storeliveness_transport_receive_queue_bytes": "storeliveness.transport.receive_queue_bytes",
     "storeliveness_transport_receive_queue_size": "storeliveness.transport.receive_queue_size",
