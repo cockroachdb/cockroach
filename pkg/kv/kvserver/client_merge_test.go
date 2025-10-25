@@ -3852,7 +3852,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// NOTE: There are no range-local keys or lock table keys, in [d,
 			// /Max) in the store we're sending a snapshot to, so we aren't
 			// expecting SSTs to clear those keys.
-			expectedSSTCount := 9
+			expectedSSTCount := 12
 			if len(sstNames) != expectedSSTCount {
 				return errors.Errorf("expected to ingest %d SSTs, got %d SSTs",
 					expectedSSTCount, len(sstNames))
@@ -3963,69 +3963,52 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// Keep the last one which contains the user keys.
 			expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]
 
-			// Construct SSTs for the range-id local keys of the subsumed
-			// replicas. with RangeIDs 3 and 4. Note that this also targets the
-			// unreplicated rangeID-based keys because we're effectively
-			// replicaGC'ing these replicas (while absorbing their user keys
-			// into the LHS).
+			// Construct SSTs for the RangeID-local keys of the subsumed replicas,
+			// with range IDs 3 and 4. Note that this also targets the unreplicated
+			// rangeID-based keys because we're effectively replicaGC'ing these
+			// replicas (while absorbing their user keys into the LHS).
 			for _, k := range []roachpb.Key{keyB, keyC} {
 				rangeID := rangeIds[string(k)]
 				sstFile := &storage.MemObject{}
 				sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 				defer sst.Close()
-				{
-					// The snapshot code will use ClearRangeWithHeuristic with a
-					// threshold of 1 to clear the range, but this will truncate
-					// the range tombstone to the first key. In this case, the
-					// first key is RangeGCThresholdKey, which doesn't yet exist
-					// in the engine, so we write the Pebble range tombstone
-					// manually.
-					sl := rditer.Select(rangeID, rditer.SelectOpts{
-						ReplicatedByRangeID: true,
-					})
-					require.Len(t, sl, 1)
-					s := sl[0]
-					require.NoError(t, sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false))
+				spans := rditer.Select(rangeID, rditer.SelectOpts{
+					ReplicatedByRangeID:   true,
+					UnreplicatedByRangeID: true,
+				})
+				require.Len(t, spans, 2)
+				for _, span := range spans {
+					require.NoError(t, sst.ClearRawRange(span.Key, span.EndKey, true, true))
 				}
-				{
-					// Ditto for the unreplicated version, where the first key
-					// happens to be the HardState.
-					sl := rditer.Select(rangeID, rditer.SelectOpts{
-						UnreplicatedByRangeID: true,
-					})
-					require.Len(t, sl, 1)
-					s := sl[0]
-					require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
-				}
-
-				if err := kvstorage.MakeStateLoader(rangeID).SetRangeTombstone(
+				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetRangeTombstone(
 					context.Background(), &sst,
-					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
-				); err != nil {
-					return err
-				}
-				if err := sst.Finish(); err != nil {
-					return err
-				}
+					kvserverpb.RangeTombstone{NextReplicaID: kvstorage.MergedTombstoneReplicaID},
+				))
+				require.NoError(t, sst.Finish())
 				expectedSSTs = append(expectedSSTs, sstFile.Data())
 			}
 
 			// Construct an SST for the user key range of the subsumed replicas.
-			sstFile := &storage.MemObject{}
-			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
-			defer sst.Close()
 			desc := roachpb.RangeDescriptor{
 				StartKey: roachpb.RKey(keyD),
 				EndKey:   roachpb.RKey(keyEnd),
 			}
-			if err := storage.ClearRangeWithHeuristic(
-				ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64,
-			); err != nil {
-				return err
-			} else if err := sst.Finish(); err != nil {
-				return err
+			spans := rditer.Select(0 /* unused */, rditer.SelectOpts{
+				Ranged: rditer.SelectRangedOptions{
+					RSpan:      desc.RSpan(),
+					SystemKeys: true,
+					LockTable:  true,
+					UserKeys:   true,
+				}})
+			require.Len(t, spans, 4)
+			for _, span := range spans {
+				sstFile := &storage.MemObject{}
+				sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
+				defer sst.Close()
+				require.NoError(t, sst.ClearRawRange(span.Key, span.EndKey, true, true))
+				require.NoError(t, sst.Finish())
+				expectedSSTs = append(expectedSSTs, sstFile.Data())
 			}
-			expectedSSTs = append(expectedSSTs, sstFile.Data())
 
 			// Iterate over all the tested SSTs and check that they're
 			// byte-by-byte equal.

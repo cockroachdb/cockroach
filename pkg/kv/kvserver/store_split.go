@@ -98,7 +98,7 @@ func splitPreApply(
 		// update its HardState. Here, we can accidentally clear the HardState of
 		// that new replica.
 		if err := kvstorage.RemoveStaleRHSFromSplit(
-			ctx, readWriter, readWriter, split.RightDesc.RangeID, split.RightDesc.RSpan(),
+			readWriter, split.RightDesc.RangeID, split.RightDesc.RSpan(),
 		); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
