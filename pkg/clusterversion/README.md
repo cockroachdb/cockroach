@@ -97,13 +97,15 @@ code for more details.
 
 **When**: When we are ready to select the first beta candidate.
 
+**Claude Prompt**: "Please create a PR to prepare the release-25.4 branch for beta.1 following the R.1 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md"
+
 **Checklist**:
  - [ ] Set `developmentBranch` constant to `false`
  - [ ] Update `version.txt` to the beta version, e.g. `24.1.0-beta.1`
  - [ ] Regenerate docs (`./dev gen docs`)
  - [ ] Regenerate expected test data results as needed
 
-**Example PR:** [#113912](https://github.com/cockroachdb/cockroach/pull/113912)
+**Example PR:** [#153906](https://github.com/cockroachdb/cockroach/pull/153906)
 
 ### R.2: Mint release
 
@@ -111,6 +113,8 @@ code for more details.
 
 **When**: When we are absolutely sure that we no longer need additional version
 gates - right before the final RC at the latest.
+
+**Claude Prompt**: "Please create a PR to mint the 25.4 release following the R.2 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md. We're preparing rc.1."
 
 **Checklist**:
 - [ ] Replace temporary constant for current release (e.g. `V24_1`) with a
