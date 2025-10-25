@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -49,8 +48,8 @@ type ClusterConfig struct {
 	// "integration-ey".
 	DB *kv.DB
 
-	// Cluster settings allow access to version and other settings.
-	Settings *cluster.Settings
+	// Use DRPC for internal node-to-node communication when true.
+	UseDRPC bool
 }
 
 // New constructs a new Cluster with the provided dependencies.
@@ -136,7 +135,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass, c.c.Settings)
+			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass, c.c.UseDRPC)
 			if err != nil {
 				return err
 			}

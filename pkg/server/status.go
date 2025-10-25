@@ -784,7 +784,7 @@ func (s *statusServer) dialNode(
 			return nil, err
 		}
 	}
-	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
+	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.rpcCtx.UseDRPC)
 }
 
 // Gossip returns current state of gossip information on the given node

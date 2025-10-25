@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,13 +30,13 @@ import (
 func GetDistSQLClientForOutbox(
 	ctx context.Context,
 	dialer rpcbase.NodeDialerNoBreaker,
-	cs *cluster.Settings,
 	sqlInstanceID base.SQLInstanceID,
 	timeout time.Duration,
+	useDRPC bool,
 ) (client execinfrapb.RPCDistSQLClient, err error) {
 	firstConnectionAttempt := timeutil.Now()
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-		client, err = execinfrapb.DialDistSQLClientNoBreaker(dialer, ctx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass, cs)
+		client, err = execinfrapb.DialDistSQLClientNoBreaker(dialer, ctx, roachpb.NodeID(sqlInstanceID), rpcbase.DefaultClass, useDRPC)
 		if err == nil || timeutil.Since(firstConnectionAttempt) > timeout {
 			break
 		}

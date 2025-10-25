@@ -180,7 +180,7 @@ func (o *Outbox) Run(
 
 	var stream execinfrapb.RPCDistSQL_FlowStreamClient
 	if err := func() error {
-		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, o.flowCtx.Cfg.Settings, sqlInstanceID, connectionTimeout)
+		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout, o.flowCtx.Cfg.RPCContext.UseDRPC)
 		if err != nil {
 			log.Dev.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
