@@ -211,6 +211,12 @@ type BaseConfig struct {
 	// which a feature unique to the demo shell.
 	EnableDemoLoginEndpoint bool
 
+	// DisallowRootLogin when set, prevents authentication attempts by clients
+	// presenting certificates with "root" as one of the principals (CommonName
+	// or SubjectAlternativeName). This applies to both SQL client connections
+	// and RPC connections.
+	DisallowRootLogin bool
+
 	// ReadyFn is called when the server has started listening on its
 	// sockets.
 	//
