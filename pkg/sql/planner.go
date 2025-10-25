@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -229,7 +230,7 @@ type planner struct {
 
 	// sessionDataMutatorIterator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
-	sessionDataMutatorIterator *sessionDataMutatorIterator
+	sessionDataMutatorIterator *sessionmutator.SessionDataMutatorIterator
 
 	// execCfg is used to access the server configuration for the Executor.
 	execCfg *ExecutorConfig
@@ -446,17 +447,14 @@ func newInternalPlanner(
 	p := &planner{execCfg: execCfg, datumAlloc: &tree.DatumAlloc{}}
 	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
 
-	smi := &sessionDataMutatorIterator{
-		sds: sds,
-		sessionDataMutatorBase: sessionDataMutatorBase{
-			defaults: SessionDefaults(map[string]string{
-				"application_name": "crdb-internal",
-				"database":         sd.SessionData.Database,
-			}),
-			settings: execCfg.Settings,
-		},
-		sessionDataMutatorCallbacks: sessionDataMutatorCallbacks{},
-	}
+	smi := sessionmutator.MakeSessionDataMutatorIterator(
+		sds,
+		sessionmutator.SessionDefaults(map[string]string{
+			"application_name": "crdb-internal",
+			"database":         sd.SessionData.Database,
+		}),
+		execCfg.Settings,
+	)
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
@@ -629,9 +627,9 @@ func (p *planner) ExprEvaluator(op string) exprutil.Evaluator {
 // inside the session data.
 func (p *planner) GetOrInitSequenceCache() sessiondatapb.SequenceCache {
 	if p.SessionData().SequenceCache == nil {
-		p.sessionDataMutatorIterator.applyOnEachMutator(
-			func(m sessionDataMutator) {
-				m.initSequenceCache()
+		p.sessionDataMutatorIterator.ApplyOnEachMutator(
+			func(m sessionmutator.SessionDataMutator) {
+				m.InitSequenceCache()
 			},
 		)
 	}
@@ -813,7 +811,7 @@ func (p *planner) SessionData() *sessiondata.SessionData {
 }
 
 // SessionDataMutatorIterator is part of the PlanHookState interface.
-func (p *planner) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+func (p *planner) SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator {
 	return p.sessionDataMutatorIterator
 }
 

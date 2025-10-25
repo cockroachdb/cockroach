@@ -3148,7 +3148,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-settings.html`,
 				if hasDefault, defVal := getSessionVarDefaultString(
 					vName,
 					gen,
-					p.sessionDataMutatorIterator.sessionDataMutatorBase,
+					p.sessionDataMutatorIterator.SessionDataMutatorBase,
 				); hasDefault {
 					resetDatum = tree.NewDString(defVal)
 				}

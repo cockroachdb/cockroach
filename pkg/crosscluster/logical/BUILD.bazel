@@ -86,6 +86,7 @@ go_library(
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sessionmutator",
         "//pkg/sql/sqlclustersettings",
         "//pkg/sql/stats",
         "//pkg/sql/syntheticprivilege",

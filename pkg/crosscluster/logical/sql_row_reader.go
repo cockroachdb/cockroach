@@ -10,16 +10,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 type sqlRowReader struct {
-	selectStatement statements.Statement[tree.Statement]
-	sessionOverride sessiondata.InternalExecutorOverride
+	session isql.Session
+
+	selectStatement isql.PreparedStatement
+
 	// keyColumnIndices is the index of the datums that are part of the primary key.
 	keyColumnIndices []int
 	columns          []columnSchema
@@ -41,7 +41,7 @@ type priorRow struct {
 }
 
 func newSQLRowReader(
-	table catalog.TableDescriptor, sessionOverride sessiondata.InternalExecutorOverride,
+	ctx context.Context, table catalog.TableDescriptor, session isql.Session,
 ) (*sqlRowReader, error) {
 	cols := getColumnSchema(table)
 	keyColumns := make([]int, 0, len(cols))
@@ -51,14 +51,18 @@ func newSQLRowReader(
 		}
 	}
 
-	selectStatement, err := newBulkSelectStatement(table)
+	selectStatementRaw, types, err := newBulkSelectStatement(table)
+	if err != nil {
+		return nil, err
+	}
+	selectStatement, err := session.Prepare(ctx, "replication-read-refresh", selectStatementRaw, types)
 	if err != nil {
 		return nil, err
 	}
 
 	return &sqlRowReader{
+		session:          session,
 		selectStatement:  selectStatement,
-		sessionOverride:  sessionOverride,
 		keyColumnIndices: keyColumns,
 		columns:          cols,
 	}, nil
@@ -69,9 +73,7 @@ func newSQLRowReader(
 // the input is the key to the output map.
 //
 // E.g. result[i] and rows[i] are the same row.
-func (r *sqlRowReader) ReadRows(
-	ctx context.Context, txn isql.Txn, rows []tree.Datums,
-) (map[int]priorRow, error) {
+func (r *sqlRowReader) ReadRows(ctx context.Context, rows []tree.Datums) (map[int]priorRow, error) {
 	// TODO(jeffswenson): optimize allocations. It may require a change to the
 	// API. For now, this probably isn't a performance bottleneck because:
 	// 1. Many of the allocations are one per batch instead of one per row.
@@ -82,7 +84,7 @@ func (r *sqlRowReader) ReadRows(
 		return nil, nil
 	}
 
-	params := make([]any, 0, len(r.keyColumnIndices))
+	params := make([]tree.Datum, 0, len(r.keyColumnIndices))
 	for _, index := range r.keyColumnIndices {
 		array := tree.NewDArray(r.columns[index].column.GetType())
 		for _, row := range rows {
@@ -93,14 +95,10 @@ func (r *sqlRowReader) ReadRows(
 		params = append(params, array)
 	}
 
-	// Execute the query using QueryBufferedEx which returns all rows at once.
+	// Execute the query using QueryPrepared which returns all rows at once.
 	// This is okay since we already know the batch is small enough to fit in
 	// memory.
-	rows, err := txn.QueryBufferedEx(ctx, "replication-read-refresh", txn.KV(),
-		r.sessionOverride,
-		r.selectStatement.SQL,
-		params...,
-	)
+	rows, err := r.session.QueryPrepared(ctx, r.selectStatement, params)
 	if err != nil {
 		return nil, err
 	}

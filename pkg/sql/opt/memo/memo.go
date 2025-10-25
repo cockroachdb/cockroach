@@ -212,6 +212,7 @@ type Memo struct {
 	disableSlowCascadeFastPathForRBRTables     bool
 	useImprovedHoistJoinProject                bool
 	rowSecurity                                bool
+	useSwapMutations                           bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -320,6 +321,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		disableSlowCascadeFastPathForRBRTables:     evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables,
 		useImprovedHoistJoinProject:                evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 		rowSecurity:                                evalCtx.SessionData().RowSecurity,
+		useSwapMutations:                           evalCtx.SessionData().UseSwapMutations,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -496,6 +498,7 @@ func (m *Memo) IsStale(
 		m.disableSlowCascadeFastPathForRBRTables != evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables ||
 		m.useImprovedHoistJoinProject != evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject ||
 		m.rowSecurity != evalCtx.SessionData().RowSecurity ||
+		m.useSwapMutations != evalCtx.SessionData().UseSwapMutations ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

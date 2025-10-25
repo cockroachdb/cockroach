@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -537,4 +538,108 @@ func tcTableNotFound(
 	// The prepare should fail because the table doesn't exist
 	_, err = session.Prepare(ctx, "table-not-found-select", stmt, nil)
 	require.ErrorContains(t, err, "relation \"defaultdb.non_existent_table\" does not exist")
+}
+
+func TestModifySession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := s.InternalDB().(descs.DB)
+	session, err := db.Session(ctx, "test-session")
+	require.NoError(t, err)
+	defer session.Close(ctx)
+
+	// Modify the application name using ModifySession.
+	err = session.ModifySession(ctx, func(m sessionmutator.SessionDataMutator) {
+		m.SetApplicationName("my_test_app")
+	})
+	require.NoError(t, err)
+
+	// Verify the change by querying the session variable.
+	stmt, err := parser.ParseOne("SHOW application_name")
+	require.NoError(t, err)
+
+	prepared, err := session.Prepare(ctx, "show_app", stmt, nil)
+	require.NoError(t, err)
+
+	rows, err := session.QueryPrepared(ctx, prepared, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "my_test_app", string(tree.MustBeDString(rows[0][0])))
+}
+
+func TestSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := s.SQLConn(t)
+	_, err := db.Exec("CREATE TABLE test (id INT PRIMARY KEY, val INT)")
+	require.NoError(t, err)
+
+	idb := s.InternalDB().(descs.DB)
+	session, err := idb.Session(ctx, "test-session")
+	require.NoError(t, err)
+	defer session.Close(ctx)
+
+	insertStmt, err := parser.ParseOne("INSERT INTO defaultdb.test VALUES ($1, $2)")
+	require.NoError(t, err)
+
+	insertPrepared, err := session.Prepare(ctx, "insert", insertStmt, []*types.T{types.Int, types.Int})
+	require.NoError(t, err)
+
+	selectStmt, err := parser.ParseOne("SELECT id, val FROM defaultdb.test ORDER BY id")
+	require.NoError(t, err)
+
+	selectPrepared, err := session.Prepare(ctx, "select", selectStmt, nil)
+	require.NoError(t, err)
+
+	// Successful savepoint should commit changes
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		return session.Savepoint(ctx, func(ctx context.Context) error {
+			_, err := session.ExecutePrepared(ctx, insertPrepared, tree.Datums{
+				tree.NewDInt(tree.DInt(1)),
+				tree.NewDInt(tree.DInt(10)),
+			})
+			return err
+		})
+	})
+	require.NoError(t, err)
+
+	rows, err := session.QueryPrepared(ctx, selectPrepared, nil)
+	require.NoError(t, err)
+	require.Equal(t, []tree.Datums{
+		{tree.NewDInt(tree.DInt(1)), tree.NewDInt(tree.DInt(10))},
+	}, rows)
+
+	// Failed savepoint should rollback changes
+	err = session.Txn(ctx, func(ctx context.Context) error {
+		err := session.Savepoint(ctx, func(ctx context.Context) error {
+			_, err := session.ExecutePrepared(ctx, insertPrepared, tree.Datums{
+				tree.NewDInt(tree.DInt(2)),
+				tree.NewDInt(tree.DInt(20)),
+			})
+			if err != nil {
+				return err
+			}
+			return errors.New("abort savepoint")
+		})
+		require.ErrorContains(t, err, "abort savepoint")
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Should still only have the first row
+	rows, err = session.QueryPrepared(ctx, selectPrepared, nil)
+	require.NoError(t, err)
+	require.Equal(t, []tree.Datums{
+		{tree.NewDInt(tree.DInt(1)), tree.NewDInt(tree.DInt(10))},
+	}, rows)
 }
