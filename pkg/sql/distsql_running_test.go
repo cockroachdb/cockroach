@@ -1221,12 +1221,13 @@ func TestTopLevelQueryStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	// testQuery will be updated throughout the test to the current target.
 	var testQuery atomic.Value
 	// The callback will send number of rows read and rows written (for each
 	// ProducerMetadata.Metrics object) on these channels, respectively.
 	rowsReadCh, rowsWrittenCh := make(chan int64), make(chan int64)
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
 				DistSQLReceiverPushCallbackFactory: func(_ context.Context, query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
@@ -1244,11 +1245,13 @@ func TestTopLevelQueryStats(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer srv.Stopper().Stop(ctx)
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
 
 	if _, err := sqlDB.Exec(`
-CREATE TABLE t (k INT PRIMARY KEY);
-INSERT INTO t SELECT generate_series(1, 10);
+CREATE TABLE t (k INT PRIMARY KEY, i INT, v INT, INDEX(i));
+INSERT INTO t SELECT i, 1, 1 FROM generate_series(1, 10) AS g(i);
 CREATE FUNCTION no_reads() RETURNS INT AS 'SELECT 1' LANGUAGE SQL;
 CREATE FUNCTION reads() RETURNS INT AS 'SELECT count(*) FROM t' LANGUAGE SQL;
 CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x' LANGUAGE SQL;
@@ -1259,6 +1262,7 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x'
 	for _, tc := range []struct {
 		name           string
 		query          string
+		setup, cleanup string // optional
 		expRowsRead    int64
 		expRowsWritten int64
 	}{
@@ -1266,6 +1270,16 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x'
 			name:           "simple read",
 			query:          "SELECT k FROM t",
 			expRowsRead:    10,
+			expRowsWritten: 0,
+		},
+		{
+			name:    "routine and index join (used to be powered by streamer)",
+			query:   "SELECT v FROM t@t_i_idx WHERE reads() > 0",
+			setup:   "SET distsql=off",
+			cleanup: "RESET distsql",
+			// 10 rows for secondary index, 10 for index join into primary, and
+			// then for each row do ten-row-scan in the routine.
+			expRowsRead:    120,
 			expRowsWritten: 0,
 		},
 		{
@@ -1309,13 +1323,23 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x'
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.setup != "" {
+				_, err := conn.ExecContext(ctx, tc.setup)
+				require.NoError(t, err)
+			}
+			if tc.cleanup != "" {
+				defer func() {
+					_, err := conn.ExecContext(ctx, tc.cleanup)
+					require.NoError(t, err)
+				}()
+			}
 			testQuery.Store(tc.query)
 			errCh := make(chan error)
 			// Spin up the worker goroutine which will actually execute the
 			// query.
 			go func() {
 				defer close(errCh)
-				_, err := sqlDB.Exec(tc.query)
+				_, err := conn.ExecContext(ctx, tc.query)
 				errCh <- err
 			}()
 			// In the main goroutine, loop until the query is completed while

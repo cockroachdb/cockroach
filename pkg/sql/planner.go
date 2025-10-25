@@ -1079,8 +1079,9 @@ func (p *planner) ClearTableStatsCache() {
 	}
 }
 
-// mustUseLeafTxn returns true if inner plans must use a leaf transaction.
-func (p *planner) mustUseLeafTxn() bool {
+// innerPlansMustUseLeafTxn returns true if inner plans must use a leaf
+// transaction.
+func (p *planner) innerPlansMustUseLeafTxn() bool {
 	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
 }
 
