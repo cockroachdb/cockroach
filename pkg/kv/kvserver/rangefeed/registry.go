@@ -29,6 +29,9 @@ type Disconnector interface {
 	// Disconnected is a permanent state; once IsDisconnected returns true, it
 	// always returns true
 	IsDisconnected() bool
+	// Unregister is called when an error has finally been delivered to the
+	// underlying stream.
+	Unregister()
 }
 
 // registration defines an interface for registration that can be added to a

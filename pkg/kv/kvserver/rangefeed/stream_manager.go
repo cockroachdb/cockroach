@@ -123,6 +123,7 @@ func (sm *StreamManager) OnError(streamID int64) {
 		defer sm.streams.Unlock()
 		if d, ok := sm.streams.m[streamID]; ok {
 			assertTrue(d.IsDisconnected(), "OnError called on connected registration")
+			d.Unregister()
 			delete(sm.streams.m, streamID)
 			sm.metrics.ActiveMuxRangeFeed.Dec(1)
 		}
@@ -163,6 +164,13 @@ func (sm *StreamManager) AddStream(streamID int64, d Disconnector) {
 	if d.IsDisconnected() {
 		// If the stream is already disconnected, we don't add it to streams. The
 		// registration will have already sent an error to the client.
+		//
+		// TODO(ssd): Technically this error event might live in the buffer still
+		// and unregistering now may close the underlying memory budget related to
+		// that event. At the moment, there isn't a better place to do this however
+		// because the whole point of IsDisconnected() is that the error event might have
+		// raced us and already be at the client.
+		d.Unregister()
 		return
 	}
 	if _, ok := sm.streams.m[streamID]; ok {
@@ -218,6 +226,9 @@ func (sm *StreamManager) Stop(ctx context.Context) {
 		// sent to the client after shutdown, but the gRPC stream will still
 		// terminate.
 		disconnector.Disconnect(rangefeedClosedErr)
+		// At this point the sender has been cleaned up so any memory allocations it
+		// had should already be gone.
+		disconnector.Unregister()
 	}
 	sm.streams.m = nil
 }

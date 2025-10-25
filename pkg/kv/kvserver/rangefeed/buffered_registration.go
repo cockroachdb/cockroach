@@ -158,6 +158,13 @@ func (br *bufferedRegistration) IsDisconnected() bool {
 	return br.mu.disconnected
 }
 
+// Unregister implements Disconnector.
+//
+// The bufferedRegistration unregisters itself via Disconnect because it is
+// responsible for all of its buffered memory and thus there is no reason to
+// delay unregistration.
+func (br *bufferedRegistration) Unregister() {}
+
 // Disconnect cancels the output loop context for the registration and passes an
 // error to the output error stream for the registration.
 // Safe to run multiple times, but subsequent errors would be discarded.
