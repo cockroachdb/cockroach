@@ -772,7 +772,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"INSERT INTO d.arr VALUES($1, $2)", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{}), pq.Array([]string{})),
 		}},
-		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
+		{"INSPECT TABLE system.locations", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
 		{"ALTER RANGE default CONFIGURE ZONE = $1", []preparedQueryTest{
@@ -910,6 +910,7 @@ CREATE TABLE d.emptynorows (); -- zero columns, zero rows
 CREATE TABLE d.emptyrows (x INT);
 INSERT INTO d.emptyrows VALUES (1),(2),(3);
 ALTER TABLE d.emptyrows DROP COLUMN x; -- zero columns, 3 rows
+SET enable_inspect_command = true;
 `
 	if _, err := db.Exec(initStmt); err != nil {
 		t.Fatal(err)

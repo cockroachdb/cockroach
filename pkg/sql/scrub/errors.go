@@ -12,12 +12,15 @@ import (
 )
 
 const (
-	// MissingIndexEntryError occurs when a primary k/v is missing a
-	// corresponding secondary index k/v.
-	MissingIndexEntryError = "missing_index_entry"
-	// DanglingIndexReferenceError occurs when a secondary index k/v
-	// points to a non-existing primary k/v.
-	DanglingIndexReferenceError = "dangling_index_reference"
+	// MissingIndexEntryError occurs when a primary index row exists
+	// but the corresponding entry is missing from a secondary index.
+	// See MissingSecondaryIndexEntry in pkg/sql/inspect/issue.go.
+	MissingIndexEntryError = "missing_secondary_index_entry"
+	// DanglingIndexReferenceError occurs when a secondary index entry exists
+	// but the corresponding row in the primary index is missing.
+	// See DanglingSecondaryIndexEntry in pkg/sql/inspect/issue.go.
+	DanglingIndexReferenceError = "dangling_secondary_index_entry"
+
 	// PhysicalError is a generic error when there is an error in the
 	// SQL physical data.
 	PhysicalError = "physical_error"
@@ -31,15 +34,6 @@ const (
 	// UnexpectedNullValueError occurs when a null value is encountered where the
 	// value is expected to be non-nullable.
 	UnexpectedNullValueError = "null_value_error"
-	// CheckConstraintViolation occurs when a row in a table is
-	// violating a check constraint.
-	CheckConstraintViolation = "check_constraint_violation"
-	// ForeignKeyConstraintViolation occurs when a row in a
-	// table is violating a foreign key constraint.
-	ForeignKeyConstraintViolation = "foreign_key_violation"
-	// UniqueConstraintViolation occurs when a row in a table is violating
-	// a unique constraint.
-	UniqueConstraintViolation = "unique_constraint_violation"
 )
 
 // Error contains the details on the scrub error that was caught.
