@@ -523,6 +523,7 @@ func getEventDescriptorCached(
 	if v, ok := cache.Get(idVer); ok {
 		ed := v.(*EventDescriptor)
 		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
+			ed.SchemaTS = schemaTS
 			return ed, nil
 		}
 	}
