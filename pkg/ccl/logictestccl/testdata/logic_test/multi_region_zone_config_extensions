@@ -290,10 +290,100 @@ statement error pq: zone config extension cannot unset the home region \(ca-cent
 ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL IN "ca-central-1" CONFIGURE ZONE USING
   lease_preferences = '[[+region=ap-southeast-2]]'
 
-statement error pq: zone config extension cannot set num_replicas 4 that is lower than the one required for the survival goal: 5 with goal REGION_FAILURE
+statement error pq: cannot set num_replicas below 5 \(num_voters required for survival goal REGION_FAILURE\), got 4
 ALTER DATABASE "mr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE USING
   num_replicas = 4
 
-statement error pq: zone config extension cannot set num_voters 4 that is lower than the one required for the survival goal: 5 with goal REGION_FAILURE
+statement error pq: cannot set num_voters below 5 \(num_voters required for survival goal REGION_FAILURE\), got 4
 ALTER DATABASE "mr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE USING
   num_voters = 4
+
+# Test that num_replicas can be set to num_voters (removing read replicas).
+# This is allowed because survival goals depend on num_voters, not total replicas.
+
+# SURVIVE REGION FAILURE with num_voters=5 should allow num_replicas=5 (removing read replicas).
+statement ok
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY GLOBAL CONFIGURE ZONE USING
+  num_replicas = 5
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 9,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+
+statement ok
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING
+  num_replicas = 5
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-configs"
+----
+DATABASE "mr-zone-configs"  ALTER DATABASE "mr-zone-configs" CONFIGURE ZONE USING
+                              range_min_bytes = 134217728,
+                              range_max_bytes = 536870912,
+                              gc.ttlseconds = 14400,
+                              num_replicas = 5,
+                              num_voters = 5,
+                              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                              voter_constraints = '{+region=ca-central-1: 2}',
+                              lease_preferences = '[[+region=ca-central-1], [+region=ap-southeast-2]]'
+
+# num_replicas below num_voters should still fail.
+statement error pq: cannot set num_replicas below 5 \(num_voters required for survival goal REGION_FAILURE\), got 3
+ALTER DATABASE "mr-zone-configs" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING
+  num_replicas = 3
+
+# Test SURVIVE ZONE FAILURE case.
+statement ok
+CREATE DATABASE "mr-zone-survival"
+  primary region "ca-central-1"
+  regions "ap-southeast-2", "us-east-1"
+  survive zone failure
+
+statement ok
+use "mr-zone-survival"
+
+# SURVIVE ZONE with num_voters=3, num_replicas=5 by default.
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-survival"
+----
+DATABASE "mr-zone-survival"  ALTER DATABASE "mr-zone-survival" CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 5,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                               voter_constraints = '[+region=ca-central-1]',
+                               lease_preferences = '[[+region=ca-central-1]]'
+
+# Reduce num_replicas to num_voters (3) - removing read replicas.
+statement ok
+ALTER DATABASE "mr-zone-survival" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING
+  num_replicas = 3
+
+query TT
+SHOW ZONE CONFIGURATION FOR DATABASE "mr-zone-survival"
+----
+DATABASE "mr-zone-survival"  ALTER DATABASE "mr-zone-survival" CONFIGURE ZONE USING
+                               range_min_bytes = 134217728,
+                               range_max_bytes = 536870912,
+                               gc.ttlseconds = 14400,
+                               num_replicas = 3,
+                               num_voters = 3,
+                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                               voter_constraints = '[+region=ca-central-1]',
+                               lease_preferences = '[[+region=ca-central-1]]'
+
+# num_replicas below num_voters should still fail.
+statement error pq: cannot set num_replicas below 3 \(num_voters required for survival goal ZONE_FAILURE\), got 2
+ALTER DATABASE "mr-zone-survival" ALTER LOCALITY REGIONAL CONFIGURE ZONE USING
+  num_replicas = 2
