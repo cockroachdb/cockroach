@@ -115,6 +115,7 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	OptNumSinkWorkers                     = `num_sink_workers`
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
@@ -411,6 +412,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
+	OptNumSinkWorkers:                     stringOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 	OptHeadersJSONColumnName:              stringOption,
 	OptExtraHeaders:                       jsonOption,
@@ -428,6 +430,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
+	OptNumSinkWorkers,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -1201,6 +1204,27 @@ func (s StatementOptions) GetPTSExpiration() (time.Duration, error) {
 		return 0, nil
 	}
 	return *exp, nil
+}
+
+// GetNumSinkWorkers returns the number of sink IO workers to use.
+// Returns 0 if not set (which means use a reasonable default).
+// Negative values disable sink IO workers.
+func (s StatementOptions) GetNumSinkWorkers() (int64, error) {
+	v, ok := s.m[OptNumSinkWorkers]
+	if !ok {
+		return 0, nil
+	}
+	// Parse as int64
+	var result int64
+	if _, err := fmt.Sscanf(v, "%d", &result); err != nil {
+		return 0, errors.Newf("invalid integer value for %s: %q", OptNumSinkWorkers, v)
+	}
+	// Verify it's a clean parse by formatting back and comparing
+	// This rejects values like "3.14" which Sscanf would truncate to 3
+	if fmt.Sprintf("%d", result) != v {
+		return 0, errors.Newf("invalid integer value for %s: %q", OptNumSinkWorkers, v)
+	}
+	return result, nil
 }
 
 // ForceKeyInValue sets the encoding option KeyInValue to true and then validates the

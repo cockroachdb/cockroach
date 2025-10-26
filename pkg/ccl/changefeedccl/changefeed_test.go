@@ -12785,3 +12785,79 @@ func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
 	}
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
+
+// TestChangefeedNumSinkWorkersPrecedence verifies that the num_sink_workers
+// option works correctly and that the precedence logic (smaller value wins)
+// is applied when both cluster setting and per-changefeed option are set.
+func TestChangefeedNumSinkWorkersPrecedence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		// Test 1: Per-changefeed option only (cluster setting = 0)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 0`)
+		foo1 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH num_sink_workers = '5'`)
+		defer closeFeed(t, foo1)
+
+		testutils.SucceedsSoon(t, func() error {
+			workers := metrics.ParallelIOWorkers.Value()
+			if workers != 5 {
+				return errors.Newf("expected 5 workers, got %d", workers)
+			}
+			return nil
+		})
+		require.NoError(t, foo1.Close())
+
+		// Test 2: Cluster setting = 10, per-changefeed = 3 → should use 3 (smaller)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 10`)
+		foo2 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH num_sink_workers = '3'`)
+		defer closeFeed(t, foo2)
+
+		testutils.SucceedsSoon(t, func() error {
+			workers := metrics.ParallelIOWorkers.Value()
+			if workers != 3 {
+				return errors.Newf("expected 3 workers (smaller of 10 and 3), got %d", workers)
+			}
+			return nil
+		})
+		require.NoError(t, foo2.Close())
+
+		// Test 3: Cluster setting = 2, per-changefeed = 8 → should use 2 (smaller)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 2`)
+		foo3 := feed(t, f, `CREATE CHANGEFEED FOR foo WITH num_sink_workers = '8'`)
+		defer closeFeed(t, foo3)
+
+		testutils.SucceedsSoon(t, func() error {
+			workers := metrics.ParallelIOWorkers.Value()
+			if workers != 2 {
+				return errors.Newf("expected 2 workers (smaller of 2 and 8), got %d", workers)
+			}
+			return nil
+		})
+		require.NoError(t, foo3.Close())
+
+		// Test 4: Cluster setting only (no per-changefeed option)
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 7`)
+		foo4 := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo4)
+
+		testutils.SucceedsSoon(t, func() error {
+			workers := metrics.ParallelIOWorkers.Value()
+			if workers != 7 {
+				return errors.Newf("expected 7 workers (from cluster setting), got %d", workers)
+			}
+			return nil
+		})
+		require.NoError(t, foo4.Close())
+	}
+
+	// Test with sinks that support parallel IO
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}

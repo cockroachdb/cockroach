@@ -259,7 +259,7 @@ func getSink(
 				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
 					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+						numSinkIOWorkers(serverCfg, opts), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
 				} else {
 					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder)
@@ -283,7 +283,7 @@ func getSink(
 			}
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 				return makeWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+					numSinkIOWorkers(serverCfg, opts), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 					metricsBuilder, serverCfg.Settings)
 			})
 		case isPubsubSink(u):
@@ -292,7 +292,7 @@ func getSink(
 				testingKnobs = knobs
 			}
 			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), targets,
-				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
+				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg, opts),
 				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 				metricsBuilder, serverCfg.Settings, testingKnobs)
 		case isCloudStorageSink(u):
@@ -446,9 +446,11 @@ type encDatumRowBuffer []rowenc.EncDatumRow
 func (b *encDatumRowBuffer) IsEmpty() bool {
 	return b == nil || len(*b) == 0
 }
+
 func (b *encDatumRowBuffer) Push(r rowenc.EncDatumRow) {
 	*b = append(*b, r)
 }
+
 func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 	ret := (*b)[0]
 	*b = (*b)[1:]
@@ -745,7 +747,7 @@ func getSinkConfigFromJson(
 ) (batchCfg sinkBatchConfig, retryCfg retry.Options, err error) {
 	retryCfg = defaultRetryConfig()
 
-	var cfg = baseConfig
+	cfg := baseConfig
 	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
 	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
 	if jsonStr != `` {
@@ -802,8 +804,38 @@ func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func numSinkIOWorkers(cfg *execinfra.ServerConfig) int {
-	numWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
+func numSinkIOWorkers(cfg *execinfra.ServerConfig, opts changefeedbase.StatementOptions) int {
+	// Get per-changefeed option
+	changefeedWorkers, err := opts.GetNumSinkWorkers()
+	if err != nil {
+		// Log error but continue with cluster setting
+		log.Changefeed.Warningf(context.Background(), "error getting num_sink_workers option: %v", err)
+		changefeedWorkers = 0
+	}
+
+	// Get cluster setting
+	clusterWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
+
+	// Apply precedence logic:
+	// 1. If both are positive, use the smaller value (cluster can cap)
+	// 2. If one is positive and the other is <=0, use the positive value
+	// 3. If both are <=0, use automatic default based on GOMAXPROCS
+
+	var numWorkers int64
+	if changefeedWorkers > 0 && clusterWorkers > 0 {
+		if changefeedWorkers < clusterWorkers {
+			numWorkers = changefeedWorkers
+		} else {
+			numWorkers = clusterWorkers
+		}
+	} else if changefeedWorkers > 0 {
+		numWorkers = changefeedWorkers
+	} else if clusterWorkers > 0 {
+		numWorkers = clusterWorkers
+	} else {
+		numWorkers = 0
+	}
+
 	if numWorkers > 0 {
 		return int(numWorkers)
 	}
