@@ -21,6 +21,7 @@ import (
 	"path"
 	"reflect"
 	"regexp"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -13083,4 +13084,118 @@ func TestDatabaseLevelChangefeedWithInitialScanOptions(t *testing.T) {
 			cdcTest(t, testFn, feedTestEnterpriseSinks)
 		})
 	}
+}
+
+// TestChangefeedNumSinkWorkersPrecedence verifies that the sink_io_workers
+// option works correctly and that the precedence logic (changefeed option is used when set)
+// is applied when both cluster setting and per-changefeed option are set.
+func TestChangefeedNumSinkWorkersPrecedence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		KafkaV2Enabled.Override(context.Background(), &s.Server.ClusterSettings().SV, true)
+
+		t.Run("uses per-changefeed option when cluster setting is zero", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 0`)
+			cf := feed(t, f, `CREATE CHANGEFEED FOR foo WITH sink_io_workers = '5'`)
+			defer closeFeed(t, cf)
+
+			testutils.SucceedsSoon(t, func() error {
+				workers := metrics.ParallelIOWorkers.Value()
+				if workers != 5 {
+					return errors.Newf("expected 5 workers, got %d", workers)
+				}
+				return nil
+			})
+		})
+
+		t.Run("uses per-changefeed option when it is set", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 10`)
+			cf := feed(t, f, `CREATE CHANGEFEED FOR foo WITH sink_io_workers = '3'`)
+			defer closeFeed(t, cf)
+
+			testutils.SucceedsSoon(t, func() error {
+				workers := metrics.ParallelIOWorkers.Value()
+				if workers != 3 {
+					return errors.Newf("expected 3 workers (from changefeed setting), got %d", workers)
+				}
+				return nil
+			})
+		})
+
+		t.Run("uses cluster setting when per-changefeed option is not set", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 7`)
+			cf := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			defer closeFeed(t, cf)
+
+			testutils.SucceedsSoon(t, func() error {
+				workers := metrics.ParallelIOWorkers.Value()
+				if workers != 7 {
+					return errors.Newf("expected 7 workers (from cluster setting), got %d", workers)
+				}
+				return nil
+			})
+		})
+
+		t.Run("uses GOMAXPROCS default when changefeed setting is negative", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 10`)
+			cf := feed(t, f, `CREATE CHANGEFEED FOR foo WITH sink_io_workers = '-1'`)
+			defer closeFeed(t, cf)
+
+			testutils.SucceedsSoon(t, func() error {
+				workers := metrics.ParallelIOWorkers.Value()
+				expectedWorkers := runtime.GOMAXPROCS(0)
+				if workers != int64(expectedWorkers) {
+					return errors.Newf("expected %d workers (GOMAXPROCS-based), got %d", expectedWorkers, workers)
+				}
+				return nil
+			})
+		})
+
+		t.Run("uses GOMAXPROCS default when cluster setting is negative and no changefeed option is set", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = -1`)
+			cf := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+			defer closeFeed(t, cf)
+
+			testutils.SucceedsSoon(t, func() error {
+				workers := metrics.ParallelIOWorkers.Value()
+				expectedWorkers := runtime.GOMAXPROCS(0)
+				if workers != int64(expectedWorkers) {
+					return errors.Newf("expected %d workers (GOMAXPROCS-based), got %d", expectedWorkers, workers)
+				}
+				return nil
+			})
+		})
+
+		t.Run("uses GOMAXPROCS default when both sink_io_workers settings are negative", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = -1`)
+			cf := feed(t, f, `CREATE CHANGEFEED FOR foo WITH sink_io_workers = '-1'`)
+			defer closeFeed(t, cf)
+
+			testutils.SucceedsSoon(t, func() error {
+				workers := metrics.ParallelIOWorkers.Value()
+				expectedWorkers := runtime.GOMAXPROCS(0)
+				if workers != int64(expectedWorkers) {
+					return errors.Newf("expected %d workers (GOMAXPROCS-based), got %d", expectedWorkers, workers)
+				}
+				return nil
+			})
+		})
+
+		t.Run("rejects invalid sink_io_workers value", func(t *testing.T) {
+			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 5`)
+			sqlDB.ExpectErrWithTimeout(t, "invalid integer value",
+				`CREATE CHANGEFEED FOR foo WITH sink_io_workers = 'invalid'`)
+		})
+	}
+
+	// Test with sinks that support parallel IO.
+	cdcTest(t, testFn, feedTestRestrictSinks("pubsub", "webhook", "kafka"))
 }

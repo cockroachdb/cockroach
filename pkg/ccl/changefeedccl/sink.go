@@ -258,8 +258,12 @@ func getSink(
 					return nil, err
 				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
+					numWorkers, err := numSinkIOWorkers(serverCfg, opts)
+					if err != nil {
+						return nil, err
+					}
 					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts,
-						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+						numWorkers, newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
 				} else {
 					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, targets, sinkOpts, serverCfg.Settings, metricsBuilder)
@@ -282,8 +286,12 @@ func getSink(
 				return nil, err
 			}
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
+				numWorkers, err := numSinkIOWorkers(serverCfg, opts)
+				if err != nil {
+					return nil, err
+				}
 				return makeWebhookSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, webhookOpts,
-					numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
+					numWorkers, newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 					metricsBuilder, serverCfg.Settings)
 			})
 		case isPubsubSink(u):
@@ -291,8 +299,12 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
+			numWorkers, err := numSinkIOWorkers(serverCfg, opts)
+			if err != nil {
+				return nil, err
+			}
 			return makePubsubSink(ctx, u, encodingOpts, opts.GetPubsubConfigJSON(), targets,
-				opts.IsSet(changefeedbase.OptUnordered), numSinkIOWorkers(serverCfg),
+				opts.IsSet(changefeedbase.OptUnordered), numWorkers,
 				newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 				metricsBuilder, serverCfg.Settings, testingKnobs)
 		case isCloudStorageSink(u):
@@ -446,9 +458,11 @@ type encDatumRowBuffer []rowenc.EncDatumRow
 func (b *encDatumRowBuffer) IsEmpty() bool {
 	return b == nil || len(*b) == 0
 }
+
 func (b *encDatumRowBuffer) Push(r rowenc.EncDatumRow) {
 	*b = append(*b, r)
 }
+
 func (b *encDatumRowBuffer) Pop() rowenc.EncDatumRow {
 	ret := (*b)[0]
 	*b = (*b)[1:]
@@ -745,7 +759,7 @@ func getSinkConfigFromJson(
 ) (batchCfg sinkBatchConfig, retryCfg retry.Options, err error) {
 	retryCfg = defaultRetryConfig()
 
-	var cfg = baseConfig
+	cfg := baseConfig
 	cfg.Retry.Max = jsonMaxRetries(retryCfg.MaxRetries)
 	cfg.Retry.Backoff = jsonDuration(retryCfg.InitialBackoff)
 	if jsonStr != `` {
@@ -802,20 +816,25 @@ func (j *jsonMaxRetries) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func numSinkIOWorkers(cfg *execinfra.ServerConfig) int {
-	numWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
-	if numWorkers > 0 {
-		return int(numWorkers)
+func numSinkIOWorkers(
+	cfg *execinfra.ServerConfig, opts changefeedbase.StatementOptions,
+) (int, error) {
+	changefeedWorkers, err := opts.GetNumSinkWorkers()
+	if err != nil {
+		return 0, errors.Wrap(err, "Invalid sink config. num_sink_workers must be an integer")
 	}
 
-	idealNumber := runtime.GOMAXPROCS(0)
-	if idealNumber < 1 {
-		return 1
+	clusterWorkers := changefeedbase.SinkIOWorkers.Get(&cfg.Settings.SV)
+
+	value := int(clusterWorkers)
+	if changefeedWorkers != nil {
+		value = int(*changefeedWorkers)
 	}
-	if idealNumber > 32 {
-		return 32
+	if value <= 0 {
+		value = min(runtime.GOMAXPROCS(0), 32)
 	}
-	return idealNumber
+
+	return value, nil
 }
 
 func newCPUPacerFactory(ctx context.Context, cfg *execinfra.ServerConfig) func() *admission.Pacer {
