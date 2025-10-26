@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -1013,4 +1015,105 @@ func TestChangefeedConsistentPartitioning(t *testing.T) {
 		require.Equal(t, expected, actual)
 	}
 
+}
+
+func TestNumSinkIOWorkers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	tests := []struct {
+		name             string
+		clusterSetting   int64
+		changefeedOption string
+		expectedWorkers  int
+		expectError      bool
+	}{
+		{
+			name:             "both zero - use default",
+			clusterSetting:   0,
+			changefeedOption: "0",
+			expectedWorkers:  runtime.GOMAXPROCS(0),
+		},
+		{
+			name:             "cluster positive, option not set - use cluster",
+			clusterSetting:   10,
+			changefeedOption: "",
+			expectedWorkers:  10,
+		},
+		{
+			name:             "cluster zero, option positive - use option",
+			clusterSetting:   0,
+			changefeedOption: "15",
+			expectedWorkers:  15,
+		},
+		{
+			name:             "both positive, option smaller - use option",
+			clusterSetting:   10,
+			changefeedOption: "5",
+			expectedWorkers:  5,
+		},
+		{
+			name:             "both positive, cluster smaller - use cluster",
+			clusterSetting:   10,
+			changefeedOption: "15",
+			expectedWorkers:  10,
+		},
+		{
+			name:             "cluster negative - use default",
+			clusterSetting:   -1,
+			changefeedOption: "",
+			expectedWorkers:  runtime.GOMAXPROCS(0),
+		},
+		{
+			name:             "option negative - use default",
+			clusterSetting:   0,
+			changefeedOption: "-1",
+			expectedWorkers:  runtime.GOMAXPROCS(0),
+		},
+		{
+			name:             "both negative - use default",
+			clusterSetting:   -1,
+			changefeedOption: "-1",
+			expectedWorkers:  runtime.GOMAXPROCS(0),
+		},
+		{
+			name:             "option not set, cluster zero - use default",
+			clusterSetting:   0,
+			changefeedOption: "",
+			expectedWorkers:  runtime.GOMAXPROCS(0),
+		},
+		{
+			name:             "invalid changefeed option returns error",
+			clusterSetting:   10,
+			changefeedOption: "invalid",
+			expectError:      true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			changefeedbase.SinkIOWorkers.Override(ctx, &execCfg.Settings.SV, test.clusterSetting)
+
+			optsMap := make(map[string]string)
+			if test.changefeedOption != "" {
+				optsMap[changefeedbase.OptNumSinkWorkers] = test.changefeedOption
+			}
+			opts := changefeedbase.MakeStatementOptions(optsMap)
+
+			result, err := numSinkIOWorkers(&execCfg.DistSQLSrv.ServerConfig, opts)
+
+			if test.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, test.expectedWorkers, result)
+			}
+		})
+	}
 }

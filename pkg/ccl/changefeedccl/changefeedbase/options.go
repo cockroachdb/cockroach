@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -132,6 +133,7 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	OptNumSinkWorkers                     = `num_sink_workers`
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
@@ -430,6 +432,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
+	OptNumSinkWorkers:                     stringOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 	OptRangeDistributionStrategy:          enum(string(ChangefeedRangeDistributionStrategyDefault), string(ChangefeedRangeDistributionStrategyBalancedSimple)),
 	OptHeadersJSONColumnName:              stringOption,
@@ -449,6 +452,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
 	OptRangeDistributionStrategy,
+	OptNumSinkWorkers,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
@@ -1235,6 +1239,21 @@ func (s StatementOptions) GetPTSExpiration() (time.Duration, error) {
 	return *exp, nil
 }
 
+// GetNumSinkWorkers returns the number of sink IO workers to use.
+// Returns 0 if not set (which means use a reasonable default).
+// Negative values disable sink IO workers.
+func (s StatementOptions) GetNumSinkWorkers() (int64, error) {
+	v, ok := s.m[OptNumSinkWorkers]
+	if !ok {
+		return 0, nil
+	}
+	result, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, errors.Newf("invalid integer value for %s: %q", OptNumSinkWorkers, v)
+	}
+	return result, nil
+}
+
 // ForceKeyInValue sets the encoding option KeyInValue to true and then validates the
 // resoluting encoding options.
 func (s StatementOptions) ForceKeyInValue() error {
@@ -1376,6 +1395,10 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 				return errors.Newf(`%s requires the %s option because %s`, pair.opt1, pair.opt2, pair.reason)
 			}
 		}
+	}
+	// Validate that num_sink_workers is an integer value if it is set.
+	if _, err := s.GetNumSinkWorkers(); err != nil {
+		return err
 	}
 	return nil
 }
