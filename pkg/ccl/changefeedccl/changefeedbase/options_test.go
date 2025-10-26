@@ -51,6 +51,68 @@ func TestOptionsValidations(t *testing.T) {
 	}
 }
 
+func TestNumSinkWorkersOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name      string
+		input     map[string]string
+		expected  int64
+		expectErr bool
+	}{
+		{
+			name:      "positive value",
+			input:     map[string]string{"num_sink_workers": "5"},
+			expected:  5,
+			expectErr: false,
+		},
+		{
+			name:      "zero value (default)",
+			input:     map[string]string{"num_sink_workers": "0"},
+			expected:  0,
+			expectErr: false,
+		},
+		{
+			name:      "negative value (disable)",
+			input:     map[string]string{"num_sink_workers": "-1"},
+			expected:  -1,
+			expectErr: false,
+		},
+		{
+			name:      "not set",
+			input:     map[string]string{},
+			expected:  0,
+			expectErr: false,
+		},
+		{
+			name:      "invalid non-integer",
+			input:     map[string]string{"num_sink_workers": "abc"},
+			expected:  0,
+			expectErr: true,
+		},
+		{
+			name:      "invalid float",
+			input:     map[string]string{"num_sink_workers": "3.14"},
+			expected:  0,
+			expectErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			o := MakeStatementOptions(test.input)
+			val, err := o.GetNumSinkWorkers()
+			if test.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, test.expected, val)
+			}
+		})
+	}
+}
+
 func TestEncodingOptionsValidations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
