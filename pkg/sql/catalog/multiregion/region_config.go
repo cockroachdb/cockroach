@@ -183,12 +183,9 @@ func (r *RegionConfig) ZoneConfigExtensions() descpb.ZoneConfigExtensions {
 // extensions to the provided zone configuration, returning the updated config.
 func (r *RegionConfig) ExtendZoneConfigWithGlobal(zc zonepb.ZoneConfig) (zonepb.ZoneConfig, error) {
 	if ext := r.zoneCfgExtensions.Global; ext != nil {
-		var numVoters, numReplicas int32
+		var numVoters int32
 		if zc.NumVoters != nil {
 			numVoters = *zc.NumVoters
-		}
-		if zc.NumReplicas != nil {
-			numReplicas = *zc.NumReplicas
 		}
 		zc = extendZoneCfg(zc, *ext)
 		// TODO(janexing): to ensure that the zone config extension won't break the
@@ -200,10 +197,10 @@ func (r *RegionConfig) ExtendZoneConfigWithGlobal(zc zonepb.ZoneConfig) (zonepb.
 				"cannot set num_voters %v that is lower than the one required for the "+
 				"survival goal: %v with goal %v\n", *zc.NumVoters, numVoters, r.SurvivalGoal())
 		}
-		if zc.NumReplicas != nil && *zc.NumReplicas < numReplicas {
+		if zc.NumReplicas != nil && *zc.NumReplicas < numVoters {
 			return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
 				"cannot set num_replicas %v that is lower than the one required for the "+
-				"survival goal: %v with goal %v\n", *zc.NumReplicas, numReplicas, r.SurvivalGoal())
+				"survival goal: %v with goal %v\n", *zc.NumReplicas, numVoters, r.SurvivalGoal())
 		}
 	}
 	return zc, nil
@@ -215,12 +212,9 @@ func (r *RegionConfig) ExtendZoneConfigWithGlobal(zc zonepb.ZoneConfig) (zonepb.
 func (r *RegionConfig) ExtendZoneConfigWithRegionalIn(
 	zc zonepb.ZoneConfig, region catpb.RegionName,
 ) (zonepb.ZoneConfig, error) {
-	var numVoters, numReplicas int32
+	var numVoters int32
 	if zc.NumVoters != nil {
 		numVoters = *zc.NumVoters
-	}
-	if zc.NumReplicas != nil {
-		numReplicas = *zc.NumReplicas
 	}
 
 	if ext := r.zoneCfgExtensions.Regional; ext != nil {
@@ -246,10 +240,10 @@ func (r *RegionConfig) ExtendZoneConfigWithRegionalIn(
 			"cannot set num_voters %v that is lower than the one required for the "+
 			"survival goal: %v with goal %v\n", *zc.NumVoters, numVoters, r.SurvivalGoal())
 	}
-	if zc.NumReplicas != nil && *zc.NumReplicas < numReplicas {
+	if zc.NumReplicas != nil && *zc.NumReplicas < numVoters {
 		return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
-			"cannot set num_replica %v that is lower than the one required for the "+
-			"survival goal: %v with goal %v\n", *zc.NumReplicas, numReplicas, r.SurvivalGoal())
+			"cannot set num_replicas %v that is lower than the one required for the "+
+			"survival goal: %v with goal %v\n", *zc.NumReplicas, numVoters, r.SurvivalGoal())
 	}
 	return zc, nil
 }
