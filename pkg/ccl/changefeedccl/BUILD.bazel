@@ -204,6 +204,7 @@ go_test(
     size = "enormous",
     srcs = [
         "alter_changefeed_test.go",
+        "benchfeed_test.go",
         "changefeed_dist_test.go",
         "changefeed_job_info_test.go",
         "changefeed_memory_test.go",
