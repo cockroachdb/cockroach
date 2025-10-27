@@ -8,7 +8,7 @@ SELECT
 FROM
   crdb_internal.node_metrics
 WHERE
-  name LIKE '%kvflowcontrol%tokens%'
+  name LIKE '%kvflowcontrol%tokens%' AND name NOT LIKE '%inflight%'
 ORDER BY
   name ASC;
 
@@ -45,7 +45,7 @@ ORDER BY
 -- three.
 SELECT name, value
     FROM crdb_internal.node_metrics
-   WHERE name LIKE '%kvflowcontrol%stream%'
+   WHERE name LIKE '%kvflowcontrol%stream%' AND name NOT LIKE '%inflight%'
 ORDER BY name ASC;
 
   kvflowcontrol.streams.eval.elastic.blocked_count | 0  
@@ -84,7 +84,7 @@ SELECT
 FROM
   crdb_internal.node_metrics
 WHERE
-  name LIKE '%kvflowcontrol%tokens%'
+  name LIKE '%kvflowcontrol%tokens%' AND name NOT LIKE '%inflight%'
 ORDER BY
   name ASC;
 

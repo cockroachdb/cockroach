@@ -32,6 +32,8 @@ kvflowcontrol.streams.eval.regular.blocked_count
 kvflowcontrol.streams.eval.regular.total_count
 kvflowcontrol.streams.send.elastic.blocked_count
 kvflowcontrol.streams.send.elastic.total_count
+kvflowcontrol.streams.send.inflight.blocked_count
+kvflowcontrol.streams.send.inflight.total_count
 kvflowcontrol.streams.send.regular.blocked_count
 kvflowcontrol.streams.send.regular.total_count
 kvflowcontrol.tokens.eval.elastic.available
@@ -51,6 +53,11 @@ kvflowcontrol.tokens.send.elastic.deducted.prevent_send_queue
 kvflowcontrol.tokens.send.elastic.returned
 kvflowcontrol.tokens.send.elastic.returned.disconnect
 kvflowcontrol.tokens.send.elastic.unaccounted
+kvflowcontrol.tokens.send.inflight.available
+kvflowcontrol.tokens.send.inflight.deducted
+kvflowcontrol.tokens.send.inflight.returned
+kvflowcontrol.tokens.send.inflight.returned.disconnect
+kvflowcontrol.tokens.send.inflight.unaccounted
 kvflowcontrol.tokens.send.regular.available
 kvflowcontrol.tokens.send.regular.deducted
 kvflowcontrol.tokens.send.regular.deducted.prevent_send_queue

@@ -7,11 +7,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Replica 1 is the leader so sending [1,1) is ignored and everything is
 # considered sent (the leader does not see MsgApps for itself).
@@ -26,11 +26,11 @@ range_id=1
     replica_id=3 [1,1)
 ----
 t1/s1: eval reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+15 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Replica 3 has a send-queue where one item deduct elastic eval tokens and
 # another regular eval tokens.
@@ -65,11 +65,11 @@ range_id=1
     term=1 index=4 pri=LowPri size=3MiB
 ----
 t1/s1: eval reg=+14 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB
-       send reg=+14 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+14 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB
-       send reg=+14 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+1.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+307 KiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+307 KiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # In pull mode, all entries in the send-queue deduct elastic eval tokens.
 # There are enough elastic tokens available in t1/s3 to deduct tokens to later
@@ -119,11 +119,11 @@ range_id=1
     replica_id=3 [1,2)
 ----
 t1/s1: eval reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # The popped item is regular, and is counted as regular since we are in push
 # mode.

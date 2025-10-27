@@ -793,7 +793,7 @@ retry:
 		requiredWait := false
 		// First check the voter set, which participate in quorum.
 		for _, v := range vs {
-			available, handle := v.evalTokenCounter.TokensAvailable(wc)
+			available, handle := v.evalTokenCounter.TokensAvailable(WorkClassOrInflight(wc))
 			if available && !v.hasSendQ {
 				votersHaveEvalTokensCount++
 				continue
@@ -816,7 +816,7 @@ retry:
 		// checking them.
 		if waitForAllReplicateHandles {
 			for _, nv := range nvs {
-				available, handle := nv.evalTokenCounter.TokensAvailable(wc)
+				available, handle := nv.evalTokenCounter.TokensAvailable(WorkClassOrInflight(wc))
 				if available || !nv.isStateReplicate {
 					// Ignore non-voters without tokens which are not in StateReplicate,
 					// as we won't be waiting for them.
@@ -1328,17 +1328,17 @@ func (rc *rangeController) computeVoterDirectivesRaftMuLocked(
 		// isReplicate
 		// !noSendQ || !hasSendTokens
 		// NB: forceFlushing => !noSendQ
-		sendPoolLimit := rs.sendTokenCounter.limit(admissionpb.ElasticWorkClass)
+		sendPoolLimit := rs.sendTokenCounter.limit(ElasticWC)
 		sendPoolBucket := sendPoolLimit / 10
 		if sendPoolBucket == 0 {
 			sendPoolBucket = 1
 		}
-		sendTokens := rs.sendTokenCounter.tokens(admissionpb.ElasticWorkClass)
+		sendTokens := rs.sendTokenCounter.tokens(ElasticWC)
 		bucketedSendTokens := (sendTokens / sendPoolBucket) * sendPoolBucket
 		score := replicaScore{
 			replicaID:          rs.replicaID,
 			bucketedTokensSend: bucketedSendTokens,
-			tokensEval:         rs.evalTokenCounter.tokens(admissionpb.ElasticWorkClass),
+			tokensEval:         rs.evalTokenCounter.tokens(ElasticWC),
 		}
 		if rs.scratchVoterStreamState.forceFlushStopIndex.active() {
 			forceFlushingScores = append(forceFlushingScores, score)
@@ -2470,12 +2470,12 @@ func (rs *replicaState) computeReplicaStreamStateRaftMuLocked(
 		// frequency of flapping between send-queue and no send-queue is reduced,
 		// which means the WaitForEval refreshCh needs to be used less frequently.
 		if needsTokens[admissionpb.ElasticWorkClass] {
-			if rs.sendTokenCounter.tokens(admissionpb.ElasticWorkClass) <= 0 {
+			if rs.sendTokenCounter.tokens(ElasticWC) <= 0 {
 				vss.hasSendTokens = false
 			}
 		}
 		if needsTokens[admissionpb.RegularWorkClass] {
-			if rs.sendTokenCounter.tokens(admissionpb.RegularWorkClass) <= 0 {
+			if rs.sendTokenCounter.tokens(RegularWC) <= 0 {
 				vss.hasSendTokens = false
 			}
 		}
@@ -2842,7 +2842,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		}
 		for wc, tokens := range sendTokensToDeduct {
 			if tokens != 0 {
-				rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.WorkClass(wc), tokens, flag)
+				rss.parent.sendTokenCounter.Deduct(ctx, WorkClassOrInflight(wc), tokens, flag)
 			}
 		}
 		if directive.preventSendQNoForceFlush {
@@ -2896,7 +2896,7 @@ func (rss *replicaSendStream) handleReadyEntriesRaftMuAndStreamLocked(
 		}
 		for wc, tokens := range evalTokensToDeduct {
 			if tokens != 0 {
-				rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.WorkClass(wc), tokens, AdjNormal)
+				rss.parent.evalTokenCounter.Deduct(ctx, WorkClassOrInflight(wc), tokens, AdjNormal)
 			}
 		}
 	}
@@ -2960,11 +2960,11 @@ func (rss *replicaSendStream) tryHandleModeChangeRaftMuAndStreamLocked(
 		// we want regular to count as regular. So return tokens to elastic and
 		// deduct from regular.
 		// TODO(kvoli): Should we have a metric for this? It should be rare.
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, ElasticWC,
 			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.RegularWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, RegularWC,
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
@@ -2972,11 +2972,11 @@ func (rss *replicaSendStream) tryHandleModeChangeRaftMuAndStreamLocked(
 	} else {
 		// Switching from push to pull. Regular needs to be counted as elastic, so
 		// return to regular and deduct from elastic.
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, ElasticWC,
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.ElasticWorkClass] +=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
-		rss.parent.evalTokenCounter.Deduct(ctx, admissionpb.RegularWorkClass,
+		rss.parent.evalTokenCounter.Deduct(ctx, RegularWC,
 			-rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass], AdjNormal)
 		rss.mu.eval.tokensDeducted[admissionpb.RegularWorkClass] -=
 			rss.mu.sendQueue.originalEvalTokens[admissionpb.RegularWorkClass]
@@ -3079,7 +3079,7 @@ func (rss *replicaSendStream) dequeueFromQueueAndSendRaftMuAndStreamLocked(
 		if rss.mu.sendQueue.forceFlushStopIndex.active() {
 			flag = AdjForceFlush
 		}
-		rss.parent.sendTokenCounter.Deduct(ctx, admissionpb.ElasticWorkClass, tokensNeeded, flag)
+		rss.parent.sendTokenCounter.Deduct(ctx, ElasticWC, tokensNeeded, flag)
 	}
 	rss.parent.parent.opts.MsgAppSender.SendMsgApp(ctx, msg, true)
 }
@@ -3155,7 +3155,7 @@ func (rss *replicaSendStream) stopAttemptingToEmptySendQueueViaWatcherRaftMuAndS
 			int64(rss.mu.sendQueue.deductedForSchedulerTokens))
 
 		rss.parent.sendTokenCounter.Return(
-			ctx, admissionpb.ElasticWorkClass, rss.mu.sendQueue.deductedForSchedulerTokens, flag)
+			ctx, ElasticWC, rss.mu.sendQueue.deductedForSchedulerTokens, flag)
 		rss.mu.sendQueue.deductedForSchedulerTokens = 0
 	}
 	if handle := rss.mu.sendQueue.tokenWatcherHandle; handle != (SendTokenWatcherHandle{}) {
@@ -3210,7 +3210,10 @@ func (rss *replicaSendStream) startAttemptingToEmptySendQueueViaWatcherStreamLoc
 }
 
 // Notify implements TokenGrantNotification.
-func (rss *replicaSendStream) Notify(ctx context.Context) {
+func (rss *replicaSendStream) Notify(ctx context.Context, wc WorkClassOrInflight) {
+	if wc != ElasticWC {
+		panic(errors.AssertionFailedf("unexpected wc %v", wc))
+	}
 	rss.mu.Lock()
 	defer rss.mu.Unlock()
 	if rss.mu.closed {
@@ -3241,7 +3244,7 @@ func (rss *replicaSendStream) Notify(ctx context.Context) {
 	if rss.mu.sendQueue.forceFlushStopIndex.active() {
 		panic(errors.AssertionFailedf("cannot be force-flushing"))
 	}
-	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, admissionpb.ElasticWorkClass, queueSize, flag)
+	tokens := rss.parent.sendTokenCounter.TryDeduct(ctx, ElasticWC, queueSize, flag)
 	if tokens == 0 {
 		// Rare case: no tokens available despite notification. Register again.
 		rss.startAttemptingToEmptySendQueueViaWatcherStreamLocked(ctx)
@@ -3290,7 +3293,7 @@ func (rss *replicaSendStream) returnSendTokensRaftMuAndStreamLocked(
 	for pri, tokens := range returned {
 		if tokens > 0 {
 			pri := WorkClassFromRaftPriority(raftpb.Priority(pri))
-			rss.parent.sendTokenCounter.Return(ctx, pri, tokens, flag)
+			rss.parent.sendTokenCounter.Return(ctx, WorkClassOrInflight(pri), tokens, flag)
 		}
 	}
 }
@@ -3306,7 +3309,7 @@ func (rss *replicaSendStream) returnEvalTokensRaftMuAndStreamLocked(
 		rpri := raftpb.Priority(pri)
 		wc := WorkClassFromRaftPriority(rpri)
 		if tokens > 0 {
-			rss.parent.evalTokenCounter.Return(ctx, wc, tokens, AdjNormal)
+			rss.parent.evalTokenCounter.Return(ctx, WorkClassOrInflight(wc), tokens, AdjNormal)
 			rss.mu.eval.tokensDeducted[wc] -= tokens
 			if rss.mu.eval.tokensDeducted[wc] < 0 {
 				if buildutil.CrdbTestBuild {
@@ -3327,7 +3330,7 @@ func (rss *replicaSendStream) returnAllEvalTokensRaftMuAndStreamLocked(ctx conte
 	for wc, tokens := range rss.mu.eval.tokensDeducted {
 		if tokens > 0 {
 			// NB: This is only called for disconnects.
-			rss.parent.evalTokenCounter.Return(ctx, admissionpb.WorkClass(wc), tokens, AdjDisconnect)
+			rss.parent.evalTokenCounter.Return(ctx, WorkClassOrInflight(wc), tokens, AdjDisconnect)
 		}
 		rss.mu.eval.tokensDeducted[wc] = 0
 	}
