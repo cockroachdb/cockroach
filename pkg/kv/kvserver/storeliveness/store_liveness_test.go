@@ -41,8 +41,10 @@ func TestStoreLiveness(t *testing.T) {
 			defer stopper.Stop(ctx)
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
-			sender := testMessageSender{}
-			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, &sender, nil)
+			sender := &mockBatchTransport{}
+			tickDuration := 1 * time.Second
+			coordinator := NewHeartbeatCoordinator(sender, tickDuration, stopper, settings)
+			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, coordinator, nil)
 			require.NoError(t, sm.onRestart(ctx))
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -67,13 +69,20 @@ func TestStoreLiveness(t *testing.T) {
 						sm.options.SupportDuration = parseDuration(t, d, "support-duration")
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
-						heartbeats := sender.drainSentMessages()
+
+						// Wait for async heartbeat processing to complete
+						// Collection window (10ms) + smear duration (10ms) + small buffer
+						time.Sleep(25 * time.Millisecond)
+
+						heartbeats := sender.getBatchMessages()
+						sender.clearBatchMessages() // Clear after capturing
 						return fmt.Sprintf("heartbeats:\n%s", printMsgs(heartbeats))
 
 					case "handle-messages":
 						msgs := parseMsgs(t, d, storeID)
 						sm.handleMessages(ctx, msgs)
-						responses := sender.drainSentMessages()
+						responses := sender.getAsyncMessages()
+						sender.clearAsyncMessages() // Clear after capturing
 						if len(responses) > 0 {
 							return fmt.Sprintf("responses:\n%s", printMsgs(responses))
 						} else {
@@ -91,7 +100,7 @@ func TestStoreLiveness(t *testing.T) {
 						gracePeriod := parseDuration(t, d, "grace-period")
 						o := Options{SupportWithdrawalGracePeriod: gracePeriod}
 						sm = NewSupportManager(
-							storeID, engine, o, settings, stopper, clock, nil, &sender, nil,
+							storeID, engine, o, settings, stopper, clock, nil, coordinator, nil,
 						)
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
