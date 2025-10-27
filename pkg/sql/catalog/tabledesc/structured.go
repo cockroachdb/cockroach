@@ -2604,6 +2604,9 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	if desc.IsSchemaLocked() {
 		appendStorageParam(`schema_locked`, `true`)
 	}
+	if desc.CanaryWindow != 0 {
+		appendStorageParam(`canary_window`, fmt.Sprintf(`'%s'`, desc.CanaryWindow.String()))
+	}
 	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
 		// NOTE: when validating the descriptor, we check that the referenced
 		// constraint exists, so this should never fail.
