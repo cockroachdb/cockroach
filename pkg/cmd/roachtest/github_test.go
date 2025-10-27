@@ -121,6 +121,7 @@ func TestCreatePostRequest(t *testing.T) {
 	type githubIssueOpts struct {
 		failures        []failure
 		loadTeamsFailed bool
+		message         string
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "github"), func(t *testing.T, path string) {
@@ -169,6 +170,7 @@ func TestCreatePostRequest(t *testing.T) {
 					fmt.Fprintf(&b, "%v", f.squashedErr)
 				}
 				message := b.String()
+				message = message + "\n" + testCase.message
 
 				params := getTestParameters(ti, issueInfo.cluster, issueInfo.vmCreateOpts)
 				req, err := github.createPostRequest(
@@ -229,13 +231,6 @@ func TestCreatePostRequest(t *testing.T) {
 test artifacts and logs in: artifacts/roachtest/manual/monitor/test-failure/node-fatal-explicit-monitor/cpu_arch=arm64/run_1
 F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n1,client=127.0.0.1:54552,hostssl,user=‹roachprod›] 250  force_log_fatal(): ‹oops›
 `)
-						case "error-with-ip-node-info":
-							refError = errors.Newf(`(roachtest.go:93).func6: manual failure
-test artifacts and logs in: artifacts/roachtest/manual/fail/run_1
-| Node | Private IP | Public IP | Machine Type |
-| --- | --- | --- | --- |
-| teamcity-1758834520-01-n1cpu4-0001 | 10.142.0.2 | 34.139.44.53 | n2-standard-4 |
-`)
 						}
 					}
 				}
@@ -258,6 +253,17 @@ test artifacts and logs in: artifacts/roachtest/manual/fail/run_1
 				ti.spec.CockroachBinary = registry.RuntimeAssertionsCockroach
 			case "set-coverage-enabled-build":
 				ti.goCoverEnabled = true
+			case "add-additional-info":
+				msg := d.CmdArgs[0].Vals[0]
+				switch msg {
+				case "ip-node-info":
+					testCase.message = `| Node | Private IP | Public IP | Machine Type |
+| --- | --- | --- | --- |
+| teamcity-1758834520-01-n1cpu4-0001 | 10.142.0.2 | 34.139.44.53 | n2-standard-4 |`
+				default:
+					return fmt.Sprintf("unknown additional info argument: %s", msg)
+				}
+
 			}
 
 			return "ok"
