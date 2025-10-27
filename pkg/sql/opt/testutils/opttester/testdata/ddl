@@ -77,7 +77,7 @@ SELECT * FROM t WHERE x > 0 AND g = 'howdy'
 select
  ├── columns: x:1(int!null) g:2(greeting!null)
  ├── immutable
- ├── stats: [rows=2, distinct(1)=2, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=2, distinct(1)=2, null(1)=0, distinct(2)=1, null(2)=0, distinct(1,2)=2, null(1,2)=0]
  │   histogram(1)=  0  0  1.6667 0.33333
  │                <--- 0 --------- 10 --
  │   histogram(2)=  0     2
@@ -85,7 +85,7 @@ select
  ├── fd: ()-->(2)
  ├── scan t
  │    ├── columns: x:1(int) g:2(greeting)
- │    └── stats: [rows=6, distinct(1)=6, null(1)=0, distinct(2)=3, null(2)=0]
+ │    └── stats: [rows=6, distinct(1)=6, null(1)=0, distinct(2)=3, null(2)=0, distinct(1,2)=6, null(1,2)=0]
  │        histogram(1)=  0  0  5  1
  │                     <--- 0 --- 10
  │        histogram(2)=  0     1     0     2     0   3
