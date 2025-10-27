@@ -116,6 +116,8 @@ var (
 		"changefeed-max-rate", 0, "Maximum frequency of changefeed ingestion. If 0, no limit.")
 	changefeedResolvedTarget = runFlags.Duration("changefeed-resolved-target", 5*time.Second,
 		"The target frequency of resolved messages. O to disable resolved reporting and accept server defaults.")
+	changefeedCursor = runFlags.String("changefeed-cursor", "",
+		"The cursor to start the changefeed from. If empty, the changefeed will start from the current cluster logical timestamp.")
 )
 
 func init() {
@@ -507,7 +509,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 			if *changefeed {
 				log.Dev.Infof(ctx, "adding changefeed to query load...")
-				err = changefeeds.AddChangefeedToQueryLoad(ctx, gen.(workload.ConnFlagser), dbName, *changefeedResolvedTarget, urls, reg, &ops)
+				err = changefeeds.AddChangefeedToQueryLoad(ctx, gen.(workload.ConnFlagser), dbName,  *changefeedResolvedTarget, *changefeedCursor, urls, reg, &ops)
+				
 				if err != nil && !*tolerateErrors {
 					return errors.Wrapf(err, "failed to initialize changefeed")
 				}

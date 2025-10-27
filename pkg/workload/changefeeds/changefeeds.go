@@ -27,6 +27,7 @@ func AddChangefeedToQueryLoad(
 	gen workload.ConnFlagser,
 	dbName string,
 	resolvedTarget time.Duration,
+	cursorStr string,
 	urls []string,
 	reg *histogram.Registry,
 	ql *workload.QueryLoad,
@@ -76,9 +77,10 @@ func AddChangefeedToQueryLoad(
 		return err
 	}
 
-	var cursorStr string
-	if err := conn.QueryRow(ctx, "SELECT cluster_logical_timestamp()").Scan(&cursorStr); err != nil {
-		return err
+	if cursorStr == "" {
+		if err := conn.QueryRow(ctx, "SELECT cluster_logical_timestamp()").Scan(&cursorStr); err != nil {
+			return err
+		}
 	}
 
 	tableNames := strings.Builder{}
