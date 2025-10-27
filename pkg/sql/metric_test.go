@@ -224,6 +224,9 @@ func TestStatementMetrics(t *testing.T) {
 		indexRowsWritten int64
 		// If true, then skip metamorphic testing for this query.
 		skipMetamorphic bool
+		// If true, then this is a deletion case, in which case indexBytesWritten
+		// is expected to be zero.
+		isDelete bool
 	}{
 		// Read-only statements.
 		{query: `SELECT * FROM db.t WHERE x = 1`, rowsRead: 1},
@@ -262,8 +265,15 @@ func TestStatementMetrics(t *testing.T) {
 			rowsRead:         1,
 			indexRowsWritten: 3,
 		},
-		{query: `DELETE FROM db.t WHERE x = 2`, rowsRead: 1, indexRowsWritten: 4},
-		{query: `DELETE FROM db.t WHERE a @> ARRAY['apple']`, rowsRead: 4, indexRowsWritten: 11},
+		{query: `DELETE FROM db.t WHERE x = 2`, rowsRead: 1, indexRowsWritten: 4, isDelete: true},
+		{
+			query:            `DELETE FROM db.t WHERE a @> ARRAY['apple']`,
+			rowsRead:         4,
+			indexRowsWritten: 11,
+			isDelete:         true,
+		},
+		// CREATE TABLE does not count rows or bytes written.
+		{query: `CREATE TABLE db.t2 (x, y) AS SELECT 1, 10 UNION SELECT 2, 20`},
 	}
 
 	for _, vectorized := range []string{"off", "on"} {
@@ -289,14 +299,14 @@ func TestStatementMetrics(t *testing.T) {
 					lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
 					lastBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
 					lastRowsWritten := s.MustGetSQLCounter(sql.MetaStatementIndexRowsWritten.Name)
+					lastBytesWritten := s.MustGetSQLCounter(sql.MetaStatementIndexBytesWritten.Name)
 
 					runner.Exec(t, tc.query)
 
 					// Test the rows read metric.
-					actual, err := checkCounterDelta(
+					_, err := checkCounterDelta(
 						s, sql.MetaStatementRowsRead, lastRowsRead, tc.rowsRead)
 					require.NoError(t, err)
-					lastRowsRead = actual
 
 					// If there were rows read, then expect bytes read to have
 					// increased. Don't check for a specific value, since there are
@@ -307,10 +317,22 @@ func TestStatementMetrics(t *testing.T) {
 					}
 
 					// Test the rows written metric.
-					actual, err = checkCounterDelta(
+					_, err = checkCounterDelta(
 						s, sql.MetaStatementIndexRowsWritten, lastRowsWritten, tc.indexRowsWritten)
 					require.NoError(t, err)
-					lastRowsWritten = actual
+
+					// If there were index rows written, then expect bytes written
+					// to have increased (or not in the delete case). Don't check
+					// for a specific value, since there are too many factors that
+					// can change this.
+					if tc.indexRowsWritten > 0 {
+						currBytesWritten := s.MustGetSQLCounter(sql.MetaStatementIndexBytesWritten.Name)
+						if !tc.isDelete {
+							require.Greater(t, currBytesWritten, lastBytesWritten)
+						} else {
+							require.Equal(t, currBytesWritten, lastBytesWritten)
+						}
+					}
 				})
 			}
 		})

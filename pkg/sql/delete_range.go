@@ -65,6 +65,11 @@ func (d *deleteRangeNode) indexRowsWritten() int64 {
 	return d.rowsAffected()
 }
 
+func (d *deleteRangeNode) indexBytesWritten() int64 {
+	// No bytes counted as written for a deletion.
+	return 0
+}
+
 func (d *deleteRangeNode) returnsRowsAffected() bool {
 	// DeleteRange always returns the number of rows deleted.
 	return true
