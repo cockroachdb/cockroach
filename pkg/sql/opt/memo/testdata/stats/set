@@ -910,7 +910,7 @@ limit
  ├── select
  │    ├── columns: column1:1(int) column2:2(bool!null)
  │    ├── cardinality: [0 - 2]
- │    ├── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=0]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=1, distinct(2)=1, null(2)=0, distinct(1,2)=1, null(1,2)=1]
  │    ├── fd: ()-->(1,2)
  │    ├── limit hint: 1.00
  │    ├── values

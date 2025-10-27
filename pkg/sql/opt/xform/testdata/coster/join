@@ -624,13 +624,13 @@ project
       ├── fd: ()-->(1,2,8,9), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null
-      │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0]
+      │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(1,2)=1, null(1,2)=-1]
       │    ├── cost: 138.96
       │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(1,2)
       │    ├── scan wxyz
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null
-      │    │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0]
+      │    │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0, distinct(1,2)=1, null(1,2)=0]
       │    │    ├── cost: 137.92
       │    │    └── cost-flags: unbounded-cardinality
       │    └── filters
@@ -738,13 +738,13 @@ project
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.980312, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(5-10)=1, null(5-10)=0]
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.980312, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(1,2,5-10)=1, null(1,2,5-10)=0]
       │    ├── cost: 12230.22
       │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5 j:6 k:7 l:8 m:9 n:10
-      │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=10000, null(5)=0, distinct(6)=10000, null(6)=0, distinct(7)=10000, null(7)=0, distinct(8)=10000, null(8)=0, distinct(9)=10000, null(9)=0, distinct(10)=10000, null(10)=0, distinct(5-10)=10000, null(5-10)=0]
+      │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=10000, null(5)=0, distinct(6)=10000, null(6)=0, distinct(7)=10000, null(7)=0, distinct(8)=10000, null(8)=0, distinct(9)=10000, null(9)=0, distinct(10)=10000, null(10)=0, distinct(1,2,5-10)=10000, null(1,2,5-10)=0]
       │    │    ├── cost: 12130.12
       │    │    └── cost-flags: unbounded-cardinality
       │    └── filters
@@ -882,7 +882,7 @@ project
       │    ├── scan abcde@idx_abd
       │    │    ├── columns: a:7!null b:8!null c:9!null d:10!null
       │    │    ├── constraint: /7/8/10: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
-      │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=24975.6, null(9)=0]
+      │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=24975.6, null(9)=0, distinct(7,8)=1, null(7,8)=0]
       │    │    ├── cost: 126.02
       │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (9)
