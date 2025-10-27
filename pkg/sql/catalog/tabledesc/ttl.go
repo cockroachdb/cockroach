@@ -55,7 +55,7 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 		}
 	}
 	if ttl.RowStatsPollInterval != 0 {
-		if err := ValidateTTLRowStatsPollInterval("ttl_row_stats_poll_interval", ttl.RowStatsPollInterval); err != nil {
+		if err := ValidateNotNegativeInterval("ttl_row_stats_poll_interval", ttl.RowStatsPollInterval); err != nil {
 			return err
 		}
 	}
@@ -154,9 +154,8 @@ func ValidateTTLCronExpr(key string, str string) error {
 	return nil
 }
 
-// ValidateTTLRowStatsPollInterval validates the automatic statistics field
-// of TTL.
-func ValidateTTLRowStatsPollInterval(key string, val time.Duration) error {
+// ValidateNotNegativeInterval validates the provided interval is not negative.
+func ValidateNotNegativeInterval(key string, val time.Duration) error {
 	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
