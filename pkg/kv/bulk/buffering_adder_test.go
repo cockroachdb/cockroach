@@ -28,8 +28,9 @@ func TestBufferingAdderMemoryExhaustion(t *testing.T) {
 	// sstbatcher if allocation failed due to memory exhaustion.
 
 	// Start a test server.
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	distSQLSrv := s.DistSQLServer().(*distsql.ServerImpl)
 	bulkAdderFactory := distSQLSrv.ServerConfig.BulkAdder

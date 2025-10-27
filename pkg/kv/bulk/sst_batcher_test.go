@@ -89,7 +89,7 @@ func (e *rowEncoder) encodeRow(row tree.Datums) roachpb.KeyValue {
 
 // newBatcher creates a new SSTBatcher with a range cache for testing.
 func newBatcher(
-	t *testing.T, ctx context.Context, s serverutils.TestServerInterface, mvccCompliant bool,
+	t *testing.T, ctx context.Context, s serverutils.ApplicationLayerInterface, mvccCompliant bool,
 ) *bulk.SSTBatcher {
 	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("mvcc-compliance")})
 	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
@@ -97,7 +97,7 @@ func newBatcher(
 	// Create a range cache to test pipelined flush behavior
 	ds := s.DistSenderI().(*kvcoord.DistSender)
 	rc := rangecache.NewRangeCache(s.ClusterSettings(), ds,
-		func() int64 { return 2 << 10 }, s.Stopper())
+		func() int64 { return 2 << 10 }, s.AppStopper())
 
 	batcher, err := bulk.MakeSSTBatcher(ctx, "test", s.DB(), s.ClusterSettings(), hlc.Timestamp{}, mvccCompliant, true, mem.MakeConcurrentBoundAccount(), reqs, rc)
 	require.NoError(t, err)
@@ -121,8 +121,9 @@ func TestDuplicateHandling(t *testing.T) {
 
 	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("lots")})
 	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	expectRevisionCount := func(startKey roachpb.Key, endKey roachpb.Key, count int, exportStartTime hlc.Timestamp) {
 		req := &kvpb.ExportRequest{
@@ -278,7 +279,7 @@ func TestDuplicateHandling(t *testing.T) {
 			require.NoError(t, err)
 			defer b.Close(ctx)
 			k := func(i int, ts int64) storage.MVCCKey {
-				return storageutils.PointKey(fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), int(ts))
+				return storageutils.PointKey(s.Codec(), fmt.Sprintf("bulk-test-%s-%04d", tc.name, i+1), int(ts))
 			}
 			endKey := tc.addKeys(t, b, k)
 			if tc.expectedCount > 0 {
@@ -293,8 +294,9 @@ func TestDuplicateHandling(t *testing.T) {
 func runTestImport(t *testing.T, batchSizeValue int64) {
 
 	ctx := context.Background()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	batchSize := func() int64 { return batchSizeValue }
 
@@ -347,7 +349,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 		{{0, 3}, {4}},
 	} {
 		t.Run(fmt.Sprintf("%d-%v", i, testCase), func(t *testing.T) {
-			prefix := keys.SystemSQLCodec.IndexPrefix(uint32(100+i), 1)
+			prefix := s.Codec().IndexPrefix(uint32(100+i), 1)
 			key := func(i int) roachpb.Key {
 				return encoding.EncodeStringAscending(append([]byte{}, prefix...), fmt.Sprintf("k%d", i))
 			}
@@ -365,7 +367,7 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			// populate it after the first split but before the second split.
 			ds := s.DistSenderI().(*kvcoord.DistSender)
 			mockCache := rangecache.NewRangeCache(s.ClusterSettings(), ds,
-				func() int64 { return 2 << 10 }, s.Stopper())
+				func() int64 { return 2 << 10 }, s.AppStopper())
 			for _, k := range []int{0, split1} {
 				ent, err := ds.RangeDescriptorCache().Lookup(ctx, keys.MustAddr(key(k)))
 				require.NoError(t, err)
@@ -448,16 +450,17 @@ func TestImportEpochIngestion(t *testing.T) {
 
 	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("lots")})
 	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	b, err := bulk.MakeTestingSSTBatcher(ctx, kvDB, s.ClusterSettings(),
 		false, true, mem.MakeConcurrentBoundAccount(), reqs)
 	require.NoError(t, err)
 	defer b.Close(ctx)
 
-	startKey := storageutils.PointKey("a", 1)
-	endKey := storageutils.PointKey("b", 1)
+	startKey := storageutils.PointKey(s.Codec(), "a", 1)
+	endKey := storageutils.PointKey(s.Codec(), "b", 1)
 	value := storageutils.StringValueRaw("myHumbleValue")
 	mvccValue, err := storage.DecodeMVCCValue(value)
 	require.NoError(t, err)
@@ -528,12 +531,13 @@ func TestSSTBatcherError(t *testing.T) {
 		},
 	}
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: knobs,
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	mem := mon.NewUnlimitedMonitor(ctx, mon.Options{Name: mon.MakeName("mvcc-compliance")})
 	reqs := limit.MakeConcurrentRequestLimiter("reqs", 1000)
@@ -542,7 +546,7 @@ func TestSSTBatcherError(t *testing.T) {
 	defer batcher.Close(ctx)
 
 	require.NoError(t, batcher.AddMVCCKey(ctx,
-		storage.MVCCKey{Key: []byte("a"), Timestamp: hlc.Timestamp{WallTime: 1}},
+		storageutils.PointKey(s.Codec(), "a", 1),
 		storageutils.StringValueRaw("value"),
 	))
 
@@ -573,12 +577,14 @@ func TestSSTBatcherPipelinedFlush(t *testing.T) {
 		},
 	}
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: knobs,
 		},
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156329),
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
@@ -625,13 +631,14 @@ func TestSSTBatcherMvccCompliance(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", "kv")
 	re := newRowEncoder(t, tableDesc.TableDesc(), s.Codec())
 
 	batcher := newBatcher(t, ctx, s, true)
@@ -676,13 +683,14 @@ func TestSSTBatcherRewriteHistory(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", "kv")
 	re := newRowEncoder(t, tableDesc.TableDesc(), s.Codec())
 
 	batcher := newBatcher(t, ctx, s, false)
@@ -743,9 +751,9 @@ func TestSSTBatcherCloseWithoutFlush(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	s := tc.Server(0)
+	s := tc.ApplicationLayer(0)
 	db := tc.ServerConn(0)
-	kvDB := tc.Server(0).DB()
+	kvDB := s.DB()
 
 	tdb := sqlutils.MakeSQLRunner(db)
 	tdb.Exec(t, `CREATE TABLE kv (pk INT PRIMARY KEY, v STRING)`)
