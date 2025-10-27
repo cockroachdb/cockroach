@@ -206,17 +206,6 @@ func discoverUserDatabases(ctx context.Context, db *gosql.DB) ([]string, error) 
 	return databases, rows.Err()
 }
 
-// isStatementTimeoutError returns true if the error is a statement timeout error.
-// Statement timeout errors are expected when launching INSPECT jobs since we only
-// want to start the job, not wait for it to complete.
-func isStatementTimeoutError(err error) bool {
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return pgcode.MakeCode(string(pqErr.Code)) == pgcode.QueryCanceled
-	}
-	return false
-}
-
 // isFeatureNotSupportedError returns true if the error is a feature not supported error.
 // This can occur when the cluster version is not yet upgraded to support INSPECT.
 func isFeatureNotSupportedError(err error) bool {
@@ -229,8 +218,7 @@ func isFeatureNotSupportedError(err error) bool {
 
 // launchInspectJobs launches INSPECT DATABASE commands in parallel for all
 // provided databases using task manager for concurrency control. Each INSPECT
-// command enables the inspect command for that connection. Statement timeout
-// errors are ignored as they indicate the job was successfully started.
+// command is launched with the DETACHED option to run in the background.
 // Feature not supported errors are returned to the caller, indicating the
 // cluster version does not support INSPECT.
 func launchInspectJobs(
@@ -242,7 +230,6 @@ func launchInspectJobs(
 		return errors.Wrap(err, "failed to disable INSPECT admission control")
 	}
 
-	statementTimeout := 5 * time.Second
 	tm := task.NewManager(ctx, l)
 	g := tm.NewErrorGroup()
 
@@ -253,30 +240,13 @@ func launchInspectJobs(
 
 			statements := []string{
 				"SET enable_inspect_command = true",
-				fmt.Sprintf("SET statement_timeout = '%s'", statementTimeout.String()),
-				fmt.Sprintf("INSPECT DATABASE %s", lexbase.EscapeSQLIdent(dbName)),
+				fmt.Sprintf("INSPECT DATABASE %s WITH OPTIONS DETACHED", lexbase.EscapeSQLIdent(dbName)),
 			}
 
-			var stmtErr error
 			for _, stmt := range statements {
 				if _, err := db.ExecContext(ctx, stmt); err != nil {
-					stmtErr = err
-					break
-				}
-			}
-
-			// Always reset statement timeout back to default.
-			if _, err := db.ExecContext(ctx, "RESET statement_timeout"); err != nil {
-				l.Printf("Warning: failed to reset statement timeout: %v", err)
-			}
-
-			// Check for errors from the statements loop.
-			if stmtErr != nil {
-				// Statement timeout is expected - it means the job started but didn't complete
-				// within the timeout. The job is still running in the background.
-				if !isStatementTimeoutError(stmtErr) {
-					l.Printf("INSPECT DATABASE %s failed to start: %v", dbName, stmtErr)
-					return errors.Wrapf(stmtErr, "failed to start INSPECT DATABASE %s", dbName)
+					l.Printf("INSPECT DATABASE %s failed to start: %v", dbName, err)
+					return errors.Wrapf(err, "failed to start INSPECT DATABASE %s", dbName)
 				}
 			}
 
