@@ -27,9 +27,7 @@ func TestEndpointTelemetryBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(81590),
 		DefaultDRPCOption: base.TestDRPCDisabled,
 	})
 	defer s.Stopper().Stop(context.Background())
