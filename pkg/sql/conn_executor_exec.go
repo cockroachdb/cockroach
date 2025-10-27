@@ -3286,6 +3286,9 @@ type topLevelQueryStats struct {
 	// include rows written to secondary indexes. This matches the behavior of
 	// EXPLAIN ANALYZE and SQL "rows affected".
 	rowsWritten int64
+	// indexBytesWritten is the number of bytes written to primary and secondary
+	// indexes.
+	indexBytesWritten int64
 	// indexRowsWritten is the number of rows written to primary and secondary
 	// indexes. It is always >= rowsWritten.
 	indexRowsWritten int64
@@ -3304,6 +3307,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.bytesRead += other.bytesRead
 	s.rowsRead += other.rowsRead
 	s.rowsWritten += other.rowsWritten
+	s.indexBytesWritten += other.indexBytesWritten
 	s.indexRowsWritten += other.indexRowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
