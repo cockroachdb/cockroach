@@ -1344,11 +1344,11 @@ type MetricsForInterval struct {
 // NumSSTables returns the total number of SSTables in the LSM, aggregated
 // across levels.
 func (m *Metrics) NumSSTables() int64 {
-	var num int64
+	var num uint64
 	for _, lm := range m.Metrics.Levels {
-		num += lm.TablesCount
+		num += lm.Tables.Count
 	}
-	return num
+	return int64(num)
 }
 
 // IngestedBytes returns the sum of all ingested tables, aggregated across all
@@ -1356,7 +1356,7 @@ func (m *Metrics) NumSSTables() int64 {
 func (m *Metrics) IngestedBytes() uint64 {
 	var ingestedBytes uint64
 	for _, lm := range m.Metrics.Levels {
-		ingestedBytes += lm.TableBytesIngested
+		ingestedBytes += lm.TablesIngested.Bytes
 	}
 	return ingestedBytes
 }
@@ -1366,7 +1366,7 @@ func (m *Metrics) IngestedBytes() uint64 {
 func (m *Metrics) CompactedBytes() (read, written uint64) {
 	for _, lm := range m.Metrics.Levels {
 		read += lm.TableBytesRead + lm.BlobBytesRead
-		written += lm.TableBytesCompacted + lm.BlobBytesCompacted
+		written += lm.TablesCompacted.Bytes + lm.BlobBytesCompacted
 	}
 	return read, written
 }
@@ -1401,32 +1401,32 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		WalPhysicalSize:            m.WAL.PhysicalSize,
 		WalBytesIn:                 m.WAL.BytesIn,
 		WalBytesWritten:            m.WAL.BytesWritten,
-		TableObsoleteCount:         m.Table.ObsoleteCount,
-		TableObsoleteSize:          m.Table.ObsoleteSize,
-		TableZombieCount:           m.Table.ZombieCount,
-		TableZombieSize:            m.Table.ZombieSize,
+		TableObsoleteCount:         int64(m.Table.Obsolete.All.Count),
+		TableObsoleteSize:          m.Table.Obsolete.All.Bytes,
+		TableZombieCount:           int64(m.Table.Zombie.All.Count),
+		TableZombieSize:            m.Table.Zombie.All.Bytes,
 		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
 	}
 	e.CacheHits, e.CacheMisses = m.BlockCache.HitsAndMisses.Aggregate()
 	for i, l := range m.Levels {
-		if l.TablesCount == 0 {
+		if l.Tables.Count == 0 {
 			continue
 		}
 		e.Levels = append(e.Levels, eventpb.LevelStats{
 			Level:           uint32(i),
-			NumFiles:        l.TablesCount,
-			SizeBytes:       l.TablesSize,
+			NumFiles:        int64(l.Tables.Count),
+			SizeBytes:       int64(l.Tables.Bytes),
 			Score:           float32(l.Score),
 			BytesIn:         l.TableBytesIn,
-			BytesIngested:   l.TableBytesIngested,
-			BytesMoved:      l.TableBytesMoved,
+			BytesIngested:   l.TablesIngested.Bytes,
+			BytesMoved:      l.TablesMoved.Bytes,
 			BytesRead:       l.TableBytesRead + l.BlobBytesRead,
-			BytesCompacted:  l.TableBytesCompacted + l.BlobBytesCompacted,
-			BytesFlushed:    l.TableBytesFlushed + l.BlobBytesFlushed,
-			TablesCompacted: l.TablesCompacted,
-			TablesFlushed:   l.TablesFlushed,
-			TablesIngested:  l.TablesIngested,
-			TablesMoved:     l.TablesMoved,
+			BytesCompacted:  l.TablesCompacted.Bytes + l.BlobBytesCompacted,
+			BytesFlushed:    l.TablesFlushed.Bytes + l.BlobBytesFlushed,
+			TablesCompacted: l.TablesCompacted.Count,
+			TablesFlushed:   l.TablesFlushed.Count,
+			TablesIngested:  l.TablesIngested.Count,
+			TablesMoved:     l.TablesMoved.Count,
 			NumSublevels:    l.Sublevels,
 		})
 	}
@@ -1756,7 +1756,7 @@ func preIngestDelay(ctx context.Context, eng Engine, settings *cluster.Settings)
 		return
 	}
 	log.VEventf(ctx, 2, "delaying SST ingestion %s. %d L0 files, %d L0 Sublevels",
-		targetDelay, metrics.Levels[0].TablesCount, metrics.Levels[0].Sublevels)
+		targetDelay, metrics.Levels[0].Tables.Count, metrics.Levels[0].Sublevels)
 
 	select {
 	case <-time.After(targetDelay):
@@ -1769,7 +1769,7 @@ func calculatePreIngestDelay(settings *cluster.Settings, metrics *pebble.Metrics
 	l0ReadAmpLimit := ingestDelayL0Threshold.Get(&settings.SV)
 
 	const ramp = 10
-	l0ReadAmp := metrics.Levels[0].TablesCount
+	l0ReadAmp := int64(metrics.Levels[0].Tables.Count)
 	if metrics.Levels[0].Sublevels >= 0 {
 		l0ReadAmp = int64(metrics.Levels[0].Sublevels)
 	}

@@ -132,17 +132,17 @@ func TestIOLoadListener(t *testing.T) {
 				var metrics pebble.Metrics
 				var l0Bytes uint64
 				d.ScanArgs(t, "l0-bytes", &l0Bytes)
-				metrics.Levels[0].TablesSize = int64(l0Bytes)
+				metrics.Levels[0].Tables.Bytes = l0Bytes
 				var l0AddedWrite, l0AddedIngested uint64
 				d.ScanArgs(t, "l0-added-write", &l0AddedWrite)
-				metrics.Levels[0].TableBytesFlushed = l0AddedWrite
+				metrics.Levels[0].TablesFlushed.Bytes = l0AddedWrite
 				if d.HasArg("l0-added-ingested") {
 					d.ScanArgs(t, "l0-added-ingested", &l0AddedIngested)
 				}
-				metrics.Levels[0].TableBytesIngested = l0AddedIngested
+				metrics.Levels[0].TablesIngested.Bytes = l0AddedIngested
 				var l0Files int
 				d.ScanArgs(t, "l0-files", &l0Files)
-				metrics.Levels[0].TablesCount = int64(l0Files)
+				metrics.Levels[0].Tables.Count = uint64(l0Files)
 				var l0SubLevels int
 				d.ScanArgs(t, "l0-sublevels", &l0SubLevels)
 				metrics.Levels[0].Sublevels = int32(l0SubLevels)
@@ -160,10 +160,10 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("base-level") {
 					var baseLevel int
 					d.ScanArgs(t, "base-level", &baseLevel)
-					metrics.Levels[baseLevel].TablesSize = 1000
+					metrics.Levels[baseLevel].Tables.Bytes = 1000
 					var compactedBytes int
 					d.ScanArgs(t, "compacted-bytes", &compactedBytes)
-					metrics.Levels[baseLevel].TableBytesCompacted = uint64(compactedBytes)
+					metrics.Levels[baseLevel].TablesCompacted.Bytes = uint64(compactedBytes)
 				}
 
 				cumFlushIdle += time.Duration(flushIdleSec) * time.Second
@@ -284,10 +284,8 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	}
 	// Bug2: overflow when bytes added delta is 0.
 	m := pebble.Metrics{}
-	m.Levels[0] = pebble.LevelMetrics{
-		Sublevels:   100,
-		TablesCount: 10000,
-	}
+	m.Levels[0] = pebble.LevelMetrics{Sublevels: 100}
+	m.Levels[0].Tables.Count = 10000
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.pebbleMetricsTick(ctx, StoreMetrics{Metrics: &m})
 	ioll.allocateTokensTick(unloadedDuration.ticksInAdjustmentInterval())
@@ -320,13 +318,16 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 				smoothedCompactionByteTokens: 201 * mb,
 				totalNumByteTokens:           int64(201 * mb),
 			},
-			l0Metrics: pebble.LevelMetrics{
-				Sublevels:          27,
-				TablesCount:        195,
-				TablesSize:         900 * mb,
-				TableBytesIngested: 1801 * mb,
-				TableBytesFlushed:  178 * mb,
-			},
+			l0Metrics: func() pebble.LevelMetrics {
+				lm := pebble.LevelMetrics{
+					Sublevels: 27,
+				}
+				lm.Tables.Count = 195
+				lm.Tables.Bytes = 900 * mb
+				lm.TablesIngested.Bytes = 1801 * mb
+				lm.TablesFlushed.Bytes = 178 * mb
+				return lm
+			}(),
 		},
 	}
 	ctx := context.Background()
@@ -360,11 +361,11 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 	randomValues := func() {
 		// Use uints, and cast so that we get bad negative values.
 		m.Levels[0].Sublevels = int32(rand.Uint32())
-		m.Levels[0].TablesCount = int64(rand.Uint64())
-		m.Levels[0].TablesSize = int64(rand.Uint64())
-		m.Levels[0].TableBytesFlushed = rand.Uint64()
+		m.Levels[0].Tables.Count = rand.Uint64()
+		m.Levels[0].Tables.Bytes = rand.Uint64()
+		m.Levels[0].TablesFlushed.Bytes = rand.Uint64()
 		for i := range m.Levels {
-			m.Levels[i].TableBytesIngested = rand.Uint64()
+			m.Levels[i].TablesIngested.Bytes = rand.Uint64()
 		}
 		d.BytesRead = rand.Uint64()
 		d.BytesWritten = rand.Uint64()
@@ -658,8 +659,8 @@ func TestComputeCumStoreCompactionStats(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		baseLevel  int
-		writeBytes int64
-		sizeBytes  int64
+		writeBytes uint64
+		sizeBytes  uint64
 		expected   cumStoreCompactionStats
 	}{
 		{
@@ -691,20 +692,20 @@ func TestComputeCumStoreCompactionStats(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := pebble.Metrics{}
-			var cumSizeBytes int64
+			var cumSizeBytes uint64
 			var cumWriteBytes uint64
-			divisor := int64(len(m.Levels) - tc.baseLevel)
+			divisor := uint64(len(m.Levels) - tc.baseLevel)
 			for i := tc.baseLevel; i < len(m.Levels); i++ {
-				m.Levels[i].TablesSize = tc.sizeBytes / divisor
-				cumSizeBytes += m.Levels[i].TablesSize
-				m.Levels[i].TableBytesCompacted = uint64(tc.writeBytes / divisor)
-				cumWriteBytes += m.Levels[i].TableBytesCompacted
+				m.Levels[i].Tables.Bytes = tc.sizeBytes / divisor
+				cumSizeBytes += m.Levels[i].Tables.Bytes
+				m.Levels[i].TablesCompacted.Bytes = tc.writeBytes / divisor
+				cumWriteBytes += m.Levels[i].TablesCompacted.Bytes
 			}
 			if cumSizeBytes < tc.sizeBytes {
-				m.Levels[tc.baseLevel].TablesSize += tc.sizeBytes - cumSizeBytes
+				m.Levels[tc.baseLevel].Tables.Bytes += tc.sizeBytes - cumSizeBytes
 			}
-			if cumWriteBytes < uint64(tc.writeBytes) {
-				m.Levels[tc.baseLevel].TableBytesCompacted += uint64(tc.writeBytes) - cumWriteBytes
+			if cumWriteBytes < tc.writeBytes {
+				m.Levels[tc.baseLevel].TablesCompacted.Bytes += tc.writeBytes - cumWriteBytes
 			}
 			require.Equal(t, tc.expected, computeCumStoreCompactionStats(&m))
 		})
