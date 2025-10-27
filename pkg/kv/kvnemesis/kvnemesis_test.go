@@ -470,7 +470,7 @@ func TestKVNemesisMultiNode_Partition_Safety(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
-		numNodes:                     5,
+		numNodes:                     4,
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
@@ -481,16 +481,6 @@ func TestKVNemesisMultiNode_Partition_Safety(t *testing.T) {
 		testGeneratorConfig: func(cfg *GeneratorConfig) {
 			cfg.Ops.Fault.AddNetworkPartition = 1
 			cfg.Ops.Fault.RemoveNetworkPartition = 1
-			// TODO(mira): DeleteRangeUsingTombstone and AddSSTable are always
-			// non-transactional, and as such are susceptible to double-application.
-			// The cluster setting kvcoord.NonTransactionalWritesNotIdempotent is
-			// enabled for this test to protect against double-application, but these
-			// requests don't propagate the flag AmbiguousReplayProtection to ensure
-			// the second application fails. We should fix this.
-			cfg.Ops.DB.DeleteRangeUsingTombstone = 0
-			cfg.Ops.DB.AddSSTable = 0
-			// The same issue above occurs for non-transactional DeleteRange requests.
-			cfg.Ops.DB.DeleteRange = 0
 		},
 	})
 }
@@ -500,7 +490,7 @@ func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testKVNemesisImpl(t, kvnemesisTestCfg{
-		numNodes:                     5,
+		numNodes:                     4,
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
@@ -516,20 +506,9 @@ func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 			// constraints (at least one replica on nodes 1 and 2).
 			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
 			// Epoch leases can experience indefinite unavailability in the case of a
-			// leader-leaseholder split and a network partition, so only leader leases
-			// are allowed.
+			// leader-leaseholder split and a network partition. This test starts off
+			// with leader leases, and lease type changes are disallowed.
 			cfg.Ops.ChangeSetting = ChangeSettingConfig{}
-			// TODO(mira): Transfers can result in RUEs because in the intermediate
-			// expiration-lease state, a request can get stuck holding latches until
-			// the replica circuit breaker trips and poisons the latches. This results
-			// in RUEs returned to the client. The behavior is expected; we can enable
-			// this setting if we allow the test to tolerate these RUEs.
-			cfg.Ops.ChangeLease = ChangeLeaseConfig{}
-			// TODO(mira): We should investigate splits more. So far I've seen then
-			// fail for two reasons: (1) r1 can become uvavailable (we can fix this by
-			// setting the right zone configs), and (2) if a partition races with the
-			// split, the range ID allocator can get stuck waiting for a response.
-			cfg.Ops.Split = SplitConfig{}
 		},
 	})
 }
@@ -559,9 +538,6 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 			// Disallow replica changes because they interfere with the zone config
 			// constraints (at least one replica on nodes 1 and 2).
 			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
-			// TODO(mira): Similar issue to Partition_Liveness, except the failure
-			// mode (2) here looks like "could not allocate ID; system is draining".
-			cfg.Ops.Split = SplitConfig{}
 		},
 	})
 }
@@ -817,22 +793,17 @@ func setAndVerifyZoneConfigs(
 			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
 	)
 
-	// Ensure the liveness and meta ranges are also constrained appropriately.
-	sqlRunner.Exec(
-		t, `ALTER RANGE meta CONFIGURE ZONE USING
-			num_replicas = 3,
-			num_voters = 3,
-			constraints = '{"+node=n1": 1, "+node=n2": 1}',
-			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
-	)
-
-	sqlRunner.Exec(
-		t, `ALTER RANGE liveness CONFIGURE ZONE USING
-			num_replicas = 3,
-			num_voters = 3,
-			constraints = '{"+node=n1": 1, "+node=n2": 1}',
-			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
-	)
+	// Ensure the liveness, meta and system ranges are also constrained.
+	systemRanges := []string{"meta", "liveness", "system"}
+	for _, r := range systemRanges {
+		sqlRunner.Exec(
+			t, fmt.Sprintf(`ALTER RANGE %s CONFIGURE ZONE USING
+				num_replicas = 3,
+				num_voters = 3,
+				constraints = '{"+node=n1": 1, "+node=n2": 1}',
+				voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`, r),
+		)
+	}
 
 	// Wait for zone configs to propagate to all span config subscribers.
 	require.NoError(t, tc.WaitForZoneConfigPropagation())
@@ -853,7 +824,7 @@ func setAndVerifyZoneConfigs(
 							Key:    desc.StartKey.AsRawKey(),
 							EndKey: desc.EndKey.AsRawKey(),
 						}
-						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 2 {
+						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 3 {
 							overlappingReplicas = append(overlappingReplicas, replica)
 						}
 						return true // continue
