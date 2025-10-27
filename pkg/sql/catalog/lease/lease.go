@@ -1567,6 +1567,11 @@ type Manager struct {
 	bytesMonitor *mon.BytesMonitor
 	// boundAccount tracks the memory usage from leased descriptors.
 	boundAccount *mon.ConcurrentBoundAccount
+
+	// TestingDisableRangeFeedCheckpoint is used to disable rangefeed checkpoints.
+	// Ideally, this would be inside StorageTestingKnobs, but those get copied into
+	// the lease manager.
+	TestingDisableRangeFeedCheckpoint atomic.Bool
 }
 
 const leaseConcurrencyLimit = 5
@@ -2506,7 +2511,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		ctx context.Context, ev *kvpb.RangeFeedValue,
 	) {
 		// Skip updates if rangefeeds are disabled.
-		if m.testingKnobs.DisableRangeFeedCheckpoint {
+		if m.TestingDisableRangeFeedCheckpoint.Load() {
 			return
 		}
 		// Check first if it is the special descriptor metadata key used to track
@@ -2572,7 +2577,7 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 	}
 
 	handleCheckpoint := func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-		if m.testingKnobs.DisableRangeFeedCheckpoint {
+		if m.TestingDisableRangeFeedCheckpoint.Load() {
 			return
 		}
 		// Track checkpoints that occur from the rangefeed to make sure progress
@@ -3150,7 +3155,7 @@ func (m *Manager) TestingSetDisableRangeFeedCheckpointFn(disable bool) chan stru
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.rangeFeedCheckpoints = 0
-	m.testingKnobs.DisableRangeFeedCheckpoint = disable
+	m.TestingDisableRangeFeedCheckpoint.Store(disable)
 	if disable {
 		m.testingKnobs.RangeFeedResetChannel = make(chan struct{})
 	} else {

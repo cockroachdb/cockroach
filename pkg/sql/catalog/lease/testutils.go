@@ -61,9 +61,6 @@ type ManagerTestingKnobs struct {
 	// To disable the deletion of orphaned leases at server startup.
 	DisableDeleteOrphanedLeases bool
 
-	// DisableRangeFeedCheckpoint is used to disable rangefeed checkpoints.
-	DisableRangeFeedCheckpoint bool
-
 	// RangeFeedReset channel is closed to indicate that the range feed
 	// has been reset.
 	RangeFeedResetChannel chan struct{}
