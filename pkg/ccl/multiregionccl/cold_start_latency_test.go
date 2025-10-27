@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
@@ -117,13 +116,11 @@ func TestColdStartLatency(t *testing.T) {
 		args.Knobs.Server = serverKnobs
 		perServerArgs[i] = args
 	}
-	cs := cluster.MakeTestingClusterSettings()
 	tc := testcluster.NewTestCluster(t, numNodes, base.TestClusterArgs{
 		ParallelStart:     true,
 		ServerArgsPerNode: perServerArgs,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
-			Settings:          cs,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		},
 	})
 	go func() {
@@ -261,7 +258,6 @@ COMMIT;`}
 	const password = "asdf"
 	{
 		tenant, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-			Settings: cs,
 			TenantID: serverutils.TestTenantID(),
 			TestingKnobs: base.TestingKnobs{
 				Server: tenantServerKnobs(0),
@@ -310,7 +306,6 @@ COMMIT;`}
 		start := timeutil.Now()
 		sn := tenantServerKnobs(i)
 		tenant, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
-			Settings:            cs,
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,
