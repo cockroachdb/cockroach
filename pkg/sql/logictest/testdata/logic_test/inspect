@@ -514,10 +514,12 @@ subtest end
 subtest refcursor_stored_column
 
 statement ok
-CREATE TABLE refcursor_tbl (id INT PRIMARY KEY, a INT, c REFCURSOR);
+CREATE TABLE refcursor_tbl (id INT PRIMARY KEY, a INT, c REFCURSOR, d REFCURSOR[]);
 
 statement ok
-INSERT INTO refcursor_tbl VALUES (1, 10, 'cursor1'), (2, 20, 'cursor2');
+INSERT INTO refcursor_tbl VALUES
+  (1, 10, 'cursor1', ARRAY['c1a', 'c1b']::REFCURSOR[]),
+  (2, 20, 'cursor2', ARRAY['c2a', 'c2b']::REFCURSOR[]);
 
 # Verify that we cannot index the refcursor. They can only be included
 # in an index as stored columns.
@@ -525,7 +527,10 @@ statement error pq: unimplemented: column c has type refcursor, which is not ind
 CREATE INDEX idx_refcursor ON refcursor_tbl (c);
 
 statement ok
-CREATE INDEX idx_refcursor ON refcursor_tbl (a) STORING (c);
+CREATE INDEX idx_a_c ON refcursor_tbl (a) STORING (c);
+
+statement ok
+CREATE INDEX idx_a_d ON refcursor_tbl (a) STORING (d);
 
 statement ok
 INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
@@ -533,7 +538,23 @@ INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
 query TI
 SELECT * FROM last_inspect_job;
 ----
-succeeded  1
+succeeded  2
+
+# Test with hash optimization disabled to ensure JOIN-based consistency check works.
+statement ok
+SET CLUSTER SETTING sql.inspect.index_consistency_hash.enabled = false;
+
+statement ok
+INSPECT TABLE refcursor_tbl WITH OPTIONS INDEX ALL;
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  2
+
+# Re-enable hash optimization.
+statement ok
+SET CLUSTER SETTING sql.inspect.index_consistency_hash.enabled = true;
 
 statement ok
 DROP TABLE refcursor_tbl;
