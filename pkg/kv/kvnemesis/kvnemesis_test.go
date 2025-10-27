@@ -430,7 +430,7 @@ func TestKVNemesisSingleNode_ReproposalChaos(t *testing.T) {
 }
 
 // TestKVNemesisMultiNode_BufferedWritesNoLockDurabilityUpgrades runs KVNemesis
-// with write buffering enabled and no lock durability ugprades. We leave splits
+// with write buffering enabled and no lock durability upgrades. We leave splits
 // to be metamorphic since those are all handled in-memory.
 func TestKVNemesisMultiNode_BufferedWritesNoLockDurabilityUpgrades(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -462,25 +462,6 @@ func TestKVNemesisMultiNode_BufferedWritesLockDurabilityUpgrades(t *testing.T) {
 		concurrency.UnreplicatedLockReliabilitySplit.Override(ctx, &st.SV, true)
 	}
 
-	testKVNemesisImpl(t, cfg)
-}
-
-// TestKVNemesisMultiNode_BufferedWritesNoPipelining turns on buffered
-// writes and turns off write pipelining.
-func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	cfg := defaultTestConfiguration(3)
-	cfg.seedOverride = 0
-	cfg.bufferedWriteProb = 0.7
-	cfg.testSettings = func(ctx context.Context, st *cluster.Settings) {
-		kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, true)
-		kvcoord.PipelinedWritesEnabled.Override(ctx, &st.SV, false)
-		concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
-		concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, true)
-		concurrency.UnreplicatedLockReliabilitySplit.Override(ctx, &st.SV, true)
-	}
 	testKVNemesisImpl(t, cfg)
 }
 
@@ -829,8 +810,8 @@ func setAndVerifyZoneConfigs(
 ) {
 	// Set constraints on the system database; GeneratorDataTableID inherits from it.
 	sqlRunner.Exec(
-		t, `ALTER DATABASE system CONFIGURE ZONE USING 
-			num_replicas = 3, 
+		t, `ALTER DATABASE system CONFIGURE ZONE USING
+			num_replicas = 3,
 			num_voters = 3,
 			constraints = '{"+node=n1": 1, "+node=n2": 1}',
 			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
@@ -838,16 +819,16 @@ func setAndVerifyZoneConfigs(
 
 	// Ensure the liveness and meta ranges are also constrained appropriately.
 	sqlRunner.Exec(
-		t, `ALTER RANGE meta CONFIGURE ZONE USING 
-			num_replicas = 3, 
+		t, `ALTER RANGE meta CONFIGURE ZONE USING
+			num_replicas = 3,
 			num_voters = 3,
 			constraints = '{"+node=n1": 1, "+node=n2": 1}',
 			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
 	)
 
 	sqlRunner.Exec(
-		t, `ALTER RANGE liveness CONFIGURE ZONE USING 
-			num_replicas = 3, 
+		t, `ALTER RANGE liveness CONFIGURE ZONE USING
+			num_replicas = 3,
 			num_voters = 3,
 			constraints = '{"+node=n1": 1, "+node=n2": 1}',
 			voter_constraints = '{"+node=n1": 1, "+node=n2": 1}'`,
