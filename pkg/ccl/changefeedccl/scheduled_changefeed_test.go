@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -304,8 +303,7 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -320,25 +318,20 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
-	rootDB := sqlutils.MakeSQLRunner(db)
-	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
 	enableEnterprise := utilccl.TestingDisableEnterprise()
 	enableEnterprise()
 
-	rootDB.Exec(t, `CREATE TABLE table_a (i int)`)
-	rootDB.Exec(t, `CREATE USER testuser WITH PASSWORD 'test'`)
+	sqlDB.Exec(t, `CREATE TABLE table_a (i int)`)
+	sqlDB.Exec(t, `CREATE USER testuser WITH PASSWORD 'test'`)
 
-	pgURL := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword("testuser", "test"),
-		Host:   s.SQLAddr(),
-	}
-	db2, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db2.Close()
+	db2 := s.SQLConn(t, serverutils.UserPassword("testuser", "test"))
 	userDB := sqlutils.MakeSQLRunner(db2)
 
 	userDB.ExpectErr(t, `Failed to dry run create changefeed: user "testuser" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`,
