@@ -213,14 +213,14 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 	t.metrics.MessagesReceived.Inc(1)
 }
 
-// SendAsync implements the MessageSender interface. It sends a message to the
+// EnqueueMessage implements the MessageSender interface. It sends a message to the
 // recipient specified in the request, and returns false if the outgoing queue
 // is full or the node dialer's circuit breaker has tripped.
 //
 // The returned bool may be a false positive but will never be a false negative;
 // if sent is true the message may or may not actually be sent but if it's false
 // the message definitely was not sent.
-func (t *Transport) SendAsync(ctx context.Context, msg slpb.Message) (enqueued bool) {
+func (t *Transport) EnqueueMessage(ctx context.Context, msg slpb.Message) (enqueued bool) {
 	toNodeID := msg.To.NodeID
 	fromNodeID := msg.From.NodeID
 	// If this is a message from one local store to another local store, do not
@@ -288,7 +288,7 @@ func (t *Transport) startProcessNewQueue(
 	cleanup := func() {
 		q, ok := t.getQueue(toNodeID)
 		t.queues.Delete(toNodeID)
-		// Account for all remaining messages in the queue. SendAsync may be
+		// Account for all remaining messages in the queue. EnqueueMessage may be
 		// writing to the queue concurrently, so it's possible that we won't
 		// account for a few messages below.
 		if ok {
