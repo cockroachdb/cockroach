@@ -82,8 +82,8 @@ var MinLeaseTransferStatsDuration = 30 * time.Second
 var EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_lease_rebalancing.enabled",
-	"set to enable rebalancing of range leases based on load and latency",
-	true,
+	"set to enable rebalancing of range leases based on load and latency (DEPRECATED)",
+	false,
 	settings.WithPublic)
 
 // leaseRebalancingAggressiveness enables users to tweak how aggressive their
