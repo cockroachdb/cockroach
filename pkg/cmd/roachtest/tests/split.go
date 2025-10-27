@@ -362,7 +362,7 @@ func registerLoadSplits(r registry.Registry) {
 				// The number of splits should be similar to YCSB/A.
 				cpuThreshold:      100 * time.Millisecond, // 1/10th of a CPU per second.
 				minimumRanges:     15,
-				maximumRanges:     40,
+				maximumRanges:     60, // see #156261
 				initialRangeCount: 2,
 				load: ycsbSplitLoad{
 					workload:     "b",
