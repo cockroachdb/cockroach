@@ -4,7 +4,7 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*]
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 inspect range_id=1
 ----
@@ -108,11 +108,11 @@ range_id=1
   term=1 index=3 pri=NormalPri size=2MiB
 ----
 t1/s1: eval reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
-       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB
+       send reg=+8.0 MiB/+16 MiB ela=+0 B/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 inspect range_id=1
 ----
@@ -354,11 +354,11 @@ range_id=1
   store_id=2 term=1 to_index=2 pri=NormalPri
 ----
 t1/s1: eval reg=+11 MiB/+16 MiB ela=+3.0 MiB/+8.0 MiB
-       send reg=+11 MiB/+16 MiB ela=+3.0 MiB/+8.0 MiB
+       send reg=+11 MiB/+16 MiB ela=+3.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
-       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 inspect range_id=1
 ----
