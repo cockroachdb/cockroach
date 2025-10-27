@@ -13,12 +13,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
 )
+
+var logResolvedEvery = log.Every(10 * time.Second)
 
 // AddChangefeedToQueryLoad augments the passed QueryLoad to contain an extra
 // worker to run a changefeed over the tables of the generator.
@@ -83,6 +86,11 @@ func AddChangefeedToQueryLoad(
 		}
 	}
 
+	epoch, err := hlc.ParseHLC(cursorStr)
+	if err != nil {
+		return err
+	}
+
 	tableNames := strings.Builder{}
 	for i, table := range gen.Tables() {
 		if i == 0 {
@@ -122,10 +130,15 @@ func AddChangefeedToQueryLoad(
 		return true
 	}
 	var rows pgx.Rows
+	var changefeedStartTime time.Time
 	maybeSetupRows := func() (done bool) {
 		if rows != nil {
 			return false
 		}
+		if changefeedStartTime.IsZero() {
+			changefeedStartTime = timeutil.Now()
+		}
+		log.Dev.Infof(ctx, "creating changefeed after %s with stmt: %s with args %v", timeutil.Since(epoch.GoTime()), stmt, args)
 		var err error
 		rows, err = conn.Query(cfCtx, stmt, args...)
 		return maybeMarkDone(err)
@@ -169,6 +182,11 @@ func AddChangefeedToQueryLoad(
 					return errors.Errorf("resolved timestamp %s is less than last resolved timestamp %s", resolved, lastResolved)
 				}
 				lastResolved = resolved
+				if !lastResolved.IsEmpty() {
+					if logResolvedEvery.ShouldLog() {
+						log.Dev.Infof(ctx, "received resolved timestamp: lag=%s, ts=%s, sinceStart=%s", timeutil.Since(lastResolved.GoTime()), lastResolved, timeutil.Since(changefeedStartTime))
+					}
+				}
 			} else {
 				return errors.Errorf("failed to parse CHANGEFEED event: %s", values[2])
 			}
