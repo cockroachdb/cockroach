@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -149,9 +148,8 @@ func (c *indexConsistencyCheck) Start(
 		}
 		col := c.tableDesc.PublicColumns()[pos]
 		otherColumns = append(otherColumns, col)
-		if col.GetType().Family() == types.RefCursorFamily {
-			// Refcursor values do not support equality comparison, so we cannot use
-			// them in the join predicates that detect inconsistencies.
+		if !tree.EqCmpAllowedForEquivalentTypes(col.GetType(), col.GetType()) {
+			// We cannot use types in join predicates that don't allow for equality comparisons.
 			return
 		}
 		joinColumns = append(joinColumns, col)
