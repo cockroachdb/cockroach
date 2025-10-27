@@ -47,9 +47,8 @@ func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Fails with the default test tenant due to span limits. Tracked
-			// with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// Fails with the default test tenant due to span limits.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 			UseDatabase:       "rand",
 			ExternalIODir:     dir,
 		},

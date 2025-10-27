@@ -294,7 +294,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
@@ -450,12 +450,14 @@ func TestBackupRestoreExecLocality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "too slow")
+
 	const numAccounts = 1000
 
 	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
@@ -4078,7 +4080,8 @@ func TestNonLinearChain(t *testing.T) {
 	defer cleanup()
 
 	tc := testcluster.NewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled, ExternalIODir: dir, Knobs: base.TestingKnobs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
+		ExternalIODir:     dir, Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	}})
@@ -6502,8 +6505,8 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 			// The meta table is used to track limits.
 			UseMetaTable: true,
 		}
-		// Test fails within a tenant. Tracked with #76378.
-		params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+		// Test fails within a tenant.
+		params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798)
 		tc := testcluster.StartTestCluster(t, 1, params)
 		defer tc.Stopper().Stop(ctx)
 		db := tc.ServerConn(0)
@@ -9273,8 +9276,8 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 		// This test hangs when run within a tenant. It's likely that
 		// the cause of the hang is the fact that we're waiting on the GC to
 		// complete, and we don't have visibility into the GC completing from
-		// the tenant. More investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		// the tenant. More investigation is required.
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 		Knobs: base.TestingKnobs{
 			GCJob: &sql.GCJobTestingKnobs{
 				RunBeforePerformGC: func(id jobspb.JobID) error {
@@ -9448,7 +9451,7 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				// Disabled to run within tenants because the function that sets up the restoring cluster
 				// has not been configured yet to run within tenants.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig: &spanconfig.TestingKnobs{
@@ -9549,8 +9552,8 @@ func TestExportRequestBelowGCThresholdOnDataExcludedFromBackup(t *testing.T) {
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Test fails when run within a tenant as zone config
-			// updates are not allowed by default. Tracked with 73768.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			// updates are not allowed by default.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 		},
 	}
 	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
@@ -9654,8 +9657,8 @@ func TestExcludeDataFromBackupDoesNotHoldupGC(t *testing.T) {
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODir = dir
 	// Test fails when run within a tenant. More investigation is
-	// required. Tracked with #76378.
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+	// required.
+	params.ServerArgs.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798)
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		DisableGCQueue:            true,
 		DisableLastProcessedCheck: true,
