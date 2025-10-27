@@ -81,7 +81,7 @@ func TestRangeCount(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(81590),
 		},
 	})
 	require.NoError(t, testCluster.WaitForFullReplication())

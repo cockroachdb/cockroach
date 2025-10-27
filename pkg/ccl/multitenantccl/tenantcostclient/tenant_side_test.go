@@ -1200,8 +1200,6 @@ func TestSQLLivenessExemption(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test fails when run with the default test tenant. Disabling and
-	// tracking with #76378.
 	hostServer, hostDB, hostKV := serverutils.StartServer(t,
 		base.TestServerArgs{DefaultTestTenant: base.TestControlsTenantsExplicitly})
 	defer hostServer.Stopper().Stop(context.Background())
