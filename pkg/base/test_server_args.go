@@ -379,11 +379,6 @@ var (
 	// to use TestTenantProbabilistic or TestTenantProbabilisticOnly.
 	SharedTestTenantAlwaysEnabled = DefaultTestTenantOptions{testBehavior: ttEnabled | ttSharedProcess, allowAdditionalTenants: true}
 
-	// TODOTestTenantDisabled should not be used anymore. Use the
-	// other values instead.
-	// TODO(#76378): Review existing tests and use the proper value instead.
-	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
-
 	// TestRequiresExplicitSQLConnection is used when the test is unable to pass
 	// the cluster as an option in the connection URL. The test could still
 	// probabilistically use an external process test virtual cluster, but
