@@ -11,6 +11,7 @@ import (
 	"context"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -431,7 +432,7 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if err := tabledesc.ValidateTTLRowStatsPollInterval(key, d); err != nil {
+			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
 				return err
 			}
 			rowLevelTTL := po.getOrCreateRowLevelTTL()
@@ -626,6 +627,32 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
 			po.TableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
+			return nil
+		},
+	},
+	"canary_window": {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			d, err := paramparse.DatumAsDuration(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateNotNegativeInterval(key, d); err != nil {
+				return err
+			}
+
+			// Validate the setting of canary window cannot be outrageously long.
+			const maxCanaryWindowInHour = 48
+			if d > time.Duration(maxCanaryWindowInHour)*time.Hour {
+				return errors.Newf(
+					"canary window size %s exceeds maximum allowed value of %d hours",
+					d.String(), maxCanaryWindowInHour)
+			}
+
+			po.TableDesc.CanaryWindow = d
+			return nil
+		},
+		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			po.TableDesc.CanaryWindow = 0
 			return nil
 		},
 	},
