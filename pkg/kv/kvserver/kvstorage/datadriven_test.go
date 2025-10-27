@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -108,10 +109,7 @@ func TestDataDriven(t *testing.T) {
 			ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), e.tr, path)
 			// This method prints all output to `buf`.
 			var buf strings.Builder
-			var printTrace bool // if true, trace printed to buf on return
-			if d.HasArg("trace") {
-				d.ScanArgs(t, "trace", &printTrace)
-			}
+			printTrace := dd.ScanArgOr(t, d, "trace", false) // if true, print trace to buf
 
 			defer func() {
 				if r := recover(); r != nil {
@@ -136,26 +134,14 @@ func TestDataDriven(t *testing.T) {
 
 			switch d.Cmd {
 			case "new-replica":
-				var rangeID int
-				d.ScanArgs(t, "range-id", &rangeID)
-				var replicaID int
-				if d.HasArg("replica-id") { // optional to allow making incomplete state
-					d.ScanArgs(t, "replica-id", &replicaID)
-				}
-				var k string
-				if d.HasArg("k") {
-					d.ScanArgs(t, "k", &k)
-				}
-				var ek string
-				if d.HasArg("ek") {
-					d.ScanArgs(t, "ek", &ek)
-				}
-				var skipRaftReplicaID bool
-				if d.HasArg("skip-raft-replica-id") {
-					d.ScanArgs(t, "skip-raft-replica-id", &skipRaftReplicaID)
-				}
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 0)
+				k := dd.ScanArgOr(t, d, "k", "")
+				ek := dd.ScanArgOr(t, d, "ek", "")
+				skipRaftReplicaID := dd.ScanArgOr(t, d, "skip-raft-replica-id", false)
+
 				if desc := e.handleNewReplica(t, ctx,
-					roachpb.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
+					roachpb.FullReplicaID{RangeID: rangeID, ReplicaID: replicaID},
 					skipRaftReplicaID, keys.MustAddr(roachpb.Key(k)), keys.MustAddr(roachpb.Key(ek)),
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)

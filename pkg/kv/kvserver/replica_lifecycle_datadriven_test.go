@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -64,11 +65,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-descriptor":
-				var startKey, endKey string
-				d.ScanArgs(t, "start", &startKey)
-				d.ScanArgs(t, "end", &endKey)
-				var replicasStr string
-				d.ScanArgs(t, "replicas", &replicasStr)
+				startKey := dd.ScanArg[string](t, d, "start")
+				endKey := dd.ScanArg[string](t, d, "end")
+				replicasStr := dd.ScanArg[string](t, d, "replicas")
 				replicaNodeIDs := parseReplicas(t, replicasStr)
 
 				rangeID := tc.nextRangeID
@@ -107,15 +106,14 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				return fmt.Sprintf("created descriptor: %v", desc)
 
 			case "create-replica":
-				var rangeID int
-				d.ScanArgs(t, "range-id", &rangeID)
-				rs := tc.mustGetRangeState(t, roachpb.RangeID(rangeID))
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				initialized := d.HasArg("initialized")
+
+				rs := tc.mustGetRangeState(t, rangeID)
 				if rs.replica != nil {
 					return errors.New("initialized replica already exists on n1/s1").Error()
 				}
 				repl := rs.getReplicaDescriptor(t)
-
-				initialized := d.HasArg("initialized")
 
 				batch := tc.storage.NewBatch()
 				defer batch.Close()
@@ -126,11 +124,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						rs.desc, repl.ReplicaID, rs.version,
 					))
 				} else {
-					err := kvstorage.CreateUninitializedReplica(
+					require.NoError(t, kvstorage.CreateUninitializedReplica(
 						ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
 						roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
-					)
-					require.NoError(t, err)
+					))
 				}
 				tc.updatePostReplicaCreateState(t, ctx, rs, batch)
 
