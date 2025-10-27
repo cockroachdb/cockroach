@@ -567,6 +567,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.HintsGeneration = ps.HintsGeneration
 		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
+		// If we are executing a statement that has been prepared, we should
+		// reuse the UseCanaryStats so that we don't re-roll the dice.
+		p.EvalContext().UseCanaryStats = ps.Metadata.UseCanaryStats
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
@@ -953,6 +956,14 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	if err := ex.handleAOST(ctx, ast); err != nil {
 		return makeErrEvent(err)
+	}
+
+	// Only roll the dice if the UseCanaryStats is unset. This is for the case
+	// where we execute a prepared stmt, and the dice should has been rolled
+	// when the stmt was prepared. In this case, we should just reuse the
+	// value decided on the prepare stage.
+	if ex.executorType != executorTypeInternal && p.EvalContext().UseCanaryStats == eval.UseCanaryStatsValUnset {
+		p.EvalContext().UseCanaryStats = canaryRollDice(p.EvalContext(), ex.rng.internal)
 	}
 
 	// The first order of business is to ensure proper sequencing
@@ -1471,6 +1482,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.HintsGeneration = ps.HintsGeneration
 		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
 		res.ResetStmtType(ps.AST)
+		// If we are executing a statement that has been prepared, we should
+		// reuse the UseCanaryStats so that we don't re-roll the dice.
+		p.EvalContext().UseCanaryStats = ps.Metadata.UseCanaryStats
 
 		if e.DiscardRows {
 			ih.SetDiscardRows()
@@ -1935,10 +1949,20 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 
 	// For a portal (prepared stmt), since handleAOST() is called when preparing
 	// the statement, and this function is idempotent, we don't need to
-	// call it again during execution.
+	// call it again during execution. Similarly, we don't re-determine the
+	// use of canary stats or stable stats for planning.
 	if portal == nil {
 		if err := ex.handleAOST(ctx, vars.ast); err != nil {
 			return makeErrEvent(err)
+		}
+
+		// Only roll the dice if the UseCanaryStats is unset. This is for the case
+		// where we execute a prepared stmt, and the dice should has been rolled
+		// when the stmt was prepared. In this case, we should just reuse the
+		// value decided on the prepare stage.
+		if ex.executorType != executorTypeInternal &&
+			p.EvalContext().UseCanaryStats == eval.UseCanaryStatsValUnset {
+			p.EvalContext().UseCanaryStats = canaryRollDice(p.EvalContext(), ex.rng.internal)
 		}
 	}
 

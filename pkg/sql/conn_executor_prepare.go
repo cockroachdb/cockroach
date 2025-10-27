@@ -167,7 +167,6 @@ func (ex *connExecutor) prepare(
 	rawTypeHints []oid.Oid,
 	origin prep.StatementOrigin,
 ) (_ *prep.Statement, retErr error) {
-
 	prepared := prep.NewStatement(origin, ex.sessionPreparedMon.MakeBoundAccount())
 	defer func() {
 		// Make sure to close the memory account if an error is returned.
@@ -237,6 +236,10 @@ func (ex *connExecutor) prepare(
 				TypeHints: placeholderHints,
 				Types:     placeholderHints,
 			},
+		}
+
+		if ex.executorType != executorTypeInternal {
+			prepared.Metadata.UseCanaryStats = canaryRollDice(p.EvalContext(), ex.rng.internal)
 		}
 		prepared.Statement = stmt.Statement
 		// When we set our prepared statement, we need to make sure to propagate
