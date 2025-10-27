@@ -1298,9 +1298,9 @@ func getFullyQualifiedTableNames(
 			// Table name is fully qualfied e.g. foo.bar.fizz. This will resolve to
 			// foo.bar.fizz unless foo != <targetDatabase>, in which case it would fail.
 			if tableName.CatalogName != tree.Name(targetDatabase) {
-				return nil, errors.AssertionFailedf(
+				return nil, changefeedbase.WithTerminalError(errors.Newf(
 					"table %q must be in target database %q", tableName.FQString(), targetDatabase,
-				)
+				))
 			}
 		}
 		fqTableNames = append(fqTableNames, tableName)
