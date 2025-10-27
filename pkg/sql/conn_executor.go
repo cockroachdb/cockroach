@@ -157,6 +157,45 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// canaryFraction controls the probabilistic sampling rate for queries
+// participating in the canary statistics rollout feature.
+//
+// This cluster-level setting determines what fraction of queries will use
+// "canary statistics" (newly collected stats within their canary window)
+// versus "stable statistics" (previously proven stats). For example, a value
+// of 0.2 means 20% of queries will test canary stats while 80% use stable stats.
+//
+// The selection is atomic per query: if a query is chosen for canary evaluation,
+// it will use canary statistics for ALL tables it references (where available).
+// A query never uses a mix of canary and stable statistics.
+var canaryFraction = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.stats.canary_fraction",
+	"probability that a query will use canary statistics instead of stable statistics (0.0-1.0)",
+	0.1,
+	settings.Fraction,
+	settings.WithPublic,
+)
+
+// canaryRollDice performs the probabilistic check to determine if a query
+// should use the "canary path" for statistics.
+// This selection is atomic per query.
+func canaryRollDice(evalCtx *eval.Context) bool {
+	threshold := canaryFraction.Get(&evalCtx.Settings.SV)
+
+	// If the fraction is 0, never use canary stats.
+	if threshold == 0 {
+		return false
+	}
+	// If the fraction is 1, always use canary stats.
+	if threshold == 1 {
+		return true
+	}
+
+	actual := rand.Float64()
+	return actual < threshold
+}
+
 // The metric label name we'll use to facet latency metrics by statement fingerprint.
 var detailedLatencyMetricLabel = "fingerprint"
 

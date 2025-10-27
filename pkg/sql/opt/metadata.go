@@ -158,7 +158,7 @@ type Metadata struct {
 }
 
 // Init prepares the metadata for use (or reuse).
-func (md *Metadata) Init() {
+func (md *Metadata) Init(evalCtx *eval.Context) {
 	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
 	schemas := md.schemas

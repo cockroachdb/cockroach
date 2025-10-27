@@ -955,6 +955,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		return makeErrEvent(err)
 	}
 
+	p.extendedEvalCtx.UseCanaryStats = canaryRollDice(p.EvalContext())
+
 	// The first order of business is to ensure proper sequencing
 	// semantics.  As per PostgreSQL's dialect specs, the "read" part of
 	// statements always see the data as per a snapshot of the database

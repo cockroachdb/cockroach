@@ -29,7 +29,9 @@ go_test(
     srcs = ["scalar_vars_test.go"],
     embed = [":testutils"],
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/sql/opt",
+        "//pkg/sql/sem/eval",
         "@com_github_stretchr_testify//assert",
     ],
 )
