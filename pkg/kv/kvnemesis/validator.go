@@ -489,11 +489,13 @@ func (v *validator) processOp(op Operation) {
 			break
 		}
 		readObservation := &observedRead{Key: t.Key}
+		var shouldObserveRead bool
 		writeObservation := &observedWrite{
 			Key:   t.Key,
 			Seq:   t.Seq,
 			Value: roachpb.MakeValueFromString(t.Value()),
 		}
+		var shouldObserveWrite bool
 		// Consider two cases based on whether the CPut hit a ConditionFailedError.
 		err := errorFromResult(t.Result)
 		if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
@@ -504,7 +506,7 @@ func (v *validator) processOp(op Operation) {
 				observedVal.RawBytes = e.ActualValue.RawBytes
 			}
 			readObservation.Value = observedVal
-			v.curObservations = append(v.curObservations, readObservation)
+			shouldObserveRead = true
 		} else {
 			// If the CPut succeeded, the expected value is observed, and the CPut's
 			// write is also observed.
@@ -517,11 +519,21 @@ func (v *validator) processOp(op Operation) {
 					observedVal = roachpb.MakeValueFromBytes(t.ExpVal)
 				}
 				readObservation.Value = observedVal
-				v.curObservations = append(v.curObservations, readObservation)
+				shouldObserveRead = true
 			}
 			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
 				writeObservation.Timestamp = sv.Timestamp
 			}
+			shouldObserveWrite = true
+		}
+		// The read observation should be added before the write observation, since
+		// that's the order in which the CPut executed. Moreover, the CPut read is
+		// always non-locking, so if the observation filter is observeLocking, we
+		// won't be adding it.
+		if shouldObserveRead && v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, readObservation)
+		}
+		if shouldObserveWrite {
 			v.curObservations = append(v.curObservations, writeObservation)
 		}
 		if v.buffering == bufferingSingle {
