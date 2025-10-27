@@ -67,8 +67,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 			case "create-descriptor":
 				startKey := dd.ScanArg[string](t, d, "start")
 				endKey := dd.ScanArg[string](t, d, "end")
-				replicasStr := dd.ScanArg[string](t, d, "replicas")
-				replicaNodeIDs := parseReplicas(t, replicasStr)
+				replicaNodeIDs := dd.ScanArg[[]roachpb.NodeID](t, d, "replicas")
+
+				// The test is written from the perspective of n1/s1, so not having n1
+				// in this list should return an error.
+				require.True(t, slices.Contains(replicaNodeIDs, 1), "replica list must contain n1")
 
 				rangeID := tc.nextRangeID
 				tc.nextRangeID++
@@ -274,20 +277,4 @@ func (r *replicaInfo) String() string {
 		sb.WriteString(fmt.Sprintf("TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
 	}
 	return sb.String()
-}
-
-func parseReplicas(t *testing.T, val string) []roachpb.NodeID {
-	var replicaNodeIDs []roachpb.NodeID
-	require.True(t, len(val) >= 2 && val[0] == '[' && val[len(val)-1] == ']', "incorrect format")
-	val = val[1 : len(val)-1]
-	for _, s := range strings.Split(val, ",") {
-		var id int
-		_, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &id)
-		require.NoError(t, err)
-		replicaNodeIDs = append(replicaNodeIDs, roachpb.NodeID(id))
-	}
-	// The test is written from the perspective of n1/s1, so not having n1 in
-	// this list should return an error.
-	require.True(t, slices.Contains(replicaNodeIDs, 1), "replica list must contain n1")
-	return replicaNodeIDs
 }
