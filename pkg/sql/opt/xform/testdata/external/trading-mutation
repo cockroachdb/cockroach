@@ -579,7 +579,7 @@ project
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:9!null cardid:10!null version:17!null
       │         ├── constraint: /9/17: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=0.999992, null(10)=0, distinct(17)=1, null(17)=0, distinct(9,17)=1, null(9,17)=0]
+      │         ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=0, null(10)=0, distinct(17)=1, null(17)=0, distinct(9,17)=1, null(9,17)=0]
       │         │   histogram(17)=
       │         ├── key: (10)
       │         └── fd: ()-->(9), (10)-->(17), (17)-->(10)

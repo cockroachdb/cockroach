@@ -51,7 +51,7 @@ type Statistics struct {
 	// a true row count they would be pretty much the same thing.
 	//
 	// For expressions with Cardinality.Max = 0, RowCount will be 0. For
-	// expressions with Cardinality.Max > 0, RowCount will be >= epsilon.
+	// expressions with Cardinality.Max > 0, RowCount will be >= minRowCount.
 	RowCount float64
 
 	// minRowCount, if greater than zero, limits the lower bound of RowCount
@@ -81,6 +81,7 @@ type Statistics struct {
 	// For expressions with Cardinality.Max = 0, selectivity will be 0. For
 	// expressions with Cardinality.Max > 0, selectivity will be in the range
 	// [epsilon, 1.0].
+	// TODO: Update this.
 	Selectivity Selectivity
 
 	// AvgColSizes contains the estimated average size of columns that
@@ -148,6 +149,25 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 		s.Selectivity.Multiply(selectivity)
 		s.RowCount = r
 	}
+
+	// Old.
+	// // if selectivity == ZeroSelectivity {
+	// // 	s.Selectivity = ZeroSelectivity
+	// // 	s.RowCount = 0
+	// // } else if r := s.RowCount * selectivity.AsFloat(); r < s.minRowCount {
+	// // 	s.Selectivity.Multiply(MakeSelectivityFromFraction(s.minRowCount, s.RowCount))
+	// // 	s.RowCount = s.minRowCount
+	// // } else {
+	// // 	s.Selectivity.Multiply(selectivity)
+	// // 	s.RowCount = r
+	// // }
+	// if selectivity == ZeroSelectivity {
+	// 	s.RowCount = 0
+	// 	s.Selectivity = ZeroSelectivity
+	// 	return
+	// }
+	// s.RowCount *= selectivity.AsFloat()
+	// s.Selectivity.Multiply(selectivity)
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It

@@ -86,7 +86,7 @@ vectorized: true
     │   │   │   │       └── • scan
     │   │   │   │             columns: (a)
     │   │   │   │             ordering: +a
-    │   │   │   │             estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │   │   │   │             estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │   │   │   │             table: sharded_primary@sharded_primary_pkey
     │   │   │   │             spans: /4-/5
     │   │   │   │
@@ -103,7 +103,7 @@ vectorized: true
     │   │   │           └── • scan
     │   │   │                 columns: (a)
     │   │   │                 ordering: +a
-    │   │   │                 estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │   │   │                 estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │   │   │                 table: sharded_primary@sharded_primary_pkey
     │   │   │                 spans: /5-/6
     │   │   │
@@ -125,7 +125,7 @@ vectorized: true
     │   │       │       └── • scan
     │   │       │             columns: (a)
     │   │       │             ordering: +a
-    │   │       │             estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │   │       │             estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │   │       │             table: sharded_primary@sharded_primary_pkey
     │   │       │             spans: /2-/3
     │   │       │
@@ -142,7 +142,7 @@ vectorized: true
     │   │               └── • scan
     │   │                     columns: (a)
     │   │                     ordering: +a
-    │   │                     estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │   │                     estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │   │                     table: sharded_primary@sharded_primary_pkey
     │   │                     spans: /3-/4
     │   │
@@ -169,7 +169,7 @@ vectorized: true
     │       │   │       └── • scan
     │       │   │             columns: (a)
     │       │   │             ordering: +a
-    │       │   │             estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │       │   │             estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │       │   │             table: sharded_primary@sharded_primary_pkey
     │       │   │             spans: /0-/1
     │       │   │
@@ -186,7 +186,7 @@ vectorized: true
     │       │           └── • scan
     │       │                 columns: (a)
     │       │                 ordering: +a
-    │       │                 estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │       │                 estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │       │                 table: sharded_primary@sharded_primary_pkey
     │       │                 spans: /1-/2
     │       │
@@ -203,7 +203,7 @@ vectorized: true
     │               └── • scan
     │                     columns: (a)
     │                     ordering: +a
-    │                     estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+    │                     estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
     │                     table: sharded_primary@sharded_primary_pkey
     │                     spans: /10-/11
     │
@@ -230,7 +230,7 @@ vectorized: true
         │   │       └── • scan
         │   │             columns: (a)
         │   │             ordering: +a
-        │   │             estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+        │   │             estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
         │   │             table: sharded_primary@sharded_primary_pkey
         │   │             spans: /8-/9
         │   │
@@ -247,7 +247,7 @@ vectorized: true
         │           └── • scan
         │                 columns: (a)
         │                 ordering: +a
-        │                 estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+        │                 estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
         │                 table: sharded_primary@sharded_primary_pkey
         │                 spans: /9-/10
         │
@@ -269,7 +269,7 @@ vectorized: true
             │       └── • scan
             │             columns: (a)
             │             ordering: +a
-            │             estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+            │             estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
             │             table: sharded_primary@sharded_primary_pkey
             │             spans: /6-/7
             │
@@ -286,7 +286,7 @@ vectorized: true
                     └── • scan
                           columns: (a)
                           ordering: +a
-                          estimated row count: 31 - 9,091 (9.1% of the table; stats collected <hidden> ago)
+                          estimated row count: 30 - 9,091 (9.1% of the table; stats collected <hidden> ago)
                           table: sharded_primary@sharded_primary_pkey
                           spans: /7-/8
 
@@ -765,7 +765,7 @@ vectorized: true
     │
     └── • cross join (anti)
         │ columns: (column1, column2, crdb_internal_a_shard_8_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │
         ├── • values
         │     columns: (column1, column2, crdb_internal_a_shard_8_comp)
@@ -802,7 +802,7 @@ vectorized: true
     │
     └── • cross join (anti)
         │ columns: (column1, column2, crdb_internal_a_shard_8_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │
         ├── • values
         │     columns: (column1, column2, crdb_internal_a_shard_8_comp)
@@ -1136,43 +1136,37 @@ vectorized: true
     │ render column2: column2
     │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
     │
-    └── • project
+    └── • cross join (anti)
         │ columns: (column1, column2, crdb_internal_b_shard_8_comp)
+        │ estimated row count: 1 (missing stats)
         │
-        └── • lookup join (anti)
-            │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
-            │ estimated row count: 0 (missing stats)
-            │ table: t_hash_indexed@idx_t_hash_indexed
-            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
-            │ equality cols are key
-            │ parallel
+        ├── • project
+        │   │ columns: (column1, column2, crdb_internal_b_shard_8_comp)
+        │   │
+        │   └── • lookup join (anti)
+        │       │ columns: (column1, column2, crdb_internal_b_shard_8_comp, crdb_internal_b_shard_8_eq)
+        │       │ estimated row count: 1 (missing stats)
+        │       │ table: t_hash_indexed@idx_t_hash_indexed
+        │       │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
+        │       │ equality cols are key
+        │       │ parallel
+        │       │
+        │       └── • values
+        │             columns: (column1, column2, crdb_internal_b_shard_8_comp, crdb_internal_b_shard_8_eq)
+        │             size: 4 columns, 1 row
+        │             row 0, expr 0: 4321
+        │             row 0, expr 1: 8765
+        │             row 0, expr 2: 5
+        │             row 0, expr 3: 5
+        │
+        └── • project
+            │ columns: ()
             │
-            └── • render
-                │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
-                │ render crdb_internal_b_shard_8_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 8)
-                │ render column1: column1
-                │ render column2: column2
-                │ render crdb_internal_b_shard_8_comp: crdb_internal_b_shard_8_comp
-                │
-                └── • cross join (anti)
-                    │ columns: (column1, column2, crdb_internal_b_shard_8_comp)
-                    │ estimated row count: 0 (missing stats)
-                    │
-                    ├── • values
-                    │     columns: (column1, column2, crdb_internal_b_shard_8_comp)
-                    │     size: 3 columns, 1 row
-                    │     row 0, expr 0: 4321
-                    │     row 0, expr 1: 8765
-                    │     row 0, expr 2: 5
-                    │
-                    └── • project
-                        │ columns: ()
-                        │
-                        └── • scan
-                              columns: (a)
-                              estimated row count: 1 (missing stats)
-                              table: t_hash_indexed@t_hash_indexed_pkey
-                              spans: /4321/0
+            └── • scan
+                  columns: (a)
+                  estimated row count: 1 (missing stats)
+                  table: t_hash_indexed@t_hash_indexed_pkey
+                  spans: /4321/0
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (111, 222), (333, 444) ON CONFLICT DO NOTHING
@@ -1200,7 +1194,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_hash_indexed@idx_t_hash_indexed
             │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
@@ -1215,7 +1209,7 @@ vectorized: true
                 │
                 └── • lookup join (anti)
                     │ columns: (crdb_internal_b_shard_8_comp, column1, column2)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_hash_indexed@t_hash_indexed_pkey
                     │ equality: (column1) = (a)
                     │ equality cols are key
@@ -1257,7 +1251,7 @@ vectorized: true
     │
     └── • cross join (anti)
         │ columns: (column1, column2, crdb_internal_b_shard_8_comp)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │
         ├── • values
         │     columns: (column1, column2, crdb_internal_b_shard_8_comp)
@@ -1300,7 +1294,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: t_hash_indexed@idx_t_hash_indexed
             │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
@@ -1369,7 +1363,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_parent_pk@t_parent_pk_pkey
                 │ equality: (crdb_internal_id_shard_16_eq, pid) = (crdb_internal_id_shard_16, id)
                 │ equality cols are key
@@ -1439,7 +1433,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_real_id_shard_16_eq, pid)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_parent_sec@idx_t_parent_sec_real_id
                 │ equality: (crdb_internal_real_id_shard_16_eq, pid) = (crdb_internal_real_id_shard_16, real_id)
                 │ equality cols are key

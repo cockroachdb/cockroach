@@ -1043,22 +1043,9 @@ project
  │    │    │    │    ├── fd: ()-->(1,2,9,36), (17)-->(22), (37)-->(38), (51)-->(57), (17)==(37,51), (37)==(17,51), (51)==(17,37), (6)==(22), (22)==(6), (1)==(9), (9)==(1)
  │    │    │    │    ├── inner-join (hash)
  │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null s_symb:17!null s_co_id:22!null dm_date:36!null dm_s_symb:37!null dm_close:38!null
- │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  │    │    │    │    │    ├── key: (37)
  │    │    │    │    │    ├── fd: ()-->(1,2,9,36), (17)-->(22), (37)-->(38), (17)==(37), (37)==(17), (6)==(22), (22)==(6), (1)==(9), (9)==(1)
- │    │    │    │    │    ├── inner-join (lookup security)
- │    │    │    │    │    │    ├── columns: s_symb:17!null s_co_id:22!null dm_date:36!null dm_s_symb:37!null dm_close:38!null
- │    │    │    │    │    │    ├── key columns: [37] = [17]
- │    │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    │    ├── key: (37)
- │    │    │    │    │    │    ├── fd: ()-->(36), (17)-->(22), (37)-->(38), (17)==(37), (37)==(17)
- │    │    │    │    │    │    ├── scan daily_market
- │    │    │    │    │    │    │    ├── columns: dm_date:36!null dm_s_symb:37!null dm_close:38!null
- │    │    │    │    │    │    │    ├── constraint: /36/37: [/'2020-06-17' - /'2020-06-17']
- │    │    │    │    │    │    │    ├── key: (37)
- │    │    │    │    │    │    │    └── fd: ()-->(36), (37)-->(38)
- │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── (s_co_id:22 >= 1) AND (s_co_id:22 <= 5000) [outer=(22), constraints=(/22: [/1 - /5000]; tight)]
  │    │    │    │    │    ├── inner-join (lookup company@company_co_in_id_idx)
  │    │    │    │    │    │    ├── columns: in_id:1!null in_name:2!null co_id:6!null co_in_id:9!null
  │    │    │    │    │    │    ├── lookup expression
@@ -1075,6 +1062,19 @@ project
  │    │    │    │    │    │    │    ├── key: ()
  │    │    │    │    │    │    │    └── fd: ()-->(1,2)
  │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    ├── inner-join (lookup security)
+ │    │    │    │    │    │    ├── columns: s_symb:17!null s_co_id:22!null dm_date:36!null dm_s_symb:37!null dm_close:38!null
+ │    │    │    │    │    │    ├── key columns: [37] = [17]
+ │    │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    │    ├── key: (37)
+ │    │    │    │    │    │    ├── fd: ()-->(36), (17)-->(22), (37)-->(38), (17)==(37), (37)==(17)
+ │    │    │    │    │    │    ├── scan daily_market
+ │    │    │    │    │    │    │    ├── columns: dm_date:36!null dm_s_symb:37!null dm_close:38!null
+ │    │    │    │    │    │    │    ├── constraint: /36/37: [/'2020-06-17' - /'2020-06-17']
+ │    │    │    │    │    │    │    ├── key: (37)
+ │    │    │    │    │    │    │    └── fd: ()-->(36), (37)-->(38)
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── (s_co_id:22 >= 1) AND (s_co_id:22 <= 5000) [outer=(22), constraints=(/22: [/1 - /5000]; tight)]
  │    │    │    │    │    └── filters
  │    │    │    │    │         └── s_co_id:22 = co_id:6 [outer=(6,22), constraints=(/6: (/NULL - ]; /22: (/NULL - ]), fd=(6)==(22), (22)==(6)]
  │    │    │    │    └── filters (true)

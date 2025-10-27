@@ -1825,9 +1825,9 @@ Joins Considered: 12
 ================================================================================
 Final Plan
 ================================================================================
-semi-join (lookup dz)
+left-join (lookup cy)
  ├── lookup columns are key
- ├── left-join (lookup cy)
+ ├── semi-join (lookup dz)
  │    ├── lookup columns are key
  │    ├── anti-join (merge)
  │    │    ├── scan bx
@@ -2958,30 +2958,31 @@ JOIN t88659 AS t4 ON (t3.a) = (t4.b) AND (t2.b) = (t4.a) AND (t2.a) = (t4.a);
 ----
 inner-join (lookup t88659)
  ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21
- ├── key columns: [7] = [19]
+ ├── key columns: [1] = [1]
  ├── lookup columns are key
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(2,3), (7)-->(9), (13)-->(15), (19)-->(21), (2)==(7,8,13,14,19,20), (7)==(2,8,13,14,19,20), (8)==(2,7,13,14,19,20), (13)==(2,7,8,14,19,20), (14)==(2,7,8,13,19,20), (19)==(2,7,8,13,14,20), (20)==(2,7,8,13,14,19), (3)==(9,15,21), (9)==(3,15,21), (15)==(3,9,21), (21)==(3,9,15)
- ├── inner-join (lookup t88659)
- │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null
- │    ├── key columns: [2] = [13]
- │    ├── lookup columns are key
+ ├── inner-join (lookup t88659@idx)
+ │    ├── columns: a:1!null b:2!null a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21!null
+ │    ├── key columns: [7] = [2]
  │    ├── immutable
  │    ├── key: (1)
- │    ├── fd: (1)-->(2,3), (7)-->(9), (13)-->(15), (2)==(7,8,13,14), (7)==(2,8,13,14), (8)==(2,7,13,14), (13)==(2,7,8,14), (14)==(2,7,8,13), (3)==(9,15), (9)==(3,15), (15)==(3,9)
+ │    ├── fd: (7)-->(9), (13)-->(15), (19)-->(21), (1)-->(2), (2)==(7,8,13,14,19,20), (7)==(2,8,13,14,19,20), (8)==(2,7,13,14,19,20), (13)==(2,7,8,14,19,20), (14)==(2,7,8,13,19,20), (19)==(2,7,8,13,14,20), (20)==(2,7,8,13,14,19), (9)==(15,21), (15)==(9,21), (21)==(9,15)
  │    ├── inner-join (lookup t88659)
- │    │    ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
- │    │    ├── key columns: [1] = [1]
+ │    │    ├── columns: a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null a:19!null b:20!null c:21!null
+ │    │    ├── key columns: [7] = [19]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(2,3), (7)-->(9), (2)==(7,8), (7)==(2,8), (8)==(2,7), (3)==(9), (9)==(3)
- │    │    ├── inner-join (lookup t88659@idx)
- │    │    │    ├── columns: a:1!null b:2!null a:7!null b:8!null c:9
- │    │    │    ├── key columns: [7] = [2]
- │    │    │    ├── key: (1)
- │    │    │    ├── fd: (7)-->(9), (1)-->(2), (2)==(7,8), (7)==(2,8), (8)==(2,7)
+ │    │    ├── key: (19)
+ │    │    ├── fd: (7)-->(9), (13)-->(15), (19)-->(21), (7)==(8,13,14,19,20), (8)==(7,13,14,19,20), (13)==(7,8,14,19,20), (14)==(7,8,13,19,20), (19)==(7,8,13,14,20), (20)==(7,8,13,14,19), (9)==(15,21), (15)==(9,21), (21)==(9,15)
+ │    │    ├── inner-join (lookup t88659)
+ │    │    │    ├── columns: a:7!null b:8!null c:9!null a:13!null b:14!null c:15!null
+ │    │    │    ├── key columns: [7] = [13]
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── immutable
+ │    │    │    ├── key: (13)
+ │    │    │    ├── fd: (7)-->(9), (13)-->(15), (7)==(8,13,14), (8)==(7,13,14), (13)==(7,8,14), (14)==(7,8,13), (9)==(15), (15)==(9)
  │    │    │    ├── select
  │    │    │    │    ├── columns: a:7!null b:8!null c:9
  │    │    │    │    ├── key: (7)
@@ -2995,15 +2996,15 @@ inner-join (lookup t88659)
  │    │    │    │    │    └── fd: (7)-->(8,9)
  │    │    │    │    └── filters
  │    │    │    │         └── a:7 = b:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
- │    │    │    └── filters (true)
+ │    │    │    └── filters
+ │    │    │         ├── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+ │    │    │         └── a:7 = b:14 [outer=(7,14), constraints=(/7: (/NULL - ]; /14: (/NULL - ]), fd=(7)==(14), (14)==(7)]
  │    │    └── filters
- │    │         └── c:3 = c:9 [outer=(3,9), immutable, constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
- │    └── filters
- │         ├── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
- │         └── b:2 = b:14 [outer=(2,14), constraints=(/2: (/NULL - ]; /14: (/NULL - ]), fd=(2)==(14), (14)==(2)]
+ │    │         ├── a:13 = b:20 [outer=(13,20), constraints=(/13: (/NULL - ]; /20: (/NULL - ]), fd=(13)==(20), (20)==(13)]
+ │    │         └── c:9 = c:21 [outer=(9,21), immutable, constraints=(/9: (/NULL - ]; /21: (/NULL - ]), fd=(9)==(21), (21)==(9)]
+ │    └── filters (true)
  └── filters
-      ├── a:13 = b:20 [outer=(13,20), constraints=(/13: (/NULL - ]; /20: (/NULL - ]), fd=(13)==(20), (20)==(13)]
-      └── c:3 = c:21 [outer=(3,21), immutable, constraints=(/3: (/NULL - ]; /21: (/NULL - ]), fd=(3)==(21), (21)==(3)]
+      └── c:3 = c:15 [outer=(3,15), immutable, constraints=(/3: (/NULL - ]; /15: (/NULL - ]), fd=(3)==(15), (15)==(3)]
 
 # Regression test for #90761 - don't drop LeftJoin filter when there are enough
 # InnerJoin edges to "link" all relations and the LeftJoin doesn't get
