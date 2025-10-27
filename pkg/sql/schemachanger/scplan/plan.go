@@ -155,9 +155,24 @@ type rulesForRelease struct {
 // rulesForRelease supported rules for each release, this is an ordered array
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
+	// NB: sort versions in descending order, i.e. newest supported version first.
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
-	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
 	{activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
+	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
+}
+
+func init() {
+	// Assert that rulesForReleases is in descending order (newest first).
+	for i := 0; i < len(rulesForReleases)-1; i++ {
+		curr := rulesForReleases[i].activeVersion.Version()
+		next := rulesForReleases[i+1].activeVersion.Version()
+		if curr.Less(next) {
+			panic(errors.AssertionFailedf(
+				"rulesForReleases must be in descending order: %v < %v at positions %d and %d",
+				curr, next, i, i+1,
+			))
+		}
+	}
 }
 
 // minVersionForRules the oldest version supported by the rules.
