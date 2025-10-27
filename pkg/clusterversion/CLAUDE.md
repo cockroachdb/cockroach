@@ -430,10 +430,11 @@ import (
 Add to rulesForReleases array (around line 158):
 ```go
 var rulesForReleases = []rulesForRelease{
-	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
-	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
-	{activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
-	{activeVersion: clusterversion.V25_4, rulesRegistry: release_25_4.GetRegistry()},  // Add this
+  // NB: sort versions in descending order, i.e. newest supported version first.
+  {activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
+  {activeVersion: clusterversion.V25_4, rulesRegistry: release_25_4.GetRegistry()},  // Add this
+  {activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
+  {activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
 }
 ```
 
