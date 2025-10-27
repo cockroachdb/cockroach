@@ -63,7 +63,7 @@ func TestMetadata(t *testing.T) {
 		},
 	}
 
-	md.Init()
+	md.Init(&evalCtx)
 	if md.AddSchema(testCat.Schema()) != schID {
 		t.Fatalf("unexpected schema id")
 	}

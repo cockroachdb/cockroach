@@ -330,7 +330,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		clampInequalitySelectivity:                 evalCtx.SessionData().OptimizerClampInequalitySelectivity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
-	m.metadata.Init()
+	m.metadata.Init(evalCtx)
 	m.logPropsBuilder.init(ctx, evalCtx, m)
 }
 

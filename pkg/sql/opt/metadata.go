@@ -9,10 +9,12 @@ import (
 	"context"
 	"fmt"
 	"math/bits"
+	"math/rand/v2"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -44,6 +46,45 @@ type privilegeBitmap uint64
 type routineDep struct {
 	overload        *tree.Overload
 	invocationTypes []*types.T
+}
+
+// canaryFraction controls the probabilistic sampling rate for queries
+// participating in the canary statistics rollout feature.
+//
+// This cluster-level setting determines what fraction of queries will use
+// "canary statistics" (newly collected stats within their canary window)
+// versus "stable statistics" (previously proven stats). For example, a value
+// of 0.2 means 20% of queries will test canary stats while 80% use stable stats.
+//
+// The selection is atomic per query: if a query is chosen for canary evaluation,
+// it will use canary statistics for ALL tables it references (where available).
+// A query never uses a mix of canary and stable statistics.
+var canaryFraction = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.stats.canary_fraction",
+	"probability that a query will use canary statistics instead of stable statistics (0.0-1.0)",
+	0.1,
+	settings.Fraction,
+	settings.WithPublic,
+)
+
+// canaryRollDice performs the probabilistic check to determine if a query
+// should use the "canary path" for statistics.
+// This selection is atomic per query.
+func canaryRollDice(evalCtx *eval.Context) bool {
+	threshold := canaryFraction.Get(&evalCtx.Settings.SV)
+
+	// If the fraction is 0, never use canary stats.
+	if threshold == 0 {
+		return false
+	}
+	// If the fraction is 1, always use canary stats.
+	if threshold == 1 {
+		return true
+	}
+
+	actual := rand.Float64()
+	return actual < threshold
 }
 
 // Metadata assigns unique ids to the columns, tables, and other metadata used
@@ -153,12 +194,35 @@ type Metadata struct {
 		depDigest cat.DependencyDigest
 	}
 
+	// useCanaryStats indicates whether this query participates in the canary
+	// statistics rollout feature. When set to true, the optimizer attempts to use
+	// "canary statistics" for all tables referenced by the query.
+	//
+	// This flag is determined probabilistically during query planning based on the
+	// sql.stats.canary_fraction cluster setting. The selection is atomic per query:
+	// either all tables use canary stats (when available) or all use stable stats.
+	//
+	// Canary statistics are newly collected table statistics that are still within
+	// their configured "canary window" (canary_stats_window storage parameter).
+	// These stats provide a controlled way to gradually roll out new statistics
+	// before promoting them to stable, allowing for manual intervention if
+	// performance regressions are detected.
+	//
+	// Stable statistics are the previously established statistics that have either
+	// been promoted from canary status or were collected before canary mode was
+	// enabled for the table.
+	//
+	// Fallback behavior: If a table lacks distinct canary statistics (e.g., only
+	// one statistics version exists, or canary stats have expired), the optimizer
+	// will use the available stable statistics even when this flag is true.
+	useCanaryStats bool
+
 	// NOTE! When adding fields here, update Init (if reusing allocated
 	// data structures is desired), CopyFrom and TestMetadata.
 }
 
 // Init prepares the metadata for use (or reuse).
-func (md *Metadata) Init() {
+func (md *Metadata) Init(evalCtx *eval.Context) {
 	// Clear the metadata objects to release memory (this clearing pattern is
 	// optimized by Go).
 	schemas := md.schemas
@@ -239,6 +303,9 @@ func (md *Metadata) Init() {
 	md.objectRefsByName = objectRefsByName
 	md.privileges = privileges
 	md.builtinRefsByName = builtinRefsByName
+	if !evalCtx.SessionData().Internal {
+		md.useCanaryStats = canaryRollDice(evalCtx)
+	}
 }
 
 // CopyFrom initializes the metadata with a copy of the provided metadata.
@@ -337,6 +404,7 @@ func (md *Metadata) CopyFrom(from *Metadata, copyScalarFn func(Expr) Expr) {
 	md.withBindings = nil
 
 	md.rlsMeta = from.rlsMeta.Copy()
+	md.useCanaryStats = from.useCanaryStats
 }
 
 // MDDepName stores either the unresolved DataSourceName or the StableID from
