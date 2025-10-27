@@ -96,6 +96,10 @@ type EngineMetrics struct {
 	// StatementIndexRowsWritten counts the number of primary and secondary index
 	// rows modified by SQL statements.
 	StatementIndexRowsWritten *metric.Counter
+
+	// StatementIndexBytesWritten counts the number of primary and secondary index
+	// bytes modified by SQL statements.
+	StatementIndexBytesWritten *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
@@ -214,6 +218,7 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.metrics.EngineMetrics.StatementRowsRead.Inc(stats.rowsRead)
 	ex.metrics.EngineMetrics.StatementBytesRead.Inc(stats.bytesRead)
 	ex.metrics.EngineMetrics.StatementIndexRowsWritten.Inc(stats.indexRowsWritten)
+	ex.metrics.EngineMetrics.StatementIndexBytesWritten.Inc(stats.indexBytesWritten)
 
 	if ex.statsCollector.EnabledForTransaction() {
 		recordedStmtStats := &sqlstats.RecordedStmtStats{

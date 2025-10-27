@@ -261,6 +261,7 @@ func (p *planNodeToRowSource) trailingMetaCallback() []execinfrapb.ProducerMetad
 			metrics := execinfrapb.GetMetricsMeta()
 			metrics.RowsWritten = m.rowsWritten()
 			metrics.IndexRowsWritten = m.indexRowsWritten()
+			metrics.IndexBytesWritten = m.indexBytesWritten()
 			meta = []execinfrapb.ProducerMetadata{{Metrics: metrics}}
 		}
 	}

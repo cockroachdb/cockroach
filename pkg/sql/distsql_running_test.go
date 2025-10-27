@@ -1254,23 +1254,25 @@ CREATE TABLE t (k INT PRIMARY KEY, i INT, v INT, INDEX(i));
 INSERT INTO t SELECT i, 1, 1 FROM generate_series(1, 10) AS g(i);
 CREATE FUNCTION no_reads() RETURNS INT AS 'SELECT 1' LANGUAGE SQL;
 CREATE FUNCTION reads() RETURNS INT AS 'SELECT count(*) FROM t' LANGUAGE SQL;
-CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x' LANGUAGE SQL;
+CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT x' LANGUAGE SQL;
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, tc := range []struct {
-		name           string
-		query          string
-		setup, cleanup string // optional
-		expRowsRead    int64
-		expRowsWritten int64
+		name                string
+		query               string
+		setup, cleanup      string // optional
+		expRowsRead         int64
+		expRowsWritten      int64
+		expIndexRowsWritten int64
 	}{
 		{
-			name:           "simple read",
-			query:          "SELECT k FROM t",
-			expRowsRead:    10,
-			expRowsWritten: 0,
+			name:                "simple read",
+			query:               "SELECT k FROM t",
+			expRowsRead:         10,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
 		},
 		{
 			name:    "routine and index join (used to be powered by streamer)",
@@ -1281,12 +1283,14 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x'
 			// then for each row do ten-row-scan in the routine.
 			expRowsRead:    120,
 			expRowsWritten: 0,
+			expIndexRowsWritten: 0,
 		},
 		{
-			name:           "simple write",
-			query:          "INSERT INTO t SELECT generate_series(11, 42)",
-			expRowsRead:    0,
-			expRowsWritten: 32,
+			name:                "simple write",
+			query:               "INSERT INTO t SELECT generate_series(11, 42)",
+			expRowsRead:         0,
+			expRowsWritten:      32,
+			expIndexRowsWritten: 64,
 		},
 		{
 			name: "read with apply join",
@@ -1294,32 +1298,37 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x); SELECT x'
     WITH foo AS MATERIALIZED (SELECT k FROM t AS x WHERE x.k = y.k)
     SELECT * FROM foo
   ) FROM t AS y`,
-			expRowsRead:    84, // scanning the table twice
-			expRowsWritten: 0,
+			expRowsRead:         84, // scanning the table twice
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
 		},
 		{
-			name:           "routine, no reads",
-			query:          "SELECT no_reads()",
-			expRowsRead:    0,
-			expRowsWritten: 0,
+			name:                "routine, no reads",
+			query:               "SELECT no_reads()",
+			expRowsRead:         0,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
 		},
 		{
-			name:           "routine, reads",
-			query:          "SELECT reads()",
-			expRowsRead:    42,
-			expRowsWritten: 0,
+			name:                "routine, reads",
+			query:               "SELECT reads()",
+			expRowsRead:         42,
+			expRowsWritten:      0,
+			expIndexRowsWritten: 0,
 		},
 		{
-			name:           "routine, write",
-			query:          "SELECT write(43)",
-			expRowsRead:    0,
-			expRowsWritten: 1,
+			name:                "routine, write",
+			query:               "SELECT write(43)",
+			expRowsRead:         0,
+			expRowsWritten:      1,
+			expIndexRowsWritten: 2,
 		},
 		{
-			name:           "routine, multiple reads and writes",
-			query:          "SELECT reads(), write(44), reads(), write(45), write(46), reads()",
-			expRowsRead:    133, // first read is 43 rows, second is 44, third is 46
-			expRowsWritten: 3,
+			name:                "routine, multiple reads and writes",
+			query:               "SELECT reads(), write(44), reads(), write(45), write(46), reads()",
+			expRowsRead:         133, // first read is 43 rows, second is 44, third is 46
+			expRowsWritten:      3,
+			expIndexRowsWritten: 6,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
