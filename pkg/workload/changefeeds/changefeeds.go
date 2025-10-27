@@ -182,10 +182,11 @@ func AddChangefeedToQueryLoad(
 			} else {
 				return errors.Errorf("failed to parse CHANGEFEED event: %s", values[2])
 			}
-			// Resolved timestamps arrived infrequently. Always record the time since
-			// our lastResolved so that we don't get long periods of 0 in the
-			// histogram.
-			if cfResolved != nil {
+
+			// Resolved timestamps arrived infrequently. We always record the time
+			// since our lastResolved if we have one. Until we have a resolved
+			// timestamp, the histogram will report 0.
+			if cfResolved != nil && !lastResolved.IsEmpty() {
 				cfResolved.Record(timeutil.Since(lastResolved.GoTime()))
 			}
 			return nil
