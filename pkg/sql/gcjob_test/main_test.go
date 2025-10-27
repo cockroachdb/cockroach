@@ -9,7 +9,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -21,10 +20,6 @@ func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
-	)()
 
 	os.Exit(m.Run())
 }

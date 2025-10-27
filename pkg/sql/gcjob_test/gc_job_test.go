@@ -99,9 +99,11 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	// call to stop the TestServer. Otherwise, the quiesce step of shutting down
 	// can hang forever waiting for the GC job.
 	defer close(blockGC)
-	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sysDB.Exec(t, `SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
 	// Refresh protected timestamp cache immediately to make MVCC GC queue to
 	// process GC immediately.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
@@ -194,10 +196,10 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		b := txn.NewBatch()
-		descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myTableID)
+		descKey := catalogkeys.MakeDescMetadataKey(s.Codec(), myTableID)
 		descDesc := myTableDesc.DescriptorProto()
 		b.Put(descKey, descDesc)
-		descKey2 := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, myOtherTableID)
+		descKey2 := catalogkeys.MakeDescMetadataKey(s.Codec(), myOtherTableID)
 		descDesc2 := myOtherTableDesc.DescriptorProto()
 		b.Put(descKey2, descDesc2)
 		return txn.Run(ctx, b)
@@ -353,7 +355,7 @@ WHERE job_id = %s`, jobID)).Scan(&state, &statusMessage, &jobErr)
 	})
 }
 
-// TestGCTenant is lightweight test that tests the branching logic in Resume
+// TestGCResumer is lightweight test that tests the branching logic in Resume
 // depending on if the job is GC for tenant or tables/indexes.
 func TestGCResumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -362,7 +364,12 @@ func TestGCResumer(t *testing.T) {
 	defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	args := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	}
 	srv, sqlDB, _ := serverutils.StartServer(t, args)
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry
@@ -460,7 +467,9 @@ func TestGCTenant(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	defer srv.Stopper().Stop(ctx)
 
