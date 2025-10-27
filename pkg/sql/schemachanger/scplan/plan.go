@@ -155,9 +155,10 @@ type rulesForRelease struct {
 // rulesForRelease supported rules for each release, this is an ordered array
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
+	// NB: sort versions in descending order, i.e. newest supported version first.
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
-	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
 	{activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
+	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
 }
 
 // minVersionForRules the oldest version supported by the rules.
