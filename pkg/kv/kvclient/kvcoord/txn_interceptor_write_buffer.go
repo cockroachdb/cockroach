@@ -736,13 +736,14 @@ func (twb *txnWriteBuffer) resetBuffer() {
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) createSavepointLocked(ctx context.Context, sp *savepoint) {
+func (twb *txnWriteBuffer) createSavepointLocked(ctx context.Context, sp *savepoint) error {
 	assertTrue(twb.firstExplicitSavepointSeq <= sp.seqNum,
 		"sequence number in created savepoint lower than retained savepoint")
 
 	if twb.firstExplicitSavepointSeq == enginepb.TxnSeq(0) {
 		twb.firstExplicitSavepointSeq = sp.seqNum
 	}
+	return nil
 }
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
@@ -753,7 +754,7 @@ func (twb *txnWriteBuffer) releaseSavepointLocked(ctx context.Context, sp *savep
 }
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) {
+func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s savepoint) error {
 	toDelete := make([]*bufferedWrite, 0)
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
@@ -809,6 +810,7 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 	if twb.firstExplicitSavepointSeq == s.seqNum {
 		twb.firstExplicitSavepointSeq = 0
 	}
+	return nil
 }
 
 // closeLocked implements the txnInterceptor interface.

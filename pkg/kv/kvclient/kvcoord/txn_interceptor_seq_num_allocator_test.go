@@ -493,8 +493,8 @@ func TestSequenceNumberAllocationAfterLeafInitialization(t *testing.T) {
 	require.NotNil(t, br)
 }
 
-// TestSequenceNumberAllocationSavepoint tests that the allocator populates a
-// savepoint with the cur seq num.
+// TestSequenceNumberAllocationSavepoint tests that the allocator bumps the
+// current seq num and populates a savepoint with the new seq num.
 func TestSequenceNumberAllocationSavepoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -520,6 +520,6 @@ func TestSequenceNumberAllocationSavepoint(t *testing.T) {
 	require.Equal(t, enginepb.TxnSeq(2), s.writeSeq)
 
 	sp := &savepoint{}
-	s.createSavepointLocked(ctx, sp)
-	require.Equal(t, enginepb.TxnSeq(2), s.writeSeq)
+	require.NoError(t, s.createSavepointLocked(ctx, sp))
+	require.Equal(t, enginepb.TxnSeq(3), s.writeSeq)
 }
