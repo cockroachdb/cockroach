@@ -476,9 +476,32 @@ func (h *BatchTruncationHelper) Truncate(
 // non-trivial slowdown and increase in allocations, so we choose to duplicate
 // the code for performance.
 func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUnion, []int, error) {
-	var truncReqs []kvpb.RequestUnion
-	var positions []int
+	endIdx := len(h.positions) - 1
+	fullyProcessed := 0
 	for i := h.startIdx; i < len(h.positions); i++ {
+		pos := h.positions[i]
+		if pos < 0 {
+			fullyProcessed++
+			continue
+		}
+		header := h.headers[i]
+		ek := rs.EndKey.AsRawKey()
+		if ek.Compare(header.Key) <= 0 {
+			// All of the remaining requests start after this range, so we're
+			// done.
+			endIdx = i - 1
+			break
+		}
+	}
+
+	numReqs := endIdx - h.startIdx - fullyProcessed + 1
+	if numReqs == 0 {
+		return nil, nil, nil
+	}
+	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
+	positions := make([]int, 0, numReqs)
+
+	for i := h.startIdx; i <= endIdx; i++ {
 		pos := h.positions[i]
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
@@ -489,11 +512,6 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 		// rs.EndKey can't be local because it contains range split points,
 		// which are never local.
 		ek := rs.EndKey.AsRawKey()
-		if ek.Compare(header.Key) <= 0 {
-			// All of the remaining requests start after this range, so we're
-			// done.
-			break
-		}
 		if !h.isRange[i] {
 			// This is a point request, and the key is contained within this
 			// range, so we include the request as is and mark it as "fully
@@ -635,9 +653,32 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 // non-trivial slowdown and increase in allocations, so we choose to duplicate
 // the code for performance.
 func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUnion, []int, error) {
-	var truncReqs []kvpb.RequestUnion
-	var positions []int
+	endIdx := len(h.positions) - 1
+	fullyProcessed := 0
 	for i := h.startIdx; i < len(h.positions); i++ {
+		pos := h.positions[i]
+		if pos < 0 {
+			fullyProcessed++
+			continue
+		}
+		header := h.headers[i]
+		sk := rs.Key.AsRawKey()
+		if sk.Compare(header.EndKey) >= 0 {
+			// All of the remaining requests end before this range, so we're
+			// done.
+			endIdx = i - 1
+			break
+		}
+	}
+
+	numReqs := endIdx - h.startIdx - fullyProcessed + 1
+	if numReqs == 0 {
+		return nil, nil, nil
+	}
+	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
+	positions := make([]int, 0, numReqs)
+
+	for i := h.startIdx; i <= endIdx; i++ {
 		pos := h.positions[i]
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
@@ -648,11 +689,6 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 		// rs.Key can't be local because it contains range split points, which
 		// are never local.
 		sk := rs.Key.AsRawKey()
-		if sk.Compare(header.EndKey) >= 0 {
-			// All of the remaining requests end before this range, so we're
-			// done.
-			break
-		}
 		if !h.isRange[i] {
 			// This is a point request, and the key is contained within this
 			// range, so we include the request as is and mark it as "fully
