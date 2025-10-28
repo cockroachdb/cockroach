@@ -4255,6 +4255,7 @@ sql_safe_updates                                                 off
 ssl                                                              on
 standard_conforming_strings                                      on
 statement_timeout                                                0
+stats_as_of                                                      ·
 streamer_always_maintain_ordering                                off
 streamer_enabled                                                 on
 streamer_head_of_line_only_fraction                              0.8
