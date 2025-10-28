@@ -759,6 +759,10 @@ message LocalOnlySessionData {
   // canary statistics (mode == on), stable statistics (mode == off), or
   // let the system decide based on random selection (mode == auto).
   int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // StatsAsOf is an optional timestamp that, when set, stats selection
+  // will be based on the age gap between the stats creation timestamp and
+  // the StatsAsOf timestamp, rather than the current time.
+  util.hlc.Timestamp stats_as_of = 194 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

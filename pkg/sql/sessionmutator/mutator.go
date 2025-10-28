@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/redact"
@@ -1109,4 +1110,8 @@ func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
 
 func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMode) {
 	m.Data.CanaryStatsMode = val
+}
+
+func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {
+	m.Data.StatsAsOf = val
 }
