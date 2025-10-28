@@ -54,17 +54,7 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 	// test is done to pacify the dead node detector. Do this after the
 	// clock offset is reset or the node will crash again.
 	var aliveAfterOffset bool
-	defer func() {
-		offsetInjector.recover(ctx, c.Spec().NodeCount)
-		// Resetting the clock is a jump in the opposite direction which
-		// can cause a crash even if the original jump didn't. Wait a few
-		// seconds before checking whether the node is alive and
-		// restarting it if not.
-		time.Sleep(3 * time.Second)
-		if !isAlive(db, t.L()) {
-			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
-		}
-	}()
+
 	defer offsetInjector.recover(ctx, c.Spec().NodeCount)
 	offsetInjector.offset(ctx, c.Spec().NodeCount, tc.offset)
 
@@ -76,6 +66,13 @@ func runClockJump(ctx context.Context, t test.Test, c cluster.Cluster, tc clockJ
 	if aliveAfterOffset != tc.aliveAfterOffset {
 		t.Fatalf("Expected node health %v, got %v", tc.aliveAfterOffset, aliveAfterOffset)
 	}
+
+	// Resetting the clock is a jump in the opposite direction which can cause a
+	// crash even if the original jump didn't. Since we do not control when
+	// exactly the clock jumps, we simply stop and wipe the node (which also
+	// prevents the post-test assertions from complaining about a down node).
+	c.Wipe(ctx, c.All())
+	offsetInjector.recover(ctx, c.Spec().NodeCount)
 }
 
 type clockJumpTestCase struct {
