@@ -181,7 +181,9 @@ func (ubr *unbufferedRegistration) disconnectLocked(pErr *kvpb.Error) {
 	}
 	ubr.mu.disconnected = true
 	ubr.stream.SendError(pErr)
-	ubr.removeRegFromProcessor(ubr)
+	// NB: The unbuffered registration does not unregister itself on Disconnect
+	// because it still has memory in the buffered sender and we do not want to
+	// free any underlying memory budgets until that has been cleared.
 }
 
 // IsDisconnected returns true if the registration is disconnected.
@@ -189,6 +191,12 @@ func (ubr *unbufferedRegistration) IsDisconnected() bool {
 	ubr.mu.Lock()
 	defer ubr.mu.Unlock()
 	return ubr.mu.disconnected
+}
+
+// Unregister implements Disconnector.
+func (ubr *unbufferedRegistration) Unregister() {
+	assertTrue(ubr.IsDisconnected(), "connected registration in Unregister")
+	ubr.removeRegFromProcessor(ubr)
 }
 
 // runOutputLoop is run in a goroutine. It is responsible for running the

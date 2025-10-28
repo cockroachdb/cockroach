@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -36,6 +37,8 @@ import (
 
 func TestProcessorBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 		ctx := context.Background()
@@ -349,6 +352,8 @@ func TestProcessorBasic(t *testing.T) {
 
 func TestProcessorOmitRemote(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 		ctx := context.Background()
@@ -434,6 +439,8 @@ func TestProcessorOmitRemote(t *testing.T) {
 // doesn't apply to unbuffered registrations.
 func TestProcessorSlowConsumer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", []rangefeedTestType{scheduledProcessorWithUnbufferedSender},
 		func(t *testing.T, rt rangefeedTestType) {
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
@@ -540,6 +547,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 // result of budget exhaustion.
 func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		fb := newTestBudget(40)
 		m := NewMetrics()
@@ -597,6 +606,8 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 // TestProcessorMemoryBudgetReleased that memory budget is correctly released.
 func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		fb := newTestBudget(250)
 		p, h, stopper := newTestProcessor(t, withBudget(fb), withChanTimeout(15*time.Minute),
@@ -647,6 +658,7 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 // until it has consumed all intents in the iterator.
 func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		txn1 := makeTxn("txn1", uuid.MakeV4(), isolation.Serializable, hlc.Timestamp{})
@@ -748,6 +760,7 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 
 func TestProcessorTxnPushAttempt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		ts10 := hlc.Timestamp{WallTime: 10}
@@ -931,6 +944,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 // push notifications when disabled.
 func TestProcessorTxnPushDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const pushInterval = 10 * time.Millisecond
 
@@ -991,6 +1005,8 @@ func TestProcessorTxnPushDisabled(t *testing.T) {
 // not then it would be possible for them to deadlock.
 func TestProcessorConcurrentStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 
 		ctx := context.Background()
@@ -1044,6 +1060,8 @@ func TestProcessorConcurrentStop(t *testing.T) {
 // observes only operations that are consumed after it has registered.
 func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 
 		p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
@@ -1104,6 +1122,8 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 
 func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	const totalEvents = 100
 
 	// Channel capacity is used in two places, processor channel and registration
@@ -1196,6 +1216,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 // budget for discarded pending events is returned.
 func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const totalEvents = 100
 
@@ -1264,6 +1285,7 @@ func newTestBudget(limit int64) *FeedBudget {
 // events.
 func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	const totalEvents = 100
 
@@ -1460,6 +1482,7 @@ func TestSizeOfEvent(t *testing.T) {
 // 0 will backpressure senders when a consumer isn't keeping up.
 func TestProcessorBackpressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -1534,6 +1557,7 @@ func TestProcessorBackpressure(t *testing.T) {
 // handled by the scheduler.
 func TestProcessorContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	// Try stopping both via the stopper and via Processor.Stop().
 	testutils.RunTrueAndFalse(t, "stopper", func(t *testing.T, useStopper bool) {
@@ -1590,6 +1614,7 @@ func TestProcessorContextCancellation(t *testing.T) {
 // to start gracefully.
 func TestIntentScannerOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -1618,18 +1643,113 @@ func TestIntentScannerOnError(t *testing.T) {
 	}
 	err := s.Start(stopper, erroringScanConstructor)
 	require.ErrorContains(t, err, "scanner error")
+}
 
-	// The processor should be stopped eventually.
-	p := (s).(*ScheduledProcessor)
-	testutils.SucceedsSoon(t, func() error {
-		select {
-		case <-p.stoppedC:
-			_, ok := sch.shards[shardIndex(p.ID(), len(sch.shards), p.Priority)].procs[p.ID()]
-			require.False(t, ok)
-			require.False(t, sch.priorityIDs.Contains(p.ID()))
-			return nil
-		default:
-			return errors.New("processor not stopped")
+// TestProcessorMemoryAccountingOnError tests that when a
+// buffered sender disconnects because of an error, the memory budget continues
+// to account for any previously buffered events until they are actually sent.
+//
+// Note, this tests the case where the error is a memory overflow, but any error
+// that disconnects our registration could have been used.
+func TestProcessorMemoryAccountingOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	queueCap := int64(10)
+	streamID := int64(1)
+
+	st := cluster.MakeTestingClusterSettings()
+	RangefeedSingleBufferedSenderQueueMaxPerReg.Override(ctx, &st.SV, queueCap)
+
+	fb := newTestBudget(math.MaxInt64)
+	testServerStream := newTestServerStream()
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+
+	smMetrics := NewStreamManagerMetrics()
+	sm := NewStreamManager(bs, smMetrics)
+	require.NoError(t, sm.Start(ctx, stopper))
+	defer sm.Stop(ctx)
+
+	// Create a processor with our budget.
+	p, h, pStopper := newTestProcessor(t,
+		withBudget(fb),
+		withRangefeedTestType(scheduledProcessorWithBufferedSender))
+	defer pStopper.Stop(ctx)
+
+	// Block the sender so the buffer will fill up.
+	unblock := testServerStream.BlockSend()
+	defer func() {
+		if unblock != nil {
+			unblock()
 		}
+	}()
+
+	startTime := hlc.Timestamp{WallTime: 1}
+	sm.RegisteringStream(streamID)
+	registered, d, _ := p.Register(
+		ctx,
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		startTime,
+		nil,   /* catchUpIter */
+		false, /* withDiff */
+		false, /* withFiltering */
+		false, /* withOmitRemote */
+		noBulkDelivery,
+		sm.NewStream(streamID, 1 /* rangeID */),
+	)
+	require.True(t, registered)
+	sm.AddStream(streamID, d)
+
+	// Overflow the queue.
+	for i := range queueCap + 1 {
+		v := writeValueOpWithKV(roachpb.Key("k"), hlc.Timestamp{WallTime: startTime.WallTime + i + 1}, []byte("val"))
+		require.True(t, p.ConsumeLogicalOps(ctx, v))
+	}
+
+	// Once all events have been sent to the registration, we should be overflowed
+	// and disconnection.
+	h.syncEventC()
+	testutils.SucceedsSoon(t, func() error {
+		if d.IsDisconnected() {
+			return nil
+		}
+		return errors.New("waiting for registration to disconnect")
+	})
+
+	// At this point, the registration should be disconnected but the buffered
+	// sender still has events in its queue. Assert that the memory budget still
+	// accounts for the memory in that queue.
+	//
+	// NB: This could be racy if change the structure of the code in the future.
+	// Namely, perhaps it isn't zero, now, but perhaps it becomes zero at some
+	// time in the future. We try to defend against that here by sending 2 sync
+	// events to help ensure we've definitely processed any processor requests.
+	//
+	// At the time this test was written, this test caught the bug on every run.
+	h.syncEventC()
+	h.syncEventC()
+
+	fb.mu.Lock()
+	budgetUsed := fb.mu.memBudget.Used()
+	fb.mu.Unlock()
+	require.Greater(t, budgetUsed, int64(0),
+		"memory budget should still account for events in buffered sender after overflow")
+
+	// Unblocking the sender should drain the queue and free everything from the
+	// memory budget.
+	unblock()
+	unblock = nil
+
+	testutils.SucceedsSoon(t, func() error {
+		fb.mu.Lock()
+		defer fb.mu.Unlock()
+		if used := fb.mu.memBudget.Used(); used != 0 {
+			return errors.Errorf("budget still has %d bytes allocated", used)
+		}
+		return nil
 	})
 }

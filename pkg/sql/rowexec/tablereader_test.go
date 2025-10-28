@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/gogo/protobuf/types"
@@ -121,7 +121,7 @@ func TestTableReader(t *testing.T) {
 				copy(ts.Spans, c.spec.Spans)
 
 				st := s.ClusterSettings()
-				evalCtx := eval.MakeTestingEvalContext(st)
+				evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 				defer evalCtx.Stop(ctx)
 				flowCtx := execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
@@ -187,12 +187,20 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
+	rng, _ := randutil.NewTestRand()
+	// This test isn't supported for external-process mode (we don't emit the
+	// misplanned range metadata there), so we have our own randomization logic
+	// that excludes that mode and gives 50% to two other modes each.
+	testTenantOption := base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+	if rng.Float64() < 0.5 {
+		testTenantOption = base.SharedTestTenantAlwaysEnabled
+	}
 	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
+				UseDatabase:       "test",
+				DefaultTestTenant: testTenantOption,
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
@@ -216,7 +224,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	st := s.ClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 
 	// Ensure the evalCtx is connected to the server's ID container, so they
@@ -326,7 +334,7 @@ func TestTableReaderDrain(t *testing.T) {
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	st := s.ClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), srv.NodeID())
@@ -383,7 +391,7 @@ func TestLimitScans(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 
 	st := s.ClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 	evalCtx.TestingKnobs.ForceProductionValues = true
 	flowCtx := execinfra.FlowCtx{
@@ -435,14 +443,11 @@ func TestLimitScans(t *testing.T) {
 		t.Fatalf("expected %d rows, got: %d", limit, rows)
 	}
 
-	skip.UnderMetamorphic(t, "the rest of this test isn't metamorphic: its output "+
-		"depends on the batch size, which varies the number of spans searched.")
-
 	// We're now going to count how many distinct scans we've done. This regex is
 	// specific so that we don't count range resolving requests, and we dedupe
 	// scans from the same key as the DistSender retries scans when it detects
 	// splits.
-	re := regexp.MustCompile(fmt.Sprintf(`querying next range at /Table/%d/1(\S.*)?`, tableDesc.GetID()))
+	re := regexp.MustCompile(fmt.Sprintf(`querying next range at (/Tenant/\d+)?/Table/%d/1(\S.*)?`, tableDesc.GetID()))
 	spans := sp.GetConfiguredRecording()
 	ranges := make(map[string]struct{})
 	for _, span := range spans {
@@ -486,7 +491,7 @@ func BenchmarkTableReader(b *testing.B) {
 	s := srv.ApplicationLayer()
 
 	st := s.ClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(ctx)
 
 	const numCols = 2

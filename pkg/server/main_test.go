@@ -27,7 +27,7 @@ func TestMain(m *testing.M) {
 	kvtenant.InitTestConnectorFactory()
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156304),
 	)()
 
 	defer serverutils.TestingGlobalDRPCOption(
