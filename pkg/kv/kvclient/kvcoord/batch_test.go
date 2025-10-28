@@ -642,7 +642,6 @@ func BenchmarkTruncateLoop(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	rng, _ := randutil.NewTestRand()
 	const keyLength = 8
 	for _, scanDir := range []ScanDirection{Ascending, Descending} {
 		for _, mustPreserveOrder := range []bool{false, true} {
@@ -650,6 +649,7 @@ func BenchmarkTruncateLoop(b *testing.B) {
 				for _, numRanges := range []int{4, 64} {
 					// We'll split the whole key space into numRanges ranges
 					// using random numRanges-1 split points.
+					rng := randutil.NewTestRandWithSeed(51)
 					rangeSpans := makeRanges(rng, numRanges, keyLength)
 					if scanDir == Descending {
 						// Reverse all the range spans for the Descending scan
