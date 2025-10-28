@@ -902,6 +902,7 @@ var cockroachdbMetrics = map[string]string{
     "jobs_inspect_resume_retry_error": "jobs.inspect.resume_retry_error",
     "jobs_inspect_runs": "jobs.inspect.runs",
     "jobs_inspect_runs_with_issues": "jobs.inspect.runs_with_issues",
+    "jobs_inspect_spans_processed": "jobs.inspect.spans_processed",
     "jobs_key_visualizer_currently_idle": "jobs.key_visualizer.currently_idle",
     "jobs_key_visualizer_currently_paused": "jobs.key_visualizer.currently_paused",
     "jobs_key_visualizer_currently_running": "jobs.key_visualizer.currently_running",
