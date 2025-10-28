@@ -38,7 +38,7 @@ func registerKerberosConnectionStressTest(r registry.Registry) {
 		Name:      "kerberos_connection_stress_test",
 		Owner:     registry.OwnerProductSecurity,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(numNodes, spec.GCEZones(regionUsCentral)),
+		Cluster:   r.MakeClusterSpec(numNodes, spec.GCEZones(regionUsCentral), spec.Arch(spec.OnlyAMD64)),
 		// Cannot be run locally as it is dependent on Linux.
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
