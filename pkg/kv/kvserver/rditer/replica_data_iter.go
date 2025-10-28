@@ -183,7 +183,7 @@ func MakeReplicatedKeySpansExcludingUser(d *roachpb.RangeDescriptor) []roachpb.S
 // 3. User key span.
 func makeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
-		makeRangeIDReplicatedSpan(d.RangeID),
+		MakeRangeIDReplicatedSpan(d.RangeID),
 		makeRangeLocalKeySpan(d.RSpan()),
 		d.KeySpan().AsRawSpanWithNoLocals(),
 	}
@@ -196,12 +196,12 @@ func makeReplicatedKeySpansExceptLockTable(d *roachpb.RangeDescriptor) []roachpb
 // 2. Range-local key span.
 func makeReplicatedKeySpansExcludingUserAndLockTable(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return []roachpb.Span{
-		makeRangeIDReplicatedSpan(d.RangeID),
+		MakeRangeIDReplicatedSpan(d.RangeID),
 		makeRangeLocalKeySpan(d.RSpan()),
 	}
 }
 
-func makeRangeIDReplicatedSpan(rangeID roachpb.RangeID) roachpb.Span {
+func MakeRangeIDReplicatedSpan(rangeID roachpb.RangeID) roachpb.Span {
 	prefix := keys.MakeRangeIDReplicatedPrefix(rangeID)
 	return roachpb.Span{
 		Key:    prefix,
