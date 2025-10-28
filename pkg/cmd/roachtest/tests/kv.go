@@ -460,6 +460,7 @@ func registerKVContention(r registry.Registry) {
 func registerKVQuiescenceDead(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:                "kv/quiescence/nodes=3",
+		Skip:                "https://github.com/cockroachdb/cockroach/issues/156357",
 		Owner:               registry.OwnerKV,
 		Cluster:             r.MakeClusterSpec(4, spec.WorkloadNode()),
 		CompatibleClouds:    registry.AllExceptAWS,
