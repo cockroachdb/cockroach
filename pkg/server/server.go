@@ -2154,7 +2154,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* unauthenticatedGWMux */
 		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		s.inspectzServer,             /* handleInspectzUnauthenticated */

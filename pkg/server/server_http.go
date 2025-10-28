@@ -144,9 +144,6 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 })
 
 // setupRoutes configures HTTP routes for the server.
-//
-// TODO(shubham,server): Remove unauthenticatedGWMux once apiinternal supports
-// all RPC prefixes.
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -155,7 +152,6 @@ func (s *httpServer) setupRoutes(
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
-	unauthenticatedGWMux http.Handler,
 	unauthenticatedAPIInternalServer http.Handler,
 	handleDebugUnauthenticated http.Handler,
 	handleInspectzUnauthenticated http.Handler,
@@ -205,19 +201,17 @@ func (s *httpServer) setupRoutes(
 
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
-	var authenticatedGWMux = unauthenticatedGWMux
 	var stmtBundleHandlerFunc = http.HandlerFunc(adminServer.StmtBundleHandler)
 	var txnBundleHandlerFunc = http.HandlerFunc(adminServer.TxnBundleHandler)
 	if !s.cfg.InsecureWebAccess() {
-		authenticatedGWMux = authserver.NewMux(authnServer, authenticatedGWMux, false /* allowAnonymous */)
 		stmtBundleHandlerFunc = authserver.NewMux(authnServer, stmtBundleHandlerFunc, false).ServeHTTP
 		txnBundleHandlerFunc = authserver.NewMux(authnServer, txnBundleHandlerFunc, false).ServeHTTP
 	}
 
 	// Login and logout paths.
 	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(authserver.LoginPath, unauthenticatedGWMux)
-	s.mux.Handle(authserver.LogoutPath, authenticatedGWMux)
+	s.mux.Handle(authserver.LoginPath, unauthenticatedAPIInternalServer)
+	s.mux.Handle(authserver.LogoutPath, authenticatedAPIInternalServer)
 	s.mux.Handle(virtualClustersPath, virtualClustersHandler)
 	// The login path for 'cockroach demo', if we're currently running
 	// that.
