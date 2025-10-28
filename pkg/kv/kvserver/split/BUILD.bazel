@@ -35,6 +35,7 @@ go_test(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
