@@ -7,6 +7,7 @@ package catalog
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -878,6 +879,9 @@ type TableDescriptor interface {
 	// security for the table and false if it is no force. When forced is
 	// set the table's RLS policies are enforced even on the table owner.
 	IsRowLevelSecurityForced() bool
+	// GetStatsCanaryWindow returns the canary statistics rollout duration.
+	// See TableDescriptor.StatsCanaryWindow for details.
+	GetStatsCanaryWindow() time.Duration
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

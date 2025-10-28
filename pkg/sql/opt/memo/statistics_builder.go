@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -659,6 +661,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
+	tabMeta := sb.md.TableMeta(tabID)
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
@@ -680,13 +683,41 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
+	useCanary := sb.mem.useCanaryStats == eval.UseCanaryStatsValTrue
+	var skippedStatsCreationTimestamp time.Time
+	statsCanaryWindow := tabMeta.StatsCanaryWindow
 	// Find the most recent full statistic. (Stats are ordered with most recent first.)
 	var first int
-	for first < tab.StatisticCount() &&
-		(tab.Statistic(first).IsPartial() ||
-			tab.Statistic(first).IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
-			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
-		first++
+	sd := sb.evalCtx.SessionData()
+	for first < tab.StatisticCount() {
+		stat := tab.Statistic(first)
+		if stat.IsPartial() ||
+			stat.IsMerged() && !sd.OptimizerUseMergedPartialStatistics ||
+			stat.IsForecast() && !sd.OptimizerUseForecasts {
+			first++
+			continue
+		} else if statsCanaryWindow > 0 && !useCanary && first < tab.StatisticCount()-1 {
+			// The following, we are getting full statistics for the stable stats,
+			// in contrast to the canary stats. The canary stats is skipped.
+			// If there remains only one full statistics, don't skip.
+			createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+			if stat.CreatedAt() == skippedStatsCreationTimestamp && !skippedStatsCreationTimestamp.IsZero() {
+				// We've already seen this canary stat, so skip it.
+				first++
+				continue
+			}
+			// Found a canary stats (defined as creation time within the canary window size). Register the
+			// creation timestamp and move on the next older one.
+			if createdAtTS.AddDuration(statsCanaryWindow).After(hlc.Timestamp{WallTime: time.Now().UnixNano()}) {
+				// If there is already a canary stats skipped, we don't skip again.
+				if skippedStatsCreationTimestamp.IsZero() {
+					skippedStatsCreationTimestamp = stat.CreatedAt()
+					first++
+					continue
+				}
+			}
+		}
+		break
 	}
 
 	if first >= tab.StatisticCount() {

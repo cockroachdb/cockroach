@@ -205,6 +205,9 @@ type Table interface {
 
 	// Policies returns all the policies defined for this table.
 	Policies() *Policies
+
+	// StatsCanaryWindow returns the canary window size for the table.
+	StatsCanaryWindow() time.Duration
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
