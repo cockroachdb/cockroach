@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats/bounds"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -307,7 +308,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		typeResolver = &r
 	}
 	// Fetch all stats for the table that matches the given table descriptor.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, false /* stable */, 0 /* canaryWindowSize */)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return nil, err
 	}
@@ -729,7 +730,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
 		typeResolver = &r
 	}
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, false /* stable */, 0 /* canaryWindowSize */)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return nil, err
 	}

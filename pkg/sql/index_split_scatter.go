@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -70,7 +71,7 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 		return nil, nil
 	}
 	// Fetch the current statistics for this table.
-	tableStats, err := is.statsCache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */)
+	tableStats, err := is.statsCache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return nil, err
 	}
