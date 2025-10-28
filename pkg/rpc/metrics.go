@@ -521,6 +521,14 @@ func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
 	return drpcmetadata.Add(ctx, gwRequestKey, "true")
 }
 
+// IsDRPCGatewayRequest returns true if the context was marked as a DRPC gateway request.
+func IsDRPCGatewayRequest(ctx context.Context) bool {
+	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
+		return true
+	}
+	return false
+}
+
 // DRPCGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
 // that are invoked due to DB console requests. For these requests, we do not
 // want an uncaught panic to crash the node.

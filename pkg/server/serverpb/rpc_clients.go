@@ -82,3 +82,23 @@ func DialAdminClientNoBreaker(
 	return nodedialer.DialRPCClientNoBreaker(nd, ctx, nodeID, rpcbase.DefaultClass,
 		NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter)
 }
+
+// DialLogInClient establishes a DRPC connection if enabled; otherwise, it
+// falls back to gRPC. The established connection is used to create a
+// RPCLogInClient.
+func DialLogInClient(
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
+) (RPCLogInClient, error) {
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		NewGRPCLogInClientAdapter, NewDRPCLogInClientAdapter, cs)
+}
+
+// DialLogOutClient establishes a DRPC connection if enabled; otherwise, it
+// falls back to gRPC. The established connection is used to create a
+// RPCLogOutClient.
+func DialLogOutClient(
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
+) (RPCLogOutClient, error) {
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		NewGRPCLogOutClientAdapter, NewDRPCLogOutClientAdapter, cs)
+}

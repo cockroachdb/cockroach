@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -48,6 +49,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcmetadata"
 )
 
 const (
@@ -249,7 +251,11 @@ func (s *authenticationServer) UserLogin(
 		return nil, srverrors.APIInternalError(ctx, err)
 	}
 
-	// Set the cookie header on the outgoing response.
+	if rpc.IsDRPCGatewayRequest(ctx) {
+		return &serverpb.UserLoginResponse{Cookie: cookie.String()}, nil
+	}
+
+	// For gRPC-gateway, set the cookie header on the outgoing response
 	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
 	}
@@ -390,20 +396,30 @@ func (s *authenticationServer) createSessionFor(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
-	md, ok := grpcutil.FastFromIncomingContext(ctx)
-	if !ok {
-		return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
-	}
-	sessionIDs := md.Get(webSessionIDKeyStr)
-	if len(sessionIDs) != 1 {
-		return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
+	var sessionIDStr string
+	if rpc.IsDRPCGatewayRequest(ctx) {
+		val, ok := drpcmetadata.GetValue(ctx, webSessionIDKeyStr)
+		if !ok || val == "" {
+			return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get session ID from DRPC context"))
+		}
+		sessionIDStr = val
+	} else {
+		md, ok := grpcutil.FastFromIncomingContext(ctx)
+		if !ok {
+			return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
+		}
+		sessionIDs := md.Get(webSessionIDKeyStr)
+		if len(sessionIDs) != 1 {
+			return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get session ID from gRPC context"))
+		}
+		sessionIDStr = sessionIDs[0]
 	}
 
-	sessionID, err := strconv.Atoi(sessionIDs[0])
+	sessionID, err := strconv.Atoi(sessionIDStr)
 	if err != nil {
 		return nil, status.Errorf(
 			codes.InvalidArgument,
-			"invalid session id: %d", sessionID)
+			"invalid session id: %s", sessionIDStr)
 	}
 
 	// Revoke the session.
@@ -429,7 +445,11 @@ func (s *authenticationServer) UserLogout(
 	cookie := CreateSessionCookie("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
-	// Set the cookie header on the outgoing response.
+	if rpc.IsDRPCGatewayRequest(ctx) {
+		return &serverpb.UserLogoutResponse{Cookie: cookie.String()}, nil
+	}
+
+	// For gRPC-gateway, set the cookie header on the outgoing response
 	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
 	}

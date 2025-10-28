@@ -58,6 +58,8 @@ type apiInternalServer struct {
 	status     serverpb.RPCStatusClient
 	admin      serverpb.RPCAdminClient
 	timeseries tspb.RPCTimeSeriesClient
+	login      serverpb.RPCLogInClient
+	logout     serverpb.RPCLogOutClient
 }
 
 // NewAPIInternalServer creates a new REST API server that proxies to internal
@@ -89,16 +91,29 @@ func NewAPIInternalServer(
 		return nil, err
 	}
 
+	login, err := serverpb.DialLogInClient(nd, ctx, localNodeID, cs)
+	if err != nil {
+		return nil, err
+	}
+
+	logout, err := serverpb.DialLogOutClient(nd, ctx, localNodeID, cs)
+	if err != nil {
+		return nil, err
+	}
+
 	r := &apiInternalServer{
 		status:     status,
 		admin:      admin,
 		timeseries: timeseries,
+		login:      login,
+		logout:     logout,
 		mux:        mux.NewRouter(),
 	}
 
 	r.registerStatusRoutes()
 	r.registerAdminRoutes()
 	r.registerTimeSeriesRoutes()
+	r.registerAuthenticationRoutes()
 
 	decoder.SetAliasTag("json")
 	decoder.IgnoreUnknownKeys(true)
@@ -165,6 +180,7 @@ func executeRPC[TReq, TResp protoutil.Message](
 	if err != nil {
 		return err
 	}
+	handleAuthCookies(w, resp)
 	return writeResponse(ctx, w, req, http.StatusOK, resp)
 }
 
@@ -174,6 +190,25 @@ func decodePathVars[TReq protoutil.Message](rpcReq TReq, vars map[string]string)
 		pathParams[k] = []string{v}
 	}
 	return decoder.Decode(rpcReq, pathParams)
+}
+
+// handleAuthCookies checks if the response contains authentication cookie information
+// and sets the appropriate HTTP cookie headers.
+func handleAuthCookies(w http.ResponseWriter, resp protoutil.Message) {
+	switch r := resp.(type) {
+	case *serverpb.UserLoginResponse:
+		if r.Cookie != "" {
+			w.Header().Add("Set-Cookie", r.Cookie)
+			// Clear the cookie to avoid sending it in the response json body
+			r.Cookie = ""
+		}
+	case *serverpb.UserLogoutResponse:
+		if r.Cookie != "" {
+			w.Header().Add("Set-Cookie", r.Cookie)
+			// Clear the cookie to avoid sending it in the response json body
+			r.Cookie = ""
+		}
+	}
 }
 
 // writeHTTPError converts an error to an HTTP error response. It handles gRPC

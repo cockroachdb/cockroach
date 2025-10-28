@@ -18,11 +18,13 @@ message UserLoginRequest {
 	string password = 2;
 }
 
-// UserLoginResponse is currently empty. If a login is successful, an HTTP
-// Set-Cookie header will be added to the response with a session
-// cookie identifying the created session.
+// UserLoginResponse contains the session cookie to be set after successful login.
+// When using DRPC HTTP, the cookie is returned in the response and the handler
+// sets it as an HTTP cookie. When using gRPC-gateway, the cookie is set via
+// gRPC metadata headers.
 message UserLoginResponse {
-	// No information to return.
+	// The session cookie to be set in the HTTP response (only for DRPC HTTP endpoints).
+	string cookie = 1;
 }
 
 // UserLogoutRequest will terminate the current session in use. The request
@@ -33,7 +35,8 @@ message UserLogoutRequest {
 }
 
 message UserLogoutResponse {
-	// No information to return.
+	// The cookie to be cleared in the HTTP response (only for DRPC HTTP endpoints).
+	string cookie = 1;
 }
 
 // SessionCookie is a message used to encode the authentication cookie returned
