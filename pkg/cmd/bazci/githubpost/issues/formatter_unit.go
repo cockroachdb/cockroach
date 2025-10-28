@@ -76,13 +76,15 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		r.CodeBlock("", fnr.FatalLogs)
 		if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
 			r.Escaped("Cluster Node to Ip Mapping:")
-			r.CodeBlock("", nodeIpMap.NodeToIpMapping)
+			r.nl()
+			r.Escaped(nodeIpMap.NodeToIpMapping)
 		}
 	} else if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
 		r.Escaped("Failed with:")
 		r.CodeBlock("", nodeIpMap.Message)
 		r.Escaped("Cluster Node to Ip Mapping:")
-		r.CodeBlock("", nodeIpMap.NodeToIpMapping)
+		r.nl()
+		r.Escaped(nodeIpMap.NodeToIpMapping)
 	} else {
 		r.CodeBlock("", data.CondensedMessage.Digest(50))
 	}
