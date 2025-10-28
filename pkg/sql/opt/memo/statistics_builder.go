@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -659,6 +661,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
+	tabMeta := sb.md.TableMeta(tabID)
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
@@ -680,7 +683,28 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	// Make now and annotate the metadata table with it for next time.
 	stats = &props.Statistics{}
 
-	first := cat.FindLatestFullStat(tab, sb.evalCtx.SessionData())
+	statsCanaryWindow := tabMeta.StatsCanaryWindow
+	sd := sb.evalCtx.SessionData()
+
+	first := cat.FindLatestFullStat(0 /* start */, tab, sd, hlc.MaxTimestamp, true /* inclusive */)
+	// If we are going to select the stable stat and there are still more stats,
+	// try to see if we should skip the current full stats and look for the second
+	// most recent full stat.
+	if statsCanaryWindow > 0 && !sb.evalCtx.UseCanaryStats && first < tab.StatisticCount() {
+		stat := tab.Statistic(first)
+		createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+		// If the most recent full stat is within the canary window, try look for the
+		// second most recent full stat who is created strictly earlier than the
+		// current one.
+		if createdAtTS.AddDuration(statsCanaryWindow).After(hlc.Timestamp{WallTime: time.Now().UnixNano()}) {
+			nextFullStatsIdx := cat.FindLatestFullStat(first+1, tab, sd, createdAtTS, false /* inclusive */)
+			// Only skip to the next full stats if it is valid.
+			if nextFullStatsIdx < tab.StatisticCount() {
+				first = nextFullStatsIdx
+			}
+		}
+	}
+
 	if first >= tab.StatisticCount() {
 		// No statistics.
 		stats.Available = false
@@ -699,13 +723,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	EachStat:
 		for i := first; i < tab.StatisticCount(); i++ {
 			stat := tab.Statistic(i)
-			if stat.IsPartial() {
-				continue
-			}
-			if stat.IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics {
-				continue
-			}
-			if stat.IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts {
+			if !cat.IsEligibleFullStats(stat, sb.evalCtx.SessionData(), hlc.MaxTimestamp, true /* inclusive */) {
 				continue
 			}
 			if stat.ColumnCount() > 1 && !sb.evalCtx.SessionData().OptimizerUseMultiColStats {
