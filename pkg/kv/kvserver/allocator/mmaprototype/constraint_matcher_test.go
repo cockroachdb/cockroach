@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -99,23 +100,21 @@ func TestConstraintMatcher(t *testing.T) {
 				return b.String()
 
 			case "remove-store":
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
-				cm.removeStore(roachpb.StoreID(storeID))
+				storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
+				cm.removeStore(storeID)
 				var b strings.Builder
 				printMatcher(&b)
 				return b.String()
 
 			case "store-matches":
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
+				storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 				lines := strings.Split(d.Input, "\n")
 				require.Greater(t, 2, len(lines))
 				var cc []roachpb.Constraint
 				if len(lines) == 1 {
 					cc = parseConstraints(t, strings.Fields(strings.TrimSpace(lines[0])))
 				}
-				matches := cm.storeMatches(roachpb.StoreID(storeID), interner.internConstraintsConj(cc))
+				matches := cm.storeMatches(storeID, interner.internConstraintsConj(cc))
 				return fmt.Sprintf("%t", matches)
 
 			case "match-stores":
