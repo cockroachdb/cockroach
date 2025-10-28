@@ -105,6 +105,7 @@ go_test(
         "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
