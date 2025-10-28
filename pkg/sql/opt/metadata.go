@@ -73,7 +73,7 @@ var canaryFraction = settings.RegisterFloatSetting(
 func canaryRollDice(evalCtx *eval.Context) bool {
 	threshold := canaryFraction.Get(&evalCtx.Settings.SV)
 
-	// If the fraction is 0, never use canary stats.
+	// If the fraction is 0, never use canary stats. (should we even allow?)
 	if threshold == 0 {
 		return false
 	}
@@ -824,7 +824,7 @@ func (md *Metadata) AddTable(tab cat.Table, alias *tree.TableName) TableID {
 	if md.tables == nil {
 		md.tables = make([]TableMeta, 0, 4)
 	}
-	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias})
+	md.tables = append(md.tables, TableMeta{MetaID: tabID, Table: tab, Alias: *alias, CanaryWindowSize: tab.CanaryWindowSize()})
 
 	colCount := tab.ColumnCount()
 	if md.cols == nil {
@@ -945,6 +945,7 @@ func (md *Metadata) DuplicateTable(
 		partialIndexPredicates:        partialIndexPredicates,
 		indexPartitionLocalities:      tabMeta.indexPartitionLocalities,
 		checkConstraintsStats:         checkConstraintsStats,
+		CanaryWindowSize:              tabMeta.CanaryWindowSize,
 	}
 	newTabMeta.indexVisibility.cached = tabMeta.indexVisibility.cached
 	newTabMeta.indexVisibility.notVisible = tabMeta.indexVisibility.notVisible
@@ -1330,4 +1331,10 @@ func (md *Metadata) checkRLSDependencies(
 	// a new version of the table descriptor is created. The metadata dependency
 	// check already accounts for changes in the table descriptor version.
 	return true, nil
+}
+
+// UseCanaryStats returns true if the metadata is configured to use canary
+// statistics for the current query planning.
+func (md *Metadata) UseCanaryStats() bool {
+	return md.useCanaryStats
 }

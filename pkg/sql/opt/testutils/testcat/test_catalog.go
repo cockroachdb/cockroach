@@ -922,6 +922,8 @@ type Table struct {
 	rlsForced    bool
 	policies     cat.Policies
 	nextPolicyID descpb.PolicyID
+
+	canaryWindowSize time.Duration
 }
 
 var _ cat.Table = &Table{}
@@ -1231,6 +1233,9 @@ func (tt *Table) IsRowLevelSecurityEnabled() bool { return tt.rlsEnabled }
 
 // IsRowLevelSecurityForced is part of the cat.Table interface.
 func (tt *Table) IsRowLevelSecurityForced() bool { return tt.rlsForced }
+
+// CanaryWindowSize is part of the cat.Table interface.
+func (tt *Table) CanaryWindowSize() time.Duration { return tt.canaryWindowSize }
 
 // Policies is part of the cat.Table interface.
 func (tt *Table) Policies() *cat.Policies {
