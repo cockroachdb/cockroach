@@ -54,17 +54,22 @@ type route struct {
 // apiInternalServer provides REST endpoints that proxy to RPC services. It
 // serves as a bridge between HTTP REST clients and internal RPC services.
 type apiInternalServer struct {
-	mux        *mux.Router
-	status     serverpb.RPCStatusClient
-	admin      serverpb.RPCAdminClient
-	timeseries tspb.RPCTimeSeriesClient
+	mux            *mux.Router
+	status         serverpb.RPCStatusClient
+	admin          serverpb.RPCAdminClient
+	timeseries     tspb.RPCTimeSeriesClient
+	authentication authserver.Server
 }
 
 // NewAPIInternalServer creates a new REST API server that proxies to internal
 // RPC services. It establishes connections to the RPC services and registers
 // all REST endpoints.
 func NewAPIInternalServer(
-	ctx context.Context, nd rpcbase.NodeDialer, localNodeID roachpb.NodeID, cs *cluster.Settings,
+	ctx context.Context,
+	nd rpcbase.NodeDialer,
+	localNodeID roachpb.NodeID,
+	cs *cluster.Settings,
+	authServer authserver.Server,
 ) (*apiInternalServer, error) {
 	status, err := serverpb.DialStatusClient(nd, ctx, localNodeID, cs)
 	if err != nil {
@@ -88,17 +93,18 @@ func NewAPIInternalServer(
 	if err != nil {
 		return nil, err
 	}
-
 	r := &apiInternalServer{
-		status:     status,
-		admin:      admin,
-		timeseries: timeseries,
-		mux:        mux.NewRouter(),
+		status:         status,
+		admin:          admin,
+		timeseries:     timeseries,
+		authentication: authServer,
+		mux:            mux.NewRouter(),
 	}
 
 	r.registerStatusRoutes()
 	r.registerAdminRoutes()
 	r.registerTimeSeriesRoutes()
+	r.registerAuthenticationRoutes()
 
 	decoder.SetAliasTag("json")
 	decoder.IgnoreUnknownKeys(true)

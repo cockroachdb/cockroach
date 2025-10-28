@@ -485,7 +485,7 @@ func newTenantServer(
 		gw.RegisterService(args.grpc.Server)
 	}
 
-	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, args.tenantTimeSeriesServer} {
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, args.tenantTimeSeriesServer} {
 		if err := s.RegisterDRPCService(args.drpc); err != nil {
 			return nil, err
 		}
@@ -829,7 +829,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer,
-			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.Settings)
+			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.Settings, s.authentication)
 		if err != nil {
 			return err
 		}
@@ -850,7 +850,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* unauthenticatedGWMux */
 		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

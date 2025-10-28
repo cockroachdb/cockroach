@@ -1311,7 +1311,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		gw.RegisterService(grpcServer.Server)
 	}
 
-	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, &sTS} {
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, &sTS} {
 		if err := s.RegisterDRPCService(drpcServer); err != nil {
 			return nil, err
 		}
@@ -2148,7 +2148,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
 		// Pass our own node ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(
-			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings)
+			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings, s.authentication)
 		if err != nil {
 			return err
 		}
@@ -2169,7 +2169,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* unauthenticatedGWMux */
 		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		s.inspectzServer,             /* handleInspectzUnauthenticated */

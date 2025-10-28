@@ -22,18 +22,18 @@ message UserLoginRequest {
 // Set-Cookie header will be added to the response with a session
 // cookie identifying the created session.
 message UserLoginResponse {
-	// No information to return.
+    // No information to return.
 }
 
 // UserLogoutRequest will terminate the current session in use. The request
 // is empty because the current session is identified by an HTTP cookie on the
 // incoming request.
 message UserLogoutRequest {
-	// No information needed.
+    // No information needed.
 }
 
 message UserLogoutResponse {
-	// No information to return.
+    // No information to return.
 }
 
 // SessionCookie is a message used to encode the authentication cookie returned

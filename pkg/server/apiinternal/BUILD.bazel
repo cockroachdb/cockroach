@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "api_internal.go",
         "api_internal_admin.go",
+        "api_internal_authentication.go",
         "api_internal_status.go",
         "api_internal_ts.go",
     ],

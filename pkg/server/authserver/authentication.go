@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -37,17 +38,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/gogo/protobuf/jsonpb"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc"
 )
 
 const (
@@ -134,15 +136,6 @@ type authenticationServer struct {
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterLogInServer(g, s)
 	serverpb.RegisterLogOutServer(g, s)
-
-}
-
-// RegisterService registers the LogIn and LogOut services with DRPC.
-func (s *authenticationServer) RegisterDRPCService(d drpc.Mux) error {
-	if err := serverpb.DRPCRegisterLogIn(d, s); err != nil {
-		return err
-	}
-	return serverpb.DRPCRegisterLogOut(d, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -331,6 +324,151 @@ func (s *authenticationServer) DemoLogin(w http.ResponseWriter, req *http.Reques
 	_, _ = w.Write([]byte("you can use the UI now"))
 }
 
+// HTTPLogin is a direct HTTP handler for user login, designed for REST APIs.
+// It extracts credentials from the request, validates them, and sets a session cookie.
+func (s *authenticationServer) HTTPLogin(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	log.Dev.Info(ctx, "HTTPLogin called")
+	var loginReq serverpb.UserLoginRequest
+
+	if err := decodeHTTPAuthRequest(req, &loginReq); err != nil {
+		writeAuthError(ctx, w, req, codes.InvalidArgument, "invalid request body")
+		return
+	}
+
+	if loginReq.Username == "" {
+		writeAuthError(ctx, w, req, codes.Unauthenticated, "no username was provided")
+		return
+	}
+
+	// Normalize the username
+	userName, _ := username.MakeSQLUsernameFromUserInput(loginReq.Username, username.PurposeValidation)
+
+	// Verify the user and check if DB console session could be started
+	verified, pwRetrieveFn, err := s.VerifyUserSessionDBConsole(ctx, userName)
+	if err != nil {
+		writeAuthError(ctx, w, req, codes.Internal, "internal error")
+		return
+	}
+	if !verified {
+		writeAuthError(ctx, w, req, codes.Unauthenticated, "the provided credentials did not match any account on the server")
+		return
+	}
+
+	ldapAuthSuccess := false
+	originIP := s.lookupIncomingRequestOriginIP(ctx)
+	hbaConf, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
+	authMethod, hbaEntry, err := s.lookupAuthenticationMethodUsingRules(hba.ConnHostSSL, hbaConf, userName, originIP)
+	if err != nil {
+		if log.V(1) {
+			log.Dev.Infof(ctx, "invalid retrieval of HBA entry: error: %v", err)
+		}
+	} else if authMethod.String() == "ldap" {
+		if log.V(1) {
+			log.Dev.Infof(ctx, "retrieved LDAP HBA entry successfully: authMethod: %s, hbaEntry: %v", authMethod.String(), hbaEntry)
+		}
+		execCfg := s.sqlServer.ExecutorConfig()
+		ldapManager.Do(func() {
+			if ldapManager.m == nil {
+				ldapManager.m = pgwire.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+			}
+		})
+		ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, userName, hbaEntry, identMap)
+		if authError != nil {
+			if log.V(1) {
+				log.Dev.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+			}
+		} else {
+			detailedErrors, authError = ldapManager.m.ValidateLDAPLogin(ctx, execCfg.Settings, ldapUserDN, userName, loginReq.Password, hbaEntry, identMap)
+			if authError != nil {
+				if log.V(1) {
+					log.Dev.Infof(ctx, "ldap bind response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
+				}
+			} else {
+				ldapAuthSuccess = true
+			}
+		}
+	}
+
+	if !ldapAuthSuccess {
+		// Verify the provided username/password pair
+		verified, expired, err := s.VerifyPasswordDBConsole(ctx, userName, loginReq.Password, pwRetrieveFn)
+		if err != nil {
+			writeAuthError(ctx, w, req, codes.Internal, "internal error")
+			return
+		}
+		if expired {
+			writeAuthError(ctx, w, req, codes.Unauthenticated, fmt.Sprintf("the password for %s has expired", userName))
+			return
+		}
+		if !verified {
+			writeAuthError(ctx, w, req, codes.Unauthenticated, "the provided credentials did not match any account on the server")
+			return
+		}
+	}
+
+	// Create session
+	cookie, err := s.createSessionFor(ctx, userName)
+	if err != nil {
+		writeAuthError(ctx, w, req, codes.Internal, "internal error")
+		return
+	}
+
+	// Set the session cookie
+	http.SetCookie(w, cookie)
+
+	// Return response
+	if err := writeAuthResponse(ctx, w, req, http.StatusOK, &serverpb.UserLoginResponse{}); err != nil {
+		log.Dev.Errorf(ctx, "failed to write HTTPLogin response: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+// HTTPLogout is a direct HTTP handler for user logout, designed for REST APIs.
+// It extracts the session from cookies, revokes it, and clears the cookie.
+func (s *authenticationServer) HTTPLogout(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	log.Dev.Info(ctx, "HTTPLogout called")
+
+	// Find and decode the session cookie
+	st := s.sqlServer.ExecutorConfig().Settings
+	sessionCookie, err := FindAndDecodeSessionCookie(ctx, st, req.Cookies())
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			writeAuthError(ctx, w, req, codes.Unauthenticated, "no session cookie found")
+		} else {
+			writeAuthError(ctx, w, req, codes.Unauthenticated, "invalid session cookie")
+		}
+		return
+	}
+
+	// Revoke the session
+	if n, err := s.sqlServer.InternalExecutor().ExecEx(
+		ctx,
+		"revoke-auth-session",
+		nil, /* txn */
+		sessiondata.NodeUserSessionDataOverride,
+		"UPDATE system.web_sessions SET \"revokedAt\" = now() WHERE id = $1",
+		sessionCookie.ID,
+	); err != nil {
+		writeAuthError(ctx, w, req, codes.Internal, "internal error")
+		return
+	} else if n == 0 {
+		writeAuthError(ctx, w, req, codes.Unauthenticated, "session not found")
+		return
+	}
+
+	// Clear the session cookie on the client
+	clearSessionCookie := CreateEmptySessionCookieWithImmediateExpiry(!s.cfg.DisableTLSForHTTP)
+	http.SetCookie(w, clearSessionCookie)
+
+	// Return response based on Accept header
+	if err := writeAuthResponse(ctx, w, req, http.StatusOK, &serverpb.UserLogoutResponse{}); err != nil {
+		log.Dev.Errorf(ctx, "failed to write HTTPLogout response: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
 var errWebAuthenticationFailure = status.Errorf(
 	codes.Unauthenticated,
 	"the provided credentials did not match any account on the server",
@@ -390,6 +528,7 @@ func (s *authenticationServer) createSessionFor(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
+	// Extract session ID from gRPC metadata
 	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
 		return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
@@ -881,4 +1020,88 @@ func (am *authenticationMux) verifyJWT(req *http.Request) (string, error) {
 	}
 
 	return retrievedUsername, nil
+}
+
+// decodeHTTPAuthRequest decodes login/logout requests honoring Content-Type.
+func decodeHTTPAuthRequest(req *http.Request, target protoutil.Message) error {
+	if req.Body == nil {
+		return nil
+	}
+	reqContentType := selectAuthContentType(req.Header[httputil.ContentTypeHeader])
+	switch reqContentType {
+	case httputil.ProtoContentType, httputil.AltProtoContentType:
+		bytes, err := io.ReadAll(req.Body)
+		if err != nil {
+			return err
+		}
+		return protoutil.Unmarshal(bytes, target)
+	default:
+		return jsonpb.Unmarshal(req.Body, target)
+	}
+}
+
+// writeAuthResponse writes protobuf/JSON based on Accept/Content-Type.
+func writeAuthResponse(
+	ctx context.Context,
+	w http.ResponseWriter,
+	req *http.Request,
+	code int,
+	payload protoutil.Message,
+) error {
+	resContentType := selectAuthContentType(
+		req.Header[httputil.AcceptHeader],
+		req.Header[httputil.ContentTypeHeader],
+	)
+
+	var buf []byte
+	switch resContentType {
+	case httputil.ProtoContentType:
+		b, err := protoutil.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		buf = b
+	default:
+		jsonpb := &protoutil.JSONPb{
+			EnumsAsInts:  true,
+			EmitDefaults: true,
+		}
+		b, err := jsonpb.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		buf = b
+	}
+
+	w.Header().Set("Content-Type", resContentType)
+	w.WriteHeader(code)
+	_, err := w.Write(buf)
+	return err
+}
+
+// writeAuthError encodes errors as ResponseError protobuf (or JSON fallback).
+func writeAuthError(
+	ctx context.Context, w http.ResponseWriter, req *http.Request, code codes.Code, msg string,
+) {
+	// TODO(server): eliminate this dependency on grpc-gateway when
+	// migrating away from it
+	httpCode := gwruntime.HTTPStatusFromCode(code)
+	if err := writeAuthResponse(ctx, w, req, httpCode, &serverpb.ResponseError{Error: msg}); err != nil {
+		log.Dev.Errorf(ctx, "failed to write auth error: %v", err)
+		http.Error(w, msg, httpCode)
+	}
+}
+
+func selectAuthContentType(headerSets ...[]string) string {
+	for _, headers := range headerSets {
+		for _, c := range headers {
+			switch c {
+			case httputil.ProtoContentType, httputil.AltProtoContentType:
+				return httputil.ProtoContentType
+			case httputil.JSONContentType, httputil.AltJSONContentType, httputil.MIMEWildcard:
+				return httputil.JSONContentType
+			}
+		}
+	}
+	return httputil.JSONContentType
 }
