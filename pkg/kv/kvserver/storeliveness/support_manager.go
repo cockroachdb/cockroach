@@ -329,6 +329,7 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
 		}
 	}
+
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
 	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
@@ -426,6 +427,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	for _, response := range responses {
 		_ = sm.sender.EnqueueMessage(ctx, response)
 	}
+
 	log.KvExec.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
 

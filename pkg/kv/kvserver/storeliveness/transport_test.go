@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/rand"
 	"net"
+	"sort"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -34,21 +37,27 @@ import (
 var maxDelay = 10 * time.Millisecond
 
 // testMessageHandler stores all received messages in a channel.
+type receivedMessage struct {
+	msg        *slpb.Message
+	receivedAt time.Time
+}
+
 type testMessageHandler struct {
-	messages chan *slpb.Message
+	messages chan receivedMessage
 }
 
 func newMessageHandler(size int) testMessageHandler {
 	return testMessageHandler{
-		messages: make(chan *slpb.Message, size),
+		messages: make(chan receivedMessage, size),
 	}
 }
 
 func (tmh *testMessageHandler) HandleMessage(msg *slpb.Message) error {
 	// Simulate a message handling delay.
 	time.Sleep(time.Duration(rand.Int63n(int64(maxDelay))))
+	received := receivedMessage{msg: msg, receivedAt: timeutil.Now()}
 	select {
-	case tmh.messages <- msg:
+	case tmh.messages <- received:
 		return nil
 	default:
 		return receiveQueueSizeLimitReachedErr
@@ -128,7 +137,8 @@ func (tt *transportTester) AddNodeWithoutGossip(
 		nodedialer.New(tt.nodeRPCContext, gossip.AddressResolver(tt.gossip)),
 		grpcServer,
 		drpcServer,
-		nil, /* knobs */
+		tt.st, /* settings */
+		nil,   /* knobs */
 	)
 	require.NoError(tt.t, err)
 	tt.transports[nodeID] = transport
@@ -176,8 +186,8 @@ func TestTransportSendAndReceive(t *testing.T) {
 	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
 	defer tt.Stop()
 
-	// Node 1: stores 1, 2
-	// Node 2: stores 3, 4
+	// Node 1: stores 1, 2.
+	// Node 2: stores 3, 4.
 	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
 	store1 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
 	store2 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(2)}
@@ -210,9 +220,9 @@ func TestTransportSendAndReceive(t *testing.T) {
 			testutils.SucceedsSoon(
 				t, func() error {
 					select {
-					case msg := <-handler.messages:
-						senders = append(senders, msg.From)
-						require.Equal(t, recipient, msg.To)
+					case received := <-handler.messages:
+						senders = append(senders, received.msg.From)
+						require.Equal(t, recipient, received.msg.To)
 						return nil
 					default:
 					}
@@ -275,6 +285,7 @@ func TestTransportRestartedNode(t *testing.T) {
 		testutils.SucceedsSoon(
 			t, func() error {
 				tt.transports[sender.NodeID].EnqueueMessage(ctx, msg)
+
 				sent := tt.transports[sender.NodeID].metrics.MessagesSent.Count()
 				if initialSent >= sent {
 					return errors.Newf("message not sent yet; initial %d, current %d", initialSent, sent)
@@ -289,6 +300,7 @@ func TestTransportRestartedNode(t *testing.T) {
 		testutils.SucceedsSoon(
 			t, func() error {
 				tt.transports[sender.NodeID].EnqueueMessage(ctx, msg)
+
 				dropped := tt.transports[sender.NodeID].metrics.MessagesSendDropped.Count()
 				if initialDropped >= dropped {
 					return errors.Newf(
@@ -305,13 +317,14 @@ func TestTransportRestartedNode(t *testing.T) {
 			t, func() error {
 				select {
 				case received := <-handler.messages:
-					require.Equal(t, msg, *received)
+					require.Equal(t, msg, *received.msg)
 					return nil
 				default:
 					// To ensure messages start getting delivered, keep sending messages
 					// out. Even after EnqueueMessage returns true, messages may still not be
 					// delivered (e.g. if the receiver node is not up yet).
 					tt.transports[sender.NodeID].EnqueueMessage(ctx, msg)
+
 				}
 				return errors.New("still waiting to receive message")
 			},
@@ -388,7 +401,7 @@ func TestTransportSendToMissingStore(t *testing.T) {
 		t, func() error {
 			select {
 			case received := <-handler.messages:
-				require.Equal(t, existingMsg, *received)
+				require.Equal(t, existingMsg, *received.msg)
 				require.Equal(
 					t, int64(1), tt.transports[existingRcv.NodeID].metrics.MessagesReceived.Count(),
 				)
@@ -446,7 +459,7 @@ func TestTransportClockPropagation(t *testing.T) {
 		t, func() error {
 			select {
 			case received := <-handler.messages:
-				require.Equal(t, msg, *received)
+				require.Equal(t, msg, *received.msg)
 				return nil
 			default:
 			}
@@ -468,8 +481,8 @@ func TestTransportShortCircuit(t *testing.T) {
 	tt := newTransportTester(t, cluster.MakeTestingClusterSettings())
 	defer tt.Stop()
 
-	// Node 1: stores 1, 2
-	// Node 2: store 3
+	// Node 1: stores 1, 2.
+	// Node 2: store 3.
 	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
 	store1 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
 	store2 := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(2)}
@@ -493,9 +506,9 @@ func TestTransportShortCircuit(t *testing.T) {
 	testutils.SucceedsSoon(
 		t, func() error {
 			select {
-			case msg := <-handler.messages:
-				require.Equal(t, store1, msg.From)
-				require.Equal(t, store2, msg.To)
+			case received := <-handler.messages:
+				require.Equal(t, store1, received.msg.From)
+				require.Equal(t, store2, received.msg.To)
 				return nil
 			default:
 			}
@@ -533,16 +546,19 @@ func TestTransportIdleSendQueue(t *testing.T) {
 	handler := tt.AddStore(receiver)
 
 	tt.transports[sender.NodeID].knobs.OverrideIdleTimeout = func() time.Duration {
+		// Set the idle timeout larger than the batch wait. Otherwise, we won't
+		// be able to send any message.
 		return 100 * time.Millisecond
 	}
 
 	// Send and receive a message.
 	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg))
+
 	testutils.SucceedsSoon(
 		t, func() error {
 			select {
 			case received := <-handler.messages:
-				require.Equal(t, msg, *received)
+				require.Equal(t, msg, *received.msg)
 				return nil
 			default:
 			}
@@ -590,17 +606,20 @@ func TestTransportFullReceiveQueue(t *testing.T) {
 					sendDropped++
 					return errors.New("still waiting to enqueue message")
 				}
+
 				return nil
 			},
 		)
 	}
 
 	require.Equal(
-		t, int64(sendDropped), tt.transports[sender.NodeID].metrics.MessagesSendDropped.Count(),
+		t, int64(sendDropped),
+		tt.transports[sender.NodeID].metrics.MessagesSendDropped.Count(),
 	)
 	testutils.SucceedsSoon(
 		t, func() error {
-			if tt.transports[sender.NodeID].metrics.MessagesSent.Count() != int64(tt.maxHandlerSize) {
+			if tt.transports[sender.NodeID].metrics.MessagesSent.Count() !=
+				int64(tt.maxHandlerSize) {
 				return errors.New("not all messages are sent yet")
 			}
 			return nil
@@ -608,7 +627,8 @@ func TestTransportFullReceiveQueue(t *testing.T) {
 	)
 	testutils.SucceedsSoon(
 		t, func() error {
-			if tt.transports[receiver.NodeID].metrics.MessagesReceived.Count() != int64(tt.maxHandlerSize) {
+			if tt.transports[receiver.NodeID].metrics.MessagesReceived.Count() !=
+				int64(tt.maxHandlerSize) {
 				return errors.New("not all messages are received yet")
 			}
 			return nil
@@ -616,12 +636,333 @@ func TestTransportFullReceiveQueue(t *testing.T) {
 	)
 	// The receiver queue is full but the enqueue to the sender queue succeeds.
 	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg))
+
 	testutils.SucceedsSoon(
 		t, func() error {
-			if tt.transports[receiver.NodeID].metrics.MessagesReceiveDropped.Count() != int64(1) {
+			if tt.transports[receiver.NodeID].metrics.MessagesReceiveDropped.Count() !=
+				int64(1) {
 				return errors.New("message not dropped yet")
 			}
 			return nil
 		},
 	)
+}
+
+// TestTransportHeartbeatSmearingBatching verifies that heartbeat smearing
+// batches messages from multiple queues before signalling them to send.
+func TestTransportHeartbeatSmearingBatching(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	HeartbeatSmearingEnabled.Override(ctx, &st.SV, true)
+	// 100ms is wide berth for stress tests.
+	HeartbeatSmearingRefreshInterval.Override(ctx, &st.SV, 100*time.Millisecond)
+	tt := newTransportTester(t, st)
+	defer tt.Stop()
+
+	node1 := roachpb.NodeID(1)
+	node2 := roachpb.NodeID(2)
+	node3 := roachpb.NodeID(3)
+
+	node1Sender := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	node2Receiver := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(2)}
+	node3Receiver := slpb.StoreIdent{NodeID: node3, StoreID: roachpb.StoreID(3)}
+
+	tt.AddNode(node1)
+	tt.AddNode(node2)
+	tt.AddNode(node3)
+	tt.AddStore(node1Sender)
+	handler2 := tt.AddStore(node2Receiver)
+	handler3 := tt.AddStore(node3Receiver)
+
+	// Enqueue messages to multiple destinations.
+	node2Message := slpb.Message{Type: slpb.MsgHeartbeat,
+		From: node1Sender, To: node2Receiver}
+	node3Message := slpb.Message{Type: slpb.MsgHeartbeat,
+		From: node1Sender, To: node3Receiver}
+
+	tt.transports[node1Sender.NodeID].EnqueueMessage(ctx, node2Message)
+	tt.transports[node1Sender.NodeID].EnqueueMessage(ctx, node3Message)
+
+	// Verify messages should NOT be sent yet as smearing is enabled.
+	// Wait briefly to ensure messages don't arrive.
+	testTimeout := time.NewTimer(HeartbeatSmearingRefreshInterval.Get(&st.SV) / 10)
+	defer testTimeout.Stop()
+	select {
+	case <-handler2.messages:
+		require.Fail(t, "message should not have been sent yet; "+
+			"received message %v", handler2.messages)
+	case <-handler3.messages:
+		require.Fail(t, "message should not have been sent yet; "+
+			"received message %v", handler3.messages)
+	case <-testTimeout.C:
+		// Success - no messages arrived.
+	}
+
+	// Wait for messages to be received.
+	testutils.SucceedsSoon(
+		t, func() error {
+			if len(handler2.messages) != 1 || len(handler3.messages) != 1 {
+				return errors.Newf("expected 1 message in each handler, got %d and %d",
+					len(handler2.messages), len(handler3.messages))
+			}
+			return nil
+		},
+	)
+
+	// Verify contents were as expected.
+	received2 := <-handler2.messages
+	require.Equal(t, node2Message, *received2.msg)
+	received3 := <-handler3.messages
+	require.Equal(t, node3Message, *received3.msg)
+}
+
+// TestTransportSmearingLogicalBehaviour verifies that message smearing causes
+// messages to arrive in a staggered manner over time, rather than all at once.
+// This demonstrates that the smearing mechanism is working to avoid thundering herd.
+func TestTransportSmearingLogicalBehaviour(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	HeartbeatSmearingEnabled.Override(ctx, &st.SV, true)
+	// Override the smearing settings to ensure that the test is not flaky.
+	HeartbeatSmearingRefreshInterval.Override(ctx, &st.SV, 250*time.Millisecond)
+	HeartbeatSmearingInterval.Override(ctx, &st.SV, 50*time.Millisecond)
+	tt := newTransportTester(t, st)
+	defer tt.Stop()
+
+	node1 := roachpb.NodeID(1)
+	sender := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+
+	numReceivers := 10
+	receivers := make([]slpb.StoreIdent, numReceivers)
+	handlers := make([]testMessageHandler, numReceivers)
+
+	tt.AddNode(node1)
+	tt.AddStore(sender)
+
+	for i := 0; i < numReceivers; i++ {
+		nodeID := roachpb.NodeID(i + 2)
+		receivers[i] = slpb.StoreIdent{NodeID: nodeID, StoreID: roachpb.StoreID(i + 2)}
+		tt.AddNode(nodeID)
+		handlers[i] = tt.AddStore(receivers[i])
+	}
+
+	// Enqueue messages to all receivers.
+	for i := 0; i < numReceivers; i++ {
+		msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receivers[i]}
+		tt.transports[sender.NodeID].EnqueueMessage(ctx, msg)
+	}
+
+	receiveTimes := make([]time.Time, numReceivers)
+	start := timeutil.Now()
+
+	for i := 0; i < numReceivers; i++ {
+		idx := i
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case received := <-handlers[idx].messages:
+				require.NotNil(t, received.msg)
+				receiveTimes[idx] = received.receivedAt
+				return nil
+			default:
+				return errors.Newf("message to receiver %d not yet delivered", idx)
+			}
+		})
+	}
+
+	// Verify that not all messages arrived at exactly the same time.
+	sort.Slice(receiveTimes, func(i, j int) bool {
+		return receiveTimes[i].Before(receiveTimes[j])
+	})
+
+	// The time between first and last arrival should be larger than the smear interval,
+	// indicating staggered delivery.
+	timeSpan := receiveTimes[len(receiveTimes)-1].Sub(receiveTimes[0])
+	require.Greater(t, timeSpan, 50*time.Millisecond,
+		"messages should be smeared across multiple batches")
+
+	// Verify all messages arrived relatively quickly from start.
+	totalElapsed := receiveTimes[len(receiveTimes)-1].Sub(start)
+	require.Less(t, totalElapsed, 500*time.Millisecond,
+		"all messages should be delivered within reasonable time")
+}
+
+// TestTransportSmearingDisabled verifies that when heartbeat smearing is
+// disabled (by setting the refresh interval to 0), messages are delivered
+// nearly simultaneously rather than being staggered over time.
+func TestTransportSmearingDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	// Disable smearing by setting the refresh interval to 0.
+	HeartbeatSmearingRefreshInterval.Override(ctx, &st.SV, 0)
+	tt := newTransportTester(t, st)
+	defer tt.Stop()
+
+	node1 := roachpb.NodeID(1)
+	sender := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+
+	numReceivers := 10
+	receivers := make([]slpb.StoreIdent, numReceivers)
+	handlers := make([]testMessageHandler, numReceivers)
+
+	tt.AddNode(node1)
+	tt.AddStore(sender)
+
+	for i := 0; i < numReceivers; i++ {
+		nodeID := roachpb.NodeID(i + 2)
+		receivers[i] = slpb.StoreIdent{NodeID: nodeID, StoreID: roachpb.StoreID(i + 2)}
+		tt.AddNode(nodeID)
+		handlers[i] = tt.AddStore(receivers[i])
+	}
+
+	// Enqueue messages to all receivers.
+	for i := 0; i < numReceivers; i++ {
+		msg := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receivers[i]}
+		tt.transports[sender.NodeID].EnqueueMessage(ctx, msg)
+	}
+
+	receiveTimes := make([]time.Time, numReceivers)
+
+	for i := 0; i < numReceivers; i++ {
+		idx := i
+		testutils.SucceedsSoon(t, func() error {
+			select {
+			case received := <-handlers[idx].messages:
+				require.NotNil(t, received.msg)
+				receiveTimes[idx] = received.receivedAt
+				return nil
+			default:
+				return errors.Newf("message to receiver %d not yet delivered", idx)
+			}
+		})
+	}
+
+	sort.Slice(receiveTimes, func(i, j int) bool {
+		return receiveTimes[i].Before(receiveTimes[j])
+	})
+
+	// When smearing is disabled, messages should arrive nearly simultaneously.
+	timeSpan := receiveTimes[len(receiveTimes)-1].Sub(receiveTimes[0])
+	require.Less(t, timeSpan, 50*time.Millisecond,
+		"messages should arrive nearly simultaneously when smearing is disabled")
+}
+
+// TestTransportClusterSettingToggle verifies that messages are not lost when
+// the kv.store_liveness.heartbeat_smearing.enabled cluster setting is toggled
+// during active operation. This is a regression test for a race condition where
+// messages could be lost if the setting changed while the processQueue goroutine
+// was running.
+func TestTransportClusterSettingToggle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	tt := newTransportTester(t, st)
+	defer tt.Stop()
+
+	node1, node2 := roachpb.NodeID(1), roachpb.NodeID(2)
+	sender := slpb.StoreIdent{NodeID: node1, StoreID: roachpb.StoreID(1)}
+	receiver := slpb.StoreIdent{NodeID: node2, StoreID: roachpb.StoreID(2)}
+
+	tt.AddNode(node1)
+	tt.AddNode(node2)
+	tt.AddStore(sender)
+	handler := tt.AddStore(receiver)
+
+	// Start with heartbeat smearing enabled.
+	HeartbeatSmearingEnabled.Override(ctx, &st.SV, true)
+
+	// Enqueue a message while heartbeat smearing is enabled.
+	msg1 := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
+	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg1))
+
+	// Toggle the setting to disabled (direct send mode).
+	// With both channels always active, processQueue will check the setting
+	// when processing messages, so messages will be sent directly when
+	// smearing is disabled.
+	HeartbeatSmearingEnabled.Override(ctx, &st.SV, false)
+
+	// Enqueue another message after the toggle. This message should be sent
+	// directly as smearing is disabled.
+	msg2 := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
+	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg2))
+
+	// Verify both messages are received (msg1 should switch to direct mode,
+	// msg2 should be sent directly).
+	receivedMsgs := 0
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.NotNil(t, received.msg)
+				receivedMsgs++
+			default:
+			}
+			if receivedMsgs < 2 {
+				return errors.Newf(
+					"only received %d messages so far, expecting 2",
+					receivedMsgs)
+			}
+			return nil
+		},
+	)
+	require.Equal(t, 2, receivedMsgs)
+
+	// Now toggle back to heartbeat smearing mode.
+	HeartbeatSmearingEnabled.Override(ctx, &st.SV, true)
+
+	// Now enqueue msg3 - processQueue should have re-read the setting and be in
+	// heartbeat smearing mode.
+	msg3 := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
+	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg3))
+
+	// Verify the message is enqueued but NOT delivered (waiting in smearing mode).
+	// Use SucceedsSoon to give the system time to stabilize in the correct state.
+	testutils.SucceedsSoon(t, func() error {
+		// Message should be in the queue.
+		if tt.transports[sender.NodeID].metrics.SendQueueSize.Value() != 1 {
+			return errors.Newf("expected queue size 1, got %d",
+				tt.transports[sender.NodeID].metrics.SendQueueSize.Value())
+		}
+		// But should NOT have been received yet.
+		select {
+		case <-handler.messages:
+			return errors.New(
+				"message should not have been sent yet in heartbeat smearing mode")
+		default:
+		}
+		return nil
+	})
+
+	// Signal to send messages.
+
+	// Verify the message is received.
+	testutils.SucceedsSoon(
+		t, func() error {
+			select {
+			case received := <-handler.messages:
+				require.Equal(t, msg3, *received.msg)
+				return nil
+			default:
+			}
+			return errors.New("message not received yet")
+		},
+	)
+
+	// Verify no messages were dropped during any of the toggles.
+	// Total messages sent: msg1, msg2, msg3 = 3.
+	require.Equal(t, int64(0),
+		tt.transports[sender.NodeID].metrics.MessagesSendDropped.Count())
+	require.Equal(t, int64(3),
+		tt.transports[sender.NodeID].metrics.MessagesSent.Count())
+	require.Equal(t, int64(3),
+		tt.transports[receiver.NodeID].metrics.MessagesReceived.Count())
 }
