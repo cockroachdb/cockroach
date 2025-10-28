@@ -1569,6 +1569,11 @@ func init() {
 	f.StringSliceVar(&debugMergeLogsOpts.tenantIDsFilter, "tenant-ids", nil,
 		"tenant IDs to filter logs by")
 
+	f = debugMCPCmd.Flags()
+	f.String("kapa-api-key", "", "Kapa.AI API key for documentation queries")
+	f.String("kapa-project-id", "9828e446-2c28-467f-9dfa-73cd90fa56a2", "Kapa.AI project ID")
+	_ = f.MarkHidden("kapa-project-id")
+
 	f = debugZipUploadCmd.Flags()
 	f.StringVar(&debugZipUploadOpts.ddAPIKey, "dd-api-key", getEnvOrDefault(datadogAPIKeyEnvVar, ""),
 		"Datadog API key to use to send debug.zip artifacts to datadog")

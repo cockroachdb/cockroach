@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/gob"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -335,9 +337,17 @@ type QueryTSDumpInput struct {
 	Metrics []string `json:"metrics,omitempty" jsonschema:"Array of metric names to retrieve in a single scan (recommended for multiple metrics)"`
 }
 
+// KapaConfig holds configuration for Kapa.AI integration
+type KapaConfig struct {
+	apiKey          string
+	projectID       string
+	currentThreadID string
+}
+
 // debugMCPState holds the server state
 type debugMCPState struct {
-	metrics []MetricMetadata
+	metrics    []MetricMetadata
+	kapaConfig *KapaConfig
 }
 
 // searchMetricsTool handles the search-metrics tool
@@ -532,6 +542,82 @@ done:
 	}, nil, nil
 }
 
+// SearchDocsInput defines the input for the search-docs tool
+type SearchDocsInput struct {
+	Query string `json:"query" jsonschema:"Question or query about CockroachDB"`
+}
+
+// searchDocsTool handles the search-docs tool
+func (s *debugMCPState) searchDocsTool(
+	ctx context.Context, req *mcp.CallToolRequest, input SearchDocsInput,
+) (*mcp.CallToolResult, any, error) {
+	if input.Query == "" {
+		return nil, nil, fmt.Errorf("query parameter is required")
+	}
+
+	// Build request body
+	reqBody := map[string]string{"query": input.Query}
+	reqJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Determine URL based on whether we have a thread ID
+	var url string
+	if s.kapaConfig.currentThreadID == "" {
+		url = fmt.Sprintf("https://api.kapa.ai/query/v1/projects/%s/chat/", s.kapaConfig.projectID)
+	} else {
+		url = fmt.Sprintf("https://api.kapa.ai/query/v1/threads/%s/chat/", s.kapaConfig.currentThreadID)
+	}
+
+	// Create HTTP request
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(reqJSON))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-API-KEY", s.kapaConfig.apiKey)
+
+	// Make the request
+	client := &http.Client{}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var response map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Extract and store thread_id if present
+	if threadID, ok := response["thread_id"].(string); ok && threadID != "" {
+		s.kapaConfig.currentThreadID = threadID
+	}
+
+	// Extract only answer and is_certain fields
+	result := map[string]any{}
+	if answer, ok := response["answer"]; ok {
+		result["answer"] = answer
+	}
+	if isCertain, ok := response["is_certain"]; ok {
+		result["is_certain"] = isCertain
+	}
+
+	// Return only the filtered fields
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: toJSON(result)}},
+	}, nil, nil
+}
+
 func runDebugMCP(cmd *cobra.Command, args []string) error {
 	// Parse embedded metrics
 	metrics, err := parseMetrics()
@@ -572,6 +658,23 @@ func runDebugMCP(cmd *cobra.Command, args []string) error {
 		Name:        "query-tsdump",
 		Description: "Query a tsdump file for one or more metrics by name. Efficiently scans the file once to retrieve all requested metrics.",
 	}, state.queryTSDumpTool)
+
+	// Conditionally register Kapa.AI tool if API key is provided
+	kapaAPIKey, _ := cmd.Flags().GetString("kapa-api-key")
+	if kapaAPIKey != "" {
+		kapaProjectID, _ := cmd.Flags().GetString("kapa-project-id")
+		state.kapaConfig = &KapaConfig{
+			apiKey:    kapaAPIKey,
+			projectID: kapaProjectID,
+		}
+
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        "search-docs",
+			Description: "Search CockroachDB documentation and support knowledge base for conceptual understanding and configuration guidance. Maintains conversation context across multiple queries.",
+		}, state.searchDocsTool)
+
+		fmt.Fprintf(os.Stderr, "Kapa.AI integration enabled\n")
+	}
 
 	// Run the server with stdio transport
 	return server.Run(context.Background(), &mcp.StdioTransport{})
