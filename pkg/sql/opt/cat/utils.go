@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -342,19 +343,35 @@ func MaybeMarkRedactable(unsafe string, markRedactable bool) string {
 	return unsafe
 }
 
-// FindLatestFullStat finds the most recent full statistic that can be used for
-// planning and returns the index to be used with tab.Statistic(). If such
-// doesn't exist (meaning that either there are no full stats altogether or that
-// the present ones cannot be used based on the session variables), then
-// tab.StatisticCount() is returned.
-func FindLatestFullStat(tab Table, sd *sessiondata.SessionData) int {
-	// Stats are ordered with most recent first.
-	var first int
-	for first < tab.StatisticCount() &&
-		(tab.Statistic(first).IsPartial() ||
-			(tab.Statistic(first).IsMerged() && !sd.OptimizerUseMergedPartialStatistics) ||
-			(tab.Statistic(first).IsForecast() && !sd.OptimizerUseForecasts)) {
-		first++
+// FindLatestFullStat finds the most recent full statistic ranging from
+// the start index that can be used for planning and returns the index
+// to be used with tab.Statistic(). The returned stat should be older than
+// the given timestamp parameter. Specifically, if inclusive==false, the
+// returned stat should be strictly older than the timestamp, otherwise it
+// can be equal to it.  If such doesn't exist (meaning that
+// // either there are no full stats altogether or that the present ones
+// // cannot be used based on the session variables), then
+// // tab.StatisticCount() is returned.
+func FindLatestFullStat(
+	start int, tab Table, sd *sessiondata.SessionData, olderThan hlc.Timestamp, inclusive bool,
+) int {
+	for i := start; i < tab.StatisticCount(); i++ {
+		if IsEligibleFullStats(tab.Statistic(i), sd, olderThan, inclusive) {
+			return i
+		}
 	}
-	return first
+	return tab.StatisticCount()
+}
+
+// IsEligibleFullStats returns true if the given statistic can be used as a full stats
+// that matches the requirements from the session data, and also has an
+// eligible creation timestamp.
+func IsEligibleFullStats(
+	stat TableStatistic, sd *sessiondata.SessionData, olderThan hlc.Timestamp, inclusive bool,
+) bool {
+	createdAtTs := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+	return !stat.IsPartial() &&
+		(!stat.IsMerged() || sd.OptimizerUseMergedPartialStatistics) &&
+		(!stat.IsForecast() || sd.OptimizerUseForecasts) &&
+		((inclusive && createdAtTs.LessEq(olderThan)) || (!inclusive && createdAtTs.Less(olderThan)))
 }
