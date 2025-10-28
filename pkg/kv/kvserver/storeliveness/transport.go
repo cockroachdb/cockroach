@@ -7,7 +7,6 @@ package storeliveness
 
 import (
 	"context"
-	"runtime/pprof"
 	"time"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
@@ -570,7 +570,7 @@ func (t *Transport) startProcessNewQueue(
 	err := t.stopper.RunAsyncTask(
 		ctx, "storeliveness.Transport: sending messages",
 		func(ctx context.Context) {
-			pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
+			pprofutil.Do(ctx, worker, "remote_node_id", toNodeID.String())
 		},
 	)
 	if err != nil {

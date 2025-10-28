@@ -8,7 +8,6 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"runtime/pprof"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -241,9 +241,9 @@ func (f *RangeFeed) start(
 		// pprof.Do function does exactly what we do here, but it also results in
 		// pprof.Do function showing up in the stack traces -- so, just set and reset
 		// labels manually.
-		defer pprof.SetGoroutineLabels(ctx)
-		ctx = pprof.WithLabels(ctx, pprof.Labels(append(f.extraPProfLabels, "rangefeed", f.name)...))
-		pprof.SetGoroutineLabels(ctx)
+		ctx, reset := pprofutil.SetProfilerLabels(ctx, append(f.extraPProfLabels, "rangefeed", f.name)...)
+		defer reset()
+
 		if f.invoker != nil {
 			_ = f.invoker(func() error {
 				f.run(ctx, frontier, resumeFromFrontier)

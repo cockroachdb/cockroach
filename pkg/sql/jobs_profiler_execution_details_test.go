@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"runtime/pprof"
 	"sort"
 	"strings"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -208,10 +208,10 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return fakeExecResumer{
 				OnResume: func(ctx context.Context) error {
-					pprof.Do(ctx, pprof.Labels("foo", "bar"), func(ctx2 context.Context) {
+					pprofutil.Do(ctx, func(ctx2 context.Context) {
 						blockCh <- struct{}{}
 						<-continueCh
-					})
+					}, "foo", "bar")
 					return nil
 				},
 			}

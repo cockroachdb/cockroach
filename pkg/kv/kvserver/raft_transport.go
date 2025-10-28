@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 	"net"
-	"runtime/pprof"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -931,7 +931,7 @@ func (t *RaftTransport) startProcessNewQueue(
 	}
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
-		pprof.Do(ctx, pprof.Labels("remote_node_id", toNodeID.String()), worker)
+		pprofutil.Do(ctx, worker, "remote_node_id", toNodeID.String())
 	}(ctx)
 	return true
 }
