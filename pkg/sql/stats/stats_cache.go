@@ -287,12 +287,13 @@ func (sc *TableStatisticsCache) GetTableStats(
 	typeResolver *descs.DistSQLTypeResolver,
 	stable bool,
 	canaryWindowSize time.Duration,
+	statsAsOf hlc.Timestamp,
 ) (stats []*TableStatistic, err error) {
 	if !sc.statsUsageAllowed(table) {
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
 }
 
 // GetTableStatsProtosFromDB looks up statistics for the requested table in
@@ -407,11 +408,15 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	typeResolver *descs.DistSQLTypeResolver,
 	stable bool,
 	canaryWindowSize time.Duration,
+	statsAsOf hlc.Timestamp,
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
 	asOfTs := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	if !statsAsOf.IsEmpty() {
+		asOfTs = statsAsOf
+	}
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
