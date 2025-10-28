@@ -2,12 +2,13 @@ name: Claude Code PR Review
 
 on:
   pull_request_target:
-    types: [synchronize, ready_for_review, reopened, labeled]
+    types: [synchronize, ready_for_review, reopened]
 
 jobs:
   claude-code-pr-review:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.base_ref, 'release-') && !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review')"
+    timeout-minutes: 60
+    if: "!startsWith(github.base_ref, 'release-') && !contains(github.event.pull_request.labels.*.name, 'O-No-AI-Review') && github.event.pull_request.merged == false"
     permissions:
       contents: read
       pull-requests: write
@@ -236,6 +237,8 @@ jobs:
 
           **Next Steps:**
           Please review the detailed findings in the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+          **Note:** When viewing the workflow output, scroll to the bottom to find the Final Analysis Summary.
 
           After you review the findings, please tag the issue as follows:
           - If the detected issue is real or was helpful in any way, please tag the issue with \`O-AI-Review-Real-Issue-Found\`
