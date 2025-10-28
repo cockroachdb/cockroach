@@ -2192,7 +2192,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	tp, mockSender := makeMockTxnPipeliner(nil /* iter */)
 
 	initialSavepoint := savepoint{}
-	tp.createSavepointLocked(ctx, &initialSavepoint)
+	require.NoError(t, tp.createSavepointLocked(ctx, &initialSavepoint))
 
 	tp.ifWrites.insert(roachpb.Key("a"), 10, lock.Intent)
 	tp.ifWrites.insert(roachpb.Key("b"), 11, lock.Intent)
@@ -2200,7 +2200,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 	require.Equal(t, 3, tp.ifWrites.len())
 
 	s := savepoint{seqNum: enginepb.TxnSeq(13), active: true}
-	tp.createSavepointLocked(ctx, &s)
+	require.NoError(t, tp.createSavepointLocked(ctx, &s))
 
 	// Some more writes after the savepoint.
 	tp.ifWrites.insert(roachpb.Key("c"), 14, lock.Intent)
@@ -2241,7 +2241,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 
 	// Now restore the savepoint and check that the in-flight write state has been restored
 	// and all rolled-back writes were moved to the lock footprint.
-	tp.rollbackToSavepointLocked(ctx, s)
+	require.NoError(t, tp.rollbackToSavepointLocked(ctx, s))
 	txn.AddIgnoredSeqNumRange(enginepb.IgnoredSeqNumRange{Start: 13, End: 15})
 
 	// Check that the tracked inflight writes were updated correctly. The key that
@@ -2299,7 +2299,7 @@ func TestTxnPipelinerSavepoints(t *testing.T) {
 
 	// Now rollback to the initial savepoint and check that all in-flight writes
 	// are gone.
-	tp.rollbackToSavepointLocked(ctx, initialSavepoint)
+	require.NoError(t, tp.rollbackToSavepointLocked(ctx, initialSavepoint))
 	require.Empty(t, tp.ifWrites.len())
 	require.Equal(t, 4, len(tp.lockFootprint.asSlice()))
 }
