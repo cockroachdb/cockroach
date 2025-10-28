@@ -1267,20 +1267,12 @@ func (r *testRunner) runTest(
 					t.Error(liveMigrationError(liveMigrationVMNames))
 				}
 
-				// Construct stdoutMsg which will be shouted and githubMsg which will
+				// Construct failureMsg which will be shouted and githubMsg which will
 				// be passed to github.MaybePost to be formatted in the github issue
 				// body
 				failureMsg = fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
-				stdoutMsg := failureMsg
-				githubMsg := failureMsg
-				if githubFatalLogs := t.getGithubFatalLogs(); githubFatalLogs != "" {
-					githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubFatalLogs)
-				}
-				if githubIpToNodeMapping := t.getGithubIpToNodeMapping(); githubIpToNodeMapping != "" {
-					githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubIpToNodeMapping)
-				}
+				githubMsg := t.getGithubMessage(failureMsg)
 
-				l.PrintfCtx(ctx, "creating github issue with msg: %s", githubMsg)
 				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
 				logTestParameters(l, params)
 				issue, err := github.MaybePost(t, issueInfo, l, githubMsg, params)
@@ -1290,22 +1282,22 @@ func (r *testRunner) runTest(
 				}
 
 				// If an issue was created (or comment added) on GitHub,
-				// include that information in the stdoutMsg so that it can be
+				// include that information in the failureMsg so that it can be
 				// easily inspected on the TeamCity overview page.
 				if issue != nil {
-					stdoutMsg += "\n" + issue.String()
+					failureMsg += "\n" + issue.String()
 				}
 				if roachtestflags.TeamCity {
 					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 					// TeamCity regards the test as successful.
 					shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
-						s.Name, TeamCityEscape(stdoutMsg), testRunID)
+						s.Name, TeamCityEscape(failureMsg), testRunID)
 				}
 
-				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, stdoutMsg)
+				shout(ctx, l, stdout, "--- FAIL: %s (%s)\n%s", testRunID, durationStr, failureMsg)
 
 				if roachtestflags.GitHubActions {
-					stdoutMsgLines := strings.Split(strings.TrimSpace(stdoutMsg), "\n")
+					stdoutMsgLines := strings.Split(strings.TrimSpace(failureMsg), "\n")
 					for _, line := range stdoutMsgLines {
 						shout(ctx, l, stdout, "::error title=%s failed::%s", s.Name, line)
 					}
@@ -1800,8 +1792,9 @@ func gatherNodeIpMapping(t *testImpl, c *clusterImpl) (string, error) {
 	}
 	testClusterLogger, err := c.l.ChildLogger("node-ips", logger.QuietStderr, logger.QuietStdout)
 	if err != nil {
+		// Best effort, swallowing error
 		t.L().Printf("unable to create logger %s: %s", "node-ips", err)
-		return "", err
+		return nodeIpTable, nil
 	}
 	testClusterLogger.Printf("\n%s", nodeIpTable)
 	return nodeIpTable, nil
@@ -1824,11 +1817,10 @@ func gatherFatalNodeLogs(t *testImpl, testLogger *logger.Logger) (string, error)
 		return "", nil
 	}
 	args := append([]string{"-E", "-m", "10", "-a", logPattern}, targetFiles...)
-	command := "grep"
-	t.L().Printf("Gathering fatal level logs with command: %q %s", command, strings.Join(args, " "))
+	t.L().Printf("Gathering fatal level logs with command: %s %s", "grep", strings.Join(args, " "))
 	// Works with local and remote node clusters because we will always download
 	// the artifacts if there's a test failure (except for timeout)
-	cmd := exec.Command(command, args...)
+	cmd := exec.Command("grep", args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		var ee *exec.ExitError

@@ -590,6 +590,19 @@ func (t *testImpl) appendGithubIpToNodeMapping(msg string) {
 	t.mu.githubIpToNodeMapping += msg
 }
 
+// getGithubMessage abstracts details on how the Github message is constructed
+func (t *testImpl) getGithubMessage(failureMsg string) string {
+	githubMsg := failureMsg
+	if githubFatalLogs := t.getGithubFatalLogs(); githubFatalLogs != "" {
+		githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubFatalLogs)
+	}
+	if githubIpToNodeMapping := t.getGithubIpToNodeMapping(); githubIpToNodeMapping != "" {
+		githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubIpToNodeMapping)
+	}
+	t.L().Printf("github message: %s", githubMsg)
+	return githubMsg
+}
+
 // failuresMatchingError checks whether the first error in trees of
 // any of the errors in the failures passed match the `refError`
 // target. If it does, `refError` is set to that target error value
