@@ -107,6 +107,7 @@ var lowercaseTimezones = map[string]string{
 	`america/coral_harbour`:            `America/Coral_Harbour`,
 	`america/cordoba`:                  `America/Cordoba`,
 	`america/costa_rica`:               `America/Costa_Rica`,
+	`america/coyhaique`:                `America/Coyhaique`,
 	`america/creston`:                  `America/Creston`,
 	`america/cuiaba`:                   `America/Cuiaba`,
 	`america/curacao`:                  `America/Curacao`,

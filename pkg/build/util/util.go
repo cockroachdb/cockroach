@@ -135,6 +135,11 @@ func MungeTestXML(srcContent []byte, outFile io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// If test.xml is empty, this will be an empty object. We do want to
+	// emit something, however.
+	if len(suites.Suites) == 0 {
+		return writeToFile(&testSuite{}, outFile)
+	}
 	// We only want the first test suite in the list of suites.
 	return writeToFile(&suites.Suites[0], outFile)
 }
