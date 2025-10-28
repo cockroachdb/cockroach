@@ -12,11 +12,19 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/server/serverpb",
         "//pkg/server/srverrors",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/util/httputil",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_grpc_ecosystem_grpc_gateway//runtime:go_default_library",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )
 
