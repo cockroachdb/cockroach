@@ -686,21 +686,32 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	useCanary := sb.mem.Metadata().UseCanaryStats()
 	var skippedStatsCreationTimestamp time.Time
 	canaryWindowSize := tabMeta.CanaryWindowSize
+	// TODO(janexing): should we use clock.Now() or the StmtTimestamp as
+	// the default? Or avoid this issue by only setting it if the session var
+	// is set?
+	asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.StmtTimestamp.UnixNano()}
+	if asOf := sb.evalCtx.SessionData().StatsAsOf; !asOf.IsEmpty() {
+		asOfTs = asOf
+	}
 	// Find the most recent full statistic. (Stats are ordered with most recent first.)
 	var first int
 	sd := sb.evalCtx.SessionData()
 	for first < tab.StatisticCount() {
 		stat := tab.Statistic(first)
+		createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
 		if stat.IsPartial() ||
 			stat.IsMerged() && !sd.OptimizerUseMergedPartialStatistics ||
 			stat.IsForecast() && !sd.OptimizerUseForecasts {
+			first++
+			continue
+		} else if createdAtTS.After(asOfTs) {
+			// The stats is too new, skip it.
 			first++
 			continue
 		} else if canaryWindowSize > 0 && !useCanary && first < tab.StatisticCount()-1 {
 			// The following, we are getting full statistics for the stable stats,
 			// in contrast to the canary stats. The canary stats is skipped.
 			// If there remains only one full statistics, don't skip.
-			createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
 			if stat.CreatedAt() == skippedStatsCreationTimestamp && !skippedStatsCreationTimestamp.IsZero() {
 				// We've already seen this canary stat, so skip it.
 				first++
@@ -708,7 +719,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 			// Found a canary stats (defined as creation time within the canary window size). Register the
 			// creation timestamp and move on the next older one.
-			if createdAtTS.AddDuration(canaryWindowSize).After(hlc.Timestamp{WallTime: time.Now().UnixNano()}) {
+			if createdAtTS.AddDuration(canaryWindowSize).After(asOfTs) {
 				// If there is already a canary stats skipped, we don't skip again.
 				if skippedStatsCreationTimestamp.IsZero() {
 					skippedStatsCreationTimestamp = stat.CreatedAt()
