@@ -18,15 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 type Server interface {
 	RegisterService(*grpc.Server)
 	RegisterGateway(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error
-
-	RegisterDRPCService(drpc.Mux) error
-
 	// UserLogin verifies an incoming request by a user to create an web
 	// authentication session. It checks the provided credentials against
 	// the system.users table, and if successful creates a new
@@ -46,6 +42,16 @@ type Server interface {
 	// DemoLogin is the same as UserLogin but using the GET method.
 	// It is only available for 'cockroach demo' and test clusters.
 	DemoLogin(w http.ResponseWriter, req *http.Request)
+
+	// LoginHandler handles user login requests.
+	// It extracts credentials from the request, validates them
+	// and sets a session cookie on successful authentication.
+	LoginHandler(w http.ResponseWriter, req *http.Request)
+
+	// LogoutHandler handles user logout requests.
+	// It extracts the session from the request cookie and adds it to the
+	// context. The handler then revokes the session and clears the cookie.
+	LogoutHandler(w http.ResponseWriter, req *http.Request)
 
 	// NewAuthSession attempts to create a new authentication session for
 	// the given user. If successful, returns the ID and secret value for
