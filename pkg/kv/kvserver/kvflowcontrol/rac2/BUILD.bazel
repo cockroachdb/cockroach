@@ -71,6 +71,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/echotest",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/asciitsdb",

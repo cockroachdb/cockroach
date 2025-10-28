@@ -2472,6 +2472,7 @@ GO_TARGETS = [
     "//pkg/testutils/bazelcodecover:bazelcodecover",
     "//pkg/testutils/colcontainerutils:colcontainerutils",
     "//pkg/testutils/datapathutils:datapathutils",
+    "//pkg/testutils/dd:dd",
     "//pkg/testutils/diagutils:diagutils",
     "//pkg/testutils/distsqlutils:distsqlutils",
     "//pkg/testutils/docker/docker-fsnotify:docker-fsnotify",

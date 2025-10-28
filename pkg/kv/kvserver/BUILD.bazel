@@ -517,6 +517,7 @@ go_test(
         "//pkg/storage/storageconfig",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/echotest",
         "//pkg/testutils/gossiputil",
         "//pkg/testutils/jobutils",

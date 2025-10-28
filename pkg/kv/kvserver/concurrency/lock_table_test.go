@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -194,11 +195,10 @@ func TestLockTableBasic(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
-				var maxLocks int
-				d.ScanArgs(t, "maxlocks", &maxLocks)
+				maxLocks := dd.ScanArg[int64](t, d, "maxlocks")
 				m := TestingMakeLockTableMetricsCfg()
 				ltImpl := newLockTable(
-					int64(maxLocks), roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
+					maxLocks, roachpb.RangeID(3), clock, cluster.MakeTestingClusterSettings(),
 					m.LocksShedDueToMemoryLimit, m.NumLockShedDueToMemoryLimitEvents,
 				)
 				ltImpl.enabled = true
@@ -212,24 +212,10 @@ func TestLockTableBasic(t *testing.T) {
 				return ""
 
 			case "time-tick":
-				var timeDelta time.Duration
-				var delta int
-				if d.HasArg("m") {
-					d.ScanArgs(t, "m", &delta)
-					timeDelta += time.Duration(delta) * time.Minute
-				}
-				if d.HasArg("s") {
-					d.ScanArgs(t, "s", &delta)
-					timeDelta += time.Duration(delta) * time.Second
-				}
-				if d.HasArg("ms") {
-					d.ScanArgs(t, "ms", &delta)
-					timeDelta += time.Duration(delta) * time.Millisecond
-				}
-				if d.HasArg("ns") {
-					d.ScanArgs(t, "ns", &delta)
-					timeDelta += time.Duration(delta)
-				}
+				timeDelta := time.Duration(dd.ScanArgOr(t, d, "m", 0))*time.Minute +
+					time.Duration(dd.ScanArgOr(t, d, "s", 0))*time.Second +
+					time.Duration(dd.ScanArgOr(t, d, "ms", 0))*time.Millisecond +
+					time.Duration(dd.ScanArgOr(t, d, "ns", 0))*time.Nanosecond
 				manualClock.Advance(timeDelta)
 				return ""
 
@@ -238,15 +224,10 @@ func TestLockTableBasic(t *testing.T) {
 				// lockTableImpl.String() knows about UUIDs and not transaction names.
 				// Assigning txnNames of the form txn1, txn2, ... keeps the two in sync,
 				// which makes test cases easier to understand.
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				ts := scanTimestamp(t, d)
-				var epoch int
-				d.ScanArgs(t, "epoch", &epoch)
-				var seq int
-				if d.HasArg("seq") {
-					d.ScanArgs(t, "seq", &seq)
-				}
+				epoch := dd.ScanArg[enginepb.TxnEpoch](t, d, "epoch")
+				seq := dd.ScanArgOr[enginepb.TxnSeq](t, d, "seq", 0)
 				iso := ScanIsoLevel(t, d)
 				txnMeta, ok := txnsByName[txnName]
 				var id uuid.UUID
@@ -257,16 +238,15 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				txnsByName[txnName] = &enginepb.TxnMeta{
 					ID:             id,
-					Epoch:          enginepb.TxnEpoch(epoch),
-					Sequence:       enginepb.TxnSeq(seq),
+					Epoch:          epoch,
+					Sequence:       seq,
 					WriteTimestamp: ts,
 					IsoLevel:       iso,
 				}
 				return ""
 
 			case "pushed-txn-updated":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txnMeta, ok := txnsByName[txnName]
 				if !ok {
 					return fmt.Sprintf("txn %s not found", txnName)
@@ -274,9 +254,7 @@ func TestLockTableBasic(t *testing.T) {
 				txn := &roachpb.Transaction{
 					TxnMeta: *txnMeta,
 				}
-				var statusStr string
-				d.ScanArgs(t, "status", &statusStr)
-				switch statusStr {
+				switch statusStr := dd.ScanArg[string](t, d, "status"); statusStr {
 				case "committed":
 					txn.Status = roachpb.COMMITTED
 				case "aborted":
@@ -298,13 +276,11 @@ func TestLockTableBasic(t *testing.T) {
 				// lockTableImpl.String() does not know about request names. Assigning
 				// request names of the form req1, req2, ... keeps the two in sync,
 				// which makes test cases easier to understand.
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				if _, ok := requestsByName[reqName]; ok {
 					d.Fatalf(t, "duplicate request: %s", reqName)
 				}
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txnMeta, ok := txnsByName[txnName]
 				if !ok && txnName != "none" {
 					d.Fatalf(t, "unknown txn %s", txnName)
@@ -315,10 +291,7 @@ func TestLockTableBasic(t *testing.T) {
 					waitPolicy = lock.WaitPolicy_SkipLocked
 				}
 				updateRetainedTxn := !d.HasArg("no-update-retained-txn")
-				var maxLockWaitQueueLength int
-				if d.HasArg("max-lock-wait-queue-length") {
-					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
-				}
+				maxLockWaitQueueLength := dd.ScanArgOr(t, d, "max-lock-wait-queue-length", 0)
 				latchSpans, lockSpans := scanSpans(t, d, ts)
 				ba := &kvpb.BatchRequest{}
 				ba.Timestamp = ts
@@ -351,8 +324,7 @@ func TestLockTableBasic(t *testing.T) {
 				return ""
 
 			case "scan":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				req, ok := requestsByName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -367,8 +339,7 @@ func TestLockTableBasic(t *testing.T) {
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
 			case "scan-opt":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				req, ok := requestsByName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -382,16 +353,13 @@ func TestLockTableBasic(t *testing.T) {
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
 			case "acquire":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				req, ok := requestsByName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				var key string
-				d.ScanArgs(t, "k", &key)
-				var s string
-				d.ScanArgs(t, "durability", &s)
+				key := dd.ScanArg[string](t, d, "k")
+				s := dd.ScanArg[string](t, d, "durability")
 				if len(s) != 1 || (s[0] != 'r' && s[0] != 'u') {
 					d.Fatalf(t, "incorrect durability: %s", s)
 				}
@@ -403,26 +371,19 @@ func TestLockTableBasic(t *testing.T) {
 				acq := roachpb.MakeLockAcquisition(
 					req.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.Txn.IgnoredSeqNums,
 				)
-				var ignored []enginepb.IgnoredSeqNumRange
-				if d.HasArg("ignored-seqs") {
-					ignored = ScanIgnoredSeqNumbers(t, d)
-				}
-				acq.IgnoredSeqNums = ignored
+				acq.IgnoredSeqNums = ScanIgnoredSeqNumbers(t, d)
 				if err := lt.AcquireLock(&acq); err != nil {
 					return err.Error()
 				}
 				return lt.String()
 
 			case "release":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txnMeta, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-				var s string
-				d.ScanArgs(t, "span", &s)
-				span := getSpan(t, d, s)
+				span := getSpan(t, d, dd.ScanArg[string](t, d, "span"))
 				// TODO(sbhola): also test ABORTED.
 				intent := &roachpb.LockUpdate{Span: span, Txn: *txnMeta, Status: roachpb.COMMITTED}
 				if err := lt.UpdateLocks(intent); err != nil {
@@ -431,26 +392,19 @@ func TestLockTableBasic(t *testing.T) {
 				return lt.String()
 
 			case "update":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txnMeta, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
-				var epoch int
-				d.ScanArgs(t, "epoch", &epoch)
-				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
-				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
-				txnMeta.WriteTimestamp = ts
-				txnsByName[txnName] = txnMeta
-				var s string
-				d.ScanArgs(t, "span", &s)
-				span := getSpan(t, d, s)
-				var ignored []enginepb.IgnoredSeqNumRange
-				if d.HasArg("ignored-seqs") {
-					ignored = ScanIgnoredSeqNumbers(t, d)
+				epoch := dd.ScanArg[enginepb.TxnEpoch](t, d, "epoch")
+				txnMeta = &enginepb.TxnMeta{
+					ID: txnMeta.ID, Sequence: txnMeta.Sequence, Epoch: epoch, WriteTimestamp: ts,
 				}
+				txnsByName[txnName] = txnMeta
+				span := getSpan(t, d, dd.ScanArg[string](t, d, "span"))
+				ignored := ScanIgnoredSeqNumbers(t, d)
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
 					Span: span, Txn: *txnMeta, Status: roachpb.PENDING, IgnoredSeqNums: ignored}
@@ -460,46 +414,34 @@ func TestLockTableBasic(t *testing.T) {
 				return lt.String()
 
 			case "update-txn-not-observed":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txnMeta, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				ts := scanTimestamp(t, d)
-				var epoch int
-				d.ScanArgs(t, "epoch", &epoch)
-				txnMeta = &enginepb.TxnMeta{ID: txnMeta.ID, Sequence: txnMeta.Sequence}
-				txnMeta.Epoch = enginepb.TxnEpoch(epoch)
-				txnMeta.WriteTimestamp = ts
-				txnsByName[txnName] = txnMeta
+				epoch := dd.ScanArg[enginepb.TxnEpoch](t, d, "epoch")
+				txnsByName[txnName] = &enginepb.TxnMeta{
+					ID: txnMeta.ID, Sequence: txnMeta.Sequence,
+					Epoch: epoch, WriteTimestamp: ts,
+				}
 				return ""
 
 			case "add-discovered":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				g := guardsByReqName[reqName]
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
-				var key string
-				d.ScanArgs(t, "k", &key)
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				key := dd.ScanArg[string](t, d, "k")
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txnMeta, ok := txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				foundLock := roachpb.MakeLock(txnMeta, roachpb.Key(key), lock.Intent)
-				seq := 1
-				if d.HasArg("lease-seq") {
-					d.ScanArgs(t, "lease-seq", &seq)
-				}
-				consultTxnStatusCache := false
-				if d.HasArg("consult-txn-status-cache") {
-					d.ScanArgs(t, "consult-txn-status-cache", &consultTxnStatusCache)
-				}
-				leaseSeq := roachpb.LeaseSequence(seq)
+				leaseSeq := dd.ScanArgOr[roachpb.LeaseSequence](t, d, "lease-seq", 1)
+				consultTxnStatusCache := dd.ScanArgOr(t, d, "consult-txn-status-cache", false)
 				str := lock.Intent // default replicated locks to write intents
 				if d.HasArg("strength") {
 					str = ScanLockStrength(t, d)
@@ -513,8 +455,7 @@ func TestLockTableBasic(t *testing.T) {
 				return lt.String()
 
 			case "check-opt-no-conflicts":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				req, ok := requestsByName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -527,14 +468,12 @@ func TestLockTableBasic(t *testing.T) {
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				g := guardsByReqName[reqName]
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
-				var key string
-				d.ScanArgs(t, "k", &key)
+				key := dd.ScanArg[string](t, d, "k")
 				strength := ScanLockStrength(t, d)
 				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
 				if err != nil {
@@ -550,8 +489,7 @@ func TestLockTableBasic(t *testing.T) {
 				return "locked: false"
 
 			case "dequeue":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				g := guardsByReqName[reqName]
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
@@ -562,8 +500,7 @@ func TestLockTableBasic(t *testing.T) {
 				return lt.String()
 
 			case "should-wait":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				g := guardsByReqName[reqName]
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
@@ -571,8 +508,7 @@ func TestLockTableBasic(t *testing.T) {
 				return fmt.Sprintf("%t", g.ShouldWait())
 
 			case "guard-state":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				g := guardsByReqName[reqName]
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
@@ -624,8 +560,7 @@ func TestLockTableBasic(t *testing.T) {
 					str, typeStr, txnS, state.key, state.held, state.guardStrength)
 
 			case "resolve-before-scanning":
-				var reqName string
-				d.ScanArgs(t, "r", &reqName)
+				reqName := dd.ScanArg[string](t, d, "r")
 				g := guardsByReqName[reqName]
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
@@ -633,19 +568,14 @@ func TestLockTableBasic(t *testing.T) {
 				return intentsToResolveToStr(g.ResolveBeforeScanning(), false)
 
 			case "enable":
-				seq := int(1)
-				if d.HasArg("lease-seq") {
-					d.ScanArgs(t, "lease-seq", &seq)
-				}
-				lt.Enable(roachpb.LeaseSequence(seq))
+				lt.Enable(dd.ScanArgOr[roachpb.LeaseSequence](t, d, "lease-seq", 1))
 				return ""
 
 			case "clear":
 				lt.Clear(d.HasArg("disable"))
 				return lt.String()
 			case "clear-ge":
-				var endKeyStr string
-				d.ScanArgs(t, "key", &endKeyStr)
+				endKeyStr := dd.ScanArg[string](t, d, "key")
 				locks := lt.ClearGE(roachpb.Key(endKeyStr))
 				var buf strings.Builder
 				fmt.Fprintf(&buf, "num returned for re-acquisition: %d", len(locks))
@@ -659,22 +589,12 @@ func TestLockTableBasic(t *testing.T) {
 
 			case "query":
 				span := keys.EverythingSpan
-				var maxLocks int
-				var targetBytes int
-				if d.HasArg("span") {
-					var spanStr string
-					d.ScanArgs(t, "span", &spanStr)
-					span = getSpan(t, d, spanStr)
-				}
-				if d.HasArg("max-locks") {
-					d.ScanArgs(t, "max-locks", &maxLocks)
-				}
-				if d.HasArg("max-bytes") {
-					d.ScanArgs(t, "max-bytes", &targetBytes)
+				if str, ok := dd.ScanArgOpt[string](t, d, "span"); ok {
+					span = getSpan(t, d, str)
 				}
 				scanOpts := QueryLockTableOptions{
-					MaxLocks:           int64(maxLocks),
-					TargetBytes:        int64(targetBytes),
+					MaxLocks:           dd.ScanArgOr[int64](t, d, "max-locks", 0),
+					TargetBytes:        dd.ScanArgOr[int64](t, d, "max-bytes", 0),
 					IncludeUncontended: d.HasArg("uncontended"),
 				}
 				lockInfos, resumeState := lt.QueryLockTableState(span, scanOpts)
@@ -718,9 +638,7 @@ func nextUUID(counter *uint128.Uint128) uuid.UUID {
 }
 
 func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
-	var tsS string
-	d.ScanArgs(t, "ts", &tsS)
-	ts, err := hlc.ParseTimestamp(tsS)
+	ts, err := hlc.ParseTimestamp(dd.ScanArg[string](t, d, "ts"))
 	if err != nil {
 		d.Fatalf(t, "%v", err)
 	}
@@ -747,8 +665,7 @@ func scanSpans(
 ) (*spanset.SpanSet, *lockspanset.LockSpanSet) {
 	latchSpans := &spanset.SpanSet{}
 	lockSpans := &lockspanset.LockSpanSet{}
-	var spansStr string
-	d.ScanArgs(t, "spans", &spansStr)
+	spansStr := dd.ScanArg[string](t, d, "spans")
 	lockSpanStrs := strings.Split(spansStr, "+")
 	for _, lockSpanStr := range lockSpanStrs {
 		parts := strings.Split(lockSpanStr, "@")
@@ -796,12 +713,10 @@ func latchAccessForLockStrength(
 }
 
 func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
-	const key = "iso"
-	if !d.HasArg(key) {
+	isoS, ok := dd.ScanArgOpt[string](t, d, "iso")
+	if !ok {
 		return isolation.Serializable
 	}
-	var isoS string
-	d.ScanArgs(t, key, &isoS)
 	switch isoS {
 	case "serializable":
 		return isolation.Serializable
@@ -816,9 +731,7 @@ func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
 }
 
 func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
-	var strS string
-	d.ScanArgs(t, "strength", &strS)
-	return GetStrength(t, d, strS)
+	return GetStrength(t, d, dd.ScanArg[string](t, d, "strength"))
 }
 
 func GetStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strength {
@@ -840,9 +753,11 @@ func GetStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strengt
 }
 
 func ScanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
+	seqsStr, ok := dd.ScanArgOpt[string](t, d, "ignored-seqs")
+	if !ok {
+		return nil
+	}
 	var ignored []enginepb.IgnoredSeqNumRange
-	var seqsStr string
-	d.ScanArgs(t, "ignored-seqs", &seqsStr)
 	parts := strings.Split(seqsStr, ",")
 	for _, p := range parts {
 		pair := strings.Split(p, "-")

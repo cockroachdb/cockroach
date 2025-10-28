@@ -34,7 +34,7 @@ score-sums:
   locality-str 1:3:: 0.500000
   locality-str 4:5:: 1.000000
 
-existing-replica-localities store-ids=1,2
+existing-replica-localities store-ids=(1,2)
 ----
 replicas:
   =a,=a1
@@ -61,7 +61,7 @@ score-sums:
   locality-str 1:3:: 0.500000
   locality-str 4:5:: 2.000000
 
-existing-replica-localities store-ids=1,3
+existing-replica-localities store-ids=(1,3)
 ----
 replicas:
   =a,=a1

@@ -56,6 +56,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/leaktest",
         "//pkg/util/log",

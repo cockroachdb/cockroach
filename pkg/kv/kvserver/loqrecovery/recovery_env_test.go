@@ -9,8 +9,8 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -572,10 +573,7 @@ func (e *quorumRecoveryEnv) handleMakePlan(t *testing.T, d datadriven.TestData) 
 		return "", err
 	}
 	err = report.Error()
-	var force bool
-	if d.HasArg("force") {
-		d.ScanArgs(t, "force", &force)
-	}
+	force := dd.ScanArgOr(t, &d, "force", false)
 	if err != nil && !force {
 		return "", err
 	}
@@ -712,27 +710,9 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 	t *testing.T, d datadriven.TestData, defaultToAll bool,
 ) []roachpb.StoreID {
 	// Prepare replica info
-	var stores []roachpb.StoreID
-	if d.HasArg("stores") {
-		for _, arg := range d.CmdArgs {
-			if arg.Key == "stores" {
-				for _, id := range arg.Vals {
-					id, err := strconv.ParseInt(id, 10, 32)
-					if err != nil {
-						t.Fatalf("failed to parse store id: %v", err)
-					}
-					stores = append(stores, roachpb.StoreID(id))
-				}
-			}
-		}
-	} else {
-		if defaultToAll {
-			for id := range e.stores {
-				stores = append(stores, id)
-			}
-		} else {
-			stores = []roachpb.StoreID{}
-		}
+	stores, ok := dd.ScanArgOpt[[]roachpb.StoreID](t, &d, "stores")
+	if !ok && defaultToAll {
+		stores = slices.AppendSeq(stores, maps.Keys(e.stores))
 	}
 	slices.Sort(stores)
 	return stores
@@ -741,23 +721,8 @@ func (e *quorumRecoveryEnv) parseStoresArg(
 // parseNodesArg parses NodeIDs from nodes arg if available.
 // Results are returned in sorted order to allow consistent output.
 func (e *quorumRecoveryEnv) parseNodesArg(t *testing.T, d datadriven.TestData) []roachpb.NodeID {
-	var nodes []roachpb.NodeID
-	if d.HasArg("nodes") {
-		for _, arg := range d.CmdArgs {
-			if arg.Key == "nodes" {
-				for _, id := range arg.Vals {
-					id, err := strconv.ParseInt(id, 10, 32)
-					if err != nil {
-						t.Fatalf("failed to parse node id: %v", err)
-					}
-					nodes = append(nodes, roachpb.NodeID(id))
-				}
-			}
-		}
-	}
-	if len(nodes) > 0 {
-		slices.Sort(nodes)
-	}
+	nodes, _ := dd.ScanArgOpt[[]roachpb.NodeID](t, &d, "nodes")
+	slices.Sort(nodes)
 	return nodes
 }
 
@@ -804,10 +769,7 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 func (e *quorumRecoveryEnv) handleApplyPlan(t *testing.T, d datadriven.TestData) (string, error) {
 	ctx := context.Background()
 	stores := e.parseStoresArg(t, d, true /* defaultToAll */)
-	var restart bool
-	if d.HasArg("restart") {
-		d.ScanArgs(t, "restart", &restart)
-	}
+	restart := dd.ScanArgOr(t, &d, "restart", false)
 
 	if !restart {
 		nodes := e.groupStoresByNodeStore(t, stores)
@@ -863,14 +825,8 @@ func (e *quorumRecoveryEnv) dumpRecoveryEvents(
 ) (string, error) {
 	ctx := context.Background()
 
-	removeEvents := false
-	if d.HasArg("remove") {
-		d.ScanArgs(t, "remove", &removeEvents)
-	}
-	dumpStatus := false
-	if d.HasArg("status") {
-		d.ScanArgs(t, "status", &dumpStatus)
-	}
+	removeEvents := dd.ScanArgOr(t, &d, "remove", false)
+	dumpStatus := dd.ScanArgOr(t, &d, "status", false)
 
 	var events []string
 	logEvents := func(ctx context.Context, record loqrecoverypb.ReplicaRecoveryRecord) (bool, error) {

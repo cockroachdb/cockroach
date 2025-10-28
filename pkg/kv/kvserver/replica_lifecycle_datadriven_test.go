@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -64,12 +65,13 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-descriptor":
-				var startKey, endKey string
-				d.ScanArgs(t, "start", &startKey)
-				d.ScanArgs(t, "end", &endKey)
-				var replicasStr string
-				d.ScanArgs(t, "replicas", &replicasStr)
-				replicaNodeIDs := parseReplicas(t, replicasStr)
+				startKey := dd.ScanArg[string](t, d, "start")
+				endKey := dd.ScanArg[string](t, d, "end")
+				replicaNodeIDs := dd.ScanArg[[]roachpb.NodeID](t, d, "replicas")
+
+				// The test is written from the perspective of n1/s1, so not having n1
+				// in this list should return an error.
+				require.True(t, slices.Contains(replicaNodeIDs, 1), "replica list must contain n1")
 
 				rangeID := tc.nextRangeID
 				tc.nextRangeID++
@@ -107,15 +109,14 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				return fmt.Sprintf("created descriptor: %v", desc)
 
 			case "create-replica":
-				var rangeID int
-				d.ScanArgs(t, "range-id", &rangeID)
-				rs := tc.mustGetRangeState(t, roachpb.RangeID(rangeID))
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				initialized := d.HasArg("initialized")
+
+				rs := tc.mustGetRangeState(t, rangeID)
 				if rs.replica != nil {
 					return errors.New("initialized replica already exists on n1/s1").Error()
 				}
 				repl := rs.getReplicaDescriptor(t)
-
-				initialized := d.HasArg("initialized")
 
 				batch := tc.storage.NewBatch()
 				defer batch.Close()
@@ -126,11 +127,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 						rs.desc, repl.ReplicaID, rs.version,
 					))
 				} else {
-					err := kvstorage.CreateUninitializedReplica(
+					require.NoError(t, kvstorage.CreateUninitializedReplica(
 						ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
 						roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
-					)
-					require.NoError(t, err)
+					))
 				}
 				tc.updatePostReplicaCreateState(t, ctx, rs, batch)
 
@@ -277,20 +277,4 @@ func (r *replicaInfo) String() string {
 		sb.WriteString(fmt.Sprintf("TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
 	}
 	return sb.String()
-}
-
-func parseReplicas(t *testing.T, val string) []roachpb.NodeID {
-	var replicaNodeIDs []roachpb.NodeID
-	require.True(t, len(val) >= 2 && val[0] == '[' && val[len(val)-1] == ']', "incorrect format")
-	val = val[1 : len(val)-1]
-	for _, s := range strings.Split(val, ",") {
-		var id int
-		_, err := fmt.Sscanf(strings.TrimSpace(s), "%d", &id)
-		require.NoError(t, err)
-		replicaNodeIDs = append(replicaNodeIDs, roachpb.NodeID(id))
-	}
-	// The test is written from the perspective of n1/s1, so not having n1 in
-	// this list should return an error.
-	require.True(t, slices.Contains(replicaNodeIDs, 1), "replica list must contain n1")
-	return replicaNodeIDs
 }

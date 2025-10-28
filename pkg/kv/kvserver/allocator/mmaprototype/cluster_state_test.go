@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -365,12 +366,9 @@ func TestClusterState(t *testing.T) {
 					return printNodeListMeta()
 
 				case "set-store-membership":
-					var storeID int
-					d.ScanArgs(t, "store-id", &storeID)
-					var storeMembershipString string
-					d.ScanArgs(t, "membership", &storeMembershipString)
+					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					var storeMembershipVal storeMembership
-					switch storeMembershipString {
+					switch str := dd.ScanArg[string](t, d, "membership"); str {
 					case "member":
 						storeMembershipVal = storeMembershipMember
 					case "removing":
@@ -378,7 +376,7 @@ func TestClusterState(t *testing.T) {
 					case "removed":
 						storeMembershipVal = storeMembershipRemoved
 					}
-					cs.setStoreMembership(roachpb.StoreID(storeID), storeMembershipVal)
+					cs.setStoreMembership(storeID, storeMembershipVal)
 
 					var buf strings.Builder
 					nonRemovedStores, removedStores := testingGetStoreList(t, cs)
@@ -389,10 +387,8 @@ func TestClusterState(t *testing.T) {
 					return buf.String()
 
 				case "update-failure-detection":
-					var nodeID int
-					var failureDetectionString string
-					d.ScanArgs(t, "node-id", &nodeID)
-					d.ScanArgs(t, "summary", &failureDetectionString)
+					nodeID := dd.ScanArg[roachpb.NodeID](t, d, "node-id")
+					failureDetectionString := dd.ScanArg[string](t, d, "summary")
 					var fd failureDetectionSummary
 					for i := fdOK; i < fdDead+1; i++ {
 						if i.String() == failureDetectionString {
@@ -400,7 +396,7 @@ func TestClusterState(t *testing.T) {
 							break
 						}
 					}
-					cs.updateFailureDetectionSummary(roachpb.NodeID(nodeID), fd)
+					cs.updateFailureDetectionSummary(nodeID, fd)
 					return printNodeListMeta()
 
 				case "store-load-msg":
@@ -414,10 +410,8 @@ func TestClusterState(t *testing.T) {
 					return ""
 
 				case "make-pending-changes":
-					var rid int
+					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 					var changes []ReplicaChange
-					d.ScanArgs(t, "range-id", &rid)
-					rangeID := roachpb.RangeID(rid)
 					rState := cs.ranges[rangeID]
 
 					lines := strings.Split(d.Input, "\n")
@@ -467,10 +461,9 @@ func TestClusterState(t *testing.T) {
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
-					var changeIDsInt []int
-					d.ScanArgs(t, "change-ids", &changeIDsInt)
+					changeIDsInt := dd.ScanArg[[]ChangeID](t, d, "change-ids")
 					for _, id := range changeIDsInt {
-						cs.undoPendingChange(ChangeID(id), true)
+						cs.undoPendingChange(id, true)
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
@@ -478,8 +471,7 @@ func TestClusterState(t *testing.T) {
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
-					var seconds int
-					d.ScanArgs(t, "seconds", &seconds)
+					seconds := dd.ScanArg[int](t, d, "seconds")
 					ts.Advance(time.Second * time.Duration(seconds))
 					return fmt.Sprintf("t=%v", ts.Now().Sub(testingBaseTime))
 
