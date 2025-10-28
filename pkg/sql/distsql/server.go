@@ -545,6 +545,28 @@ func newFlow(
 	return rowflow.NewRowBasedFlow(base)
 }
 
+// ConcurrencyKind indicates which concurrency type is present within the local
+// DistSQL flow. Note that inter-node concurrency (i.e. whether we have a
+// distributed plan) is not reflected here.
+type ConcurrencyKind uint32
+
+const (
+	// ConcurrencyHasParallelProcessors, if set, indicates that we have multiple
+	// processors running for the same plan stage.
+	ConcurrencyHasParallelProcessors ConcurrencyKind = (1 << iota)
+	// ConcurrencyStreamer, if set, indicates we have concurrency due to usage
+	// of the Streamer API.
+	ConcurrencyStreamer
+	// ConcurrencyParallelChecks, if set, indicates that we're running
+	// post-query CHECKs in parallel with each other (i.e. the concurrency is
+	// with _other_ local flows).
+	ConcurrencyParallelChecks
+	// ConcurrencyWithOuterPlan, if set, indicates that - if we're running an
+	// "inner" plan (like an apply-join iteration or a routine) - we might have
+	// concurrency with the "outer" plan.
+	ConcurrencyWithOuterPlan
+)
+
 // LocalState carries information that is required to set up a flow with wrapped
 // planNodes.
 type LocalState struct {
@@ -559,13 +581,9 @@ type LocalState struct {
 	// remote flows.
 	IsLocal bool
 
-	// HasConcurrency indicates whether the local flow uses multiple goroutines.
-	HasConcurrency bool
-
-	// MustUseLeaf indicates whether the local flow must use the LeafTxn even if
-	// there is no concurrency in the flow on its own because there would be
-	// concurrency with other flows which prohibits the usage of the RootTxn.
-	MustUseLeaf bool
+	// concurrency tracks the types of concurrency present when accessing the
+	// Txn.
+	concurrency ConcurrencyKind
 
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
@@ -582,10 +600,22 @@ type LocalState struct {
 	LocalVectorSources map[int32]any
 }
 
+// AddConcurrency marks the given concurrency kinds as present in the local
+// flow.
+func (l *LocalState) AddConcurrency(kind ConcurrencyKind) {
+	l.concurrency |= kind
+}
+
+// GetConcurrency returns the bit-mask representing all concurrency kinds
+// present in the local flow.
+func (l LocalState) GetConcurrency() ConcurrencyKind {
+	return l.concurrency
+}
+
 // MustUseLeafTxn returns true if a LeafTxn must be used. It is valid to call
-// this method only after IsLocal and HasConcurrency have been set correctly.
+// this method only after IsLocal and all concurrency kinds have been set.
 func (l LocalState) MustUseLeafTxn() bool {
-	return !l.IsLocal || l.HasConcurrency || l.MustUseLeaf
+	return !l.IsLocal || l.concurrency != 0
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node,

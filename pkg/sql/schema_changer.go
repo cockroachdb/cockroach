@@ -521,7 +521,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					ctx, localPlanner, localPlanner.ExtendedEvalContextCopy,
 					localPlanner.curPlan.subqueryPlans, recv, &subqueryResultMemAcc,
 					false, /* skipDistSQLDiagramGeneration */
-					false, /* mustUseLeafTxn */
+					false, /* innerPlansMustUseLeafTxn */
 				) {
 					if planAndRunErr = rw.Err(); planAndRunErr != nil {
 						return
