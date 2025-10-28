@@ -1747,6 +1747,10 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	// Intentionally disable WaitForInitialVersion support, so that we can run
+	// historical queries at timestamps before the lease manager is fully caught
+	// up.
+	WaitForInitialVersion.Override(ctx, &st.SV, false)
 	srv, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{
 			// Avoid using tenants since async tenant migration steps can acquire
@@ -1770,6 +1774,11 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(db)
 
 	r.Exec(t, "CREATE TABLE t1(n int)")
+	// These queries will be intentionally executed before the lease manager is
+	// fully aware of their existence, since WaitForInitialVersion support is
+	// disabled. We should be forced to use a non-locked timestamp to be aware
+	// of the tables existence.
+	r.Exec(t, "SELECT * FROM t1")
 	r.Exec(t, "INSERT INTO t1 VALUES (1)")
 
 	grp := ctxgroup.WithContext(context.Background())
