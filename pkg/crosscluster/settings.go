@@ -59,7 +59,7 @@ var ReplanThreshold = settings.RegisterFloatSetting(
 	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
 		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
 	0.1,
-	settings.NonNegativeFloatWithMaximum(1),
+	settings.Fraction,
 	settings.WithName("physical_replication.consumer.replan_flow_threshold"),
 )
 
@@ -116,7 +116,7 @@ var LogicalReplanThreshold = settings.RegisterFloatSetting(
 	"fraction of nodes in the producer or consumer job that would need to change to refresh the"+
 		" physical execution plan. If set to 0, the physical plan will not automatically refresh.",
 	0.1,
-	settings.NonNegativeFloatWithMaximum(1),
+	settings.Fraction,
 )
 
 var LogicalReplanFrequency = settings.RegisterDurationSetting(

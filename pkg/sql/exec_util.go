@@ -295,7 +295,7 @@ var TraceTxnSampleRate = settings.RegisterFloatSetting(
 		"will have tracing enabled, and only those which exceed the configured "+
 		"threshold will be logged.",
 	1.0,
-	settings.NonNegativeFloatWithMaximum(1.0),
+	settings.Fraction,
 	settings.WithPublic)
 
 // TraceTxnOutputJaegerJSON sets the output format of transaction trace logs.

@@ -63,7 +63,7 @@ var MaxFractionHistogramMCVs = settings.RegisterFloatSetting(
 	"sql.stats.histogram_buckets.max_fraction_most_common_values",
 	"maximum fraction of histogram buckets to use for most common values",
 	0.1,
-	settings.NonNegativeFloatWithMaximum(1),
+	settings.Fraction,
 	settings.WithPublic)
 
 // HistogramVersion identifies histogram versions.
