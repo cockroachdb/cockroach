@@ -792,6 +792,20 @@ message LocalOnlySessionData {
   // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
   // optimizer_min_row_count setting to be applied correctly to anti-joins.
   bool optimizer_use_min_row_count_anti_join_fix = 203;
+  // StatsAsOf is an optional timestamp that, when set, causes
+  // statistics selection to be based on the age gap between the stats
+  // creation timestamp and the StatsAsOf timestamp, rather than the
+  // current time. This is primarily intended for debugging, testing,
+  // and historical analysis. Should not be used in production
+  // environments.
+  // Note the time-traveling only takes effect if the timestamp is later
+  // than or equal to the latest full stats in the stable stats cache --
+  // we don't support traveling way too back in the history at this
+  // moment. If the asOf timestamp is earlier than the latest full stats
+  // in the stable stats cache, a trace message would be logged, and
+  // still the whole stable stats cache will be used for planning.
+  util.hlc.Timestamp stats_as_of = 204 [(gogoproto.nullable) = false];
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
