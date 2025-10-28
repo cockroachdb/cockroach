@@ -6,6 +6,7 @@
 package future
 
 import (
+	"html/template"
 	"net/http"
 	"os"
 	"path"
@@ -13,16 +14,54 @@ import (
 	"strings"
 )
 
-func HandleFuture(w http.ResponseWriter, r *http.Request) {
-	// Get the requested path and strip the /future prefix
-	requestPath := r.URL.Path
-	requestPath = strings.TrimPrefix(requestPath, "/future")
-	requestPath = strings.TrimPrefix(requestPath, "/")
+func MakeFutureHandler() http.HandlerFunc {
+	mux := http.ServeMux{}
 
-	// Default to index.html for root
-	if requestPath == "" {
-		requestPath = "index.html"
+	// Serve the inline template for both root and /index.html
+	serveTemplate := func(w http.ResponseWriter, r *http.Request) {
+		tpl, err := template.New("index").Parse(`
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="assets/htmx.min.js"></script>
+    <script defer src="assets/alpine.min.js"></script>
+    <link rel=stylesheet href="assets/missing.css">
+  </head>
+
+  <body>
+  Future DB Console! (inline!)
+
+  <h1>Login</h1>
+  <form method="POST">
+    <input type="text" id="username"></input>
+    <input type="password" id="password"></input>
+    <button type="submit"></button>
+  </form>
+  </body>
+</html>
+			`)
+		if err != nil {
+			http.Error(w, "bad template", 500)
+			return
+		}
+		err = tpl.Execute(w, nil)
+		if err != nil {
+			http.Error(w, "bad template", 500)
+			return
+		}
 	}
+
+	//mux.HandleFunc("/", serveTemplate)
+	mux.HandleFunc("/future/index.html", serveTemplate)
+	mux.HandleFunc("/future/assets/", HandleAssets)
+
+	return mux.ServeHTTP
+}
+
+func HandleAssets(w http.ResponseWriter, r *http.Request) {
+	// Get the requested path and strip the /assets/ prefix
+	requestPath := r.URL.Path
+	requestPath = strings.TrimPrefix(requestPath, "/future/assets/")
 
 	// Clean the path to prevent directory traversal
 	requestPath = path.Clean(requestPath)

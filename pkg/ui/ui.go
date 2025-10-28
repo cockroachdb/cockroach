@@ -188,7 +188,7 @@ func Handler(cfg Config) http.Handler {
 			args.NodeID = cfg.NodeID.String()
 		}
 		if futurePath.MatchString(r.URL.Path) {
-			future.HandleFuture(w, r)
+			future.MakeFutureHandler().ServeHTTP(w, r)
 			return
 		}
 		if uiConfigPath.MatchString(r.URL.Path) {
