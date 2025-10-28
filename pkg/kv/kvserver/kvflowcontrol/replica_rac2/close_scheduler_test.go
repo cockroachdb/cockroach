@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -119,10 +120,7 @@ func TestStreamCloseScheduler(t *testing.T) {
 			return buf.String()
 
 		case "tick":
-			var durationStr string
-			d.ScanArgs(t, "duration", &durationStr)
-			duration, err := time.ParseDuration(durationStr)
-			require.NoError(t, err)
+			duration := dd.ScanArg[time.Duration](t, d, "duration")
 			clock.Advance(duration)
 			// Delay to allow the channel selects to fire.
 			time.Sleep(20 * time.Millisecond)
