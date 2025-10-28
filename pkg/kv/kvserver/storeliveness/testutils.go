@@ -101,6 +101,10 @@ func (tms *testMessageSender) EnqueueMessage(_ context.Context, msg slpb.Message
 	return true
 }
 
+func (tms *testMessageSender) SendAllEnqueuedMessages(_ context.Context) {
+	// No-op for testing
+}
+
 func (tms *testMessageSender) drainSentMessages() []slpb.Message {
 	tms.mu.Lock()
 	defer tms.mu.Unlock()
