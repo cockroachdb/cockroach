@@ -1321,12 +1321,14 @@ func (m *Manager) purgeOldVersions(
 				handle.release(ctx)
 			}
 		}()
-		state := m.findDescriptorState(id, false)
-		state.mu.Lock()
-		defer state.mu.Unlock()
-		// Find the previous version and determine the timestamp handle that
-		// it belongs to.
-		prev := state.mu.active.findPrevious()
+		prev, newest := func() (*descriptorVersionState, *descriptorVersionState) {
+			state := m.findDescriptorState(id, false)
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			// Find the previous version and determine the timestamp handle that
+			// it belongs to.
+			return state.mu.active.findPrevious(), state.mu.active.findNewest()
+		}()
 		// If there is no previous or the previous version is a historical descriptor,
 		// nothing needs to be done (i.e. no active lease or already setup for
 		// expiration).
@@ -1358,8 +1360,8 @@ func (m *Manager) purgeOldVersions(
 						handle.mu.leasesToRelease[id].(*descriptorVersionState).getExpiration(ctx),
 						prev.GetVersion(),
 						prev.getExpiration(ctx),
-						state.mu.active.findNewest().GetVersion(),
-						state.mu.active.findNewest().getExpiration(ctx))
+						newest.GetVersion(),
+						newest.getExpiration(ctx))
 				}
 				// Bump the refcount on the previous version of the descriptor and attach
 				// it to the relevant timestamp.
