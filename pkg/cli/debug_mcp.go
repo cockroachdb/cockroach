@@ -7,6 +7,7 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	_ "embed"
 	"encoding/gob"
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -329,6 +331,13 @@ type MCPError struct {
 	Message string `json:"message"`
 }
 
+// KapaConfig holds configuration for Kapa.AI integration
+type KapaConfig struct {
+	apiKey          string
+	projectID       string
+	currentThreadID string
+}
+
 // MCPServer is a minimal MCP server implementation
 type MCPServer struct {
 	name         string
@@ -336,6 +345,7 @@ type MCPServer struct {
 	instructions string
 	tools        map[string]MCPTool
 	metrics      []MetricMetadata
+	kapaConfig   *KapaConfig
 }
 
 // MCPTool represents an MCP tool
@@ -730,6 +740,74 @@ func (s *MCPServer) searchMetricsTool(params map[string]any) (string, error) {
 	}), nil
 }
 
+// kapaQueryTool queries the Kapa.AI API for CockroachDB documentation
+func (s *MCPServer) kapaQueryTool(params map[string]any) (string, error) {
+	query, ok := params["query"].(string)
+	if !ok || query == "" {
+		return "", fmt.Errorf("query parameter is required")
+	}
+
+	// Build request body
+	reqBody := map[string]string{"query": query}
+	reqJSON, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	// Determine URL based on whether we have a thread ID
+	var url string
+	if s.kapaConfig.currentThreadID == "" {
+		url = fmt.Sprintf("https://api.kapa.ai/query/v1/projects/%s/chat/", s.kapaConfig.projectID)
+	} else {
+		url = fmt.Sprintf("https://api.kapa.ai/query/v1/threads/%s/chat/", s.kapaConfig.currentThreadID)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(reqJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-KEY", s.kapaConfig.apiKey)
+
+	// Make the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response
+	var response map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Extract and store thread_id if present
+	if threadID, ok := response["thread_id"].(string); ok && threadID != "" {
+		s.kapaConfig.currentThreadID = threadID
+	}
+
+	// Extract only answer and is_certain fields
+	result := map[string]any{}
+	if answer, ok := response["answer"]; ok {
+		result["answer"] = answer
+	}
+	if isCertain, ok := response["is_certain"]; ok {
+		result["is_certain"] = isCertain
+	}
+
+	// Return only the filtered fields
+	return toJSON(result), nil
+}
+
 func runDebugMCP(cmd *cobra.Command, args []string) error {
 	server := NewMCPServer("cockroach-debug", "1.0.0")
 
@@ -787,6 +865,34 @@ func runDebugMCP(cmd *cobra.Command, args []string) error {
 		},
 		Handler: server.queryTSDumpTool,
 	})
+
+	// Conditionally register Kapa.AI tool if API key is provided
+	kapaAPIKey, _ := cmd.Flags().GetString("kapa-api-key")
+	if kapaAPIKey != "" {
+		kapaProjectID, _ := cmd.Flags().GetString("kapa-project-id")
+		server.kapaConfig = &KapaConfig{
+			apiKey:    kapaAPIKey,
+			projectID: kapaProjectID,
+		}
+
+		server.AddTool(MCPTool{
+			Name:        "search-docs",
+			Description: "Search CockroachDB documentation and support knowledge base for conceptual understanding and configuration guidance. Maintains conversation context across multiple queries.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "Question or query about CockroachDB",
+					},
+				},
+				"required": []string{"query"},
+			},
+			Handler: server.kapaQueryTool,
+		})
+
+		fmt.Fprintf(os.Stderr, "Kapa.AI integration enabled\n")
+	}
 
 	return server.Run(context.Background())
 }
