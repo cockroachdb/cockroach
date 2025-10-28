@@ -2049,11 +2049,11 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 
 	m := p.db.Metrics()
 	stats.TotalFiles = 3 /* CURRENT, MANIFEST, OPTIONS */
-	stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles + m.Table.ObsoleteCount)
-	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize + m.Table.ObsoleteSize
+	stats.TotalFiles += uint64(m.WAL.Files) + m.Table.Zombie.All.Count + uint64(m.WAL.ObsoleteFiles) + m.Table.Obsolete.All.Count
+	stats.TotalBytes = m.WAL.Size + m.Table.Zombie.All.Bytes + m.Table.Obsolete.All.Bytes
 	for _, l := range m.Levels {
-		stats.TotalFiles += uint64(l.TablesCount)
-		stats.TotalBytes += uint64(l.TablesSize)
+		stats.TotalFiles += l.Tables.Count
+		stats.TotalBytes += l.Tables.Bytes
 	}
 
 	sstSizes := make(map[pebble.TableNum]uint64)
