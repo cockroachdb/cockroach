@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -421,7 +422,7 @@ func TestAverageRefreshTime(t *testing.T) {
 
 	checkAverageRefreshTime := func(expected time.Duration) error {
 		return testutils.SucceedsSoonError(func() error {
-			stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */)
+			stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{})
 			if err != nil {
 				return err
 			}
@@ -437,7 +438,7 @@ func TestAverageRefreshTime(t *testing.T) {
 	// expectedAge time ago if lessThan is true (false).
 	checkMostRecentStat := func(expectedAge time.Duration, lessThan bool) error {
 		return testutils.SucceedsSoonError(func() error {
-			stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */)
+			stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{})
 			if err != nil {
 				return err
 			}
@@ -927,7 +928,7 @@ func checkStatsCount(
 	return testutils.SucceedsSoonError(func() error {
 		cache.InvalidateTableStats(ctx, table.GetID())
 
-		stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */)
+		stats, err := cache.GetTableStats(ctx, table, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 		if err != nil {
 			return err
 		}
@@ -960,7 +961,7 @@ func compareStatsCountWithZero(
 	desc :=
 		desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "system", tableName)
 	return testutils.SucceedsSoonError(func() error {
-		stats, err := cache.GetTableStats(ctx, desc, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */)
+		stats, err := cache.GetTableStats(ctx, desc, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 		if err != nil {
 			return err
 		}

@@ -341,7 +341,6 @@ SHOW GRANTS ON pg_catalog.pg_namespace
 database_name  schema_name  table_name    grantee  privilege_type  is_grantable
 test           pg_catalog   pg_namespace  public   SELECT          false
 
-
 # Verify selecting from pg_catalog.
 
 statement ok
@@ -977,7 +976,6 @@ t1                 j                         char      3403232968    default
 t1                 i                         _varchar  3403232968    default
 t1                 h                         _bpchar   3403232968    default
 t1                 k                         varchar   999873346     sv
-
 
 ## pg_catalog.pg_am
 
@@ -1839,7 +1837,6 @@ t1             r
 t1             r
 t1_a_key       i
 t_with_pk_seq  r
-
 
 # Some entries in pg_depend are linked to a foreign key constraint whose
 # supporting index is the referenced object id. Other entries are table-view dependencies
@@ -2995,7 +2992,6 @@ query             STRING       true         NULL            ·                  
 backend_type      STRING       true         NULL            ·                      {}       false
 leader_pid        INT4         true         NULL            ·                      {}       false
 
-
 ## pg_catalog.pg_settings
 
 statement ok
@@ -3210,6 +3206,7 @@ sql_safe_updates                                                 off            
 ssl                                                              on                  NULL      NULL        NULL        string
 standard_conforming_strings                                      on                  NULL      NULL        NULL        string
 statement_timeout                                                0                   NULL      NULL        NULL        string
+stats_as_of                                                      ·                   NULL      NULL        NULL        string
 streamer_always_maintain_ordering                                off                 NULL      NULL        NULL        string
 streamer_enabled                                                 on                  NULL      NULL        NULL        string
 streamer_head_of_line_only_fraction                              0.8                 NULL      NULL        NULL        string
@@ -3461,6 +3458,7 @@ sql_safe_updates                                                 off            
 ssl                                                              on                  NULL  user     NULL      on                  on
 standard_conforming_strings                                      on                  NULL  user     NULL      on                  on
 statement_timeout                                                0                   ms    user     NULL      0s                  0s
+stats_as_of                                                      ·                   NULL  user     NULL      ·                   ·
 streamer_always_maintain_ordering                                off                 NULL  user     NULL      off                 off
 streamer_enabled                                                 on                  NULL  user     NULL      on                  on
 streamer_head_of_line_only_fraction                              0.8                 NULL  user     NULL      0.8                 0.8
@@ -3704,6 +3702,7 @@ sql_safe_updates                                                 NULL    NULL   
 ssl                                                              NULL    NULL     NULL     NULL        NULL
 standard_conforming_strings                                      NULL    NULL     NULL     NULL        NULL
 statement_timeout                                                NULL    NULL     NULL     NULL        NULL
+stats_as_of                                                      NULL    NULL     NULL     NULL        NULL
 streamer_always_maintain_ordering                                NULL    NULL     NULL     NULL        NULL
 streamer_enabled                                                 NULL    NULL     NULL     NULL        NULL
 streamer_head_of_line_only_fraction                              NULL    NULL     NULL     NULL        NULL
@@ -4602,8 +4601,6 @@ h      timestamp without time zone     NULL            false  1114  -1
 i      timestamp with time zone        NULL            false  1184  -1
 j      interval                        NULL            false  1186  -1
 rowid  bigint                          unique_rowid()  true   20    -1
-
-
 
 # Regression test for limits on virtual index scans. (#53522)
 
