@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/asciitsdb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -279,8 +280,7 @@ func TestUsingSimulation(t *testing.T) {
 				if d.HasArg("t") {
 					// Parse t=[<duration>,<duration>), but ignoring the
 					// start time.
-					var tstr string
-					d.ScanArgs(t, "t", &tstr)
+					tstr := dd.ScanArg[string](t, d, "t")
 					tstr = strings.TrimSuffix(strings.TrimPrefix(tstr, "["), ")")
 					args := strings.Split(tstr, ",")
 					dur, err := time.ParseDuration(args[1])
@@ -298,16 +298,9 @@ func TestUsingSimulation(t *testing.T) {
 				return buf.String()
 
 			case "plot":
-				var h, w, p = 15, 40, 1
-				if d.HasArg("height") {
-					d.ScanArgs(t, "height", &h)
-				}
-				if d.HasArg("width") {
-					d.ScanArgs(t, "width", &w)
-				}
-				if d.HasArg("precision") {
-					d.ScanArgs(t, "precision", &p)
-				}
+				h := dd.ScanArgOr(t, d, "height", 15)
+				w := dd.ScanArgOr(t, d, "width", 40)
+				p := dd.ScanArgOr(t, d, "precision", 1)
 
 				var buf strings.Builder
 				for i, line := range strings.Split(d.Input, "\n") {
@@ -369,10 +362,8 @@ func TestUsingSimulation(t *testing.T) {
 					default:
 					}
 
-					if d.HasArg("t") {
+					if tstr, ok := dd.ScanArgOpt[string](t, d, "t"); ok {
 						// Parse t=[<duration>,<duration>).
-						var tstr string
-						d.ScanArgs(t, "t", &tstr)
 						tstr = strings.TrimSuffix(strings.TrimPrefix(tstr, "["), ")")
 						args := strings.Split(tstr, ",")
 
@@ -395,8 +386,7 @@ func TestUsingSimulation(t *testing.T) {
 				return buf.String()
 
 			case "snapshots":
-				var name string
-				d.ScanArgs(t, "handle", &name)
+				name := dd.ScanArg[string](t, d, "handle")
 				rangeID, ok := handleToRangeID[name]
 				require.True(t, ok, "expected to find handle %q, was it initialized?", name)
 				handle := sim.state.ranges[rangeID]
