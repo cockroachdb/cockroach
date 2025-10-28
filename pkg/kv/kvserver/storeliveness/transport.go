@@ -14,10 +14,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc"
@@ -44,6 +47,39 @@ const (
 	connClass = rpcbase.SystemClass
 )
 
+// TODO(dodeca12): Currently this complexity allows the fallback to immediate
+// heartbeat sends. Once the smearing has been battle-tested, remove this and
+// default to using the smeared heartbeat sends approach (no more fallback).
+var HeartbeatSmearingEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_smearing.enabled",
+	"if enabled, heartbeat sends are smeared across a certain duration, "+
+		"via the transport goroutine, "+
+		"otherwise heartbeat sends are sent when they are enqueued "+
+		"at the sendQueue, bypassing heartbeat smearing",
+
+	true,
+)
+
+var HeartbeatSmearingRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_smearing.refresh",
+	"the total time window within which all queued heartbeat messages should be "+
+		"sent; the pacer distributes the work across this duration to complete "+
+		"by the deadline",
+	10*time.Millisecond,
+	settings.PositiveDuration,
+)
+
+var HeartbeatSmearingInterval = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_smearing.smear",
+	"the interval between sending successive batches of heartbeats across all "+
+		"send queues",
+	1*time.Millisecond,
+	settings.PositiveDuration,
+)
+
 var logQueueFullEvery = log.Every(1 * time.Second)
 
 // MessageHandler is the interface that must be implemented by
@@ -60,6 +96,7 @@ var sendQueueSizeLimitReachedErr = errors.Errorf("store liveness send queue is f
 
 // sendQueue is a queue of outgoing Messages.
 type sendQueue struct {
+
 	// msgs is a slice of messages that are queued to be sent.
 	mu struct {
 		syncutil.Mutex
@@ -67,13 +104,19 @@ type sendQueue struct {
 		// size is the total size in bytes of the messages in the queue.
 		size int64
 	}
-	// directSend is the channel used to signal the processQueue goroutine.
+	// sendMessages is signaled by the transport's smearing sender goroutine
+	// to tell processQueue to send messages (smearing mechanism).
+	sendMessages chan struct{}
+	// directSend is signaled when a message is enqueued (while smearing is
+	// disabled) to tell processQueue to send immediately, bypassing the
+	// smearing sender goroutine.
 	directSend chan struct{}
 }
 
 func newSendQueue() sendQueue {
 	return sendQueue{
-		directSend: make(chan struct{}, 1),
+		sendMessages: make(chan struct{}, 1),
+		directSend:   make(chan struct{}, 1),
 	}
 }
 
@@ -86,10 +129,6 @@ func (q *sendQueue) append(msg slpb.Message) error {
 	}
 	q.mu.msgs = append(q.mu.msgs, msg)
 	q.mu.size += int64(msg.Size())
-	select {
-	case q.directSend <- struct{}{}:
-	default:
-	}
 	return nil
 }
 
@@ -103,31 +142,63 @@ func (q *sendQueue) drain() ([]slpb.Message, int64) {
 	return msgs, size
 }
 
+func (q *sendQueue) Size() int64 {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.mu.size
+}
+
 // Transport handles the RPC messages for Store Liveness.
 //
 // Each node maintains a single instance of Transport that handles sending and
 // receiving messages on behalf of all stores on the node.
-//
 // The transport is asynchronous with respect to the caller, and internally
 // multiplexes outbound messages by queuing them on a per-node queue before
 // delivering them asynchronously.
 type Transport struct {
 	log.AmbientContext
-	stopper *stop.Stopper
-	clock   *hlc.Clock
-	dialer  *nodedialer.Dialer
-	metrics *TransportMetrics
+	stopper  *stop.Stopper
+	clock    *hlc.Clock
+	dialer   *nodedialer.Dialer
+	metrics  *TransportMetrics
+	settings *clustersettings.Settings
 
 	// queues stores outgoing message queues keyed by the destination node ID.
 	queues syncutil.Map[roachpb.NodeID, sendQueue]
 	// handlers stores the MessageHandler for each store on the node.
 	handlers syncutil.Map[roachpb.StoreID, MessageHandler]
 
+	// sendAllMessages is signaled to instruct the heartbeat smearing sender to
+	// signal all sendQueues to send their enqueued messages.
+	sendAllMessages chan struct{}
+
 	// TransportKnobs includes all knobs for testing.
 	knobs *TransportKnobs
 }
 
 var _ MessageSender = (*Transport)(nil)
+
+type pacerConfig struct {
+	settings *clustersettings.Settings
+}
+
+// GetRefresh implements the taskpacer.Config interface.
+func (c pacerConfig) GetRefresh() time.Duration {
+	return HeartbeatSmearingRefreshInterval.Get(&c.settings.SV)
+}
+
+// GetSmear implements the taskpacer.Config interface.
+func (c pacerConfig) GetSmear() time.Duration {
+	return HeartbeatSmearingInterval.Get(&c.settings.SV)
+}
+
+// SendHeartbeatsSmeared returns true if the cluster setting to send heartbeats
+// via the heartbeat smearing sender (the goroutine in `transport.go`) is enabled.
+// The smearing sender is responsible for smearing the heartbeats over
+// a certain duration, so expect heartbeats sends to be paced when enabled.
+func (t *Transport) SendHeartbeatsSmeared() bool {
+	return HeartbeatSmearingEnabled.Get(&t.settings.SV)
+}
 
 // NewTransport creates a new Store Liveness Transport.
 func NewTransport(
@@ -137,18 +208,21 @@ func NewTransport(
 	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
 	drpcMux drpc.Mux,
+	settings *clustersettings.Settings,
 	knobs *TransportKnobs,
 ) (*Transport, error) {
 	if knobs == nil {
 		knobs = &TransportKnobs{}
 	}
 	t := &Transport{
-		AmbientContext: ambient,
-		stopper:        stopper,
-		clock:          clock,
-		dialer:         dialer,
-		metrics:        newTransportMetrics(),
-		knobs:          knobs,
+		AmbientContext:  ambient,
+		stopper:         stopper,
+		clock:           clock,
+		dialer:          dialer,
+		metrics:         newTransportMetrics(),
+		settings:        settings,
+		sendAllMessages: make(chan struct{}, 1),
+		knobs:           knobs,
 	}
 	if grpcServer != nil {
 		slpb.RegisterStoreLivenessServer(grpcServer, t)
@@ -158,6 +232,85 @@ func NewTransport(
 			return nil, err
 		}
 	}
+
+	// Start background goroutine to act as the transport smearing sender.
+	// It is responsible for smearing the heartbeat sends across a certain duration.
+	if err := stopper.RunAsyncTask(
+		context.Background(), "storeliveness transport smearing sender",
+		func(ctx context.Context) {
+			var batchTimer timeutil.Timer
+			defer batchTimer.Stop()
+
+			conf := pacerConfig{settings: settings}
+			pacer := taskpacer.New(conf)
+
+			// This will hold the channels we need to signal to send messages.
+			toSignal := make([]chan struct{}, 0)
+
+			for {
+				select {
+				case <-stopper.ShouldQuiesce():
+					return
+				case <-t.sendAllMessages:
+					// We received a signal to send all messages.
+					// Wait for a short duration to give other stores a chance to
+					// enqueue messages which will increase batching opportunities.
+					time.Sleep(batchDuration)
+					select {
+					case <-t.sendAllMessages:
+						// Consume any additional signals to send all messages.
+					default: // We have waited to batch messages
+					}
+
+					// Collect all sendQueues.
+					t.queues.Range(func(nodeID roachpb.NodeID, q *sendQueue) bool {
+						// This check is vital to avoid unnecessary signaling
+						// on empty queues - otherwise, especially on
+						// heartbeat responses, we'd wake up N processesQueue
+						// goroutines where N is the number of destination
+						// nodes.
+						if q.Size() == 0 { // no messages to send
+							return true
+						}
+						toSignal = append(toSignal, q.sendMessages)
+						return true
+					})
+
+					// There is a benign race condition where a new message may be
+					// enqueued to a new queue after we collect the toSignal channels.
+					// In this case, t.sendAllMessages will be set again, and we will
+					// pick it up in the next iteration of the for loop.
+
+					// Pace the signalling of the channels.
+					pacer.StartTask(timeutil.Now())
+					workLeft := len(toSignal)
+					for workLeft > 0 {
+						todo, by := pacer.Pace(timeutil.Now(), workLeft)
+
+						// Pop todo items off the toSignal slice and signal them.
+						for i := 0; i < todo && workLeft > 0; i++ {
+							ch := toSignal[len(toSignal)-1]
+							toSignal = toSignal[:len(toSignal)-1]
+							select {
+							case ch <- struct{}{}:
+							default:
+							}
+							workLeft--
+						}
+
+						if workLeft > 0 {
+							if wait := timeutil.Until(by); wait > 0 {
+								time.Sleep(wait)
+							}
+						}
+					}
+				}
+			}
+		},
+	); err != nil {
+		return nil, err
+	}
+
 	return t, nil
 }
 
@@ -259,13 +412,13 @@ func (t *Transport) handleMessage(ctx context.Context, msg *slpb.Message) {
 	t.metrics.MessagesReceived.Inc(1)
 }
 
-// EnqueueMessage implements the MessageSender interface. It sends a message to the
-// recipient specified in the request, and returns false if the outgoing queue
-// is full or the node dialer's circuit breaker has tripped.
+// EnqueueMessage implements the MessageSender interface. It enqueues a message
+// to the sendQueue for the recipient node, and returns false if the outgoing
+// queue is full or the node dialer's circuit breaker has tripped.
 //
 // The returned bool may be a false positive but will never be a false negative;
-// if sent is true the message may or may not actually be sent but if it's false
-// the message definitely was not sent.
+// if enqueued is true the message may or may not actually be sent but if it's
+// false the message definitely was not enqueued.
 func (t *Transport) EnqueueMessage(ctx context.Context, msg slpb.Message) (enqueued bool) {
 	toNodeID := msg.To.NodeID
 	fromNodeID := msg.From.NodeID
@@ -306,9 +459,25 @@ func (t *Transport) EnqueueMessage(ctx context.Context, msg slpb.Message) (enque
 		return false
 	}
 
+	// Signal the processQueue goroutine if in direct mode (smearing disabled).
+	if !t.SendHeartbeatsSmeared() {
+		select {
+		case q.directSend <- struct{}{}:
+		default:
+		}
+	}
+
 	t.metrics.SendQueueSize.Inc(1)
 	t.metrics.SendQueueBytes.Inc(msgSize)
 	return true
+}
+
+// SendAllEnqueuedMessages signals all queues to send all their messages.
+func (t *Transport) SendAllEnqueuedMessages(ctx context.Context) {
+	select {
+	case t.sendAllMessages <- struct{}{}:
+	default:
+	}
 }
 
 // getQueue returns the queue for the specified node ID and a boolean
@@ -406,6 +575,7 @@ func (t *Transport) processQueue(
 	var idleTimer timeutil.Timer
 	defer idleTimer.Stop()
 	batch := &slpb.MessageBatch{}
+
 	for {
 		// Drain the timer channel before resetting to avoid receiving stale
 		// timeout signals. This can happen if the timer fires while we're
@@ -425,46 +595,49 @@ func (t *Transport) processQueue(
 			t.metrics.SendQueueIdle.Inc(1)
 			return nil
 
-		case <-q.directSend:
-			// Sleep for batchDuration to batch messages, then drain all accumulated
-			// messages at once. We use sleep-then-drain instead of a timer-based
-			// batching mechanism (e.g., select between timer and message channel)
-			// to avoid frequent goroutine wake-ups.
-			//
-			// With timer-based batching, the goroutine would wake up on each message
-			// arrival during the batching window.
-			// This creates a pattern where the goroutine wakes up repeatedly
-			// during batching, causing spikes in runnable goroutines and
-			// suboptimal scheduling behaviour.
-			//
-			// By sleeping first and then draining all messages in a single operation,
-			// we ensure the goroutine wakes up only once per batch period, after
-			// the batching window has elapsed. This keeps the runnable goroutine
-			// count stable and reduces scheduling overhead.
-			time.Sleep(batchDuration)
-			select {
-			case <-q.directSend:
-			default:
-			}
-			var batchMessagesSize int64
-			batch.Messages, batchMessagesSize = q.drain()
-			if len(batch.Messages) == 0 {
-				continue
-			}
-			t.metrics.SendQueueSize.Dec(int64(len(batch.Messages)))
-			t.metrics.SendQueueBytes.Dec(batchMessagesSize)
+		case <-q.sendMessages:
+			// Signal received - proceed to batching logic below.
 
+		case <-q.directSend:
+
+		}
+		// Sleep for batchDuration to batch messages, then drain all accumulated
+		// messages at once. We use sleep-then-drain instead of a timer-based
+		// batching mechanism (e.g., select between timer and message channel)
+		// to avoid frequent goroutine wake-ups.
+		//
+		// With timer-based batching, the goroutine would wake up on each message
+		// arrival during the batching window.
+		// This creates a pattern where the goroutine wakes up repeatedly
+		// during batching, causing spikes in runnable goroutines and
+		// suboptimal scheduling behaviour.
+		//
+		// By sleeping first and then draining all messages in a single operation,
+		// we ensure the goroutine wakes up only once per batch period, after
+		// the batching window has elapsed. This keeps the runnable goroutine
+		// count stable and reduces scheduling overhead.
+		time.Sleep(batchDuration)
+		select {
+		case <-q.directSend:
+		default:
+		}
+		var batchMessagesSize int64
+		batch.Messages, batchMessagesSize = q.drain()
+		if len(batch.Messages) == 0 {
+			continue
+		}
+		t.metrics.SendQueueSize.Dec(int64(len(batch.Messages)))
+		t.metrics.SendQueueBytes.Dec(batchMessagesSize)
+
+		if len(batch.Messages) > 0 {
 			batch.Now = t.clock.NowAsClockTimestamp()
 			if err = stream.Send(batch); err != nil {
 				t.metrics.MessagesSendDropped.Inc(int64(len(batch.Messages)))
 				return err
 			}
-
 			t.metrics.BatchesSent.Inc(1)
 			t.metrics.MessagesSent.Inc(int64(len(batch.Messages)))
-
-			// Reuse the Messages slice, but zero out the contents to avoid delaying
-			// GC of memory referenced from within.
+			// Reuse the Messages slice, but zero out the contents to avoid delaying GC.
 			for i := range batch.Messages {
 				batch.Messages[i] = slpb.Message{}
 			}
