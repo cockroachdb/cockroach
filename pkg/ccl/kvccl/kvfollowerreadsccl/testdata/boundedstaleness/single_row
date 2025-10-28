@@ -11,6 +11,12 @@ CREATE TABLE t(pk INT PRIMARY KEY) WITH (schema_locked = false);
 INSERT INTO t VALUES (1);
 ----
 
+# The tests assume that the leaseholder is node_idx=0 (n1), assert that here.
+query ignore-events
+SELECT DISTINCT(lease_holder) FROM [SHOW RANGES FROM TABLE t WITH DETAILS];
+----
+1
+
 # If we try to read a timestamp that is impossible to satisfy with a follower
 # read, we should always be looking at the leaseholder in the nearest_only=False
 # case. We always do bounded staleness reads from node_idx 2, as node_idx 0 in a
@@ -62,57 +68,57 @@ events (1 found):
 # Note we have to wait until a match here, in case a follower read reads an
 # older version of the data.
 query idx=2 wait-until-follower-read wait-until-match
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('20s') WHERE pk = 1
 ----
 1
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s') WHERE pk = 1
 ----
 1
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('20s', false) WHERE pk = 1
 ----
 1
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s', false) WHERE pk = 1
 ----
 1
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('20s', true) WHERE pk = 1
 ----
 1
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s', true) WHERE pk = 1
 ----
 1
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 exec idx=2
-PREPARE max_staleness_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1;
+PREPARE max_staleness_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('20s') WHERE pk = 1;
 ----
 
 exec idx=2
-PREPARE min_timestamp_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+PREPARE min_timestamp_prep AS SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s') WHERE pk = 1
 ----
 
 override-matching-stmt-for-tracing
-SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+SELECT pk FROM t AS OF SYSTEM TIME with_max_staleness('20s') WHERE pk = 1
 ----
 
 query idx=2
@@ -123,7 +129,7 @@ events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local follower read
 
 override-matching-stmt-for-tracing
-SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+SELECT pk FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s') WHERE pk = 1
 ----
 
 query idx=2
@@ -149,28 +155,28 @@ ALTER TABLE t ADD COLUMN new_col INT NOT NULL DEFAULT 2
 # Ensure we resort to the leaseholder as the schema change requires a recent read
 # in the nearest_only=False case.
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s') WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('20s') WHERE pk = 1
 ----
 1 2
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s') WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s') WHERE pk = 1
 ----
 1 2
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', false) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('20s', false) WHERE pk = 1
 ----
 1 2
 events (1 found):
  * event 1: colbatchscan trace on node_idx 2: local read then remote leaseholder read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', false) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s', false) WHERE pk = 1
 ----
 1 2
 events (1 found):
@@ -182,7 +188,7 @@ events (1 found):
 # Note that we retry until follower read here as the first schema read of
 # historical schema descriptors result in non-follower reads.
 query idx=2 wait-until-follower-read
-SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('10s', true) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_max_staleness('20s', true) WHERE pk = 1
 ----
 1
 events (17 found):
@@ -205,7 +211,7 @@ events (17 found):
  * event 17: colbatchscan trace on node_idx 2: local follower read
 
 query idx=2
-SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 1
+SELECT * FROM t AS OF SYSTEM TIME with_min_timestamp(now() - '20s', true) WHERE pk = 1
 ----
 1
 events (17 found):
@@ -242,7 +248,7 @@ ALTER TABLE t2 ADD COLUMN new_col INT
 ----
 
 query idx=2
-SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
+SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '20s', true) WHERE pk = 2
 ----
 pq: referenced descriptor ID 105: looking up ID 105: descriptor not found
 events (10 found):
@@ -258,7 +264,7 @@ events (10 found):
  * event 10: transaction retry on node_idx: 2
 
 query idx=2
-SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '10s', true) WHERE pk = 2
+SELECT * FROM t2 AS OF SYSTEM TIME with_min_timestamp(now() - '20s', true) WHERE pk = 2
 ----
 pq: referenced descriptor ID 105: looking up ID 105: descriptor not found
 events (10 found):

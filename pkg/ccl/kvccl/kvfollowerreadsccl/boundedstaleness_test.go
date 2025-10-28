@@ -311,6 +311,11 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			skip.IgnoreLint(t, "test doesn't apply to external process multi-tenancy")
 		}
 
+		require.NoError(t, tc.WaitForFullReplication())
+		tc.ToggleLeaseQueues(false)
+		tc.ToggleSplitQueues(false)
+		tc.ToggleReplicateQueues(false)
+
 		savedTraceStmt := ""
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			// Early exit non-query execution related commands.
@@ -326,7 +331,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 				return ""
 			}
 
-			var showEvents bool
+			var showEvents *bool
 			var waitUntilFollowerReads bool
 			var waitUntilMatch bool
 			defer func() {
@@ -353,6 +358,9 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					serverNum, err := strconv.ParseInt(arg.Vals[0], 10, 64)
 					require.NoError(t, err)
 					dbConn = tc.ServerConn(int(serverNum))
+				case "ignore-events":
+					f := false
+					showEvents = &f
 				default:
 					t.Fatalf("unknown arg: %s", arg.Key)
 				}
@@ -376,9 +384,12 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 					}
 					return ""
 				case "query":
-					// Always show events.
+					// Default to showing events
+					if showEvents == nil {
+						t := true
+						showEvents = &t
+					}
 					bse.setStmt(traceStmt)
-					showEvents = true
 					rows, err := dbConn.Query(d.Input)
 					if err != nil {
 						return err.Error()
@@ -394,7 +405,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				ret = executeCmd()
 				// Append events to the output if desired.
-				if showEvents {
+				if showEvents != nil && *showEvents {
 					if !strings.HasSuffix(ret, "\n") {
 						ret += "\n"
 					}
