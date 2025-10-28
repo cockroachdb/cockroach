@@ -45,6 +45,7 @@ go_library(
         "//pkg/sql/physicalplan",
         "//pkg/sql/privilege",
         "//pkg/sql/rowexec",
+        "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/idxtype",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",

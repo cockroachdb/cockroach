@@ -116,6 +116,10 @@ var (
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
 	errStringTooLarge = pgerror.Newf(pgcode.ProgramLimitExceeded,
 		"requested length too large, exceeds %s", humanizeutil.IBytes(builtinconstants.MaxAllocatedStringSize))
+
+	// ErrDatumsToBytes_IllegalArg is an error marker for when datums_to_bytes
+	// encounters a type that cannot be used.
+	ErrDatumsToBytes_IllegalArg = errors.Newf("datums_to_bytes: illegal argument")
 )
 
 func categorizeType(t *types.T) string {
@@ -4766,11 +4770,12 @@ value if you rely on the HLC for accuracy.`,
 					var err error
 					out, err = keyside.Encode(out, arg, encoding.Ascending)
 					if err != nil {
-						return nil, pgerror.Newf(
+						pgErr := pgerror.Newf(
 							pgcode.DatatypeMismatch,
 							"illegal argument %d of type %s",
 							i, arg.ResolvedType(),
 						)
+						return nil, errors.Mark(pgErr, ErrDatumsToBytes_IllegalArg)
 					}
 				}
 				return tree.NewDBytes(tree.DBytes(out)), nil

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -246,13 +247,20 @@ func (c *indexConsistencyCheck) Start(
 	if indexConsistencyHashEnabled.Get(&c.flowCtx.Cfg.Settings.SV) && len(allColNames) > 0 {
 		match, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
 		if hashErr != nil {
-			// If hashing fails, we usually fall back to the full check. But if the
-			// error stems from query construction, that's an internal bug and shouldn't
-			// be ignored.
-			if isQueryConstructionError(hashErr) {
+			// Hashing depends on crdb_internal.datums_to_bytes. This doesn't work for
+			// all column types (e.g. TSQUERY). So, we look for a specific error
+			// marker and fallback if found.
+			if errors.Is(hashErr, builtins.ErrDatumsToBytes_IllegalArg) {
+				log.Dev.Infof(ctx, "skipping hash precheck for index %s: illegal argument for crdb_internal.datums_to_bytes, falling back to full check: %v",
+					c.secIndex.GetName(), hashErr)
+			} else if isQueryConstructionError(hashErr) {
+				// If hashing fails and the error stems from query construction,
+				// that's an internal bug and shouldn't be ignored.
 				return errors.WithAssertionFailure(hashErr)
+			} else {
+				// For all other hash errors, log and fall back.
+				log.Dev.Infof(ctx, "hash precheck for index consistency did not match; falling back to full check: %v", hashErr)
 			}
-			log.Dev.Infof(ctx, "hash precheck for index consistency did not match; falling back to full check: %v", hashErr)
 		}
 		if match {
 			// Hashes match, no corruption detected - skip the full check.
