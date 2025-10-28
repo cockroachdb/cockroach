@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -105,15 +106,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-txn":
-				var txnName string
-				d.ScanArgs(t, "name", &txnName)
+				txnName := dd.ScanArg[string](t, d, "name")
 				ts := scanTimestamp(t, d)
-
-				epoch := 0
-				if d.HasArg("epoch") {
-					d.ScanArgs(t, "epoch", &epoch)
-				}
-
+				epoch := dd.ScanArgOr[enginepb.TxnEpoch](t, d, "epoch", 0)
 				iso := concurrency.ScanIsoLevel(t, d)
 				priority := scanTxnPriority(t, d)
 
@@ -133,7 +128,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					TxnMeta: enginepb.TxnMeta{
 						ID:             id,
 						IsoLevel:       iso,
-						Epoch:          enginepb.TxnEpoch(epoch),
+						Epoch:          epoch,
 						WriteTimestamp: ts,
 						MinTimestamp:   ts,
 						Priority:       priority,
@@ -145,14 +140,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return ""
 
 			case "new-request":
-				var reqName string
-				d.ScanArgs(t, "name", &reqName)
+				reqName := dd.ScanArg[string](t, d, "name")
 				if _, ok := c.requestsByName[reqName]; ok {
 					d.Fatalf(t, "duplicate request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txn, ok := c.txnsByName[txnName]
 				if !ok && txnName != "none" {
 					d.Fatalf(t, "unknown txn %s", txnName)
@@ -182,15 +175,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					lockTimeout = 1 * time.Nanosecond
 				}
 
-				var maxLockWaitQueueLength int
-				if d.HasArg("max-lock-wait-queue-length") {
-					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
-				}
-
-				var deadlockTimeout time.Duration
-				if d.HasArg("deadlock-timeout") {
-					d.ScanArgs(t, "deadlock-timeout", &deadlockTimeout)
-				}
+				maxLockWaitQueueLength := dd.ScanArgOr(t, d, "max-lock-wait-queue-length", 0)
+				deadlockTimeout := dd.ScanArgOr[time.Duration](t, d, "deadlock-timeout", 0)
 
 				ba := &kvpb.BatchRequest{}
 				pp := scanPoisonPolicy(t, d)
@@ -225,16 +211,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return ""
 
 			case "sequence":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				req, ok := c.requestsByName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				evalKind := concurrency.PessimisticEval
-				if d.HasArg("eval-kind") {
-					var kind string
-					d.ScanArgs(t, "eval-kind", &kind)
+				if kind, ok := dd.ScanArgOpt[string](t, d, "eval-kind"); ok {
 					switch kind {
 					case "pess":
 						evalKind = concurrency.PessimisticEval
@@ -277,8 +260,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "finish":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -295,8 +277,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "poison":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -310,15 +291,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "handle-lock-conflict-error":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				prev, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var leaseSeq int
-				d.ScanArgs(t, "lease-seq", &leaseSeq)
+				leaseSeq := dd.ScanArg[roachpb.LeaseSequence](t, d, "lease-seq")
 
 				// Each roachpb.Lock is provided on an indented line.
 				var locks []roachpb.Lock
@@ -333,15 +312,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						d.Fatalf(t, "expected \"lock\", found %s", d.Cmd)
 					}
 
-					var txnName string
-					d.ScanArgs(t, "txn", &txnName)
+					txnName := dd.ScanArg[string](t, d, "txn")
 					txn, ok := c.txnsByName[txnName]
 					if !ok {
 						d.Fatalf(t, "unknown txn %s", txnName)
 					}
-
-					var key string
-					d.ScanArgs(t, "key", &key)
+					key := dd.ScanArg[string](t, d, "key")
 
 					str := lock.Intent
 					if d.HasArg("str") {
@@ -352,9 +328,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					seq := roachpb.LeaseSequence(leaseSeq)
 					lcErr := &kvpb.LockConflictError{Locks: locks}
-					guard, err := m.HandleLockConflictError(ctx, prev, seq, lcErr)
+					guard, err := m.HandleLockConflictError(ctx, prev, leaseSeq, lcErr)
 					if err != nil {
 						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
 						c.mu.Lock()
@@ -370,8 +345,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "check-opt-no-conflicts":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				g, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -381,14 +355,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				g, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				var key string
-				d.ScanArgs(t, "key", &key)
+				key := dd.ScanArg[string](t, d, "key")
 				// TODO(nvanbenschoten): replace with scanLockStrength.
 				strength := concurrency.ScanLockStrength(t, d)
 				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
@@ -405,22 +377,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return "locked: false"
 
 			case "on-lock-acquired":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				txn := guard.Req.Txn
 
-				var key string
-				d.ScanArgs(t, "key", &key)
-
-				var seq int
-				if d.HasArg("seq") {
-					d.ScanArgs(t, "seq", &seq)
-				}
-				seqNum := enginepb.TxnSeq(seq)
+				key := dd.ScanArg[string](t, d, "key")
+				seqNum := dd.ScanArgOr[enginepb.TxnSeq](t, d, "seq", 0)
 
 				// Consider locks to be unreplicated if unspecified.
 				dur := lock.Unreplicated
@@ -469,29 +434,25 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "on-lock-updated":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txn, ok := c.txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-
-				var key string
-				d.ScanArgs(t, "key", &key)
+				key := dd.ScanArg[string](t, d, "key")
 
 				status, verb := scanTxnStatus(t, d)
 				var ts hlc.Timestamp
 				if d.HasArg("ts") {
 					ts = scanTimestamp(t, d)
 				}
-				ignoredSeqNums := scanIgnoredSeqNumbers(t, d)
+				ignoredSeqNums := concurrency.ScanIgnoredSeqNumbers(t, d)
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
@@ -522,8 +483,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "on-txn-updated":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txn, ok := c.txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
@@ -553,11 +513,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "on-lease-updated":
-				var isLeaseholder bool
-				d.ScanArgs(t, "leaseholder", &isLeaseholder)
-
-				var leaseSeq int
-				d.ScanArgs(t, "lease-seq", &leaseSeq)
+				isLeaseholder := dd.ScanArgOr(t, d, "leaseholder", false)
+				leaseSeq := dd.ScanArgOr[roachpb.LeaseSequence](t, d, "lease-seq", 0)
 
 				mon.runSync("transfer lease", func(ctx context.Context) {
 					if isLeaseholder {
@@ -565,15 +522,14 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					} else {
 						log.Event(ctx, "released")
 					}
-					m.OnRangeLeaseUpdated(roachpb.LeaseSequence(leaseSeq), isLeaseholder)
+					m.OnRangeLeaseUpdated(leaseSeq, isLeaseholder)
 				})
 				return c.waitAndCollect(t, mon)
 
 			case "on-split":
 				mon.runSync("split range", func(ctx context.Context) {
 					log.Event(ctx, "complete")
-					var endKeyStr string
-					d.ScanArgs(t, "key", &endKeyStr)
+					endKeyStr := dd.ScanArg[string](t, d, "key")
 					locks := m.OnRangeSplit(roachpb.Key(endKeyStr))
 					if len(locks) > 0 {
 						log.Eventf(ctx, "range split returned %d locks for re-acquistion", len(locks))
@@ -611,37 +567,31 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return ""
 
 			case "debug-set-clock":
-				var secs int
-				d.ScanArgs(t, "ts", &secs)
-
-				if int64(secs) < c.manual.Now().Unix() {
+				secs := dd.ScanArg[int64](t, d, "ts")
+				if secs < c.manual.Now().Unix() {
 					d.Fatalf(t, "manual clock must advance")
 				}
-				c.manual.MustAdvanceTo(timeutil.Unix(int64(secs), 0))
+				c.manual.MustAdvanceTo(timeutil.Unix(secs, 0))
 				return ""
 
 			case "debug-advance-clock":
-				var secs int
-				d.ScanArgs(t, "ts", &secs)
+				secs := dd.ScanArg[int64](t, d, "ts")
 				c.manual.Advance(time.Duration(secs) * time.Second)
 				return ""
 
 			case "debug-set-discovered-locks-threshold-to-consult-txn-status-cache":
-				var n int
-				d.ScanArgs(t, "n", &n)
+				n := dd.ScanArg[int](t, d, "n")
 				c.setDiscoveredLocksThresholdToConsultTxnStatusCache(n)
 				return ""
 
 			case "debug-set-batch-pushed-lock-resolution-enabled":
-				var ok bool
-				d.ScanArgs(t, "ok", &ok)
+				ok := dd.ScanArg[bool](t, d, "ok")
 				c.setBatchPushedLockResolutionEnabled(ok)
 				return ""
 
 			case "debug-set-max-locks":
-				var n int
-				d.ScanArgs(t, "n", &n)
-				m.SetMaxLockTableSize(int64(n))
+				n := dd.ScanArg[int64](t, d, "n")
+				m.SetMaxLockTableSize(n)
 				return ""
 
 			case "reset":

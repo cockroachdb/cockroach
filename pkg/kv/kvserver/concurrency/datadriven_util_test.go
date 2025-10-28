@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -33,9 +34,7 @@ func scanTimestamp(t *testing.T, d *datadriven.TestData) hlc.Timestamp {
 }
 
 func scanTimestampWithName(t *testing.T, d *datadriven.TestData, name string) hlc.Timestamp {
-	var tsS string
-	d.ScanArgs(t, name, &tsS)
-	ts, err := hlc.ParseTimestamp(tsS)
+	ts, err := hlc.ParseTimestamp(dd.ScanArg[string](t, d, name))
 	if err != nil {
 		d.Fatalf(t, "%v", err)
 	}
@@ -59,12 +58,10 @@ func scanTxnPriority(t *testing.T, d *datadriven.TestData) enginepb.TxnPriority 
 }
 
 func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority {
-	const key = "priority"
-	if !d.HasArg(key) {
+	priS, ok := dd.ScanArgOpt[string](t, d, "priority")
+	if !ok {
 		return roachpb.NormalUserPriority
 	}
-	var priS string
-	d.ScanArgs(t, key, &priS)
 	switch priS {
 	case "low":
 		return roachpb.MinUserPriority
@@ -79,9 +76,7 @@ func scanUserPriority(t *testing.T, d *datadriven.TestData) roachpb.UserPriority
 }
 
 func scanLockDurability(t *testing.T, d *datadriven.TestData) lock.Durability {
-	var durS string
-	d.ScanArgs(t, "dur", &durS)
-	return getLockDurability(t, d, durS)
+	return getLockDurability(t, d, dd.ScanArg[string](t, d, "dur"))
 }
 
 func getLockDurability(t *testing.T, d *datadriven.TestData, durS string) lock.Durability {
@@ -97,18 +92,14 @@ func getLockDurability(t *testing.T, d *datadriven.TestData, durS string) lock.D
 }
 
 func scanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
-	var strS string
-	d.ScanArgs(t, "str", &strS)
-	return concurrency.GetStrength(t, d, strS)
+	return concurrency.GetStrength(t, d, dd.ScanArg[string](t, d, "str"))
 }
 
 func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.WaitPolicy {
-	const key = "wait-policy"
-	if !required && !d.HasArg(key) {
+	policy, ok := dd.ScanArgOpt[string](t, d, "wait-policy")
+	if !required && !ok {
 		return lock.WaitPolicy_Block
 	}
-	var policy string
-	d.ScanArgs(t, key, &policy)
 	switch policy {
 	case "block":
 		return lock.WaitPolicy_Block
@@ -122,20 +113,11 @@ func scanWaitPolicy(t *testing.T, d *datadriven.TestData, required bool) lock.Wa
 	}
 }
 
-func scanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
-	if !d.HasArg("ignored-seqs") {
-		return nil
-	}
-	return concurrency.ScanIgnoredSeqNumbers(t, d)
-}
-
 func scanPoisonPolicy(t *testing.T, d *datadriven.TestData) poison.Policy {
-	const key = "poison-policy"
-	if !d.HasArg(key) {
+	policy, ok := dd.ScanArgOpt[string](t, d, "poison-policy")
+	if !ok {
 		return poison.Policy_Error
 	}
-	var policy string
-	d.ScanArgs(t, key, &policy)
 	switch policy {
 	case "error":
 		return poison.Policy_Error
@@ -257,9 +239,7 @@ func scanSingleRequest(
 func scanTxnStatus(
 	t *testing.T, d *datadriven.TestData,
 ) (roachpb.TransactionStatus, redact.SafeString) {
-	var statusStr string
-	d.ScanArgs(t, "status", &statusStr)
-	status := parseTxnStatus(t, d, statusStr)
+	status := parseTxnStatus(t, d, dd.ScanArg[string](t, d, "status"))
 	var verb redact.SafeString
 	switch status {
 	case roachpb.COMMITTED:
