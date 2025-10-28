@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -66,12 +67,10 @@ func parseConstraintsConj(t *testing.T, fields []string) roachpb.ConstraintsConj
 }
 
 func parseSpanConfig(t *testing.T, d *datadriven.TestData) roachpb.SpanConfig {
-	var numReplicas, numVoters int
-	var conf roachpb.SpanConfig
-	d.ScanArgs(t, "num-replicas", &numReplicas)
-	conf.NumReplicas = int32(numReplicas)
-	d.ScanArgs(t, "num-voters", &numVoters)
-	conf.NumVoters = int32(numVoters)
+	conf := roachpb.SpanConfig{
+		NumReplicas: dd.ScanArg[int32](t, d, "num-replicas"),
+		NumVoters:   dd.ScanArg[int32](t, d, "num-voters"),
+	}
 	for _, line := range strings.Split(d.Input, "\n") {
 		parts := strings.Fields(line)
 		if len(parts) == 0 {
@@ -169,8 +168,7 @@ func TestStoreIDPostingList(t *testing.T) {
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "pl":
-				var name string
-				d.ScanArgs(t, "name", &name)
+				name := dd.ScanArg[string](t, d, "name")
 				var storeIDs []roachpb.StoreID
 				for _, line := range strings.Split(d.Input, "\n") {
 					parts := strings.Fields(line)
@@ -190,9 +188,8 @@ func TestStoreIDPostingList(t *testing.T) {
 				return b.String()
 
 			case "intersect", "union", "is-equal":
-				var x, y string
-				d.ScanArgs(t, "x", &x)
-				d.ScanArgs(t, "y", &y)
+				x := dd.ScanArg[string](t, d, "x")
+				y := dd.ScanArg[string](t, d, "y")
 				plX := pls[x]
 				if d.Cmd == "is-equal" {
 					return fmt.Sprintf("%t", plX.isEqual(pls[y]))
@@ -212,19 +209,17 @@ func TestStoreIDPostingList(t *testing.T) {
 				}
 
 			case "insert", "contains", "remove":
-				var name string
-				d.ScanArgs(t, "name", &name)
+				name := dd.ScanArg[string](t, d, "name")
 				pl := pls[name]
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
+				storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 				if d.Cmd == "contains" {
-					return fmt.Sprintf("%t", pl.contains(roachpb.StoreID(storeID)))
+					return fmt.Sprintf("%t", pl.contains(storeID))
 				} else {
 					var rv bool
 					if d.Cmd == "insert" {
-						rv = pl.insert(roachpb.StoreID(storeID))
+						rv = pl.insert(storeID)
 					} else {
-						rv = pl.remove(roachpb.StoreID(storeID))
+						rv = pl.remove(storeID)
 					}
 					if forceAllocation {
 						pl = pl[:len(pl):len(pl)]
@@ -237,9 +232,7 @@ func TestStoreIDPostingList(t *testing.T) {
 				}
 
 			case "hash":
-				var name string
-				d.ScanArgs(t, "name", &name)
-				pl := pls[name]
+				pl := pls[dd.ScanArg[string](t, d, "name")]
 				return fmt.Sprintf("%d", pl.hash())
 
 			default:
@@ -375,8 +368,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 				return ""
 
 			case "span-config":
-				var name string
-				d.ScanArgs(t, "name", &name)
+				name := dd.ScanArg[string](t, d, "name")
 				conf := parseSpanConfig(t, d)
 				var b strings.Builder
 				nConf, err := makeNormalizedSpanConfig(&conf, interner)
@@ -388,10 +380,8 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 				return b.String()
 
 			case "analyze-constraints":
-				var configName string
-				d.ScanArgs(t, "config-name", &configName)
-				var leaseholder int
-				d.ScanArgs(t, "leaseholder", &leaseholder)
+				configName := dd.ScanArg[string](t, d, "config-name")
+				leaseholder := dd.ScanArg[roachpb.StoreID](t, d, "leaseholder")
 				nConf := configs[configName]
 				rac := rangeAnalyzedConstraintsPool.Get().(*rangeAnalyzedConstraints)
 				buf := rac.stateForInit()
@@ -419,7 +409,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
 						ltInterner.intern(stores[roachpb.StoreID(storeID)].locality()))
 				}
-				rac.finishInit(nConf, cm, roachpb.StoreID(leaseholder))
+				rac.finishInit(nConf, cm, leaseholder)
 				var b strings.Builder
 				printRangeAnalyzedConstraints(&b, rac, ltInterner)
 				// If there is a previous rangeAnalyzedConstraints, release it before

@@ -8,10 +8,10 @@ package mmaprototype
 import (
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -26,16 +26,8 @@ func TestDiversityScoringMemo(t *testing.T) {
 	datadriven.RunTest(t, "testdata/diversity_scoring_memo",
 		func(t *testing.T, d *datadriven.TestData) string {
 			scanStores := func() []localityTiers {
-				var storesStr string
-				d.ScanArgs(t, "store-ids", &storesStr)
-				storesStrSlice := strings.Split(storesStr, ",")
-				var storeIDs []int
-				for _, s := range storesStrSlice {
-					storeID, err := strconv.Atoi(s)
-					require.NoError(t, err)
-					storeIDs = append(storeIDs, storeID)
-				}
-				var res []localityTiers
+				storeIDs := dd.ScanArg[[]int](t, d, "store-ids")
+				res := make([]localityTiers, 0, len(storeIDs))
 				for _, storeID := range storeIDs {
 					l, ok := storeLocalities[storeID]
 					require.True(t, ok)
@@ -59,18 +51,15 @@ func TestDiversityScoringMemo(t *testing.T) {
 				}
 			}
 			getStoreLocality := func(key string) localityTiers {
-				var storeID int
-				d.ScanArgs(t, key, &storeID)
+				storeID := dd.ScanArg[int](t, d, key)
 				l, ok := storeLocalities[storeID]
 				require.True(t, ok)
 				return l
 			}
 			switch d.Cmd {
 			case "store":
-				var storeID int
-				d.ScanArgs(t, "store-id", &storeID)
-				var lts string
-				d.ScanArgs(t, "locality-tiers", &lts)
+				storeID := dd.ScanArg[int](t, d, "store-id")
+				lts := dd.ScanArg[string](t, d, "locality-tiers")
 				locality := parseLocalityTiers(t, lts)
 				lt := ltInterner.intern(locality)
 				storeLocalities[storeID] = lt
