@@ -31,10 +31,38 @@ var Enabled = settings.RegisterBoolSetting(
 	true,
 )
 
+var UseHeartbeatCoordinatorEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_coordinator.enabled",
+	"if enabled, heartbeat sends are the responsibility of the heartbeat "+
+		"coordinator which smears them over a certain duration, otherwise the "+
+		"heartbeat sends are sent immediately",
+	true,
+)
+
+var HeartbeatCoordinatorRefresh = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_coordinator.refresh",
+	"the refresh interval for the heartbeat coordinator pacer, which determines "+
+		"how frequently the coordinator checks for messages to send",
+	10*time.Millisecond,
+	settings.PositiveDuration,
+)
+
+var HeartbeatCoordinatorSmear = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"kv.store_liveness.heartbeat_coordinator.smear",
+	"the smear duration for the heartbeat coordinator pacer, which spreads out "+
+		"send signals across multiple queues to avoid thundering herd",
+	1*time.Millisecond,
+	settings.PositiveDuration,
+)
+
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
 	EnqueueMessage(ctx context.Context, msg slpb.Message) (sent bool)
+	SendAllEnqueuedMessages(ctx context.Context)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -166,6 +194,14 @@ func (sm *SupportManager) RegisterSupportWithdrawalCallback(cb func(map[roachpb.
 // Liveness sends heartbeats. It returns true if the cluster setting is on.
 func (sm *SupportManager) SupportFromEnabled(ctx context.Context) bool {
 	return Enabled.Get(&sm.settings.SV)
+}
+
+// SendViaHeartbeatCoordinator returns true if the cluster setting to send heartbeats
+// via the heartbeat coordinator (the goroutine in `transport.go`) is enabled.
+// The coordinator is responsible for smearing the heartbeats over
+// a certain duration, so expect heartbeats sends to be paced when enabled.
+func (sm *SupportManager) SendViaHeartbeatCoordinator(ctx context.Context) bool {
+	return UseHeartbeatCoordinatorEnabled.Get(&sm.settings.SV)
 }
 
 // Start starts the main processing goroutine in startLoop as an async task.
@@ -329,6 +365,9 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
 		}
 	}
+	if sm.SendViaHeartbeatCoordinator(ctx) {
+		sm.sender.SendAllEnqueuedMessages(ctx)
+	}
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
 	log.KvExec.VInfof(ctx, 2, "sent heartbeats to %d stores", successes)
@@ -425,6 +464,9 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 
 	for _, response := range responses {
 		_ = sm.sender.EnqueueMessage(ctx, response)
+	}
+	if sm.SendViaHeartbeatCoordinator(ctx) {
+		sm.sender.SendAllEnqueuedMessages(ctx)
 	}
 	log.KvExec.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
