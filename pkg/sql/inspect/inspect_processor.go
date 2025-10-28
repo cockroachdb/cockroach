@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -63,16 +64,17 @@ var (
 type inspectCheckFactory func(asOf hlc.Timestamp) inspectCheck
 
 type inspectProcessor struct {
-	processorID    int32
-	flowCtx        *execinfra.FlowCtx
-	spec           execinfrapb.InspectSpec
-	cfg            *execinfra.ServerConfig
-	checkFactories []inspectCheckFactory
-	spanSrc        spanSource
-	logger         inspectLogger
-	concurrency    int
-	clock          *hlc.Clock
-	mu             struct {
+	processorID       int32
+	flowCtx           *execinfra.FlowCtx
+	spec              execinfrapb.InspectSpec
+	cfg               *execinfra.ServerConfig
+	checkFactories    []inspectCheckFactory
+	spanSrc           spanSource
+	logger            inspectLogger
+	concurrency       int
+	clock             *hlc.Clock
+	spansProcessedCtr *metric.Counter
+	mu                struct {
 		// Guards calls to output.Push because DistSQLReceiver.Push is not
 		// concurrency safe and progress metadata can be emitted from multiple
 		// worker goroutines.
@@ -336,6 +338,9 @@ func (p *inspectProcessor) getTimestampForSpan() hlc.Timestamp {
 func (p *inspectProcessor) sendSpanCompletionProgress(
 	ctx context.Context, output execinfra.RowReceiver, completedSpan roachpb.Span, finished bool,
 ) error {
+	if p.spansProcessedCtr != nil {
+		p.spansProcessedCtr.Inc(1)
+	}
 	progressMsg := &jobspb.InspectProcessorProgress{
 		ChecksCompleted: 0, // No additional checks completed, just marking span done
 		Finished:        finished,
@@ -385,17 +390,23 @@ func newInspectProcessor(
 	if err != nil {
 		return nil, err
 	}
+	var spansProcessedCtr *metric.Counter
+	if execCfg, ok := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig); ok {
+		inspectMetrics := execCfg.JobRegistry.MetricsStruct().Inspect.(*InspectMetrics)
+		spansProcessedCtr = inspectMetrics.SpansProcessed
+	}
 
 	return &inspectProcessor{
-		spec:           spec,
-		processorID:    processorID,
-		flowCtx:        flowCtx,
-		checkFactories: checkFactories,
-		cfg:            flowCtx.Cfg,
-		spanSrc:        newSliceSpanSource(spec.Spans),
-		logger:         getInspectLogger(flowCtx, spec.JobID),
-		concurrency:    getProcessorConcurrency(flowCtx),
-		clock:          flowCtx.Cfg.DB.KV().Clock(),
+		spec:              spec,
+		processorID:       processorID,
+		flowCtx:           flowCtx,
+		checkFactories:    checkFactories,
+		cfg:               flowCtx.Cfg,
+		spanSrc:           newSliceSpanSource(spec.Spans),
+		logger:            getInspectLogger(flowCtx, spec.JobID),
+		concurrency:       getProcessorConcurrency(flowCtx),
+		clock:             flowCtx.Cfg.DB.KV().Clock(),
+		spansProcessedCtr: spansProcessedCtr,
 	}, nil
 }
 

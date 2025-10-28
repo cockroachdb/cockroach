@@ -5359,6 +5359,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.spans_processed
+      exported_name: jobs_inspect_spans_processed
+      description: Number of spans processed by INSPECT jobs
+      y_axis_label: Spans
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.currently_idle
       exported_name: jobs_key_visualizer_currently_idle
       labeled_name: 'jobs{type: key_visualizer, status: currently_idle}'
