@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -244,20 +245,27 @@ func (c *indexConsistencyCheck) Start(
 	}
 
 	if indexConsistencyHashEnabled.Get(&c.flowCtx.Cfg.Settings.SV) && len(allColNames) > 0 {
-		match, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
-		if hashErr != nil {
-			// If hashing fails, we usually fall back to the full check. But if the
-			// error stems from query construction, that's an internal bug and shouldn't
-			// be ignored.
-			if isQueryConstructionError(hashErr) {
-				return errors.WithAssertionFailure(hashErr)
+		// The hash precheck uses crdb_internal.datums_to_bytes, which depends on
+		// keyside.Encode. Skip if any column type isn’t encodable (i.e. TSQUERY, etc.).
+		if !allColumnsDatumsToBytesCompatible(c.columns) {
+			log.Dev.Infof(ctx, "skipping hash precheck for index %s: column type not compatible with datums_to_bytes",
+				c.secIndex.GetName())
+		} else {
+			match, hashErr := c.hashesMatch(ctx, allColNames, predicate, queryArgs)
+			if hashErr != nil {
+				if isQueryConstructionError(hashErr) {
+					// If hashing fails and the error stems from query construction,
+					// that's an internal bug and shouldn't be ignored.
+					return errors.WithAssertionFailure(hashErr)
+				}
+				// For all other hash errors, log and fall back.
+				log.Dev.Infof(ctx, "hash precheck for index consistency did not match; falling back to full check: %v", hashErr)
 			}
-			log.Dev.Infof(ctx, "hash precheck for index consistency did not match; falling back to full check: %v", hashErr)
-		}
-		if match {
-			// Hashes match, no corruption detected - skip the full check.
-			c.state = checkHashMatched
-			return nil
+			if match {
+				// Hashes match, no corruption detected - skip the full check.
+				c.state = checkHashMatched
+				return nil
+			}
 		}
 	}
 
@@ -917,4 +925,21 @@ func isQueryConstructionError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// allColumnsDatumsToBytesCompatible reports whether all columns can be
+// passed to crdb_internal.datums_to_bytes. Returns false if any column
+// has a type that cannot be key-encoded using keyside.Encode, which
+// datums_to_bytes relies on internally.
+//
+// REFCURSOR is technically supported by datums_to_bytes, but we still use
+// ColumnTypeIsIndexable to avoid duplicating type checks. REFCURSOR is
+// uncommon, so this trade-off keeps the code simpler.
+func allColumnsDatumsToBytesCompatible(columns []catalog.Column) bool {
+	for _, col := range columns {
+		if !colinfo.ColumnTypeIsIndexable(col.GetType()) {
+			return false
+		}
+	}
+	return true
 }
