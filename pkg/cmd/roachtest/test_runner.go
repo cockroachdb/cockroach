@@ -73,6 +73,10 @@ var (
 	// worker encountered an error when trying to POST to GitHub
 	errGithubPostFailed = fmt.Errorf("failed to POST to GitHub")
 
+	// errNoTestsExecuted error returned when an invocation of roachtest does not
+	// execute any tests i.e., if no clusters were provisioned
+	errNoTestsExecuted = fmt.Errorf("no tests executed")
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
@@ -591,6 +595,10 @@ func (r *testRunner) Run(
 	if len(r.status.fail) > 0 {
 		shout(ctx, l, lopt.stdout, "%d tests failed", len(r.status.fail))
 		err = errors.Join(err, errTestsFailed)
+	}
+	if len(r.status.pass) == 0 && len(r.status.fail) == 0 {
+		shout(ctx, l, lopt.stdout, "No tests ran. Skip count: %d", len(r.status.skip))
+		err = errors.Join(err, errNoTestsExecuted)
 	}
 	if err != nil {
 		return err

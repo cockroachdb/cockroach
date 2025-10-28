@@ -336,3 +336,14 @@ func SimulateMultiRegionCluster(
 
 	return cleanupFunc, nil
 }
+
+// PrintProvidersErrors prints error messages from a map of provider names to
+// errors from roachprod.
+func PrintProvidersErrors(w io.Writer, providersState map[string]string) {
+	for provider, s := range providersState {
+		if s == "Active" || strings.Contains(s, roachprod.RoachprodDisabledProviderMessage) {
+			continue
+		}
+		fmt.Fprintf(w, "Error from cloud provider %s: %s\n", provider, s)
+	}
+}
