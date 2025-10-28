@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -260,7 +261,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.getTableStatsFromCache(ctx, tableID, nil, nil, nil, false, 0)
+			tableStats, err := cache.getTableStatsFromCache(ctx, tableID, nil, nil, nil, false, 0, hlc.Timestamp{})
 			if err != nil {
 				return err
 			}
@@ -268,7 +269,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil, nil, nil, false, 0)
+					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil, nil, nil, false, 0, hlc.Timestamp{})
 					if err != nil {
 						return err
 					}
@@ -554,7 +555,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.getTableStatsFromCache(ctx, tableID, nil, nil, nil, false, 0)
+			tableStats, err := cache.getTableStatsFromCache(ctx, tableID, nil, nil, nil, false, 0, hlc.Timestamp{})
 			if err != nil {
 				return err
 			}
@@ -562,7 +563,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil, nil, nil, false, 0)
+					stats, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil, nil, nil, false, 0, hlc.Timestamp{})
 					if err != nil {
 						return err
 					}

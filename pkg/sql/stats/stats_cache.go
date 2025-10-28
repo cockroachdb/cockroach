@@ -264,12 +264,13 @@ func (sc *TableStatisticsCache) GetTableStats(
 	typeResolver *descs.DistSQLTypeResolver,
 	stable bool,
 	canaryWindowSize time.Duration,
+	statsAsOf hlc.Timestamp,
 ) (stats []*TableStatistic, err error) {
 	if !sc.statsUsageAllowed(table) {
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
 }
 
 // GetTableStatsProtosFromDB looks up statistics for the requested table in
@@ -384,11 +385,15 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	typeResolver *descs.DistSQLTypeResolver,
 	stable bool,
 	canaryWindowSize time.Duration,
+	statsAsOf hlc.Timestamp,
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	asOf := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	asOfTs := hlc.Timestamp{WallTime: time.Now().UnixNano()}
+	if !statsAsOf.IsEmpty() {
+		asOfTs = statsAsOf
+	}
 
 	if found, e := sc.lookupStatsLocked(ctx, tableID, false /* stealthy */); found {
 		if e.isStale(forecast, udtCols) {
@@ -396,13 +401,13 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 			sc.mu.cache.Del(tableID)
 		} else {
 			if stable {
-				return e.getStableStats(canaryWindowSize, asOf), e.err
+				return e.getStableStats(canaryWindowSize, asOfTs), e.err
 			}
 			return e.stats, e.err
 		}
 	}
 
-	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver, stable, 0, asOf)
+	return sc.addCacheEntryLocked(ctx, tableID, forecast != nil && *forecast, typeResolver, stable, canaryWindowSize, asOfTs)
 }
 
 // isStale checks whether we need to evict and re-load the cache entry.
@@ -1115,7 +1120,9 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 
 		if !stats.DelayDelete {
 			statsList = append(statsList, stats)
-		} else if statsVersionCount > 1 {
+		}
+
+		if statsVersionCount > 1 {
 			stableStatsList = append(stableStatsList, stats)
 		}
 
