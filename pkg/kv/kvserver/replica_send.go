@@ -8,7 +8,6 @@ package kvserver
 import (
 	"context"
 	"reflect"
-	"runtime/pprof"
 	"runtime/trace"
 	"time"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -131,16 +131,13 @@ func (r *Replica) SendWithWriteBytes(
 	defer r.MeasureReqCPUNanos(ctx, startCPU)
 
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
-		defer pprof.SetGoroutineLabels(ctx)
-		// Note: the defer statement captured the previous context.
-		var lbls pprof.LabelSet
+		var reset func()
 		if tenantIDOrZero.IsSet() {
-			lbls = pprof.Labels("range_str", r.rangeStr.ID(), "tenant_id", tenantIDOrZero.String())
+			ctx, reset = pprofutil.SetProfilerLabels(ctx, "range_str", r.rangeStr.ID(), "tenant_id", tenantIDOrZero.String())
 		} else {
-			lbls = pprof.Labels("range_str", r.rangeStr.ID())
+			ctx, reset = pprofutil.SetProfilerLabels(ctx, "range_str", r.rangeStr.ID())
 		}
-		ctx = pprof.WithLabels(ctx, lbls)
-		pprof.SetGoroutineLabels(ctx)
+		defer reset()
 	}
 	if trace.IsEnabled() {
 		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()

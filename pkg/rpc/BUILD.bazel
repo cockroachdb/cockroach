@@ -60,6 +60,7 @@ go_library(
         "//pkg/util/metric/aggmetric",
         "//pkg/util/netutil",
         "//pkg/util/netutil/addr",
+        "//pkg/util/pprofutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/sysutil",

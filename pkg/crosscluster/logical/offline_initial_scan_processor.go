@@ -8,7 +8,6 @@ package logical
 import (
 	"context"
 	"fmt"
-	"runtime/pprof"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -225,17 +225,20 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 	o.workerGroup.GoCtx(func(ctx context.Context) error {
 		defer close(o.checkpointCh)
 		defer close(o.rangeStatsCh)
-		pprof.Do(ctx, pprof.Labels("proc", fmt.Sprintf("%d", o.ProcessorID)), func(ctx context.Context) {
-			for event := range o.subscription.Events() {
-				if err := o.handleEvent(ctx, event); err != nil {
-					log.Dev.Infof(o.Ctx(), "consumer completed. Error: %s", err)
-					o.sendError(errors.Wrap(err, "consume events"))
-				}
+
+		ctx, reset := pprofutil.SetProfilerLabels(ctx, "proc", fmt.Sprintf("%d", o.ProcessorID))
+		defer reset()
+
+		for event := range o.subscription.Events() {
+			if err := o.handleEvent(ctx, event); err != nil {
+				log.Dev.Infof(o.Ctx(), "consumer completed. Error: %s", err)
+				o.sendError(errors.Wrap(err, "consume events"))
 			}
-			if err := o.subscription.Err(); err != nil {
-				o.sendError(errors.Wrap(err, "subscription"))
-			}
-		})
+		}
+		if err := o.subscription.Err(); err != nil {
+			o.sendError(errors.Wrap(err, "subscription"))
+		}
+
 		return nil
 	})
 }

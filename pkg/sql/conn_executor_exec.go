@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -69,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -4428,18 +4428,16 @@ func (ex *connExecutor) execWithProfiling(
 		} else {
 			stmtNoConstants = tree.FormatStatementHideConstants(ast)
 		}
-		labels := pprof.Labels(
+		var reset func()
+		ctx, reset = pprofutil.SetProfilerLabels(ctx,
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
 		)
-		pprof.Do(ctx, labels, func(ctx context.Context) {
-			err = op(ctx)
-		})
-	} else {
-		err = op(ctx)
+		defer reset()
 	}
+	err = op(ctx)
 	return err
 }
 
