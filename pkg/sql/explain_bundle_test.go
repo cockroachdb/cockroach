@@ -178,7 +178,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("basic when tracing already enabled", func(t *testing.T) {
 		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
+		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='1.0';")
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='0.0';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */

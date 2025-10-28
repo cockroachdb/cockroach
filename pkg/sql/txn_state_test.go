@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -213,6 +214,7 @@ func TestTransitions(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+	rng, _ := randutil.NewTestRand()
 	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
 	testCon := makeTestContext(stopper)
 	tranCtx := transitionCtx{
@@ -282,7 +284,7 @@ func TestTransitions(t *testing.T) {
 			ev: eventTxnStart{ImplicitTxn: fsm.True},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable,
-				false /* omitInRangefeeds */, false, /* bufferedWritesEnabled */
+				false /* omitInRangefeeds */, false /* bufferedWritesEnabled */, rng,
 			),
 			expState: stateOpen{ImplicitTxn: fsm.True, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
@@ -309,7 +311,7 @@ func TestTransitions(t *testing.T) {
 			ev: eventTxnStart{ImplicitTxn: fsm.False},
 			evPayload: makeEventTxnStartPayload(pri, tree.ReadWrite, timeutil.Now(),
 				nil /* historicalTimestamp */, tranCtx, sessiondatapb.Normal, isolation.Serializable,
-				false /* omitInRangefeeds */, false, /* bufferedWritesEnabled */
+				false /* omitInRangefeeds */, false /* bufferedWritesEnabled */, rng,
 			),
 			expState: stateOpen{ImplicitTxn: fsm.False, WasUpgraded: fsm.False},
 			expAdv: expAdvance{
