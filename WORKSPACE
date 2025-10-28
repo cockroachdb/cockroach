@@ -185,14 +185,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.25.3.darwin-amd64.tar.gz", "b229aaaf13ff3bb5f918a31b5e7da27673e173b1578b12a0157be3ca6512bb22"),
-        "darwin_arm64": ("go1.25.3.darwin-arm64.tar.gz", "1601fb97e9f325f9c2addc7193ca79750e20bd8d3e18e5a0c47e406ec0dfc63f"),
-        "linux_amd64": ("go1.25.3.linux-amd64.tar.gz", "fc7d672bafd8a1bfa66ccabbc878e28ecc812e0c2fa53f2ef95c4a04c9f42ca6"),
-        "linux_arm64": ("go1.25.3.linux-arm64.tar.gz", "50e842c343d86baae426a2c872f755ac70f22547d7b7ca85c9f329d331078b31"),
-        "linux_s390x": ("go1.25.3.linux-s390x.tar.gz", "cdec8df65f9f2920b7bd2fa4559ef880f6d90e31367549f014c8f3dd41278ae8"),
-        "windows_amd64": ("go1.25.3.windows-amd64.tar.gz", "78418dab7f8de0c695fffa2c5d3c420df51f511df8cd69745631c73b0023cec9"),
+        "darwin_amd64": ("go1.25.3.darwin-amd64.tar.gz", "2ba409dd10128f529c2b44623b559e0b7890e5f210a311325215a5ae5879474d"),
+        "darwin_arm64": ("go1.25.3.darwin-arm64.tar.gz", "746818c3703980b10279f9afec54145b35b0e3d5801fe6f5bdceeea53bcb6792"),
+        "linux_amd64": ("go1.25.3.linux-amd64.tar.gz", "821f2ede78f535fe10f95c38e2c6c87bbc200649dee20068ae4424de400196c7"),
+        "linux_arm64": ("go1.25.3.linux-arm64.tar.gz", "f6537bed6500b20d3ac1c8fd2e27609cb3c89b5e54579e344c09febb651e9598"),
+        "linux_s390x": ("go1.25.3.linux-s390x.tar.gz", "6d080fdd7333c8c84d679119613b7dc6b8703dc45f7231be78ba13e0523ffd50"),
+        "windows_amd64": ("go1.25.3.windows-amd64.tar.gz", "2f108bdf9956d0e1620d6277ecf761438f4562f7d551ca6258e8579875cf1ce5"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251016-224003/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20251028-171726/{}"],
     version = "1.25.3",
 )
 

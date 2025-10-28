@@ -116,6 +116,10 @@ const (
 	// be _exceeded_ before we no longer fast fail the restore job after hitting the
 	// maxRestoreRetryFastFail threshold.
 	restoreRetryProgressThreshold = 0
+
+	// droppedDescsOnFailKey is an info key that is set for a restore job when it
+	// has finished dropping its descriptors on failure.
+	droppedDescsOnFailKey = "dropped_descs_on_fail"
 )
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
@@ -2820,6 +2824,13 @@ func (r *restoreResumer) OnFailOrCancel(
 		return err
 	}
 
+	testingKnobs := execCfg.BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.AfterRevertRestoreDropDescriptors != nil {
+		if err := testingKnobs.AfterRevertRestoreDropDescriptors(); err != nil {
+			return err
+		}
+	}
+
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
@@ -2862,6 +2873,19 @@ func (r *restoreResumer) dropDescriptors(
 	// No need to mark the tables as dropped if they were not even created in the
 	// first place.
 	if !details.PrepareCompleted {
+		return nil
+	}
+
+	jobInfo := jobs.InfoStorageForJob(txn, r.job.ID())
+	_, hasDropped, err := jobInfo.Get(
+		ctx, "get-restore-dropped-descs-on-fail-key", droppedDescsOnFailKey,
+	)
+	if err != nil {
+		return err
+	}
+	if hasDropped {
+		// Descriptors have already been dropped once before, this is a retry of the
+		// cleanup.
 		return nil
 	}
 
@@ -3186,7 +3210,10 @@ func (r *restoreResumer) dropDescriptors(
 		return errors.Wrap(err, "dropping tables created at the start of restore caused by fail/cancel")
 	}
 
-	return nil
+	return errors.Wrap(
+		jobInfo.Write(ctx, droppedDescsOnFailKey, []byte{}),
+		"checkpointing dropped descs on fail",
+	)
 }
 
 // removeExistingTypeBackReferences removes back references from types that
