@@ -53,6 +53,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/errorutil",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/metamorphic",
