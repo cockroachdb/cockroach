@@ -685,6 +685,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	statsCanaryWindow := tabMeta.StatsCanaryWindow
 	sd := sb.evalCtx.SessionData()
 	asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.GetStmtTimestamp().UnixNano()}
+	if asOf := sb.evalCtx.SessionData().StatsAsOf; !asOf.IsEmpty() {
+		asOfTs = asOf
+	}
 
 	first := cat.FindLatestFullStat(0 /* start */, tab, sd, asOfTs, true /* inclusive */)
 	// If we are going to select the stable stat and there are still more stats,
