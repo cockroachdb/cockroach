@@ -7,6 +7,8 @@
 package tabledesc
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -739,4 +741,9 @@ func (desc *wrapper) IsRowLevelSecurityEnabled() bool {
 // IsRowLevelSecurityForced implements the TableDescriptor interface.
 func (desc *wrapper) IsRowLevelSecurityForced() bool {
 	return desc.RowLevelSecurityForced
+}
+
+// GetStatsCanaryWindow implements the TableDescriptor interface.
+func (desc *wrapper) GetStatsCanaryWindow() time.Duration {
+	return desc.StatsCanaryWindow
 }
