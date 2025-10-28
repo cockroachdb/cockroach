@@ -83,8 +83,8 @@ func (t kvRangefeedTest) insertCount() (int64, error) {
 func (t kvRangefeedTest) expectedCatchupDuration() (time.Duration, error) {
 	catchUpRows := int64(t.catchUpInterval.Seconds() * float64(t.writeMaxRate))
 	catchUpRate := t.changefeedMaxRate() - t.writeMaxRate
-	if catchUpRate < 0 {
-		return 0, errors.AssertionFailedf("invalid test configuration: catch-up rate (%d) is negative, catch up will not complete", catchUpRate)
+	if catchUpRate <= 0 {
+		return 0, errors.AssertionFailedf("invalid test configuration: catch-up rate (%d) is not positive, catch up will not complete", catchUpRate)
 	}
 	catchUpDuration := time.Duration((catchUpRows / catchUpRate)) * time.Second
 	return catchUpDuration, nil
