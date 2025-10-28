@@ -11079,3 +11079,119 @@ func TestBackupIndexCreatedAfterBackup(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 5)
 }
+
+// TestBackupRestoreFunctionDependenciesRevisionHistory tests that revision
+// history backups and restores correctly handle function dependencies.
+func TestBackupRestoreFunctionDependenciesRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 0
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Helper function to check which functions exist in a database.
+	checkFunctions := func(dbName string, expectedFuncs ...string) {
+		var expected [][]string
+		for _, fn := range expectedFuncs {
+			expected = append(expected, []string{fn})
+		}
+		if len(expected) > 0 {
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT function_name FROM crdb_internal.create_function_statements WHERE database_name = '%s' ORDER BY function_name`, dbName),
+				expected)
+		} else {
+			sqlDB.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT count(*) FROM crdb_internal.create_function_statements WHERE database_name = '%s'`, dbName),
+				[][]string{{"0"}})
+		}
+
+	}
+
+	// t0: Create database with parent and child functions where child depends on parent.
+	sqlDB.Exec(t, `CREATE DATABASE test_db`)
+	sqlDB.Exec(t, `USE test_db`)
+	sqlDB.Exec(t, `CREATE FUNCTION test_db.parent_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 42 $$`)
+	sqlDB.Exec(t, `CREATE FUNCTION test_db.child_func() RETURNS INT LANGUAGE SQL AS $$ SELECT parent_func() + 1 $$`)
+
+	// Verify both functions exist.
+	checkFunctions("test_db", "child_func", "parent_func")
+
+	// T1: Full backup with revision history.
+	backupPath := "nodelocal://1/function_deps_backup"
+	sqlDB.Exec(t, `BACKUP DATABASE test_db INTO $1 WITH revision_history`, backupPath)
+
+	// T2: Capture timestamp after backup (when parent and child exist).
+	var t2 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t2)
+
+	sqlDB.Exec(t, `DROP FUNCTION child_func`)
+	sqlDB.Exec(t, `CREATE FUNCTION test_db.child_func_2() RETURNS INT LANGUAGE SQL AS $$ SELECT parent_func() + 2 $$`)
+
+	checkFunctions("test_db", "child_func_2", "parent_func")
+
+	// T3: Capture timestamp after dropping child and creating child 2.
+	var t3 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t3)
+
+	// Drop child 2 so it does not appear at time 4.
+	sqlDB.Exec(t, `DROP FUNCTION child_func_2`)
+
+	// T4: Incremental backup with revision history.
+	sqlDB.Exec(t, `BACKUP DATABASE test_db INTO LATEST IN $1 WITH revision_history`, backupPath)
+
+	// T5: Capture timestamp after incremental backup (parent and child 2).
+	var t5 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t5)
+
+	sqlDB.Exec(t, `DROP FUNCTION parent_func`)
+
+	// Verify no functions exist.
+	checkFunctions("test_db")
+
+	// T6: Capture timestamp after dropping parent.
+	var t6 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t6)
+
+	// T6.2: Take another incremental backup to capture parent function drop.
+	sqlDB.Exec(t, `BACKUP DATABASE test_db INTO LATEST IN $1 WITH revision_history`, backupPath)
+
+	// T7: Restore AOST t2 -> expect both parent and child functions.
+	restoreQuery := fmt.Sprintf(
+		"RESTORE DATABASE test_db FROM LATEST IN $1 AS OF SYSTEM TIME %s with new_db_name = test2", t2)
+	sqlDB.Exec(t, restoreQuery, backupPath)
+	sqlDB.Exec(t, `USE test2`)
+
+	checkFunctions("test2", "child_func", "parent_func")
+
+	sqlDB.CheckQueryResults(t, `SELECT child_func()`, [][]string{{"43"}})
+
+	// T8: Restore AOST t3 -> expect parent and child 2.
+	restoreQuery = fmt.Sprintf(
+		"RESTORE DATABASE test_db FROM LATEST IN $1 AS OF SYSTEM TIME %s with new_db_name = test3", t3)
+	sqlDB.Exec(t, restoreQuery, backupPath)
+	sqlDB.Exec(t, `USE test3`)
+
+	checkFunctions("test3", "child_func_2", "parent_func")
+
+	sqlDB.CheckQueryResults(t, `SELECT parent_func()`, [][]string{{"42"}})
+	sqlDB.CheckQueryResults(t, `SELECT child_func_2()`, [][]string{{"44"}})
+
+	// T9: Restore AOST t5 -> expect parent.
+	restoreQuery = fmt.Sprintf(
+		"RESTORE DATABASE test_db FROM LATEST IN $1 AS OF SYSTEM TIME %s with new_db_name = test5", t5)
+	sqlDB.Exec(t, restoreQuery, backupPath)
+	sqlDB.Exec(t, `USE test5`)
+
+	checkFunctions("test5", "parent_func")
+
+	sqlDB.CheckQueryResults(t, `SELECT parent_func()`, [][]string{{"42"}})
+
+	// T10: Restore AOST t6 -> expect no functions.
+	restoreQuery = fmt.Sprintf(
+		"RESTORE DATABASE test_db FROM LATEST IN $1 AS OF SYSTEM TIME %s with new_db_name = test6", t6)
+	sqlDB.Exec(t, restoreQuery, backupPath)
+	sqlDB.Exec(t, `USE test6`)
+
+	checkFunctions("test6")
+}
