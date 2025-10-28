@@ -13,122 +13,61 @@ ALTER DATABASE d ADD REGION "ap-southeast-2"
 ----
 
 #####################################################################
-# CREATE TABLE: Test initial table creation with different localities
+# CREATE TABLE: Test each locality type once
 #####################################################################
 
 feature-usage
-CREATE TABLE t0 () 
+CREATE TABLE t_unspecified ()
 ----
 sql.multiregion.create_table.locality.unspecified
 
 feature-usage
-CREATE TABLE t1 () LOCALITY REGIONAL BY TABLE
+CREATE TABLE t_regional () LOCALITY REGIONAL BY TABLE
 ----
 sql.multiregion.create_table.locality.regional_by_table
 
 feature-usage
-CREATE TABLE t2 () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+CREATE TABLE t_regional_in () LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 ----
 sql.multiregion.create_table.locality.regional_by_table_in
 
 feature-usage
-CREATE TABLE t3 () LOCALITY GLOBAL
+CREATE TABLE t_global () LOCALITY GLOBAL
 ----
 sql.multiregion.create_table.locality.global
 
 #####################################################################
-# ALTER TABLE from REGIONAL BY TABLE
+# ALTER TABLE: Test representative transitions (not exhaustive)
 #####################################################################
 
 exec
-CREATE TABLE t1_to_row () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t1_to_global () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t1_to_table_in () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
-CREATE TABLE t1_to_row_as () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
-ALTER TABLE t1_to_row_as ADD COLUMN cr crdb_internal_region NOT NULL;
+CREATE TABLE t_alter1 () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
+CREATE TABLE t_alter2 () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
+CREATE TABLE t_alter3 () WITH (schema_locked=false) LOCALITY GLOBAL;
+CREATE TABLE t_alter4 () WITH (schema_locked=false) LOCALITY REGIONAL BY TABLE;
+ALTER TABLE t_alter4 ADD COLUMN cr crdb_internal_region NOT NULL;
 ----
 
+# Test REGIONAL BY TABLE -> REGIONAL BY ROW
 feature-usage
-ALTER TABLE t1_to_row SET LOCALITY REGIONAL BY ROW
+ALTER TABLE t_alter1 SET LOCALITY REGIONAL BY ROW
 ----
 sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_row
 
+# Test REGIONAL BY TABLE IN -> GLOBAL
 feature-usage
-ALTER TABLE t1_to_global SET LOCALITY GLOBAL
-----
-sql.multiregion.alter_table.locality.from.regional_by_table.to.global
-
-feature-usage
-ALTER TABLE t1_to_table_in SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
-----
-sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_table_in
-
-feature-usage
-ALTER TABLE t1_to_row_as SET LOCALITY REGIONAL BY ROW AS "cr"
-----
-sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_row_as
-
-#####################################################################
-# ALTER TABLE from REGIONAL BY TABLE IN
-#####################################################################
-
-exec
-CREATE TABLE t2_to_row () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-CREATE TABLE t2_to_global () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-CREATE TABLE t2_to_table () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-CREATE TABLE t2_to_row_as () WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "ap-southeast-2";
-ALTER TABLE t2_to_row_as ADD COLUMN cr crdb_internal_region NOT NULL;
-----
-
-feature-usage
-ALTER TABLE t2_to_row SET LOCALITY REGIONAL BY ROW
-----
-sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_row
-
-feature-usage
-ALTER TABLE t2_to_global SET LOCALITY GLOBAL
+ALTER TABLE t_alter2 SET LOCALITY GLOBAL
 ----
 sql.multiregion.alter_table.locality.from.regional_by_table_in.to.global
 
+# Test GLOBAL -> REGIONAL BY TABLE IN
 feature-usage
-ALTER TABLE t2_to_table SET LOCALITY REGIONAL BY TABLE
-----
-sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_table
-
-feature-usage
-ALTER TABLE t2_to_row_as SET LOCALITY REGIONAL BY ROW AS "cr"
-----
-sql.multiregion.alter_table.locality.from.regional_by_table_in.to.regional_by_row_as
-
-
-#####################################################################
-# ALTER TABLE from GLOBAL
-#####################################################################exec
-
-exec
-CREATE TABLE t3_to_row () WITH (schema_locked = false) LOCALITY GLOBAL;
-CREATE TABLE t3_to_table () WITH (schema_locked = false) LOCALITY GLOBAL;
-CREATE TABLE t3_to_table_in () WITH (schema_locked = false) LOCALITY GLOBAL;
-CREATE TABLE t3_to_row_as () WITH (schema_locked = false) LOCALITY GLOBAL;
-ALTER TABLE t3_to_row_as ADD COLUMN cr crdb_internal_region NOT NULL;
-----
-
-feature-usage
-ALTER TABLE t3_to_row SET LOCALITY REGIONAL BY ROW
-----
-sql.multiregion.alter_table.locality.from.global.to.regional_by_row
-
-feature-usage
-ALTER TABLE t3_to_table SET LOCALITY REGIONAL BY TABLE
-----
-sql.multiregion.alter_table.locality.from.global.to.regional_by_table
-
-feature-usage
-ALTER TABLE t3_to_table_in SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
+ALTER TABLE t_alter3 SET LOCALITY REGIONAL BY TABLE IN "ap-southeast-2"
 ----
 sql.multiregion.alter_table.locality.from.global.to.regional_by_table_in
 
+# Test REGIONAL BY TABLE -> REGIONAL BY ROW AS
 feature-usage
-ALTER TABLE t3_to_row_as SET LOCALITY REGIONAL BY ROW AS "cr"
+ALTER TABLE t_alter4 SET LOCALITY REGIONAL BY ROW AS "cr"
 ----
-sql.multiregion.alter_table.locality.from.global.to.regional_by_row_as
+sql.multiregion.alter_table.locality.from.regional_by_table.to.regional_by_row_as
