@@ -745,6 +745,8 @@ func TestTransientErrorFallback(t *testing.T) {
 	// Test that if a test fails with a transient error handled by the `require` package,
 	// the test runner will correctly still identify it as a flake and the run will have
 	// no failed tests.
+	// Note: As of #156400, testRunner.Run returns an error if no tests were
+	// executed, i.e., 0 tests passed and 0 tests failed
 	t.Run("Require API", func(t *testing.T) {
 		mockTest := registry.TestSpec{
 			Name:             `ssh flake`,
@@ -759,7 +761,7 @@ func TestTransientErrorFallback(t *testing.T) {
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
 			defaultParallelism, copt, testOpts{}, lopt, github)
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errNoTestsExecuted)
 	})
 
 	// Now test that if the transient error is not handled by the `require` package,
@@ -883,6 +885,8 @@ func TestRunnerTasks(t *testing.T) {
 	})
 }
 
+// Note: As of #156400, testRunner.Run returns an error if no tests were
+// executed, i.e., 0 tests passed and 0 tests failed
 func TestVMPreemptionPolling(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
@@ -938,7 +942,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 			defaultParallelism, copt, testOpts{}, lopt, github)
 		// The preemption monitor should mark a VM as preempted and the test should
 		// be treated as a flake instead of a failed test.
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errNoTestsExecuted)
 	})
 
 	// Test that if a VM is preempted but the polling doesn't catch it because the
@@ -954,7 +958,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 			defaultParallelism, copt, testOpts{}, lopt, github)
 		// The post test failure check should mark a VM as preempted and the test should
 		// be treated as a flake instead of a failed test.
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errNoTestsExecuted)
 	})
 
 	// Test that if VM preemption polling finds a preempted VM but the post test failure
@@ -987,7 +991,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
 			defaultParallelism, copt, testOpts{}, lopt, github)
 
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errNoTestsExecuted)
 	})
 
 	// Test that if the test hangs until timeout, a VM preemption will still be caught.
@@ -1017,7 +1021,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
 			defaultParallelism, copt, testOpts{}, lopt, github)
 
-		require.NoError(t, err)
+		require.ErrorIs(t, err, errNoTestsExecuted)
 	})
 }
 

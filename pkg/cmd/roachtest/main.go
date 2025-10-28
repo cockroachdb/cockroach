@@ -53,6 +53,11 @@ const (
 	// occur with any of the other exit codes.
 	ExitCodeGithubPostFailed = 12
 
+	// ExitCodeNoTestsExecuted is the exit code indicating that no tests executed.
+	// We want to fail the build to avoid silently passing when nothing is
+	// run. Returned when errNoTestsExecuted is thrown.
+	ExitCodeNoTestsExecuted = 13
+
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
@@ -271,16 +276,21 @@ Example:
 	}
 
 	if err := rootCmd.Execute(); err != nil {
-		code := 1
-		if errors.Is(err, errGithubPostFailed) {
-			code = ExitCodeGithubPostFailed
-		} else if errors.Is(err, errSomeClusterProvisioningFailed) {
-			code = ExitCodeClusterProvisioningFailed
-		} else if errors.Is(err, errTestsFailed) {
-			code = ExitCodeTestsFailed
+		// err is potentially a collection of joined errors. To determine which
+		// exit code to return, we have a priority-based switch case statement.
+		// For TC error code handling, see teamcity-roachtest-invoke.sh
+		switch {
+		case errors.Is(err, errGithubPostFailed):
+			os.Exit(ExitCodeGithubPostFailed)
+		case errors.Is(err, errNoTestsExecuted):
+			os.Exit(ExitCodeNoTestsExecuted)
+		case errors.Is(err, errSomeClusterProvisioningFailed):
+			os.Exit(ExitCodeClusterProvisioningFailed)
+		case errors.Is(err, errTestsFailed):
+			os.Exit(ExitCodeTestsFailed)
+		default:
+			os.Exit(1)
 		}
-		// Cobra has already printed the error message.
-		os.Exit(code)
 	}
 }
 
