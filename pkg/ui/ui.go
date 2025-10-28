@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/ui/future"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/settings" // Import the settings package to register UI-related settings for doc generation.
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -132,6 +133,8 @@ type Config struct {
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
 
+var futurePath = regexp.MustCompile("^/future")
+
 // Handler returns an http.Handler that serves the UI,
 // including index.html, which has some login-related variables
 // templated into it, as well as static assets.
@@ -183,6 +186,10 @@ func Handler(cfg Config) http.Handler {
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
+		}
+		if futurePath.MatchString(r.URL.Path) {
+			future.HandleFuture(w, r)
+			return
 		}
 		if uiConfigPath.MatchString(r.URL.Path) {
 			argBytes, err := json.Marshal(args)
