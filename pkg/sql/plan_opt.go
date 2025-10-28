@@ -263,6 +263,18 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		return err
 	}
 
+	// Log and increment telemetry counters for interesting decisions made during
+	// optimization.
+	optStats := execMemo.GetOptimizationStats()
+	if optStats.ClampedHistogramSelectivity {
+		log.VEventf(ctx, 2, "clamped histogram selectivity during optimization")
+		telemetry.Inc(sqltelemetry.PlanClampedHistogramSelectivityCounter)
+	}
+	if optStats.ClampedInequalitySelectivity {
+		log.VEventf(ctx, 2, "clamped inequality selectivity during optimization")
+		telemetry.Inc(sqltelemetry.PlanClampedInequalitySelectivityCounter)
+	}
+
 	// Build the plan tree.
 	const disableTelemetryAndPlanGists = false
 	return p.runExecBuild(ctx, execMemo, disableTelemetryAndPlanGists)

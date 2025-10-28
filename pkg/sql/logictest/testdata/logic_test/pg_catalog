@@ -3138,6 +3138,8 @@ on_update_rehome_row_enabled                                     on             
 opt_split_scan_limit                                             2048                NULL      NULL        NULL        string
 optimizer_always_use_histograms                                  on                  NULL      NULL        NULL        string
 optimizer_check_input_min_row_count                              1                   NULL      NULL        NULL        string
+optimizer_clamp_inequality_selectivity                           off                 NULL      NULL        NULL        string
+optimizer_clamp_low_histogram_selectivity                        off                 NULL      NULL        NULL        string
 optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  NULL      NULL        NULL        string
 optimizer_enable_lock_elision                                    on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL      NULL        NULL        string
@@ -3383,6 +3385,8 @@ on_update_rehome_row_enabled                                     on             
 opt_split_scan_limit                                             2048                NULL  user     NULL      2048                2048
 optimizer_always_use_histograms                                  on                  NULL  user     NULL      on                  on
 optimizer_check_input_min_row_count                              1                   NULL  user     NULL      1                   1
+optimizer_clamp_inequality_selectivity                           off                 NULL  user     NULL      off                 off
+optimizer_clamp_low_histogram_selectivity                        off                 NULL  user     NULL      off                 off
 optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  NULL  user     NULL      on                  on
 optimizer_enable_lock_elision                                    on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL  user     NULL      on                  on
@@ -3619,6 +3623,8 @@ opt_split_scan_limit                                             NULL    NULL   
 optimizer                                                        NULL    NULL     NULL     NULL        NULL
 optimizer_always_use_histograms                                  NULL    NULL     NULL     NULL        NULL
 optimizer_check_input_min_row_count                              NULL    NULL     NULL     NULL        NULL
+optimizer_clamp_inequality_selectivity                           NULL    NULL     NULL     NULL        NULL
+optimizer_clamp_low_histogram_selectivity                        NULL    NULL     NULL     NULL        NULL
 optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  NULL    NULL     NULL     NULL        NULL
 optimizer_enable_lock_elision                                    NULL    NULL     NULL     NULL        NULL
 optimizer_hoist_uncorrelated_equality_subqueries                 NULL    NULL     NULL     NULL        NULL
