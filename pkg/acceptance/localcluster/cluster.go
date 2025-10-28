@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
+
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 )
@@ -727,6 +728,11 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		}
 
 		pgURL.Path = n.Cfg.DB
+		// Set allow_unsafe_internals=true for acceptance tests to allow access to
+		// crdb_internal and system tables.
+		q := pgURL.Query()
+		q.Set("allow_unsafe_internals", "true")
+		pgURL.RawQuery = q.Encode()
 		func() {
 			n.Lock()
 			defer n.Unlock()
