@@ -1407,6 +1407,9 @@ func splitTriggerHelper(
 	// This avoids running the consistency checker on the RHS immediately after
 	// the split.
 	lastTS := hlc.Timestamp{}
+	// TODO(arul): instead of fetching the consistency checker timestamp here
+	// like this, we should instead pass it using the SplitTriggerHelperInput to
+	// make it easier to test.
 	if _, err := storage.MVCCGetProto(ctx, batch,
 		keys.QueueLastProcessedKey(split.LeftDesc.StartKey, "consistencyChecker"),
 		hlc.Timestamp{}, &lastTS, storage.MVCCGetOptions{}); err != nil {

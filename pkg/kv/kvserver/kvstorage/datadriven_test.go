@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -94,6 +95,14 @@ func (e *env) handleNewReplica(
 	return desc
 }
 
+func (e *env) handleRangeTombstone(
+	t *testing.T, ctx context.Context, rangeID roachpb.RangeID, next roachpb.ReplicaID,
+) {
+	require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(
+		ctx, e.eng, kvserverpb.RangeTombstone{NextReplicaID: next},
+	))
+}
+
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -146,6 +155,12 @@ func TestDataDriven(t *testing.T) {
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)
 				}
+
+			case "range-tombstone":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				nextID := dd.ScanArg[roachpb.ReplicaID](t, d, "next-replica-id")
+				e.handleRangeTombstone(t, ctx, rangeID, nextID)
+
 			case "load-and-reconcile":
 				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {
