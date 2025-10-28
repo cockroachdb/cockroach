@@ -2621,7 +2621,7 @@ func TestChangefeedExternalIODisabled(t *testing.T) {
 		}
 		ctx := context.Background()
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 			ExternalIODirConfig: base.ExternalIODirConfig{
 				DisableOutbound: true,
 			},
@@ -4067,7 +4067,7 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -8384,9 +8384,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	tc := serverutils.StartCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Test uses SPLIT AT, which isn't currently supported for
-			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 			UseDatabase:       "test",
 			Knobs:             knobs,
 			ExternalIODir:     sinkDir,
@@ -8549,9 +8547,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 			return perNode
 		}(),
 		ServerArgs: base.TestServerArgs{
-			// Test uses SPLIT AT, which isn't currently supported for
-			// secondary tenants. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 		},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -8707,9 +8703,7 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 		base.TestClusterArgs{
 			ServerArgsPerNode: perServerKnobs,
 			ServerArgs: base.TestServerArgs{
-				// Test uses SPLIT AT, which isn't currently supported for
-				// secondary tenants. Tracked with #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 			},
 			ReusableListenerReg: listenerReg,
 		})
@@ -8802,9 +8796,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 			ServerArgsPerNode: perServerKnobs,
 			ReplicationMode:   base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				// Test uses SPLIT AT, which isn't currently supported for
-				// secondary tenants. Tracked with #76378.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
@@ -11309,7 +11301,7 @@ func TestChangefeedExecLocality(t *testing.T) {
 	const nodes = 4
 	args := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TODOTestTenantDisabled, // need nodelocal and splits.
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142799),
 		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{},
 	}
