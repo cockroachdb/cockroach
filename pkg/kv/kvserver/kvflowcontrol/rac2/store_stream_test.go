@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -440,8 +441,7 @@ func TestSendTokenWatcher(t *testing.T) {
 				return makeStateString()
 
 			case "cancel":
-				var name string
-				d.ScanArgs(t, "name", &name)
+				name := dd.ScanArg[string](t, d, "name")
 				handle, ok := notifications[name]
 				require.True(t, ok)
 				watcher.CancelHandle(ctx, handle.handle)
@@ -449,8 +449,7 @@ func TestSendTokenWatcher(t *testing.T) {
 				return makeStateString()
 
 			case "tick":
-				var seconds int
-				d.ScanArgs(t, "seconds", &seconds)
+				seconds := dd.ScanArg[int](t, d, "seconds")
 				clock.Advance(time.Duration(seconds) * time.Second)
 				// Sleep to ensure that the tick is processed before proceeding.
 				time.Sleep(20 * time.Millisecond)
