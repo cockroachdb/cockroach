@@ -145,6 +145,66 @@ SELECT ARRAY['A', 'A.B']::LTREE[] < ARRAY['A', 'A.B.C']
 ----
 true
 
+query B
+SELECT 'A.B.C'::LTREE > 'A.B'
+----
+true
+
+query B
+SELECT 'A.B'::LTREE > 'A.B.C'
+----
+false
+
+query B
+SELECT 'A.B'::LTREE > 'A.B'
+----
+false
+
+query B
+SELECT 'A.B'::LTREE <= 'A.B.C'
+----
+true
+
+query B
+SELECT 'A.B.C'::LTREE <= 'A.B'
+----
+false
+
+query B
+SELECT 'A.B'::LTREE <= 'A.B'
+----
+true
+
+query B
+SELECT 'A.B.C'::LTREE >= 'A.B'
+----
+true
+
+query B
+SELECT 'A.B'::LTREE >= 'A.B.C'
+----
+false
+
+query B
+SELECT 'A.B'::LTREE >= 'A.B'
+----
+true
+
+query B
+SELECT 'A.B.C'::LTREE != 'A.B'
+----
+true
+
+query B
+SELECT 'A.B'::LTREE != 'A.B'
+----
+false
+
+query B
+SELECT 'A.B'::LTREE != NULL::LTREE
+----
+NULL
+
 query T
 SELECT subpath('Top.Child1.Child2'::LTREE, 1);
 ----
@@ -348,4 +408,950 @@ SELECT lca(''::LTREE, 'A.B.C'::LTREE)
 ----
 NULL
 
+# Tests for DEFAULT values with LTREE
 
+statement ok
+CREATE TABLE t_defaults (
+  id INT PRIMARY KEY,
+  path LTREE DEFAULT 'default.path',
+  path_null LTREE DEFAULT NULL
+)
+
+statement ok
+INSERT INTO t_defaults (id) VALUES (1)
+
+query ITT
+SELECT * FROM t_defaults
+----
+1  default.path  NULL
+
+statement ok
+INSERT INTO t_defaults (id, path) VALUES (2, 'custom.path')
+
+query ITT rowsort
+SELECT * FROM t_defaults
+----
+1  default.path  NULL
+2  custom.path   NULL
+
+statement ok
+DROP TABLE t_defaults
+
+# Test invalid DEFAULT value
+
+statement error could not parse ltree
+CREATE TABLE t_invalid_default (
+  id INT PRIMARY KEY,
+  path LTREE DEFAULT 'invalid..path'
+)
+
+# Tests for CHECK constraints with LTREE
+
+statement ok
+CREATE TABLE t_check (
+  id INT PRIMARY KEY,
+  path LTREE CHECK (path @> 'root.a.b')
+)
+
+statement ok
+INSERT INTO t_check VALUES (1, 'root.a.b')
+
+statement ok
+INSERT INTO t_check VALUES (2, 'root')
+
+query IT rowsort
+SELECT * FROM t_check
+----
+1  root.a.b
+2  root
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check VALUES (3, 'other.path')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check VALUES (4, 'roo')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check VALUES (4, 'root.a.b.c')
+
+statement ok
+DROP TABLE t_check
+
+# CHECK constraint with descendant operator
+
+statement ok
+CREATE TABLE t_check2 (
+  id INT PRIMARY KEY,
+  path LTREE CHECK (path <@ 'org.company')
+)
+
+statement ok
+INSERT INTO t_check2 VALUES (1, 'org.company.dept.team')
+
+statement ok
+INSERT INTO t_check2 VALUES (2, 'org.company')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check2 VALUES (3, 'org')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check2 VALUES (4, 'other.org.company')
+
+statement ok
+DROP TABLE t_check2
+
+# CHECK constraint with nlevel function
+
+statement ok
+CREATE TABLE t_check3 (
+  id INT PRIMARY KEY,
+  path LTREE CHECK (nlevel(path) >= 2)
+)
+
+statement ok
+INSERT INTO t_check3 VALUES (1, 'a.b')
+
+statement ok
+INSERT INTO t_check3 VALUES (2, 'a.b.c.d.e')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check3 VALUES (3, 'single')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO t_check3 VALUES (4, '')
+
+statement ok
+DROP TABLE t_check3
+
+# Tests for schema changes with LTREE
+
+# ALTER TABLE ADD COLUMN
+
+statement ok
+CREATE TABLE t_schema (id INT PRIMARY KEY, name STRING)
+
+statement ok
+INSERT INTO t_schema VALUES (1, 'first'), (2, 'second')
+
+statement ok
+ALTER TABLE t_schema ADD COLUMN path LTREE
+
+query ITS rowsort
+SELECT * FROM t_schema
+----
+1  first   NULL
+2  second  NULL
+
+statement ok
+INSERT INTO t_schema VALUES (3, 'third', 'a.b.c')
+
+query ITT rowsort
+SELECT * FROM t_schema
+----
+1  first   NULL
+2  second  NULL
+3  third   a.b.c
+
+# ALTER TABLE ADD COLUMN with DEFAULT
+
+statement ok
+ALTER TABLE t_schema ADD COLUMN path2 LTREE DEFAULT 'default.value'
+
+query ITTT rowsort
+SELECT * FROM t_schema
+----
+1  first   NULL   default.value
+2  second  NULL   default.value
+3  third   a.b.c  default.value
+
+# ALTER TABLE DROP COLUMN
+
+statement ok
+ALTER TABLE t_schema DROP COLUMN path
+
+query ITT rowsort
+SELECT * FROM t_schema
+----
+1  first   default.value
+2  second  default.value
+3  third   default.value
+
+statement ok
+DROP TABLE t_schema
+
+# CREATE INDEX on existing table with LTREE
+
+statement ok
+CREATE TABLE t_index (id INT PRIMARY KEY, path LTREE)
+
+statement ok
+INSERT INTO t_index VALUES (1, 'a.b'), (2, 'a.b.c'), (3, 'x.y.z')
+
+statement ok
+CREATE INDEX idx_path ON t_index (path)
+
+query IT
+SELECT * FROM t_index@idx_path WHERE path <@ 'a.b' ORDER BY id
+----
+1  a.b
+2  a.b.c
+
+# DROP INDEX
+
+statement ok
+DROP INDEX idx_path
+
+query IT
+SELECT * FROM t_index WHERE path <@ 'a.b' ORDER BY id
+----
+1  a.b
+2  a.b.c
+
+statement ok
+DROP TABLE t_index
+
+# ALTER TABLE ALTER COLUMN TYPE from TEXT to LTREE
+# Skip entire section for legacy schema changer (does not support ALTER COLUMN TYPE)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE t_alter_type (id INT PRIMARY KEY, path_text TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+INSERT INTO t_alter_type VALUES (1, 'a.b.c'), (2, 'x.y')
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_alter_type ALTER COLUMN path_text TYPE LTREE USING path_text::LTREE
+
+skipif config local-legacy-schema-changer
+query IT rowsort
+SELECT * FROM t_alter_type
+----
+1  a.b.c
+2  x.y
+
+# Verify it's actually LTREE now
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_typeof(path_text) FROM t_alter_type LIMIT 1
+----
+ltree
+
+# ALTER TABLE ALTER COLUMN TYPE from LTREE to TEXT
+
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_alter_type ALTER COLUMN path_text TYPE TEXT
+
+skipif config local-legacy-schema-changer
+query IT rowsort
+SELECT * FROM t_alter_type
+----
+1  a.b.c
+2  x.y
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_typeof(path_text) FROM t_alter_type LIMIT 1
+----
+text
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TABLE t_alter_type
+
+# ALTER TABLE ALTER COLUMN TYPE with invalid data
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE t_alter_invalid (id INT PRIMARY KEY, path_text TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+INSERT INTO t_alter_invalid VALUES (1, 'valid.path'), (2, 'invalid..path'), (3, 'also.valid')
+
+skipif config local-legacy-schema-changer
+statement error could not parse ltree
+ALTER TABLE t_alter_invalid ALTER COLUMN path_text TYPE LTREE USING path_text::LTREE
+
+# Verify table still has TEXT type and data is unchanged
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_typeof(path_text) FROM t_alter_invalid LIMIT 1
+----
+text
+
+skipif config local-legacy-schema-changer
+query IT rowsort
+SELECT * FROM t_alter_invalid
+----
+1  valid.path
+2  invalid..path
+3  also.valid
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TABLE t_alter_invalid
+
+# Tests for views with LTREE
+
+statement ok
+CREATE TABLE t_view_base (id INT PRIMARY KEY, path LTREE, name STRING)
+
+statement ok
+INSERT INTO t_view_base VALUES
+  (1, 'org.engineering.backend', 'Backend'),
+  (2, 'org.engineering.frontend', 'Frontend'),
+  (3, 'org.sales', 'Sales'),
+  (4, 'org.engineering.backend.api', 'API')
+
+statement ok
+CREATE VIEW v_engineering AS
+  SELECT id, path, name
+  FROM t_view_base
+  WHERE path <@ 'org.engineering'
+
+query ITT rowsort
+SELECT * FROM v_engineering
+----
+1  org.engineering.backend      Backend
+2  org.engineering.frontend     Frontend
+4  org.engineering.backend.api  API
+
+# View with LTREE functions
+
+statement ok
+CREATE VIEW v_with_functions AS
+  SELECT id, path, name, nlevel(path) as depth, subpath(path, 0, 2) as top_level
+  FROM t_view_base
+
+query ITTIT rowsort
+SELECT * FROM v_with_functions
+----
+1  org.engineering.backend      Backend        3  org.engineering
+2  org.engineering.frontend     Frontend       3  org.engineering
+3  org.sales                    Sales          2  org.sales
+4  org.engineering.backend.api  API            4  org.engineering
+
+# View with LTREE operators
+
+statement ok
+CREATE VIEW v_top_level AS
+  SELECT id, path, name
+  FROM t_view_base
+  WHERE path <@ 'org' AND nlevel(path) = 2
+
+query ITT rowsort
+SELECT * FROM v_top_level
+----
+3  org.sales  Sales
+
+statement ok
+DROP VIEW v_engineering
+
+statement ok
+DROP VIEW v_with_functions
+
+statement ok
+DROP VIEW v_top_level
+
+statement ok
+DROP TABLE t_view_base
+
+# Tests for computed columns with LTREE
+
+statement ok
+CREATE TABLE t_computed (
+  id INT PRIMARY KEY,
+  path LTREE,
+  depth INT AS (nlevel(path)) STORED,
+  parent_path LTREE AS (subpath(path, 0, nlevel(path) - 1)) STORED
+)
+
+statement ok
+INSERT INTO t_computed (id, path) VALUES
+  (1, 'a.b.c'),
+  (2, 'x.y'),
+  (3, 'p.q.r.s.t')
+
+query ITIT rowsort
+SELECT id, path, depth, parent_path FROM t_computed
+----
+1  a.b.c      3  a.b
+2  x.y        2  x
+3  p.q.r.s.t  5  p.q.r.s
+
+# Verify computed columns are updated on insert
+
+statement ok
+INSERT INTO t_computed (id, path) VALUES (4, 'single')
+
+query ITIT
+SELECT id, path, depth, parent_path FROM t_computed WHERE id = 4
+----
+4  single  1  ·
+
+# Update path and verify computed columns change
+
+statement ok
+UPDATE t_computed SET path = 'a.b.c.d.e' WHERE id = 1
+
+query ITIT
+SELECT id, path, depth, parent_path FROM t_computed WHERE id = 1
+----
+1  a.b.c.d.e  5  a.b.c.d
+
+statement ok
+DROP TABLE t_computed
+
+# Test computed column with invalid LTREE (STORED)
+
+statement ok
+CREATE TABLE t_computed_invalid_stored (
+  id INT PRIMARY KEY,
+  path TEXT,
+  invalid_path LTREE AS ((path || '..invalid')::LTREE) STORED
+)
+
+statement error could not parse ltree
+INSERT INTO t_computed_invalid_stored (id, path) VALUES (1, 'a.b.c')
+
+statement ok
+DROP TABLE t_computed_invalid_stored
+
+# Test computed column with invalid LTREE (VIRTUAL)
+
+statement ok
+CREATE TABLE t_computed_invalid_virtual (
+  id INT PRIMARY KEY,
+  path TEXT,
+  invalid_path LTREE AS ((path || '..invalid')::LTREE) VIRTUAL
+)
+
+statement error could not parse ltree
+INSERT INTO t_computed_invalid_virtual (id, path) VALUES (1, 'a.b.c')
+
+statement ok
+SELECT invalid_path FROM t_computed_invalid_virtual WHERE id = 1
+
+statement ok
+DROP TABLE t_computed_invalid_virtual
+
+# Tests for casting edge cases
+
+# Cast NULL to LTREE
+
+query T
+SELECT NULL::LTREE
+----
+NULL
+
+query T
+SELECT CAST(NULL AS LTREE)
+----
+NULL
+
+# Cast empty string to LTREE
+
+query T
+SELECT ''::LTREE
+----
+·
+
+# Cast invalid strings to LTREE
+
+statement error could not parse ltree
+SELECT 'invalid..path'::LTREE
+
+statement error could not parse ltree
+SELECT 'has spaces'::LTREE
+
+statement error could not parse ltree
+SELECT 'has@symbol'::LTREE
+
+statement error could not parse ltree
+SELECT '.starts.with.dot'::LTREE
+
+statement error could not parse ltree
+SELECT 'ends.with.dot.'::LTREE
+
+# Cast LTREE to TEXT
+
+query T
+SELECT 'a.b.c'::LTREE::TEXT
+----
+a.b.c
+
+query T
+SELECT ''::LTREE::TEXT
+----
+·
+
+query T
+SELECT NULL::LTREE::TEXT
+----
+NULL
+
+# Cast LTREE to STRING
+
+query T
+SELECT 'x.y.z'::LTREE::STRING
+----
+x.y.z
+
+# Round-trip casts
+
+query B
+SELECT 'a.b.c'::LTREE::TEXT::LTREE = 'a.b.c'::LTREE
+----
+true
+
+query B
+SELECT ''::LTREE::TEXT::LTREE = ''::LTREE
+----
+true
+
+# Cast from VARCHAR to LTREE
+
+query T
+SELECT 'foo.bar'::VARCHAR::LTREE
+----
+foo.bar
+
+# Cast LTREE array to TEXT array
+
+query T
+SELECT ARRAY['a.b', 'x.y.z']::LTREE[]::TEXT[]
+----
+{a.b,x.y.z}
+
+# Cast TEXT array to LTREE array
+
+query T
+SELECT ARRAY['a.b', 'x.y.z']::TEXT[]::LTREE[]
+----
+{a.b,x.y.z}
+
+# Invalid cast in array
+
+statement error could not parse ltree
+SELECT ARRAY['valid', 'invalid..path']::TEXT[]::LTREE[]
+
+# Tests for UDFs with LTREE
+
+# SQL UDF with LTREE parameter
+
+statement ok
+CREATE FUNCTION get_depth(path LTREE) RETURNS INT AS $$
+  SELECT nlevel(path)
+$$ LANGUAGE SQL
+
+query I
+SELECT get_depth('a.b.c.d')
+----
+4
+
+query I
+SELECT get_depth('')
+----
+0
+
+query I
+SELECT get_depth(NULL)
+----
+NULL
+
+# SQL UDF returning LTREE
+
+statement ok
+CREATE FUNCTION make_path(a TEXT, b TEXT) RETURNS LTREE AS $$
+  SELECT (a || '.' || b)::LTREE
+$$ LANGUAGE SQL
+
+query T
+SELECT make_path('org', 'engineering')
+----
+org.engineering
+
+query T
+SELECT make_path('a', 'b')
+----
+a.b
+
+# SQL UDF with LTREE operations
+
+statement ok
+CREATE FUNCTION is_descendant(child LTREE, parent LTREE) RETURNS BOOL AS $$
+  SELECT child <@ parent
+$$ LANGUAGE SQL
+
+query B
+SELECT is_descendant('a.b.c', 'a.b')
+----
+true
+
+query B
+SELECT is_descendant('a.b', 'a.b.c')
+----
+false
+
+query B
+SELECT is_descendant('x.y', 'a.b')
+----
+false
+
+# SQL UDF that returns parent path
+
+statement ok
+CREATE FUNCTION get_parent(path LTREE) RETURNS LTREE AS $$
+  SELECT CASE
+    WHEN nlevel(path) <= 1 THEN NULL::LTREE
+    ELSE subpath(path, 0, nlevel(path) - 1)
+  END
+$$ LANGUAGE SQL
+
+query T
+SELECT get_parent('a.b.c.d')
+----
+a.b.c
+
+query T
+SELECT get_parent('single')
+----
+NULL
+
+query T
+SELECT get_parent('')
+----
+NULL
+
+# PL/pgSQL function with LTREE
+
+statement ok
+CREATE FUNCTION count_ancestors(path LTREE) RETURNS INT AS $$
+DECLARE
+  count INT := 0;
+  current_path LTREE := path;
+BEGIN
+  WHILE nlevel(current_path) > 0 LOOP
+    count := count + 1;
+    current_path := subpath(current_path, 0, nlevel(current_path) - 1);
+  END LOOP;
+  RETURN count;
+END;
+$$ LANGUAGE PLpgSQL
+
+query I
+SELECT count_ancestors('a.b.c.d')
+----
+4
+
+query I
+SELECT count_ancestors('x')
+----
+1
+
+query I
+SELECT count_ancestors('')
+----
+0
+
+# PL/pgSQL function that builds a path
+
+statement ok
+CREATE FUNCTION build_path(labels TEXT[]) RETURNS LTREE AS $$
+DECLARE
+  result TEXT := '';
+BEGIN
+  FOR i IN 1..array_length(labels, 1) LOOP
+    IF result = '' THEN
+      result = labels[i];
+    ELSE
+      result = result || '.' || labels[i];
+    END IF;
+  END LOOP;
+  RETURN result::LTREE;
+END;
+$$ LANGUAGE PLpgSQL
+
+query T
+SELECT build_path(ARRAY['a', 'b', 'c'])
+----
+a.b.c
+
+query T
+SELECT build_path(ARRAY['single'])
+----
+single
+
+# Clean up functions
+
+statement ok
+DROP FUNCTION get_depth
+
+statement ok
+DROP FUNCTION make_path
+
+statement ok
+DROP FUNCTION is_descendant
+
+statement ok
+DROP FUNCTION get_parent
+
+statement ok
+DROP FUNCTION count_ancestors
+
+statement ok
+DROP FUNCTION build_path
+
+# Tests for sorting behavior with LTREE
+
+statement ok
+CREATE TABLE t_sort (id INT PRIMARY KEY, path LTREE)
+
+statement ok
+INSERT INTO t_sort VALUES
+  (1, 'org.zoo'),
+  (2, 'org.apple.beta'),
+  (3, 'org.apple'),
+  (4, 'org'),
+  (5, 'prod'),
+  (6, 'org.apple.beta.v1'),
+  (7, ''),
+  (8, 'org.application'),
+  (9, NULL),
+  (10, 'org.apple.alpha')
+
+# ORDER BY ASC with PK scan - verify label-by-label comparison
+
+query IT
+SELECT * FROM t_sort@t_sort_pkey ORDER BY path ASC
+----
+9   NULL
+7   ·
+4   org
+3   org.apple
+10  org.apple.alpha
+2   org.apple.beta
+6   org.apple.beta.v1
+8   org.application
+1   org.zoo
+5   prod
+
+# ORDER BY DESC with PK scan
+
+query IT
+SELECT * FROM t_sort@t_sort_pkey ORDER BY path DESC
+----
+5   prod
+1   org.zoo
+8   org.application
+6   org.apple.beta.v1
+2   org.apple.beta
+10  org.apple.alpha
+3   org.apple
+4   org
+7   ·
+9   NULL
+
+# Create index and verify same results with index
+
+statement ok
+CREATE INDEX idx_sort_path ON t_sort (path)
+
+# Verify same results with index
+
+query IT
+SELECT * FROM t_sort@idx_sort_path ORDER BY path ASC
+----
+9   NULL
+7   ·
+4   org
+3   org.apple
+10  org.apple.alpha
+2   org.apple.beta
+6   org.apple.beta.v1
+8   org.application
+1   org.zoo
+5   prod
+
+# ORDER BY DESC with index
+
+query IT
+SELECT * FROM t_sort@idx_sort_path ORDER BY path DESC
+----
+5   prod
+1   org.zoo
+8   org.application
+6   org.apple.beta.v1
+2   org.apple.beta
+10  org.apple.alpha
+3   org.apple
+4   org
+7   ·
+9   NULL
+
+statement ok
+DROP TABLE t_sort
+
+# Tests for multi-column indexes with LTREE
+
+# Index with LTREE as first column
+
+statement ok
+CREATE TABLE t_multi_idx (id INT PRIMARY KEY, path LTREE, status STRING)
+
+statement ok
+INSERT INTO t_multi_idx VALUES
+  (1, 'org.sales', 'active'),
+  (2, 'org.engineering', 'active'),
+  (3, 'org.sales', 'inactive'),
+  (4, 'org.engineering.backend', 'active'),
+  (5, 'org.engineering.frontend', 'inactive')
+
+statement ok
+CREATE INDEX idx_path_status ON t_multi_idx (path, status)
+
+query ITT
+SELECT * FROM t_multi_idx@idx_path_status WHERE path = 'org.sales' ORDER BY status
+----
+1  org.sales  active
+3  org.sales  inactive
+
+query ITT
+SELECT * FROM t_multi_idx@idx_path_status WHERE path <@ 'org.engineering' AND status = 'active' ORDER BY path
+----
+2  org.engineering         active
+4  org.engineering.backend active
+
+# Index with LTREE as second column
+
+statement ok
+CREATE INDEX idx_status_path ON t_multi_idx (status, path)
+
+query ITT
+SELECT * FROM t_multi_idx@idx_status_path WHERE status = 'active' ORDER BY path
+----
+2  org.engineering         active
+4  org.engineering.backend active
+1  org.sales               active
+
+query ITT
+SELECT * FROM t_multi_idx@idx_status_path WHERE status = 'inactive' AND path <@ 'org' ORDER BY path
+----
+5  org.engineering.frontend  inactive
+3  org.sales                 inactive
+
+# Multi-column index with multiple types
+
+statement ok
+DROP TABLE t_multi_idx
+
+statement ok
+CREATE TABLE t_multi_idx2 (id INT PRIMARY KEY, category INT, path LTREE, name STRING)
+
+statement ok
+INSERT INTO t_multi_idx2 VALUES
+  (1, 1, 'a.b', 'first'),
+  (2, 1, 'a.b.c', 'second'),
+  (3, 2, 'a.b', 'third'),
+  (4, 2, 'x.y', 'fourth')
+
+statement ok
+CREATE INDEX idx_cat_path ON t_multi_idx2 (category, path)
+
+query IITT
+SELECT * FROM t_multi_idx2@idx_cat_path WHERE category = 1 ORDER BY path
+----
+1  1  a.b    first
+2  1  a.b.c  second
+
+query IITT
+SELECT * FROM t_multi_idx2@idx_cat_path WHERE category = 2 AND path <@ 'a' ORDER BY id
+----
+3  2  a.b  third
+
+statement ok
+DROP TABLE t_multi_idx2
+
+# Tests for error boundary conditions
+
+# Label at exactly 1000 characters (should succeed)
+
+statement ok
+CREATE TABLE t_boundary (path LTREE)
+
+statement ok
+INSERT INTO t_boundary VALUES ((repeat('a', 1000))::LTREE)
+
+query I
+SELECT nlevel(path) FROM t_boundary
+----
+1
+
+# Label at 1001 characters (should fail)
+
+statement error label length is 1001, must be at most 1000
+INSERT INTO t_boundary VALUES ((repeat('b', 1001))::LTREE)
+
+# Path with many labels (approaching but not exceeding limit)
+
+statement ok
+INSERT INTO t_boundary VALUES ((SELECT string_agg('x', '.') FROM generate_series(1, 1000))::LTREE)
+
+query I
+SELECT nlevel(path) FROM t_boundary WHERE nlevel(path) = 1000
+----
+1000
+
+# Path exceeding label limit (65536 labels)
+
+statement error number of ltree labels \(65536\) exceeds the maximum allowed \(65535\)
+INSERT INTO t_boundary VALUES ((SELECT string_agg('a', '.') FROM generate_series(1, 65536))::LTREE)
+
+# Additional invalid character tests
+
+statement error label contains invalid character
+SELECT 'test.label with space'::LTREE
+
+statement error label contains invalid character
+SELECT 'test.label@domain'::LTREE
+
+statement error label contains invalid character
+SELECT 'path.to.item#1'::LTREE
+
+statement error label contains invalid character
+SELECT 'folder/subfolder'::LTREE
+
+statement error label contains invalid character
+SELECT 'test.label$var'::LTREE
+
+statement error could not parse ltree
+SELECT 'test..double.dot'::LTREE
+
+statement error could not parse ltree
+SELECT '.leading.dot'::LTREE
+
+statement error could not parse ltree
+SELECT 'trailing.dot.'::LTREE
+
+# Valid characters in labels (alphanumeric, underscore, hyphen)
+
+statement ok
+INSERT INTO t_boundary VALUES
+  ('valid_underscore'::LTREE),
+  ('valid-hyphen'::LTREE),
+  ('MixedCase123'::LTREE),
+  ('a1-b2_c3'::LTREE)
+
+query I
+SELECT count(*) FROM t_boundary WHERE nlevel(path) = 1
+----
+5
+
+statement ok
+DROP TABLE t_boundary
