@@ -23,9 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIterateRangeIDKeys lays down a number of tombstones (at keys.RangeTombstoneKey) interspersed
-// with other irrelevant keys (both chosen randomly). It then verifies that iterateRangeIDKeys
-// correctly returns only the relevant keys and values.
+// TestIterateRangeIDKeys lays down a number of RangeTombstone and ReplicaID
+// keys (at keys.RangeTombstoneKey and keys.RaftReplicaIDKey) interspersed with
+// other irrelevant keys (both chosen randomly). It then verifies that
+// iterateRangeIDKeys correctly returns only the relevant keys and values.
 func TestIterateRangeIDKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -54,6 +55,9 @@ func TestIterateRangeIDKeys(t *testing.T) {
 	rangeIDFn := func() roachpb.RangeID {
 		return 1 + roachpb.RangeID(rng.Intn(10*rangeCount)) // spread rangeIDs out
 	}
+	toss := func(x, outOf int) bool {
+		return rng.Intn(outOf) < x
+	}
 
 	// Write a number of keys that should be irrelevant to the iteration in this test.
 	for i := 0; i < rangeCount; i++ {
@@ -74,6 +78,7 @@ func TestIterateRangeIDKeys(t *testing.T) {
 	type seenT struct {
 		rangeID   roachpb.RangeID
 		tombstone kvserverpb.RangeTombstone
+		replicaID kvserverpb.RaftReplicaID
 	}
 
 	// Next, write the keys we're planning to see again.
@@ -81,18 +86,32 @@ func TestIterateRangeIDKeys(t *testing.T) {
 	for used := make(map[roachpb.RangeID]struct{}); len(wanted) < rangeCount; {
 		rangeID := rangeIDFn()
 		if _, ok := used[rangeID]; ok {
-			// We already wrote this key, so roll the dice again.
+			// We already wrote this RangeID, so roll the dice again.
 			continue
 		}
 		used[rangeID] = struct{}{}
 
-		tombstone := kvserverpb.RangeTombstone{
-			NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
-		}
-		wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
+		// Write one or both keys, each combination with 1/3 chance.
+		writeTombstone := toss(2, 3)                    // p == 2/3
+		writeReplicaID := !writeTombstone || toss(1, 2) // p == 2/3
 
-		t.Logf("writing tombstone at rangeID=%d", rangeID)
-		require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(ctx, eng, tombstone))
+		sl := MakeStateLoader(rangeID)
+		written := seenT{rangeID: rangeID}
+		if writeTombstone {
+			written.tombstone = kvserverpb.RangeTombstone{
+				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
+			}
+			t.Logf("writing tombstone at rangeID=%d", rangeID)
+			require.NoError(t, sl.SetRangeTombstone(ctx, eng, written.tombstone))
+		}
+		if writeReplicaID {
+			id := roachpb.ReplicaID(rng.Int31n(100))
+			written.replicaID = kvserverpb.RaftReplicaID{ReplicaID: id}
+			t.Logf("writing ReplicaID at rangeID=%d", rangeID)
+			require.NoError(t, sl.SetRaftReplicaID(ctx, eng, id))
+		}
+
+		wanted = append(wanted, written)
 	}
 
 	sort.Slice(wanted, func(i, j int) bool {
@@ -102,10 +121,17 @@ func TestIterateRangeIDKeys(t *testing.T) {
 	var seen []seenT
 	require.NoError(t, iterateRangeIDKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
 		var tombstone kvserverpb.RangeTombstone
-		if ok, err := get(keys.RangeTombstoneKey(id), &tombstone); err != nil {
+		foundTS, err := get(keys.RangeTombstoneKey(id), &tombstone)
+		if err != nil {
 			return err
-		} else if ok {
-			seen = append(seen, seenT{rangeID: id, tombstone: tombstone})
+		}
+		var replicaID kvserverpb.RaftReplicaID
+		foundID, err := get(keys.RaftReplicaIDKey(id), &replicaID)
+		if err != nil {
+			return err
+		}
+		if foundTS || foundID {
+			seen = append(seen, seenT{rangeID: id, tombstone: tombstone, replicaID: replicaID})
 		}
 		return nil
 	}))
