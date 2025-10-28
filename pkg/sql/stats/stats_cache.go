@@ -234,13 +234,13 @@ func decodeTableStatisticsKV(
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, table catalog.TableDescriptor, typeResolver *descs.DistSQLTypeResolver,
 ) (stats []*TableStatistic, err error) {
+	tabID := table.GetID()
+	_ = tabID
 	if !statsUsageAllowed(table, sc.settings) {
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(
-		ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver,
-	)
+	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false)
 }
 
 // GetTableStatsProtosFromDB looks up statistics for the requested table in
@@ -350,6 +350,7 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	forecast *bool,
 	udtCols []catalog.Column,
 	typeResolver *descs.DistSQLTypeResolver,
+	useCanaryStats bool,
 ) ([]*TableStatistic, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()

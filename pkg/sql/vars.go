@@ -4408,6 +4408,30 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	`canary_as_of`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`canary_as_of`),
+		SetWithPlanner: func(ctx context.Context, p *planner, local bool, s string) error {
+			// EvalAsOfTimestamp
+			asOfTimestamp, err := p.EvalAsOfTimestamp(ctx, tree.AsOfClause{Expr: tree.NewStrVal(s)})
+			if err != nil {
+				return errors.Wrap(err, "could not parse canary_as_of")
+			}
+			return p.applyOnSessionDataMutators(
+				ctx,
+				local,
+				func(m sessionDataMutator) error {
+					m.SetCanaryAsOf(asOfTimestamp.Timestamp)
+					return nil
+				},
+			)
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			// TODO: figure out the right string to return here.
+			return evalCtx.SessionData().CanaryAsOf.AsOfSystemTime(), nil
+		},
+		GlobalDefault: globalTrue,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {

@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -636,11 +638,14 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
+	tabMeta := sb.md.TableMeta(tabID)
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
 	// TODO(mgartner): It might be simpler to iterate over all the table columns
 	// looking for inverted columns.
+	tabName := tab.Name()
+	_ = tabName
 	invertedIndexCols := make(map[int]invertedIndexColInfo)
 	for indexI, indexN := 0, tab.IndexCount(); indexI < indexN; indexI++ {
 		index := tab.Index(indexI)
@@ -664,6 +669,46 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			tab.Statistic(first).IsMerged() && !sb.evalCtx.SessionData().OptimizerUseMergedPartialStatistics ||
 			tab.Statistic(first).IsForecast() && !sb.evalCtx.SessionData().OptimizerUseForecasts) {
 		first++
+	}
+
+	// TODO: nil check?
+	useCanary := sb.mem.Metadata().UseCanary()
+	var skippedCanaryCreatedAt time.Time
+	asOfTs := hlc.Timestamp{WallTime: sb.evalCtx.StmtTimestamp.UnixNano()}
+	if asOf := sb.evalCtx.SessionData().CanaryAsOf; !asOf.IsEmpty() {
+		asOfTs = asOf
+	}
+CanarySkip:
+	for first < tab.StatisticCount()-1 {
+		if canaryWindow := tabMeta.CanaryWindowSize; canaryWindow > 0 {
+			stat := tab.Statistic(first)
+			createdAtTS := hlc.Timestamp{WallTime: stat.CreatedAt().UnixNano()}
+			if createdAtTS.After(asOfTs) {
+				// Too new.
+				first++
+				continue CanarySkip
+			}
+			if !useCanary {
+				if stat.IsForecast() {
+					first++
+					continue CanarySkip
+				}
+				if stat.CreatedAt() == skippedCanaryCreatedAt && !skippedCanaryCreatedAt.IsZero() {
+					// We've already seen this canary stat, so skip it.
+					first++
+					continue CanarySkip
+				}
+				// Too young.
+				if createdAtTS.AddDuration(canaryWindow).After(asOfTs) {
+					if skippedCanaryCreatedAt.IsZero() {
+						skippedCanaryCreatedAt = stat.CreatedAt()
+						first++
+						continue CanarySkip
+					}
+				}
+			}
+		}
+		break
 	}
 
 	if first >= tab.StatisticCount() {

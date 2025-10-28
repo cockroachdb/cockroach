@@ -1011,6 +1011,8 @@ func (p *planner) DecodeGist(ctx context.Context, gist string, external bool) ([
 // indexes hypothetically added to the table. An index recommendation for the
 // query is outputted based on which hypothetical indexes are helpful in the
 // optimal plan.
+// TODO: this path should never use canary stats. We roll the dice with Memo.Init
+// for canary but this path should never touch it.
 func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	ctx context.Context,
 ) (_ []indexrec.Rec, err error) {
