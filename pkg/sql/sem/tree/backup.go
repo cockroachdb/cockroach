@@ -692,7 +692,6 @@ func (o RestoreOptions) IsDefault() bool {
 // Only one field may be non-nil.
 type BackupTargetList struct {
 	Databases NameList
-	Schemas   ObjectNamePrefixList
 	Tables    TableAttrs
 	TenantID  TenantID
 }
@@ -702,9 +701,6 @@ func (tl *BackupTargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
-	} else if tl.Schemas != nil {
-		ctx.WriteString("SCHEMA ")
-		ctx.FormatNode(&tl.Schemas)
 	} else if tl.TenantID.Specified {
 		ctx.WriteString("VIRTUAL CLUSTER ")
 		ctx.FormatNode(&tl.TenantID)
