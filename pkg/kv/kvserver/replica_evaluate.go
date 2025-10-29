@@ -291,6 +291,11 @@ func evaluateBatch(
 			}
 		}()
 	}
+	expensiveLogEnabled := log.ExpensiveLogEnabled(ctx, 2)
+	if expensiveLogEnabled {
+		log.VEventf(ctx, 2, "Header: %v", baHeader)
+		defer log.VEventf(ctx, 2, "finished evaluating batch with %d requests", len(baReqs))
+	}
 
 	// TODO(tbg): if we introduced an "executor" helper here that could carry state
 	// across the slots in the batch while we execute them, this code could come
@@ -354,7 +359,8 @@ func evaluateBatch(
 			reg = trace.StartRegion(ctx, regName)
 		}
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
+			ctx, readWriter, rec, ms, ss, baHeader, args, reply,
+			g, st, ui, evalPath, omitInRangefeeds, expensiveLogEnabled, index,
 		)
 		if reg != nil {
 			reg.End()
@@ -517,6 +523,8 @@ func evaluateCommand(
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
 	omitInRangefeeds bool,
+	expensiveLogEnabled bool,
+	idxInBatch int,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
@@ -548,7 +556,8 @@ func evaluateCommand(
 		return result.Result{}, errors.Errorf("unrecognized command %s", args.Method())
 	}
 
-	if log.ExpensiveLogEnabled(ctx, 2) {
+	const commandLogLimit = 32
+	if expensiveLogEnabled && idxInBatch < commandLogLimit {
 		trunc := func(s string) string {
 			const maxLen = 256
 			if len(s) > maxLen {
