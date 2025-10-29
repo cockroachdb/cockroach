@@ -213,7 +213,15 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			// Parse the options just to fail early if invalid. We'll parse
 			// them again later when constructing the store engine.
 			var opts pebble.Options
-			if err := opts.Parse(buf.String(), nil); err != nil {
+			var pebbleOptionsErrs error
+			err := opts.Parse(buf.String(), &pebble.ParseHooks{
+				OnUnknown: func(name, value string) {
+					pebbleOptionsErrs = errors.CombineErrors(pebbleOptionsErrs,
+						errors.Newf("unknown option: %s=%s", name, value))
+				},
+			})
+			err = errors.CombineErrors(err, pebbleOptionsErrs)
+			if err != nil {
 				return StoreSpec{}, err
 			}
 			ss.PebbleOptions = buf.String()
