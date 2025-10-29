@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -313,9 +312,6 @@ func TestAsOfRetry(t *testing.T) {
 
 			switch req := args.Req.(type) {
 			case *kvpb.GetRequest:
-				if kv.TestingIsRangeLookupRequest(req) {
-					return nil
-				}
 				for key, count := range magicVals.restartCounts {
 					if err := checkCorrectTxn(string(req.Key), magicVals, args.Hdr.Txn); err != nil {
 						return kvpb.NewError(err)
