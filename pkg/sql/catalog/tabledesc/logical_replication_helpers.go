@@ -58,6 +58,22 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
+	if err := checkForbiddenTypes(dst); err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+	}
+
+	return nil
+}
+
+func checkForbiddenTypes(dst *descpb.TableDescriptor) error {
+	for _, col := range dst.Columns {
+		// RefCursor is not supported by LDR because it has no definition of
+		// equality. It's a weird type that should never exist in a durable table
+		// since a cursor is a session scoped entity.
+		if col.Type.Family() == types.RefCursorFamily {
+			return errors.Newf("column %s is a RefCursor", col.Name)
+		}
+	}
 	return nil
 }
 
