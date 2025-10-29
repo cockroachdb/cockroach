@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"sort"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 )
 
 // LoadEvent represent a key access that generates load against the database.
@@ -48,7 +50,7 @@ func (lb LoadBatch) Len() int {
 type Generator interface {
 	// Tick returns the load events up till time tick, from the last time the
 	// workload generator was called.
-	Tick(tick time.Time) LoadBatch
+	Tick(tick types.Tick) LoadBatch
 }
 
 // RandomGenerator generates random operations within some limits.
@@ -110,8 +112,8 @@ func newRandomGenerator(
 
 // Tick returns the load events up till time tick, from the last time the
 // workload generator was called.
-func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
-	elapsed := maxTime.Sub(rwg.lastRun).Seconds()
+func (rwg *RandomGenerator) Tick(maxTime types.Tick) LoadBatch {
+	elapsed := maxTime.WallTime().Sub(rwg.lastRun).Seconds()
 	count := int(elapsed * rwg.rollsPerSecond)
 	// Do not attempt to generate additional load events if the elapsed
 	// duration is not sufficiently large. If we did, this would bump the last
@@ -166,7 +168,7 @@ func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
 	}
 
 	sort.Sort(ret)
-	rwg.lastRun = maxTime
+	rwg.lastRun = maxTime.WallTime()
 	return ret
 }
 
