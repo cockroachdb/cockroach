@@ -415,7 +415,7 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick types.Tick, s
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
 		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "StoreRebalancer", func(ctx context.Context) {
-			s.srs[store.StoreID()].Tick(ctx, tick.WallTime(), state)
+			s.srs[store.StoreID()].Tick(ctx, tick, state)
 		})
 	}
 }
@@ -427,7 +427,7 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick types.Tick,
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
 		s.doAndMaybeTrace(ctx, store.StoreID(), tick, "mma.ComputeChanges", func(ctx context.Context) {
-			s.mmSRs[store.StoreID()].Tick(ctx, tick.WallTime(), state)
+			s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
 		})
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +43,7 @@ const (
 // StoreRebalancer is a tickable actor which scans the replicas on the store
 // associated with it and attempts to perform lease, then, range rebalancing.
 type StoreRebalancer interface {
-	Tick(context.Context, time.Time, state.State)
+	Tick(context.Context, types.Tick, state.State)
 }
 
 // storeRebalancerState mantains the store rebalancer state used in the three
@@ -59,7 +60,7 @@ type storeRebalancerState struct {
 	pendingTransferTarget            roachpb.ReplicaDescriptor
 
 	pendingTicket op.DispatchedTicket
-	lastTick      time.Time
+	lastTick      types.Tick
 }
 
 type storeRebalancerControl struct {
@@ -75,7 +76,7 @@ type storeRebalancerControl struct {
 
 // NewStoreRebalancer returns a new simulator store rebalancer.
 func NewStoreRebalancer(
-	start time.Time,
+	start types.Tick,
 	storeID state.StoreID,
 	controller op.Controller,
 	allocator allocatorimpl.Allocator,
@@ -87,7 +88,7 @@ func NewStoreRebalancer(
 }
 
 func newStoreRebalancerControl(
-	start time.Time,
+	start types.Tick,
 	storeID state.StoreID,
 	controller op.Controller,
 	allocator allocatorimpl.Allocator,
@@ -157,8 +158,8 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 	return true, op.Errors()
 }
 
-func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
-	src.sr.AddLogTag("tick", tick.Sub(src.settings.StartTime))
+func (src *storeRebalancerControl) Tick(ctx context.Context, tick types.Tick, state state.State) {
+	src.sr.AddLogTag("tick", tick.Sub(types.Tick{Start: src.settings.StartTime, Tick: tick.Tick, Count: 0}))
 	ctx = src.sr.AnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
@@ -172,8 +173,8 @@ func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, sta
 
 // phaseSleep checks whether the store rebalancer should continue sleeping. If
 // not, it performs a state transfer to prologue.
-func (src *storeRebalancerControl) phaseSleep(ctx context.Context, tick time.Time, s state.State) {
-	sleepedTick := src.rebalancerState.lastTick.Add(src.settings.LBRebalancingInterval)
+func (src *storeRebalancerControl) phaseSleep(ctx context.Context, tick types.Tick, s state.State) {
+	sleepedTick := src.rebalancerState.lastTick.FromWallTime(src.rebalancerState.lastTick.WallTime().Add(src.settings.LBRebalancingInterval))
 	if tick.After(sleepedTick) {
 		src.rebalancerState.lastTick = sleepedTick
 		src.phasePrologue(ctx, tick, s)
@@ -185,7 +186,7 @@ func (src *storeRebalancerControl) phaseSleep(ctx context.Context, tick time.Tim
 // if it passes the should rebalance store check, otherwise it transfers
 // directly into the epilogue phase.
 func (src *storeRebalancerControl) phasePrologue(
-	ctx context.Context, tick time.Time, s state.State,
+	ctx context.Context, tick types.Tick, s state.State,
 ) {
 	rctx := src.sr.NewRebalanceContext(
 		ctx, src.scorerOptions(),
@@ -265,7 +266,7 @@ func (src *storeRebalancerControl) applyLeaseRebalance(
 }
 
 func (src *storeRebalancerControl) phaseLeaseRebalancing(
-	ctx context.Context, tick time.Time, s state.State,
+	ctx context.Context, tick types.Tick, s state.State,
 ) {
 	for {
 		// Check the pending transfer state, if we can't continue to searching
@@ -358,7 +359,7 @@ func (src *storeRebalancerControl) applyRangeRebalance(
 }
 
 func (src *storeRebalancerControl) phaseRangeRebalancing(
-	ctx context.Context, tick time.Time, s state.State,
+	ctx context.Context, tick types.Tick, s state.State,
 ) {
 	for {
 		// Check the pending range rebalance state, if we can't continue to
@@ -385,7 +386,7 @@ func (src *storeRebalancerControl) phaseRangeRebalancing(
 
 // phaseEpilogue clears the rebalancing context and updates the last tick
 // interval. This transfers into a sleeping phase.
-func (src *storeRebalancerControl) phaseEpilogue(ctx context.Context, tick time.Time) {
+func (src *storeRebalancerControl) phaseEpilogue(ctx context.Context, tick types.Tick) {
 	src.rebalancerState.phase = rebalancerSleeping
 	src.rebalancerState.rctx = nil
 	src.rebalancerState.lastTick = tick
