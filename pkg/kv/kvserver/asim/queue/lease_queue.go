@@ -9,14 +9,13 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -43,7 +42,7 @@ func NewLeaseQueue(
 	allocator allocatorimpl.Allocator,
 	allocatorSync *mmaintegration.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
-	start asim.Tick,
+	start types.Tick,
 ) RangeQueue {
 	lq := leaseQueue{
 		baseQueue: baseQueue{
@@ -112,7 +111,7 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 // Tick processes updates in the LeaseQueue. Only one replica is processed at a
 // time. Replicas in the queue are processed in order of priority, then in FIFO
 // order on ties.
-func (lq *leaseQueue) Tick(ctx context.Context, tick asim.Tick, s state.State) {
+func (lq *leaseQueue) Tick(ctx context.Context, tick types.Tick, s state.State) {
 	lq.AddLogTag("tick", tick)
 	ctx = lq.AnnotateCtx(ctx)
 	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
