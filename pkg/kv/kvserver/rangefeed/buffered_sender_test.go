@@ -214,8 +214,8 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	require.NoError(t, bs.sendBuffered(muxEv, nil))
 	require.Equal(t, queueCap, int64(bs.len()))
 
-	// Overflow now.
 	t.Logf(bs.TestingBufferSummary())
+	// Overflow now.
 	err := bs.sendBuffered(muxEv, nil)
 	require.EqualError(t, err, newRetryErrBufferCapacityExceeded().Error())
 	t.Logf(bs.TestingBufferSummary())
@@ -227,14 +227,15 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	testServerStream.waitForEventCount(t, int(queueCap))
 	testServerStream.reset()
 
-	// The stream should now be in state overflowing. Any non-error events are
-	// silently dropped, but the next error event is delivered to the client.
+	// The stream should now be in state overflowing. The next error event will
+	// remove the stream from our state map. Any subsequent events will be
+	// dropped.
 	ev2 := kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{Error: *newErrBufferCapacityExceeded()}}
 	muxErrEvent := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: ev2, RangeID: 0, StreamID: streamID}
 
 	t.Logf(bs.TestingBufferSummary())
-	require.NoError(t, bs.sendBuffered(muxEv, nil))
 	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	require.NoError(t, bs.sendBuffered(muxEv, nil))
 	t.Logf(bs.TestingBufferSummary())
 
 	testServerStream.waitForEvent(t, muxErrEvent)

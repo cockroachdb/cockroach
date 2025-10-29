@@ -76,14 +76,13 @@ type sender interface {
 	// all streams in StreamManager.
 	run(ctx context.Context, stopper *stop.Stopper, onError func(int64)) error
 
-	// TODO(ssd): These two methods call into question whether StreamManager and
-	// sender can really be separate. We might consider combining the two for
-	// simplicity.
+	// TODO(ssd): This method calls into question whether StreamManager and sender
+	// can really be separate. We might consider combining the two for simplicity.
 	//
-	// addStream is called when an individual stream is being added.
+	// addStream is called when an individual stream is being added. The sender is
+	// free to remove the stream once an error has been sent/enqueued to the given
+	// streamID.
 	addStream(streamID int64)
-	// removeStream is called when an individual stream is being removed.
-	removeStream(streamID int64)
 
 	// cleanup is called when the sender is stopped. It is expected to clean up
 	// any resources used by the sender.
@@ -118,17 +117,14 @@ func (sm *StreamManager) NewStream(streamID int64, rangeID roachpb.RangeID) (sin
 // streamID to avoid metrics inaccuracy when the error is sent before the stream
 // is added to the StreamManager.
 func (sm *StreamManager) OnError(streamID int64) {
-	func() {
-		sm.streams.Lock()
-		defer sm.streams.Unlock()
-		if d, ok := sm.streams.m[streamID]; ok {
-			assertTrue(d.IsDisconnected(), "OnError called on connected registration")
-			d.Unregister()
-			delete(sm.streams.m, streamID)
-			sm.metrics.ActiveMuxRangeFeed.Dec(1)
-		}
-	}()
-	sm.sender.removeStream(streamID)
+	sm.streams.Lock()
+	defer sm.streams.Unlock()
+	if d, ok := sm.streams.m[streamID]; ok {
+		assertTrue(d.IsDisconnected(), "OnError called on connected registration")
+		d.Unregister()
+		delete(sm.streams.m, streamID)
+		sm.metrics.ActiveMuxRangeFeed.Dec(1)
+	}
 }
 
 // DisconnectStream disconnects the stream with the given streamID.
