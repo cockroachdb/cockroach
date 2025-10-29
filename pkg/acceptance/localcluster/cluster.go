@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
+
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 )

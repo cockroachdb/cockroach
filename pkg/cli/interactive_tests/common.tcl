@@ -9,6 +9,7 @@ system "mkdir -p logs"
 set histfile "cockroach_sql_history"
 
 set ::env(COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING) "true"
+set ::env(COCKROACH_ACCEPTANCE_ALLOW_UNSAFE) "true"
 set ::env(COCKROACH_CONNECT_TIMEOUT) 15
 set ::env(COCKROACH_SQL_CLI_HISTORY) $histfile
 # Set client commands as insecure. The server uses --insecure.
