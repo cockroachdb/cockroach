@@ -46,6 +46,8 @@ type ImmediateMutationVisitor interface {
 	UpsertColumnType(context.Context, UpsertColumnType) error
 	AddColumnComputeExpression(context.Context, AddColumnComputeExpression) error
 	RemoveColumnComputeExpression(context.Context, RemoveColumnComputeExpression) error
+	MakeColumnHidden(context.Context, MakeColumnHidden) error
+	MakeColumnVisible(context.Context, MakeColumnVisible) error
 	MakeWriteOnlyColumnPublic(context.Context, MakeWriteOnlyColumnPublic) error
 	MakePublicColumnWriteOnly(context.Context, MakePublicColumnWriteOnly) error
 	MakeWriteOnlyColumnDeleteOnly(context.Context, MakeWriteOnlyColumnDeleteOnly) error
@@ -317,6 +319,16 @@ func (op AddColumnComputeExpression) Visit(ctx context.Context, v ImmediateMutat
 // Visit is part of the ImmediateMutationOp interface.
 func (op RemoveColumnComputeExpression) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.RemoveColumnComputeExpression(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakeColumnHidden) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakeColumnHidden(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op MakeColumnVisible) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.MakeColumnVisible(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

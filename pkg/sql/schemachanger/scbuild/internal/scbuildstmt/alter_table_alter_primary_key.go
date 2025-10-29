@@ -1063,7 +1063,7 @@ func getPrimaryIndexDefaultRowIDColumn(
 
 	// That one column should be hidden.
 	column = mustRetrieveColumnElem(b, tableID, columnID)
-	if !column.IsHidden {
+	if !(column.IsHidden || retrieveColumnHidden(b, tableID, column.ColumnID) != nil) {
 		return nil
 	}
 

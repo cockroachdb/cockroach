@@ -9,7 +9,7 @@ EXPLAIN (DDL) rollback at post-commit stage 8 of 16;
 Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY KEY USING COLUMNS (j) USING HASH WITH ('bucket_count' = ‹3›);
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 21 elements transitioning toward ABSENT
+      │    ├── 22 elements transitioning toward ABSENT
       │    │    ├── WRITE_ONLY            → DELETE_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 8 (t_pkey-), ConstraintID: 9, TemporaryIndexID: 9, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (i), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (j), IndexID: 8 (t_pkey-)}
@@ -18,6 +18,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (j), IndexID: 9}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 104 (t), Name: "crdb_internal_j_shard_3", ColumnID: 5 (crdb_internal_j_shard_3-)}
+      │    │    ├── PUBLIC                → ABSENT      ColumnHidden:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-)}
       │    │    ├── WRITE_ONLY            → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 9}
@@ -31,7 +32,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (i), IndexID: 5}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 3 (j), IndexID: 5}
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_j_shard_3-), IndexID: 5}
-      │    └── 23 Mutation operations
+      │    └── 24 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":8,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":8,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":8,"Ordinal":1,"TableID":104}
@@ -39,6 +40,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER PRIMARY
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":9,"Ordinal":1,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":5,"TableID":104}
       │         ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeColumnVisible {"ColumnID":5,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":8,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":9,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":4,"TableID":104}
