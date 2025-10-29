@@ -3340,6 +3340,18 @@ type topLevelQueryStats struct {
 	// forwardInnerQueryStats method needs an adjustment.
 }
 
+func (s topLevelQueryStats) BytesRead() int64 {
+	return s.bytesRead
+}
+
+func (s topLevelQueryStats) RowsRead() int64 {
+	return s.rowsRead
+}
+
+func (s topLevelQueryStats) RowsWritten() int64 {
+	return s.rowsWritten
+}
+
 func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.bytesRead += other.bytesRead
 	s.rowsRead += other.rowsRead
