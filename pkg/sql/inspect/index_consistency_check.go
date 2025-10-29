@@ -95,6 +95,9 @@ type indexConsistencyCheck struct {
 	// lastQuery stores the SQL query executed for this check to help
 	// debug internal errors by providing context about the span bounds.
 	lastQuery string
+
+	// lastQueryPlaceholders stores the placeholder values used in lastQuery.
+	lastQueryPlaceholders []interface{}
 }
 
 var _ inspectCheck = (*indexConsistencyCheck)(nil)
@@ -270,8 +273,9 @@ func (c *indexConsistencyCheck) Start(
 	// Wrap the query with AS OF SYSTEM TIME to ensure it uses the specified timestamp
 	queryWithAsOf := fmt.Sprintf("SELECT * FROM (%s) AS OF SYSTEM TIME %s", checkQuery, c.asOf.AsOfSystemTime())
 
-	// Store the query for error reporting
+	// Store the query and placeholders for error reporting.
 	c.lastQuery = queryWithAsOf
+	c.lastQueryPlaceholders = queryArgs
 
 	// Execute the query with AS OF SYSTEM TIME embedded in the SQL
 	qos := getInspectQoS(&c.flowCtx.Cfg.Settings.SV)
@@ -325,6 +329,7 @@ func (c *indexConsistencyCheck) Next(
 		details["error_type"] = "internal_query_error"
 		details["index_name"] = c.secIndex.GetName()
 		details["query"] = c.lastQuery // Store the query that caused the error
+		details["query_placeholders"] = formatPlaceholders(c.lastQueryPlaceholders)
 
 		return &inspectIssue{
 			ErrorType:  InternalError,
@@ -389,6 +394,7 @@ func (c *indexConsistencyCheck) Next(
 	details := make(map[redact.RedactableString]interface{})
 	details["row_data"] = extractRowData(c.rowIter.Cur(), c.columns, dataStartIdx)
 	details["index_name"] = c.secIndex.GetName()
+	details["query_placeholders"] = formatPlaceholders(c.lastQueryPlaceholders)
 
 	return &inspectIssue{
 		ErrorType:  errorType,
@@ -917,4 +923,17 @@ func isQueryConstructionError(err error) bool {
 	default:
 		return false
 	}
+}
+
+// formatPlaceholders converts query placeholder values to a string slice for JSON serialization.
+func formatPlaceholders(placeholders []interface{}) []string {
+	result := make([]string, len(placeholders))
+	for i, placeholder := range placeholders {
+		if datum, ok := placeholder.(tree.Datum); ok {
+			result[i] = tree.AsStringWithFlags(datum, tree.FmtParsable)
+		} else {
+			result[i] = fmt.Sprintf("%v", placeholder)
+		}
+	}
+	return result
 }
