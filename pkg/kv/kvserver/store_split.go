@@ -147,8 +147,12 @@ func splitPreApply(
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
+	hs, err := rsl.LoadHardState(ctx, raftRW.RO)
+	if err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
+	}
 	// TODO(pav-kv): assert that the applied state == RaftInitialLog{Index,Term}.
-	if err := rsl.SynthesizeRaftState(ctx, raftRW, logstore.EntryID{
+	if err := rsl.SynthesizeHardState(ctx, raftRW.WO, hs, logstore.EntryID{
 		Index: as.RaftAppliedIndex,
 		Term:  as.RaftAppliedIndexTerm,
 	}); err != nil {
@@ -160,6 +164,7 @@ func splitPreApply(
 	}); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
+
 	// Persist the closed timestamp.
 	//
 	// In order to tolerate a nil initClosedTS input, let's forward to
@@ -172,7 +177,11 @@ func splitPreApply(
 		initClosedTS = &hlc.Timestamp{}
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
+
 	// Update the RHS applied state with the computed closed timestamp.
+	//
+	// TODO(pav-kv): pass in the whole struct instead of this long list of
+	// parameters which can accidentally miss some fields.
 	if err := rsl.SetRangeAppliedState(
 		ctx, stateRW, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
 		as.RangeStats.ToStatsPtr(), *initClosedTS, as,

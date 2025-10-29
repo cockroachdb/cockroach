@@ -405,23 +405,3 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 		GCHint:         &roachpb.GCHint{},
 	}
 }
-
-// The rest is not technically part of ReplicaState.
-
-// SynthesizeRaftState creates a Raft state which synthesizes HardState from
-// pre-seeded data in the engine: the state machine state created by
-// WriteInitialReplicaState on a split, and the existing HardState of an
-// uninitialized replica.
-//
-// TODO(sep-raft-log): this is now only used in splits, when initializing a
-// replica. Make the implementation straightforward, most of the stuff here is
-// constant except the existing HardState.
-func (s StateLoader) SynthesizeRaftState(
-	ctx context.Context, raftRW Raft, applied logstore.EntryID,
-) error {
-	hs, err := s.LoadHardState(ctx, raftRW.RO)
-	if err != nil {
-		return err
-	}
-	return s.SynthesizeHardState(ctx, raftRW.WO, hs, applied)
-}
