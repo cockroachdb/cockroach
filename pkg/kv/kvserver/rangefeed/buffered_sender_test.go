@@ -46,6 +46,7 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 
 	t.Run("basic operation", func(t *testing.T) {
 		var num atomic.Int32
+		sm.RegisteringStream(streamID)
 		sm.AddStream(int64(streamID), &cancelCtxDisconnector{
 			cancel: func() {
 				num.Add(1)
@@ -62,6 +63,7 @@ func TestBufferedSenderDisconnectStream(t *testing.T) {
 		testServerStream.reset()
 	})
 	t.Run("disconnect stream on the same stream is idempotent", func(t *testing.T) {
+		sm.RegisteringStream(streamID)
 		sm.AddStream(int64(streamID), &cancelCtxDisconnector{
 			cancel: func() {
 				require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
@@ -120,7 +122,10 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 
 	RangefeedSingleBufferedSenderQueueMaxPerReg.Override(ctx, &st.SV, queueCap)
 	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
-	bs.addStream(streamID)
+	smMetrics := NewStreamManagerMetrics()
+	sm := NewStreamManager(bs, smMetrics)
+	sm.RegisteringStream(streamID)
+
 	require.Equal(t, queueCap, bs.queueMu.perStreamCapacity)
 
 	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
@@ -143,8 +148,109 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	require.Equal(t, queueCap, int64(bs.len()))
 
 	// Overflow now.
+	t.Log(bs.TestingBufferSummary())
 	err := bs.sendBuffered(muxEv, nil)
 	require.EqualError(t, err, newRetryErrBufferCapacityExceeded().Error())
+	t.Log(bs.TestingBufferSummary())
+
+	// Start the stream manager now, which will start to drain the overflowed stream.
+	require.NoError(t, sm.Start(ctx, stopper))
+	defer sm.Stop(ctx)
+
+	testServerStream.waitForEventCount(t, int(queueCap))
+	testServerStream.reset()
+
+	// The stream should now be in state overflowing. Any non-error events are
+	// silently dropped, but the next error event is delivered to the client.
+	ev2 := kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{Error: *newErrBufferCapacityExceeded()}}
+	muxErrEvent := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: ev2, RangeID: 0, StreamID: streamID}
+
+	t.Log(bs.TestingBufferSummary())
+	require.NoError(t, bs.sendBuffered(muxEv, nil))
+	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	t.Log(bs.TestingBufferSummary())
+
+	testServerStream.waitForEvent(t, muxErrEvent)
+	require.Equal(t, 1, testServerStream.totalEventsSent())
+
+	// Once the error event has been delivered to the client, all additional
+	// requests should be dropped.
+	//
+	// We use a second stream "flush" the buffer and assert we don't see these
+	// events. This assumes buffered sender orders unrelated streams.
+	muxEv2 := *muxEv
+	muxEv2.StreamID = 2
+	sm.RegisteringStream(2)
+	testServerStream.reset()
+	require.NoError(t, bs.sendBuffered(muxEv, nil))
+	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	require.NoError(t, bs.sendBuffered(&muxEv2, nil))
+	testServerStream.waitForEvent(t, &muxEv2)
+	require.Equal(t, 1, testServerStream.totalEventsSent())
+}
+
+// TestBufferedSenderOnOverflowWithErrorEvent tests the special case of a stream
+// hitting an overflow on an event that is itself an error.
+func TestBufferedSenderOnOverflowWithErrorEvent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	testServerStream := newTestServerStream()
+	st := cluster.MakeTestingClusterSettings()
+
+	queueCap := int64(24)
+	streamID := int64(1)
+
+	RangefeedSingleBufferedSenderQueueMaxPerReg.Override(ctx, &st.SV, queueCap)
+	bs := NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
+	smMetrics := NewStreamManagerMetrics()
+	sm := NewStreamManager(bs, smMetrics)
+	sm.RegisteringStream(streamID)
+
+	require.Equal(t, queueCap, bs.queueMu.perStreamCapacity)
+
+	val1 := roachpb.Value{RawBytes: []byte("val"), Timestamp: hlc.Timestamp{WallTime: 1}}
+	ev1 := new(kvpb.RangeFeedEvent)
+	ev1.MustSetValue(&kvpb.RangeFeedValue{Key: keyA, Value: val1})
+	muxEv := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: *ev1, RangeID: 0, StreamID: streamID}
+
+	for range queueCap {
+		require.NoError(t, bs.sendBuffered(muxEv, nil))
+	}
+
+	// Overflow now.
+	ev2 := kvpb.RangeFeedEvent{Error: &kvpb.RangeFeedError{Error: *newErrBufferCapacityExceeded()}}
+	muxErrEvent := &kvpb.MuxRangeFeedEvent{RangeFeedEvent: ev2, RangeID: 0, StreamID: streamID}
+	// We admit the error event.
+	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	t.Log(bs.TestingBufferSummary())
+
+	// Start the stream manager now, which will start to drain the overflowed stream.
+	require.NoError(t, sm.Start(ctx, stopper))
+	defer sm.Stop(ctx)
+
+	testServerStream.waitForEventCount(t, int(queueCap+1))
+	// We should see the event we sent to the stream.
+	require.True(t, testServerStream.hasEvent(muxErrEvent))
+	testServerStream.reset()
+
+	// All additional requests should be dropped, including errors because the
+	// first error should have moved us to overflowed.
+	//
+	// We use a second stream "flush" the buffer and assert we don't see these
+	// events. This assumes buffered sender orders unrelated streams.
+	muxEv2 := *muxEv
+	muxEv2.StreamID = 2
+	sm.RegisteringStream(2)
+	testServerStream.reset()
+	require.NoError(t, bs.sendBuffered(muxEv, nil))
+	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	require.NoError(t, bs.sendBuffered(&muxEv2, nil))
+	testServerStream.waitForEvent(t, &muxEv2)
+	require.Equal(t, 1, testServerStream.totalEventsSent())
 }
 
 // TestBufferedSenderOnOverflowMultiStream tests that BufferedSender and
