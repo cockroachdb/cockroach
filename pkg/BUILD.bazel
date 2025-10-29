@@ -2348,6 +2348,7 @@ GO_TARGETS = [
     "//pkg/sql/sessiondatapb:sessiondatapb_test",
     "//pkg/sql/sessioninit:sessioninit",
     "//pkg/sql/sessioninit:sessioninit_test",
+    "//pkg/sql/sessionmutator:sessionmutator",
     "//pkg/sql/sessionphase:sessionphase",
     "//pkg/sql/sessionprotectedts:sessionprotectedts",
     "//pkg/sql/sessionprotectedts:sessionprotectedts_test",

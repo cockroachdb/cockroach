@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -901,12 +902,12 @@ func (s *Server) SetupConn(
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
-	sdMutIterator := makeSessionDataMutatorIterator(sds, args.SessionDefaults, s.cfg.Settings)
-	sdMutIterator.onDefaultIntSizeChange = onDefaultIntSizeChange
-	if err := sdMutIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+	sdMutIterator := sessionmutator.MakeSessionDataMutatorIterator(sds, args.SessionDefaults, s.cfg.Settings)
+	sdMutIterator.OnDefaultIntSizeChange = onDefaultIntSizeChange
+	if err := sdMutIterator.ApplyOnEachMutatorError(func(m sessionmutator.SessionDataMutator) error {
 		for varName, v := range varGen {
 			if v.Set != nil {
-				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.sessionDataMutatorBase)
+				hasDefault, defVal := getSessionVarDefaultString(varName, v, m.SessionDataMutatorBase)
 				if hasDefault {
 					if err := v.Set(ctx, m, defVal); err != nil {
 						return err
@@ -1032,7 +1033,7 @@ func (h ConnectionHandler) GetParamStatus(ctx context.Context, varName string) s
 		log.Dev.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
 		return ""
 	}
-	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorIterator.sessionDataMutatorBase)
+	hasDefault, defVal := getSessionVarDefaultString(name, v, h.ex.dataMutatorIterator.SessionDataMutatorBase)
 	if !hasDefault {
 		log.Dev.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
 		return ""
@@ -1119,7 +1120,7 @@ func populateMinimalSessionData(sd *sessiondata.SessionData) {
 func (s *Server) newConnExecutor(
 	ctx context.Context,
 	executorType executorType,
-	sdMutIterator *sessionDataMutatorIterator,
+	sdMutIterator *sessionmutator.SessionDataMutatorIterator,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	memMetrics MemoryMetrics,
@@ -1168,7 +1169,7 @@ func (s *Server) newConnExecutor(
 		mon:                 sessionRootMon,
 		sessionMon:          sessionMon,
 		sessionPreparedMon:  sessionPreparedMon,
-		sessionDataStack:    sdMutIterator.sds,
+		sessionDataStack:    sdMutIterator.Sds,
 		dataMutatorIterator: sdMutIterator,
 		state: txnState{
 			mon:                          txnMon,
@@ -1213,7 +1214,7 @@ func (s *Server) newConnExecutor(
 
 	// The transaction_read_only variable is special; its updates need to be
 	// hooked-up to the executor.
-	ex.dataMutatorIterator.setCurTxnReadOnly = func(readOnly bool) error {
+	ex.dataMutatorIterator.SetCurTxnReadOnly = func(readOnly bool) error {
 		mode := tree.ReadWrite
 		if readOnly {
 			mode = tree.ReadOnly
@@ -1222,7 +1223,7 @@ func (s *Server) newConnExecutor(
 	}
 	// kv_transaction_buffered_writes_enabled is special since it won't affect
 	// the current explicit txn, so we want to let the user know.
-	ex.dataMutatorIterator.setBufferedWritesEnabled = func(enabled bool) {
+	ex.dataMutatorIterator.SetBufferedWritesEnabled = func(enabled bool) {
 		if ex.state.mu.txn.BufferedWritesEnabled() == enabled {
 			return
 		}
@@ -1234,11 +1235,11 @@ func (s *Server) newConnExecutor(
 			ex.planner.BufferClientNotice(ctx, pgnotice.Newf("%s buffered writes will apply after the current txn commits", action))
 		}
 	}
-	ex.dataMutatorIterator.onTempSchemaCreation = func() {
+	ex.dataMutatorIterator.OnTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
 	}
 
-	ex.dataMutatorIterator.upgradedIsolationLevel = func(
+	ex.dataMutatorIterator.UpgradedIsolationLevel = func(
 		ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool,
 	) {
 		telemetry.Inc(sqltelemetry.IsolationLevelUpgradedCounter(ctx, upgradedFrom))
@@ -1270,7 +1271,7 @@ func (s *Server) newConnExecutor(
 		s.localSqlStats.GetCounters(),
 		s.cfg.SQLStatsTestingKnobs,
 	)
-	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
+	ex.dataMutatorIterator.OnApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
 		if strings.HasPrefix(newName, catconstants.InternalAppNamePrefix) {
@@ -1285,7 +1286,7 @@ func (s *Server) newConnExecutor(
 	ex.extraTxnState.prepStmtsNamespace.portals = make(map[string]PreparedPortal)
 	ex.extraTxnState.prepStmtsNamespace.portalsSnapshot = make(map[string]PreparedPortal)
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sdMutIterator.sds)
+	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sdMutIterator.Sds)
 	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.NewCollection(
 		ctx, descs.WithDescriptorSessionDataProvider(dsdp), descs.WithMonitor(ex.sessionMon),
 	)
@@ -1758,7 +1759,7 @@ type connExecutor struct {
 	// dataMutatorIterator is nil for session-bound internal executors; we
 	// shouldn't issue statements that manipulate session state to an internal
 	// executor.
-	dataMutatorIterator *sessionDataMutatorIterator
+	dataMutatorIterator *sessionmutator.SessionDataMutatorIterator
 
 	// applicationStats records per-application SQL usage statistics. It is
 	// maintained to represent statistics for the application currently identified
@@ -3674,7 +3675,7 @@ func (ex *connExecutor) txnIsolationLevelToKV(
 	hasLicense := base.CCLDistributionAndEnterpriseEnabled(ex.server.cfg.Settings)
 	level, upgraded, upgradedDueToLicense := level.UpgradeToEnabledLevel(
 		allowReadCommitted, allowRepeatableRead, hasLicense)
-	if f := ex.dataMutatorIterator.upgradedIsolationLevel; upgraded && f != nil {
+	if f := ex.dataMutatorIterator.UpgradedIsolationLevel; upgraded && f != nil {
 		f(ctx, originalLevel, upgradedDueToLicense)
 	}
 
