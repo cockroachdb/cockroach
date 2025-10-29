@@ -122,7 +122,7 @@ func splitPreApply(
 			}
 		}
 		if err := kvstorage.RemoveStaleRHSFromSplit(
-			ctx, readWriter, readWriter, split.RightDesc.RangeID, split.RightDesc.RSpan(),
+			ctx, kvstorage.TODOState(readWriter), split.RightDesc.RangeID, split.RightDesc.RSpan(),
 		); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}

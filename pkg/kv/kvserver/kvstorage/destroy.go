@@ -195,16 +195,12 @@ func SubsumeReplica(
 	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID)
 }
 
-// RemoveStaleRHSFromSplit removes all data for the RHS replica of a split. This
-// is used in a situation when the RHS replica is already known to have been
-// removed from our store, so any pending writes that were supposed to
+// RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
+// split. This is used in a situation when the RHS replica is already known to
+// have been removed from our store, so any pending writes that were supposed to
 // initialize the RHS replica should be dropped from the write batch.
 func RemoveStaleRHSFromSplit(
-	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
-	rangeID roachpb.RangeID,
-	keys roachpb.RSpan,
+	ctx context.Context, stateRW State, rangeID roachpb.RangeID, keys roachpb.RSpan,
 ) error {
 	for _, span := range rditer.Select(rangeID, rditer.SelectOpts{
 		// Since the RHS replica is uninitalized, we know there isn't anything in
@@ -219,7 +215,7 @@ func RemoveStaleRHSFromSplit(
 		UnreplicatedByRangeID: false,
 	}) {
 		if err := storage.ClearRangeWithHeuristic(
-			ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+			ctx, stateRW.RO, stateRW.WO, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
