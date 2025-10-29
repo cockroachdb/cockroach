@@ -438,9 +438,10 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 5, ConstraintID: 3, SourceIndexID: 6 (t_pkey~)}
       │    │    ├── PUBLIC                → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 5}
       │    │    └── PUBLIC                → TRANSIENT_ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 5}
-      │    ├── 11 elements transitioning toward ABSENT
+      │    ├── 12 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → WRITE_ONLY            Column:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── PUBLIC                → ABSENT                ColumnName:{DescID: 104 (t), Name: "rowid", ColumnID: 3 (rowid-)}
+      │    │    ├── PUBLIC                → ABSENT                ColumnHidden:{DescID: 104 (t), ColumnID: 3 (rowid-)}
       │    │    ├── VALIDATED             → ABSENT                ColumnNotNull:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 0}
       │    │    ├── PUBLIC                → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 1 (t_pkey-)}
@@ -450,7 +451,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │    │    ├── PUBLIC                → ABSENT                IndexColumn:{DescID: 104 (t), ColumnID: 3 (rowid-), IndexID: 2 (t_a_idx-)}
       │    │    ├── VALIDATED             → DELETE_ONLY           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_a_idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── PUBLIC                → ABSENT                IndexName:{DescID: 104 (t), Name: "t_a_idx", IndexID: 2 (t_a_idx-)}
-      │    └── 41 Mutation operations
+      │    └── 42 Mutation operations
       │         ├── RemoveColumnNotNull {"ColumnID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":7,"Kind":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":7,"Kind":2,"Ordinal":1,"TableID":104}
@@ -468,6 +469,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD COLU
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":1,"TableID":104}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":3,"TableID":104}
       │         ├── SetColumnName {"ColumnID":3,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeColumnVisible {"ColumnID":3,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}

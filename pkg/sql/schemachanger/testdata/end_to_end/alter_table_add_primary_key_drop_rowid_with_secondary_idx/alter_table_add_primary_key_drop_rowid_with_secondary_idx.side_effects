@@ -22,7 +22,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 38 MutationType ops
+## StatementPhase stage 1 of 1 with 39 MutationType ops
 upsert descriptor #104
   ...
        - 4
@@ -331,7 +331,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 47 MutationType ops
+## PreCommitPhase stage 2 of 2 with 48 MutationType ops
 upsert descriptor #104
   ...
        - 4
@@ -1427,11 +1427,11 @@ upsert descriptor #104
   -  version: "27"
   +  version: "28"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (34 operations) — PostCommitNonRevertible phase (stage 1 of 6)."
+update progress of schema change job #1: "Pending: Updating schema metadata (35 operations) — PostCommitNonRevertible phase (stage 1 of 6)."
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 1 of 6 with 36 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 6 with 37 MutationType ops
 upsert descriptor #104
   ...
        fromHashShardedColumn: true
@@ -1659,7 +1659,6 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - column:
   +      defaultExpr: unique_rowid()
-  +      hidden: true
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
@@ -1719,10 +1718,10 @@ upsert descriptor #104
      mutations:
      - column:
   -      computeExpr: mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)
-  +      defaultExpr: unique_rowid()
-         hidden: true
+  -      hidden: true
   -      id: 5
   -      name: crdb_internal_a_shard_10
+  +      defaultExpr: unique_rowid()
   +      id: 3
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
@@ -1865,7 +1864,6 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - column:
   -      defaultExpr: unique_rowid()
-  -      hidden: true
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
   -      nullable: true
@@ -1970,7 +1968,6 @@ upsert descriptor #104
   -  mutations:
   -  - column:
   -      defaultExpr: unique_rowid()
-  -      hidden: true
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
   -      nullable: true

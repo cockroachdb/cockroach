@@ -16,7 +16,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
       │    │    ├── ABSENT                → PUBLIC      IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey+)}
       │    │    ├── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx_b+), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    └── VALIDATED             → PUBLIC      SecondaryIndex:{DescID: 104 (t), IndexID: 4 (idx_c+), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
-      │    ├── 29 elements transitioning toward ABSENT
+      │    ├── 30 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → VALIDATED   PrimaryIndex:{DescID: 104 (t), IndexID: 10 (t_pkey-), ConstraintID: 8, TemporaryIndexID: 11, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 10 (t_pkey-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 11, ConstraintID: 9, SourceIndexID: 1 (t_pkey+)}
@@ -31,6 +31,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 13}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 104 (t), Name: "crdb_internal_a_shard_10", ColumnID: 5 (crdb_internal_a_shard_10-)}
+      │    │    ├── PUBLIC                → ABSENT      ColumnHidden:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-)}
       │    │    ├── WRITE_ONLY            → ABSENT      ColumnNotNull:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), IndexID: 12 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), IndexID: 11}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), IndexID: 12 (t_pkey-)}
@@ -46,7 +47,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 9}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 9}
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 5 (crdb_internal_a_shard_10-), IndexID: 9}
-      │    └── 38 Mutation operations
+      │    └── 39 Mutation operations
       │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":104}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
@@ -64,6 +65,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD PRIMARY K
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":13,"Kind":2,"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":5,"TableID":104}
       │         ├── SetColumnName {"ColumnID":5,"Name":"crdb_internal_co...","TableID":104}
+      │         ├── MakeColumnVisible {"ColumnID":5,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":11,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":12,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":13,"TableID":104}
