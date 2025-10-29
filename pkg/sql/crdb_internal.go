@@ -3211,7 +3211,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 )
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		return forEachTypeDesc(ctx, p, db, func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, db, true /* includeMetadata */, func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
 			_, err := writeCreateTypeDescRow(ctx, db, sc, p, typeDesc, addRow)
 
 			return err
@@ -3278,7 +3278,7 @@ CREATE TABLE crdb_internal.create_schema_statements (
 			dbDescs = append(dbDescs, db)
 		}
 		for _, db := range dbDescs {
-			return forEachSchema(ctx, p, db, true /* requiresPrivileges */, func(ctx context.Context, schemaDesc catalog.SchemaDescriptor) error {
+			return forEachSchema(ctx, p, db, true, true /* includeMetadata */, func(ctx context.Context, schemaDesc catalog.SchemaDescriptor) error {
 				switch schemaDesc.SchemaKind() {
 				case catalog.SchemaUserDefined:
 					node := &tree.CreateSchema{
@@ -3333,7 +3333,7 @@ func createRoutinePopulate(
 		fnIDToDBName := make(map[descpb.ID]string)
 		fnIDToDBID := make(map[descpb.ID]descpb.ID)
 		for _, curDB := range dbDescs {
-			err := forEachSchema(ctx, p, curDB, true /* requiresPrivileges */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+			err := forEachSchema(ctx, p, curDB, true, false, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 				return sc.ForEachFunctionSignature(func(sig descpb.SchemaDescriptor_FunctionSignature) error {
 					fnIDs = append(fnIDs, sig.ID)
 					fnIDToScName[sig.ID] = sc.GetName()
@@ -6861,7 +6861,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					return err
 				}
 
-				return forEachSchema(ctx, p, databaseDesc, true /* requiresPrivileges */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, databaseDesc, true, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
 					return addRowsForSchema(schema.GetDefaultPrivilegeDescriptor(), tree.NewDString(schema.GetName()))
 				})
 			})
