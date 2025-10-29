@@ -3481,35 +3481,6 @@ func HashForReporting(secret, appName string) string {
 	return hex.EncodeToString(hash.Sum(nil)[:4])
 }
 
-// formatStatementHideConstants formats the statement using
-// tree.FmtHideConstants. It does *not* anonymize the statement, since
-// the result will still contain names and identifiers.
-func formatStatementHideConstants(ast tree.Statement, optFlags ...tree.FmtFlags) string {
-	if ast == nil {
-		return ""
-	}
-	fmtFlags := tree.FmtHideConstants
-	for _, f := range optFlags {
-		fmtFlags |= f
-	}
-	return tree.AsStringWithFlags(ast, fmtFlags)
-}
-
-// formatStatementSummary formats the statement using tree.FmtSummary
-// and tree.FmtHideConstants. This returns a summarized version of the
-// query. It does *not* anonymize the statement, since the result will
-// still contain names and identifiers.
-func formatStatementSummary(ast tree.Statement, optFlags ...tree.FmtFlags) string {
-	if ast == nil {
-		return ""
-	}
-	fmtFlags := tree.FmtSummary | tree.FmtHideConstants
-	for _, f := range optFlags {
-		fmtFlags |= f
-	}
-	return tree.AsStringWithFlags(ast, fmtFlags)
-}
-
 // DescsTxn is a convenient method for running a transaction on descriptors
 // when you have an ExecutorConfig.
 //

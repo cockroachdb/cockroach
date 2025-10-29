@@ -874,6 +874,35 @@ func SerializeForDisplay(n NodeFormatter) string {
 	return AsStringWithFlags(n, FmtParsable)
 }
 
+// FormatStatementHideConstants formats the statement using FmtHideConstants. It
+// does *not* anonymize the statement, since the result will still contain names
+// and identifiers.
+func FormatStatementHideConstants(ast Statement, optFlags ...FmtFlags) string {
+	if ast == nil {
+		return ""
+	}
+	fmtFlags := FmtHideConstants
+	for _, f := range optFlags {
+		fmtFlags |= f
+	}
+	return AsStringWithFlags(ast, fmtFlags)
+}
+
+// FormatStatementSummary formats the statement using FmtSummary and
+// FmtHideConstants. This returns a summarized version of the query. It does
+// *not* anonymize the statement, since the result will still contain names and
+// identifiers.
+func FormatStatementSummary(ast Statement, optFlags ...FmtFlags) string {
+	if ast == nil {
+		return ""
+	}
+	fmtFlags := FmtSummary | FmtHideConstants
+	for _, f := range optFlags {
+		fmtFlags |= f
+	}
+	return AsStringWithFlags(ast, fmtFlags)
+}
+
 var fmtCtxPool = sync.Pool{
 	New: func() interface{} {
 		return &FmtCtx{}

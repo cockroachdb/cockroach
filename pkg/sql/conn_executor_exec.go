@@ -4395,7 +4395,7 @@ func (ex *connExecutor) execWithProfiling(
 		if prepared != nil {
 			stmtNoConstants = prepared.StatementNoConstants
 		} else {
-			stmtNoConstants = formatStatementHideConstants(ast)
+			stmtNoConstants = tree.FormatStatementHideConstants(ast)
 		}
 		labels := pprof.Labels(
 			"appname", ex.sessionData().ApplicationName,
