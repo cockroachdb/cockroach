@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -695,6 +697,7 @@ func (b *Builder) buildExistsSubquery(
 			stmtProps,
 			nil, /* stmtStr */
 			make([]string, len(stmts)),
+			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
 			0, /* resultBufferID */
@@ -822,6 +825,7 @@ func (b *Builder) buildSubquery(
 			stmtProps,
 			nil, /* stmtStr */
 			make([]string, len(stmts)),
+			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
@@ -900,7 +904,7 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			err = fn(plan, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
+			err = fn(plan, nil, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
 			if err != nil {
 				return err
 			}
@@ -1017,8 +1021,9 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
 		udf.Def.BodyTags,
-		false, /* allowOuterWithRefs */
-		nil,   /* wrapRootExpr */
+		udf.Def.BodyASTs, /* stmtASTs */
+		false,            /* allowOuterWithRefs */
+		nil,              /* wrapRootExpr */
 		udf.Def.ResultBufferID,
 	)
 
@@ -1091,6 +1096,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			action.BodyProps,
 			action.BodyStmts,
 			action.BodyTags,
+			nil,   /* stmtASTs */
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
@@ -1141,6 +1147,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	stmtProps []*physical.Required,
 	stmtStr []string,
 	stmtTags []string,
+	stmtASTs []tree.Statement,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
@@ -1207,7 +1214,12 @@ func (b *Builder) buildRoutinePlanGenerator(
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
 
+		format := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
 		for i := range stmts {
+			var statsBuilder *sqlstats.StatsBuilderWithLatencyRecorder
+			latencyRecorder := sqlstats.NewStatementLatencyRecorder()
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStarted)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartParsing)
 			stmt := stmts[i]
 			props := stmtProps[i]
 			var tag string
@@ -1216,6 +1228,22 @@ func (b *Builder) buildRoutinePlanGenerator(
 			if i < len(stmtTags) {
 				tag = stmtTags[i]
 			}
+			if i < len(stmtASTs) {
+				fingerprint := tree.FormatStatementHideConstants(stmtASTs[i], format)
+				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
+				summary := tree.FormatStatementSummary(stmtASTs[i], format)
+				stmtType := stmtASTs[i].StatementType()
+				builder := sqlstats.NewRecordedStatementStatsBuilder(
+					fpId, dbName, fingerprint, summary, stmtType, appName,
+				)
+
+				statsBuilder = &sqlstats.StatsBuilderWithLatencyRecorder{
+					StatsBuilder:    builder,
+					LatencyRecorder: latencyRecorder,
+				}
+			}
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndParsing)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementStartPlanning)
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1324,7 +1352,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
-			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
+			sqlstats.RecordStatementPhase(latencyRecorder, sqlstats.StatementEndPlanning)
+			err = fn(plan, statsBuilder, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
