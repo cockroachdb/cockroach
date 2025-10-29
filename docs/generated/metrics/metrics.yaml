@@ -8750,7 +8750,7 @@ layers:
     - name: sql.statements.bytes_read.count
       exported_name: sql_statements_bytes_read_count
       description: Number of bytes read by SQL statements
-      y_axis_label: SQL Statements
+      y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
       aggregation: AVG
@@ -8766,7 +8766,7 @@ layers:
     - name: sql.statements.index_bytes_written.count
       exported_name: sql_statements_index_bytes_written_count
       description: Number of primary and secondary index bytes modified by SQL statements
-      y_axis_label: SQL Statements
+      y_axis_label: Bytes
       type: COUNTER
       unit: BYTES
       aggregation: AVG
@@ -8782,7 +8782,7 @@ layers:
     - name: sql.statements.index_rows_written.count
       exported_name: sql_statements_index_rows_written_count
       description: Number of primary and secondary index rows modified by SQL statements
-      y_axis_label: SQL Statements
+      y_axis_label: Rows
       type: COUNTER
       unit: COUNT
       aggregation: AVG
@@ -8798,7 +8798,7 @@ layers:
     - name: sql.statements.rows_read.count
       exported_name: sql_statements_rows_read_count
       description: Number of rows read by SQL statements
-      y_axis_label: SQL Statements
+      y_axis_label: Rows
       type: COUNTER
       unit: COUNT
       aggregation: AVG
