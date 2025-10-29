@@ -98,9 +98,33 @@ type singleRangeBatch struct {
 	// not be empty. Note that TargetBytes of at least minTargetBytes is
 	// necessary but might not be sufficient for the response to be non-empty.
 	minTargetBytes int64
+	sortByPos      bool
 }
 
 var _ sort.Interface = &singleRangeBatch{}
+
+// sortSlice sorts the slice r.reqs[start:end] in-place either by the keys of
+// the requests (if sortByPos is false) or by the positions (if sortByPos is
+// true).
+func (r *singleRangeBatch) sortSlice(start, end int, sortByPos bool) {
+	sortBatch := singleRangeBatch{
+		reqs:      r.reqs[start:end],
+		positions: r.positions[start:end],
+		sortByPos: sortByPos,
+	}
+	if r.subRequestIdx != nil {
+		sortBatch.subRequestIdx = r.subRequestIdx[start:end]
+	}
+	if !sortByPos {
+		// Set up keys for sorting.
+		for i := range sortBatch.reqs {
+			sortBatch.reqsKeys = append(
+				sortBatch.reqsKeys, sortBatch.reqs[i].GetInner().Header().Key,
+			)
+		}
+	}
+	sort.Sort(&sortBatch)
+}
 
 // deepCopyRequests updates the singleRangeBatch to have deep-copies of all KV
 // requests (Gets and Scans).
@@ -170,8 +194,12 @@ func (r *singleRangeBatch) Swap(i, j int) {
 	}
 }
 
-// Less returns true if r.reqs[i]'s key comes before r.reqs[j]'s key.
+// Less returns true when r.sortByPos is false if r.reqs[i]'s key comes before
+// r.reqs[j]'s key. Otherwise, returns true if r.positions[i] < r.positions[j].
 func (r *singleRangeBatch) Less(i, j int) bool {
+	if r.sortByPos {
+		return r.positions[i] < r.positions[j]
+	}
 	return r.reqsKeys[i].Compare(r.reqsKeys[j]) < 0
 }
 

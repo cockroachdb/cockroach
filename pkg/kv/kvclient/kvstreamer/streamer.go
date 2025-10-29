@@ -1285,6 +1285,18 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// any more responses at the moment.
 			return err
 		}
+		if w.s.mode == InOrder {
+			// For InOrder mode, sort the requests that we expect to receive non-empty
+			// results for to take advantage of storage-level optimizations. Note that
+			// re-ordering requests can backfire in InOrder mode if we hit a limit
+			// earlier than expected. To mitigate that, leave the first request in its
+			// original position to ensure forward progress.
+			expectedResponseCount := int(float64(targetBytes) / float64(avgResponseSize))
+			expectedResponseCount = min(expectedResponseCount, len(singleRangeReqs.reqs))
+			if expectedResponseCount > 100 {
+				singleRangeReqs.sortSlice(1, expectedResponseCount, false /* sortByPos */)
+			}
+		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, responsesOverhead, headOfLine)
 		w.s.requestsToServe.removeNextLocked()
 		maxNumRequestsToIssue--
@@ -1997,6 +2009,22 @@ func buildResumeSingleRangeBatch(
 	}
 	atomic.AddInt64(&s.atomics.resumeBatchRequests, 1)
 	atomic.AddInt64(&s.atomics.resumeSingleRangeRequests, int64(numIncompleteRequests))
+
+	if s.mode == InOrder {
+		// We may have sorted (part of) the original singleRangeBatch by key before
+		// issuing it. Make sure to restore position order so that requests are
+		// prioritized correctly.
+		sortedByPos := true
+		for i := 1; i < len(resumeReq.positions); i++ {
+			if resumeReq.positions[i-1] > resumeReq.positions[i] {
+				sortedByPos = false
+				break
+			}
+		}
+		if !sortedByPos {
+			resumeReq.sortSlice(0, len(resumeReq.reqs), true /* sortByPos */)
+		}
+	}
 
 	return resumeReq
 }
