@@ -594,6 +594,8 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "the test times out under race")
+
 	testCases := []struct {
 		desc     string
 		splitAts []int
