@@ -145,7 +145,7 @@ func (o *OverrideStorePool) GetStoreListForTargets(
 func (o *OverrideStorePool) LiveAndDeadReplicas(
 	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
-	return o.sp.liveAndDeadReplicasWithLiveness(repls, o.overrideNodeLivenessFn, includeSuspectAndDrainingStores)
+	return o.sp.liveAndDeadReplicasWithLiveness(repls, o.overrideNodeLivenessFn, includeSuspectAndDrainingStores, nil)
 }
 
 // ClusterNodeCount implements the AllocatorStorePool interface.

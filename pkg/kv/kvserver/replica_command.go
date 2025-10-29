@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -2116,6 +2117,7 @@ func (r *Replica) execReplicationChangesForVoters(
 	desc, err = execChangeReplicasTxn(ctx, r.store.cfg.Tracer(), desc, reason, details, iChgs, changeReplicasTxnArgs{
 		db:                                   r.store.DB(),
 		liveAndDeadReplicas:                  r.store.cfg.StorePool.LiveAndDeadReplicas,
+		liveAndDeadReplicasExt:               r.store.cfg.StorePool.LiveAndDeadReplicasExt,
 		logChange:                            r.store.logChange,
 		testForceJointConfig:                 r.store.TestingKnobs().ReplicationAlwaysUseJointConfig,
 		testAllowDangerousReplicationChanges: r.store.TestingKnobs().AllowDangerousReplicationChanges,
@@ -2422,6 +2424,9 @@ type changeReplicasTxnArgs struct {
 	liveAndDeadReplicas func(
 		repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
+	liveAndDeadReplicasExt func(
+		repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool, buf *strings.Builder,
+	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
 
 	logChange                            logChangeFn
 	testForceJointConfig                 func() bool
@@ -2565,6 +2570,13 @@ func execChangeReplicasTxn(
 				// allocator.go.
 				liveReplicas, _ := args.liveAndDeadReplicas(replicas.Descriptors(),
 					true /* includeSuspectAndDrainingStores */)
+				var buf strings.Builder
+				if f := args.liveAndDeadReplicasExt; f != nil {
+					liveReplicas, _ = f(replicas.Descriptors(),
+						true /* includeSuspectAndDrainingStores */, &buf)
+				} else {
+					fmt.Fprintln(&buf, "no Ext version found")
+				}
 				if !replicas.CanMakeProgress(
 					func(rDesc roachpb.ReplicaDescriptor) bool {
 						for _, inner := range liveReplicas {
@@ -2575,8 +2587,14 @@ func execChangeReplicasTxn(
 						return false
 					}) {
 					// NB: we use newQuorumError which is recognized by the replicate queue.
-					return newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
+					err := newQuorumError("range %s cannot make progress with proposed changes add=%v del=%v "+
 						"based on live replicas %v", crt.Desc, crt.Added(), crt.Removed(), liveReplicas)
+					log.Dev.Infof(ctx, "%v", err)
+					return err
+				}
+				if rem := crt.Removed(); len(rem) > 0 {
+					log.Dev.Infof(ctx, "removing %s is ok; updated desc %s can make progress based on live replicas %v:\n%s",
+						rem, crt.Desc, liveReplicas, buf.String())
 				}
 				return nil
 			}); err != nil {

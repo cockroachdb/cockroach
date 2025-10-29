@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -896,7 +897,13 @@ func (sp *StorePool) storeStatus(
 func (sp *StorePool) LiveAndDeadReplicas(
 	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
-	return sp.liveAndDeadReplicasWithLiveness(repls, sp.NodeLivenessFn, includeSuspectAndDrainingStores)
+	return sp.liveAndDeadReplicasWithLiveness(repls, sp.NodeLivenessFn, includeSuspectAndDrainingStores, nil)
+}
+
+func (sp *StorePool) LiveAndDeadReplicasExt(
+	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool, buf *strings.Builder,
+) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
+	return sp.liveAndDeadReplicasWithLiveness(repls, sp.NodeLivenessFn, includeSuspectAndDrainingStores, buf)
 }
 
 // liveAndDeadReplicasWithLiveness divides the provided repls slice into two slices: the
@@ -904,16 +911,23 @@ func (sp *StorePool) LiveAndDeadReplicas(
 // provided NodeLivenessFunc.
 // See comment on StorePool.LiveAndDeadReplicas(..).
 func (sp *StorePool) liveAndDeadReplicasWithLiveness(
-	repls []roachpb.ReplicaDescriptor, nl NodeLivenessFunc, includeSuspectAndDrainingStores bool,
+	repls []roachpb.ReplicaDescriptor,
+	nl NodeLivenessFunc,
+	includeSuspectAndDrainingStores bool,
+	buf *strings.Builder,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
 	now := sp.clock.Now()
 	timeUntilNodeDead := liveness.TimeUntilNodeDead.Get(&sp.st.SV)
 	timeAfterNodeSuspect := liveness.TimeAfterNodeSuspect.Get(&sp.st.SV)
+	if buf == nil {
+		buf = &strings.Builder{}
+	}
 
 	for _, repl := range repls {
 		detail := sp.GetStoreDetail(repl.StoreID)
 		// Mark replica as dead if store is dead.
 		status := detail.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect)
+		_, _ = fmt.Fprintf(buf, "s%d: %v %s\n", repl.StoreID, nl(detail.Desc.Node.NodeID), status)
 		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
