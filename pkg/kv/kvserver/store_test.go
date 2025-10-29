@@ -4043,12 +4043,10 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
-	split := roachpb.SplitTrigger{
-		LeftDesc:  leftDesc,
-		RightDesc: rightDesc,
-	}
-
-	splitPreApply(ctx, lhsRepl, batch, split, nil)
+	splitPreApply(
+		ctx, lhsRepl, kvstorage.StateRW(batch), kvstorage.TODORaft(batch),
+		roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, nil,
+	)
 
 	// Verify that the RHS truncated state is initialized as expected.
 	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)

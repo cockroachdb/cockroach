@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,7 +28,8 @@ import (
 func splitPreApply(
 	ctx context.Context,
 	r *Replica,
-	readWriter storage.ReadWriter,
+	stateRW kvstorage.StateRW,
+	raftRW kvstorage.Raft,
 	split roachpb.SplitTrigger,
 	initClosedTS *hlc.Timestamp,
 ) {
@@ -79,13 +79,17 @@ func splitPreApply(
 	// on this Store, it doesn't have a RaftTruncatedState (which only initialized
 	// replicas can have), so this deletion will not conflict with or corrupt it.
 	//
+	// NB: the key is cleared in stateRW rather than raftRW, deliberately. It
+	// lives in the raft engine, but here we want to clear it from the state
+	// engine batch, so that it doesn't make it to the state engine.
+	//
 	// TODO(#152847): remove this workaround when there are no historical
 	// proposals with RaftTruncatedState, e.g. after a below-raft migration.
-	if ts, err := rsl.LoadRaftTruncatedState(ctx, readWriter); err != nil {
+	if ts, err := rsl.LoadRaftTruncatedState(ctx, stateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot load RaftTruncatedState: %v", err)
 	} else if ts == (kvserverpb.RaftTruncatedState{}) {
 		// Common case. Do nothing.
-	} else if err := rsl.ClearRaftTruncatedState(readWriter); err != nil {
+	} else if err := rsl.ClearRaftTruncatedState(stateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
 
@@ -122,7 +126,7 @@ func splitPreApply(
 			}
 		}
 		if err := kvstorage.RemoveStaleRHSFromSplit(
-			ctx, readWriter, readWriter, split.RightDesc.RangeID, split.RightDesc.RSpan(),
+			ctx, kvstorage.WrapState(stateRW), split.RightDesc.RangeID, split.RightDesc.RSpan(),
 		); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
@@ -138,10 +142,10 @@ func splitPreApply(
 	//
 	// [*] Note that uninitialized replicas may cast votes, and if they have, we
 	// can't load the default Term and Vote values.
-	if err := rsl.SynthesizeRaftState(ctx, readWriter, kvstorage.TODORaft(readWriter)); err != nil {
+	if err := rsl.SynthesizeRaftState(ctx, stateRW, raftRW); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{
+	if err := rsl.SetRaftTruncatedState(ctx, raftRW.WO, &kvserverpb.RaftTruncatedState{
 		Index: kvstorage.RaftInitialLogIndex,
 		Term:  kvstorage.RaftInitialLogTerm,
 	}); err != nil {
@@ -159,7 +163,7 @@ func splitPreApply(
 		initClosedTS = &hlc.Timestamp{}
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
-	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
+	if err := rsl.SetClosedTimestamp(ctx, stateRW, *initClosedTS); err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	}
 }
