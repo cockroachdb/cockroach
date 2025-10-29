@@ -135,9 +135,6 @@ func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error
 // addStream implements sender.
 func (ubs *UnbufferedSender) addStream(int64) {}
 
-// removeStream implements sender.
-func (ubs *UnbufferedSender) removeStream(int64) {}
-
 // cleanup implements sender.
 func (ubs *UnbufferedSender) cleanup(context.Context) {}
 
