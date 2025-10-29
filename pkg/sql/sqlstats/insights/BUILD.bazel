@@ -28,6 +28,7 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/quantile",
         "//pkg/util/syncutil",
+        "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_prometheus_client_model//go",

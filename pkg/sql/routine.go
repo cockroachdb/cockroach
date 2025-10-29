@@ -19,10 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -325,7 +327,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, rrw, g.args,
-		func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
+		func(plan tree.RoutinePlan, statsBuilder *sqlstats.RecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder], stmtForDistSQLDiagram string, isFinalPlan bool) error {
 			stmtIdx++
 			opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 			ctx, sp := tracing.ChildSpan(ctx, opName)
@@ -368,10 +370,25 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
+			if statsBuilder != nil {
+				defer func() {
+					if g.p.statsCollector == nil {
+						if buildutil.CrdbTestBuild {
+							panic("No stats collector exists on the planner, cannot record statement stats")
+						}
+						log.Dev.Error(ctx, "No stats collector exists on the planner, cannot record statement stats")
+						return
+					}
+					g.p.statsCollector.RecordStatement(ctx, statsBuilder.SessionID(g.p.ExtendedEvalContext().SessionID).Build())
+				}()
+			}
 			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+
 			if err != nil {
+				statsBuilder.StatementError(err)
 				return err
 			}
+			statsBuilder.QueryLevelStats(queryStats.bytesRead, queryStats.rowsRead, queryStats.rowsWritten)
 			forwardInnerQueryStats(g.p.routineMetadataForwarder, queryStats)
 			if openCursor {
 				return cursorHelper.createCursor(g.p)

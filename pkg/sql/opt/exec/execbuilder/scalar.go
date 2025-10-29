@@ -8,6 +8,7 @@ package execbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -689,16 +691,7 @@ func (b *Builder) buildExistsSubquery(
 
 		// Create a plan generator that can plan the single statement
 		// representing the subquery, and wrap the routine in a COALESCE.
-		planGen := b.buildRoutinePlanGenerator(
-			params,
-			stmts,
-			stmtProps,
-			nil, /* stmtStr */
-			make([]string, len(stmts)),
-			true, /* allowOuterWithRefs */
-			wrapRootExpr,
-			0, /* resultBufferID */
-		)
+		planGen := b.buildRoutinePlanGenerator(params, stmts, stmtProps, nil, make([]string, len(stmts)), nil, true, wrapRootExpr, 0)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
 				"exists",
@@ -816,16 +809,7 @@ func (b *Builder) buildSubquery(
 
 		// Create a tree.RoutinePlanFn that can plan the single statement
 		// representing the subquery.
-		planGen := b.buildRoutinePlanGenerator(
-			params,
-			stmts,
-			stmtProps,
-			nil, /* stmtStr */
-			make([]string, len(stmts)),
-			true, /* allowOuterWithRefs */
-			nil,  /* wrapRootExpr */
-			0,    /* resultBufferID */
-		)
+		planGen := b.buildRoutinePlanGenerator(params, stmts, stmtProps, nil, make([]string, len(stmts)), nil, true, nil, 0)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
 			"subquery",
@@ -900,7 +884,7 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			err = fn(plan, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
+			err = fn(plan, nil, "" /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
 			if err != nil {
 				return err
 			}
@@ -1011,16 +995,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
-	planGen := b.buildRoutinePlanGenerator(
-		udf.Def.Params,
-		udf.Def.Body,
-		udf.Def.BodyProps,
-		udf.Def.BodyStmts,
-		udf.Def.BodyTags,
-		false, /* allowOuterWithRefs */
-		nil,   /* wrapRootExpr */
-		udf.Def.ResultBufferID,
-	)
+	planGen := b.buildRoutinePlanGenerator(udf.Def.Params, udf.Def.Body, udf.Def.BodyProps, udf.Def.BodyStmts, udf.Def.BodyTags, udf.Def.BodyASTs, false, nil, udf.Def.ResultBufferID)
 
 	// Enable stepping for volatile functions so that statements within the UDF
 	// see mutations made by the invoking statement and by previously executed
@@ -1085,16 +1060,7 @@ func (b *Builder) initRoutineExceptionHandler(
 		Actions: make([]*tree.RoutineExpr, len(exceptionBlock.Actions)),
 	}
 	for i, action := range exceptionBlock.Actions {
-		actionPlanGen := b.buildRoutinePlanGenerator(
-			action.Params,
-			action.Body,
-			action.BodyProps,
-			action.BodyStmts,
-			action.BodyTags,
-			false, /* allowOuterWithRefs */
-			nil,   /* wrapRootExpr */
-			0,     /* resultBufferID */
-		)
+		actionPlanGen := b.buildRoutinePlanGenerator(action.Params, action.Body, action.BodyProps, action.BodyStmts, action.BodyTags, nil, false, nil, 0)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
 		exceptionHandler.Actions[i] = tree.NewTypedRoutineExpr(
@@ -1141,6 +1107,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	stmtProps []*physical.Required,
 	stmtStr []string,
 	stmtTags []string,
+	stmtASTs []tree.Statement,
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
@@ -1207,15 +1174,31 @@ func (b *Builder) buildRoutinePlanGenerator(
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName
 
+		format := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
 		for i := range stmts {
+			var statsBuilder *sqlstats.RecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder]
 			stmt := stmts[i]
 			props := stmtProps[i]
 			var tag string
+			var fingerprint string
+			var summary string
+			var fpId appstatspb.StmtFingerprintID
+			var stmtType tree.StatementType
 			// Theoretically, stmts and stmtTags should have the same length,
 			// but just to avoid an out-of-bounds panic, we have this check.
 			if i < len(stmtTags) {
 				tag = stmtTags[i]
 			}
+			if i < len(stmtASTs) {
+				fingerprint = tree.FormatStatementHideConstants(stmtASTs[i], format)
+				summary = tree.FormatStatementSummary(stmtASTs[i], format)
+				fpId = appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
+				stmtType = stmtASTs[i].StatementType()
+			}
+			statsBuilder = sqlstats.NewRecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder](
+				fpId, dbName, fingerprint, summary, stmtType.String(), appName,
+			)
+
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1324,7 +1307,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
-			err = fn(plan, stmtForDistSQLDiagram, isFinalPlan)
+			err = fn(plan, statsBuilder, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err
 			}
