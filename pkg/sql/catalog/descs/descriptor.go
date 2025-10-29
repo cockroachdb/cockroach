@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -29,8 +31,13 @@ func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
 	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {
 		return cmt, hasCmt
 	}
-	if tc.cr.IsIDInCache(descpb.ID(key.ObjectID)) {
+	if tc.cr.IsCommentInCache(descpb.ID(key.ObjectID)) {
 		return tc.cr.Cache().LookupComment(key)
+	}
+	if buildutil.CrdbTestBuild &&
+		tc.leased.cache.GetByID(descpb.ID(key.ObjectID)) != nil {
+		panic(errors.AssertionFailedf("a leased descriptor exist's but metadata data was not cached " +
+			"ensure that GetAll* API is being used correctly"))
 	}
 	// TODO(chengxiong): we need to ensure descriptor if it's not in either cache
 	// and it's not a pseudo descriptor.
@@ -187,9 +194,13 @@ func getDescriptorsByID(
 
 	// Read any missing descriptors from storage and add them to the slice.
 	var readIDs catalog.DescriptorIDSet
+	var metadataNeeded catalog.DescriptorIDSet
 	for i, id := range ids {
 		if descs[i] == nil {
 			readIDs.Add(id)
+		} else if flags.layerFilters.withMetadata {
+			// Otherwise, we need to query metadata only.
+			metadataNeeded.Add(id)
 		}
 	}
 	if !readIDs.Empty() {
@@ -208,6 +219,13 @@ func getDescriptorsByID(
 				descs[i] = read.LookupDescriptor(id)
 				vls[i] = tc.validationLevels[id]
 			}
+		}
+	}
+	// If metadata needs to be cached, then execute a read only the metadata.
+	if !metadataNeeded.Empty() {
+		_, err := tc.cr.GetByIDs(ctx, txn, metadataNeeded.Ordered(), false, catalog.Any, catkv.WithMetaData(true))
+		if err != nil {
+			return err
 		}
 	}
 
