@@ -81,6 +81,12 @@ import (
 //
 //	Executes the split trigger for the specified range on n1.
 //
+// destroy-replica range-id=<int>
+// ----
+//
+//	Destroys the replica on n1 for the specified range. The replica's state
+//	must have already been created via create-replica.
+//
 // print-range-state [sort-keys=<bool>]
 // ----
 //
@@ -149,7 +155,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				if rs.replica != nil {
 					return errors.New("initialized replica already exists on n1/s1").Error()
 				}
-				repl := rs.getReplicaDescriptor(t, roachpb.NodeID(1))
+				repl := rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
 
 				batch := tc.storage.NewBatch()
 				defer batch.Close()
@@ -210,7 +216,8 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				replicaNodeID := dd.ScanArg[roachpb.NodeID](t, d, "replica")
 				leaseType := dd.ScanArgOr(t, d, "lease-type", "leader-lease")
 				rs := tc.mustGetRangeState(t, rangeID)
-				targetReplica := rs.getReplicaDescriptor(t, replicaNodeID)
+				targetReplica := rs.mustGetReplicaDescriptor(t, replicaNodeID)
+
 				// NB: The details of the lease are not important to the test;
 				// only the type is.
 				var lease roachpb.Lease
@@ -282,6 +289,34 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// of the datadriven test driver. Until that TODO is addressed,
 				// we manually split things out here.
 				return strings.ReplaceAll(output, "\n\n", "\n")
+
+			case "destroy-replica":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				rs := tc.mustGetRangeState(t, rangeID)
+				rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1)) // ensure replica exists
+
+				batch := tc.storage.NewBatch()
+				defer batch.Close()
+
+				err := kvstorage.DestroyReplica(
+					ctx,
+					batch, /* reader */
+					batch, /* writer */
+					kvstorage.DestroyReplicaInfo{
+						FullReplicaID: rs.replica.FullReplicaID,
+						Keys:          roachpb.RSpan{Key: rs.desc.StartKey, EndKey: rs.desc.EndKey},
+					},
+					rs.desc.NextReplicaID,
+				)
+				require.NoError(t, err)
+				output, err := print.DecodeWriteBatch(batch.Repr())
+				require.NoError(t, err)
+				err = batch.Commit(true)
+				require.NoError(t, err)
+
+				// Clear the replica from the range state.
+				rs.replica = nil
+				return output
 
 			case "print-range-state":
 				var sb strings.Builder
@@ -440,7 +475,7 @@ func (tc *testCtx) updatePostSplitRangeState(
 	tc.ranges[split.RightDesc.RangeID] = rhsRangeState
 }
 
-func (rs *rangeState) getReplicaDescriptor(
+func (rs *rangeState) mustGetReplicaDescriptor(
 	t *testing.T, nodeID roachpb.NodeID,
 ) *roachpb.ReplicaDescriptor {
 	for i, repl := range rs.desc.InternalReplicas {
