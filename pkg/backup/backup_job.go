@@ -158,11 +158,13 @@ func backup(
 
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
-		oracle = kvfollowerreadsccl.NewBulkOracle(
+		oracle, err = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
 			dsp.ReplicaOracleConfig(evalCtx.Locality),
-			details.ExecutionLocality,
-			kvfollowerreadsccl.StreakConfig{},
+			details.ExecutionLocality.NonEmptySlice(),
 		)
+		if err != nil {
+			return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to create locality filtering bulk oracle")
+		}
 	}
 
 	// We don't return the compatible nodes here since PartitionSpans will
