@@ -35,7 +35,7 @@ type RoutinePlanGenerator func(
 // to specify the SQL stmt corresponding to the plan.
 // - isFinalPlan is true if no more plans will be generated after the current
 // plan.
-type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, routineStatsBuilder RoutineStatsBuilder, stmtForDistSQLDiagram string, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather than exec.Plan to avoid
@@ -53,6 +53,12 @@ type RoutineExecFactory interface{}
 // result set at arbitrary points during execution. We use the empty interface
 // here rather than *sql.RowResultWriter to avoid import cycles.
 type RoutineResultWriter interface{}
+
+// RoutineStatsBuilder maps to *sqlstats.RecordedStatementStatsBuilder. It is
+// used for collecting per-statement statistics during routine execution. We
+// use the empty interface here rather than
+// *sqlstats.RecordedStatementStatsBuilder to avoid import cycles.
+type RoutineStatsBuilder interface{}
 
 // RoutineExpr represents sequential execution of multiple statements. For
 // example, it is used to represent execution of statements in the body of a

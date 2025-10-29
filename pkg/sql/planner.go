@@ -224,6 +224,8 @@ type planner struct {
 
 	instrumentation instrumentationHelper
 
+	statsCollector *sslocal.StatsCollector
+
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
 	extendedEvalCtx extendedEvalContext
@@ -495,6 +497,7 @@ func newInternalPlanner(
 	p.schemaResolver.authAccessor = p
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
 	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
+	p.statsCollector = &sslocal.StatsCollector{}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

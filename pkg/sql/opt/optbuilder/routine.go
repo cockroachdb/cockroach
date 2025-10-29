@@ -420,6 +420,7 @@ func (b *Builder) buildRoutine(
 	var bodyProps []*physical.Required
 	var bodyStmts []string
 	var bodyTags []string
+	var bodyASTs []tree.Statement
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -448,7 +449,7 @@ func (b *Builder) buildRoutine(
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
 		bodyTags = make([]string, len(stmts))
-
+		bodyASTs = make([]tree.Statement, len(stmts))
 		for i := range stmts {
 			// TODO(michae2): We should be checking the statement hints cache here to
 			// find any external statement hints that could apply to this statement.
@@ -461,6 +462,7 @@ func (b *Builder) buildRoutine(
 			}
 			body[i] = stmtScope.expr
 			bodyProps[i] = stmtScope.makePhysicalProps()
+			bodyASTs[i] = stmts[i].AST
 			// We don't need a statement tag for the artificial appended `SELECT NULL`
 			// statement.
 			if appendedNullForVoidReturn && i == len(stmts)-1 {
@@ -515,6 +517,8 @@ func (b *Builder) buildRoutine(
 		body = []memo.RelExpr{stmtScope.expr}
 		bodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
 		bodyTags = []string{stmt.AST.Label}
+		// The root block is not an explicit statement, so we set the AST to nil.
+		bodyASTs = []tree.Statement{nil}
 		if b.verboseTracing {
 			bodyStmts = []string{stmt.String()}
 		}
@@ -539,6 +543,7 @@ func (b *Builder) buildRoutine(
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,
 				BodyTags:           bodyTags,
+				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
 			},
@@ -899,6 +904,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 				Body:        []memo.RelExpr{bodyScope.expr},
 				BodyProps:   []*physical.Required{bodyScope.makePhysicalProps()},
 				BodyStmts:   bodyStmts,
+				BodyASTs:    []tree.Statement{nil},
 			},
 		},
 	)
