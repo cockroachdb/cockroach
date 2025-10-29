@@ -396,9 +396,10 @@ func (f *RangeFeed) run(ctx context.Context, frontier span.Frontier, resumeWithF
 			errors.HasType(err, &kvpb.MVCCHistoryMutationError{}) {
 			if errCallback := f.onUnrecoverableError; errCallback != nil {
 				errCallback(ctx, err)
+				log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
+			} else {
+				log.Dev.Warningf(ctx, "exiting rangefeed because of internal error with no OnInternalError callback: %s", err.Error())
 			}
-
-			log.VEventf(ctx, 1, "exiting rangefeed due to internal error: %v", err)
 			return
 		}
 		if err != nil && ctx.Err() == nil && restartLogEvery.ShouldLog() {
