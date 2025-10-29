@@ -55,8 +55,14 @@ type ReadWriter struct {
 
 // TODOState interprets the provided storage accessor as the State engine.
 //
-// TODO(pav-kv): remove when all callers have clarified their access patterns.
+// TODO(pav-kv): remove when all callers have clarified their access patterns,
+// and switched to WrapState() or other explicitly defined engine types.
 func TODOState(rw storage.ReadWriter) State {
+	return State{RO: rw, WO: rw}
+}
+
+// WrapState interprets the provided storage accessor as the State engine.
+func WrapState(rw StateRW) State {
 	return State{RO: rw, WO: rw}
 }
 
