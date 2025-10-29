@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
