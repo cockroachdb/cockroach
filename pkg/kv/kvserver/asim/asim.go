@@ -314,7 +314,7 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick types.Tick) {
 // each store ticks the pending operations such as relocate range and lease
 // transfers.
 func (s *Simulator) tickStateChanges(ctx context.Context, tick types.Tick) {
-	s.changer.Tick(ctx, tick.WallTime(), s.state)
+	s.changer.Tick(ctx, tick, s.state)
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
@@ -376,7 +376,7 @@ func (s *Simulator) tickQueues(ctx context.Context, tick types.Tick, state state
 
 		// Tick changes that may have been enqueued with a lower completion
 		// than the current tick, from the queues.
-		s.changer.Tick(ctx, tick.WallTime(), state)
+		s.changer.Tick(ctx, tick, state)
 
 		// Try adding suggested load splits that are pending for this store.
 		for _, rangeID := range state.LoadSplitterFor(storeID).ClearSplitKeys() {
