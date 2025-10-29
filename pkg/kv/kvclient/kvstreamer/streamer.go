@@ -1141,30 +1141,6 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	)
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
-		if !headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
-			// The next batch is not head-of-the-line, and the budget has used
-			// up more than eagerMemUsageLimitBytes bytes. At this point, we
-			// stop issuing "eager" requests, so we just exit.
-			//
-			// This exit will not lead to the streamer deadlocking because we
-			// already have at least one batch to serve, and at some point we'll
-			// get into this loop with headOfLine=true, so we'll always be
-			// issuing at least one batch, eventually.
-			//
-			// This behavior is helpful to prevent pathological behavior
-			// observed in #113729. Namely, if we issue too many batches eagerly
-			// in the InOrder mode, the buffered responses might consume most of
-			// our memory budget, and at some point we might regress to
-			// processing requests one batch with a single Get / Scan request at
-			// a time. We don't want to just drop already received responses
-			// (we've already discarded the original singleRangeBatches anyway),
-			// so this mechanism allows us to preserve a fraction of the budget
-			// to processing head-of-the-line batches.
-			//
-			// Similar pattern can occur in the OutOfOrder mode too although the
-			// degradation is not as severe as in the InOrder mode.
-			return nil
-		}
 		singleRangeReqs := w.s.requestsToServe.nextLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minTargetBytes is the minimum TargetBytes limit with which it makes
@@ -1226,23 +1202,24 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// that will get a very large single row in response which will exceed
 		// this limit).
 		targetBytes := int64(len(singleRangeReqs.reqs)) * avgResponseSize
+		if w.s.mode == InOrder {
+			pos := singleRangeReqs.positions
+			overlapCount := w.s.requestsToServe.lowerPriorityRequestCountLocked(pos[len(pos)-1])
+			if divisor := min(overlapCount, maxNumRequestsToIssue); divisor > 0 {
+				// Some results from this batch cannot be emitted until results from
+				// other singleRangeBatches are received. To account for that, we cap
+				// targetBytes to a fraction of the available budget proportional to the
+				// number of overlapping requests. This prevents the head-of-line batch
+				// from using up all the budget when most of its results depend on other
+				// batches.
+				targetBytes = min(targetBytes, int64(float64(availableBudget)/float64(divisor)))
+			}
+		}
 		// Make sure that targetBytes is sufficient to receive non-empty
 		// response. Our estimate might be an under-estimate when responses vary
 		// significantly in size.
 		if targetBytes < singleRangeReqs.minTargetBytes {
 			targetBytes = singleRangeReqs.minTargetBytes
-		}
-		if headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
-			// Given that the eager memory usage limit has already been
-			// exceeded, we won't issue any more requests for now, so rather
-			// than use the estimate on the response size, this head-of-the-line
-			// batch will use most of the available budget, as controlled by the
-			// session variable.
-			if headOfLineOnly := int64(float64(availableBudget) * w.s.headOfLineOnlyFraction); headOfLineOnly > targetBytes {
-				targetBytes = headOfLineOnly
-				// Ensure that we won't issue any more requests for now.
-				budgetIsExhausted = true
-			}
 		}
 		if targetBytes+responsesOverhead > availableBudget {
 			// We don't have enough budget to account for both the TargetBytes

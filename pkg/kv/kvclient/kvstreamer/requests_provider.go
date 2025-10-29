@@ -288,6 +288,10 @@ type requestsProvider interface {
 	// nextLocked) from the provider. The lock of the provider must be already
 	// held. Panics if there are no requests.
 	removeNextLocked()
+	// lowerPriorityRequestCount returns the number of singleRangeRequests with a
+	// lower priority than the provided one. The lock of the provider must be
+	// already held. Panics if used in OutOfOrder mode.
+	lowerPriorityRequestCountLocked(priority int) int
 }
 
 type requestsProviderBase struct {
@@ -387,6 +391,10 @@ func (p *outOfOrderRequestsProvider) removeNextLocked() {
 	// Use the last request so that we could reuse its slot if resume request is
 	// added.
 	p.requests = p.requests[:len(p.requests)-1]
+}
+
+func (p *outOfOrderRequestsProvider) lowerPriorityRequestCountLocked(priority int) int {
+	panic(errors.AssertionFailedf("lowerPriorityRequestCountLocked called in OutOfOrder mode"))
 }
 
 // inOrderRequestsProvider is a requestProvider that maintains a min heap of all
@@ -515,4 +523,15 @@ func (p *inOrderRequestsProvider) removeNextLocked() {
 		panic(errors.AssertionFailedf("removeNextLocked called when requestsProvider is empty"))
 	}
 	p.heapRemoveFirst()
+}
+
+func (p *inOrderRequestsProvider) lowerPriorityRequestCountLocked(priority int) int {
+	p.Mutex.AssertHeld()
+	var count int
+	for i := range p.requests {
+		if p.requests[i].priority() < priority {
+			count++
+		}
+	}
+	return count
 }
