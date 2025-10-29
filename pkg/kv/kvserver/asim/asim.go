@@ -326,7 +326,7 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick types.Tick) {
 // exchange. It then updates the exchanged descriptors for each store's store
 // pool.
 func (s *Simulator) tickGossip(ctx context.Context, tick types.Tick) {
-	s.gossip.Tick(ctx, tick.WallTime(), s.state)
+	s.gossip.Tick(ctx, tick, s.state)
 }
 
 func (s *Simulator) tickStoreClocks(tick time.Time) {

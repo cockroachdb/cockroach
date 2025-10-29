@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -25,7 +26,7 @@ import (
 type Gossip interface {
 	// Tick checks for completed gossip updates and triggers new gossip
 	// updates if needed.
-	Tick(context.Context, time.Time, state.State)
+	Tick(context.Context, types.Tick, state.State)
 }
 
 // gossip is an implementation of the Gossip interface. It manages the
@@ -43,7 +44,7 @@ var _ Gossip = &gossip{}
 // have been triggered by the underlying kvserver.StoreGossip component.
 type storeGossiper struct {
 	local              *kvserver.StoreGossip
-	lastIntervalGossip time.Time
+	lastIntervalGossip types.Tick
 	descriptorGetter   func(cached bool) roachpb.StoreDescriptor
 	pendingOutbound    *roachpb.StoreDescriptor
 	addingStore        bool
@@ -55,7 +56,7 @@ func newStoreGossiper(
 	st *cluster.Settings,
 ) *storeGossiper {
 	sg := &storeGossiper{
-		lastIntervalGossip: time.Time{},
+		lastIntervalGossip: types.Tick{},
 		descriptorGetter:   descriptorGetter,
 	}
 
@@ -133,7 +134,7 @@ func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID, nodeID s
 
 // Tick checks for completed gossip updates and triggers new gossip
 // updates if needed.
-func (g *gossip) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (g *gossip) Tick(ctx context.Context, tick types.Tick, s state.State) {
 	stores := s.Stores()
 	for _, store := range stores {
 		var sg *storeGossiper
@@ -149,7 +150,7 @@ func (g *gossip) Tick(ctx context.Context, tick time.Time, s state.State) {
 		// shoud gossip.
 		// NB: In the real code this is controlled by a gossip
 		// ticker on the node that activates every 10 seconds.
-		if !tick.Before(sg.lastIntervalGossip.Add(g.settings.StateExchangeInterval)) {
+		if !tick.Before(sg.lastIntervalGossip.FromWallTime(sg.lastIntervalGossip.WallTime().Add(g.settings.StateExchangeInterval))) {
 			sg.lastIntervalGossip = tick
 			_ = sg.local.GossipStore(ctx, false /* useCached */)
 		}
@@ -157,13 +158,13 @@ func (g *gossip) Tick(ctx context.Context, tick time.Time, s state.State) {
 		// Put the pending gossip infos into the exchange.
 		if sg.pendingOutbound != nil {
 			desc := *sg.pendingOutbound
-			g.exchange.put(tick, desc)
+			g.exchange.put(tick.WallTime(), desc)
 			// Clear the pending gossip infos for this store.
 			sg.pendingOutbound = nil
 		}
 	}
 	// Update with any recently complete gossip infos.
-	g.maybeUpdateState(tick, s)
+	g.maybeUpdateState(tick.WallTime(), s)
 }
 
 // CapacityChangeNotify notifies that a capacity change event has occurred
