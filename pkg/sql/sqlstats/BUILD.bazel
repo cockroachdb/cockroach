@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlcommenter",
         "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/stop",
