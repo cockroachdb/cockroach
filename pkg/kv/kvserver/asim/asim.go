@@ -439,5 +439,5 @@ func (s *Simulator) tickMetrics(ctx context.Context, tick types.Tick) {
 
 // tickEvents ticks the registered simulation events.
 func (s *Simulator) tickEvents(ctx context.Context, tick types.Tick) {
-	s.eventExecutor.TickEvents(ctx, tick.WallTime(), s.state, s.history)
+	s.eventExecutor.TickEvents(ctx, tick, s.state, s.history)
 }
