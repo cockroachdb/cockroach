@@ -291,21 +291,21 @@ func TestSetIntersection(t *testing.T) {
 func TestSetSubtraction(t *testing.T) {
 	checkEqual(t,
 		nil,
-		subtractSpans(
+		SubtractSpans(
 			[]Span{single("b")},
 			[]Span{span("b", "c")},
 		),
 	)
 	checkEqual(t,
 		[]Span{span("b\x00", "d")},
-		subtractSpans(
+		SubtractSpans(
 			[]Span{span("b", "d")},
 			[]Span{span("b", "b\x00")},
 		),
 	)
 	checkEqual(t,
 		[]Span{span("b", "d"), span("e", "ea")},
-		subtractSpans(
+		SubtractSpans(
 			[]Span{span("b", "d"), span("e", "f")},
 			[]Span{span("ea", "f")},
 		),
@@ -313,7 +313,7 @@ func TestSetSubtraction(t *testing.T) {
 	checkEqual(t,
 		[]Span{span("d", "da"), span("db", "dc"),
 			span("dd", "df"), span("fa", "g")},
-		subtractSpans(
+		SubtractSpans(
 			[]Span{single("b"), span("d", "e"), span("f", "g")},
 			[]Span{span("b", "c"), span("da", "db"),
 				span("dc", "dd"), span("df", "e"), span("f", "fa")},
