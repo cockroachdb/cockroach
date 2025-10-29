@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/types",
         "//pkg/util/encoding/csv",
         "//pkg/util/log",
     ],
