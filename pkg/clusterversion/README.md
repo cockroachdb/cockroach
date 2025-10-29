@@ -197,6 +197,8 @@ of the forked release is cut. It can happen earlier, but we don't want it to
 happen while there is a high chance of in-progress changes that affect the
 bootstrap data in a meaningful way.
 
+**Claude Prompt**: "Please create a PR to enable mixed-cluster logic tests for 25.4 following the M.2 checklist in pkg/clusterversion/README.md and the detailed runbook in pkg/clusterversion/CLAUDE.md. Base this on top of the M.1 PR."
+
 **Checklist**:
 
 - [ ] Create new SQL bootstrap data. This is necessary because we want code on
