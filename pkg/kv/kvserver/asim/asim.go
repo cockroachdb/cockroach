@@ -305,7 +305,7 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick types.Tick) {
 		func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
 	)
 	for _, generator := range s.generators {
-		event := generator.Tick(tick.WallTime())
+		event := generator.Tick(tick)
 		s.state.ApplyLoad(event)
 	}
 }
