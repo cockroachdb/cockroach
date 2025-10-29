@@ -146,9 +146,20 @@ func (n *singleInputPlanNode) SetInput(i int, p planNode) error {
 type mutationPlanNode interface {
 	planNode
 
-	// rowsWritten returns the number of rows modified by this planNode. It
-	// should only be called once Next returns false.
+	// rowsWritten returns the number of table rows modified by this planNode.
+	// It does not include rows written to secondary indexes. It should only be
+	// called once Next returns false.
 	rowsWritten() int64
+
+	// indexRowsWritten returns the number of primary and secondary index rows
+	// modified by this planNode. It is always >= rowsWritten. It should only be
+	// called once Next returns false.
+	indexRowsWritten() int64
+
+	// indexBytesWritten returns the number of primary and secondary index bytes
+	// modified by this planNode. It should only be called once Next returns
+	// false.
+	indexBytesWritten() int64
 
 	// returnsRowsAffected indicates that the planNode returns the number of
 	// rows affected by the mutation, rather than the rows themselves.

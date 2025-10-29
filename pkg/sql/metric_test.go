@@ -218,21 +218,17 @@ func TestStatementMetrics(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 	s := srv.ApplicationLayer()
 
-	runner.Exec(t, `CREATE DATABASE db`)
-	runner.Exec(t, `CREATE TABLE db.t (x INT PRIMARY KEY, y INT, a STRING[], v VECTOR(2))`)
-	runner.Exec(t, `CREATE INDEX ON db.t (y)`)
-	runner.Exec(t, `CREATE INVERTED INDEX ON db.t (a)`)
-	runner.Exec(t, `CREATE VECTOR INDEX ON db.t (v)`)
-	runner.Exec(t, `INSERT INTO db.t VALUES (1, 10, ARRAY['apple', 'orange'], '[1, 2]')`)
-	runner.Exec(t, `INSERT INTO db.t VALUES (2, 20, ARRAY['banana'], '[3, 4]')`)
-	runner.Exec(t, `INSERT INTO db.t VALUES (3, 30, ARRAY['apple', 'pear', 'mango'], '[5, 6]')`)
-
 	testCases := []struct {
-		query    string
-		rowsRead int64
+		query            string
+		rowsRead         int64
+		indexRowsWritten int64
 		// If true, then skip metamorphic testing for this query.
 		skipMetamorphic bool
+		// If true, then this is a deletion case, in which case indexBytesWritten
+		// is expected to be zero.
+		isDelete bool
 	}{
+		// Read-only statements.
 		{query: `SELECT * FROM db.t WHERE x = 1`, rowsRead: 1},
 		{query: `SELECT * FROM db.t WHERE x <= 2`, rowsRead: 2},
 		{query: `SELECT * FROM db.t WHERE a @> ARRAY['apple']`, rowsRead: 4},
@@ -244,24 +240,99 @@ func TestStatementMetrics(t *testing.T) {
 			skipMetamorphic: true,
 		},
 		{query: `SELECT * FROM db.t ORDER BY v <-> '[2, 2]' LIMIT 1`, rowsRead: 3},
+
+		// Mutation statements.
+		{query: `INSERT INTO db.t VALUES (4, 40, ARRAY['orange', 'cherry'], '[7, 8]')`, indexRowsWritten: 5},
+		{
+			query:            `INSERT INTO db.t VALUES (5, 50, ARRAY['orange', 'cherry']), (6, 60, NULL)`,
+			indexRowsWritten: 6,
+		},
+		// Expect to read 2 rows - one in secondary index, one in primary index.
+		// Expect to write 3 rows - update primary index, delete and insert in
+		// "y" secondary index.
+		{query: `UPDATE db.t SET y = 100 WHERE y = 40`, rowsRead: 2, indexRowsWritten: 3},
+		// Expect to read 4 rows - two in secondary index, two in primary index.
+		// Expect to write 5 rows - update primary index, delete and insert two
+		// rows in "y" secondary index.
+		{query: `UPDATE db.t SET y = 100 WHERE y >= 10 AND y <= 20`, rowsRead: 4, indexRowsWritten: 6},
+		{
+			query:            `UPSERT INTO db.t VALUES (6, 60, ARRAY['date'], '[100, 110]')`,
+			rowsRead:         1,
+			indexRowsWritten: 3,
+		},
+		{
+			query:            `INSERT INTO db.t VALUES (6, 600) ON CONFLICT (x) DO UPDATE SET a = ARRAY['strawberry']`,
+			rowsRead:         1,
+			indexRowsWritten: 3,
+		},
+		{query: `DELETE FROM db.t WHERE x = 2`, rowsRead: 1, indexRowsWritten: 4, isDelete: true},
+		{
+			query:            `DELETE FROM db.t WHERE a @> ARRAY['apple']`,
+			rowsRead:         4,
+			indexRowsWritten: 11,
+			isDelete:         true,
+		},
+		// CREATE TABLE does not count rows or bytes written.
+		{query: `CREATE TABLE db.t2 (x, y) AS SELECT 1, 10 UNION SELECT 2, 20`},
 	}
 
-	lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
+	for _, vectorized := range []string{"off", "on"} {
+		t.Run(fmt.Sprintf("vectorize = %s", vectorized), func(t *testing.T) {
+			runner.Exec(t, "SET vectorize = $1", vectorized)
+			runner.Exec(t, `DROP DATABASE IF EXISTS db`)
+			runner.Exec(t, `CREATE DATABASE db`)
+			runner.Exec(t, `CREATE TABLE db.t (x INT PRIMARY KEY, y INT, a STRING[], v VECTOR(2))`)
+			runner.Exec(t, `CREATE INDEX ON db.t (y)`)
+			runner.Exec(t, `CREATE INVERTED INDEX ON db.t (a)`)
+			runner.Exec(t, `CREATE VECTOR INDEX ON db.t (v)`)
+			runner.Exec(t, `INSERT INTO db.t VALUES (1, 10, ARRAY['apple', 'orange'], '[1, 2]')`)
+			runner.Exec(t, `INSERT INTO db.t VALUES (2, 20, ARRAY['banana'], '[3, 4]')`)
+			runner.Exec(t, `INSERT INTO db.t VALUES (3, 30, ARRAY['apple', 'pear', 'mango'], '[5, 6]')`)
 
-	for _, tc := range testCases {
-		t.Run(tc.query, func(t *testing.T) {
-			for _, vectorized := range []string{"off", "on"} {
-				runner.Exec(t, "SET vectorize = $1", vectorized)
-				t.Run(fmt.Sprintf("vectorize = %s", vectorized), func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.query, func(t *testing.T) {
 					if tc.skipMetamorphic && metamorphic.IsMetamorphicBuild() {
 						return
 					}
 
+					// Get initial values of the counters.
+					lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
+					lastBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
+					lastRowsWritten := s.MustGetSQLCounter(sql.MetaStatementIndexRowsWritten.Name)
+					lastBytesWritten := s.MustGetSQLCounter(sql.MetaStatementIndexBytesWritten.Name)
+
 					runner.Exec(t, tc.query)
-					actual, err := checkCounterDelta(
+
+					// Test the rows read metric.
+					_, err := checkCounterDelta(
 						s, sql.MetaStatementRowsRead, lastRowsRead, tc.rowsRead)
 					require.NoError(t, err)
-					lastRowsRead = actual
+
+					// If there were rows read, then expect bytes read to have
+					// increased. Don't check for a specific value, since there are
+					// too many factors that can change this.
+					if tc.rowsRead > 0 {
+						currBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
+						require.Greater(t, currBytesRead, lastBytesRead)
+					}
+
+					// Test the rows written metric.
+					_, err = checkCounterDelta(
+						s, sql.MetaStatementIndexRowsWritten, lastRowsWritten, tc.indexRowsWritten)
+					require.NoError(t, err)
+
+					// If there were index rows written, then expect bytes written
+					// to have increased (or not in the delete case). Don't check
+					// for a specific value, since there are too many factors that
+					// can change this.
+					if tc.indexRowsWritten > 0 {
+						currBytesWritten := s.MustGetSQLCounter(sql.MetaStatementIndexBytesWritten.Name)
+						if !tc.isDelete {
+							require.Greater(t, currBytesWritten, lastBytesWritten)
+						} else {
+							require.Equal(t, currBytesWritten, lastBytesWritten)
+						}
+					}
 				})
 			}
 		})

@@ -130,6 +130,15 @@ func (d *deleteSwapNode) rowsWritten() int64 {
 	return d.run.rowsAffected()
 }
 
+func (d *deleteSwapNode) indexRowsWritten() int64 {
+	return d.run.td.indexRowsWritten
+}
+
+func (d *deleteSwapNode) indexBytesWritten() int64 {
+	// No bytes counted as written for a deletion.
+	return 0
+}
+
 func (d *deleteSwapNode) returnsRowsAffected() bool {
 	return !d.run.rowsNeeded
 }

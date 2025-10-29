@@ -130,6 +130,14 @@ func (u *updateSwapNode) rowsWritten() int64 {
 	return u.run.rowsAffected()
 }
 
+func (u *updateSwapNode) indexRowsWritten() int64 {
+	return u.run.tu.indexRowsWritten
+}
+
+func (u *updateSwapNode) indexBytesWritten() int64 {
+	return u.run.tu.indexBytesWritten
+}
+
 func (u *updateSwapNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
