@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -177,7 +178,15 @@ func splitPreApply(
 	//
 	// [*] Note that uninitialized replicas may cast votes, and if they have, we
 	// can't load the default Term and Vote values.
-	if err := rsl.SynthesizeRaftState(ctx, stateRW, raftRW); err != nil {
+	as, err := rsl.LoadRangeAppliedState(ctx, stateRW)
+	if err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
+	}
+	// TODO(pav-kv): assert that the applied state == RaftInitialLog{Index,Term}.
+	if err := rsl.SynthesizeRaftState(ctx, raftRW, logstore.EntryID{
+		Index: as.RaftAppliedIndex,
+		Term:  as.RaftAppliedIndexTerm,
+	}); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 	if err := rsl.SetRaftTruncatedState(ctx, raftRW.WO, &kvserverpb.RaftTruncatedState{
@@ -186,8 +195,9 @@ func splitPreApply(
 	}); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
-	// Persist the closed timestamp.
-	if err := rsl.SetClosedTimestamp(ctx, stateRW, in.initClosedTimestamp); err != nil {
+	// Update the RHS applied state with the computed closed timestamp.
+	as.RaftClosedTimestamp = in.initClosedTimestamp
+	if err := rsl.SetRangeAppliedState(ctx, stateRW, as); err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	}
 }
