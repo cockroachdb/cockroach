@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -29,10 +30,10 @@ type Controller interface {
 	// Dispatch enqueues an operation to be processed. It returns a ticket
 	// associated with the operation that may be used to check on the operation
 	// progress.
-	Dispatch(context.Context, time.Time, state.State, ControlledOperation) DispatchedTicket
+	Dispatch(context.Context, types.Tick, state.State, ControlledOperation) DispatchedTicket
 	// Tick iterates through pending operations and processes them up to the
 	// current tick.
-	Tick(context.Context, time.Time, state.State)
+	Tick(context.Context, types.Tick, state.State)
 	// Check checks the progress of the operation associated with the ticket
 	// given. If the ticket exists, it returns the operation and true, else
 	// false.
@@ -75,7 +76,7 @@ func NewController(
 // associated with the operation that may be used to check on the operation
 // progress.
 func (c *controller) Dispatch(
-	ctx context.Context, tick time.Time, state state.State, co ControlledOperation,
+	ctx context.Context, tick types.Tick, state state.State, co ControlledOperation,
 ) DispatchedTicket {
 	c.ticketGen++
 	ticket := c.ticketGen
@@ -89,7 +90,7 @@ func (c *controller) Dispatch(
 
 // Tick iterates through pending operations and processes them up to the
 // current tick.
-func (c *controller) Tick(ctx context.Context, tick time.Time, state state.State) {
+func (c *controller) Tick(ctx context.Context, tick types.Tick, state state.State) {
 	for c.pending.Len() > 0 {
 		i := heap.Pop(c.pending)
 		qop, _ := i.(*queuedOp)
@@ -119,7 +120,7 @@ func (c *controller) Check(ticket DispatchedTicket) (op ControlledOperation, ok 
 }
 
 func (c *controller) process(
-	ctx context.Context, tick time.Time, state state.State, co ControlledOperation,
+	ctx context.Context, tick types.Tick, state state.State, co ControlledOperation,
 ) {
 	switch op := co.(type) {
 	case *RelocateRangeOp:
@@ -146,7 +147,7 @@ func (c *controller) process(
 }
 
 func (c *controller) processRelocateRange(
-	ctx context.Context, tick time.Time, s state.State, ro *RelocateRangeOp,
+	ctx context.Context, tick types.Tick, s state.State, ro *RelocateRangeOp,
 ) error {
 	rng := s.RangeFor(ro.key)
 	options := SimRelocateOneOptions{allocator: c.allocator, storePool: c.storePool, state: s}
@@ -205,7 +206,7 @@ func (c *controller) processRelocateRange(
 }
 
 func (c *controller) processTransferLease(
-	ctx context.Context, tick time.Time, s state.State, ro *TransferLeaseOp,
+	ctx context.Context, tick types.Tick, s state.State, ro *TransferLeaseOp,
 ) error {
 	if store, ok := s.LeaseholderStore(ro.rangeID); ok && store.StoreID() == ro.target {
 		ro.done = true
@@ -231,12 +232,12 @@ func (c *controller) processTransferLease(
 			ro.rangeID, ro.target)
 	}
 
-	ro.next = tick.Add(delay)
+	ro.next = tick.FromWallTime(tick.WallTime().Add(delay))
 	return nil
 }
 
 func (c *controller) processChangeReplicas(
-	tick time.Time, s state.State, cro *ChangeReplicasOp,
+	tick types.Tick, s state.State, cro *ChangeReplicasOp,
 ) error {
 	rng, ok := s.Range(cro.rangeID)
 	if !ok {
@@ -245,7 +246,7 @@ func (c *controller) processChangeReplicas(
 	// We need to check if the change is already complete. If it is, we can
 	// skip the operation. This is the case where the change didn't apply
 	// instantly and processChangeReplicas is called over multiple ticks.
-	if (cro.complete != time.Time{}) && !tick.Before(cro.complete) {
+	if (cro.complete != types.Tick{}) && !tick.Before(cro.complete) {
 		cro.done = true
 		return nil
 	}
