@@ -196,7 +196,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick types.Tick) {
 		storeID,
 	)
 	s.srs[storeID] = storerebalancer.NewStoreRebalancer(
-		tick.WallTime(),
+		tick,
 		storeID,
 		s.controllers[storeID],
 		allocator,
