@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -28,7 +29,7 @@ type EventExecutor interface {
 	// TickEvents retrieves and invokes the underlying event function from the
 	// scheduled events at the given tick. It returns a boolean indicating if any
 	// assertion event failed during the tick, allowing for early exit.
-	TickEvents(context.Context, time.Time, state.State, history.History) bool
+	TickEvents(context.Context, types.Tick, state.State, history.History) bool
 	// PrintEventSummary returns a string summarizing the executed mutation and
 	// assertion events.
 	PrintEventSummary(tag string) string
@@ -123,7 +124,7 @@ func (e *eventExecutor) PrintEventsExecuted() string {
 // scheduled events at the given tick. It returns a boolean indicating if any
 // assertion event failed during the tick, allowing for early exit.
 func (e *eventExecutor) TickEvents(
-	ctx context.Context, tick time.Time, state state.State, history history.History,
+	ctx context.Context, tick types.Tick, state state.State, history history.History,
 ) (failureExists bool) {
 	// Sorts the scheduled list in chronological to initiate event execution.
 	if !e.hasStarted {
@@ -133,7 +134,7 @@ func (e *eventExecutor) TickEvents(
 	// Assume the events are in sorted order and the event list is never added
 	// to.
 	for e.nextEventIndex < len(e.scheduledEvents) {
-		if !tick.Before(e.scheduledEvents[e.nextEventIndex].At) {
+		if !tick.WallTime().Before(e.scheduledEvents[e.nextEventIndex].At) {
 			log.KvDistribution.Infof(ctx, "applying event (scheduled=%s tick=%s)", e.scheduledEvents[e.nextEventIndex].At, tick)
 			scheduledEvent := e.scheduledEvents[e.nextEventIndex]
 			fn := scheduledEvent.TargetEvent.Func()
@@ -147,7 +148,7 @@ func (e *eventExecutor) TickEvents(
 			} else {
 				assertionFn, ok := fn.(event.AssertionFunc)
 				if ok {
-					if !assertionFn(ctx, tick, history) && !failureExists {
+					if !assertionFn(ctx, tick.WallTime(), history) && !failureExists {
 						failureExists = true
 					}
 				} else {
