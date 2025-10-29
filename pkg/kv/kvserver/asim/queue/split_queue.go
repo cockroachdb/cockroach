@@ -104,8 +104,8 @@ func (sq *splitQueue) Tick(ctx context.Context, tick types.Tick, s state.State) 
 			Author:      sq.storeID,
 		}
 
-		if completeAt, ok := sq.stateChanger.Push(sq.next.WallTime(), &change); ok {
-			sq.next = sq.next.FromWallTime(completeAt)
+		if completeAt, ok := sq.stateChanger.Push(sq.next, &change); ok {
+			sq.next = completeAt
 		}
 	}
 

@@ -224,9 +224,9 @@ func pushReplicateChange(
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
 	}
 
-	if completeAt, ok := stateChanger.Push(tick.WallTime(), stateChange); ok {
+	if completeAt, ok := stateChanger.Push(tick, stateChange); ok {
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
-		next = tick.FromWallTime(completeAt)
+		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
 		as.PostApply(changeID, false /* success */)

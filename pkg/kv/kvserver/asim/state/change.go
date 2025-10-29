@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/google/btree"
@@ -36,13 +37,13 @@ type Change interface {
 // Changer takes state changes and applies them with delay.
 type Changer interface {
 	// Push appends a state change to occur. There must not be more than one
-	// state change per Range() at any time. Push returns the time the state
+	// state change per Range() at any time. Push returns the tick the state
 	// change will apply, and true if this is satisfied; else it will return
 	// false.
-	Push(tick time.Time, sc Change) (time.Time, bool)
+	Push(tick types.Tick, sc Change) (types.Tick, bool)
 	// Tick updates state changer to apply any changes that have occurred
 	// between the last tick and this one.
-	Tick(ctx context.Context, tick time.Time, state State)
+	Tick(ctx context.Context, tick types.Tick, state State)
 }
 
 // ReplicaChange contains information necessary to add, remove or move (both) a
@@ -423,7 +424,7 @@ type replicaChanger struct {
 	lastTicket     int
 	completeAt     *btree.BTreeG[*pendingChange]
 	pendingTickets map[int]Change
-	pendingTarget  map[StoreID]time.Time
+	pendingTarget  map[StoreID]types.Tick
 	pendingRange   map[RangeID]int
 }
 
@@ -433,14 +434,14 @@ func NewReplicaChanger() Changer {
 	return &replicaChanger{
 		completeAt:     btree.NewG[*pendingChange](8, (*pendingChange).Less),
 		pendingTickets: make(map[int]Change),
-		pendingTarget:  make(map[StoreID]time.Time),
+		pendingTarget:  make(map[StoreID]types.Tick),
 		pendingRange:   make(map[RangeID]int),
 	}
 }
 
 type pendingChange struct {
 	ticket     int
-	completeAt time.Time
+	completeAt types.Tick
 }
 
 func (pc *pendingChange) Less(than *pendingChange) bool {
@@ -453,7 +454,7 @@ func (pc *pendingChange) Less(than *pendingChange) bool {
 // state change per Range() at any time. Push returns the time the state
 // change will apply, and true if this is satisfied; else it will return
 // false.
-func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) {
+func (rc *replicaChanger) Push(tick types.Tick, change Change) (types.Tick, bool) {
 	// Allow at most one pending action per range at any point in time.
 	if _, ok := rc.pendingRange[change.Range()]; ok {
 		return tick, false
@@ -475,7 +476,7 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 		}
 		completeAt = rc.pendingTarget[change.Target()]
 	}
-	completeAt = completeAt.Add(change.Delay())
+	completeAt = completeAt.FromWallTime(completeAt.WallTime().Add(change.Delay()))
 
 	// Create a unique entry (completionTime, ticket) and append it to the
 	// completion queue.
@@ -487,12 +488,12 @@ func (rc *replicaChanger) Push(tick time.Time, change Change) (time.Time, bool) 
 
 // Tick updates state changer to apply any changes that have occurred
 // between the last tick and this one.
-func (rc *replicaChanger) Tick(ctx context.Context, tick time.Time, state State) {
+func (rc *replicaChanger) Tick(ctx context.Context, tick types.Tick, state State) {
 	var changeList []*pendingChange
 
 	// NB: Add the smallest unit of time, in order to find all items in
 	// [smallest, tick].
-	pivot := &pendingChange{completeAt: tick.Add(time.Nanosecond)}
+	pivot := &pendingChange{completeAt: tick.Add(1)}
 	rc.completeAt.AscendLessThan(pivot, func(nextChange *pendingChange) bool {
 		changeList = append(changeList, nextChange)
 		return true

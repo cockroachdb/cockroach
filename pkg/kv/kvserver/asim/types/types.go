@@ -50,6 +50,11 @@ func (t Tick) After(u Tick) bool {
 	return t.WallTime().After(u.WallTime())
 }
 
+// Equal reports whether the instant represented by t is equal to u.
+func (t Tick) Equal(u Tick) bool {
+	return t.Count == u.Count && t.Start.Equal(u.Start) && t.Tick == u.Tick
+}
+
 // Add returns a new Tick advanced by n logical steps. It panics if n is
 // negative and would produce a negative Count.
 func (t Tick) Add(n int) Tick {
