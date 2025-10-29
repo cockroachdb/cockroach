@@ -3849,6 +3849,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
 		persistedSQLStats:    ex.server.persistedSQLStats,
 		localSQLStats:        ex.server.localSqlStats,
+		sqlStatsIngester:     ex.server.sqlStatsIngester,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}

@@ -29,13 +29,23 @@ type RoutinePlanGenerator func(
 	fn RoutinePlanGeneratedFunc,
 ) error
 
+type RoutineBodyStmt struct {
+	FingerprintStr string
+	SummaryStr     string
+	StmtType       StatementType
+	StmtString     string
+	DbName         string
+	AppName        string
+	FingerprintId  uint64
+}
+
 // RoutinePlanGeneratedFunc is the function type that is called for each plan
 // enumerated by a RoutinePlanGenerator.
 // - stmtForDistSQLDiagram, if set, will be used when generating DistSQL diagram
 // to specify the SQL stmt corresponding to the plan.
 // - isFinalPlan is true if no more plans will be generated after the current
 // plan.
-type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmt RoutineBodyStmt, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather than exec.Plan to avoid

@@ -211,6 +211,9 @@ func NewRecordedStatementStatsBuilder[L StatementLatencyRecorder, Q QueryStats, 
 func (b RecordedStatementStatsBuilder[L, Q, P]) LatencyRecorder(
 	recorder L,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.RunLatencySec = recorder.RunLatency().Seconds()
 	b.stmtStats.IdleLatencySec = recorder.IdleLatency().Seconds()
 	b.stmtStats.ServiceLatencySec = recorder.ServiceLatency().Seconds()
@@ -225,6 +228,9 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) LatencyRecorder(
 func (b RecordedStatementStatsBuilder[L, Q, P]) QueryLevelStats(
 	stats Q,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.BytesRead = stats.BytesRead()
 	b.stmtStats.RowsRead = stats.RowsRead()
 	b.stmtStats.RowsWritten = stats.RowsWritten()
@@ -234,6 +240,9 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) QueryLevelStats(
 func (b RecordedStatementStatsBuilder[L, Q, P]) ExecStats(
 	execStats *execstats.QueryLevelStats,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	if execStats == nil {
 		return b
 	}
@@ -254,6 +263,9 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) ExecStats(
 func (b RecordedStatementStatsBuilder[L, Q, P]) Indexes(
 	indexes []string,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.Indexes = indexes
 	return b
 }
@@ -261,6 +273,9 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) Indexes(
 func (b RecordedStatementStatsBuilder[L, Q, P]) StatementError(
 	stmtErr error,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	if stmtErr == nil {
 		return b
 	}
@@ -272,6 +287,9 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) StatementError(
 func (b RecordedStatementStatsBuilder[L, Q, P]) AutoRetry(
 	autoRetryCount int, autoRetryReason error,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.AutoRetryCount = autoRetryCount
 	b.stmtStats.AutoRetryReason = autoRetryReason
 	return b
@@ -280,6 +298,9 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) AutoRetry(
 func (b RecordedStatementStatsBuilder[L, Q, P]) RowsAffected(
 	rowsAffected int,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.RowsAffected = rowsAffected
 	return b
 }
@@ -287,17 +308,26 @@ func (b RecordedStatementStatsBuilder[L, Q, P]) RowsAffected(
 func (b RecordedStatementStatsBuilder[L, Q, P]) IndexRecommendations(
 	idxRecommendations []string,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.IndexRecommendations = idxRecommendations
 	return b
 }
 
 func (b RecordedStatementStatsBuilder[L, Q, P]) UnderOuterTxn() RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.UnderOuterTxn = true
 	return b
 }
 func (b RecordedStatementStatsBuilder[L, Q, P]) QueryTags(
 	queryTags []sqlcommenter.QueryTag,
 ) RecordedStatementStatsBuilder[L, Q, P] {
+	if b.stmtStats == nil {
+		return b
+	}
 	b.stmtStats.QueryTags = queryTags
 	return b
 }

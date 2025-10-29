@@ -420,10 +420,15 @@ func (b *Builder) buildRoutine(
 	var bodyProps []*physical.Required
 	var bodyStmts []string
 	var bodyTags []string
+	var bodyASTs []tree.Statement
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
 		stmts, err := parser.Parse(o.Body)
+		bodyASTs = make([]tree.Statement, len(stmts))
+		for i := range stmts {
+			bodyASTs[i] = stmts[i].AST
+		}
 		if err != nil {
 			panic(err)
 		}
@@ -539,6 +544,7 @@ func (b *Builder) buildRoutine(
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,
 				BodyTags:           bodyTags,
+				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
 			},

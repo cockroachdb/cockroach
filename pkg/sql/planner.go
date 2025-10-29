@@ -109,6 +109,8 @@ type extendedEvalContext struct {
 
 	localSQLStats *sslocal.SQLStats
 
+	sqlStatsIngester *sslocal.SQLStatsIngester
+
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
@@ -536,12 +538,14 @@ func internalExtendedEvalCtx(
 	var indexUsageStatsController eval.IndexUsageStatsController
 	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
 	var localSqlStatsProvider *sslocal.SQLStats
+	var sqlStatsIngester *sslocal.SQLStatsIngester
 	if ief := execCfg.InternalDB; ief != nil {
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
 			schemaTelemetryController = ief.server.schemaTelemetryController
 			sqlStatsProvider = ief.server.persistedSQLStats
 			localSqlStatsProvider = ief.server.localSqlStats
+			sqlStatsIngester = ief.server.sqlStatsIngester
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -553,6 +557,7 @@ func internalExtendedEvalCtx(
 			indexUsageStatsController = &idxusage.Controller{}
 			sqlStatsProvider = &persistedsqlstats.PersistedSQLStats{}
 			localSqlStatsProvider = &sslocal.SQLStats{}
+			sqlStatsIngester = &sslocal.SQLStatsIngester{}
 		}
 	}
 	ret := extendedEvalContext{
@@ -578,6 +583,7 @@ func internalExtendedEvalCtx(
 		indexUsageStats:   indexUsageStats,
 		persistedSQLStats: sqlStatsProvider,
 		localSQLStats:     localSqlStatsProvider,
+		sqlStatsIngester:  sqlStatsIngester,
 		jobs:              newTxnJobsCollection(),
 	}
 	ret.copyFromExecCfg(execCfg)

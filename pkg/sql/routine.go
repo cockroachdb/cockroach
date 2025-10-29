@@ -11,14 +11,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -325,7 +329,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, rrw, g.args,
-		func(plan tree.RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error {
+		func(plan tree.RoutinePlan, stmt tree.RoutineBodyStmt, isFinalPlan bool) error {
 			stmtIdx++
 			opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 			ctx, sp := tracing.ChildSpan(ctx, opName)
@@ -368,10 +372,31 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
-			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmtForDistSQLDiagram)
+			var builder sqlstats.RecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder, topLevelQueryStats, PlanInfo]
+			if stmt.FingerprintId != 0 {
+				builder = sqlstats.NewRecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder, topLevelQueryStats, PlanInfo](
+					appstatspb.StmtFingerprintID(stmt.FingerprintId),
+					g.p.extendedEvalCtx.SessionID,
+					stmt.DbName,
+					stmt.FingerprintStr,
+					stmt.SummaryStr,
+					clusterunique.ID{},
+					stmt.StmtType, stmt.AppName,
+					PlanInfo{
+						planFlags: g.p.curPlan.flags, // TODO: Is this right?
+						planGist:  explain.PlanGist{},
+					})
+				defer func() {
+					g.p.ExtendedEvalContext().sqlStatsIngester.RecordStatement(builder.Build())
+				}()
+			}
+			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmt.StmtString)
+
 			if err != nil {
+				builder = builder.StatementError(err)
 				return err
 			}
+			builder = builder.QueryLevelStats(queryStats)
 			forwardInnerQueryStats(g.p.routineMetadataForwarder, queryStats)
 			if openCursor {
 				return cursorHelper.createCursor(g.p)
