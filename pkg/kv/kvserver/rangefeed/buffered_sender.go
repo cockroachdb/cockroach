@@ -105,9 +105,10 @@ const (
 	// streamOverflowing is the state we are in when the stream has reached its
 	// limit and is waiting to deliver an error.
 	streamOverflowing streamState = iota
-	// streamOverflowed means the stream has overflowed and the error has been
-	// placed in the queue.
-	streamOverflowed streamState = iota
+	// streamErrored means an error has been enqueued for this stream and further
+	// buffered sends will be ignored. Streams in this state will not be found in
+	// the status map.
+	streamErrored streamState = iota
 )
 
 func (s streamState) String() string {
@@ -116,8 +117,8 @@ func (s streamState) String() string {
 		return "active"
 	case streamOverflowing:
 		return "overflowing"
-	case streamOverflowed:
-		return "overflowed"
+	case streamErrored:
+		return "errored"
 	default:
 		return "unknown"
 	}
@@ -188,7 +189,12 @@ func (bs *BufferedSender) sendBuffered(
 	if shouldAdmit {
 		status.queueItems++
 	}
-	bs.queueMu.byStream[ev.StreamID] = status
+	if nextState == streamErrored {
+		delete(bs.queueMu.byStream, ev.StreamID)
+	} else {
+		bs.queueMu.byStream[ev.StreamID] = status
+	}
+
 	if err != nil || !shouldAdmit {
 		return err
 	}
@@ -211,61 +217,36 @@ func (bs *BufferedSender) sendBuffered(
 func (bs *BufferedSender) nextPerQueueStateLocked(
 	status streamStatus, ev *kvpb.MuxRangeFeedEvent,
 ) (streamState, bool, error) {
+	// An error should always put us into stateErrored, so let's do that first.
+	if ev.Error != nil {
+		if status.state == streamErrored {
+			assumedUnreachable("unexpected buffered event on stream in state streamErrored")
+		}
+		return streamErrored, true, nil
+	}
+
 	switch status.state {
 	case streamActive:
 		if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
-			if ev.Error != nil {
-				// If _this_ event is an error, no use sending another error. This stream
-				// is going down. Admit this error and mark the stream as overflowed.
-				return streamOverflowed, true, nil
-			} else {
-				// This stream is at capacity, return an error to the registration that it
-				// should send back to us after cleaning up.
-				return streamOverflowing, false, newRetryErrBufferCapacityExceeded()
-			}
+			// This stream is at capacity, return an error to the registration that it
+			// should send back to us after cleaning up.
+			return streamOverflowing, false, newRetryErrBufferCapacityExceeded()
 		}
 		// Happy path.
 		return streamActive, true, nil
 	case streamOverflowing:
-		// The unbufferedRegistration is the only component that sends non-error
-		// events to our stream. In response to the error we return when moving to
-		// stateOverflowing, it should immediately send us an error and mark itself
-		// as disconnected.
-		//
-		// The only unfortunate exception is if we get disconnected while flushing
-		// the catch-up scan buffer. In this case we admit the event and stay in
-		// state overflowing until we actually receive the error.
-		//
-		// TODO(ssd): Given the above exception, we should perhaps just move
-		// directly to streamOverflowed. But, I think instead we want to remove
-		// that exception if possible.
-		if ev.Error != nil {
-			return streamOverflowed, true, nil
-		} else {
-			// Drop everything but error events. We didn't admit the event that put
-			// us into the overflowing state so we don't want to admit any later
-			// non-error events.
-			return streamOverflowing, false, nil
-		}
-	case streamOverflowed:
-		// TODO(ssd): It would be nice to be able to put this assertion here:
-		//
-		//    assumedUnreachable("event on overflowed stream")
-		//
-		// But, it isn't yet possible because of the following:
-		//
-		// 1. Unbuffered Registration is publishing the catch-up buffer while not
-		//    holding its lock.
-		//
-		// 2. An another error comes in and that error moves us to the overflowed
-		//    state.
-		//
-		// 3. The unbuffered registration publishes another message from the
-		//    catch-up buffer.
-		//
-		// One way to fix this is to remove the stream from the stream status map
-		// when we admit an error. We leave that to a future PR.
-		return streamOverflowed, false, nil
+		// The only place we do concurrent buffered sends is during catch-up scan
+		// publishing which may be concurrent with a disconnect. The catch-up scan
+		// will stop publishing if it receives an error and try to send an error
+		// back. A disconnect only sends an error. This path exclusively handles non
+		// errors.
+		assumedUnreachable("unexpected buffered event on stream in state streamOverflowing")
+		return streamOverflowing, false, nil
+	case streamErrored:
+		// This is unexpected because streamErrored streams are removed from the
+		// status map and future sends are ignored.
+		assumedUnreachable("unexpected buffered event on stream in state streamErrored")
+		return streamErrored, false, nil
 	default:
 		panic(fmt.Sprintf("unhandled stream state: %v", status.state))
 	}
@@ -339,18 +320,6 @@ func (bs *BufferedSender) addStream(streamID int64) {
 	} else {
 		assumedUnreachable(fmt.Sprintf("stream %d already exists in buffered sender", streamID))
 	}
-}
-
-// removeStream removes the per-stream state tracking from the sender.
-//
-// TODO(ssd): There may be items still in the queue when removeStream is called.
-// We'd like to solve this by removing this as a possibility. But this is OK
-// since we will eventually process the events and the client knows to ignore
-// them.
-func (bs *BufferedSender) removeStream(streamID int64) {
-	bs.queueMu.Lock()
-	defer bs.queueMu.Unlock()
-	delete(bs.queueMu.byStream, streamID)
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
