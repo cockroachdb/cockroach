@@ -7,65 +7,56 @@
 
 ---
 
-## Phase 1: Local Setup (can do on Mac)
+## IMPORTANT: Two Approaches
 
-### 1.1 Create new branch based on M.2
+Based on recent PRs, there are two valid approaches:
+
+### Approach A: Two separate PRs (most recent pattern - PR #150712 + #152080)
+1. **PR 1 (Fixtures)**: Fixtures + run `release update-releases-file`
+2. **PR 2 (Code)**: Update PreviousRelease + add testserver config
+
+### Approach B: Single combined PR (older pattern - PR #141765)
+1. **One PR**: Everything together
+
+**Recommendation**: Use Approach A (two PRs) as it's the most recent pattern and makes review easier.
+
+---
+
+## Phase 1: Fixtures PR (if using Approach A)
+
+### 1.1 Update releases file (on Mac)
 ```bash
 git checkout enable-mixed-cluster-25.4
-git checkout -b enable-upgrade-tests-25.4
-```
+git checkout -b enable-upgrade-tests-25.4-fixtures
 
-### 1.2 Update PreviousRelease constant
-- **File:** `pkg/clusterversion/cockroach_versions.go`
-- **Change:** `const PreviousRelease Key = V25_3` → `const PreviousRelease Key = V25_4`
-
-### 1.3 Add cockroach-go-testserver-25.4 config
-- **File:** `pkg/sql/logictest/logictestbase/logictestbase.go`
-- Add config similar to `cockroach-go-testserver-25.3`
-- Add to `cockroach-go-testserver-configs` set
-
-### 1.4 Update logictest BUILD.bazel visibility
-- **File:** `pkg/sql/logictest/BUILD.bazel`
-- Update `cockroach_predecessor_version` visibility to include 25.4
-
-### 1.5 Verify supportsSkipUpgradeTo logic
-- **File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go`
-- Check if any special handling is needed for 25.4
-
-### 1.6 Update releases file
-```bash
 bazel build //pkg/cmd/release:release
 _bazel/bin/pkg/cmd/release/release_/release update-releases-file
 ```
 
-This should:
-- Update `pkg/testutils/release/cockroach_releases.yaml` (25.4 now has rc.1)
-- Update `pkg/sql/logictest/REPOSITORIES.bzl` (add 25.4.0-rc.1 binaries)
+**What this updates:**
+- `pkg/testutils/release/cockroach_releases.yaml` - Adds 25.4.0-rc.1
+- `pkg/sql/logictest/REPOSITORIES.bzl` - Adds 25.4.0-rc.1 binaries with checksums
 
-### 1.7 Generate bazel files
+**Commit this first:**
 ```bash
-./dev gen bazel
+git add pkg/testutils/release/cockroach_releases.yaml pkg/sql/logictest/REPOSITORIES.bzl
+git commit -m "master: Update pkg/testutils/release/cockroach_releases.yaml"
 ```
 
-### 1.8 Commit local changes
-Commit everything EXCEPT the fixture files (which you'll add from gceworker).
-
----
-
-## Phase 2: Fixture Generation (MUST use gceworker)
+### 1.2 Generate fixtures (MUST use gceworker)
 
 **⚠️ CRITICAL: This CANNOT be done on Mac. Must use gceworker (amd64 required).**
 
 Fixtures README states: "the roachtest needs to be run on `amd64` (if you are using a Mac it's recommended to use a gceworker)."
 
-### 2.1 SSH to gceworker
+**a) SSH to gceworker
 ```bash
 # Create or use existing gceworker
 roachprod create <your-gceworker-name> -n 1 --gce-machine-type n2-standard-4
 roachprod ssh <your-gceworker-name>:1
 ```
 
-### 2.2 On gceworker - Clone and checkout
+**b) On gceworker - Clone and checkout
 ```bash
 git clone git@github.com:celiala/cockroach.git
 cd cockroach
@@ -73,18 +64,18 @@ git checkout v25.4.0-rc.1
 export FIXTURE_VERSION=v25.4.0-rc.1
 ```
 
-### 2.3 On gceworker - Set license
+**c) On gceworker - Set license
 ```bash
 export COCKROACH_DEV_LICENSE="<your-license-key>"
 ```
 
-### 2.4 On gceworker - Build binaries
+**d) On gceworker - Build binaries
 ```bash
 ./dev build cockroach short //c-deps:libgeos roachprod workload roachtest
 ./bin/roachprod destroy local  # Clean up any remnants
 ```
 
-### 2.5 On gceworker - Generate fixtures
+**e) On gceworker - Generate fixtures
 ```bash
 ./bin/roachtest run generate-fixtures --local --debug \
   --cockroach ./cockroach --suite fixtures
@@ -99,14 +90,14 @@ for i in 1 2 3 4; do
 done
 ```
 
-### 2.6 On gceworker - Move fixtures
+**f) On gceworker - Move fixtures
 ```bash
 # Run the command from the test output
 # Verify you get checkpoint-v25.4.tgz in each directory
 ls -la pkg/cmd/roachtest/fixtures/*/checkpoint-v25.4.tgz
 ```
 
-### 2.7 Copy fixtures back to Mac
+**g) Copy fixtures back to Mac
 ```bash
 # On your Mac:
 roachprod get <gceworker>:1 cockroach/pkg/cmd/roachtest/fixtures/ /tmp/fixtures-25.4/
@@ -115,10 +106,53 @@ roachprod get <gceworker>:1 cockroach/pkg/cmd/roachtest/fixtures/ /tmp/fixtures-
 cp /tmp/fixtures-25.4/*/checkpoint-v25.4.tgz pkg/cmd/roachtest/fixtures/
 ```
 
-### 2.8 Add fixtures to git
+**h) Add fixtures and push PR**
 ```bash
 git add pkg/cmd/roachtest/fixtures/*/checkpoint-v25.4.tgz
-git commit --amend  # Add to your existing M.3 commit
+git commit -m "roachtest: add 25.4 fixtures"
+git push -u celiala enable-upgrade-tests-25.4-fixtures
+gh pr create --repo cockroachdb/cockroach --title "master: Update releases file and add 25.4 fixtures"
+```
+
+---
+
+## Phase 2: Code Changes PR (if using Approach A)
+
+### 2.1 Create new branch (wait for fixtures PR to merge first)
+```bash
+git checkout master
+git pull origin master  # Get the merged fixtures PR
+git checkout -b enable-upgrade-tests-25.4-code
+```
+
+### 2.2 Update PreviousRelease constant
+- **File:** `pkg/clusterversion/cockroach_versions.go`
+- **Change:** `const PreviousRelease Key = V25_3` → `const PreviousRelease Key = V25_4`
+
+### 2.3 Add cockroach-go-testserver-25.4 config
+- **File:** `pkg/sql/logictest/logictestbase/logictestbase.go`
+- Add config similar to `cockroach-go-testserver-25.3`
+- Add to `cockroach-go-testserver-configs` set
+
+### 2.4 Update logictest BUILD.bazel visibility
+- **File:** `pkg/sql/logictest/BUILD.bazel`
+- Update `cockroach_predecessor_version` visibility to include 25.4
+
+### 2.5 Verify supportsSkipUpgradeTo logic
+- **File:** `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go`
+- Check if any special handling is needed for 25.4
+
+### 2.6 Generate bazel files
+```bash
+./dev gen bazel
+```
+
+### 2.7 Commit and push
+```bash
+git add -A
+git commit -m "clusterversion: bump PreviousVersion to 25.4"
+git push -u celiala enable-upgrade-tests-25.4-code
+gh pr create --repo cockroachdb/cockroach --title "clusterversion: bump PreviousVersion"
 ```
 
 ---
@@ -159,23 +193,29 @@ Ensure all V25_4_* gates are identical.
 
 ## Expected Files Modified
 
-### Code changes (~5 files)
-1. `pkg/clusterversion/cockroach_versions.go` - PreviousRelease
+### Approach A (Two PRs):
+
+**Fixtures PR (~6 files):**
+1. `pkg/testutils/release/cockroach_releases.yaml` - Updated by release tool
+2. `pkg/sql/logictest/REPOSITORIES.bzl` - Updated by release tool with binaries
+3. `pkg/cmd/roachtest/fixtures/1/checkpoint-v25.4.tgz` - Generated on gceworker
+4. `pkg/cmd/roachtest/fixtures/2/checkpoint-v25.4.tgz` - Generated on gceworker
+5. `pkg/cmd/roachtest/fixtures/3/checkpoint-v25.4.tgz` - Generated on gceworker
+6. `pkg/cmd/roachtest/fixtures/4/checkpoint-v25.4.tgz` - Generated on gceworker
+
+**Code PR (~9 files):**
+1. `pkg/clusterversion/cockroach_versions.go` - PreviousRelease constant
 2. `pkg/sql/logictest/logictestbase/logictestbase.go` - Add testserver config
 3. `pkg/sql/logictest/BUILD.bazel` - Visibility update
-4. `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` - Verify logic
+4. `pkg/BUILD.bazel` - Updated by `./dev gen bazel`
+5. `pkg/cli/testdata/declarative-rules/deprules` - Generated
+6. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/BUILD.bazel` - Generated
+7. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/generated_test.go` - Generated
+8. Possibly: `pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go` - If logic needs update
+9. Possibly: Test expectation files - Various logic test files
 
-### Generated files
-5. `pkg/testutils/release/cockroach_releases.yaml` - Updated by release tool
-6. `pkg/sql/logictest/REPOSITORIES.bzl` - Updated by release tool
-7. Various `BUILD.bazel` files - Updated by `./dev gen bazel`
-8. `pkg/sql/logictest/tests/cockroach-go-testserver-25.4/` - New directory
-
-### Fixture files (4 large binary files)
-9. `pkg/cmd/roachtest/fixtures/1/checkpoint-v25.4.tgz`
-10. `pkg/cmd/roachtest/fixtures/2/checkpoint-v25.4.tgz`
-11. `pkg/cmd/roachtest/fixtures/3/checkpoint-v25.4.tgz`
-12. `pkg/cmd/roachtest/fixtures/4/checkpoint-v25.4.tgz`
+### Approach B (One PR):
+- All of the above files in a single PR (~15 files total)
 
 ---
 
@@ -188,8 +228,38 @@ Ensure all V25_4_* gates are identical.
 
 ---
 
+## Validation Against Previous PRs
+
+Before creating your PRs, compare against these recent M.3 PRs:
+
+### Recent M.3 PRs (Two-PR approach):
+- **PR #150712** (Fixtures): 6 files - releases.yaml, REPOSITORIES.bzl, + 4 fixtures
+- **PR #152080** (Code): 9 files - cockroach_versions.go, logictestbase.go, BUILD.bazel, etc.
+
+### Validation commands:
+```bash
+# Compare your fixtures PR files:
+gh pr view 150712 --json files --jq '.files[].path' | sort > /tmp/ref_fixtures.txt
+git diff --name-only <base> | sort > /tmp/my_fixtures.txt
+comm -3 /tmp/ref_fixtures.txt /tmp/my_fixtures.txt
+
+# Compare your code PR files:
+gh pr view 152080 --json files --jq '.files[].path' | sort > /tmp/ref_code.txt
+git diff --name-only <base> | sort > /tmp/my_code.txt
+comm -3 /tmp/ref_code.txt /tmp/my_code.txt
+```
+
+**Expected differences:**
+- Version numbers (25.3 vs 25.4)
+- Additional test expectation files (depends on what tests need updates)
+
+---
+
 ## Reference
 
 - **Runbook:** `pkg/clusterversion/README.md` - M.3 checklist
 - **Fixtures README:** `pkg/cmd/roachtest/fixtures/README.md`
-- **Example PR:** [#141765](https://github.com/cockroachdb/cockroach/pull/141765)
+- **Example PRs:**
+  - Fixtures: [#150712](https://github.com/cockroachdb/cockroach/pull/150712)
+  - Code: [#152080](https://github.com/cockroachdb/cockroach/pull/152080)
+  - Combined: [#141765](https://github.com/cockroachdb/cockroach/pull/141765)
