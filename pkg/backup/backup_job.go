@@ -158,10 +158,11 @@ func backup(
 
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
-		oracle = kvfollowerreadsccl.NewBulkOracle(
+		strictFiltering := false
+		oracle = kvfollowerreadsccl.NewLocalityFilteringBulkOracle(
 			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			strictFiltering,
 			details.ExecutionLocality,
-			kvfollowerreadsccl.StreakConfig{},
 		)
 	}
 
