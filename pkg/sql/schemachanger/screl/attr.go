@@ -322,6 +322,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(IndexID, "IndexIDForValidation"),
 	),
+	rel.EntityMapping(t((*scpb.ColumnGeneratedAsIdentity)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
+	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

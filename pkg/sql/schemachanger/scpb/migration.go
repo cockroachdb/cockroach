@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	idxtype "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
@@ -74,6 +75,26 @@ func migrateDeprecatedFields(
 			columnType.ComputeExpr = nil
 			migrated = true
 		}
+	}
+
+	// Migrate GeneratedAsIdentity from column to a separate element
+	if column := target.GetColumn(); column != nil &&
+		version.IsActive(clusterversion.V26_1) &&
+		column.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+		newTarget := MakeTarget(
+			AsTargetStatus(target.TargetStatus),
+			&ColumnGeneratedAsIdentity{
+				TableID:        column.TableID,
+				ColumnID:       column.ColumnID,
+				Type:           column.GeneratedAsIdentityType,
+				SequenceOption: column.GeneratedAsIdentitySequenceOption,
+			},
+			&target.Metadata,
+		)
+		newTargets = append(newTargets, newTarget)
+		column.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+		column.GeneratedAsIdentitySequenceOption = ""
+		migrated = true
 	}
 	return
 }

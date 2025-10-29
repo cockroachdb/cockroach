@@ -109,6 +109,7 @@ message ElementProto {
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComputeExpression column_compute_expression = 190 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnGeneratedAsIdentity column_generated_as_identity = 191 [(gogoproto.moretags) = "parent:\"Column\""];
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
@@ -219,8 +220,8 @@ message Column {
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   bool is_hidden = 3;
   bool is_inaccessible = 4;
-  uint32 generated_as_identity_type = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
-  string generated_as_identity_sequence_option = 6;
+  uint32 generated_as_identity_type = 5 [deprecated = true, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
+  string generated_as_identity_sequence_option = 6 [deprecated = true];
   uint32 pg_attribute_num = 7 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
   bool is_system_column = 8;
 }
@@ -272,6 +273,13 @@ message ColumnComputeExpression {
     ALTER_TYPE_USING = 1;
   }
   Usage usage = 5;
+}
+
+message ColumnGeneratedAsIdentity {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  uint32 type = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
+  string sequence_option = 4;
 }
 
 message ColumnFamily {
