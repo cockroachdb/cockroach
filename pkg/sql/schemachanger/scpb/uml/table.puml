@@ -64,6 +64,11 @@ ColumnGeneratedAsIdentity :  ColumnID
 ColumnGeneratedAsIdentity :  Type
 ColumnGeneratedAsIdentity :  SequenceOption
 
+object ColumnHidden
+
+ColumnHidden :  TableID
+ColumnHidden :  ColumnID
+
 object ColumnName
 
 ColumnName :  TableID
@@ -576,6 +581,7 @@ Column <|-- ColumnComputeExpression
 Column <|-- ColumnDefaultExpression
 Table <|-- ColumnFamily
 Column <|-- ColumnGeneratedAsIdentity
+Column <|-- ColumnHidden
 Column <|-- ColumnName
 Column <|-- ColumnNotNull
 Column <|-- ColumnOnUpdateExpression

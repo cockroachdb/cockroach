@@ -403,10 +403,11 @@ PostCommitPhase stage 15 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 4
       TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 4 with 17 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnHidden:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnNotNull:{DescID: 104, ColumnID: 3, IndexID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -448,6 +449,9 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 16 MutationType ops
     *scop.SetColumnName
       ColumnID: 3
       Name: crdb_internal_column_3_name_placeholder
+      TableID: 104
+    *scop.MakeColumnVisible
+      ColumnID: 3
       TableID: 104
     *scop.MakeWriteOnlyIndexDeleteOnly
       IndexID: 1
@@ -616,6 +620,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: Precedence
   rule: column no longer public before dependents
 - from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
+  to:   [ColumnHidden:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: column no longer public before dependents
+- from: [Column:{DescID: 104, ColumnID: 3}, WRITE_ONLY]
   to:   [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
   kind: Precedence
   rule: column no longer public before dependents
@@ -647,6 +655,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   to:   [ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3, TypeName: INT8}, ABSENT]
   kind: SameStagePrecedence
   rule: column type dependents removed right before column type, except if part of a column type alteration 
+- from: [ColumnHidden:{DescID: 104, ColumnID: 3}, ABSENT]
+  to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
+  kind: Precedence
+  rule: dependents removed before column
 - from: [ColumnName:{DescID: 104, Name: rowid, ColumnID: 3}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence

@@ -335,6 +335,8 @@ func handleGeneralColumnConversion(
 			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
 	}
 
+	colHidden := retrieveColumnHidden(b, tbl.TableID, col.ColumnID)
+
 	colNotNull := retrieveColumnNotNull(b, tbl.TableID, col.ColumnID)
 
 	// Generate the ID of the new column we are adding.
@@ -379,6 +381,9 @@ func handleGeneralColumnConversion(
 	}
 	if colNotNull != nil {
 		b.Drop(colNotNull)
+	}
+	if colHidden != nil {
+		b.Drop(colHidden)
 	}
 	if oldColComment != nil {
 		b.Drop(oldColComment)
@@ -428,6 +433,7 @@ func handleGeneralColumnConversion(
 			Expression: *b.WrapExpression(tbl.TableID, expr),
 			Usage:      scpb.ColumnComputeExpression_ALTER_TYPE_USING,
 		},
+		hidden:  colHidden != nil,
 		notNull: retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
 		// The new column will be placed in the same column family as the one
 		// it's replacing, so there's no need to specify a family.
