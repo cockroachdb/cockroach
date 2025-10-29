@@ -7,11 +7,11 @@ package op
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -26,7 +26,7 @@ type RelocateRangeOp struct {
 
 // NewRelocateRangeOp returns a new NewRelocateRangeOp.
 func NewRelocateRangeOp(
-	tick time.Time,
+	tick types.Tick,
 	key roachpb.Key,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	transferLeaseToFirstVoter bool,

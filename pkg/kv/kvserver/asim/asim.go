@@ -318,7 +318,7 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick types.Tick) {
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
-		s.controllers[store.StoreID()].Tick(ctx, tick.WallTime(), s.state)
+		s.controllers[store.StoreID()].Tick(ctx, tick, s.state)
 	}
 }
 
