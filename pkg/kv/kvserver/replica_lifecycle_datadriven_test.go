@@ -179,35 +179,22 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 				repl := rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1))
 
-				batch := tc.storage.NewBatch()
-				defer batch.Close()
+				output := tc.mutate(t, func(batch storage.Batch) {
+					if initialized {
+						require.NoError(t, kvstorage.WriteInitialRangeState(
+							ctx, batch, batch,
+							rs.desc, repl.ReplicaID, rs.version,
+						))
+					} else {
+						require.NoError(t, kvstorage.CreateUninitializedReplica(
+							ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
+							roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
+						))
+					}
+					tc.updatePostReplicaCreateState(t, ctx, rs, batch)
+				})
 
-				if initialized {
-					require.NoError(t, kvstorage.WriteInitialRangeState(
-						ctx, batch, batch,
-						rs.desc, repl.ReplicaID, rs.version,
-					))
-				} else {
-					require.NoError(t, kvstorage.CreateUninitializedReplica(
-						ctx, kvstorage.TODOState(batch), batch, 1, /* StoreID */
-						roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
-					))
-				}
-				tc.updatePostReplicaCreateState(t, ctx, rs, batch)
-
-				// Print the descriptor and batch output.
-				var sb strings.Builder
-				output, err := print.DecodeWriteBatch(batch.Repr())
-				require.NoError(t, err, "error decoding batch")
-				sb.WriteString(fmt.Sprintf("created replica: %v", repl))
-				if output != "" {
-					sb.WriteString("\n")
-					sb.WriteString(output)
-				}
-				// Commit the batch.
-				err = batch.Commit(true)
-				require.NoError(t, err, "error committing batch")
-				return sb.String()
+				return fmt.Sprintf("created replica: %v\n%s", repl, output)
 
 			case "create-split":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
@@ -272,71 +259,48 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				require.True(t, ok, "split trigger not found for range-id %d", rangeID)
 				rs := tc.mustGetRangeState(t, rangeID)
 				desc := rs.desc
-				batch := tc.storage.NewBatch()
-				defer batch.Close()
 
-				rec := (&batcheval.MockEvalCtx{
-					ClusterSettings:        tc.st,
-					Desc:                   &desc,
-					Clock:                  tc.clock,
-					AbortSpan:              rs.abortspan,
-					LastReplicaGCTimestamp: rs.lastGCTimestamp,
-					RangeLeaseDuration:     tc.rangeLeaseDuration,
-				}).EvalContext()
+				return tc.mutate(t, func(batch storage.Batch) {
+					rec := (&batcheval.MockEvalCtx{
+						ClusterSettings:        tc.st,
+						Desc:                   &desc,
+						Clock:                  tc.clock,
+						AbortSpan:              rs.abortspan,
+						LastReplicaGCTimestamp: rs.lastGCTimestamp,
+						RangeLeaseDuration:     tc.rangeLeaseDuration,
+					}).EvalContext()
 
-				in := batcheval.SplitTriggerHelperInput{
-					LeftLease:      rs.lease,
-					GCThreshold:    &rs.gcThreshold,
-					GCHint:         &rs.gcHint,
-					ReplicaVersion: rs.version,
-				}
-				// Actually run the split trigger.
-				_, _, err := batcheval.TestingSplitTrigger(
-					ctx, rec, batch /* bothDeltaMS */, enginepb.MVCCStats{}, split, in, hlc.Timestamp{},
-				)
-				require.NoError(t, err)
+					in := batcheval.SplitTriggerHelperInput{
+						LeftLease:      rs.lease,
+						GCThreshold:    &rs.gcThreshold,
+						GCHint:         &rs.gcHint,
+						ReplicaVersion: rs.version,
+					}
+					_, _, err := batcheval.TestingSplitTrigger(
+						ctx, rec, batch, enginepb.MVCCStats{}, split, in, hlc.Timestamp{},
+					)
+					require.NoError(t, err)
 
-				// Update the test context's notion of the range state after the
-				// split.
-				tc.updatePostSplitRangeState(t, ctx, batch, rangeID, split)
-				// Print the state of the batch (all keys/values written as part
-				// of the split trigger).
-				output, err := print.DecodeWriteBatch(batch.Repr())
-				require.NoError(t, err)
-				// Commit the batch.
-				err = batch.Commit(true)
-				require.NoError(t, err, "error committing batch")
-				// TODO(arul): There are double lines in the output (see tryTxn
-				// in debug_print.go) that we need to strip out for the benefit
-				// of the datadriven test driver. Until that TODO is addressed,
-				// we manually split things out here.
-				return strings.ReplaceAll(output, "\n\n", "\n")
+					tc.updatePostSplitRangeState(t, ctx, batch, rangeID, split)
+				})
 
 			case "destroy-replica":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				rs := tc.mustGetRangeState(t, rangeID)
 				rs.mustGetReplicaDescriptor(t, roachpb.NodeID(1)) // ensure replica exists
 
-				batch := tc.storage.NewBatch()
-				defer batch.Close()
-
-				err := kvstorage.DestroyReplica(
-					ctx,
-					kvstorage.TODOReadWriter(batch),
-					kvstorage.DestroyReplicaInfo{
-						FullReplicaID: rs.replica.FullReplicaID,
-						Keys:          rs.desc.RSpan(),
-					},
-					rs.desc.NextReplicaID,
-				)
-				require.NoError(t, err)
-				output, err := print.DecodeWriteBatch(batch.Repr())
-				require.NoError(t, err)
-				err = batch.Commit(true)
-				require.NoError(t, err)
-
-				// Clear the replica from the range state.
-				rs.replica = nil
+				output := tc.mutate(t, func(batch storage.Batch) {
+					require.NoError(t, kvstorage.DestroyReplica(
+						ctx,
+						kvstorage.TODOReadWriter(batch),
+						kvstorage.DestroyReplicaInfo{
+							FullReplicaID: rs.replica.FullReplicaID,
+							Keys:          rs.desc.RSpan(),
+						},
+						rs.desc.NextReplicaID,
+					))
+				})
+				rs.replica = nil // clear the replica from the range state
 				return output
 
 			case "append-raft-entries":
@@ -345,29 +309,22 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				rs := tc.mustGetRangeState(t, rangeID)
 				require.NotNil(t, rs.replica, "replica must be created before appending entries")
 
-				batch := tc.storage.NewBatch()
-				defer batch.Close()
-
 				sl := logstore.NewStateLoader(rangeID)
 				lastIndex := rs.replica.lastIdx
 				rs.replica.lastIdx += kvpb.RaftIndex(numEntries)
 				term := rs.replica.hs.Term
 
-				for i := 0; i < numEntries; i++ {
-					entryIndex := lastIndex + 1 + kvpb.RaftIndex(i)
-					require.NoError(t, storage.MVCCBlindPutProto(
-						ctx, batch,
-						sl.RaftLogKey(entryIndex), hlc.Timestamp{},
-						&raftpb.Entry{Index: uint64(entryIndex), Term: term},
-						storage.MVCCWriteOptions{},
-					))
-				}
-
-				output, err := print.DecodeWriteBatch(batch.Repr())
-				require.NoError(t, err)
-				err = batch.Commit(true)
-				require.NoError(t, err)
-				return strings.ReplaceAll(output, "\n\n", "\n")
+				return tc.mutate(t, func(batch storage.Batch) {
+					for i := 0; i < numEntries; i++ {
+						entryIndex := lastIndex + 1 + kvpb.RaftIndex(i)
+						require.NoError(t, storage.MVCCBlindPutProto(
+							ctx, batch,
+							sl.RaftLogKey(entryIndex), hlc.Timestamp{},
+							&raftpb.Entry{Index: uint64(entryIndex), Term: term},
+							storage.MVCCWriteOptions{},
+						))
+					}
+				})
 
 			case "create-range-data":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
@@ -377,41 +334,33 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				require.True(t, numUserKeys > 0 || numSystemKeys > 0 || numLockTableKeys > 0)
 
 				rs := tc.mustGetRangeState(t, rangeID)
-				batch := tc.storage.NewBatch()
-				defer batch.Close()
-
 				ts := hlc.Timestamp{WallTime: 1}
-
 				getUserKey := func(i int) roachpb.Key {
 					return append(rs.desc.StartKey.AsRawKey(), strconv.Itoa(i)...)
 				}
 
-				// 1. User keys.
-				for i := 0; i < numUserKeys; i++ {
-					require.NoError(t, batch.PutMVCC(
-						storage.MVCCKey{Key: getUserKey(i), Timestamp: ts}, storage.MVCCValue{},
-					))
-				}
-				// 2. System keys.
-				for i := 0; i < numSystemKeys; i++ {
-					key := keys.TransactionKey(getUserKey(i), uuid.NamespaceDNS)
-					require.NoError(t, batch.PutMVCC(
-						storage.MVCCKey{Key: key, Timestamp: ts}, storage.MVCCValue{},
-					))
-				}
-				// 3. Lock table keys.
-				for i := 0; i < numLockTableKeys; i++ {
-					ek, _ := storage.LockTableKey{
-						Key: getUserKey(i), Strength: lock.Intent, TxnUUID: uuid.UUID{},
-					}.ToEngineKey(nil)
-					require.NoError(t, batch.PutEngineKey(ek, nil))
-				}
-
-				output, err := print.DecodeWriteBatch(batch.Repr())
-				require.NoError(t, err)
-				err = batch.Commit(true)
-				require.NoError(t, err)
-				return output
+				return tc.mutate(t, func(batch storage.Batch) {
+					// 1. User keys.
+					for i := 0; i < numUserKeys; i++ {
+						require.NoError(t, batch.PutMVCC(
+							storage.MVCCKey{Key: getUserKey(i), Timestamp: ts}, storage.MVCCValue{},
+						))
+					}
+					// 2. System keys.
+					for i := 0; i < numSystemKeys; i++ {
+						key := keys.TransactionKey(getUserKey(i), uuid.NamespaceDNS)
+						require.NoError(t, batch.PutMVCC(
+							storage.MVCCKey{Key: key, Timestamp: ts}, storage.MVCCValue{},
+						))
+					}
+					// 3. Lock table keys.
+					for i := 0; i < numLockTableKeys; i++ {
+						ek, _ := storage.LockTableKey{
+							Key: getUserKey(i), Strength: lock.Intent, TxnUUID: uuid.UUID{},
+						}.ToEngineKey(nil)
+						require.NoError(t, batch.PutEngineKey(ek, nil))
+					}
+				})
 
 			case "print-range-state":
 				var sb strings.Builder
@@ -498,6 +447,23 @@ func newTestCtx() *testCtx {
 // close closes the test context's storage engine.
 func (tc *testCtx) close() {
 	tc.storage.Close()
+}
+
+// mutate executes a write operation on a batch and commits it. All KVs written
+// as part of the batch are returned as a string for the benefit of the
+// datadriven test output.
+func (tc *testCtx) mutate(t *testing.T, write func(storage.Batch)) string {
+	batch := tc.storage.NewBatch()
+	defer batch.Close()
+	write(batch)
+	output, err := print.DecodeWriteBatch(batch.Repr())
+	require.NoError(t, err)
+	require.NoError(t, batch.Commit(false))
+	// TODO(arul): There may be double new lines in the output (see tryTxn in
+	// debug_print.go) that we need to strip out for the benefit of the
+	// datadriven test driver. Until that TODO is addressed, we manually split
+	// things out here.
+	return strings.ReplaceAll(output, "\n\n", "\n")
 }
 
 // newRangeState constructs a new rangeState for the supplied descriptor.
