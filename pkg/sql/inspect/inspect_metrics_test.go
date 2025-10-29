@@ -51,12 +51,15 @@ func TestInspectMetrics(t *testing.T) {
 	initialRuns := metrics.Runs.Count()
 	initialRunsWithIssues := metrics.RunsWithIssues.Count()
 	initialIssuesFound := metrics.IssuesFound.Count()
+	initialSpansProcessed := metrics.SpansProcessed.Count()
 
 	// First run: no corruption, should succeed without issues
 	runner.Exec(t, "INSPECT TABLE db.t")
 	require.Equal(t, initialRuns+1, metrics.Runs.Count(), "Runs counter should increment")
 	require.Equal(t, initialRunsWithIssues, metrics.RunsWithIssues.Count(), "RunsWithIssues should not increment")
 	require.Equal(t, initialIssuesFound, metrics.IssuesFound.Count(), "IssuesFound should not increment")
+	require.Equal(t, initialSpansProcessed+1, metrics.SpansProcessed.Count(),
+		"SpansProcessed should increment by 1 (one secondary index i1)")
 
 	// Create corruption: delete a secondary index entry for row (1, 2)
 	// This creates a "missing_secondary_index_entry" issue - the primary key exists
@@ -86,6 +89,8 @@ func TestInspectMetrics(t *testing.T) {
 		"RunsWithIssues should increment when issues are found")
 	require.Equal(t, initialIssuesFound+1, metrics.IssuesFound.Count(),
 		"IssuesFound should increment when issues are detected")
+	require.Equal(t, initialSpansProcessed+2, metrics.SpansProcessed.Count(),
+		"SpansProcessed should increment by 2 total (1 span per INSPECT × 2 runs)")
 
 	// Third run: on a different clean table to verify RunsWithIssues doesn't increment again.
 	runner.Exec(t, `
@@ -103,4 +108,6 @@ func TestInspectMetrics(t *testing.T) {
 		"RunsWithIssues should NOT increment for successful job")
 	require.Equal(t, initialIssuesFound+1, metrics.IssuesFound.Count(),
 		"IssuesFound should NOT increment for successful job")
+	require.Equal(t, initialSpansProcessed+3, metrics.SpansProcessed.Count(),
+		"SpansProcessed should increment by 3 total (1 span per INSPECT × 3 runs)")
 }

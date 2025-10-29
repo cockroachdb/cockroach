@@ -17,6 +17,7 @@ type InspectMetrics struct {
 	Runs           *metric.Counter
 	RunsWithIssues *metric.Counter
 	IssuesFound    *metric.Counter
+	SpansProcessed *metric.Counter
 }
 
 var _ metric.Struct = (*InspectMetrics)(nil)
@@ -43,6 +44,12 @@ var (
 		Measurement: "Issues",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaInspectSpansProcessed = metric.Metadata{
+		Name:        "jobs.inspect.spans_processed",
+		Help:        "Number of spans processed by INSPECT jobs",
+		Measurement: "Spans",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeInspectMetrics instantiates the metrics for INSPECT jobs.
@@ -51,6 +58,7 @@ func MakeInspectMetrics(histogramWindow time.Duration) metric.Struct {
 		Runs:           metric.NewCounter(metaInspectRuns),
 		RunsWithIssues: metric.NewCounter(metaInspectRunsWithIssues),
 		IssuesFound:    metric.NewCounter(metaInspectIssuesFound),
+		SpansProcessed: metric.NewCounter(metaInspectSpansProcessed),
 	}
 }
 
