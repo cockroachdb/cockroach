@@ -142,3 +142,212 @@ type SSDrainer interface {
 	// be lost.
 	Reset(ctx context.Context) error
 }
+
+type StatementLatencyRecorder interface {
+	RunLatency() time.Duration
+	IdleLatency() time.Duration
+	ServiceLatency() time.Duration
+	ParsingLatency() time.Duration
+	PlanningLatency() time.Duration
+	ExecOverheadLatency() time.Duration
+	StartTime() time.Time
+	EndTime() time.Time
+}
+
+type RecordedStatementStatsBuilder[L StatementLatencyRecorder] struct {
+	stmtStats *RecordedStmtStats
+}
+
+func NewRecordedStatementStatsBuilder[L StatementLatencyRecorder](
+	fingerprintId appstatspb.StmtFingerprintID,
+	database string,
+	fingerprint string,
+	summary string,
+	stmtType string,
+	appName string,
+) *RecordedStatementStatsBuilder[L] {
+	return &RecordedStatementStatsBuilder[L]{
+		stmtStats: &RecordedStmtStats{
+			FingerprintID: fingerprintId,
+			QuerySummary:  summary,
+			StatementType: stmtType,
+			Query:         fingerprint,
+			Database:      database,
+			App:           appName,
+		},
+	}
+}
+
+func (b *RecordedStatementStatsBuilder[L]) PlanMetadata(
+	generic bool, distSQL bool, vectorized bool, implicitTxn bool, fullScan bool,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.Generic = generic
+	b.stmtStats.DistSQL = distSQL
+	b.stmtStats.Vec = vectorized
+	b.stmtStats.ImplicitTxn = implicitTxn
+	b.stmtStats.FullScan = fullScan
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) PlanGist(
+	gist string, hash uint64,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.PlanGist = gist
+	b.stmtStats.PlanHash = hash
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) LatencyRecorder(
+	recorder L,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.RunLatencySec = recorder.RunLatency().Seconds()
+	b.stmtStats.IdleLatencySec = recorder.IdleLatency().Seconds()
+	b.stmtStats.ServiceLatencySec = recorder.ServiceLatency().Seconds()
+	b.stmtStats.ParseLatencySec = recorder.ParsingLatency().Seconds()
+	b.stmtStats.PlanLatencySec = recorder.PlanningLatency().Seconds()
+	b.stmtStats.OverheadLatencySec = recorder.ExecOverheadLatency().Seconds()
+	b.stmtStats.StartTime = recorder.StartTime()
+	b.stmtStats.EndTime = recorder.EndTime()
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) QueryLevelStats(
+	bytesRead int64, rowsRead int64, rowsWritten int64,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.BytesRead = bytesRead
+	b.stmtStats.RowsRead = rowsRead
+	b.stmtStats.RowsWritten = rowsWritten
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) ExecStats(
+	execStats *execstatstypes.QueryLevelStats,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	if execStats == nil {
+		return b
+	}
+
+	var sqlInstanceIDs []int64
+	var kvNodeIDs []int32
+	sqlInstanceIDs = make([]int64, 0, len(execStats.SQLInstanceIDs))
+	for _, sqlInstanceID := range execStats.SQLInstanceIDs {
+		sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
+	}
+	kvNodeIDs = execStats.KVNodeIDs
+	b.stmtStats.KVNodeIDs = kvNodeIDs
+	b.stmtStats.Nodes = sqlInstanceIDs
+	b.stmtStats.ExecStats = execStats
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) Indexes(
+	indexes []string,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.Indexes = indexes
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) StatementError(
+	stmtErr error,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	if stmtErr == nil {
+		return b
+	}
+	b.stmtStats.StatementError = stmtErr
+	b.stmtStats.Failed = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) AutoRetry(
+	autoRetryCount int, autoRetryReason error,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.AutoRetryCount = autoRetryCount
+	b.stmtStats.AutoRetryReason = autoRetryReason
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) RowsAffected(
+	rowsAffected int,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.RowsAffected = rowsAffected
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) IndexRecommendations(
+	idxRecommendations []string,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.IndexRecommendations = idxRecommendations
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) UnderOuterTxn() *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.UnderOuterTxn = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) QueryTags(
+	queryTags []sqlcommenter.QueryTag,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.QueryTags = queryTags
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) QueryID(
+	queryID clusterunique.ID,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.StatementID = queryID
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) SessionID(
+	sessionID clusterunique.ID,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.SessionID = sessionID
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) Build() *RecordedStmtStats {
+	return b.stmtStats
+}
