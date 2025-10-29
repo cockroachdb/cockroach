@@ -434,7 +434,7 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick types.Tick,
 
 // tickMetrics prints the metrics up to the given tick.
 func (s *Simulator) tickMetrics(ctx context.Context, tick types.Tick) {
-	s.metrics.Tick(ctx, tick.WallTime(), s.state)
+	s.metrics.Tick(ctx, tick, s.state)
 }
 
 // tickEvents ticks the registered simulation events.
