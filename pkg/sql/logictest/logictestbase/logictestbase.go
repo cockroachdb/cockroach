@@ -95,6 +95,9 @@ type TestClusterConfig struct {
 	DisableSchemaLockedByDefault bool
 	// PrepareQueries executes queries and statements with Prepare and Execute.
 	PrepareQueries bool
+	// EnableLeasedDescriptorSupport enables leased descriptors for pg_catalog /
+	// crdb_internal and locked leasing behavior.
+	EnableLeasedDescriptorSupport bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -545,6 +548,19 @@ var LogicTestConfigs = []TestClusterConfig{
 		UseCockroachGoTestserver: true,
 		BootstrapVersion:         clusterversion.V25_3,
 		NumNodes:                 3,
+	},
+	{
+		Name:                "local-leased-descriptors",
+		NumNodes:            1,
+		OverrideDistSQLMode: "off",
+		// local is the configuration where we run all tests which have bad
+		// interactions with the default test tenant.
+		//
+		// TODO(#76378): We should review this choice. Why can't we use "Random"
+		// here? If there are specific tests that are incompatible, we can
+		// flag them to run only in a separate config.
+		UseSecondaryTenant:            Never,
+		EnableLeasedDescriptorSupport: true,
 	},
 }
 
