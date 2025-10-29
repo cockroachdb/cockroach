@@ -1,0 +1,48 @@
+# This test reproduces the issue observed in #152604, where
+# a zone config change prefers removing live replicas despite
+# the presence of recently down replicas. This leads to loss
+# of quorum.
+#
+# See:
+# - https://github.com/cockroachdb/cockroach/issues/152604
+# - https://github.com/cockroachdb/cockroach/issues/155734
+
+gen_cluster nodes=5
+----
+
+# Place ranges, replicated across all five nodes.
+gen_ranges ranges=100 repl_factor=5 min_key=1 max_key=10000
+----
+
+# Mark n4 and n5 as NodeLivenessStatus_UNAVAILABLE, which is the status
+# stores have when down but not down for long enough to be marked as dead.
+# The range doesn't lose quorum as a result of this, since three replicas
+# are still around.
+set_liveness node=4 liveness=unavailable
+----
+
+set_liveness node=5 liveness=unavailable
+----
+
+# Trigger down-replication to three replicas.
+
+set_span_config
+[0,10000): num_replicas=3 num_voters=3
+----
+
+# Note how s4 and s5 retain their replicas, while replicas are being
+# remved from live nodes s1-s3. This leads to a loss of quorum that
+# isn't immediately obvious since this is an asim test, but the logs
+# show that the allocator itself realizes (when trying to make the
+# next change), but that is too late.
+#
+# In the real world, as of #156464, these dangerous replication changes
+# would be blocked, but it is far from ideal that they are attempted
+# in the first place.
+eval duration=10m cfgs=(sma-count) metrics=(replicas)
+----
+replicas#1: first: [s1=101, s2=101, s3=101, s4=101, s5=101] (stddev=0.00, mean=101.00, sum=505)
+replicas#1: last:  [s1=68, s2=67, s3=68, s4=101, s5=101] (stddev=16.33, mean=81.00, sum=405)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
+artifacts[sma-count]: ff4c6613afd4b749
+==========================
