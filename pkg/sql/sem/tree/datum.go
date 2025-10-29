@@ -4273,7 +4273,7 @@ func (d *DLTree) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DLTree) AmbiguousFormat() bool { return false }
+func (*DLTree) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DLTree) Format(ctx *FmtCtx) {
