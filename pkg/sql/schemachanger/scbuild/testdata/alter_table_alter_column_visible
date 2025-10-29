@@ -1,0 +1,11 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, a INT)
+----
+
+build
+ALTER COLUMN foo.a SET VISIBLE
+----
+
+build
+ALTER COLUMN foo.a SET NOT VISIBLE
+----
