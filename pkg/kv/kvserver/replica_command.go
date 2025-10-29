@@ -2402,6 +2402,9 @@ func within10s(ctx context.Context, fn func() error) error {
 			return nil
 		}
 	}
+	if err != nil {
+		return err
+	}
 	return ctx.Err()
 }
 
