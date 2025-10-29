@@ -143,3 +143,23 @@ type SSDrainer interface {
 	// be lost.
 	Reset(ctx context.Context) error
 }
+
+type StatementLatencyRecorder interface {
+	RunLatency() time.Duration
+	IdleLatency() time.Duration
+	ServiceLatency() time.Duration
+	ParsingLatency() time.Duration
+	PlanningLatency() time.Duration
+	ProcessingLatency() time.Duration
+	ExecOverheadLatency() time.Duration
+	StartTime() time.Time
+	EndTime() time.Time
+}
+
+type StatementMetadata interface {
+	Fingerprint() string
+	Summary() string
+	GetQueryID() clusterunique.ID
+	StatementType() tree.StatementType
+	GetQueryTags() []sqlcommenter.QueryTag
+}

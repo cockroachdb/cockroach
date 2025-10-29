@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 )
 
 // Statement contains a statement with optional expected result columns and metadata.
@@ -37,6 +38,26 @@ type Statement struct {
 	Prepared *prep.Statement
 
 	QueryTags []sqlcommenter.QueryTag
+}
+
+func (s Statement) GetQueryTags() []sqlcommenter.QueryTag {
+	return s.QueryTags
+}
+
+func (s Statement) StatementType() tree.StatementType {
+	return s.AST.StatementType()
+}
+
+func (s Statement) Fingerprint() string {
+	return s.StmtNoConstants
+}
+
+func (s Statement) Summary() string {
+	return s.StmtSummary
+}
+
+func (s Statement) GetQueryID() clusterunique.ID {
+	return s.QueryID
 }
 
 func makeStatement(
@@ -87,3 +108,5 @@ func (s Statement) String() string {
 	// passwords.
 	return s.AST.String()
 }
+
+var _ sqlstats.StatementMetadata = Statement{}
