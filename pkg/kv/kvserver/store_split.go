@@ -68,6 +68,9 @@ func splitPreApply(
 	// than the ReplicaID in the split trigger (which can be stale).
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
 
+	// TODO(pav-kv): keep plumbing the engine types up the stack.
+	rw := kvstorage.TODOReadWriter(readWriter)
+
 	rsl := kvstorage.MakeStateLoader(split.RightDesc.RangeID)
 	// After PR #149620, the split trigger batch may only contain replicated state
 	// machine keys, and never contains unreplicated / raft keys. One exception:
@@ -81,11 +84,11 @@ func splitPreApply(
 	//
 	// TODO(#152847): remove this workaround when there are no historical
 	// proposals with RaftTruncatedState, e.g. after a below-raft migration.
-	if ts, err := rsl.LoadRaftTruncatedState(ctx, readWriter); err != nil {
+	if ts, err := rsl.LoadRaftTruncatedState(ctx, rw.State.RO); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot load RaftTruncatedState: %v", err)
 	} else if ts == (kvserverpb.RaftTruncatedState{}) {
 		// Common case. Do nothing.
-	} else if err := rsl.ClearRaftTruncatedState(readWriter); err != nil {
+	} else if err := rsl.ClearRaftTruncatedState(rw.State.WO); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
 
@@ -122,7 +125,7 @@ func splitPreApply(
 			}
 		}
 		if err := kvstorage.RemoveStaleRHSFromSplit(
-			ctx, kvstorage.TODOState(readWriter), split.RightDesc.RangeID, split.RightDesc.RSpan(),
+			ctx, rw.State, split.RightDesc.RangeID, split.RightDesc.RSpan(),
 		); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
@@ -138,10 +141,10 @@ func splitPreApply(
 	//
 	// [*] Note that uninitialized replicas may cast votes, and if they have, we
 	// can't load the default Term and Vote values.
-	if err := rsl.SynthesizeRaftState(ctx, readWriter, kvstorage.TODORaft(readWriter)); err != nil {
+	if err := rsl.SynthesizeRaftState(ctx, rw.State.RO, rw.Raft); err != nil {
 		log.KvExec.Fatalf(ctx, "%v", err)
 	}
-	if err := rsl.SetRaftTruncatedState(ctx, readWriter, &kvserverpb.RaftTruncatedState{
+	if err := rsl.SetRaftTruncatedState(ctx, rw.Raft.WO, &kvserverpb.RaftTruncatedState{
 		Index: kvstorage.RaftInitialLogIndex,
 		Term:  kvstorage.RaftInitialLogTerm,
 	}); err != nil {
@@ -159,7 +162,9 @@ func splitPreApply(
 		initClosedTS = &hlc.Timestamp{}
 	}
 	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
-	if err := rsl.SetClosedTimestamp(ctx, readWriter, *initClosedTS); err != nil {
+	if err := rsl.SetClosedTimestamp(
+		ctx, kvstorage.StateRW(readWriter), *initClosedTS,
+	); err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
 	}
 }
