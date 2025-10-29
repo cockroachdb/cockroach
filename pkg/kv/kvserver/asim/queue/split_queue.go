@@ -8,8 +8,8 @@ package queue
 import (
 	"container/heap"
 	"context"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,7 +26,7 @@ func NewSplitQueue(
 	storeID state.StoreID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
-	start time.Time,
+	start asim.Tick,
 ) RangeQueue {
 	return &splitQueue{
 		baseQueue: baseQueue{
@@ -67,7 +67,7 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 // taken. Replicas in the queue are processed in order of priority, then in
 // FIFO order on ties. The tick currently only considers size based range
 // splitting.
-func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (sq *splitQueue) Tick(ctx context.Context, tick asim.Tick, s state.State) {
 	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
 	// here (see #149904 for more details).
 	if sq.lastTick.After(sq.next) {
@@ -115,7 +115,7 @@ func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 // shouldSplit returns whether a range should be split into two. When the
 // floating point number returned is greater than or equal to 1, it should be
 // split with that priority, else it shouldn't.
-func (sq *splitQueue) shouldSplit(tick time.Time, rangeID state.RangeID, s state.State) float64 {
+func (sq *splitQueue) shouldSplit(tick asim.Tick, rangeID state.RangeID, s state.State) float64 {
 	rng, ok := s.Range(rangeID)
 	if !ok {
 		return 0
@@ -136,11 +136,11 @@ func (sq *splitQueue) shouldSplit(tick time.Time, rangeID state.RangeID, s state
 // two. It will return the key that divides the range into an equal number of
 // keys on the lhs and rhs.
 func (sq *splitQueue) findKeySpanSplit(
-	tick time.Time, s state.State, rangeID state.RangeID,
+	tick asim.Tick, s state.State, rangeID state.RangeID,
 ) (state.Key, bool) {
 	// Try and use the split key suggested by the load based splitter, if one
 	// exists.
-	if loadSplitKey, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick, rangeID); ok {
+	if loadSplitKey, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick.WallTime(), rangeID); ok {
 		return loadSplitKey, true
 	}
 

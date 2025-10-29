@@ -9,11 +9,11 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -40,7 +40,7 @@ func NewReplicateQueue(
 	allocator allocatorimpl.Allocator,
 	allocatorSync *mmaintegration.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
-	start time.Time,
+	start asim.Tick,
 ) RangeQueue {
 	rq := replicateQueue{
 		baseQueue: baseQueue{
@@ -110,7 +110,7 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 // on the action taken. Replicas in the queue are processed in order of
 // priority, then in FIFO order on ties. The Tick function currently only
 // supports processing ConsiderRebalance actions on replicas.
-func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (rq *replicateQueue) Tick(ctx context.Context, tick asim.Tick, s state.State) {
 	rq.AddLogTag("tick", tick)
 	ctx = rq.AnnotateCtx(ctx)
 	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
@@ -169,12 +169,12 @@ func pushReplicateChange(
 	ctx context.Context,
 	change plan.ReplicateChange,
 	repl *SimulatorReplica,
-	tick time.Time,
+	tick asim.Tick,
 	delayFn func(int64, bool) time.Duration,
 	stateChanger state.Changer,
 	as *mmaintegration.AllocatorSync,
 	queueName string,
-) (time.Time, mmaintegration.SyncChangeID) {
+) (asim.Tick, mmaintegration.SyncChangeID) {
 	var stateChange state.Change
 	var changeID mmaintegration.SyncChangeID
 	next := tick
