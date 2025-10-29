@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 func TestCreateTempDir(t *testing.T) {
@@ -124,7 +125,7 @@ func TestCleanupTempDirs(t *testing.T) {
 		}
 	}
 
-	if err = CleanupTempDirs(recordFile.Name()); err != nil {
+	if err = CleanupTempDirs(t.Context(), vfs.Default, recordFile.Name()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -212,7 +212,7 @@ func initTempStorageConfig(
 			specIdxDisk = i
 		}
 		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
-		if err := fs.CleanupTempDirs(recordPath); err != nil {
+		if err := fs.CleanupTempDirs(ctx, vfs.Default, recordPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrap(err,
 				"could not cleanup temporary directories from record file")
 		}
@@ -311,7 +311,7 @@ func initTempStorageConfig(
 		// Remove temporary directory on shutdown.
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
-			if err := fs.CleanupTempDirs(recordPath); err != nil {
+			if err := fs.CleanupTempDirs(ctx, vfs.Default, recordPath); err != nil {
 				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
