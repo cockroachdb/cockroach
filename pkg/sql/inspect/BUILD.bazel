@@ -68,6 +68,7 @@ go_library(
 
 go_test(
     name = "inspect_test",
+    size = "large",
     srcs = [
         "index_consistency_check_test.go",
         "inspect_job_test.go",
