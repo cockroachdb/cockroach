@@ -662,7 +662,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			ColumnID:   col.GetID(),
 		})
 	})
-
 }
 
 func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {

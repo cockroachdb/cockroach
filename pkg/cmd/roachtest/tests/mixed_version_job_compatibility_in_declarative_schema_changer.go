@@ -123,6 +123,12 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t2 RENAME COLUMN k_renamed TO k`,
 	}
 
+	// DDLs supported in V26_1.
+	v261DDLs := []string{
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET NOT VISIBLE`,
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN j SET VISIBLE`,
+	}
+
 	// Used to clean up our CREATE-d elements after we are done with them.
 	cleanup := []string{
 		`DROP INDEX testdb.testsc.t@idx`,
@@ -150,6 +156,13 @@ func executeSupportedDDLs(
 	}
 	if clusterVersion.AtLeast(clusterversion.V25_4.Version()) {
 		for _, ddl := range v254DDLs {
+			if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
+				return err
+			}
+		}
+	}
+	if clusterVersion.AtLeast(clusterversion.V26_1.Version()) {
+		for _, ddl := range v261DDLs {
 			if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
 				return err
 			}
