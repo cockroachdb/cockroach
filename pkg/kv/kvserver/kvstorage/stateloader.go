@@ -232,18 +232,6 @@ func (s StateLoader) SetMVCCStats(
 	return s.SetRangeAppliedState(ctx, stateRW, as)
 }
 
-// SetClosedTimestamp overwrites the closed timestamp.
-func (s StateLoader) SetClosedTimestamp(
-	ctx context.Context, stateRW StateRW, closedTS hlc.Timestamp,
-) error {
-	as, err := s.LoadRangeAppliedState(ctx, stateRW)
-	if err != nil {
-		return err
-	}
-	as.RaftClosedTimestamp = closedTS
-	return s.SetRangeAppliedState(ctx, stateRW, as)
-}
-
 // LoadGCThreshold loads the GC threshold.
 func (s StateLoader) LoadGCThreshold(ctx context.Context, stateRO StateRO) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
@@ -408,18 +396,12 @@ func UninitializedReplicaState(rangeID roachpb.RangeID) kvserverpb.ReplicaState 
 // TODO(sep-raft-log): this is now only used in splits, when initializing a
 // replica. Make the implementation straightforward, most of the stuff here is
 // constant except the existing HardState.
-func (s StateLoader) SynthesizeRaftState(ctx context.Context, stateRO StateRO, raftRW Raft) error {
+func (s StateLoader) SynthesizeRaftState(
+	ctx context.Context, raftRW Raft, applied logstore.EntryID,
+) error {
 	hs, err := s.LoadHardState(ctx, raftRW.RO)
 	if err != nil {
 		return err
-	}
-	as, err := s.LoadRangeAppliedState(ctx, stateRO)
-	if err != nil {
-		return err
-	}
-	applied := logstore.EntryID{
-		Index: as.RaftAppliedIndex,
-		Term:  as.RaftAppliedIndexTerm,
 	}
 	return s.SynthesizeHardState(ctx, raftRW.WO, hs, applied)
 }
