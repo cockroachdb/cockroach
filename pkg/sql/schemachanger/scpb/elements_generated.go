@@ -306,6 +306,43 @@ func (c *ElementCollection[E]) FilterColumnFamily() *ElementCollection[*ColumnFa
 	return (*ElementCollection[*ColumnFamily])(ret)
 }
 
+func (e ColumnGeneratedAsIdentity) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnGeneratedAsIdentity) Element() Element {
+	return e.ColumnGeneratedAsIdentity
+}
+
+// ForEachColumnGeneratedAsIdentity iterates over elements of type ColumnGeneratedAsIdentity.
+// Deprecated
+func ForEachColumnGeneratedAsIdentity(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnGeneratedAsIdentity),
+) {
+  c.FilterColumnGeneratedAsIdentity().ForEach(fn)
+}
+
+// FindColumnGeneratedAsIdentity finds the first element of type ColumnGeneratedAsIdentity.
+// Deprecated
+func FindColumnGeneratedAsIdentity(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnGeneratedAsIdentity) {
+	if tc := c.FilterColumnGeneratedAsIdentity(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnGeneratedAsIdentity)
+	}
+	return current, target, element
+}
+
+// ColumnGeneratedAsIdentityElements filters elements of type ColumnGeneratedAsIdentity.
+func (c *ElementCollection[E]) FilterColumnGeneratedAsIdentity() *ElementCollection[*ColumnGeneratedAsIdentity] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnGeneratedAsIdentity)
+		return ok
+	})
+	return (*ElementCollection[*ColumnGeneratedAsIdentity])(ret)
+}
+
 func (e ColumnName) element() {}
 
 // Element implements ElementGetter.
@@ -3324,6 +3361,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_ColumnDefaultExpression{ ColumnDefaultExpression: t}
 		case *ColumnFamily:
 			e.ElementOneOf = &ElementProto_ColumnFamily{ ColumnFamily: t}
+		case *ColumnGeneratedAsIdentity:
+			e.ElementOneOf = &ElementProto_ColumnGeneratedAsIdentity{ ColumnGeneratedAsIdentity: t}
 		case *ColumnName:
 			e.ElementOneOf = &ElementProto_ColumnName{ ColumnName: t}
 		case *ColumnNotNull:
@@ -3500,6 +3539,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_ColumnComputeExpression)(nil)),
 	((*ElementProto_ColumnDefaultExpression)(nil)),
 	((*ElementProto_ColumnFamily)(nil)),
+	((*ElementProto_ColumnGeneratedAsIdentity)(nil)),
 	((*ElementProto_ColumnName)(nil)),
 	((*ElementProto_ColumnNotNull)(nil)),
 	((*ElementProto_ColumnOnUpdateExpression)(nil)),
@@ -3596,6 +3636,7 @@ func GetElementTypes() []interface{} {
 	((*ColumnComputeExpression)(nil)),
 	((*ColumnDefaultExpression)(nil)),
 	((*ColumnFamily)(nil)),
+	((*ColumnGeneratedAsIdentity)(nil)),
 	((*ColumnName)(nil)),
 	((*ColumnNotNull)(nil)),
 	((*ColumnOnUpdateExpression)(nil)),

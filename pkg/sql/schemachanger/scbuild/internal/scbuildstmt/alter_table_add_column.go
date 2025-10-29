@@ -116,11 +116,10 @@ func alterTableAddColumn(
 	spec := addColumnSpec{
 		tbl: tbl,
 		col: &scpb.Column{
-			TableID:                 tbl.TableID,
-			ColumnID:                desc.ID,
-			IsHidden:                desc.Hidden,
-			IsInaccessible:          desc.Inaccessible,
-			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
+			TableID:        tbl.TableID,
+			ColumnID:       desc.ID,
+			IsHidden:       desc.Hidden,
+			IsInaccessible: desc.Inaccessible,
 		},
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
@@ -138,9 +137,6 @@ func alterTableAddColumn(
 	// Only set PgAttributeNum if it differs from ColumnID.
 	if pgAttNum := desc.GetPGAttributeNum(); pgAttNum != catid.PGAttributeNum(desc.ID) {
 		spec.col.PgAttributeNum = pgAttNum
-	}
-	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
-		spec.col.GeneratedAsIdentitySequenceOption = *ptr
 	}
 	spec.name = &scpb.ColumnName{
 		TableID:  tbl.TableID,
@@ -289,6 +285,26 @@ func alterTableAddColumn(
 			Expression: *b.WrapExpression(tbl.TableID, cdd.OnUpdateExpr),
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
+	}
+	if d.GeneratedIdentity.IsGeneratedAsIdentity {
+		generatedAsIdentityType := desc.GeneratedAsIdentityType
+		seqOptions := ""
+		if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
+			seqOptions = *ptr
+		}
+		// Versions from 26.1 GeneratedAsIdentity will have a separate element for
+		// GeneratedAsIdentity. Older versios store it in the column element.
+		if spec.colType.ElementCreationMetadata.In_26_1OrLater {
+			spec.generatedAsID = &scpb.ColumnGeneratedAsIdentity{
+				TableID:        tbl.TableID,
+				ColumnID:       spec.col.ColumnID,
+				Type:           generatedAsIdentityType,
+				SequenceOption: seqOptions,
+			}
+		} else {
+			spec.col.GeneratedAsIdentityType = generatedAsIdentityType
+			spec.col.GeneratedAsIdentitySequenceOption = seqOptions
+		}
 	}
 	// Add secondary indexes for this column.
 	backing := addColumn(b, spec, t)
@@ -458,6 +474,7 @@ type addColumnSpec struct {
 	compute          *scpb.ColumnComputeExpression
 	transientCompute *scpb.ColumnComputeExpression
 	comment          *scpb.ColumnComment
+	generatedAsID    *scpb.ColumnGeneratedAsIdentity
 	unique           bool
 	notNull          bool
 }
@@ -493,6 +510,9 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
+		}
+		if spec.generatedAsID != nil {
+			b.Add(spec.generatedAsID)
 		}
 		// Don't need to modify primary indexes for virtual columns.
 		if spec.colType.IsVirtual {
