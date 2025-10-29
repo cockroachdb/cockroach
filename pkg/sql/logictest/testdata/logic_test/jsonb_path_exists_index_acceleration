@@ -556,3 +556,50 @@ SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '
 
 statement error index "foo_inv" is inverted and cannot be used for this query
 SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '{"x": "c"}') ORDER BY a;
+
+subtest anykey
+
+statement ok
+DROP TABLE IF EXISTS anykey_json_tab;
+
+statement ok
+CREATE TABLE anykey_json_tab (
+  a INT PRIMARY KEY,
+  b JSONB
+);
+
+statement ok
+CREATE INVERTED INDEX anykey_inv ON anykey_json_tab(b)
+
+statement ok
+INSERT INTO anykey_json_tab VALUES
+(1, '{"a": {"b": {"c": "d"}}}'),
+(2, '{"a": {"b": {"c": {"d": "e"}}}}'),
+(3, '{"a": {"b": [{"c": {"d": "e"}}]}}'),
+(4, '{"a": {"b": ["c", "d"]}}'),
+(5, '{"a": {"b": "d"}}'),
+(6, '{"a": {"b1": "d"}}'),
+(7, '{"a": {"b1": {"c": {"d": "e"}}}}');
+
+query IT
+SELECT a, b FROM anykey_json_tab@primary WHERE jsonb_path_exists(b, '$.a.b.*') ORDER BY a;
+----
+1  {"a": {"b": {"c": "d"}}}
+2  {"a": {"b": {"c": {"d": "e"}}}}
+3  {"a": {"b": [{"c": {"d": "e"}}]}}
+
+query IT
+SELECT a, b FROM anykey_json_tab@anykey_inv WHERE jsonb_path_exists(b, '$.a.b.*') ORDER BY a;
+----
+1  {"a": {"b": {"c": "d"}}}
+2  {"a": {"b": {"c": {"d": "e"}}}}
+3  {"a": {"b": [{"c": {"d": "e"}}]}}
+
+# AnyKey should only be allowed at the end of the path chain.
+statement error index "anykey_inv" is inverted and cannot be used for this query
+SELECT a, b FROM anykey_json_tab@anykey_inv WHERE jsonb_path_exists(b, '$.a.*.b') ORDER BY a;
+
+statement error index "anykey_inv" is inverted and cannot be used for this query
+SELECT a, b FROM anykey_json_tab@anykey_inv WHERE jsonb_path_exists(b, '$.a.b.*.*') ORDER BY a;
+
+subtest end
