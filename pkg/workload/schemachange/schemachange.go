@@ -163,6 +163,94 @@ func setupSchemaChangePromCounter(reg prometheus.Registerer) schemaChangeCounter
 	}
 }
 
+func (s *schemaChange) logInspectErrors(
+	ctx context.Context, pool *workload.MultiConnPool, log *atomicLog,
+) error {
+	connPool := pool.Get()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		log.printLn(fmt.Sprintf("unable to acquire connection for SHOW INSPECT ERRORS: %v", err))
+		return err
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC`)
+	if err != nil {
+		log.printLn(fmt.Sprintf("fetching INSPECT jobs failed: %v", err))
+		return err
+	}
+	jobIDs, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	rows.Close()
+	if err != nil {
+		log.printLn(fmt.Sprintf("collecting INSPECT job IDs failed: %v", err))
+		return err
+	}
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	type InspectJobResult struct {
+		JobID  int64            `json:"jobId"`
+		Status string           `json:"status"`
+		Errors []map[string]any `json:"errors,omitempty"`
+	}
+
+	type InspectErrorSummary struct {
+		Message string             `json:"message"`
+		Jobs    []InspectJobResult `json:"jobs"`
+	}
+
+	summary := InspectErrorSummary{
+		Message: "Inspect Job Errors",
+		Jobs:    make([]InspectJobResult, 0, len(jobIDs)),
+	}
+
+	var totalErrors int
+	for _, jobID := range jobIDs {
+		query := fmt.Sprintf(`
+			SELECT error_type, database_name, schema_name, table_name, primary_key, job_id, aost, details
+			FROM [SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS]`, jobID)
+		rows, err := conn.Query(ctx, query)
+		if err != nil {
+			log.printLn(fmt.Sprintf("%s failed: %v", query, err))
+			continue
+		}
+		results, err := pgx.CollectRows(rows, pgx.RowToMap)
+		rows.Close()
+		if err != nil {
+			log.printLn(fmt.Sprintf("collecting inspect errors for job %d failed: %v", jobID, err))
+			continue
+		}
+
+		jobResult := InspectJobResult{
+			JobID: jobID,
+		}
+
+		if len(results) == 0 {
+			jobResult.Status = "no errors reported"
+		} else {
+			jobResult.Status = fmt.Sprintf("%d error rows", len(results))
+			jobResult.Errors = results
+			totalErrors += len(results)
+		}
+
+		summary.Jobs = append(summary.Jobs, jobResult)
+	}
+
+	// Output as JSON.
+	jsonBytes, err := json.MarshalIndent(summary, "", " ")
+	if err != nil {
+		log.printLn(fmt.Sprintf("failed to marshal inspect errors to JSON: %v", err))
+		return err
+	}
+	log.printLn(string(jsonBytes))
+
+	if totalErrors > 0 {
+		return errors.Newf("found %d inspect errors across %d jobs", totalErrors, len(jobIDs))
+	}
+	return nil
+}
+
 // Meta implements the workload.Generator interface.
 func (s *schemaChange) Meta() workload.Meta { return schemaChangeMeta }
 
@@ -246,12 +334,14 @@ func (s *schemaChange) Ops(
 
 	ql := workload.QueryLoad{
 		Close: func(_ context.Context) error {
-			// Create a new context for shutting down the tracer provider. The
-			// provided context may be cancelled depending on why the workload is
-			// shutting down and we always want to provide a period of time to flush
-			// traces.
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			// Create a new context for shutting down the tracer provider and logging
+			// inspect errors. The provided context may be cancelled depending on why
+			// the workload is shutting down and we always want to provide a period of
+			// time to flush traces.
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
+
+			inspectErr := s.logInspectErrors(ctx, pool, stdoutLog)
 
 			pool.Close()
 			watchDogPool.Close()
@@ -259,7 +349,7 @@ func (s *schemaChange) Ops(
 			closeErr := s.closeJSONLogFile()
 			shutdownErr := tracerProvider.Shutdown(ctx)
 			s.schemaWorkloadResultAnnotator.logWorkloadStats(stdoutLog)
-			return errors.CombineErrors(closeErr, shutdownErr)
+			return errors.Join(inspectErr, closeErr, shutdownErr)
 		},
 	}
 
@@ -563,6 +653,9 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='off';"); err != nil {
 			return err
 		}
+	}
+	if _, err := conn.Exec(ctx, "SET enable_inspect_command = true;"); err != nil {
+		return err
 	}
 
 	tx, err := conn.Begin(ctx)

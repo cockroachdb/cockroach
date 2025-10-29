@@ -145,6 +145,9 @@ const (
 	dropView     // DROP VIEW <view>
 	truncateTable
 
+	// INSPECT ...
+	inspect // INSPECT {TABLE|DATABASE} ...
+
 	// Unimplemented operations. TODO(sql-foundations): Audit and/or implement these operations.
 	// alterDatabaseOwner
 	// alterDatabasePlacement
@@ -206,7 +209,7 @@ const (
 )
 
 func isDMLOpType(t opType) bool {
-	return t == insertRow || t == selectStmt || t == validate
+	return t == insertRow || t == selectStmt || t == validate || t == inspect
 }
 
 var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, error){
@@ -214,6 +217,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	insertRow:  (*operationGenerator).insertRow,
 	selectStmt: (*operationGenerator).selectStmt,
 	validate:   (*operationGenerator).validate,
+	inspect:    (*operationGenerator).inspect,
 
 	// DDL Operations
 	alterDatabaseAddRegion:            (*operationGenerator).addRegion,
@@ -273,6 +277,7 @@ var opWeights = []int{
 	insertRow:  10,
 	selectStmt: 10,
 	validate:   2, // validate twice more often
+	inspect:    1,
 
 	// DDL Operations
 	alterDatabaseAddRegion:            1,
@@ -334,6 +339,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	insertRow:  clusterversion.MinSupported,
 	selectStmt: clusterversion.MinSupported,
 	validate:   clusterversion.MinSupported,
+	inspect:    clusterversion.V25_4,
 
 	alterPolicy:                       clusterversion.V25_2,
 	alterTableAddColumn:               clusterversion.MinSupported,
