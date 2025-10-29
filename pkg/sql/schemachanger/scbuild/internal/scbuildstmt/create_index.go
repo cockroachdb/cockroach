@@ -820,7 +820,7 @@ func maybeCreateAndAddShardCol(
 		}
 	})
 	scpb.ForEachColumn(elts, func(_ scpb.Status, _ scpb.TargetStatus, col *scpb.Column) {
-		if col.ColumnID == existingShardColID && !col.IsHidden {
+		if col.ColumnID == existingShardColID && !(col.IsHidden || retrieveColumnHidden(b, tbl.TableID, col.ColumnID) != nil) {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
 			panic(pgerror.Newf(pgcode.DuplicateColumn,
@@ -841,7 +841,6 @@ func maybeCreateAndAddShardCol(
 		col: &scpb.Column{
 			TableID:  tbl.TableID,
 			ColumnID: shardColID,
-			IsHidden: true,
 		},
 		name: &scpb.ColumnName{
 			TableID:  tbl.TableID,
@@ -866,6 +865,12 @@ func maybeCreateAndAddShardCol(
 		}
 	} else {
 		spec.colType.ComputeExpr = wexpr
+	}
+
+	if spec.colType.ElementCreationMetadata.In_26_1OrLater {
+		spec.hidden = true
+	} else {
+		spec.col.IsHidden = true
 	}
 
 	backing := addColumn(b, spec, n)
