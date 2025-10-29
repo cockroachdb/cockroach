@@ -182,9 +182,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				return sb.String()
 
 			case "create-split":
-				rangeID := dd.ScanArg[int](t, d, "range-id")
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				splitKey := dd.ScanArg[string](t, d, "split-key")
-				rs := tc.mustGetRangeState(t, roachpb.RangeID(rangeID))
+				rs := tc.mustGetRangeState(t, rangeID)
 				desc := rs.desc
 				require.True(
 					t,
@@ -202,18 +202,15 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					LeftDesc:  leftDesc,
 					RightDesc: rightDesc,
 				}
-				tc.splits[roachpb.RangeID(rangeID)] = split
+				tc.splits[rangeID] = split
 				return "ok"
 
 			case "set-lease":
-				rangeID := dd.ScanArg[int](t, d, "range-id")
-				replicaNodeID := dd.ScanArg[int](t, d, "replica")
-				leaseType := "leader-lease" // default to a leader-lease
-				if d.HasArg("lease-type") {
-					leaseType = dd.ScanArg[string](t, d, "lease-type")
-				}
-				rs := tc.mustGetRangeState(t, roachpb.RangeID(rangeID))
-				targetReplica := rs.getReplicaDescriptor(t, roachpb.NodeID(replicaNodeID))
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				replicaNodeID := dd.ScanArg[roachpb.NodeID](t, d, "replica")
+				leaseType := dd.ScanArgOr(t, d, "lease-type", "leader-lease")
+				rs := tc.mustGetRangeState(t, rangeID)
+				targetReplica := rs.getReplicaDescriptor(t, replicaNodeID)
 				// NB: The details of the lease are not important to the test;
 				// only the type is.
 				var lease roachpb.Lease
@@ -241,10 +238,10 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				return "ok"
 
 			case "run-split-trigger":
-				rangeID := dd.ScanArg[int](t, d, "range-id")
-				split, ok := tc.splits[roachpb.RangeID(rangeID)]
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				split, ok := tc.splits[rangeID]
 				require.True(t, ok, "split trigger not found for range-id %d", rangeID)
-				rs := tc.mustGetRangeState(t, roachpb.RangeID(rangeID))
+				rs := tc.mustGetRangeState(t, rangeID)
 				desc := rs.desc
 				batch := tc.storage.NewBatch()
 				defer batch.Close()
@@ -272,7 +269,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				// Update the test context's notion of the range state after the
 				// split.
-				tc.updatePostSplitRangeState(t, ctx, batch, roachpb.RangeID(rangeID), split)
+				tc.updatePostSplitRangeState(t, ctx, batch, rangeID, split)
 				// Print the state of the batch (all keys/values written as part
 				// of the split trigger).
 				output, err := print.DecodeWriteBatch(batch.Repr())
@@ -292,10 +289,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					return "no ranges in test context"
 				}
 
-				sortByKeys := false
-				if d.HasArg("sort-keys") {
-					sortByKeys = dd.ScanArg[bool](t, d, "sort-keys")
-				}
+				sortByKeys := dd.ScanArgOr(t, d, "sort-keys", false)
 
 				rangeIDs := maps.Keys(tc.ranges)
 				slices.SortFunc(rangeIDs, func(a, b roachpb.RangeID) int {
