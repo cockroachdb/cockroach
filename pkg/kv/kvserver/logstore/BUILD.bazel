@@ -53,6 +53,7 @@ go_test(
         "logstore_bench_test.go",
         "logstore_test.go",
         "sideload_test.go",
+        "stateloader_test.go",
         "sync_waiter_test.go",
     ],
     data = glob(["testdata/**"]),
