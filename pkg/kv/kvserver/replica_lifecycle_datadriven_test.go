@@ -12,14 +12,19 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -87,6 +93,20 @@ import (
 //	Destroys the replica on n1 for the specified range. The replica's state
 //	must have already been created via create-replica.
 //
+// append-raft-entries range-id=<int> num-entries=<int>
+// ----
+//
+//	Appends the specified number of dummy raft entries to the raft log for
+//	the replica on n1/s1. The replica must have already been created via
+//	create-replica.
+//
+// create-range-data range-id=<int> [num-user-keys=<int>] [num-system-keys=<int>] [num-lock-table-keys=<int>]
+// ----
+//
+//	Creates the specified number of user, system, and lock table keys for the
+//	range. At least one parameter should be non-zero to ensure this directive is
+//	not nonsensical.
+//
 // print-range-state [sort-keys=<bool>]
 // ----
 //
@@ -96,6 +116,8 @@ import (
 func TestReplicaLifecycleDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
 
 	datadriven.Walk(t, "testdata/replica_lifecycle", func(t *testing.T, path string) {
 		tc := newTestCtx()
@@ -304,7 +326,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					batch, /* writer */
 					kvstorage.DestroyReplicaInfo{
 						FullReplicaID: rs.replica.FullReplicaID,
-						Keys:          roachpb.RSpan{Key: rs.desc.StartKey, EndKey: rs.desc.EndKey},
+						Keys:          rs.desc.RSpan(),
 					},
 					rs.desc.NextReplicaID,
 				)
@@ -316,6 +338,80 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				// Clear the replica from the range state.
 				rs.replica = nil
+				return output
+
+			case "append-raft-entries":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				numEntries := dd.ScanArg[int](t, d, "num-entries")
+				rs := tc.mustGetRangeState(t, rangeID)
+				require.NotNil(t, rs.replica, "replica must be created before appending entries")
+
+				batch := tc.storage.NewBatch()
+				defer batch.Close()
+
+				sl := logstore.NewStateLoader(rangeID)
+				lastIndex := rs.replica.lastIdx
+				rs.replica.lastIdx += kvpb.RaftIndex(numEntries)
+				term := rs.replica.hs.Term
+
+				for i := 0; i < numEntries; i++ {
+					entryIndex := lastIndex + 1 + kvpb.RaftIndex(i)
+					require.NoError(t, storage.MVCCBlindPutProto(
+						ctx, batch,
+						sl.RaftLogKey(entryIndex), hlc.Timestamp{},
+						&raftpb.Entry{Index: uint64(entryIndex), Term: term},
+						storage.MVCCWriteOptions{},
+					))
+				}
+
+				output, err := print.DecodeWriteBatch(batch.Repr())
+				require.NoError(t, err)
+				err = batch.Commit(true)
+				require.NoError(t, err)
+				return strings.ReplaceAll(output, "\n\n", "\n")
+
+			case "create-range-data":
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				numUserKeys := dd.ScanArgOr(t, d, "num-user-keys", 0)
+				numSystemKeys := dd.ScanArgOr(t, d, "num-system-keys", 0)
+				numLockTableKeys := dd.ScanArgOr(t, d, "num-lock-table-keys", 0)
+				require.True(t, numUserKeys > 0 || numSystemKeys > 0 || numLockTableKeys > 0)
+
+				rs := tc.mustGetRangeState(t, rangeID)
+				batch := tc.storage.NewBatch()
+				defer batch.Close()
+
+				ts := hlc.Timestamp{WallTime: 1}
+
+				getUserKey := func(i int) roachpb.Key {
+					return append(rs.desc.StartKey.AsRawKey(), strconv.Itoa(i)...)
+				}
+
+				// 1. User keys.
+				for i := 0; i < numUserKeys; i++ {
+					require.NoError(t, batch.PutMVCC(
+						storage.MVCCKey{Key: getUserKey(i), Timestamp: ts}, storage.MVCCValue{},
+					))
+				}
+				// 2. System keys.
+				for i := 0; i < numSystemKeys; i++ {
+					key := keys.TransactionKey(getUserKey(i), uuid.NamespaceDNS)
+					require.NoError(t, batch.PutMVCC(
+						storage.MVCCKey{Key: key, Timestamp: ts}, storage.MVCCValue{},
+					))
+				}
+				// 3. Lock table keys.
+				for i := 0; i < numLockTableKeys; i++ {
+					ek, _ := storage.LockTableKey{
+						Key: getUserKey(i), Strength: lock.Intent, TxnUUID: uuid.UUID{},
+					}.ToEngineKey(nil)
+					require.NoError(t, batch.PutEngineKey(ek, nil))
+				}
+
+				output, err := print.DecodeWriteBatch(batch.Repr())
+				require.NoError(t, err)
+				err = batch.Commit(true)
+				require.NoError(t, err)
 				return output
 
 			case "print-range-state":
@@ -364,8 +460,9 @@ type rangeState struct {
 // engine (both raft log and state machine) state.
 type replicaInfo struct {
 	roachpb.FullReplicaID
-	hs raftpb.HardState
-	ts kvserverpb.RaftTruncatedState
+	hs      raftpb.HardState
+	ts      kvserverpb.RaftTruncatedState
+	lastIdx kvpb.RaftIndex
 }
 
 // testCtx is a single test's context. It tracks the state of all ranges and any
@@ -443,8 +540,9 @@ func (tc *testCtx) updatePostReplicaCreateState(
 			RangeID:   rs.desc.RangeID,
 			ReplicaID: replID.ReplicaID,
 		},
-		hs: hs,
-		ts: ts,
+		hs:      hs,
+		ts:      ts,
+		lastIdx: ts.Index,
 	}
 }
 
@@ -505,8 +603,9 @@ func (r *replicaInfo) String() string {
 	if r.hs == (raftpb.HardState{}) {
 		sb.WriteString("uninitialized")
 	} else {
-		sb.WriteString(fmt.Sprintf("HardState={Term:%d,Vote:%d,Commit:%d} ", r.hs.Term, r.hs.Vote, r.hs.Commit))
-		sb.WriteString(fmt.Sprintf("TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
+		sb.WriteString(fmt.Sprintf("HardState={Term:%d,Vote:%d,Commit:%d}", r.hs.Term, r.hs.Vote, r.hs.Commit))
+		sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
+		sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
 	}
 	return sb.String()
 }
