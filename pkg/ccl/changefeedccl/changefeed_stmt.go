@@ -327,6 +327,9 @@ func changefeedPlanHook(
 			// perTablePTSRecords is the per-table protected timestamp records which exist when
 			// per-table protected timestamps are enabled.
 			var perTablePTSRecords []*ptpb.Record
+			// systemTablesPTSRecord is the system tables protected timestamp record which exists when
+			// per-table protected timestamps are enabled.
+			var systemTablesPTSRecord *ptpb.Record
 			// ptsRecords is the protected timestamp records object containing all per-table protected
 			// timestamp records. Its format matches what will be persisted to the job info table.
 			var ptsRecords *cdcprogresspb.ProtectedTimestampRecords
@@ -339,9 +342,11 @@ func changefeedPlanHook(
 			if usingPerTablePTS {
 				protectedTimestampRecords := make(map[descpb.ID]uuid.UUID)
 				if err := targets.EachTarget(func(target changefeedbase.Target) error {
+					// TODO(#155957): We are likely leaking PTS records here in
+					// the column families case.
 					ptsTargets := changefeedbase.Targets{}
 					ptsTargets.Add(target)
-					ptsRecord := createProtectedTimestampRecord(
+					ptsRecord := createUserTablesProtectedTimestampRecord(
 						ctx,
 						codec,
 						jobID,
@@ -355,11 +360,18 @@ func changefeedPlanHook(
 				}); err != nil {
 					return err
 				}
+				systemTablesPTSRecord = createSystemTablesProtectedTimestampRecord(
+					ctx,
+					codec,
+					jobID,
+					details.StatementTime,
+				)
 				ptsRecords = &cdcprogresspb.ProtectedTimestampRecords{
-					ProtectedTimestampRecords: protectedTimestampRecords,
+					UserTables:   protectedTimestampRecords,
+					SystemTables: systemTablesPTSRecord.ID.GetUUID(),
 				}
 			} else {
-				ptr = createProtectedTimestampRecord(
+				ptr = createCombinedProtectedTimestampRecord(
 					ctx,
 					codec,
 					jobID,
@@ -380,11 +392,14 @@ func changefeedPlanHook(
 					}
 				}
 				if usingPerTablePTS {
+					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 					for _, perTableRecord := range perTablePTSRecords {
-						pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 						if err := pts.Protect(ctx, perTableRecord); err != nil {
 							return err
 						}
+					}
+					if err := pts.Protect(ctx, systemTablesPTSRecord); err != nil {
+						return err
 					}
 					if err := writeChangefeedJobInfo(
 						ctx, perTableProtectedTimestampsFilename, ptsRecords, p.InternalSQLTxn(), jobID,
@@ -427,6 +442,9 @@ func changefeedPlanHook(
 						if err := pts.Protect(ctx, perTableRecord); err != nil {
 							return err
 						}
+					}
+					if err := pts.Protect(ctx, systemTablesPTSRecord); err != nil {
+						return err
 					}
 					if err := writeChangefeedJobInfo(
 						ctx, perTableProtectedTimestampsFilename, ptsRecords, txn, jobID,
@@ -1966,6 +1984,9 @@ func (b *changefeedResumer) OnFailOrCancel(
 	}
 
 	maybeCleanUpProtectedTimestamp(progress.GetChangefeed().ProtectedTimestampRecord)
+	// We clean up the per-table protected timestamps (and their accompanying
+	// system tables protected timestamp record) in a transaction since we need
+	// to read from the job info.
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		ptsEntries := cdcprogresspb.ProtectedTimestampRecords{}
 		if err := readChangefeedJobInfo(
@@ -1973,13 +1994,17 @@ func (b *changefeedResumer) OnFailOrCancel(
 		); err != nil {
 			return err
 		}
-
-		if len(ptsEntries.ProtectedTimestampRecords) == 0 {
+		// In the event that the changefeed is not using per-table protected
+		// timestamps, the ptsEntries populated from the job info table
+		// (in the file perTableProtectedTimestampsFilename) will be empty.
+		// There is nothing to clean up, so we can safely return here.
+		if len(ptsEntries.UserTables) == 0 && ptsEntries.SystemTables == uuid.Nil {
 			return nil
 		}
-		for _, record := range ptsEntries.ProtectedTimestampRecords {
+		for _, record := range ptsEntries.UserTables {
 			maybeCleanUpProtectedTimestamp(record)
 		}
+		maybeCleanUpProtectedTimestamp(ptsEntries.SystemTables)
 		return deleteChangefeedJobInfo(ctx, perTableProtectedTimestampsFilename, txn, b.job.ID())
 	}); err != nil {
 		return err

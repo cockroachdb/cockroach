@@ -521,9 +521,14 @@ func getEventDescriptorCached(
 	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
 
 	if v, ok := cache.Get(idVer); ok {
-		ed := v.(*EventDescriptor)
-		if catalog.UserDefinedTypeColsHaveSameVersion(ed.td, desc) {
-			return ed, nil
+		cached := v.(*EventDescriptor)
+		if catalog.UserDefinedTypeColsHaveSameVersion(cached.td, desc) {
+			// Make a shallow copy to avoid modifying the cached value. The cached
+			// EventDescriptor is shared across changefeed operations and may be
+			// referenced concurrently.
+			ed := *cached
+			ed.SchemaTS = schemaTS
+			return &ed, nil
 		}
 	}
 
