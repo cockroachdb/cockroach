@@ -208,6 +208,22 @@ ElementState:
     name: primary
     tableId: 108
   Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
+    tableId: 108
+  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: id
@@ -1002,6 +1018,22 @@ ElementState:
 - ColumnFamily:
     familyId: 0
     name: primary
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
     tableId: 111
   Status: PUBLIC
 - ColumnName:

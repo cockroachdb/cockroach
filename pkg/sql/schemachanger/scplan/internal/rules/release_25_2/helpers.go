@@ -209,7 +209,7 @@ func isColumnDependent(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.ColumnType, *scpb.ColumnNotNull:
 		return true
-	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
+	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn, *scpb.ColumnHidden:
 		return true
 	}
 	return isColumnTypeDependent(e)

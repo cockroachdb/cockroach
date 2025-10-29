@@ -116,10 +116,11 @@ func alterTableAddColumn(
 	spec := addColumnSpec{
 		tbl: tbl,
 		col: &scpb.Column{
-			TableID:        tbl.TableID,
-			ColumnID:       desc.ID,
-			IsHidden:       desc.Hidden,
-			IsInaccessible: desc.Inaccessible,
+			TableID:                 tbl.TableID,
+			ColumnID:                desc.ID,
+			IsHidden:                desc.Hidden,
+			IsInaccessible:          desc.Inaccessible,
+			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
 		},
 		unique:  d.Unique.IsUnique,
 		notNull: !desc.Nullable,
@@ -306,6 +307,15 @@ func alterTableAddColumn(
 			spec.col.GeneratedAsIdentitySequenceOption = seqOptions
 		}
 	}
+
+	if d.Hidden {
+		if spec.colType.ElementCreationMetadata.In_26_1OrLater {
+			spec.hidden = true
+		} else {
+			spec.col.IsHidden = true
+		}
+	}
+
 	// Add secondary indexes for this column.
 	backing := addColumn(b, spec, t)
 	if idx != nil {
@@ -475,6 +485,7 @@ type addColumnSpec struct {
 	transientCompute *scpb.ColumnComputeExpression
 	comment          *scpb.ColumnComment
 	generatedAsID    *scpb.ColumnGeneratedAsIdentity
+	hidden           bool
 	unique           bool
 	notNull          bool
 }
@@ -513,6 +524,13 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 		if spec.generatedAsID != nil {
 			b.Add(spec.generatedAsID)
+		}
+		if spec.hidden {
+			elm := scpb.ColumnHidden{
+				TableID:  spec.tbl.TableID,
+				ColumnID: spec.col.ColumnID,
+			}
+			b.Add(&elm)
 		}
 		// Don't need to modify primary indexes for virtual columns.
 		if spec.colType.IsVirtual {

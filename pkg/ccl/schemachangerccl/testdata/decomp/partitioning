@@ -110,6 +110,22 @@ ElementState:
     name: fam_0_pk_a_j
     tableId: 104
   Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 104
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 104
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 104
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
+    tableId: 104
+  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: pk
@@ -623,6 +639,22 @@ ElementState:
 - ColumnFamily:
     familyId: 0
     name: primary
+    tableId: 105
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 105
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 105
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 105
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
     tableId: 105
   Status: PUBLIC
 - ColumnName:

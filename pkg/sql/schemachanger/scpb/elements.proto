@@ -2,6 +2,9 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+// 
+// This file is used by `element_generator.go` to build `elements_generated.go`.
+// It's sensitive to formatting; tools such as `buf format` aren't recommended.
 
 syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
@@ -110,6 +113,7 @@ message ElementProto {
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComputeExpression column_compute_expression = 190 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnGeneratedAsIdentity column_generated_as_identity = 191 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnHidden column_hidden = 192 [(gogoproto.moretags) = "parent:\"Column\""];
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
@@ -218,7 +222,9 @@ message Expression {
 message Column {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool is_hidden = 3;
+  // Deprecated.
+  // The hidden attribute is now handled as a separate element (see ColumnHidden).
+  bool is_hidden = 3 [deprecated = true];
   bool is_inaccessible = 4;
   uint32 generated_as_identity_type = 5 [deprecated = true, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
   string generated_as_identity_sequence_option = 6 [deprecated = true];
@@ -251,7 +257,7 @@ message ColumnType {
   // ElementCreationMetadata stores information about when this element is created.
   // It can be used in a similar way to version gates to ensure compatibility
   // in mixed version state.
-  ElementCreationMetadata element_creation_metadata= 11;
+  ElementCreationMetadata element_creation_metadata = 11;
   // If non-zero, the column will be added to the column family after the column with
   // this ID. This is used for operations like 'ALTER COLUMN .. TYPE', where
   // maintaining column family order is necessary when replacing columns.
@@ -281,6 +287,12 @@ message ColumnGeneratedAsIdentity {
   uint32 type = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
   string sequence_option = 4;
 }
+
+message ColumnHidden {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+}
+
 
 message ColumnFamily {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];

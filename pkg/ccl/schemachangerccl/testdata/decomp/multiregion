@@ -189,6 +189,26 @@ ElementState:
     name: primary
     tableId: 110
   Status: PUBLIC
+- ColumnHidden:
+    columnId: 2
+    tableId: 110
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 110
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 110
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 110
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
+    tableId: 110
+  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: b
@@ -581,6 +601,26 @@ ElementState:
 - ColumnFamily:
     familyId: 0
     name: primary
+    tableId: 109
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 2
+    tableId: 109
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 109
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 109
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 109
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
     tableId: 109
   Status: PUBLIC
 - ColumnName:
@@ -1019,6 +1059,26 @@ ElementState:
 - ColumnFamily:
     familyId: 0
     name: primary
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 3
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
     tableId: 108
   Status: PUBLIC
 - ColumnName:

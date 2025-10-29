@@ -2122,6 +2122,14 @@ func retrieveColumnNotNull(
 		MustGetZeroOrOneElement()
 }
 
+func retrieveColumnHidden(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) *scpb.ColumnHidden {
+	return b.QueryByID(tableID).FilterColumnHidden().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnHidden) bool { return e.ColumnID == columnID }).
+		MustGetZeroOrOneElement()
+}
+
 func retrieveColumnComment(
 	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
 ) *scpb.ColumnComment {
