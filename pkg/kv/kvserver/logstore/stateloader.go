@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // StateLoader gives access to read or write the state of the Raft log. It
@@ -167,43 +166,4 @@ func (sl StateLoader) SetHardState(
 		&hs,
 		storage.MVCCWriteOptions{}, /* opts */
 	)
-}
-
-// SynthesizeHardState synthesizes an on-disk HardState from the given input,
-// taking care that a HardState compatible with the existing data is written.
-func (sl StateLoader) SynthesizeHardState(
-	ctx context.Context, writer storage.Writer, oldHS raftpb.HardState, applied EntryID,
-) error {
-	newHS := raftpb.HardState{
-		Term: uint64(applied.Term),
-		// NB: when applying a Raft snapshot, the applied index is equal to the
-		// Commit index represented by the snapshot.
-		Commit: uint64(applied.Index),
-	}
-
-	if oldHS.Commit > newHS.Commit {
-		return errors.Newf("can't decrease HardState.Commit from %d to %d",
-			redact.Safe(oldHS.Commit), redact.Safe(newHS.Commit))
-	}
-
-	// TODO(arul): This function can be called with an empty OldHS. In all other
-	// cases, where a term is included, we should be able to assert that the term
-	// isn't regressing (i.e. oldHS.Term >= newHS.Term).
-
-	if oldHS.Term > newHS.Term {
-		// The existing HardState is allowed to be ahead of us, which is
-		// relevant in practice for the split trigger. We already checked above
-		// that we're not rewinding the acknowledged index, and we haven't
-		// updated votes yet.
-		newHS.Term = oldHS.Term
-	}
-	// If the existing HardState voted in this term and knows who the leader is,
-	// remember that.
-	if oldHS.Term == newHS.Term {
-		newHS.Vote = oldHS.Vote
-		newHS.Lead = oldHS.Lead
-		newHS.LeadEpoch = oldHS.LeadEpoch
-	}
-	err := sl.SetHardState(ctx, writer, newHS)
-	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }

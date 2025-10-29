@@ -8,20 +8,17 @@ package kvstorage
 import (
 	"context"
 	"path/filepath"
-	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,65 +52,46 @@ func TestWriteInitialRangeState(t *testing.T) {
 	echotest.Require(t, str, filepath.Join("testdata", t.Name()+".txt"))
 }
 
-func TestSynthesizeHardState(t *testing.T) {
+func TestSynthesizeRaftState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	defer log.Scope(t).Close(t)
 
-	tHS := raftpb.HardState{Term: 2, Vote: 3, Commit: 4, Lead: 5, LeadEpoch: 6}
+	init := logstore.EntryID{Index: RaftInitialLogIndex, Term: RaftInitialLogTerm}
 
-	testCases := []struct {
-		AppliedTerm  kvpb.RaftTerm
-		AppliedIndex kvpb.RaftIndex
-		OldHS        *raftpb.HardState
-		NewHS        raftpb.HardState
-		Err          string
-	}{
-		{OldHS: nil, AppliedTerm: 42, AppliedIndex: 24, NewHS: raftpb.HardState{Term: 42, Vote: 0, Commit: 24}},
-		// Can't wind back the committed index of the new HardState.
-		{OldHS: &tHS, AppliedIndex: kvpb.RaftIndex(tHS.Commit - 1), Err: "can't decrease HardState.Commit"},
-		{OldHS: &tHS, AppliedIndex: kvpb.RaftIndex(tHS.Commit), NewHS: tHS},
-		{OldHS: &tHS, AppliedIndex: kvpb.RaftIndex(tHS.Commit + 1), NewHS: raftpb.HardState{Term: tHS.Term, Vote: 3, Commit: tHS.Commit + 1, Lead: 5, LeadEpoch: 6}},
-		// Higher Term is picked up, but Vote, Lead, and LeadEpoch aren't carried
-		// over when the term changes.
-		{OldHS: &tHS, AppliedIndex: kvpb.RaftIndex(tHS.Commit), AppliedTerm: 11, NewHS: raftpb.HardState{Term: 11, Vote: 0, Commit: tHS.Commit, Lead: 0}},
-	}
-
-	for i, test := range testCases {
-		func() {
-			batch := eng.NewBatch()
-			defer batch.Close()
-			rsl := MakeStateLoader(roachpb.RangeID(1))
-
-			if test.OldHS != nil {
-				if err := rsl.SetHardState(context.Background(), batch, *test.OldHS); err != nil {
-					t.Fatal(err)
-				}
+	for _, tc := range []struct {
+		oldHS   raftpb.HardState
+		applied logstore.EntryID
+		want    raftpb.HardState
+		wantErr string
+	}{{
+		oldHS: raftpb.HardState{Term: 2, Commit: 1}, applied: init,
+		wantErr: "non-zero commit index 1",
+	}, {
+		oldHS: raftpb.HardState{Term: 1}, applied: logstore.EntryID{Index: 123},
+		wantErr: "mismatches {Index:10 Term:5}",
+	}, {
+		oldHS: raftpb.HardState{Term: 1}, applied: init,
+		want: raftpb.HardState{Term: 5, Commit: 10},
+	}, {
+		oldHS: raftpb.HardState{Term: 4, Vote: 1, Lead: 5}, applied: init,
+		want: raftpb.HardState{Term: 5, Commit: 10},
+	}, {
+		oldHS: raftpb.HardState{Term: 5, Vote: 1, Lead: 2, LeadEpoch: 10}, applied: init,
+		want: raftpb.HardState{Term: 5, Commit: 10, Vote: 1, Lead: 2, LeadEpoch: 10},
+	}, {
+		oldHS: raftpb.HardState{Term: 9, Lead: 1, LeadEpoch: 10}, applied: init,
+		want: raftpb.HardState{Term: 9, Commit: 10, Lead: 1, LeadEpoch: 10},
+	}} {
+		t.Run("", func(t *testing.T) {
+			hs, ts, err := SynthesizeRaftState(tc.oldHS, tc.applied)
+			require.Equal(t, tc.want, hs)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				require.Equal(t, init, ts)
+			} else {
+				require.ErrorContains(t, err, tc.wantErr)
+				require.Equal(t, kvserverpb.RaftTruncatedState{}, ts)
 			}
-
-			oldHS, err := rsl.LoadHardState(context.Background(), batch)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			err = rsl.SynthesizeHardState(context.Background(), batch, oldHS,
-				logstore.EntryID{Index: test.AppliedIndex, Term: test.AppliedTerm})
-			if !testutils.IsError(err, test.Err) {
-				t.Fatalf("%d: expected %q got %v", i, test.Err, err)
-			} else if err != nil {
-				// No further checking if we expected an error and got it.
-				return
-			}
-
-			hs, err := rsl.LoadHardState(context.Background(), batch)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(hs, test.NewHS) {
-				t.Fatalf("%d: expected %+v, got %+v", i, &test.NewHS, &hs)
-			}
-		}()
+		})
 	}
 }
