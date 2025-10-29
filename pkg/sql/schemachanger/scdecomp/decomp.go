@@ -590,6 +590,18 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 				columnType.ComputeExpr = expr
 			}
 		}
+
+		if col.IsGeneratedAsIdentity() && columnType.ElementCreationMetadata.In_26_1OrLater {
+			w.ev(scpb.Status_PUBLIC,
+				&scpb.ColumnGeneratedAsIdentity{
+					TableID:        tbl.GetID(),
+					ColumnID:       col.GetID(),
+					Type:           col.GetGeneratedAsIdentityType(),
+					SequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
+				})
+			column.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+			column.GeneratedAsIdentitySequenceOption = ""
+		}
 		w.ev(scpb.Status_PUBLIC, columnType)
 	}
 	if !col.IsNullable() {

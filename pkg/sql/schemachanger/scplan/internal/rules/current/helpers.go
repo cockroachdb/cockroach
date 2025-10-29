@@ -253,6 +253,8 @@ func isColumnDependent(e scpb.Element) bool {
 		return true
 	case *scpb.ColumnName, *scpb.ColumnComment, *scpb.IndexColumn:
 		return true
+	case *scpb.ColumnGeneratedAsIdentity:
+		return true
 	}
 	return isColumnTypeDependent(e)
 }

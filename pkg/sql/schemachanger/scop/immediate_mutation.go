@@ -247,6 +247,19 @@ type RemoveColumnComputeExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// AddColumnGeneratedAsIdentity will add a new generated as identity to a column.
+type AddColumnGeneratedAsIdentity struct {
+	immediateMutationOp
+	GeneratedAsIdentity scpb.ColumnGeneratedAsIdentity
+}
+
+// RemoveColumnGeneratedAsIdentity will remove the generated as identity from a column.
+type RemoveColumnGeneratedAsIdentity struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
 type MakeWriteOnlyColumnPublic struct {
 	immediateMutationOp

@@ -115,6 +115,11 @@ const (
 	// identify a policy within a table.
 	PolicyID
 
+	// GeneratedAsIdentityType: ALWAYS or BY DEFAULT
+	GeneratedAsIdentityType
+	// GeneratedAsIdentitySequenceOption
+	GeneratedAsIdentitySequenceOption
+
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
 	AttrMax = iota - 1
@@ -321,6 +326,12 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(IndexID, "IndexIDForValidation"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnGeneratedAsIdentity)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(GeneratedAsIdentityType, "Type"),
+		rel.EntityAttr(GeneratedAsIdentitySequenceOption, "SequenceOption"),
 	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),
