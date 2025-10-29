@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1212,7 +1211,7 @@ func TestNonRetryableError(t *testing.T) {
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args kvserverbase.FilterArgs) *kvpb.Error {
 			if req, ok := args.Req.(*kvpb.GetRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) {
 					hitError = true
 					return kvpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
 				}
@@ -1260,7 +1259,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	) *kvpb.Error {
 		for _, ru := range ba.Requests {
 			if req := ru.GetGet(); req != nil {
-				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) {
 					if atomic.LoadInt32(&clockUpdate) == 0 {
 						atomic.AddInt32(&clockUpdate, 1)
 						// Hack to advance the transaction timestamp on a
@@ -1358,7 +1357,7 @@ func TestFlushUncommittedDescriptorCacheOnRestart(t *testing.T) {
 			}
 
 			if req, ok := args.Req.(*kvpb.GetRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) {
 					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError.
 					txn := args.Hdr.Txn
