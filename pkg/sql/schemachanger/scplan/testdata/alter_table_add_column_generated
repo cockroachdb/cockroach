@@ -99,6 +99,7 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
+        GeneratedAsIdentityType: 1
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2
@@ -337,6 +338,7 @@ PreCommitPhase stage 2 of 2 with 43 MutationType ops
     *scop.MakeAbsentColumnDeleteOnly
       Column:
         ColumnID: 2
+        GeneratedAsIdentityType: 1
         TableID: 104
     *scop.SetColumnName
       ColumnID: 2

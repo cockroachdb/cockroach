@@ -260,6 +260,20 @@ type RemoveColumnGeneratedAsIdentity struct {
 	ColumnID descpb.ColumnID
 }
 
+// MakeColumnHidden will add the hidden attribute to a column.
+type MakeColumnHidden struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakeColumnHidden will remove the hidden attribute from a column.
+type MakeColumnVisible struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
 type MakeWriteOnlyColumnPublic struct {
 	immediateMutationOp

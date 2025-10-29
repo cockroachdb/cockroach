@@ -343,6 +343,43 @@ func (c *ElementCollection[E]) FilterColumnGeneratedAsIdentity() *ElementCollect
 	return (*ElementCollection[*ColumnGeneratedAsIdentity])(ret)
 }
 
+func (e ColumnHidden) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ColumnHidden) Element() Element {
+	return e.ColumnHidden
+}
+
+// ForEachColumnHidden iterates over elements of type ColumnHidden.
+// Deprecated
+func ForEachColumnHidden(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ColumnHidden),
+) {
+  c.FilterColumnHidden().ForEach(fn)
+}
+
+// FindColumnHidden finds the first element of type ColumnHidden.
+// Deprecated
+func FindColumnHidden(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ColumnHidden) {
+	if tc := c.FilterColumnHidden(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ColumnHidden)
+	}
+	return current, target, element
+}
+
+// ColumnHiddenElements filters elements of type ColumnHidden.
+func (c *ElementCollection[E]) FilterColumnHidden() *ElementCollection[*ColumnHidden] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ColumnHidden)
+		return ok
+	})
+	return (*ElementCollection[*ColumnHidden])(ret)
+}
+
 func (e ColumnName) element() {}
 
 // Element implements ElementGetter.
@@ -3363,6 +3400,8 @@ func (e* ElementProto) SetElement(element Element) {
 			e.ElementOneOf = &ElementProto_ColumnFamily{ ColumnFamily: t}
 		case *ColumnGeneratedAsIdentity:
 			e.ElementOneOf = &ElementProto_ColumnGeneratedAsIdentity{ ColumnGeneratedAsIdentity: t}
+		case *ColumnHidden:
+			e.ElementOneOf = &ElementProto_ColumnHidden{ ColumnHidden: t}
 		case *ColumnName:
 			e.ElementOneOf = &ElementProto_ColumnName{ ColumnName: t}
 		case *ColumnNotNull:
@@ -3540,6 +3579,7 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_ColumnDefaultExpression)(nil)),
 	((*ElementProto_ColumnFamily)(nil)),
 	((*ElementProto_ColumnGeneratedAsIdentity)(nil)),
+	((*ElementProto_ColumnHidden)(nil)),
 	((*ElementProto_ColumnName)(nil)),
 	((*ElementProto_ColumnNotNull)(nil)),
 	((*ElementProto_ColumnOnUpdateExpression)(nil)),
@@ -3637,6 +3677,7 @@ func GetElementTypes() []interface{} {
 	((*ColumnDefaultExpression)(nil)),
 	((*ColumnFamily)(nil)),
 	((*ColumnGeneratedAsIdentity)(nil)),
+	((*ColumnHidden)(nil)),
 	((*ColumnName)(nil)),
 	((*ColumnNotNull)(nil)),
 	((*ColumnOnUpdateExpression)(nil)),
