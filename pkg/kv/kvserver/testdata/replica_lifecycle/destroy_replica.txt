@@ -1,0 +1,27 @@
+create-descriptor start=a end=z replicas=(1,2,3)
+----
+created descriptor: r1:{a-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
+
+create-replica range-id=1 initialized
+----
+created replica: (n1,s1):1
+Put: 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
+Put: 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 0,0
+Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 10.8-upgrading-step-007
+Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
+
+destroy-replica range-id=1
+----
+Delete (Sized at 28): 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 
+Delete (Sized at 43): 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): 
+Delete (Sized at 34): 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): 
+Delete (Sized at 44): 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): 
+Delete (Sized at 36): 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 
+Put: 0,0 /Local/RangeID/1/u/RangeTombstone (0x016989757266746200): next_replica_id:4 
+Delete (Sized at 38): 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): 
+Delete (Sized at 30): 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): 
+Delete (Sized at 32): 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): 
