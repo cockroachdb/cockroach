@@ -676,6 +676,19 @@ func (p *planner) InternalSQLTxn() descs.Txn {
 	return &p.internalSQLTxn
 }
 
+// DisableUnsafeInternalCheck sets the skipUnsafeInternalsCheck property
+// to true, and returns a function which reverses it to false.
+func (p *planner) DisableUnsafeInternalsCheck() func() {
+	if p.skipUnsafeInternalsCheck {
+		return func() {}
+	}
+
+	p.skipUnsafeInternalsCheck = true
+	return func() {
+		p.skipUnsafeInternalsCheck = false
+	}
+}
+
 func (p *planner) regionsProvider() *regions.Provider {
 	if txn := p.InternalSQLTxn(); txn != nil {
 		_ = txn.Regions() // force initialization

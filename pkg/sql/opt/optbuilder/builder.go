@@ -593,6 +593,11 @@ func (b *Builder) maybeTrackUserDefinedTypeDepsForViews(texpr tree.TypedExpr) {
 // DisableUnsafeInternalCheck is used to disable the check that the
 // prevents external users from accessing unsafe internals.
 func (b *Builder) DisableUnsafeInternalCheck() func() {
+	// Already in the middle of a disabled section.
+	if b.skipUnsafeInternalsCheck {
+		return func() {}
+	}
+
 	b.skipUnsafeInternalsCheck = true
 	var cleanup func()
 	if b.catalog != nil {
