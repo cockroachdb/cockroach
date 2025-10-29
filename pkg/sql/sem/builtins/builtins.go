@@ -444,7 +444,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.VariadicType{VarType: types.Any},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
+				ctx := tree.NewFmtCtx(tree.FmtBareStrings)
 				for _, d := range args {
 					if d == tree.DNull {
 						continue
@@ -485,7 +485,7 @@ var regularBuiltins = map[string]builtinDefinition{
 					return tree.DNull, nil
 				}
 				sep := tree.MustBeDString(args[0])
-				ctx := tree.NewFmtCtx(tree.FmtPgwireText)
+				ctx := tree.NewFmtCtx(tree.FmtBareStrings)
 				prefix := false
 				for _, d := range args[1:] {
 					if d == tree.DNull {
