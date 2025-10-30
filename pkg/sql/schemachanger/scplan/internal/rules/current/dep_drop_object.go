@@ -129,7 +129,7 @@ func init() {
 				from.TypeFilter(rulesVersionKey, isTypeDescriptor),
 				from.DescIDEq(fromDescID),
 				to.ReferencedTypeDescIDsContain(fromDescID),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithTypeT),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithTypeTOrHasReferences),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
@@ -168,7 +168,7 @@ func init() {
 	)
 
 	registerDepRule(
-		"descriptor drop right before removing dependent with function refs in columns",
+		"descriptor drop right before removing dependent with function refs in columns / triggers",
 		scgraph.SameStagePrecedence,
 		"referenced-descriptor", "referencing-via-function",
 		func(from, to NodeVars) rel.Clauses {
@@ -177,12 +177,11 @@ func init() {
 				from.Type((*scpb.Function)(nil)),
 				from.DescIDEq(fromDescID),
 				to.ReferencedFunctionIDsContains(fromDescID),
-				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpression),
+				to.TypeFilter(rulesVersionKey, isSimpleDependent, isWithExpressionOrHasReferences),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
 		},
 	)
-
 }
 
 // These rules ensure that descriptor, back-reference in parent descriptor,

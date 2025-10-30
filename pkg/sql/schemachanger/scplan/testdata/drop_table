@@ -117,7 +117,7 @@ StatementPhase stage 1 of 1 with 142 MutationType ops
     [[TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[TriggerDeps:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -723,7 +723,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
-    [[TriggerDeps:{DescID: 109, TriggerID: 1}, ABSENT], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT], ABSENT] -> PUBLIC
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 110}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], ABSENT] -> PUBLIC
@@ -832,7 +832,7 @@ PreCommitPhase stage 2 of 2 with 153 MutationType ops
     [[TriggerTiming:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerEvents:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[TriggerFunctionCall:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[TriggerDeps:{DescID: 109, TriggerID: 1}, ABSENT], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 110}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 110, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -2704,7 +2704,7 @@ DROP TABLE defaultdb.shipments CASCADE;
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
-  to:   [TriggerDeps:{DescID: 109, TriggerID: 1}, ABSENT]
+  to:   [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
@@ -2751,11 +2751,11 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerDeps:{DescID: 109, TriggerID: 1}, ABSENT]
+- from: [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
   to:   [Table:{DescID: 109}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [TriggerDeps:{DescID: 109, TriggerID: 1}, ABSENT]
+- from: [TriggerDeps:{DescID: 109, ReferencedTypeIDs: [107 108], TriggerID: 1, ReferencedFunctionIDs: [113]}, ABSENT]
   to:   [Trigger:{DescID: 109, TriggerID: 1}, PUBLIC]
   kind: Precedence
   rule: trigger removed before dependents
