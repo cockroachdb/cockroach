@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/utils/packer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/fatih/color"
@@ -2255,4 +2257,133 @@ If a destination is not provided, the certs will be downloaded to a default %s d
 			return roachprod.FetchCertsDir(ctx, config.Logger, cluster, pgurlCertsDir, dest)
 		}),
 	}
+}
+
+func (cr *commandRegistry) buildBakeImageCmd() *cobra.Command {
+	var providers []string
+	var zones []string
+	var project string
+	var architectures []string
+	var dryRun bool
+
+	bakeImageCmd := &cobra.Command{
+		Use:   "bake-images",
+		Short: "pre-bake cloud VM images with roachprod configuration",
+		Long: `Pre-bake cloud VM images with packages and configuration to speed up cluster creation.
+
+This command creates cloud images with all roachprod packages (node_exporter,
+ebpf_exporter, chrony, etc.) pre-installed. When creating clusters with these
+pre-baked images, instance startup time is significantly reduced since packages
+don't need to be downloaded and installed.
+
+The image name is generated based on the base Ubuntu image and a checksum of
+the startup template content. If an image with the computed name already exists,
+the command exits successfully without creating a new image.
+
+If no provider is specified, images will be built for all supported providers.
+If no architecture is specified, all supported architectures will be built.
+
+Examples:
+  roachprod bake-image                                           # Build for all providers and architectures
+  roachprod bake-image --provider=gce --zones=us-central1-a      # GCE only
+  roachprod bake-image --provider=aws                            # AWS only
+  roachprod bake-image --provider=gce,aws --arch=amd64,arm64     # Both providers, specific architectures`,
+		Args: cobra.NoArgs,
+		Run: Wrap(func(cmd *cobra.Command, args []string) error {
+			// Default to all providers if none specified
+			if len(providers) == 0 {
+				providers = []string{"gce", "aws"}
+			}
+
+			// Default to all architectures if none specified
+			if len(architectures) == 0 {
+				architectures = []string{"amd64", "arm64", "fips"}
+			}
+
+			// Collect sources and provisioners from all providers
+			var allSources []packer.SourceConfig
+			var allProvisioners []packer.ProvisionerConfig
+			var allPlugins []packer.PluginConfig
+
+			for _, provider := range providers {
+				config.Logger.Printf("Preparing images for provider: %s", provider)
+
+				var sources []packer.SourceConfig
+				var provisioners []packer.ProvisionerConfig
+				var plugins []packer.PluginConfig
+				var err error
+
+				switch provider {
+				case "gce":
+					// Get GCE provider instance
+					gceProvider, ok := vm.Providers["gce"].(*gce.Provider)
+					if !ok {
+						return errors.New("GCE provider not initialized")
+					}
+
+					providerOpts := map[string]interface{}{
+						"zones":   zones,
+						"project": project,
+					}
+					sources, provisioners, plugins, err = gceProvider.GetPackerSources(
+						config.Logger, architectures, providerOpts,
+					)
+
+				case "aws":
+					// Get AWS provider instance
+					awsProvider, ok := vm.Providers["aws"].(*aws.Provider)
+					if !ok {
+						return errors.New("AWS provider not initialized")
+					}
+
+					providerOpts := map[string]interface{}{}
+					sources, provisioners, plugins, err = awsProvider.GetPackerSources(
+						config.Logger, architectures, providerOpts,
+					)
+
+				default:
+					return errors.Newf("unsupported provider: %s (supported: gce, aws)", provider)
+				}
+
+				if err != nil {
+					return errors.Wrapf(err, "failed to get Packer sources for %s", provider)
+				}
+
+				// Accumulate sources, provisioners, and plugins
+				allSources = append(allSources, sources...)
+				allProvisioners = append(allProvisioners, provisioners...)
+				allPlugins = append(allPlugins, plugins...)
+			}
+
+			// If no sources to build, we're done
+			if len(allSources) == 0 {
+				config.Logger.Printf("All requested images already exist, nothing to build")
+				return nil
+			}
+
+			// Build all images in a single Packer run (parallel across providers!)
+			config.Logger.Printf("Building images across %d provider(s) in parallel...", len(providers))
+			if err := packer.Build(config.Logger, allSources, allProvisioners, allPlugins, dryRun); err != nil {
+				return errors.Wrap(err, "packer build failed")
+			}
+
+			config.Logger.Printf("Successfully baked images for all requested providers")
+			return nil
+		}),
+	}
+
+	bakeImageCmd.Flags().StringSliceVar(&providers, "provider", nil,
+		"cloud provider(s) to build images for (gce, aws); if not specified, builds for all")
+	bakeImageCmd.Flags().StringSliceVar(&zones, "zones", []string{"us-central1-a"},
+		"zones to build the image in (GCE only, uses first zone)")
+	bakeImageCmd.Flags().StringVar(&project, "project", gce.DefaultProject(),
+		"GCE project to create the image in (GCE only)")
+	bakeImageCmd.Flags().StringSliceVar(&architectures, "arch", nil,
+		"architectures to build for (amd64, arm64, fips); if not specified, builds all")
+	bakeImageCmd.Flags().BoolVar(&dryRun, "dry-run", false,
+		"if set, only prints the actions without executing them")
+
+	cr.addToExcludeFromBashCompletion(bakeImageCmd)
+	cr.addToExcludeFromClusterFlagsMulti(bakeImageCmd)
+	return bakeImageCmd
 }
