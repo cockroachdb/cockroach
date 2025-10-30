@@ -237,7 +237,7 @@ func (s *httpServer) setupRoutes(
 
 	// Exempt the 2nd health check endpoint from authentication.
 	// (This simply mirrors /health and exists for backward compatibility.)
-	s.mux.Handle(apiconstants.AdminHealth, authenticatedAPIInternalServer)
+	s.mux.Handle(apiconstants.AdminHealth, unauthenticatedAPIInternalServer)
 	// The /_status/vars and /metrics endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, false /* useStaticLabels */}.handleVars))
 	s.mux.Handle(apiconstants.MetricsPath, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, true /* useStaticLabels */}.handleVars))
