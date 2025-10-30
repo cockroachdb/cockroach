@@ -126,3 +126,13 @@ var LogicalReplanFrequency = settings.RegisterDurationSetting(
 	10*time.Minute,
 	settings.PositiveDuration,
 )
+
+// LogicalReplicationUDFWriterEnabled controls whether the UDF-based logical
+// data replication writer is enabled. When disabled, existing UDF writer jobs
+// will be paused and new UDF LDR jobs cannot be created.
+var LogicalReplicationUDFWriterEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.deprecated_udf_writer.enabled",
+	"enables the UDF-based logical data replication writer (deprecated, will be removed)",
+	false,
+)

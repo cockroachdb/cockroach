@@ -117,6 +117,12 @@ func createLogicalReplicationStreamPlanHook(
 
 		hasUDF := len(options.userFunctions) > 0 || options.defaultFunction != nil && options.defaultFunction.FunctionId != 0
 
+		if hasUDF && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&p.ExecCfg().Settings.SV) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"UDF-based logical replication is disabled and will be deleted in a future CockroachDB release. "+
+					"Enable with SET CLUSTER SETTING logical_replication.deprecated_udf_writer.enabled = true")
+		}
+
 		mode := jobspb.LogicalReplicationDetails_Immediate
 		if m, ok := options.GetMode(); ok {
 			switch m {

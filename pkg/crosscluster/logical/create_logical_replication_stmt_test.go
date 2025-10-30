@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -200,4 +201,28 @@ func TestResolveDestinationObjects(t *testing.T) {
 
 	}
 
+}
+
+func TestUDFLogicalReplicationDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer tc.Stopper().Stop(ctx)
+
+	runnerA.Exec(t, "CREATE TABLE test_tab(pk INT PRIMARY KEY, v INT)")
+	runnerB.Exec(t, "CREATE TABLE test_tab(pk INT PRIMARY KEY, v INT)")
+
+	runnerB.Exec(t, `
+		CREATE FUNCTION repl_apply(action STRING, proposed test_tab, existing test_tab, prev test_tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timestamp DECIMAL)
+		RETURNS string AS $$ BEGIN RETURN 'accept_proposed'; END $$ LANGUAGE plpgsql
+	`)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	// Should fail with UDF writer disabled (default setting)
+	runnerB.ExpectErr(t, "UDF-based logical replication is disabled",
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE test_tab ON $1 INTO TABLE test_tab WITH FUNCTION repl_apply FOR TABLE test_tab",
+		dbAURL.String())
 }

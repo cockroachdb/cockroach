@@ -87,9 +87,31 @@ type logicalReplicationResumer struct {
 
 var _ jobs.Resumer = (*logicalReplicationResumer)(nil)
 
+func (r *logicalReplicationResumer) jobUsesUDF() bool {
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+
+	if payload.DefaultConflictResolution.FunctionId != 0 {
+		return true
+	}
+
+	for _, pair := range payload.ReplicationPairs {
+		if pair.DstFunctionID != 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	jobExecCtx := execCtx.(sql.JobExecContext)
+
+	if r.jobUsesUDF() && !crosscluster.LogicalReplicationUDFWriterEnabled.Get(&jobExecCtx.ExecCfg().Settings.SV) {
+		r.updateStatusMessage(ctx, "job paused because UDF-based logical replication writer is disabled")
+		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
+	}
+
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
 }
 
