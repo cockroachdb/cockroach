@@ -752,6 +752,9 @@ message LocalOnlySessionData {
   // OptimizerUseMaxFrequencySelectivity, when true, indicates that the
   // optimizer should use max frequency for selectivity estimation.
   bool optimizer_use_max_frequency_selectivity = 191;
+  // DisableWaitForJobsNotice, if set, disables the notice that is sent whenever
+  // some jobs were created in the txn.
+  bool disable_wait_for_jobs_notice = 192;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

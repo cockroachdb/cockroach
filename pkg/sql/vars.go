@@ -4457,6 +4457,23 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalTrue,
 	},
+
+	// CockroachDB extension.
+	`disable_wait_for_jobs_notice`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_wait_for_jobs_notice`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`disable_wait_for_jobs_notice`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableWaitForJobsNotice(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableWaitForJobsNotice), nil
+		},
+		GlobalDefault: globalFalse,
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
