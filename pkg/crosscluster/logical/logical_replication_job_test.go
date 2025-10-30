@@ -1652,9 +1652,9 @@ func compareReplicatedTables(
 		indexB, err := catalog.MustFindIndexByName(descB, indexA.GetName())
 		require.NoError(t, err)
 
-		aFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descA, indexA, []string{})
+		aFingerprintQuery, err := sql.BuildExperimentalFingerprintQueryForIndex(descA, indexA, []string{})
 		require.NoError(t, err)
-		bFingerprintQuery, err := sql.BuildFingerprintQueryForIndex(descB, indexB, []string{})
+		bFingerprintQuery, err := sql.BuildExperimentalFingerprintQueryForIndex(descB, indexB, []string{})
 		require.NoError(t, err)
 		t.Logf("fingerprinting index %s", indexA.GetName())
 		runnerB.CheckQueryResults(t, bFingerprintQuery, runnerA.QueryStr(t, aFingerprintQuery))

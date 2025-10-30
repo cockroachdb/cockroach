@@ -1157,19 +1157,25 @@ func (node *ShowRangeForRow) Format(ctx *FmtCtx) {
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.
 type ShowFingerprints struct {
-	TenantSpec *TenantSpec
-	Table      *UnresolvedObjectName
+	TenantSpec   *TenantSpec
+	Table        *UnresolvedObjectName
+	Experimental bool
 
 	Options ShowFingerprintOptions
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowFingerprints) Format(ctx *FmtCtx) {
+	if node.Experimental {
+		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS ")
+	} else {
+		ctx.WriteString("SHOW FINGERPRINTS ")
+	}
 	if node.Table != nil {
-		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
+		ctx.WriteString("FROM TABLE ")
 		ctx.FormatNode(node.Table)
 	} else {
-		ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER ")
+		ctx.WriteString("FROM VIRTUAL CLUSTER ")
 		ctx.FormatNode(node.TenantSpec)
 	}
 
