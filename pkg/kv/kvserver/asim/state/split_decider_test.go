@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/stretchr/testify/require"
 )
@@ -26,12 +27,13 @@ func TestSplitDecider(t *testing.T) {
 	// A decider should be created for a range when a load event is first
 	// recorded against it.
 	require.Nil(t, decider.deciders[1])
-	decider.Record(startTime, 1, workload.LoadEvent{Key: 1, Reads: 1})
+	startTick := types.Tick{Start: startTime, Tick: time.Second, Count: 0}
+	decider.Record(startTick, 1, workload.LoadEvent{Key: 1, Reads: 1})
 	require.NotNil(t, decider.deciders[1])
 
 	// No valid split key should be found when there has been below threshold
 	// load.
-	splitKey, found := decider.SplitKey(startTime, 1)
+	splitKey, found := decider.SplitKey(startTick, 1)
 	require.False(t, found)
 	require.Equal(t, InvalidKey, splitKey)
 
@@ -54,7 +56,8 @@ func TestSplitDecider(t *testing.T) {
 	// There should now be 1 suggested range for splitting which corresponds to
 	// the midpoint of the testing sequence.
 	require.Equal(t, []RangeID{1}, decider.ClearSplitKeys())
-	splitKey, found = decider.SplitKey(startTime.Add(testSettings.SplitStatRetention), 1)
+	endTick := startTick.FromWallTime(startTime.Add(testSettings.SplitStatRetention))
+	splitKey, found = decider.SplitKey(endTick, 1)
 	require.True(t, found)
 	require.Equal(t, Key(6), splitKey)
 

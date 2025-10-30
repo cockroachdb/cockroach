@@ -296,7 +296,7 @@ func TestRelocateRangeOp(t *testing.T) {
 			}
 
 			gossip := gossip.NewGossip(s, settings)
-			gossip.Tick(ctx, start, s)
+			gossip.Tick(ctx, state.OffsetTick(start, 0), s)
 
 			results := map[int64]map[state.RangeID]rangeState{}
 			pending := []DispatchedTicket{}

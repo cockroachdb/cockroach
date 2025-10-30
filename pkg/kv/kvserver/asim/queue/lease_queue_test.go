@@ -146,9 +146,9 @@ func TestLeaseQueue(t *testing.T) {
 				s.Allocator(store.StoreID()),
 				s.Node(store.NodeID()).AllocatorSync(),
 				s.StorePool(store.StoreID()),
-				start,
+				state.OffsetTick(start, 0),
 			)
-			s.TickClock(start)
+			s.TickClock(state.OffsetTick(start, 0))
 
 			for nodeID, livenessStatus := range tc.nonLiveNodes {
 				s.SetNodeLiveness(nodeID, livenessStatus)
@@ -161,7 +161,7 @@ func TestLeaseQueue(t *testing.T) {
 			leaseCountResults := make(map[int64]map[int]int)
 			// Initialize the store pool information.
 			gossip := gossip.NewGossip(s, testSettings)
-			gossip.Tick(ctx, start, s)
+			gossip.Tick(ctx, state.OffsetTick(start, 0), s)
 
 			nextRepl := 0
 			repls := s.Replicas(store.StoreID())

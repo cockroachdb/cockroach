@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -55,6 +56,7 @@ type state struct {
 	clusterinfo             ClusterInfo
 	usageInfo               *ClusterUsageInfo
 	clock                   *ManualSimClock
+	currentTick             types.Tick
 	settings                *config.SimulationSettings
 
 	// Unique ID generators for Nodes and Stores. These are incremented
@@ -77,6 +79,7 @@ func newState(settings *config.SimulationSettings) *state {
 		loadsplits:        make(map[StoreID]LoadSplitter),
 		capacityOverrides: make(map[StoreID]CapacityOverride),
 		clock:             &ManualSimClock{nanos: settings.StartTime.UnixNano()},
+		currentTick:       types.Tick{Start: settings.StartTime, Tick: time.Second, Count: 0},
 		ranges:            newRMap(),
 		usageInfo:         newClusterUsageInfo(),
 		settings:          settings,
@@ -1080,7 +1083,7 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	if !ok {
 		return
 	}
-	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
+	s.loadsplits[store.StoreID()].Record(s.currentTick, rng.rangeID, le)
 }
 
 // RangeUsageInfo returns the usage information for the Range with ID RangeID on
@@ -1124,8 +1127,9 @@ func (s *state) ClusterUsageInfo() *ClusterUsageInfo {
 
 // TickClock modifies the state Clock time to Tick. The clock is used as the
 // system time source for the store pools that are spawned from this state.
-func (s *state) TickClock(tick time.Time) {
-	s.clock.Set(tick.UnixNano())
+func (s *state) TickClock(tick types.Tick) {
+	s.currentTick = tick
+	s.clock.Set(tick.WallTime().UnixNano())
 }
 
 func (s *state) Clock() timeutil.TimeSource {

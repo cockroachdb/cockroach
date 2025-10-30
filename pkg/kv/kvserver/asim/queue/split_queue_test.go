@@ -144,7 +144,7 @@ func TestSplitQueue(t *testing.T) {
 				store.StoreID(),
 				changer,
 				testSettings,
-				start,
+				state.OffsetTick(start, 0),
 			)
 
 			results := make([]map[int64]int64, 0, 1)
