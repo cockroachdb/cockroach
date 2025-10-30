@@ -463,7 +463,7 @@ func TestClusterState(t *testing.T) {
 				case "reject-pending-changes":
 					changeIDsInt := dd.ScanArg[[]ChangeID](t, d, "change-ids")
 					for _, id := range changeIDsInt {
-						cs.undoPendingChange(id, true)
+						cs.maybeUndoPendingChange(id, true)
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
