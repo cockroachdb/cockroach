@@ -2274,37 +2274,64 @@ SELECT * FROM (
 		t *testing.T,
 		tc *testcluster.TestCluster,
 		db *gosql.DB,
-	) (numVoters, numNonVoters int, _ roachpb.RangeID, err error) {
+	) (numVoters, numNonVoters int, _ roachpb.RangeDescriptor, err error) {
 		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
-			return 0, 0, 0, err
+			return 0, 0, roachpb.RangeDescriptor{}, err
 		}
 
-		var rangeID roachpb.RangeID
-		if err := db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID); err != nil {
-			return 0, 0, 0, err
+		var key roachpb.Key
+		require.NoError(t,
+			db.QueryRow(`
+SELECT start_key from crdb_internal.ranges_no_leases WHERE range_id IN
+(SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1);
+`).Scan(&key))
+		desc, err := tc.LookupRange(key)
+		if err != nil {
+			return 0, 0, roachpb.RangeDescriptor{}, err
 		}
+
 		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
-			if replica, err := s.GetReplica(rangeID); err == nil && replica.OwnsValidLease(ctx, replica.Clock().NowAsClockTimestamp()) {
+			if replica, err := s.GetReplica(desc.RangeID); err == nil && replica.OwnsValidLease(ctx,
+				replica.Clock().NowAsClockTimestamp()) {
 				desc := replica.Desc()
 				numVoters = len(desc.Replicas().VoterDescriptors())
 				numNonVoters = len(desc.Replicas().NonVoterDescriptors())
 			}
 			return nil
 		})
-		return numVoters, numNonVoters, rangeID, nil
+		return numVoters, numNonVoters, desc, nil
 	}
 
 	// Ensure we are meeting our ZONE survival configuration.
+	logMore := time.After(15 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
-		numVoters, numNonVoters, rangeID, err := computeNumberOfReplicas(t, tc, db)
+		numVoters, numNonVoters, desc, err := computeNumberOfReplicas(t, tc, db)
+
 		require.NoError(t, err)
+		select {
+		default:
+		case <-logMore:
+			// If the retry loop has been stuck for a while, log the span config
+			// as seen by each store. For it to apply, the range's span needs to
+			// be contained in the start key's span config. If this is not the
+			// case, it can explain why the replication changes are not being made.
+			iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
+				cfg, sp, err := s.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
+				if err != nil {
+					return err
+				}
+				t.Logf("s%d: r%d %s -> span config %s %s", s.StoreID(), desc.RangeID, desc.RSpan(), sp, &cfg)
+				return nil
+			})
+		}
+
 		if numVoters != 3 {
-			return errors.Newf("expected 3 voters for r%d; got %d", rangeID, numVoters)
+			return errors.Newf("expected 3 voters for r%d; got %d", desc.RangeID, numVoters)
 		}
 		if numNonVoters != 2 {
-			return errors.Newf("expected 2 non-voters for r%d; got %v", rangeID, numNonVoters)
+			return errors.Newf("expected 2 non-voters for r%d; got %v", desc.RangeID, numNonVoters)
 		}
-		t.Logf("success: %d has %d voters and %d non-voters", rangeID, numVoters, numNonVoters)
+		t.Logf("success: %d has %d voters and %d non-voters", desc.RangeID, numVoters, numNonVoters)
 		return nil
 	})
 
@@ -2320,13 +2347,13 @@ SELECT * FROM (
 
 	// Ensure we are meeting our REGION survival configuration.
 	testutils.SucceedsSoon(t, func() error {
-		numVoters, numNonVoters, rangeID, err := computeNumberOfReplicas(t, tc, db)
+		numVoters, numNonVoters, desc, err := computeNumberOfReplicas(t, tc, db)
 		require.NoError(t, err)
 		if numVoters != 5 {
-			return errors.Newf("expected 5 voters for r%d; got %d", rangeID, numVoters)
+			return errors.Newf("expected 5 voters for r%d; got %d", desc.RangeID, numVoters)
 		}
 		if numNonVoters != 0 {
-			return errors.Newf("expected 0 non-voters for r%d; got %v", rangeID, numNonVoters)
+			return errors.Newf("expected 0 non-voters for r%d; got %v", desc.RangeID, numNonVoters)
 		}
 		return nil
 	})
