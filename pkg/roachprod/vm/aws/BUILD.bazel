@@ -6,6 +6,7 @@ go_library(
         "aws.go",
         "config.go",
         "keys.go",
+        "pre_bake_amis.go",
         "support.go",
     ],
     embedsrcs = [
@@ -19,6 +20,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
+        "//pkg/roachprod/vm/utils/packer",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

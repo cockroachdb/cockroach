@@ -74,5 +74,6 @@ func (cr *commandRegistry) register() {
 		cr.buildGetLatestPProfCmd(),
 		cr.buildFetchCertsDir(),
 		cr.buildChaosCmd(),
+		cr.buildBakeImageCmd(),
 	})
 }

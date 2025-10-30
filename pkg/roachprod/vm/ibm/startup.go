@@ -138,8 +138,8 @@ setup_disks
 {{ template "ssh_utils" . }}
 {{ template "node_exporter" . }}
 {{ template "ebpf_exporter" . }}
-
-sudo touch {{ .OSInitializedFile }}
+{{ template "touch_initialized_file" . }}
+{{ template "tail_utils" . }}
 `
 
 // startupScript returns the startup script for the given arguments.
