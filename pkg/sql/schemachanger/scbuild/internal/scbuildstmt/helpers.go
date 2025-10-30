@@ -1467,7 +1467,12 @@ func addASwapInIndexByCloningFromSource(
 //
 // Note that this function excludes acting upon indexes whose IDs are in `excludes`.
 func updateElementsToDependOnNewFromOld(
-	b BuildCtx, tableID catid.DescID, old catid.IndexID, new catid.IndexID, excludes catid.IndexSet,
+	b BuildCtx,
+	tableID catid.DescID,
+	old catid.IndexID,
+	new catid.IndexID,
+	newRecreateTargetID catid.IndexID,
+	excludes catid.IndexSet,
 ) {
 	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {
@@ -1483,8 +1488,8 @@ func updateElementsToDependOnNewFromOld(
 			if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
 				e.SourceIndexID = new
 			}
-			if e.RecreateTargetIndexID == old {
-				e.RecreateTargetIndexID = new
+			if e.RecreateTargetIndexID == old && !excludes.Contains(e.IndexID) {
+				e.RecreateTargetIndexID = newRecreateTargetID
 			}
 		case *scpb.CheckConstraint:
 			if e.IndexIDForValidation == old {
@@ -1553,7 +1558,7 @@ func (pic *primaryIndexChain) inflate(b BuildCtx) {
 		b BuildCtx, tableID catid.DescID, out catid.IndexID, source catid.IndexID, isInFinal bool,
 	) (in, inTemp indexSpec) {
 		in, inTemp = addASwapInIndexByCloningFromSource(b, tableID, out, source, isInFinal)
-		updateElementsToDependOnNewFromOld(b, tableID, out, in.primary.IndexID,
+		updateElementsToDependOnNewFromOld(b, tableID, out, in.primary.IndexID, in.primary.IndexID,
 			catid.MakeIndexIDSet(in.primary.IndexID, in.primary.TemporaryIndexID))
 		return in, inTemp
 	}
@@ -1638,6 +1643,14 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 		redundants = append(redundants, idxSpec)
 		redundantIDs[idxSpec] = true
 	}
+	hasRedundantID := func(id catid.IndexID) bool {
+		for _, r := range redundants {
+			if r.indexID() == id {
+				return true
+			}
+		}
+		return false
+	}
 
 	if haveSameIndexCols(b, tableID, pic.oldSpec.primary.IndexID, pic.inter1Spec.primary.IndexID) {
 		markAsRedundant(&pic.inter1Spec)
@@ -1678,8 +1691,28 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 	// identified by attrs defined in screl and updating SourceIndexID of a
 	// primary index will cause us to fail to retrieve the element to drop).
 	for _, redundant := range redundants {
+		// For new replacement secondary indexes we need to select the index to
+		// publish this index with. The source index ID is an excellent candidate
+		// as long as its not the old primary index (i.e. we folded all earlier
+		// primary indexes).
+		recreateTargetID := redundant.SourceIndexID()
+		if recreateTargetID == pic.oldSpec.primary.IndexID || hasRedundantID(recreateTargetID) {
+			// Otherwise, we need to select the next valid index in the chain, that
+			// follows the redundant one.
+			firstMatch := false
+			specs := pic.allPrimaryIndexSpecs(func(spec *indexSpec) bool {
+				if spec.indexID() == recreateTargetID {
+					firstMatch = true
+					return false
+				}
+				return !redundantIDs[spec] && firstMatch
+			})
+			if len(specs) > 0 {
+				recreateTargetID = specs[0].indexID()
+			}
+		}
 		updateElementsToDependOnNewFromOld(b, tableID,
-			redundant.indexID(), redundant.SourceIndexID(), catid.IndexSet{} /* excludes */)
+			redundant.indexID(), redundant.SourceIndexID(), recreateTargetID, catid.IndexSet{} /* excludes */)
 		*redundant = indexSpec{} // reset this indexSpec in the chain
 	}
 
