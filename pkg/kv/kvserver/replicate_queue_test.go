@@ -1786,11 +1786,13 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 
 func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
 	for _, s := range tc.Servers {
-		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+		if err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
 			return store.ForceReplicationScanAndProcess()
-		})
+		}); err != nil {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
