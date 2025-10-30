@@ -8953,6 +8953,70 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.bytes_read.count
+      exported_name: sql_statements_bytes_read_count
+      description: Number of bytes read by SQL statements
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.bytes_read.count.internal
+      exported_name: sql_statements_bytes_read_count_internal
+      description: Number of bytes read by SQL statements (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.index_bytes_written.count
+      exported_name: sql_statements_index_bytes_written_count
+      description: Number of primary and secondary index bytes modified by SQL statements
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.index_bytes_written.count.internal
+      exported_name: sql_statements_index_bytes_written_count_internal
+      description: Number of primary and secondary index bytes modified by SQL statements (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.index_rows_written.count
+      exported_name: sql_statements_index_rows_written_count
+      description: Number of primary and secondary index rows modified by SQL statements
+      y_axis_label: Rows
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.index_rows_written.count.internal
+      exported_name: sql_statements_index_rows_written_count_internal
+      description: Number of primary and secondary index rows modified by SQL statements (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.rows_read.count
+      exported_name: sql_statements_rows_read_count
+      description: Number of rows read by SQL statements
+      y_axis_label: Rows
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.statements.rows_read.count.internal
+      exported_name: sql_statements_rows_read_count_internal
+      description: Number of rows read by SQL statements (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.stats.activity.update.latency
       exported_name: sql_stats_activity_update_latency
       description: The latency of updates made by the SQL activity updater job. Includes failed update attempts
