@@ -279,7 +279,11 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 	if b.knobs.BeforeAdd != nil {
-		ctx, e = b.knobs.BeforeAdd(ctx, e)
+		var shouldAdd bool
+		ctx, e, shouldAdd = b.knobs.BeforeAdd(ctx, e)
+		if !shouldAdd {
+			return nil
+		}
 	}
 
 	if log.V(2) {
