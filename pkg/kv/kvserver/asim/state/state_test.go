@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -319,7 +318,7 @@ func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 		}
 	}
 
-	s.TickClock(start)
+	s.TickClock(OffsetTick(start, 0))
 	testingResetLoad(s, r1.RangeID())
 	for i := 1; i < 100; i++ {
 		applyLoadToStats(int64(k1), qps)
@@ -785,7 +784,7 @@ func TestCapacityOverride(t *testing.T) {
 		Key:    1,
 		Writes: 500,
 	}})
-	s.TickClock(tick.Add(5 * time.Second))
+	s.TickClock(OffsetTick(tick, 5))
 
 	capacity := s.StoreDescriptors(false /* cached */, storeID)[0].Capacity
 	require.Equal(t, 42.0, capacity.QueriesPerSecond)

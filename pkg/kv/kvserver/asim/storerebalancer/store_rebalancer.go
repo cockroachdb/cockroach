@@ -8,7 +8,6 @@ package storerebalancer
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -110,7 +109,7 @@ func newStoreRebalancerControl(
 		sr:       sr,
 		settings: settings,
 		rebalancerState: &storeRebalancerState{
-			lastTick: start.Add(-settings.LBRebalancingInterval),
+			lastTick: start.Add(-int(settings.LBRebalancingInterval.Seconds())),
 		},
 		storeID:    storeID,
 		allocator:  allocator,
@@ -246,7 +245,7 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance(ctx context.Contex
 
 func (src *storeRebalancerControl) applyLeaseRebalance(
 	ctx context.Context,
-	tick time.Time,
+	tick types.Tick,
 	s state.State,
 	candidateReplica kvserver.CandidateReplica,
 	target roachpb.ReplicaDescriptor,
@@ -336,7 +335,7 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance(ctx context.Contex
 
 func (src *storeRebalancerControl) applyRangeRebalance(
 	ctx context.Context,
-	tick time.Time,
+	tick types.Tick,
 	s state.State,
 	candidateReplica kvserver.CandidateReplica,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,

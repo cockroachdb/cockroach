@@ -266,7 +266,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 		ctx = s.AmbientContext.AnnotateCtx(ctx)
 
 		// Update the store clocks with the current tick time.
-		s.tickStoreClocks(tick.WallTime())
+		s.tickStoreClocks(tick)
 
 		// Tick any events.
 		s.tickEvents(ctx, tick)
@@ -329,7 +329,7 @@ func (s *Simulator) tickGossip(ctx context.Context, tick types.Tick) {
 	s.gossip.Tick(ctx, tick, s.state)
 }
 
-func (s *Simulator) tickStoreClocks(tick time.Time) {
+func (s *Simulator) tickStoreClocks(tick types.Tick) {
 	s.state.TickClock(tick)
 }
 

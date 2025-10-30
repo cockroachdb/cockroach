@@ -102,7 +102,7 @@ func TestScannerReplicaPacer(t *testing.T) {
 			for _, tick := range tc.ticks {
 				replsThisTick := 0
 				for {
-					if repl := pacer.Next(state.OffsetTick(start, tick)); repl == nil {
+					if repl := pacer.Next(state.OffsetTick(start, tick).WallTime()); repl == nil {
 						break
 					}
 

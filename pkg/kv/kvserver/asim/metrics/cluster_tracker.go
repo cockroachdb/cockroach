@@ -9,8 +9,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -56,7 +56,7 @@ func (m *ClusterMetricsTracker) write(record []string) error {
 // Listen implements the StoreMetricsListener interface.
 func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) {
 	var (
-		tick                 time.Time
+		tick                 types.Tick
 		totalRangeCount      int64
 		totalLeaseTransfers  int64
 		totalRebalances      int64

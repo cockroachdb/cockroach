@@ -9,7 +9,6 @@ import (
 	"context"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -22,7 +21,8 @@ import (
 func TestGossip(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 
-	tick := settings.StartTime
+	start := settings.StartTime
+	tick := int64(0)
 	s := state.NewStateEvenDistribution(3, 100, 3, 1000, settings)
 	// Transfer all the leases to store 1 initially.
 	for _, rng := range s.Ranges() {
@@ -110,13 +110,13 @@ func TestGossip(t *testing.T) {
 	// The initial storepool state should be empty for each store.
 	assertStorePool(assertEmptyFn)
 
-	gossip.Tick(ctx, tick, s)
+	gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 	// The storepool state is still empty, after ticking, since the
 	// delay is 1 second.
 	assertStorePool(assertEmptyFn)
 	// The last interval gossip time for each store should be the current tick.
 	for _, sg := range gossip.storeGossip {
-		require.Equal(t, tick, sg.lastIntervalGossip)
+		require.Equal(t, state.OffsetTick(start, tick), sg.lastIntervalGossip)
 	}
 
 	// The exchange component should contain three store descriptors, one for
@@ -125,8 +125,8 @@ func TestGossip(t *testing.T) {
 
 	// Add the delay interval and then assert that the storepools for each
 	// store are populated.
-	tick = tick.Add(settings.StateExchangeDelay)
-	gossip.Tick(ctx, tick, s)
+	tick += int64(settings.StateExchangeDelay.Seconds())
+	gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 
 	// The exchange component should now be empty, clearing the previous
 	// gossiped descriptors.
@@ -142,16 +142,16 @@ func TestGossip(t *testing.T) {
 	// lease to s2.
 	for _, rng := range s.Ranges() {
 		s.TransferLease(rng.RangeID(), 2)
-		storeTick = storeTick.Add(3 * time.Second)
-		s.TickClock(storeTick)
+		storeTick += 3
+		s.TickClock(state.OffsetTick(start, storeTick))
 	}
-	gossip.Tick(ctx, tick, s)
+	gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 	// There should be just store 1 and 2 pending gossip updates in the exchanger.
 	require.Len(t, gossip.exchange.pending, 2)
 	// Increment the tick and check that the updated lease count information
 	// reached each storepool.
-	tick = tick.Add(settings.StateExchangeDelay)
-	gossip.Tick(ctx, tick, s)
+	tick += int64(settings.StateExchangeDelay.Seconds())
+	gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 	require.Len(t, gossip.exchange.pending, 0)
 
 	// NB: If all the storepools are identical, we only need to check one

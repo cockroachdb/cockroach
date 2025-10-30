@@ -8,13 +8,13 @@ package mmaintegration
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,7 +34,7 @@ type MMAStoreRebalancer struct {
 
 	// lastRebalanceTime is the last time allocator.ComputeChanges was called.
 	// This is used to determine when to allocator.ComputeChanges again.
-	lastRebalanceTime time.Time
+	lastRebalanceTime types.Tick
 	// pendingChangeIdx is the index of the next pendingChange to be processed,
 	// When pendingChangeIdx == len(pendingChanges), there are no more pending
 	// changes to process.
@@ -52,7 +52,7 @@ type MMAStoreRebalancer struct {
 	// hooked up to be passed into the mma allocator. This is a placeholder for
 	// tracking the last time a store shed leases, with the intention to use it
 	// to populate StoreCapacity the no_leases_shed_last_rebalance field.
-	lastLeaseTransfer time.Time
+	lastLeaseTransfer types.Tick
 }
 
 type pendingChangeAndRangeUsageInfo struct {
@@ -87,9 +87,9 @@ func NewMMAStoreRebalancer(
 
 // Tick is called periodically to check for and apply rebalancing operations
 // using mmaprototype.Allocator.
-func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state.State) {
+func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick types.Tick, s state.State) {
 	ctx = msr.AnnotateCtx(ctx)
-	ctx = logtags.AddTag(ctx, "t", tick.Sub(msr.settings.StartTime))
+	ctx = logtags.AddTag(ctx, "t", tick.Sub(types.Tick{Start: msr.settings.StartTime, Tick: 0, Count: 0}))
 
 	if !msr.currentlyRebalancing &&
 		tick.Sub(msr.lastRebalanceTime) < msr.settings.LBRebalancingInterval {

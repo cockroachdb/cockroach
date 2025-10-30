@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,10 +24,10 @@ import (
 type LoadSplitter interface {
 	// Record records a workload event at the time given, against the range
 	// with ID RangeID.
-	Record(time.Time, RangeID, workload.LoadEvent) bool
+	Record(types.Tick, RangeID, workload.LoadEvent) bool
 	// SplitKey returns whether split key and true if a valid split key exists
 	// given the recorded load, otherwise returning false.
-	SplitKey(time.Time, RangeID) (Key, bool)
+	SplitKey(types.Tick, RangeID) (Key, bool)
 	// ClearSplitKeys returns a suggested list of ranges that should be split
 	// due to load. Calling this function resets the list of suggestions.
 	ClearSplitKeys() []RangeID
@@ -95,7 +96,7 @@ func (s *SplitDecider) newDecider() *split.Decider {
 
 // Record records a workload event at the time given, against the range
 // with ID RangeID.
-func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadEvent) bool {
+func (s *SplitDecider) Record(tick types.Tick, rangeID RangeID, le workload.LoadEvent) bool {
 	decider := s.deciders[rangeID]
 
 	if decider == nil {
@@ -106,7 +107,7 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 	qps := LoadEventQPS(le)
 	shouldSplit := decider.Record(
 		context.Background(),
-		tick,
+		tick.WallTime(),
 		func(_ split.SplitObjective) int { return int(qps) },
 		func() roachpb.Span {
 			return roachpb.Span{Key: Key(le.Key).ToRKey().AsRawKey()}
@@ -121,13 +122,13 @@ func (s *SplitDecider) Record(tick time.Time, rangeID RangeID, le workload.LoadE
 
 // SplitKey returns whether split key and true if a valid split key exists
 // given the recorded load, otherwise returning false.
-func (s *SplitDecider) SplitKey(tick time.Time, rangeID RangeID) (Key, bool) {
+func (s *SplitDecider) SplitKey(tick types.Tick, rangeID RangeID) (Key, bool) {
 	decider := s.deciders[rangeID]
 	if decider == nil {
 		return InvalidKey, false
 	}
 
-	key := decider.MaybeSplitKey(context.Background(), tick)
+	key := decider.MaybeSplitKey(context.Background(), tick.WallTime())
 	if key == nil {
 		return InvalidKey, false
 	}

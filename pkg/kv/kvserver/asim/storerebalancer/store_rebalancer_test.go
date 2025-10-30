@@ -159,14 +159,14 @@ func TestStoreRebalancer(t *testing.T) {
 			s := tc.s
 
 			gossip := gossip.NewGossip(s, testSettings)
-			gossip.Tick(ctx, start, s)
+			gossip.Tick(ctx, state.OffsetTick(start, 0), s)
 
 			allocator := s.Allocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
 			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
-			src := newStoreRebalancerControl(start, testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
-			s.TickClock(start)
+			src := newStoreRebalancerControl(state.OffsetTick(start, 0), testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
+			s.TickClock(state.OffsetTick(start, 0))
 
 			resultsQPS := []map[state.StoreID]float64{}
 			resultsPhase := []storeRebalancerPhase{}
@@ -271,14 +271,14 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			gossip := gossip.NewGossip(s, testSettings)
 
 			// Update the storepool for informing allocator decisions.
-			gossip.Tick(ctx, start, s)
+			gossip.Tick(ctx, state.OffsetTick(start, 0), s)
 
 			allocator := s.Allocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
 			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
-			src := newStoreRebalancerControl(start, testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
-			s.TickClock(start)
+			src := newStoreRebalancerControl(state.OffsetTick(start, 0), testingStore, controller, allocator, storePool, testSettings, GetStateRaftStatusFn(s))
+			s.TickClock(state.OffsetTick(start, 0))
 
 			results := []map[state.StoreID]float64{}
 			for _, tick := range tc.ticks {

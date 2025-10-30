@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"

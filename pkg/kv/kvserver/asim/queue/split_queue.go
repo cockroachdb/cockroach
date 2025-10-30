@@ -122,7 +122,7 @@ func (sq *splitQueue) shouldSplit(tick types.Tick, rangeID state.RangeID, s stat
 	}
 
 	// Check whether we should split this range based on load.
-	if _, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick.WallTime(), rangeID); ok {
+	if _, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick, rangeID); ok {
 		return 2.0
 	}
 
@@ -140,7 +140,7 @@ func (sq *splitQueue) findKeySpanSplit(
 ) (state.Key, bool) {
 	// Try and use the split key suggested by the load based splitter, if one
 	// exists.
-	if loadSplitKey, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick.WallTime(), rangeID); ok {
+	if loadSplitKey, ok := s.LoadSplitterFor(sq.storeID).SplitKey(tick, rangeID); ok {
 		return loadSplitKey, true
 	}
 
