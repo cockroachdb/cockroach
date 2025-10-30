@@ -173,9 +173,7 @@ var enableClientRetryTokenBucket = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"cloudstorage.s3.client_retry_token_bucket.enabled",
 	"enable the client side retry token bucket in the AWS S3 client",
-	// TODO(jeffswenson): change this to false in a seperate PR. This is false in
-	// the backports to stay true to the backport policy.
-	true)
+	false)
 
 // roleProvider contains fields about the role that needs to be assumed
 // in order to access the external storage.
