@@ -18,7 +18,7 @@ store-id=1
 
 ranges
 ----
-range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 
 make-pending-changes range-id=1
