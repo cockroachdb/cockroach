@@ -159,3 +159,17 @@ func (o WithNodeExporterPortOverride) apply(args *StartupArgs) {
 func WithNodeExporterPort(nodeExporterPort int) WithNodeExporterPortOverride {
 	return WithNodeExporterPortOverride{NodeExporterPort: nodeExporterPort}
 }
+
+type WithStartupScriptModeOverride struct {
+	StartupScriptMode StartupScriptMode
+}
+
+// apply applies the StartupScriptMode override to the StartupArgs.
+func (o WithStartupScriptModeOverride) apply(args *StartupArgs) {
+	args.StartupScriptMode = o.StartupScriptMode
+}
+
+// WithStartupScriptMode overrides the StartupScriptMode field.
+func WithStartupScriptMode(startupScriptMode StartupScriptMode) WithStartupScriptModeOverride {
+	return WithStartupScriptModeOverride{StartupScriptMode: startupScriptMode}
+}
