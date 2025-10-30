@@ -1549,6 +1549,10 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	})
 }
 
+func makeKey(codec keys.SQLCodec, key string) roachpb.Key {
+	return append(append(roachpb.Key(nil), codec.TenantPrefix()...), key...)
+}
+
 // TestAddSSTableIntentResolution tests that AddSSTable resolves
 // intents of conflicting transactions.
 func TestAddSSTableIntentResolution(t *testing.T) {
@@ -1556,20 +1560,18 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
-	})
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	// Start a transaction that writes an intent at b.
 	txn := db.NewTxn(ctx, "intent")
-	require.NoError(t, txn.Put(ctx, "b", "intent"))
+	require.NoError(t, txn.Put(ctx, makeKey(s.Codec(), "b"), "intent"))
 
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst, start, end := storageutils.MakeSST(t, s.ClusterSettings(), kvs{
+	sst, start, end := storageutils.MakeSSTWithPrefix(t, s.ClusterSettings(), s.Codec().TenantPrefix(), kvs{
 		pointKV("a", 1, "1"),
 		pointKV("b", 1, "2"),
 		pointKV("c", 1, "3"),
@@ -1598,22 +1600,19 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
-		Knobs:             base.TestingKnobs{},
-	})
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	// Write key.
 	txn := db.NewTxn(ctx, "txn")
-	require.NoError(t, txn.Put(ctx, "key", "txn"))
+	require.NoError(t, txn.Put(ctx, makeKey(s.Codec(), "key"), "txn"))
 	require.NoError(t, txn.Commit(ctx))
 	txnTS, err := txn.CommitTimestamp()
 	require.NoError(t, err)
 
 	// Add an SST writing below the previous write.
-	sst, start, end := storageutils.MakeSST(t, s.ClusterSettings(), kvs{pointKV("key", 1, "sst")})
+	sst, start, end := storageutils.MakeSSTWithPrefix(t, s.ClusterSettings(), s.Codec().TenantPrefix(), kvs{pointKV("key", 1, "sst")})
 	sstReq := &kvpb.AddSSTableRequest{
 		RequestHeader:                  kvpb.RequestHeader{Key: start, EndKey: end},
 		Data:                           sst,
@@ -1629,7 +1628,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 
 	// Reading gets the value from the txn, because the tscache allowed writing
 	// below the committed value.
-	kv, err := db.Get(ctx, "key")
+	kv, err := db.Get(ctx, makeKey(s.Codec(), "key"))
 	require.NoError(t, err)
 	require.Equal(t, "txn", string(kv.ValueBytes()))
 
@@ -1642,7 +1641,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	_, pErr = db.NonTransactionalSender().Send(ctx, ba)
 	require.Nil(t, pErr)
 
-	kv, err = db.Get(ctx, "key")
+	kv, err = db.Get(ctx, makeKey(s.Codec(), "key"))
 	require.NoError(t, err)
 	require.Equal(t, "sst", string(kv.ValueBytes()))
 }
@@ -1654,30 +1653,32 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableCanAckBeforeApplication: true,
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Issue a write to trigger a closed timestamp.
-	require.NoError(t, db.Put(ctx, "someKey", "someValue"))
+	require.NoError(t, db.Put(ctx, makeKey(s.Codec(), "someKey"), "someValue"))
+
+	key := makeKey(s.Codec(), "key")
 
 	// Get the closed timestamp for the range owning "key".
-	rd, err := s.LookupRange(roachpb.Key("key"))
+	rd, err := srv.LookupRange(key)
 	require.NoError(t, err)
-	r, store, err := s.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rd.RangeID)
+	r, store, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rd.RangeID)
 	require.NoError(t, err)
 	closedTS := r.GetCurrentClosedTimestamp(ctx)
 	require.NotZero(t, closedTS)
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.
 	reqTS := closedTS.Prev()
-	sst, start, end := storageutils.MakeSST(t, store.ClusterSettings(), kvs{pointKV("key", 1, "sst")})
+	sst, start, end := storageutils.MakeSSTWithPrefix(t, store.ClusterSettings(), s.Codec().TenantPrefix(), kvs{pointKV("key", 1, "sst")})
 	sstReq := &kvpb.AddSSTableRequest{
 		RequestHeader:                  kvpb.RequestHeader{Key: start, EndKey: end},
 		Data:                           sst,
@@ -1695,10 +1696,10 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.True(t, closedTS.LessEq(writeTS), "timestamp %s below closed timestamp %s", result.Timestamp, closedTS)
 
 	// Check that the value was in fact written at the write timestamp.
-	kvs, err := storage.Scan(context.Background(), store.TODOEngine(), roachpb.Key("key"), roachpb.Key("key").Next(), 0)
+	kvs, err := storage.Scan(context.Background(), store.TODOEngine(), key, key.Next(), 0)
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
-	require.Equal(t, storage.MVCCKey{Key: roachpb.Key("key"), Timestamp: writeTS}, kvs[0].Key)
+	require.Equal(t, storage.MVCCKey{Key: key, Timestamp: writeTS}, kvs[0].Key)
 	mvccVal, err := storage.DecodeMVCCValue(kvs[0].Value)
 	require.NoError(t, err)
 	v, err := mvccVal.Value.GetBytes()
