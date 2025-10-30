@@ -967,7 +967,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 }
 func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
     return u.val.(tree.ChangefeedFilterOption)
-} 
+}
 
 %}
 
@@ -1017,7 +1017,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
-%token <str> FILES FILTER
+%token <str> FILES FILTER FINGERPRINTS
 %token <str> FIRST FIRST_CONTAINED_BY FIRST_CONTAINS FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX
 %token <str> FORCE_INVERTED_INDEX FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
 %token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
@@ -1400,6 +1400,7 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %type <tree.Statement> show_enums_stmt
 %type <tree.Statement> show_external_connections_stmt
 %type <tree.Statement> show_fingerprints_stmt opt_with_show_fingerprints_options fingerprint_options_list fingerprint_options
+%type <bool> experimental_or_not_fingerprints
 %type <tree.Statement> show_functions_stmt
 %type <tree.Statement> show_procedures_stmt
 %type <tree.Statement> show_grants_stmt
@@ -6513,7 +6514,7 @@ db_level_changefeed_filter_option:
   {
     $$.val = tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.IncludeFilter}
   }
-| /* EMPTY */ 
+| /* EMPTY */
   {
     $$.val = tree.ChangefeedFilterOption{}
   }
@@ -7961,7 +7962,7 @@ inspect_option:
 //   [WITH DETAILS]
 //
 // When table is specified errors will be filtered to that table. When job is
-// not set results from the most recent, completed job with errors is reported on. 
+// not set results from the most recent, completed job with errors is reported on.
 // %SeeAlso: INSPECT
 show_inspect_errors_stmt:
   SHOW INSPECT ERRORS opt_for_table_clause opt_for_job_clause opt_with_details
@@ -10404,15 +10405,33 @@ show_locality_stmt:
   }
 
 show_fingerprints_stmt:
-  SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name opt_with_show_fingerprints_options
+  SHOW experimental_or_not_fingerprints FROM TABLE table_name opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName(), Options: *$6.showFingerprintOptions()}
+    $$.val = &tree.ShowFingerprints{
+                Table: $5.unresolvedObjectName(),
+                Experimental: $2.bool(),
+                Options: *$6.showFingerprintOptions(),
+             }
   }
-| SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
+| SHOW experimental_or_not_fingerprints FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{TenantSpec: $5.tenantSpec(), Options: *$6.showFingerprintOptions()}
+    $$.val = &tree.ShowFingerprints{
+                TenantSpec: $5.tenantSpec(),
+                Experimental: $2.bool(),
+                Options: *$6.showFingerprintOptions(),
+             }
+  }
+
+experimental_or_not_fingerprints:
+  EXPERIMENTAL_FINGERPRINTS
+  {
+    $$.val = true
+  }
+| FINGERPRINTS
+  {
+    $$.val = false
   }
 
 opt_with_show_fingerprints_options:
@@ -18604,6 +18623,7 @@ unreserved_keyword:
 | FAILURE
 | FILES
 | FILTER
+| FINGERPRINTS
 | FIRST
 | FOLLOWING
 | FORMAT
@@ -19145,6 +19165,7 @@ bare_label_keywords:
 | FALSE
 | FAMILY
 | FILES
+| FINGERPRINTS
 | FIRST
 | FLOAT
 | FOLLOWING
