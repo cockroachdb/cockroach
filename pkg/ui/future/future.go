@@ -6,13 +6,16 @@
 package future
 
 import (
+	"embed"
 	"html/template"
 	"net/http"
-	"os"
-	"path"
-	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+//go:embed assets/*
+var assetsFS embed.FS
 
 func MakeFutureHandler() http.HandlerFunc {
 	mux := http.ServeMux{}
@@ -25,18 +28,43 @@ func MakeFutureHandler() http.HandlerFunc {
   <head>
     <script src="assets/htmx.min.js"></script>
     <script defer src="assets/alpine.min.js"></script>
+    <script src="assets/auto-refresh.js"></script>
     <link rel=stylesheet href="assets/missing.css">
   </head>
 
   <body>
-  Future DB Console! (inline!)
-
-  <h1>Login</h1>
-  <form method="POST">
-    <input type="text" id="username"></input>
-    <input type="password" id="password"></input>
-    <button type="submit"></button>
-  </form>
+  <div class="fullscreen container center align-content:center flex-switch">
+    <div>
+      <h3>Log in to the DB Console</h3>
+      <form method="POST" class="flex-column">
+        <div>
+          <label for="username">Username:</label>
+          <input type="text" id="username"></input>          
+        </div>
+        <div>
+          <label for="password">Password:</label>
+          <input type="password" id="password"></input>
+        </div>
+        <div>
+          <strong>
+            <button type="submit">Log In</button>
+          </strong>
+        </div>
+      </form>
+    </div>
+    <div>
+      <h4>A user with a password is required to log in to the DB Console on secure clusters.</h4>
+      <p>
+        Create a user with this SQL command:
+        <code class="language-sql">
+          CREATE USER craig WITH PASSWORD 'cockroach';
+        </code>
+      </p>
+      <p>
+        <a href="#">Read more about configuring login</a>
+      </p>
+    </div>
+  </div>
   </body>
 </html>
 			`)
@@ -59,41 +87,21 @@ func MakeFutureHandler() http.HandlerFunc {
 }
 
 func HandleAssets(w http.ResponseWriter, r *http.Request) {
-	// Get the requested path and strip the /assets/ prefix
+	log.Dev.Warningf(r.Context(), "REQUESTING: %s", r.URL.Path)
+
+	// Get the requested path and strip the /future/assets/ prefix
 	requestPath := r.URL.Path
 	requestPath = strings.TrimPrefix(requestPath, "/future/assets/")
 
-	// Clean the path to prevent directory traversal
-	requestPath = path.Clean(requestPath)
+	// Construct the path within the embedded filesystem
+	embedPath := "assets/" + requestPath
 
-	// Construct the full file path relative to the assets directory
-	// The assets directory is assumed to be relative to the current working directory
-	assetsDir := "pkg/ui/future/assets"
-	fullPath := filepath.Join(assetsDir, requestPath)
+	log.Dev.Warningf(r.Context(), "SERVING embedded: %s", embedPath)
 
-	// Security check: ensure the resolved path is still within the assets directory
-	absAssetsDir, err := filepath.Abs(assetsDir)
+	// Try to read the file from the embedded filesystem
+	data, err := assetsFS.ReadFile(embedPath)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	absFullPath, err := filepath.Abs(fullPath)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	// Ensure the file path is within the assets directory
-	if !strings.HasPrefix(absFullPath, absAssetsDir) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	// Check if the file exists and is not a directory
-	fileInfo, err := os.Stat(fullPath)
-	if err != nil {
-		if os.IsNotExist(err) {
+		if strings.Contains(err.Error(), "file does not exist") {
 			http.Error(w, "File not found", http.StatusNotFound)
 			return
 		}
@@ -101,23 +109,20 @@ func HandleAssets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Don't serve directories
-	if fileInfo.IsDir() {
-		// Try to serve index.html from the directory
-		indexPath := filepath.Join(fullPath, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
-			fullPath = indexPath
-		} else {
-			http.Error(w, "Not found", http.StatusNotFound)
-			return
-		}
-	}
-
-	// Set no-cache headers to ensure files are always read from disk
+	// Set no-cache headers for development hot reloading
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
 
-	// Serve the file
-	http.ServeFile(w, r, fullPath)
+	// Detect and set content type based on file extension
+	if strings.HasSuffix(requestPath, ".js") {
+		w.Header().Set("Content-Type", "application/javascript")
+	} else if strings.HasSuffix(requestPath, ".css") {
+		w.Header().Set("Content-Type", "text/css")
+	} else if strings.HasSuffix(requestPath, ".html") {
+		w.Header().Set("Content-Type", "text/html")
+	}
+
+	// Write the file contents
+	_, _ = w.Write(data)
 }

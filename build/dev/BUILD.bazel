@@ -1,0 +1,14 @@
+# Development target for running CockroachDB single-node server with ibazel
+# Usage: ibazel run //build/dev:cockroach-single-node
+# Note: Uses cockroach-short (no UI bundle) for faster builds
+sh_binary(
+    name = "cockroach-single-node",
+    srcs = ["cockroach-single-node.sh"],
+    args = [
+        "$(location //pkg/cmd/cockroach-short:cockroach-short)",
+    ],
+    data = [
+        "//pkg/cmd/cockroach-short:cockroach-short",
+    ],
+    visibility = ["//visibility:public"],
+)

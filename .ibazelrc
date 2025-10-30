@@ -1,0 +1,17 @@
+# ibazel configuration for CockroachDB development
+
+# Debounce delay in milliseconds - wait this long after a file change before rebuilding
+# This prevents excessive rebuilds during rapid file saves
+debounce_delay=500
+
+# Build flags to pass to Bazel
+build_flags=--config=dev
+
+# Don't run tests automatically
+run_tests=false
+
+# Show build output
+show_build_output=true
+
+# Notify on build completion (macOS only)
+notify_on_build_completion=false
