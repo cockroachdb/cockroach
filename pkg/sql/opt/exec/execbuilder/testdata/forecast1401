@@ -18390,7 +18390,9 @@ __forecast__  {e}    2022-02-06 18:39:47.938163 +0000 UTC  6550920018  160520885
 __forecast__  {f}    2022-02-06 18:39:47.938163 +0000 UTC  6550920018  8977521     25263499    0
 
 statement ok
-SET optimizer_use_forecasts = off
+SET optimizer_use_forecasts = off;
+SET optimizer_clamp_low_histogram_selectivity = off;
+SET optimizer_clamp_inequality_selectivity = off;
 
 # Without forecasts, we estimate 1 row with c newer than 2022-01-25.
 

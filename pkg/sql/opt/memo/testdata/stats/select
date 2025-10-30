@@ -4067,7 +4067,7 @@ WHERE
 left-join (hash)
  ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
- ├── stats: [rows=2623.02, distinct(10)=1, null(10)=2123.01, distinct(11)=500.011, null(11)=2123.01]
+ ├── stats: [rows=2623.02, distinct(10)=1, null(10)=2122.76, distinct(11)=500.261, null(11)=2122.76]
  ├── key: (2,4,5)
  ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
  ├── select
@@ -4095,7 +4095,7 @@ left-join (hash)
  ├── scan table1
  │    ├── columns: table1.col1:10(string!null) table1.col2:11(string!null) table1.col3:12(int!null)
  │    ├── constraint: /10/11: [/'e' - /'e']
- │    ├── stats: [rows=2000, distinct(10)=1, null(10)=0, distinct(11)=2000, null(11)=0]
+ │    ├── stats: [rows=2001, distinct(10)=1, null(10)=0, distinct(11)=2001, null(11)=0]
  │    │   histogram(10)=  0 2000
  │    │                 <--- 'e'
  │    ├── key: (11)
@@ -4462,10 +4462,10 @@ SELECT c0 FROM t00 WHERE (c0 = 1) OR (c1 = 3) OR
 ----
 project
  ├── columns: c0:1(int)
- ├── stats: [rows=1.9]
+ ├── stats: [rows=1.90162]
  └── select
       ├── columns: c0:1(int) c1:2(int)
-      ├── stats: [rows=1.9]
+      ├── stats: [rows=1.90162]
       ├── scan t00
       │    ├── columns: c0:1(int) c1:2(int)
       │    └── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=10, null(2)=0]
