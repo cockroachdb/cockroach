@@ -137,7 +137,7 @@ func (lq *leaseQueue) process(
 
 	if transferOp, ok := change.Op.(plan.AllocationTransferLeaseOp); ok {
 		lease, _ := repl.GetLease()
-		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
+		log.KvDistribution.Infof(ctx, "transferring lease to %d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
 		lq.lastLeaseTransfer.Store(timeutil.Now())
 		changeID := lq.as.NonMMAPreTransferLease(
 			ctx,
