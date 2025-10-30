@@ -325,7 +325,8 @@ func TestClusterState(t *testing.T) {
 					var buf strings.Builder
 					for _, rangeID := range rangeIDs {
 						rs := cs.ranges[roachpb.RangeID(rangeID)]
-						fmt.Fprintf(&buf, "range-id=%v load=%v raft-cpu=%v\n", rangeID, rs.load.Load, rs.load.RaftCPU)
+						fmt.Fprintf(&buf, "range-id=%v local-store=%v load=%v raft-cpu=%v\n", rangeID,
+							rs.localRangeOwner, rs.load.Load, rs.load.RaftCPU)
 						for _, repl := range rs.replicas {
 							fmt.Fprintf(&buf, "  store-id=%v %v\n",
 								repl.StoreID, repl.ReplicaIDAndType,
@@ -462,8 +463,18 @@ func TestClusterState(t *testing.T) {
 
 				case "reject-pending-changes":
 					changeIDsInt := dd.ScanArg[[]ChangeID](t, d, "change-ids")
+					expectPanic := false
+					if d.HasArg("expect-panic") {
+						expectPanic = true
+					}
 					for _, id := range changeIDsInt {
-						cs.undoPendingChange(id, true)
+						if expectPanic {
+							require.Panics(t, func() {
+								cs.undoPendingChange(id, true)
+							})
+						} else {
+							cs.undoPendingChange(id, true)
+						}
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
