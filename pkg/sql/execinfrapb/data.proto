@@ -345,8 +345,11 @@ message RemoteProducerMetadata {
     // IndexRowsWritten is the number of primary and secondary index rows
     // modified while executing a statement. It is always >= RowsWritten.
     optional int64 index_rows_written = 5 [(gogoproto.nullable) = false];
+    // IndexBytesWritten is the number of primary and secondary index bytes
+    // modified while executing a statement.
+    optional int64 index_bytes_written = 6 [(gogoproto.nullable) = false];
     reserved 4;
-    // NEXT ID: 6
+    // NEXT ID: 7
   }
   oneof value {
     RangeInfos range_info = 1;
@@ -361,7 +364,7 @@ message RemoteProducerMetadata {
     TracingAggregatorEvents tracing_aggregator_events= 12;
   }
   reserved 6, 10;
-  // NEXT ID: 14
+  // NEXT ID: 13
 }
 
 // DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped

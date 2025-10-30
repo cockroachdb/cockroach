@@ -1397,6 +1397,12 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaStatementIndexBytesWritten = metric.Metadata{
+		Name:        "sql.statements.index_bytes_written.count",
+		Help:        "Number of primary and secondary index bytes modified by SQL statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {
