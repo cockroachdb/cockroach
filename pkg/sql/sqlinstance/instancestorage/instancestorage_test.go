@@ -327,7 +327,7 @@ func TestRefreshSession(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109410),
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(109410),
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
 				{Key: "abc", Value: "xyz"},

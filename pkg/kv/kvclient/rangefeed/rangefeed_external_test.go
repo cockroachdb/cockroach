@@ -671,7 +671,6 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		kvserver.RangefeedUseBufferedSender.Override(ctx, &settings.SV, rt.useBufferedSender)
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109473),
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						SmallEngineBlocks: smallEngineBlocks,
@@ -685,7 +684,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		srv := tsrv.ApplicationLayer()
 		db := srv.DB()
 
-		_, _, err := tc.SplitRange(roachpb.Key("a"))
+		_, _, err := tc.SplitRange(makeKey(srv.Codec(), "a"))
 		require.NoError(t, err)
 		require.NoError(t, tc.WaitForFullReplication())
 
@@ -702,7 +701,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		var once sync.Once
 		checkpointC := make(chan struct{})
 		rowC := make(chan *kvpb.RangeFeedValue)
-		spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("e")}}
+		spans := []roachpb.Span{{Key: makeKey(srv.Codec(), "c"), EndKey: makeKey(srv.Codec(), "e")}}
 		r, err := f.RangeFeed(ctx, "test", spans, db.Clock().Now(),
 			func(ctx context.Context, value *kvpb.RangeFeedValue) {
 				select {
@@ -737,8 +736,11 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 			pointKV("d", ts, "4"),
 			pointKV("e", ts, "5"),
 		}
-		expectKVs := kvs{pointKV("c", ts, "3"), pointKV("d", ts, "4")}
-		sst, sstStart, sstEnd := storageutils.MakeSST(t, srv.ClusterSettings(), sstKVs)
+		mkKey := func(s string) string {
+			return string(makeKey(srv.Codec(), s))
+		}
+		expectKVs := kvs{pointKV(mkKey("c"), ts, "3"), pointKV(mkKey("d"), ts, "4")}
+		sst, sstStart, sstEnd := storageutils.MakeSSTWithPrefix(t, srv.ClusterSettings(), srv.Codec().TenantPrefix(), sstKVs)
 		_, _, _, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 			false /* disallowConflicts */, hlc.Timestamp{},
 			nil, /* stats */
@@ -764,6 +766,10 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		}
 		require.Equal(t, expectKVs, seenKVs)
 	})
+}
+
+func makeKey(codec keys.SQLCodec, s string) roachpb.Key {
+	return append(codec.TenantPrefix(), roachpb.Key(s)...)
 }
 
 // TestWithOnDeleteRange tests that the rangefeed emits MVCC range tombstones.
@@ -796,12 +802,8 @@ func TestWithOnDeleteRange(t *testing.T) {
 		srv := tsrv.ApplicationLayer()
 		db := srv.DB()
 
-		_, _, err := tsrv.SplitRange(roachpb.Key("a"))
+		_, _, err := tsrv.SplitRange(makeKey(srv.Codec(), "a"))
 		require.NoError(t, err)
-
-		mkKey := func(s string) string {
-			return string(append(srv.Codec().TenantPrefix(), roachpb.Key(s)...))
-		}
 
 		// events tracks the observed events during a test run.
 		events := &testEvents{
@@ -812,8 +814,8 @@ func TestWithOnDeleteRange(t *testing.T) {
 		// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
 		// to ensure the DeleteRange event is truncated to the registration span.
 		spans := []roachpb.Span{{
-			Key:    append(srv.Codec().TenantPrefix(), roachpb.Key("c")...),
-			EndKey: append(srv.Codec().TenantPrefix(), roachpb.Key("g")...),
+			Key:    makeKey(srv.Codec(), "c"),
+			EndKey: makeKey(srv.Codec(), "g"),
 		}}
 
 		// To coordinate updates that occur after the rangefeed starts, we track a
@@ -839,14 +841,14 @@ func TestWithOnDeleteRange(t *testing.T) {
 		// should be visible, because catchup scans do emit tombstones. The range
 		// tombstone should be ordered after the initial point, but before the foo
 		// catchup point, and the previous values should respect the range tombstones.
-		require.NoError(t, db.Put(ctx, mkKey("covered"), "covered"))
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "covered"))
-		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "initial"))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "covered"), "covered"))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "foo"), "covered"))
+		require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey(srv.Codec(), "a"), makeKey(srv.Codec(), "z")))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "foo"), "initial"))
 		rangeFeedTS0 := db.Clock().Now()
-		require.NoError(t, db.Put(ctx, mkKey("covered"), "catchup"))
-		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
-		require.NoError(t, db.Put(ctx, mkKey("foo"), "catchup"))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "covered"), "catchup"))
+		require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey(srv.Codec(), "a"), makeKey(srv.Codec(), "z")))
+		require.NoError(t, db.Put(ctx, makeKey(srv.Codec(), "foo"), "catchup"))
 		rangeFeedTS1 := db.Clock().Now()
 		f, err := rangefeed.NewFactory(srv.AppStopper(), db, srv.ClusterSettings(), nil)
 		require.NoError(t, err)
@@ -869,7 +871,7 @@ func TestWithOnDeleteRange(t *testing.T) {
 
 		// Wait for checkpoint after catchup scan.
 		waitForFrontier(rangeFeedTS1)
-		require.NoError(t, db.DelRangeUsingTombstone(ctx, mkKey("a"), mkKey("z")))
+		require.NoError(t, db.DelRangeUsingTombstone(ctx, makeKey(srv.Codec(), "a"), makeKey(srv.Codec(), "z")))
 		waitForFrontier(db.Clock().Now())
 		r.Close()
 
