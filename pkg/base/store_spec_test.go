@@ -39,9 +39,6 @@ max_manifest_file_size=134217728
 max_open_files=1000
 mem_table_size=4194304
 mem_table_stop_writes_threshold=2
-min_compaction_rate=4194304
-min_flush_rate=1048576
-table_property_collectors=[]
 wal_dir=
 [Level "0"]
 block_restart_interval=16
@@ -156,7 +153,7 @@ target_file_size=2097152`
 		{"path=/,pebble=[Options] l0_compaction_threshold=2 l0_stop_writes_threshold=10", "", StoreSpec{Path: "/",
 			PebbleOptions: "[Options]\nl0_compaction_threshold=2\nl0_stop_writes_threshold=10"}},
 		{fmt.Sprintf("path=/,pebble=%s", examplePebbleOptions), "", StoreSpec{Path: "/", PebbleOptions: examplePebbleOptions}},
-		{"path=/mnt/hda1,pebble=[Options] not_a_real_option=10", "pebble: unknown option: Options.not_a_real_option", StoreSpec{}},
+		{"path=/mnt/hda1,pebble=[Options] not_a_real_option=10", "unknown option: Options.not_a_real_option=10", StoreSpec{}},
 
 		// all together
 		{"path=/mnt/hda1,attrs=hdd:ssd,size=20GiB", "", StoreSpec{

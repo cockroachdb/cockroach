@@ -9630,7 +9630,7 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Immutable,
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				ltree := tree.MustBeDLTree(args[0])
-				return tree.NewDString(ltree.String()), nil
+				return tree.NewDString(ltree.LTree.String()), nil
 			},
 		},
 	),
