@@ -71,8 +71,12 @@ var canaryFraction = settings.RegisterFloatSetting(
 // should use the "canary path" for statistics.
 // This selection is atomic per query.
 func canaryRollDice(evalCtx *eval.Context) bool {
-	threshold := canaryFraction.Get(&evalCtx.Settings.SV)
-
+	var threshold float64
+	if evalCtx.TestingKnobs.CanaryFraction != nil {
+		threshold = *evalCtx.TestingKnobs.CanaryFraction
+	} else {
+		threshold = canaryFraction.Get(&evalCtx.Settings.SV)
+	}
 	// If the fraction is 0, never use canary stats. (should we even allow?)
 	if threshold == 0 {
 		return false

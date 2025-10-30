@@ -41,6 +41,10 @@ type TestingKnobs struct {
 	// We use clusterversion.Key rather than a roachpb.Version because it will be used
 	// to get initial values to use during bootstrap.
 	TenantLogicalVersionKeyOverride clusterversion.Key
+	// CanaryFraction determines the fraction of queries that will have use
+	// canary stats rather than the stable stats. Having this field makes test
+	// easier to optimize queries with deterministic stats.
+	CanaryFraction *float64
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}
