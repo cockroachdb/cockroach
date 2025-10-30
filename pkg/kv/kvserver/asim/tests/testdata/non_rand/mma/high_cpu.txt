@@ -62,27 +62,129 @@ asserting: |leases(t)/mean_{T}(leases) - 1| ≤ 0.10 ∀ t∈T and each store (T
 
 eval duration=20m samples=1 seed=42 cfgs=(mma-count,mma-only) metrics=(cpu,cpu_util,replicas,leases)
 ----
-cpu#1: last:  [s1=1541887030, s2=1713235417, s3=1580118619, s4=1618283496, s5=1563312037, s6=1657951235, s7=1307364950, s8=1552531971, s9=1561935680, s10=1645749580] (stddev=103163155.55, mean=1574237001.50, sum=15742370015)
-cpu#1: thrash_pct: [s1=25%, s2=29%, s3=18%, s4=29%, s5=28%, s6=16%, s7=19%, s8=27%, s9=30%, s10=18%]  (sum=238%)
-cpu_util#1: last:  [s1=0.19, s2=0.21, s3=0.20, s4=0.20, s5=0.20, s6=0.21, s7=0.16, s8=0.19, s9=0.20, s10=0.21] (stddev=0.01, mean=0.20, sum=2)
-cpu_util#1: thrash_pct: [s1=25%, s2=29%, s3=18%, s4=29%, s5=28%, s6=16%, s7=19%, s8=27%, s9=30%, s10=18%]  (sum=238%)
+cpu#1: last:  [s1=1686981580, s2=1656985804, s3=1583570266, s4=1726441417, s5=1370525285, s6=1503341155, s7=1358245755, s8=1601698821, s9=1601685190, s10=1652826073] (stddev=119863546.40, mean=1574230134.60, sum=15742301346)
+cpu#1: thrash_pct: [s1=3%, s2=14%, s3=20%, s4=4%, s5=3%, s6=5%, s7=4%, s8=2%, s9=11%, s10=3%]  (sum=69%)
+cpu_util#1: last:  [s1=0.21, s2=0.21, s3=0.20, s4=0.22, s5=0.17, s6=0.19, s7=0.17, s8=0.20, s9=0.20, s10=0.21] (stddev=0.01, mean=0.20, sum=2)
+cpu_util#1: thrash_pct: [s1=3%, s2=14%, s3=20%, s4=4%, s5=3%, s6=5%, s7=4%, s8=2%, s9=11%, s10=3%]  (sum=69%)
 leases#1: first: [s1=37, s2=22, s3=14, s4=13, s5=11, s6=11, s7=10, s8=11, s9=10, s10=11] (stddev=8.07, mean=15.00, sum=150)
-leases#1: last:  [s1=10, s2=14, s3=15, s4=16, s5=15, s6=17, s7=16, s8=15, s9=15, s10=17] (stddev=1.90, mean=15.00, sum=150)
-leases#1: thrash_pct: [s1=0%, s2=9%, s3=8%, s4=9%, s5=9%, s6=0%, s7=0%, s8=9%, s9=17%, s10=0%]  (sum=61%)
+leases#1: last:  [s1=10, s2=13, s3=15, s4=18, s5=14, s6=17, s7=14, s8=16, s9=13, s10=20] (stddev=2.72, mean=15.00, sum=150)
+leases#1: thrash_pct: [s1=0%, s2=10%, s3=15%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=31%, s10=0%]  (sum=56%)
 replicas#1: first: [s1=80, s2=70, s3=51, s4=42, s5=37, s6=35, s7=34, s8=33, s9=34, s10=34] (stddev=16.02, mean=45.00, sum=450)
-replicas#1: last:  [s1=45, s2=44, s3=45, s4=46, s5=43, s6=45, s7=47, s8=45, s9=45, s10=45] (stddev=1.00, mean=45.00, sum=450)
-replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=5%, s6=0%, s7=0%, s8=0%, s9=6%, s10=0%]  (sum=11%)
-artifacts[mma-count]: 2e50737f44fc4950
+replicas#1: last:  [s1=44, s2=44, s3=45, s4=47, s5=44, s6=43, s7=46, s8=47, s9=43, s10=47] (stddev=1.55, mean=45.00, sum=450)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%, s9=0%, s10=0%]  (sum=0%)
+artifacts[mma-count]: 250fdc2f7c8cbe8e
+failed assertion sample 1
+  balance stat=cpu threshold=(≤1.10) ticks=100
+	max/mean=1.13 tick=77
+	max/mean=1.13 tick=78
+	max/mean=1.12 tick=79
+	max/mean=1.12 tick=80
+	max/mean=1.12 tick=81
+	max/mean=1.12 tick=82
+	max/mean=1.32 tick=83
+	max/mean=1.32 tick=84
+	max/mean=1.32 tick=85
+	max/mean=1.32 tick=86
+	max/mean=1.32 tick=87
+	max/mean=1.32 tick=88
+	max/mean=1.58 tick=89
+	max/mean=1.58 tick=90
+	max/mean=1.57 tick=91
+	max/mean=1.58 tick=92
+	max/mean=1.57 tick=93
+	max/mean=1.57 tick=94
+	max/mean=1.83 tick=95
+	max/mean=1.83 tick=96
+	max/mean=1.83 tick=97
+	max/mean=1.84 tick=98
+	max/mean=1.84 tick=99  steady state stat=cpu threshold=(≤0.10) ticks=100
+	store=1 min/mean=0.08 max/mean=0.58
+	store=2 min/mean=0.01 max/mean=0.13
+	store=3 min/mean=0.01 max/mean=0.11
+	store=4 min/mean=0.25 max/mean=0.03
+	store=6 min/mean=0.25 max/mean=0.07
+	store=7 min/mean=0.14 max/mean=0.04
+	store=9 min/mean=0.01 max/mean=0.12
+	store=10 min/mean=0.19 max/mean=0.03  steady state stat=leases threshold=(≤0.10) ticks=100
+	store=1 min/mean=0.07 max/mean=0.49
+	store=4 min/mean=0.16 max/mean=0.01
+	store=6 min/mean=0.10 max/mean=0.02
+	store=9 min/mean=0.02 max/mean=0.28
+	store=10 min/mean=0.19 max/mean=0.02
 ==========================
-cpu#1: last:  [s1=1706498399, s2=1615687783, s3=1677746697, s4=1624652238, s5=1648924305, s6=1640076380, s7=1135947134, s8=1438619020, s9=1699568316, s10=1553238061] (stddev=164018033.83, mean=1574095833.30, sum=15740958333)
-cpu#1: thrash_pct: [s1=32%, s2=85%, s3=84%, s4=36%, s5=17%, s6=37%, s7=15%, s8=16%, s9=22%, s10=20%]  (sum=364%)
+cpu#1: last:  [s1=1706689487, s2=1615590137, s3=1678019631, s4=1624790239, s5=1649039010, s6=1640251361, s7=1136037214, s8=1438297729, s9=1699465002, s10=1552865852] (stddev=164064190.24, mean=1574104566.20, sum=15741045662)
+cpu#1: thrash_pct: [s1=11%, s2=31%, s3=53%, s4=20%, s5=3%, s6=20%, s7=4%, s8=3%, s9=5%, s10=4%]  (sum=154%)
 cpu_util#1: last:  [s1=0.21, s2=0.20, s3=0.21, s4=0.20, s5=0.21, s6=0.21, s7=0.14, s8=0.18, s9=0.21, s10=0.19] (stddev=0.02, mean=0.20, sum=2)
-cpu_util#1: thrash_pct: [s1=32%, s2=85%, s3=84%, s4=36%, s5=17%, s6=37%, s7=15%, s8=16%, s9=22%, s10=20%]  (sum=364%)
+cpu_util#1: thrash_pct: [s1=11%, s2=31%, s3=53%, s4=20%, s5=3%, s6=20%, s7=4%, s8=3%, s9=5%, s10=4%]  (sum=154%)
 leases#1: first: [s1=37, s2=22, s3=14, s4=13, s5=11, s6=11, s7=10, s8=11, s9=10, s10=11] (stddev=8.07, mean=15.00, sum=150)
 leases#1: last:  [s1=15, s2=9, s3=17, s4=10, s5=23, s6=17, s7=13, s8=16, s9=15, s10=15] (stddev=3.71, mean=15.00, sum=150)
-leases#1: thrash_pct: [s1=0%, s2=41%, s3=66%, s4=37%, s5=0%, s6=39%, s7=0%, s8=0%, s9=0%, s10=0%]  (sum=183%)
+leases#1: thrash_pct: [s1=0%, s2=0%, s3=37%, s4=30%, s5=0%, s6=39%, s7=0%, s8=0%, s9=0%, s10=0%]  (sum=107%)
 replicas#1: first: [s1=80, s2=70, s3=51, s4=42, s5=37, s6=35, s7=34, s8=33, s9=34, s10=34] (stddev=16.02, mean=45.00, sum=450)
 replicas#1: last:  [s1=80, s2=58, s3=46, s4=45, s5=38, s6=37, s7=35, s8=36, s9=37, s10=38] (stddev=13.42, mean=45.00, sum=450)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=5%, s4=0%, s5=0%, s6=5%, s7=0%, s8=0%, s9=0%, s10=0%]  (sum=10%)
-artifacts[mma-only]: 7478cadb8f2e4145
+artifacts[mma-only]: e2a6a645a68fa963
+failed assertion sample 1
+  balance stat=cpu threshold=(≤1.10) ticks=100
+	max/mean=1.19 tick=59
+	max/mean=1.20 tick=60
+	max/mean=1.19 tick=61
+	max/mean=1.19 tick=62
+	max/mean=1.20 tick=63
+	max/mean=1.35 tick=64
+	max/mean=1.34 tick=65
+	max/mean=1.33 tick=66
+	max/mean=1.34 tick=67
+	max/mean=1.34 tick=68
+	max/mean=1.33 tick=69
+	max/mean=1.38 tick=70
+	max/mean=1.59 tick=71
+	max/mean=1.59 tick=72
+	max/mean=1.59 tick=73
+	max/mean=1.59 tick=74
+	max/mean=1.59 tick=75
+	max/mean=1.65 tick=76
+	max/mean=1.84 tick=77
+	max/mean=1.84 tick=78
+	max/mean=1.84 tick=79
+	max/mean=1.84 tick=80
+	max/mean=1.84 tick=81
+	max/mean=1.91 tick=82
+	max/mean=2.10 tick=83
+	max/mean=2.09 tick=84
+	max/mean=2.10 tick=85
+	max/mean=2.10 tick=86
+	max/mean=2.09 tick=87
+	max/mean=2.21 tick=88
+	max/mean=2.35 tick=89
+	max/mean=2.35 tick=90
+	max/mean=2.35 tick=91
+	max/mean=2.35 tick=92
+	max/mean=2.35 tick=93
+	max/mean=2.47 tick=94
+	max/mean=2.73 tick=95
+	max/mean=2.73 tick=96
+	max/mean=2.73 tick=97
+	max/mean=2.73 tick=98
+	max/mean=2.73 tick=99  steady state stat=cpu threshold=(≤0.10) ticks=100
+	store=1 min/mean=0.24 max/mean=0.94
+	store=2 min/mean=0.10 max/mean=0.48
+	store=3 min/mean=0.09 max/mean=0.16
+	store=4 min/mean=0.03 max/mean=0.12
+	store=5 min/mean=0.44 max/mean=0.09
+	store=6 min/mean=0.25 max/mean=0.18
+	store=7 min/mean=0.43 max/mean=0.27
+	store=8 min/mean=0.47 max/mean=0.05
+	store=9 min/mean=0.41 max/mean=0.14
+	store=10 min/mean=0.33 max/mean=0.14  steady state stat=replicas threshold=(≤0.10) ticks=100
+	store=2 min/mean=0.02 max/mean=0.11  steady state stat=leases threshold=(≤0.10) ticks=100
+	store=1 min/mean=0.15 max/mean=0.59
+	store=2 min/mean=0.09 max/mean=0.42
+	store=3 min/mean=0.03 max/mean=0.14
+	store=4 min/mean=0.06 max/mean=0.60
+	store=5 min/mean=0.39 max/mean=0.08
+	store=6 min/mean=0.14 max/mean=0.21
+	store=7 min/mean=0.16 max/mean=0.09
+	store=8 min/mean=0.23 max/mean=0.02
+	store=9 min/mean=0.21 max/mean=0.07
+	store=10 min/mean=0.15 max/mean=0.06
 ==========================

@@ -41,7 +41,7 @@ leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 replicas#1: first: [s1=4, s2=4, s3=4, s4=0, s5=0] (stddev=1.96, mean=2.40, sum=12)
 replicas#1: last:  [s1=1, s2=1, s3=4, s4=3, s5=3] (stddev=1.20, mean=2.40, sum=12)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
-artifacts[sma-count]: eaa5c7254461b39d
+artifacts[sma-count]: 210a494e0342b157
 ==========================
 leases#1: first: [s1=4, s2=0, s3=0, s4=0, s5=0] (stddev=1.60, mean=0.80, sum=4)
 leases#1: last:  [s1=1, s2=0, s3=0, s4=1, s5=2] (stddev=0.75, mean=0.80, sum=4)
@@ -49,5 +49,5 @@ leases#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
 replicas#1: first: [s1=4, s2=4, s3=4, s4=0, s5=0] (stddev=1.96, mean=2.40, sum=12)
 replicas#1: last:  [s1=1, s2=1, s3=4, s4=3, s5=3] (stddev=1.20, mean=2.40, sum=12)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%]  (sum=0%)
-artifacts[mma-only]: 2216e9f740949e3d
+artifacts[mma-only]: 34e74f5b65b6efdb
 ==========================

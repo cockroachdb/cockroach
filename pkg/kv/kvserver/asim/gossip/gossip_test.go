@@ -9,6 +9,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -124,8 +125,8 @@ func TestGossip(t *testing.T) {
 	require.Len(t, gossip.exchange.pending, 3)
 
 	// Add the delay interval and then assert that the storepools for each
-	// store are populated.
-	tick += int64(settings.StateExchangeDelay.Seconds())
+	// store are populated. Round up to the next second.
+	tick += int64((settings.StateExchangeDelay + time.Second - 1) / time.Second)
 	gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 
 	// The exchange component should now be empty, clearing the previous
@@ -150,7 +151,7 @@ func TestGossip(t *testing.T) {
 	require.Len(t, gossip.exchange.pending, 2)
 	// Increment the tick and check that the updated lease count information
 	// reached each storepool.
-	tick += int64(settings.StateExchangeDelay.Seconds())
+	tick += int64((settings.StateExchangeDelay + time.Second - 1) / time.Second)
 	gossip.Tick(ctx, state.OffsetTick(start, tick), s)
 	require.Len(t, gossip.exchange.pending, 0)
 

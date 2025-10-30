@@ -78,8 +78,10 @@ func (t Tick) Sub(u Tick) time.Duration {
 // FromWallTime creates a new Tick from a wall-clock time, using the same
 // Start and Tick interval as the receiver. This is useful for converting
 // time.Time values back to Ticks during incremental migration.
+// If the wall time falls between ticks, it rounds up to the next tick.
 func (t Tick) FromWallTime(wallTime time.Time) Tick {
 	elapsed := wallTime.Sub(t.Start)
-	count := int(elapsed / t.Tick)
+	// Round up: (elapsed + Tick - 1) / Tick
+	count := int((elapsed + t.Tick - 1) / t.Tick)
 	return Tick{Start: t.Start, Tick: t.Tick, Count: count}
 }
