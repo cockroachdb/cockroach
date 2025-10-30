@@ -550,9 +550,8 @@ func (a *allocatorState) rebalanceStores(
 				}
 				leaseChanges := MakeLeaseTransferChanges(
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-				if valid, reason := a.cs.preCheckOnApplyReplicaChanges(leaseChanges[:]); !valid {
-					panic(fmt.Sprintf("pre-check failed for lease transfer %v: due to %v",
-						leaseChanges, reason))
+				if err := a.cs.preCheckOnApplyReplicaChanges(leaseChanges[:]); err != nil {
+					panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChanges))
 				}
 				pendingChanges := a.cs.createPendingChanges(leaseChanges[:]...)
 				changes = append(changes, PendingRangeChange{
@@ -768,9 +767,9 @@ func (a *allocatorState) rebalanceStores(
 			}
 			replicaChanges := makeRebalanceReplicaChanges(
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-			if valid, reason := a.cs.preCheckOnApplyReplicaChanges(replicaChanges[:]); !valid {
-				panic(fmt.Sprintf("pre-check failed for replica changes: %v due to %v for %v",
-					replicaChanges, reason, rangeID))
+			if err = a.cs.preCheckOnApplyReplicaChanges(replicaChanges[:]); err != nil {
+				panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
+					replicaChanges, rangeID))
 			}
 			pendingChanges := a.cs.createPendingChanges(replicaChanges[:]...)
 			changes = append(changes, PendingRangeChange{
@@ -844,12 +843,26 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 		for _, changeID := range changeIDs {
 			change, ok := a.cs.pendingChanges[changeID]
 			if !ok {
+				continue
+			}
+			rs, ok := a.cs.ranges[change.rangeID]
+			if !ok {
+				panic(errors.AssertionFailedf("range %v not found in cluster state", change.rangeID))
+			}
+			if rs.pendingChangeNoRollback {
+				// All the changes are to the same range, so return.
 				return
 			}
 			replicaChanges = append(replicaChanges, change.ReplicaChange)
+			// Else ignore this change. We don't want to pass this change to
+			// pre-check since it will likely violate an invariant and cause us to
+			// emit a noisy log message.
 		}
-		if valid, reason := a.cs.preCheckOnUndoReplicaChanges(replicaChanges); !valid {
-			log.KvDistribution.Infof(context.Background(), "did not undo change %v: due to %v", changeIDs, reason)
+		if len(replicaChanges) == 0 {
+			return
+		}
+		if err := a.cs.preCheckOnUndoReplicaChanges(replicaChanges); err != nil {
+			log.KvDistribution.Infof(context.Background(), "did not undo change %v: due to %v", changeIDs, err)
 			return
 		}
 	}
@@ -872,10 +885,10 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if valid, reason := a.cs.preCheckOnApplyReplicaChanges(changes); !valid {
+	if err := a.cs.preCheckOnApplyReplicaChanges(changes); err != nil {
 		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
-			"did not register external changes: due to %v", reason)
+			"did not register external changes: due to %v", err)
 		return nil
 	} else {
 		a.mmaMetrics.ExternaRegisterSuccess.Inc(1)

@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -325,7 +326,8 @@ func TestClusterState(t *testing.T) {
 					var buf strings.Builder
 					for _, rangeID := range rangeIDs {
 						rs := cs.ranges[roachpb.RangeID(rangeID)]
-						fmt.Fprintf(&buf, "range-id=%v load=%v raft-cpu=%v\n", rangeID, rs.load.Load, rs.load.RaftCPU)
+						fmt.Fprintf(&buf, "range-id=%v local-store=%v load=%v raft-cpu=%v\n", rangeID,
+							rs.localRangeOwner, rs.load.Load, rs.load.RaftCPU)
 						for _, repl := range rs.replicas {
 							fmt.Fprintf(&buf, "  store-id=%v %v\n",
 								repl.StoreID, repl.ReplicaIDAndType,
@@ -344,7 +346,13 @@ func TestClusterState(t *testing.T) {
 							"store-id=%v node-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
 							ss.StoreID, ss.NodeID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
 						)
-						for ls, topk := range ss.adjusted.topKRanges {
+						var localStores []roachpb.StoreID
+						for ls := range ss.adjusted.topKRanges {
+							localStores = append(localStores, ls)
+						}
+						slices.Sort(localStores)
+						for _, ls := range localStores {
+							topk := ss.adjusted.topKRanges[ls]
 							n := topk.len()
 							if n == 0 {
 								continue
@@ -462,8 +470,18 @@ func TestClusterState(t *testing.T) {
 
 				case "reject-pending-changes":
 					changeIDsInt := dd.ScanArg[[]ChangeID](t, d, "change-ids")
+					expectPanic := false
+					if d.HasArg("expect-panic") {
+						expectPanic = true
+					}
 					for _, id := range changeIDsInt {
-						cs.undoPendingChange(id, true)
+						if expectPanic {
+							require.Panics(t, func() {
+								cs.undoPendingChange(id, true)
+							})
+						} else {
+							cs.undoPendingChange(id, true)
+						}
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
