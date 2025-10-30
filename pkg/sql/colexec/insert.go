@@ -190,9 +190,15 @@ func (v *vectorInserter) Next() coldata.Batch {
 			}
 			colexecerror.ExpectedError(err)
 		}
-		log.VEventf(ctx, 2, "copy running batch, autocommit: %v, final: %v, numrows: %d", v.autoCommit, end == b.Length(), end-start)
+		// Similar to tableWriterBase.finalize, we examine whether it's likely
+		// that we'll be able to auto-commit. If it seems unlikely based on the
+		// deadlie, we won't auto-commit which might allow the connExecutor to
+		// get a fresh deadline before committing.
+		autoCommit := v.autoCommit && end == b.Length() &&
+			!v.flowCtx.Txn.DeadlineLikelySufficient()
+		log.VEventf(ctx, 2, "copy running batch, autocommit: %v, numrows: %d", autoCommit, end-start)
 		var err error
-		if v.autoCommit && end == b.Length() {
+		if autoCommit {
 			err = v.flowCtx.Txn.CommitInBatch(ctx, kvba.Batch)
 		} else {
 			err = v.flowCtx.Txn.Run(ctx, kvba.Batch)
