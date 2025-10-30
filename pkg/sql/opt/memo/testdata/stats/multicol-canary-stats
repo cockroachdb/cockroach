@@ -1,0 +1,237 @@
+# Test multi-column statistics with canary selection
+exec-ddl
+CREATE TABLE multi_col (a INT PRIMARY KEY, b INT, c STRING, d DECIMAL, e BOOL, INDEX ab (a, b)) WITH (canary_window = '20s')
+----
+
+exec-ddl
+ALTER TABLE multi_col INJECT STATISTICS '[
+		{
+		  "columns": ["a"],
+			"created_at": "2018-01-01 12:00:20.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 500,
+			"null_count": 10,
+			"avg_size": 8
+		},
+		{
+		  "columns": ["b"],
+			"created_at": "2018-01-01 12:00:20.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 300,
+			"null_count": 20,
+			"avg_size": 8
+		},
+		{
+		  "columns": ["a", "b"],
+			"created_at": "2018-01-01 12:00:20.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 750,
+			"null_count": 25
+		},
+		{
+		  "columns": ["c"],
+			"created_at": "2018-01-01 12:00:20.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 400,
+			"null_count": 5,
+			"avg_size": 15
+		},
+		{
+		  "columns": ["d"],
+			"created_at": "2018-01-01 12:00:20.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 600,
+			"null_count": 15,
+			"avg_size": 16
+		},
+		{
+		  "columns": ["e"],
+			"created_at": "2018-01-01 12:00:20.00000+00:00",
+			"row_count": 1000,
+			"distinct_count": 2,
+			"null_count": 50,
+			"avg_size": 1
+		},
+    {
+		  "columns": ["a"],
+			"created_at": "2018-01-01 12:00:00.00000+00:00",
+			"row_count": 800,
+			"distinct_count": 400,
+			"null_count": 8,
+			"avg_size": 8
+		},
+		{
+		  "columns": ["b"],
+			"created_at": "2018-01-01 12:00:00.00000+00:00",
+			"row_count": 800,
+			"distinct_count": 240,
+			"null_count": 16,
+			"avg_size": 8
+		},
+		{
+		  "columns": ["a", "b"],
+			"created_at": "2018-01-01 12:00:00.00000+00:00",
+			"row_count": 800,
+			"distinct_count": 600,
+			"null_count": 20
+		},
+		{
+		  "columns": ["c"],
+			"created_at": "2018-01-01 12:00:00.00000+00:00",
+			"row_count": 800,
+			"distinct_count": 320,
+			"null_count": 4,
+			"avg_size": 15
+		},
+		{
+		  "columns": ["d"],
+			"created_at": "2018-01-01 12:00:00.00000+00:00",
+			"row_count": 800,
+			"distinct_count": 480,
+			"null_count": 12,
+			"avg_size": 16
+		},
+		{
+		  "columns": ["e"],
+			"created_at": "2018-01-01 12:00:00.00000+00:00",
+			"row_count": 800,
+			"distinct_count": 2,
+			"null_count": 40,
+			"avg_size": 1
+		}
+	]'
+----
+
+# Test canary stats with single column queries
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=true
+SELECT a FROM multi_col WHERE a > 10
+----
+scan multi_col@ab
+ ├── columns: a:1(int!null)
+ ├── constraint: /1/2: [/11 - ]
+ ├── stats: [rows=333.333, distinct(1)=166.667, null(1)=0]
+ └── key: (1)
+
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=false
+SELECT a FROM multi_col WHERE a > 10
+----
+scan multi_col@ab
+ ├── columns: a:1(int!null)
+ ├── constraint: /1/2: [/11 - ]
+ ├── stats: [rows=266.667, distinct(1)=133.333, null(1)=0]
+ └── key: (1)
+
+# Test canary stats with multi-column queries
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=true
+SELECT a, b FROM multi_col WHERE a > 10 AND b < 100
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── stats: [rows=299.141, distinct(1)=166.667, null(1)=0, distinct(2)=100, null(2)=0, distinct(1,2)=299.141, null(1,2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan multi_col@ab
+ │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── constraint: /1/2: (/11/NULL - ]
+ │    ├── stats: [rows=330.661, distinct(1)=166.667, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── b:2 < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=false
+SELECT a, b FROM multi_col WHERE a > 10 AND b < 100
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── stats: [rows=239.53, distinct(1)=133.333, null(1)=0, distinct(2)=80, null(2)=0, distinct(1,2)=239.53, null(1,2)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── scan multi_col@ab
+ │    ├── columns: a:1(int!null) b:2(int)
+ │    ├── constraint: /1/2: (/11/NULL - ]
+ │    ├── stats: [rows=264.662, distinct(1)=133.333, null(1)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── filters
+      └── b:2 < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+
+# Test with different data types
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=true
+SELECT c, d, e FROM multi_col WHERE e = true
+----
+select
+ ├── columns: c:3(string) d:4(decimal) e:5(bool!null)
+ ├── stats: [rows=950, distinct(5)=1, null(5)=0]
+ ├── fd: ()-->(5)
+ ├── scan multi_col
+ │    ├── columns: c:3(string) d:4(decimal) e:5(bool)
+ │    └── stats: [rows=1000, distinct(5)=2, null(5)=50]
+ └── filters
+      └── e:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=false
+SELECT c, d, e FROM multi_col WHERE e = true
+----
+select
+ ├── columns: c:3(string) d:4(decimal) e:5(bool!null)
+ ├── stats: [rows=760, distinct(5)=1, null(5)=0]
+ ├── fd: ()-->(5)
+ ├── scan multi_col
+ │    ├── columns: c:3(string) d:4(decimal) e:5(bool)
+ │    └── stats: [rows=800, distinct(5)=2, null(5)=40]
+ └── filters
+      └── e:5 [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
+
+# Test aggregate operations with multi-column stats
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=true
+SELECT count(*), sum(a), avg(d) FROM multi_col GROUP BY e
+----
+project
+ ├── columns: count:8(int!null) sum:9(decimal!null) avg:10(decimal)
+ ├── cardinality: [0 - 3]
+ ├── stats: [rows=2]
+ └── group-by (hash)
+      ├── columns: e:5(bool) count_rows:8(int!null) sum:9(decimal!null) avg:10(decimal)
+      ├── grouping columns: e:5(bool)
+      ├── cardinality: [0 - 3]
+      ├── stats: [rows=2, distinct(5)=2, null(5)=1]
+      ├── key: (5)
+      ├── fd: (5)-->(8-10)
+      ├── scan multi_col
+      │    ├── columns: a:1(int!null) d:4(decimal) e:5(bool)
+      │    ├── stats: [rows=1000, distinct(5)=2, null(5)=50]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4,5)
+      └── aggregations
+           ├── count-rows [as=count_rows:8, type=int]
+           ├── sum [as=sum:9, type=decimal, outer=(1)]
+           │    └── a:1 [type=int]
+           └── avg [as=avg:10, type=decimal, outer=(4)]
+                └── d:4 [type=decimal]
+
+opt stats-as-of=(2018-01-01 12:00:30.00000+00:00) canary-stats=false
+SELECT count(*), sum(a), avg(d) FROM multi_col GROUP BY e
+----
+project
+ ├── columns: count:8(int!null) sum:9(decimal!null) avg:10(decimal)
+ ├── cardinality: [0 - 3]
+ ├── stats: [rows=2]
+ └── group-by (hash)
+      ├── columns: e:5(bool) count_rows:8(int!null) sum:9(decimal!null) avg:10(decimal)
+      ├── grouping columns: e:5(bool)
+      ├── cardinality: [0 - 3]
+      ├── stats: [rows=2, distinct(5)=2, null(5)=1]
+      ├── key: (5)
+      ├── fd: (5)-->(8-10)
+      ├── scan multi_col
+      │    ├── columns: a:1(int!null) d:4(decimal) e:5(bool)
+      │    ├── stats: [rows=800, distinct(5)=2, null(5)=40]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4,5)
+      └── aggregations
+           ├── count-rows [as=count_rows:8, type=int]
+           ├── sum [as=sum:9, type=decimal, outer=(1)]
+           │    └── a:1 [type=int]
+           └── avg [as=avg:10, type=decimal, outer=(4)]
+                └── d:4 [type=decimal]

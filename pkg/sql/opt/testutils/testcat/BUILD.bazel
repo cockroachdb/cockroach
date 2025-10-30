@@ -62,6 +62,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vtable",
+        "//pkg/util/duration",
         "//pkg/util/intsets",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",

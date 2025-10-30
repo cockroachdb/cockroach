@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 	"reflect"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -700,7 +699,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 		// If the most recent full stat is within the canary window, try look for the
 		// second most recent full stat who is created strictly earlier than the
 		// current one.
-		if createdAtTS.AddDuration(statsCanaryWindow).After(hlc.Timestamp{WallTime: time.Now().UnixNano()}) {
+		if createdAtTS.AddDuration(statsCanaryWindow).After(olderThanTs) {
 			nextFullStatsIdx := cat.FindLatestFullStat(first+1, tab, sd, createdAtTS, false /* inclusive */)
 			if nextFullStatsIdx < tab.StatisticCount() {
 				first = nextFullStatsIdx

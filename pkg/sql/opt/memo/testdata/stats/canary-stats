@@ -1,0 +1,365 @@
+exec-ddl
+CREATE TABLE sel (a INT PRIMARY KEY) WITH (canary_window = '30s')
+----
+
+# Single stats case: both canary and stable path should use the same stats.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:00.00000+00:00",
+      "row_count": 20,
+      "distinct_count": 20
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:10.00000+00:00) canary-stats=true
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:10.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+# More than 2 stats available: should only consider the latest 2 stats with different created_at
+# as possible candidates.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:00.00000+00:00",
+      "row_count": 20,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 10:59:40.00000+00:00",
+      "row_count": 10,
+      "distinct_count": 10
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=true
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+# Skip over stats with same created_at timestamp when picking for stable stats.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 10:59:40.00000+00:00",
+      "row_count": 5,
+      "distinct_count": 5
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=true
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=5]
+ ├── key: (1)
+ └── ordering: +1
+
+# When the only remaining stats is not an eligible full stats, use the latest stats as the stable stats.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 10:59:40.00000+00:00",
+      "row_count": 5,
+      "distinct_count": 5,
+      "partial_predicate": "(a < 0:::INT8) OR ((a > 8:::INT8) OR (a IS NULL))"
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+# Optimize as of a later timestamp, so that latest stats is out of the
+# canary window, and canary stats has been promoted to stable stats.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:00.00000+00:00",
+      "row_count": 20,
+      "distinct_count": 20
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 10:59:40.00000+00:00",
+      "row_count": 10,
+      "distinct_count": 10
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:01:30.00000+00:00) canary-stats=true
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:01:30.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+# Test time traveling of stats_as_of.
+opt stats-as-of=(2018-01-01 11:00:20.00000+00:00) canary-stats=true
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=20]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 11:00:20.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=10]
+ ├── key: (1)
+ └── ordering: +1
+
+# If travelling way too back in the past so that no stats are valid,
+# both paths should use the fake stats (with rows = 1000).
+opt stats-as-of=(2018-01-01 10:00:00.00000+00:00) canary-stats=true
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── ordering: +1
+
+opt stats-as-of=(2018-01-01 10:00:00.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── ordering: +1
+
+# Test that for stable stats, we always pick the last available *full* stats.
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:00.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 10:00:30.00000+00:00",
+      "row_count": 40,
+      "distinct_count": 40,
+      "partial_predicate": "(a < 0:::INT8) OR ((a > 8:::INT8) OR (a IS NULL))"
+    }
+	]'
+----
+
+opt stats-as-of=(2018-01-01 11:00:20.00000+00:00) canary-stats=false
+SELECT a FROM sel ORDER BY a
+----
+scan sel
+ ├── columns: a:1(int!null)
+ ├── stats: [rows=30]
+ ├── key: (1)
+ └── ordering: +1
+
+# Test with a query with multiple tables, with one having canary_window defined but the other not.
+exec-ddl
+CREATE TABLE sel2 (a INT PRIMARY KEY)
+----
+
+exec-ddl
+ALTER TABLE sel2 INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 10,
+      "distinct_count": 10
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:30.00000+00:00",
+      "row_count": 5,
+      "distinct_count": 5
+    }
+	]'
+----
+
+exec-ddl
+ALTER TABLE sel INJECT STATISTICS '[
+    {
+    	"columns": ["a"],
+      "created_at": "2018-01-01 11:00:40.00000+00:00",
+      "row_count": 30,
+      "distinct_count": 30
+    },
+    {
+      "columns": ["a"],
+      "created_at": "2018-01-01 11:00:30.00000+00:00",
+      "row_count": 20,
+      "distinct_count": 20
+    }
+	]'
+----
+
+# Table sel2 doesn't have canary window defined, so we should always use
+# the most recent stats for it, which has 10 rows for sel2.
+# So with canary-stats=false, we should pick stable stats for table sel (rowCount = 20)
+# and the latest stats for table sel2 (rowCount=10).
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=false
+SELECT * FROM sel JOIN sel2 ON sel.a = sel2.a ORDER BY sel.a
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) a:4(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
+ ├── key: (4)
+ ├── fd: (1)==(4), (4)==(1)
+ ├── ordering: +(1|4) [actual: +1]
+ ├── scan sel
+ │    ├── columns: sel.a:1(int!null)
+ │    ├── stats: [rows=20, distinct(1)=20, null(1)=0]
+ │    ├── key: (1)
+ │    └── ordering: +1
+ ├── scan sel2
+ │    ├── columns: sel2.a:4(int!null)
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=0]
+ │    ├── key: (4)
+ │    └── ordering: +4
+ └── filters (true)
+
+# With canary-stats=true, we should pick the canary stats for table sel
+# (rowCount = 30) and the latest stats for table sel2 (rowCount=10).
+opt stats-as-of=(2018-01-01 11:00:50.00000+00:00) canary-stats=true
+SELECT * FROM sel JOIN sel2 ON sel.a = sel2.a ORDER BY sel.a
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) a:4(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
+ ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=10, null(4)=0]
+ ├── key: (4)
+ ├── fd: (1)==(4), (4)==(1)
+ ├── ordering: +(1|4) [actual: +1]
+ ├── scan sel
+ │    ├── columns: sel.a:1(int!null)
+ │    ├── stats: [rows=30, distinct(1)=30, null(1)=0]
+ │    ├── key: (1)
+ │    └── ordering: +1
+ ├── scan sel2
+ │    ├── columns: sel2.a:4(int!null)
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=0]
+ │    ├── key: (4)
+ │    └── ordering: +4
+ └── filters (true)
