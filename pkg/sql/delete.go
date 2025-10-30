@@ -138,7 +138,7 @@ func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 
-		// Are we done yet with the current batch?
+		// Are we done yet with the current SQL-level batch?
 		if d.run.td.currentBatchSize >= d.run.td.maxBatchSize ||
 			d.run.td.b.ApproximateMutationBytes() >= d.run.td.maxBatchByteSize {
 			break

@@ -200,7 +200,7 @@ func (b *Builder) tryBuildFastPathInsert(
 	insInput := ins.Input
 	values, ok := insInput.(*memo.ValuesExpr)
 	// Values expressions containing subqueries or UDFs, or having a size larger
-	// than the max mutation batch size are disallowed.
+	// than the max mutation SQL-level batch size are disallowed.
 	if !ok || !memo.ValuesLegalForInsertFastPath(values) {
 		return execPlan{}, colOrdMap{}, false, nil
 	}

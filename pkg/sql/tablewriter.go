@@ -49,12 +49,14 @@ type tableWriterBase struct {
 	// deadlockTimeout specifies the amount of time that the writer will wait
 	// on a lock before checking if there is a race condition.
 	deadlockTimeout time.Duration
-	// maxBatchSize determines the maximum number of entries in the KV batch
-	// for a mutation operation. By default, it will be set to 10k but can be
-	// a different value in tests.
+	// maxBatchSize determines the maximum number of rows in the SQL-level batch
+	// for a mutation operation. By default, it will be set to 10k but can be a
+	// different value in tests.
 	maxBatchSize int
 	// maxBatchByteSize determines the maximum number of key and value bytes in
 	// the KV batch for a mutation operation.
+	// NOTE: This is based on the bytes in the KV batch, while maxBatchSize is
+	// based on the rows in the SQL-level batch.
 	maxBatchByteSize int
 	// currentBatchSize is the size of the current SQL-level batch (i.e. not the
 	// KV-level batch). It is updated on every row() call and is reset once a new

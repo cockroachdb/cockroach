@@ -146,7 +146,7 @@ func (u *updateNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 
-		// Are we done yet with the current batch?
+		// Are we done yet with the current SQL-level batch?
 		if u.run.tu.currentBatchSize >= u.run.tu.maxBatchSize ||
 			u.run.tu.b.ApproximateMutationBytes() >= u.run.tu.maxBatchByteSize {
 			break
