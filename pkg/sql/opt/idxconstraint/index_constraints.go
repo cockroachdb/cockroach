@@ -375,13 +375,15 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 	case opt.ContainedByOp:
 		if l, ok := datum.(*tree.DLTree); ok {
-			if l.LTree.Compare(ltree.Empty) == 0 {
-				// Empty LTree shouldn't be constrained.
-				// TODO: This could be constrained by excluding NULLs.
+			end, ok := l.LTree.NextSibling()
+			if !ok {
+				// An empty LTree represents the root of the tree, so it
+				// includes all non-NULL LTrees.
+				// TODO(mgartner): This could be constrained by excluding NULLs.
 				break
 			}
 			startKey := constraint.MakeKey(l)
-			endKey := constraint.MakeKey(tree.NewDLTree(l.LTree.NextSibling()))
+			endKey := constraint.MakeKey(tree.NewDLTree(end))
 			c.singleSpan(
 				offset, startKey, includeBoundary, endKey, excludeBoundary,
 				c.columns[offset].Descending(),
