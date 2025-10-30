@@ -2986,6 +2986,7 @@ func (c *clusterImpl) ConnE(
 	for k, v := range connOptions.ConnectionOptions {
 		vals.Add(k, v)
 	}
+	vals["allow_unsafe_internals"] = []string{"true"}
 
 	if _, ok := vals["connect_timeout"]; !ok {
 		// connect_timeout is a libpq-specific parameter for the maximum
