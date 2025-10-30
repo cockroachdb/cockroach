@@ -35,6 +35,11 @@ func GenerateLDRTable(
 			if columnDef.Type.(*types.T).Family() == types.ArrayFamily && columnDef.Type.(*types.T).ArrayContents().Family() == types.BitFamily {
 				return false
 			}
+			// We don't support RefCursor columns in LDR tables because they do not
+			// support equality.
+			if columnDef.Type.(*types.T).Family() == types.RefCursorFamily {
+				return false
+			}
 			// We don't allow the special '"char"' column because pgwire truncates the value to 1 byte.
 			// TODO(jeffswenson): remove this once #149427 is fixed.
 			if columnDef.Type.(*types.T).Family() == types.StringFamily && columnDef.Type.(*types.T).Width() == 1 {
