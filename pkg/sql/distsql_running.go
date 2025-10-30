@@ -1502,6 +1502,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		r.stats.rowsRead += meta.Metrics.RowsRead
 		r.stats.rowsWritten += meta.Metrics.RowsWritten
 		r.stats.indexRowsWritten += meta.Metrics.IndexRowsWritten
+		r.stats.indexBytesWritten += meta.Metrics.IndexBytesWritten
 		if r.progressAtomic != nil && r.expectedRowsRead != 0 {
 			progress := float64(r.stats.rowsRead) / float64(r.expectedRowsRead)
 			atomic.StoreUint64(r.progressAtomic, math.Float64bits(progress))
