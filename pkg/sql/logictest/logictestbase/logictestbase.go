@@ -546,6 +546,14 @@ var LogicTestConfigs = []TestClusterConfig{
 		BootstrapVersion:         clusterversion.V25_3,
 		NumNodes:                 3,
 	},
+	{
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v25.4.
+		Name:                     "cockroach-go-testserver-25.4",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V25_4,
+		NumNodes:                 3,
+	},
 }
 
 // ConfigIdx is an index in the above slice.
@@ -669,6 +677,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 	"cockroach-go-testserver-configs": makeConfigSet(
 		"cockroach-go-testserver-25.2",
 		"cockroach-go-testserver-25.3",
+		"cockroach-go-testserver-25.4",
 	),
 
 	// Special alias for configs where schema locked is disabled.

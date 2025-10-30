@@ -2895,7 +2895,7 @@ func TestGetWriterType(t *testing.T) {
 
 	t.Run("immediate-mode", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.V25_3.Version(),
+			clusterversion.V25_4.Version(),
 			clusterversion.PreviousRelease.Version(),
 			true, /* initializeVersion */
 		)
