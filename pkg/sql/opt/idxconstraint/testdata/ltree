@@ -25,7 +25,7 @@ a @> NULL
 index-constraints vars=(a ltree) index=a
 a <@ 'A.B.C'
 ----
-[/'A.B.C' - /'A.B.D')
+[/'A.B.C' - /'A.B.C-')
 
 index-constraints vars=(a ltree) index=a
 a <@ 'z'
@@ -53,8 +53,8 @@ a @> '-' OR a @> 'foo.bar'
 index-constraints vars=(a ltree) index=a
 a <@ '-' OR a <@ 'foo.bar'
 ----
-[/'-' - /'0')
-[/'foo.bar' - /'foo.bas')
+[/'-' - /'--')
+[/'foo.bar' - /'foo.bar-')
 
 index-constraints vars=(a ltree) index=a
 a <@ 'A.B.C' OR a @> 'A.B'
@@ -62,14 +62,14 @@ a <@ 'A.B.C' OR a @> 'A.B'
 [/'' - /'']
 [/'A' - /'A']
 [/'A.B' - /'A.B']
-[/'A.B.C' - /'A.B.D')
+[/'A.B.C' - /'A.B.C-')
 
 index-constraints vars=(a ltree) index=a
 a @> 'A.B.C' OR a <@ 'A.B'
 ----
 [/'' - /'']
 [/'A' - /'A']
-[/'A.B' - /'A.C')
+[/'A.B' - /'A.B-')
 
 index-constraints vars=(a ltree) index=a
 a <@ 'A.B.C' AND a @> 'A.B.C.D.E'
