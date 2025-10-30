@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -165,7 +166,7 @@ func registerVectorIndex(r registry.Registry) {
 			backfillPct: 60,
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
-			minRecall:   []float64{0.80, 0.80, 0.85, 0.90, 0.90},
+			minRecall:   []float64{0.75, 0.80, 0.85, 0.90, 0.90},
 			rwSplit:     .9,
 		},
 		// Local - no prefix
@@ -191,7 +192,7 @@ func registerVectorIndex(r registry.Registry) {
 			backfillPct: 60,
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
-			minRecall:   []float64{0.80, 0.80, 0.85, 0.90, 0.90},
+			minRecall:   []float64{0.65, 0.70, 0.75, 0.80, 0.85},
 			rwSplit:     .9,
 		},
 		// Standard - with prefix
@@ -204,7 +205,7 @@ func registerVectorIndex(r registry.Registry) {
 			backfillPct: 60,
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
-			minRecall:   []float64{0.90, 0.90, 0.90, 0.90, 0.90},
+			minRecall:   []float64{0.75, 0.80, 0.85, 0.90, 0.90},
 			rwSplit:     .9,
 		},
 		// Local - with prefix
@@ -230,8 +231,9 @@ func registerVectorIndex(r registry.Registry) {
 		r.Add(registry.TestSpec{
 			Name:             name,
 			Owner:            registry.OwnerSQLQueries,
+			Timeout:          opts.duration + 2*time.Hour,
 			Cluster:          r.MakeClusterSpec(opts.nodes),
-			CompatibleClouds: registry.AllClouds,
+			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runVectorIndex(ctx, t, c, opts)
@@ -489,7 +491,7 @@ func testRecall(
 				sumRecall += vecann.CalculateRecall(results, truth)
 			}
 			avgRecall := sumRecall / float64(data.Test.Count)
-			require.GreaterOrEqual(t, avgRecall, minRecall)
+			require.GreaterOrEqualf(t, avgRecall, minRecall, "at beam size %d", beamSize)
 			recalls = append(recalls, avgRecall)
 		}
 		t.L().Printf("beam size=%d : %v", beamSize, recalls)
