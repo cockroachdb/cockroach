@@ -3,10 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// TODO(148365): Move this file to the `pkg/sql/inspect` package. The scrub command
-// will have to forgo its dependency on inspect.
-
-package sql
+package inspect
 
 import (
 	"context"
@@ -14,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -28,12 +26,10 @@ import (
 )
 
 // TriggerInspectJob starts an inspect job for the snapshot.
-// TODO(148365): Stop exporting this function when it's moved to the inspect
-// package.
 func TriggerInspectJob(
 	ctx context.Context,
 	jobRecordDescription string,
-	execCfg *ExecutorConfig,
+	execCfg *sql.ExecutorConfig,
 	txn isql.Txn,
 	checks []*jobspb.InspectDetails_Check,
 	asOf hlc.Timestamp,
@@ -100,9 +96,8 @@ func TriggerInspectJob(
 
 // InspectChecksForDatabase generates checks on every supported index on every
 // table in the given database.
-// TODO(148365): Stop exporting this function after moving to pkg/sql/inspect.
 func InspectChecksForDatabase(
-	ctx context.Context, p PlanHookState, db catalog.DatabaseDescriptor,
+	ctx context.Context, p sql.PlanHookState, db catalog.DatabaseDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	avoidLeased := false
 	if aost := p.ExtendedEvalContext().AsOfSystemTime; aost != nil {
@@ -136,7 +131,7 @@ func InspectChecksForDatabase(
 // InspectChecksForTable generates checks on every supported index on the given
 // table.
 func InspectChecksForTable(
-	ctx context.Context, p PlanHookState, table catalog.TableDescriptor,
+	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 
@@ -169,7 +164,7 @@ type indexKey struct {
 // If index names are not found or are not supported for inspection, an error is returned.
 // Index names are deduplicated.
 func InspectChecksByIndexNames(
-	ctx context.Context, p PlanHookState, names tree.TableIndexNames,
+	ctx context.Context, p sql.PlanHookState, names tree.TableIndexNames,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
 

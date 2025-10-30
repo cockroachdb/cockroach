@@ -4,6 +4,7 @@ go_library(
     name = "inspect",
     srcs = [
         "index_consistency_check.go",
+        "inspect_job_entry.go",
         "inspect_logger.go",
         "inspect_metrics.go",
         "inspect_plan.go",
