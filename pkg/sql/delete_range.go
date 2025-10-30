@@ -78,6 +78,17 @@ func (d *deleteRangeNode) rowsWritten() int64 {
 	return int64(d.rowCount)
 }
 
+func (d *deleteRangeNode) indexRowsWritten() int64 {
+	// Same as rowsWritten, because deleteRangeNode only applies to primary index
+	// rows (it is not used if there's a secondary index on the table).
+	return int64(d.rowCount)
+}
+
+func (d *deleteRangeNode) indexBytesWritten() int64 {
+	// No bytes counted as written for a deletion.
+	return 0
+}
+
 // startExec implements the planNode interface.
 func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := params.p.cancelChecker.Check(); err != nil {
