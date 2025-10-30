@@ -1200,7 +1200,7 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		// after flushing the queue, but couldn't determine when main processor loop
 		// is actually closed.
 		testutils.SucceedsSoon(t, func() error {
-			fmt.Printf("Budget now: %d bytes remained, %d events processed\n",
+			t.Logf("budget: %d bytes remained, %d events processed",
 				m.AllocBytes(), rStream.Consumed())
 			if m.AllocBytes() != 0 {
 				return errors.Errorf(
@@ -1367,7 +1367,7 @@ func requireBudgetDrainedSoon(t *testing.T, b *FeedBudget, stream *consumer) {
 		b.mu.Lock()
 		used := b.mu.memBudget.Used()
 		b.mu.Unlock()
-		fmt.Printf("Budget used: %d bytes, %d events processed\n",
+		t.Logf("budget used: %d bytes, %d events processed",
 			used, stream.Consumed())
 		if used != 0 {
 			return errors.Errorf(
