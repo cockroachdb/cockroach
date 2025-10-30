@@ -181,8 +181,11 @@ func (i *immediateVisitor) RemoveColumnGeneratedAsIdentity(
 
 // updateColumnGeneratedAsIdentity will handle add or removal of generated as identity
 func (i *immediateVisitor) updateColumnGeneratedAsIdentity(
-	ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID,
-	genType catpb.GeneratedAsIdentityType, sequenceOption *string,
+	ctx context.Context,
+	tableID descpb.ID,
+	columnID descpb.ColumnID,
+	genType catpb.GeneratedAsIdentityType,
+	sequenceOption *string,
 ) error {
 	tbl, err := i.checkOutTable(ctx, tableID)
 	if err != nil {

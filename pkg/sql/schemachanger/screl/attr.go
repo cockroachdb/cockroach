@@ -115,9 +115,11 @@ const (
 	// identify a policy within a table.
 	PolicyID
 
-	// GeneratedAsIdentityType: ALWAYS or BY DEFAULT
+	// GeneratedAsIdentityType is the type for a generated as identity column.
+	// It's value must be in catpb.GeneratedAsIdentityType.
 	GeneratedAsIdentityType
-	// GeneratedAsIdentitySequenceOption
+	// GeneratedAsIdentitySequenceOption is the squence options for the generated
+	// as identity column in a string.
 	GeneratedAsIdentitySequenceOption
 
 	// AttrMax is the largest possible Attr value.
