@@ -278,6 +278,8 @@ func TestCatchupScanInlineError(t *testing.T) {
 
 func TestCatchupScanSeesOldIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Regression test for [#85886]. When with-diff is specified, the iterator may
 	// be positioned on an intent that is outside the time bounds. When we read
 	// the intent and want to load the version, we must make sure to ignore time
