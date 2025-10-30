@@ -8,7 +8,6 @@ package kvstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -128,16 +127,10 @@ func (s StateLoader) Save(
 			return enginepb.MVCCStats{}, err
 		}
 	}
-	if err := s.SetRangeAppliedState(
-		ctx,
-		stateRW,
-		state.RaftAppliedIndex,
-		state.LeaseAppliedIndex,
-		state.RaftAppliedIndexTerm,
-		ms,
-		state.RaftClosedTimestamp,
-		nil,
-	); err != nil {
+	state.Stats = ms // no-op, just an acknowledgement that the stats were updated
+
+	as := state.ToRangeAppliedState()
+	if err := s.SetRangeAppliedState(ctx, stateRW, &as); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return *ms, nil
@@ -216,26 +209,8 @@ func (s StateLoader) LoadMVCCStats(
 // keys. We now deem those keys to be "legacy" because they have been replaced
 // by the range applied state key.
 func (s StateLoader) SetRangeAppliedState(
-	ctx context.Context,
-	stateRW StateRW,
-	appliedIndex kvpb.RaftIndex,
-	leaseAppliedIndex kvpb.LeaseAppliedIndex,
-	appliedIndexTerm kvpb.RaftTerm,
-	newMS *enginepb.MVCCStats,
-	raftClosedTimestamp hlc.Timestamp,
-	asAlloc *kvserverpb.RangeAppliedState, // optional
+	ctx context.Context, stateRW StateRW, as *kvserverpb.RangeAppliedState,
 ) error {
-	if asAlloc == nil {
-		asAlloc = new(kvserverpb.RangeAppliedState)
-	}
-	as := asAlloc
-	*as = kvserverpb.RangeAppliedState{
-		RaftAppliedIndex:     appliedIndex,
-		LeaseAppliedIndex:    leaseAppliedIndex,
-		RangeStats:           kvserverpb.MVCCPersistentStats(*newMS),
-		RaftClosedTimestamp:  raftClosedTimestamp,
-		RaftAppliedIndexTerm: appliedIndexTerm,
-	}
 	// The RangeAppliedStateKey is not included in stats. This is also reflected
 	// in ComputeStats.
 	ms := (*enginepb.MVCCStats)(nil)
@@ -253,10 +228,8 @@ func (s StateLoader) SetMVCCStats(
 	if err != nil {
 		return err
 	}
-	alloc := as // reuse
-	return s.SetRangeAppliedState(
-		ctx, stateRW, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
-		as.RaftClosedTimestamp, alloc)
+	as.RangeStats = kvserverpb.MVCCPersistentStats(*newMS)
+	return s.SetRangeAppliedState(ctx, stateRW, as)
 }
 
 // SetClosedTimestamp overwrites the closed timestamp.
@@ -267,10 +240,8 @@ func (s StateLoader) SetClosedTimestamp(
 	if err != nil {
 		return err
 	}
-	alloc := as // reuse
-	return s.SetRangeAppliedState(
-		ctx, stateRW, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
-		as.RangeStats.ToStatsPtr(), closedTS, alloc)
+	as.RaftClosedTimestamp = closedTS
+	return s.SetRangeAppliedState(ctx, stateRW, as)
 }
 
 // LoadGCThreshold loads the GC threshold.
