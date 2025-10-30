@@ -4458,7 +4458,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 				"serialization")
 			continue
 		}
-		sqlNoConstants := truncateSQL(formatStatementHideConstants(parsed.AST))
+		sqlNoConstants := truncateSQL(tree.FormatStatementHideConstants(parsed.AST))
 		nPlaceholders := 0
 		if query.placeholders != nil {
 			nPlaceholders = len(query.placeholders.Values)
@@ -4483,7 +4483,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			ElapsedTime:    elapsedTime,
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
-			SqlSummary:     formatStatementSummary(parsed.AST),
+			SqlSummary:     tree.FormatStatementSummary(parsed.AST),
 			Placeholders:   placeholders,
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
@@ -4498,7 +4498,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	lastActiveQueryNoConstants := ""
 	if ex.mu.LastActiveQuery != nil {
 		lastActiveQuery = truncateSQL(ex.mu.LastActiveQuery.String())
-		lastActiveQueryNoConstants = truncateSQL(formatStatementHideConstants(ex.mu.LastActiveQuery))
+		lastActiveQueryNoConstants = truncateSQL(tree.FormatStatementHideConstants(ex.mu.LastActiveQuery))
 	}
 	status := serverpb.Session_IDLE
 	if len(activeQueries) > 0 {

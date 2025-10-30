@@ -54,8 +54,8 @@ func makeStatement(
 
 	return Statement{
 		Statement:       parserStmt,
-		StmtNoConstants: formatStatementHideConstants(parserStmt.AST, fmtFlags),
-		StmtSummary:     formatStatementSummary(parserStmt.AST, fmtFlags),
+		StmtNoConstants: tree.FormatStatementHideConstants(parserStmt.AST, fmtFlags),
+		StmtSummary:     tree.FormatStatementSummary(parserStmt.AST, fmtFlags),
 		QueryID:         queryID,
 		QueryTags:       tags,
 	}

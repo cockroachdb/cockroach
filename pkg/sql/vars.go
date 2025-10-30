@@ -4246,21 +4246,10 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`enable_scrub_job`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_scrub_job`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_scrub_job", s)
-			if err != nil {
-				return err
-			}
-			m.SetEnableScrubJob(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableScrubJob), nil
-		},
-		GlobalDefault: globalFalse,
-	},
+	// This is only kept for backwards compatibility and no longer has any effect.
+	`enable_scrub_job`: makeBackwardsCompatBoolVar(
+		"enable_scrub_job", false,
+	),
 
 	// CockroachDB extension.
 	`enable_inspect_command`: {

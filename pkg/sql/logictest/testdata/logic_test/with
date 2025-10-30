@@ -993,11 +993,6 @@ SELECT * FROM t
 8 100
 20 400
 
-# Check for corruption. (There should be none!)
-query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
-----
-
 statement ok
 RESET CLUSTER SETTING sql.multiple_modifications_of_table.enabled
 
@@ -1017,11 +1012,6 @@ TABLE u1 UNION ALL TABLE u2
 6 60
 8 60
 20 440
-
-# Check for corruption.
-query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE t WITH OPTIONS INDEX ALL
-----
 
 statement ok
 RESET enable_multiple_modifications_of_table
@@ -1140,11 +1130,6 @@ query II
 SELECT i, j FROM u@u_j_idx
 ----
 0 0
-
-# Check for corruption. (There should be none!)
-query TTTTTTTT
-EXPERIMENTAL SCRUB TABLE u WITH OPTIONS INDEX ALL
-----
 
 # Example pulled from a blog post.
 # https://malisper.me/the-missing-postgres-scan-the-loose-index-scan

@@ -18,12 +18,25 @@ import (
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
 	if _, ok := explain.Statement.(*tree.Execute); ok {
-		panic(pgerror.New(
-			pgcode.FeatureNotSupported, "EXPLAIN EXECUTE is not supported; use EXPLAIN ANALYZE",
-		))
+		// EXPLAIN (FINGERPRINT) EXECUTE is supported, but other modes are not.
+		if explain.Mode != tree.ExplainFingerprint {
+			panic(pgerror.New(
+				pgcode.FeatureNotSupported, "EXPLAIN EXECUTE is not supported; use EXPLAIN ANALYZE",
+			))
+		}
 	}
 
-	stmtScope := b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */)
+	var stmtScope *scope
+	if explain.Mode == tree.ExplainFingerprint {
+		// We don't actually need to build the statement for EXPLAIN (FINGERPRINT),
+		// so don't. This allows someone to run EXPLAIN (FINGERPRINT) for statements
+		// they don't have permission to execute, for example. Instead, we create a
+		// dummy empty VALUES clause as input.
+		emptyValues := &tree.LiteralValuesClause{Rows: tree.RawRows{}}
+		stmtScope = b.buildLiteralValuesClause(emptyValues, nil /* desiredTypes */, inScope)
+	} else {
+		stmtScope = b.buildStmtAtRoot(explain.Statement, nil /* desiredTypes */)
+	}
 
 	outScope = inScope.push()
 
@@ -56,6 +69,9 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	case tree.ExplainGist:
 		telemetry.Inc(sqltelemetry.ExplainGist)
 
+	case tree.ExplainFingerprint:
+		telemetry.Inc(sqltelemetry.ExplainFingerprint)
+
 	default:
 		panic(errors.Errorf("EXPLAIN mode %s not supported", explain.Mode))
 	}
@@ -67,6 +83,10 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		ColList:  colsToColList(outScope.cols),
 		Props:    stmtScope.makePhysicalProps(),
 		StmtType: explain.Statement.StatementReturnType(),
+	}
+	if explain.Mode == tree.ExplainFingerprint {
+		stmtFingerprintFmtMask := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
+		private.Fingerprint = tree.FormatStatementHideConstants(explain.Statement, stmtFingerprintFmtMask)
 	}
 	outScope.expr = b.factory.ConstructExplain(input, &private)
 	return outScope

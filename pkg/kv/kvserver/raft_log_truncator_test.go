@@ -18,11 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -181,8 +179,10 @@ func (r *replicaTruncatorTest) writeRaftStateToEngine(
 func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 	t *testing.T, eng storage.Engine, raftAppliedIndex kvpb.RaftIndex, flush bool,
 ) {
-	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
-		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, hlc.Timestamp{}, nil))
+	require.NoError(t, r.stateLoader.SetRangeAppliedState(
+		context.Background(), eng,
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: raftAppliedIndex},
+	))
 	// Flush to make it satisfy the contract of OnlyReadGuaranteedDurable in
 	// Pebble.
 	if flush {

@@ -3,7 +3,7 @@
 subtest setup
 
 statement ok
-SET enable_scrub_job = true;
+SET enable_inspect_command = true;
 
 statement ok
 SET enable_inspect_command = true;
@@ -57,15 +57,15 @@ start_key           end_key       replicas  lease_holder
 
 subtest end
 
-subtest scrub_job_implicit_txn
+subtest inspect_job_implicit_txn
 
 statement ok
-EXPERIMENTAL SCRUB TABLE data AS OF SYSTEM TIME '-1us';
+INSPECT TABLE data AS OF SYSTEM TIME '-1us';
 
 query TTB
 SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1
 ----
-EXPERIMENTAL SCRUB TABLE data AS OF SYSTEM TIME '-1us'  succeeded  true
+INSPECT TABLE data AS OF SYSTEM TIME '-1us'  succeeded  true
 
 subtest end
 
