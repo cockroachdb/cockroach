@@ -333,12 +333,23 @@ message RemoteProducerMetadata {
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
-    // Total number of bytes read while executing a statement.
+    // BytesRead is the number of primary and secondary index bytes read while
+    // executing a statement.
     optional int64 bytes_read = 1 [(gogoproto.nullable) = false];
-    // Total number of rows read while executing a statement.
+    // RowsRead is the number of primary and secondary index rows read while
+    // executing a statement.
     optional int64 rows_read = 2 [(gogoproto.nullable) = false];
-    // Total number of rows modified while executing a statement.
+    // RowsWritten is the number of primary index rows modified while executing
+    // a statement. It does not include secondary index rows.
     optional int64 rows_written = 3 [(gogoproto.nullable) = false];
+    // IndexRowsWritten is the number of primary and secondary index rows
+    // modified while executing a statement. It is always >= RowsWritten.
+    optional int64 index_rows_written = 5 [(gogoproto.nullable) = false];
+    // IndexBytesWritten is the number of primary and secondary index bytes
+    // modified while executing a statement.
+    optional int64 index_bytes_written = 6 [(gogoproto.nullable) = false];
+    reserved 4;
+    // NEXT ID: 7
   }
   oneof value {
     RangeInfos range_info = 1;
