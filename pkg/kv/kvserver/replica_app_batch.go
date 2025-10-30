@@ -704,16 +704,13 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 }
 
 // addAppliedStateKeyToBatch adds the applied state key to the application
-// batch's RocksDB batch. This records the highest raft and lease index that
-// have been applied as of this batch. It also records the Range's mvcc stats.
+// batch's Pebble batch. This records the highest raft and lease index that have
+// been applied as of this batch. It also records the Range's MVCC stats.
 func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
-	// Set the range applied state, which includes the last applied raft and
-	// lease index along with the mvcc stats, all in one key.
-	loader := &b.r.raftMu.stateLoader
-	return loader.SetRangeAppliedState(
-		ctx, b.batch, b.state.RaftAppliedIndex, b.state.LeaseAppliedIndex, b.state.RaftAppliedIndexTerm,
-		b.state.Stats, b.state.RaftClosedTimestamp, &b.asAlloc,
-	)
+	// Set the range applied state, which includes the last applied raft and lease
+	// index along with the MVCC stats, all in one key.
+	b.asAlloc = b.state.ToRangeAppliedState()
+	return b.r.raftMu.stateLoader.SetRangeAppliedState(ctx, b.batch, &b.asAlloc)
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {

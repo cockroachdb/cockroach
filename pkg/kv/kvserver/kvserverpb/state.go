@@ -16,3 +16,14 @@ func (ms *MVCCPersistentStats) ToStats() enginepb.MVCCStats {
 func (ms *MVCCPersistentStats) ToStatsPtr() *enginepb.MVCCStats {
 	return (*enginepb.MVCCStats)(ms)
 }
+
+// ToRangeAppliedState converts the ReplicaState to RangeAppliedState.
+func (m *ReplicaState) ToRangeAppliedState() RangeAppliedState {
+	return RangeAppliedState{
+		RaftAppliedIndex:     m.RaftAppliedIndex,
+		LeaseAppliedIndex:    m.LeaseAppliedIndex,
+		RangeStats:           MVCCPersistentStats(*m.Stats),
+		RaftClosedTimestamp:  m.RaftClosedTimestamp,
+		RaftAppliedIndexTerm: m.RaftAppliedIndexTerm,
+	}
+}
