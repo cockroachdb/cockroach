@@ -263,7 +263,7 @@ SELECT subpath(NULL::LTREE, 99, 99);
 ----
 NULL
 
-# An overflow has occurred 
+# An overflow has occurred
 query error invalid positions
 SELECT subpath('A.B.C'::LTREE, 1, 9223372036854775807::INT8)
 
@@ -1355,3 +1355,22 @@ SELECT count(*) FROM t_boundary WHERE nlevel(path) = 1
 
 statement ok
 DROP TABLE t_boundary
+
+# Regression test for #156478. Correct constraint spans should be built for the
+# <@ (contained-by) operator.
+statement ok
+CREATE TABLE t156478 (
+  k INT PRIMARY KEY,
+  l LTREE,
+  INDEX idx (l),
+  INDEX idx_desc (l DESC)
+)
+
+statement ok
+INSERT INTO t156478 VALUES (1, 'foo.bar_'::LTREE)
+
+query empty
+SELECT * FROM t156478@idx WHERE l <@ 'foo.bar'::LTREE
+
+query empty
+SELECT * FROM t156478@idx_desc WHERE l <@ 'foo.bar'::LTREE
