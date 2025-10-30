@@ -862,7 +862,7 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 		if success {
 			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now(), false)
 		} else {
-			a.cs.undoPendingChange(changeID, false)
+			a.cs.maybeUndoPendingChange(changeID, false)
 		}
 	}
 }
