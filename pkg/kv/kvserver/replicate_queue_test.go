@@ -2304,6 +2304,7 @@ SELECT * FROM (
 		if numNonVoters != 2 {
 			return errors.Newf("expected 2 non-voters for r%d; got %v", rangeID, numNonVoters)
 		}
+		t.Logf("success: %d has %d voters and %d non-voters", rangeID, numVoters, numNonVoters)
 		return nil
 	})
 
