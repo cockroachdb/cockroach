@@ -836,6 +836,7 @@ func (c *SyncedCluster) NodeURL(
 		v.Add("sslmode", "disable")
 	}
 
+	v.Add("allow_unsafe_internals", "true")
 	// We only want to pass an explicit `cluster` name if the user provided one.
 	if virtualClusterName != "" {
 		// We can only pass the cluster parameter for shared processes, as SQL server
