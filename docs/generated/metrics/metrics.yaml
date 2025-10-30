@@ -3,7 +3,7 @@ layers:
   categories:
   - name: CHANGEFEEDS
     metrics:
-    - name: changefeed.commit_latency
+    - name: changefeed.commit_latency1
       exported_name: changefeed_commit_latency
       description: 'Event commit latency: a difference between event MVCC timestamp and the time it was acknowledged by the downstream sink.  If the sink batches events,  then the difference between the oldest event in the batch and acknowledgement is recorded; Excludes latency during backfill'
       y_axis_label: Nanoseconds
