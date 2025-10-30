@@ -118,3 +118,11 @@ func (s *spoolNode) indexRowsWritten() int64 {
 	}
 	return m.indexRowsWritten()
 }
+
+func (s *spoolNode) indexBytesWritten() int64 {
+	m, ok := s.source.(mutationPlanNode)
+	if !ok {
+		return 0
+	}
+	return m.indexBytesWritten()
+}

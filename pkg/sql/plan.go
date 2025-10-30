@@ -113,6 +113,11 @@ type mutationPlanNode interface {
 	// modified by this planNode. It is always >= rowsWritten. It should only be
 	// called once Next returns false.
 	indexRowsWritten() int64
+
+	// indexBytesWritten returns the number of primary and secondary index bytes
+	// modified by this planNode. It should only be called once Next returns
+	// false.
+	indexBytesWritten() int64
 }
 
 // PlanNode is the exported name for planNode. Useful for CCL hooks.
