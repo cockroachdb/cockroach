@@ -162,6 +162,14 @@ func (s *serializeNode) indexRowsWritten() int64 {
 	return m.indexRowsWritten()
 }
 
+func (s *serializeNode) indexBytesWritten() int64 {
+	m, ok := s.source.(mutationPlanNode)
+	if !ok {
+		return 0
+	}
+	return m.indexBytesWritten()
+}
+
 // requireSpool implements the planNodeRequireSpool interface.
 func (s *serializeNode) requireSpool() {}
 
@@ -238,4 +246,12 @@ func (r *rowCountNode) indexRowsWritten() int64 {
 		return 0
 	}
 	return m.indexRowsWritten()
+}
+
+func (r *rowCountNode) indexBytesWritten() int64 {
+	m, ok := r.source.(mutationPlanNode)
+	if !ok {
+		return 0
+	}
+	return m.indexBytesWritten()
 }

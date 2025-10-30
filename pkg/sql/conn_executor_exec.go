@@ -3279,10 +3279,10 @@ func (ex *connExecutor) makeExecPlan(
 
 // topLevelQueryStats returns some basic statistics about the run of the query.
 type topLevelQueryStats struct {
-	// bytesRead is the number of bytes read from primary and secondary indexes.
-	bytesRead int64
 	// rowsRead is the number of rows read from primary and secondary indexes.
 	rowsRead int64
+	// bytesRead is the number of bytes read from primary and secondary indexes.
+	bytesRead int64
 	// rowsWritten is the number of rows written to the primary index. It does not
 	// include rows written to secondary indexes.
 	// NB: There is an asymmetry between rowsRead and rowsWritten - rowsRead
@@ -3293,6 +3293,9 @@ type topLevelQueryStats struct {
 	// indexRowsWritten is the number of rows written to primary and secondary
 	// indexes. It is always >= rowsWritten.
 	indexRowsWritten int64
+	// indexBytesWritten is the number of bytes written to primary and secondary
+	// indexes.
+	indexBytesWritten int64
 	// networkEgressEstimate is an estimate for the number of bytes sent to the
 	// client. It is used for estimating the number of RUs consumed by a query.
 	networkEgressEstimate int64
@@ -3306,6 +3309,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.bytesRead += other.bytesRead
 	s.rowsRead += other.rowsRead
 	s.rowsWritten += other.rowsWritten
+	s.indexBytesWritten += other.indexBytesWritten
 	s.indexRowsWritten += other.indexRowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime

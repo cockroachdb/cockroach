@@ -147,6 +147,11 @@ func (d *deleteSwapNode) indexRowsWritten() int64 {
 	return d.run.td.indexRowsWritten
 }
 
+func (d *deleteSwapNode) indexBytesWritten() int64 {
+	// No bytes counted as written for a deletion.
+	return 0
+}
+
 func (d *deleteSwapNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }
