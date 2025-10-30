@@ -142,6 +142,8 @@ func (s streamStatus) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("%s", redact.SafeString(s.String()))
 }
 
+var errNoSuchStream = errors.New("stream already encountered an error or has not be added to buffered sender")
+
 func NewBufferedSender(
 	sender ServerStreamSender, settings *cluster.Settings, bsMetrics *BufferedSenderMetrics,
 ) *BufferedSender {
@@ -161,7 +163,8 @@ func NewBufferedSender(
 //
 // It errors in the case of a stopped sender of if the registration has exceeded
 // its capacity. sendBuffered with rangefeed events for streams that have
-// already encountered an error will be dropped without error.
+// already enqueued an error event or have not been added via addStream will
+// return an error.
 func (bs *BufferedSender) sendBuffered(
 	ev *kvpb.MuxRangeFeedEvent, alloc *SharedBudgetAllocation,
 ) error {
@@ -177,25 +180,21 @@ func (bs *BufferedSender) sendBuffered(
 	// stream.
 	status, ok := bs.queueMu.byStream[ev.StreamID]
 	if !ok {
-		// We don't error if the stream status is not found as this may be an
-		// event for an already closed stream. Such events are possible while the
-		// registration publishes the catch up scan buffer.
-		//
-		// The client ignores such events, but we drop it here regardless.
-		return nil
+		return errNoSuchStream
 	}
-	nextState, shouldAdmit, err := bs.nextPerQueueStateLocked(status, ev)
-	status.state = nextState
-	if shouldAdmit {
-		status.queueItems++
-	}
+	nextState, err := bs.nextPerQueueStateLocked(status, ev)
 	if nextState == streamErrored {
+		// We will be admitting this event but no events after this.
+		assertTrue(err == nil, "expected error event to be admitted")
 		delete(bs.queueMu.byStream, ev.StreamID)
 	} else {
+		if err == nil {
+			status.queueItems++
+		}
+		status.state = nextState
 		bs.queueMu.byStream[ev.StreamID] = status
 	}
-
-	if err != nil || !shouldAdmit {
+	if err != nil {
 		return err
 	}
 
@@ -211,18 +210,18 @@ func (bs *BufferedSender) sendBuffered(
 }
 
 // nextPerQueueStateLocked returns the next state that should be stored for the
-// stream related to the given rangefeed event and a bool that indicates whether
-// the event should be admitted to the buffer. Any error returned should
-// returned to the caller of sendBuffered.
+// stream related to the given rangefeed event. If an error is returned, the
+// event should not be admitted and the given error should be returned to the
+// client.
 func (bs *BufferedSender) nextPerQueueStateLocked(
 	status streamStatus, ev *kvpb.MuxRangeFeedEvent,
-) (streamState, bool, error) {
+) (streamState, error) {
 	// An error should always put us into stateErrored, so let's do that first.
 	if ev.Error != nil {
 		if status.state == streamErrored {
 			assumedUnreachable("unexpected buffered event on stream in state streamErrored")
 		}
-		return streamErrored, true, nil
+		return streamErrored, nil
 	}
 
 	switch status.state {
@@ -230,23 +229,24 @@ func (bs *BufferedSender) nextPerQueueStateLocked(
 		if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
 			// This stream is at capacity, return an error to the registration that it
 			// should send back to us after cleaning up.
-			return streamOverflowing, false, newRetryErrBufferCapacityExceeded()
+			return streamOverflowing, newRetryErrBufferCapacityExceeded()
 		}
 		// Happy path.
-		return streamActive, true, nil
+		return streamActive, nil
 	case streamOverflowing:
 		// The only place we do concurrent buffered sends is during catch-up scan
 		// publishing which may be concurrent with a disconnect. The catch-up scan
 		// will stop publishing if it receives an error and try to send an error
-		// back. A disconnect only sends an error. This path exclusively handles non
-		// errors.
+		// back. A disconnect only sends an error. This path exclusively handles
+		// non-errors.
 		assumedUnreachable("unexpected buffered event on stream in state streamOverflowing")
-		return streamOverflowing, false, nil
+		return streamOverflowing, newRetryErrBufferCapacityExceeded()
 	case streamErrored:
 		// This is unexpected because streamErrored streams are removed from the
-		// status map and future sends are ignored.
+		// status map and thus should be handled in sendBuffered before this
+		// function is called.
 		assumedUnreachable("unexpected buffered event on stream in state streamErrored")
-		return streamErrored, false, nil
+		return streamErrored, errNoSuchStream
 	default:
 		panic(fmt.Sprintf("unhandled stream state: %v", status.state))
 	}
