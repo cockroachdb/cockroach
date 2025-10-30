@@ -617,7 +617,7 @@ func checkReplicaCount(
 	rangeDesc *roachpb.RangeDescriptor,
 	voterCount, nonVoterCount int,
 ) (bool, error) {
-	err := forceScanOnAllReplicationQueues(tc)
+	err := forceScanOnAllReplicationAndSplitQueues(tc)
 	if err != nil {
 		log.KvDistribution.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
 		return false, err
@@ -1543,7 +1543,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 		" num_replicas=5, num_voters=1")
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			return err
 		}
 		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
@@ -1558,7 +1558,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 
 	checkRelocated := func(t *testing.T, voterStores, nonVoterStores []roachpb.StoreID) {
 		testutils.SucceedsSoon(t, func() error {
-			if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 				return err
 			}
 			scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
@@ -1664,7 +1664,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	// Make sure that the range has conformed to the constraints we just set
 	// above.
 	require.Eventually(t, func() bool {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			log.KvDistribution.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
 			return false
 		}
@@ -1784,10 +1784,19 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 	}
 }
 
-func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
+func forceScanOnAllReplicationAndSplitQueues(tc *testcluster.TestCluster) (err error) {
+	// We force scans on the replication and split queues because sometimes splits
+	// are necessary to apply zone config changes, which then lead to further
+	// replication decisions. See #156530 for an example of this.
 	for _, s := range tc.Servers {
 		if err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			return store.ForceReplicationScanAndProcess()
+			if err := store.ForceReplicationScanAndProcess(); err != nil {
+				return err
+			}
+			if err := store.ForceSplitScanAndProcess(); err != nil {
+				return err
+			}
+			return nil
 		}); err != nil {
 			return err
 		}
@@ -2231,7 +2240,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	setConstraintFn("RANGE meta", 7, 7, "")
 	setConstraintFn("RANGE default", 7, 7, "")
 	testutils.SucceedsSoon(t, func() error {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			return err
 		}
 		s, err := sqlutils.RowsToDataDrivenOutput(sqlutils.MakeSQLRunner(tc.Conns[0]).Query(t, `
@@ -2266,7 +2275,7 @@ SELECT * FROM (
 		tc *testcluster.TestCluster,
 		db *gosql.DB,
 	) (numVoters, numNonVoters int, _ roachpb.RangeID, err error) {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			return 0, 0, 0, err
 		}
 
