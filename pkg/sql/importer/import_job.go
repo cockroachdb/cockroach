@@ -329,12 +329,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
-			checks, err := inspect.InspectChecksForTable(ctx, nil /* p */, tblDesc)
+			checks, err := inspect.ChecksForTable(ctx, nil /* p */, tblDesc)
 			if err != nil {
 				return err
 			}
 
-			job, err := inspect.TriggerInspectJob(
+			job, err := inspect.TriggerJob(
 				ctx,
 				fmt.Sprintf("import-validation-%s", tblDesc.GetName()),
 				p.ExecCfg(),

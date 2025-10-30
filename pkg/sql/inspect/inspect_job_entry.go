@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// TriggerInspectJob starts an inspect job for the snapshot.
-func TriggerInspectJob(
+// TriggerJob starts an inspect job for the snapshot.
+func TriggerJob(
 	ctx context.Context,
 	jobRecordDescription string,
 	execCfg *sql.ExecutorConfig,
@@ -94,9 +94,9 @@ func TriggerInspectJob(
 	return job, nil
 }
 
-// InspectChecksForDatabase generates checks on every supported index on every
+// checksForDatabase generates checks on every supported index on every
 // table in the given database.
-func InspectChecksForDatabase(
+func checksForDatabase(
 	ctx context.Context, p sql.PlanHookState, db catalog.DatabaseDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	avoidLeased := false
@@ -115,7 +115,7 @@ func InspectChecksForDatabase(
 	checks := []*jobspb.InspectDetails_Check{}
 
 	if err := tables.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		tableChecks, err := InspectChecksForTable(ctx, p, desc.(catalog.TableDescriptor))
+		tableChecks, err := ChecksForTable(ctx, p, desc.(catalog.TableDescriptor))
 		if err != nil {
 			return err
 		}
@@ -128,9 +128,9 @@ func InspectChecksForDatabase(
 	return checks, nil
 }
 
-// InspectChecksForTable generates checks on every supported index on the given
+// ChecksForTable generates checks on every supported index on the given
 // table.
-func InspectChecksForTable(
+func ChecksForTable(
 	ctx context.Context, p sql.PlanHookState, table catalog.TableDescriptor,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
@@ -160,10 +160,10 @@ type indexKey struct {
 	descpb.IndexID
 }
 
-// InspectChecksByIndexNames generates checks for the specified index names.
+// checksByIndexNames generates checks for the specified index names.
 // If index names are not found or are not supported for inspection, an error is returned.
 // Index names are deduplicated.
-func InspectChecksByIndexNames(
+func checksByIndexNames(
 	ctx context.Context, p sql.PlanHookState, names tree.TableIndexNames,
 ) ([]*jobspb.InspectDetails_Check, error) {
 	checks := []*jobspb.InspectDetails_Check{}
