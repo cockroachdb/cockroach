@@ -506,6 +506,15 @@ var (
 			1 /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
+	valueSeparationLatencyTolerantMinimumSize = settings.RegisterIntSetting(
+		settings.SystemVisible,
+		"storage.value_separation.latency_tolerant_minimum_size",
+		"the minimum size of a value that will be separated into a blob file given the value is "+
+			"latency tolerant (in the range local keyspace) or likely MVCC garbage",
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.latency_tolerant_minimum_size",
+			10 /* 10 bytes (default) */, 1 /* 1 byte (minimum) */, 256 /* 256 bytes (maximum) */)),
+		settings.IntWithMinimum(1),
+	)
 )
 
 // This setting controls deletion pacing. This helps prevent disk slowness
@@ -1008,12 +1017,13 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 		highPri := float64(valueSeparationCompactionGarbageThresholdHighPriority.Get(&cfg.settings.SV)) / 100.0
 		highPri = max(highPri, lowPri)
 		return pebble.ValueSeparationPolicy{
-			Enabled:                  true,
-			MinimumSize:              int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
-			MaxBlobReferenceDepth:    int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
-			RewriteMinimumAge:        valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
-			GarbageRatioLowPriority:  lowPri,
-			GarbageRatioHighPriority: highPri,
+			Enabled:                    true,
+			MinimumSize:                int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
+			MinimumLatencyTolerantSize: int(valueSeparationLatencyTolerantMinimumSize.Get(&cfg.settings.SV)),
+			MaxBlobReferenceDepth:      int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
+			RewriteMinimumAge:          valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
+			GarbageRatioLowPriority:    lowPri,
+			GarbageRatioHighPriority:   highPri,
 		}
 	}
 	cfg.opts.Experimental.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
