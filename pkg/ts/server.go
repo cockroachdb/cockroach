@@ -253,6 +253,15 @@ func (s *Server) Query(
 		sampleNanos = Resolution10s.SampleDuration()
 	}
 
+	// Determine the storage resolution based on sampleNanos
+	var diskResolution Resolution
+	switch {
+	case sampleNanos >= Resolution30m.SampleDuration():
+		diskResolution = Resolution30m
+	default:
+		diskResolution = Resolution10s
+	}
+
 	// For the interpolation limit, use the time limit until stores are considered
 	// dead. This is a conservatively long span, but gives us a good indication of
 	// when a gap likely indicates an outage (and thus missing values should not
@@ -339,7 +348,7 @@ func (s *Server) Query(
 					datapoints, sources, err := s.db.Query(
 						ctx,
 						query,
-						Resolution10s,
+						diskResolution,
 						timespan,
 						memContexts[queryIdx],
 					)
