@@ -114,11 +114,9 @@ func (mt *Tracker) Register(listeners ...StoreMetricsListener) {
 // Tick updates all listeners attached to the metrics tracker with the state at
 // the tick given.
 func (mt *Tracker) Tick(ctx context.Context, tick types.Tick, s state.State) {
-	// Initialize lastTick on the first call.
-	if mt.lastTick.Tick == 0 {
-		mt.lastTick = tick
-	}
-	if mt.lastTick.FromWallTime(mt.lastTick.WallTime().Add(mt.interval)).After(tick) {
+	// On the first call (lastTick is zero-valued), we should output metrics
+	// immediately. After that, check if enough time has passed.
+	if mt.lastTick.Tick != 0 && mt.lastTick.FromWallTime(mt.lastTick.WallTime().Add(mt.interval)).After(tick) {
 		// Nothing to do yet.
 		return
 	}
@@ -186,4 +184,7 @@ func (mt *Tracker) Tick(ctx context.Context, tick types.Tick, s state.State) {
 	for _, listener := range mt.storeListeners {
 		listener.Listen(ctx, sms)
 	}
+
+	// Update lastTick to mark when we output metrics.
+	mt.lastTick = tick
 }

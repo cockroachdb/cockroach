@@ -88,7 +88,7 @@ func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) 
 	}
 
 	record := make([]string, 0, 10)
-	record = append(record, tick.String())
+	record = append(record, tick.WallTime().String())
 	record = append(record, fmt.Sprintf("%d", totalRangeCount))
 	record = append(record, fmt.Sprintf("%d", totalWriteKeys))
 	record = append(record, fmt.Sprintf("%d", totalWriteBytes))

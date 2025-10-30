@@ -105,14 +105,13 @@ func newStoreRebalancerControl(
 
 	sr.AddLogTag("s", storeID)
 
-	// Initialize lastTick to start. This ensures the rebalancer will be
-	// eligible to run on the first tick when enough time has elapsed since
-	// start.
+	// Initialize lastTick to start - LBRebalancingInterval. This ensures the
+	// rebalancer is eligible to run immediately on the first tick.
 	return &storeRebalancerControl{
 		sr:       sr,
 		settings: settings,
 		rebalancerState: &storeRebalancerState{
-			lastTick: start,
+			lastTick: start.FromWallTime(start.WallTime().Add(-settings.LBRebalancingInterval)),
 		},
 		storeID:    storeID,
 		allocator:  allocator,
@@ -177,7 +176,7 @@ func (src *storeRebalancerControl) Tick(ctx context.Context, tick types.Tick, st
 // not, it performs a state transfer to prologue.
 func (src *storeRebalancerControl) phaseSleep(ctx context.Context, tick types.Tick, s state.State) {
 	sleepedTick := src.rebalancerState.lastTick.FromWallTime(src.rebalancerState.lastTick.WallTime().Add(src.settings.LBRebalancingInterval))
-	if tick.After(sleepedTick) {
+	if !tick.Before(sleepedTick) {
 		src.rebalancerState.lastTick = sleepedTick
 		src.phasePrologue(ctx, tick, s)
 	}

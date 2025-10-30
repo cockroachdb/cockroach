@@ -30,13 +30,13 @@ eval duration=1m cfgs=(sma-count,mma-only) metrics=(replicas) full=true
 ----
 replicas#1: first: [s1=9, s2=9, s3=9, s4=9, s5=8] (stddev=0.40, mean=8.80, sum=44)
 replicas#1: last:  [s1=11, s2=10, s3=9, s4=5, s5=9] (stddev=2.04, mean=8.80, sum=44)
-replicas#1: thrash_pct: [s1=239%, s2=170%, s3=67%, s4=0%, s5=0%]  (sum=476%)
-artifacts[sma-count]: a6973dd2f74e933f
+replicas#1: thrash_pct: [s1=105%, s2=36%, s3=67%, s4=0%, s5=0%]  (sum=208%)
+artifacts[sma-count]: 8440b2431ce5cf58
 ==========================
 replicas#1: first: [s1=9, s2=9, s3=9, s4=9, s5=8] (stddev=0.40, mean=8.80, sum=44)
 replicas#1: last:  [s1=11, s2=11, s3=9, s4=5, s5=8] (stddev=2.23, mean=8.80, sum=44)
-replicas#1: thrash_pct: [s1=105%, s2=37%, s3=67%, s4=0%, s5=0%]  (sum=209%)
-artifacts[mma-only]: 76036bbb784a6b13
+replicas#1: thrash_pct: [s1=105%, s2=0%, s3=67%, s4=0%, s5=0%]  (sum=172%)
+artifacts[mma-only]: 69ad81f1f2b7046a
 ==========================
 Cluster Set Up
 	n1(a,a_1,8vcpu): {s1:(256GiB)}

@@ -30,5 +30,5 @@ leases#1: thrash_pct: [s1=0%, s2=63%, s3=60%, s4=0%, s5=0%]  (sum=122%)
 replicas#1: first: [s1=15, s2=14, s3=8, s4=4, s5=4] (stddev=4.73, mean=9.00, sum=45)
 replicas#1: last:  [s1=9, s2=9, s3=9, s4=9, s5=9] (stddev=0.00, mean=9.00, sum=45)
 replicas#1: thrash_pct: [s1=23%, s2=116%, s3=111%, s4=0%, s5=22%]  (sum=272%)
-artifacts[mma-only]: a9369e989cbbae6d
+artifacts[mma-only]: 4f159811f11d7acf
 ==========================

@@ -151,11 +151,11 @@ func (g *gossip) Tick(ctx context.Context, tick types.Tick, s state.State) {
 		// should gossip.
 		// NB: In the real code this is controlled by a gossip
 		// ticker on the node that activates every 10 seconds.
-		// Initialize lastIntervalGossip if this is the first tick for this store.
-		if sg.lastIntervalGossip.Tick == 0 {
-			sg.lastIntervalGossip = tick
-		}
-		if !tick.Before(sg.lastIntervalGossip.FromWallTime(sg.lastIntervalGossip.WallTime().Add(g.settings.StateExchangeInterval))) {
+		// On the first tick (lastIntervalGossip is zero-valued), always gossip.
+		shouldGossip := sg.lastIntervalGossip.Tick == 0 ||
+			!tick.Before(sg.lastIntervalGossip.FromWallTime(sg.lastIntervalGossip.WallTime().Add(g.settings.StateExchangeInterval)))
+
+		if shouldGossip {
 			sg.lastIntervalGossip = tick
 			_ = sg.local.GossipStore(ctx, false /* useCached */)
 		}
