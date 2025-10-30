@@ -244,8 +244,8 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 
 	t.Log(bs.TestingBufferSummary())
 	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
-	require.NoError(t, bs.sendBuffered(muxEv, nil))
-	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	require.ErrorIs(t, bs.sendBuffered(muxEv, nil), errNoSuchStream)
+	require.ErrorIs(t, bs.sendBuffered(muxErrEvent, nil), errNoSuchStream)
 	t.Log(bs.TestingBufferSummary())
 
 	testServerStream.waitForEvent(t, muxErrEvent)
@@ -260,8 +260,8 @@ func TestBufferedSenderOnOverflow(t *testing.T) {
 	muxEv2.StreamID = 2
 	sm.RegisteringStream(2)
 	testServerStream.reset()
-	require.NoError(t, bs.sendBuffered(muxEv, nil))
-	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	require.ErrorIs(t, bs.sendBuffered(muxEv, nil), errNoSuchStream)
+	require.ErrorIs(t, bs.sendBuffered(muxErrEvent, nil), errNoSuchStream)
 	require.NoError(t, bs.sendBuffered(&muxEv2, nil))
 	testServerStream.waitForEvent(t, &muxEv2)
 	require.Equal(t, 1, testServerStream.totalEventsSent())
@@ -324,8 +324,8 @@ func TestBufferedSenderOnOverflowWithErrorEvent(t *testing.T) {
 	muxEv2.StreamID = 2
 	sm.RegisteringStream(2)
 	testServerStream.reset()
-	require.NoError(t, bs.sendBuffered(muxEv, nil))
-	require.NoError(t, bs.sendBuffered(muxErrEvent, nil))
+	require.ErrorIs(t, bs.sendBuffered(muxEv, nil), errNoSuchStream)
+	require.ErrorIs(t, bs.sendBuffered(muxErrEvent, nil), errNoSuchStream)
 	require.NoError(t, bs.sendBuffered(&muxEv2, nil))
 	testServerStream.waitForEvent(t, &muxEv2)
 	require.Equal(t, 1, testServerStream.totalEventsSent())
