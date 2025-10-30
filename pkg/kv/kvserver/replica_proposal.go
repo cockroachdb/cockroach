@@ -470,6 +470,19 @@ func (r *Replica) leasePostApplyLocked(
 
 	now := r.store.Clock().NowAsClockTimestamp()
 
+	// When a span config update arrives, it enqueues splitting on the current
+	// leaseholder. If the lease transfers before that split is processed, the
+	// enqueue on the old leaseholder is dropped, and the new leaseholder has
+	// already seen the update so it does not enqueue. Without an extra nudge,
+	// the split waits for the scanner. Enqueue here on lease acquisition to
+	// close that window.
+	if leaseChangingHands && iAmTheLeaseHolder {
+		ctx := r.AnnotateCtx(context.Background())
+		_ = r.store.stopper.RunAsyncTask(ctx, "lease-queue-check", func(ctx context.Context) {
+			r.MaybeQueue(ctx, r.store.Clock().NowAsClockTimestamp())
+		})
+	}
+
 	// Gossip the first range whenever its lease is acquired. We check to make
 	// sure the lease is active so that a trailing replica won't process an old
 	// lease request and attempt to gossip the first range.
