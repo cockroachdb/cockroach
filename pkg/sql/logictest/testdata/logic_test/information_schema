@@ -4189,6 +4189,8 @@ opt_split_scan_limit                                             2048
 optimizer                                                        on
 optimizer_always_use_histograms                                  on
 optimizer_check_input_min_row_count                              1
+optimizer_clamp_inequality_selectivity                           off
+optimizer_clamp_low_histogram_selectivity                        off
 optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on
 optimizer_enable_lock_elision                                    on
 optimizer_hoist_uncorrelated_equality_subqueries                 on
