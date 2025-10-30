@@ -114,6 +114,10 @@ func (mt *Tracker) Register(listeners ...StoreMetricsListener) {
 // Tick updates all listeners attached to the metrics tracker with the state at
 // the tick given.
 func (mt *Tracker) Tick(ctx context.Context, tick types.Tick, s state.State) {
+	// Initialize lastTick on the first call.
+	if mt.lastTick.Tick == 0 {
+		mt.lastTick = tick
+	}
 	if mt.lastTick.FromWallTime(mt.lastTick.WallTime().Add(mt.interval)).After(tick) {
 		// Nothing to do yet.
 		return

@@ -105,11 +105,14 @@ func newStoreRebalancerControl(
 
 	sr.AddLogTag("s", storeID)
 
+	// Initialize lastTick to start. This ensures the rebalancer will be
+	// eligible to run on the first tick when enough time has elapsed since
+	// start.
 	return &storeRebalancerControl{
 		sr:       sr,
 		settings: settings,
 		rebalancerState: &storeRebalancerState{
-			lastTick: start.Add(-int(settings.LBRebalancingInterval.Seconds())),
+			lastTick: start,
 		},
 		storeID:    storeID,
 		allocator:  allocator,

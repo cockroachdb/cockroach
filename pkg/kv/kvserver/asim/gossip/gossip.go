@@ -143,13 +143,18 @@ func (g *gossip) Tick(ctx context.Context, tick types.Tick, s state.State) {
 		// add it to the map of store gossips.
 		if sg, ok = g.storeGossip[store.StoreID()]; !ok {
 			g.addStoreToGossip(s, store.StoreID(), store.NodeID())
+			sg = g.storeGossip[store.StoreID()]
 		}
 
 		// If the interval between the last time this store was gossiped for
 		// interval and this tick is not less than the gossip interval, then we
-		// shoud gossip.
+		// should gossip.
 		// NB: In the real code this is controlled by a gossip
 		// ticker on the node that activates every 10 seconds.
+		// Initialize lastIntervalGossip if this is the first tick for this store.
+		if sg.lastIntervalGossip.Tick == 0 {
+			sg.lastIntervalGossip = tick
+		}
 		if !tick.Before(sg.lastIntervalGossip.FromWallTime(sg.lastIntervalGossip.WallTime().Add(g.settings.StateExchangeInterval))) {
 			sg.lastIntervalGossip = tick
 			_ = sg.local.GossipStore(ctx, false /* useCached */)
