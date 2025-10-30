@@ -4413,7 +4413,7 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerClampLowHistogramSelectivity,
 			), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 
 	`optimizer_clamp_inequality_selectivity`: {
@@ -4431,7 +4431,7 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerClampInequalitySelectivity,
 			), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 }
 
