@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "tpch",
     srcs = [
-        "expected_rows.go",
         "generate.go",
         "queries.go",
         "random.go",
