@@ -4729,7 +4729,7 @@ func (sb *statisticsBuilder) selectivityFromConstrainedCols(
 
 	// Find the minimum upper bound selectivity.
 	selectivityUpperBound =
-		props.MinSelectivity3(selectivityUpperBound, selectivityUpperBound2, selectivityUpperBound3)
+		props.MinSelectivity(selectivityUpperBound, selectivityUpperBound2, selectivityUpperBound3)
 
 	selectivity.Add(props.MakeSelectivity(
 		correlation * (selectivityUpperBound.AsFloat() - selectivity.AsFloat()),

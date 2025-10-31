@@ -1943,4 +1943,4 @@ vectorized: true
 • scan
   missing stats
   table: t5@t5_a_idx
-  spans: [/'A.B.C' - /'A.B.D')
+  spans: [/'A.B.C' - /'A.B.C-')
