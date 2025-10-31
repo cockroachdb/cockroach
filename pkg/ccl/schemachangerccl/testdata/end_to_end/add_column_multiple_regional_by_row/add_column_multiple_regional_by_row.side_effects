@@ -22,10 +22,12 @@ checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.drop_column
 increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.qualifcation.unique
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 increment telemetry for sql.schema.alter_table.drop_column
 increment telemetry for sql.schema.alter_table.add_column
+increment telemetry for sql.schema.qualifcation.unique
 increment telemetry for sql.schema.qualifcation.default_expr
 increment telemetry for sql.schema.new_column_type.int8
 write *eventpb.AlterTable to event log:

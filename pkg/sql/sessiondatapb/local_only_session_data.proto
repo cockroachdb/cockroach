@@ -749,6 +749,9 @@ message LocalOnlySessionData {
   // clamp the selectivity of open-ended inequality filters (e.g. <, >, !=)
   // but not (=, BETWEEN etc.) to a minimum threshold.
   bool optimizer_clamp_inequality_selectivity = 190;
+  // OptimizerUseMaxFrequencySelectivity, when true, indicates that the
+  // optimizer should use max frequency for selectivity estimation.
+  bool optimizer_use_max_frequency_selectivity = 191;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

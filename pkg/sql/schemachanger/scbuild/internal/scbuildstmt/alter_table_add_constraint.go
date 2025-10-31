@@ -123,7 +123,7 @@ func alterTableAddCheck(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tbl.TableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tbl.TableID, columnName)
 		},
 	)
@@ -522,7 +522,7 @@ func alterTableAddUniqueWithoutIndex(
 			func() colinfo.ResultColumns {
 				return getNonDropResultColumns(b, tbl.TableID)
 			},
-			func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+			func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 				return columnLookupFn(b, tbl.TableID, columnName)
 			},
 		)
@@ -660,36 +660,6 @@ func validateConstraintNameIsNotUsed(
 
 	return false, pgerror.Newf(pgcode.DuplicateObject,
 		"duplicate constraint name: %q", name)
-}
-
-// getNonDropResultColumns returns all public and adding columns, sorted by
-// column ID in ascending order, in the format of ResultColumns.
-func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.ResultColumns) {
-	for _, col := range getNonDropColumns(b, tableID) {
-		ret = append(ret, colinfo.ResultColumn{
-			Name:           mustRetrieveColumnNameElem(b, tableID, col.ColumnID).Name,
-			Typ:            mustRetrieveColumnTypeElem(b, tableID, col.ColumnID).Type,
-			Hidden:         col.IsHidden,
-			TableID:        tableID,
-			PGAttributeNum: uint32(col.PgAttributeNum),
-		})
-	}
-	return ret
-}
-
-// columnLookupFn can look up information of a column by name.
-// It should be exclusively used in DequalifyAndValidateExprImpl.
-func columnLookupFn(
-	b BuildCtx, tableID catid.DescID, columnName tree.Name,
-) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
-	if columnID == 0 {
-		return false, false, 0, nil
-	}
-
-	colElem := mustRetrieveColumnElem(b, tableID, columnID)
-	colTypeElem := mustRetrieveColumnTypeElem(b, tableID, columnID)
-	return true, !colElem.IsInaccessible, columnID, colTypeElem.Type
 }
 
 // generateUniqueCheckConstraintName generates a unique name for check constraint.

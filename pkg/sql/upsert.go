@@ -106,7 +106,7 @@ func (n *upsertNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 
-		// Are we done yet with the current batch?
+		// Are we done yet with the current SQL-level batch?
 		if n.run.tw.currentBatchSize >= n.run.tw.maxBatchSize ||
 			n.run.tw.b.ApproximateMutationBytes() >= n.run.tw.maxBatchByteSize {
 			break

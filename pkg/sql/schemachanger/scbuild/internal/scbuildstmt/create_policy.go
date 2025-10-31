@@ -281,7 +281,7 @@ func validateAndResolveTypesInExpr(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tableID, columnName)
 		},
 	)

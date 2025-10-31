@@ -228,3 +228,80 @@ column_name
 NewCamelCase
 SnakeCase
 decimal_value
+
+# Test renaming a column, adding a new column with the old name, and altering
+# the primary key to use the renamed column in a single statement.
+subtest rename_add_alter_primary_key
+
+statement ok
+CREATE TABLE rename_add_alter_pk_tbl (a INT PRIMARY KEY, b INT, FAMILY f (a, b));
+
+statement ok
+INSERT INTO rename_add_alter_pk_tbl VALUES (1, 10), (2, 20);
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+statement ok
+ALTER TABLE rename_add_alter_pk_tbl RENAME COLUMN a TO b_old,
+              ADD COLUMN a INT NOT NULL DEFAULT 0,
+              ALTER PRIMARY KEY USING COLUMNS (b_old);
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+query III colnames,rowsort
+SELECT b_old, b, a FROM rename_add_alter_pk_tbl;
+----
+b_old  b   a
+1      10  0
+2      20  0
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM rename_add_alter_pk_tbl;
+----
+table_name             index_name                  non_unique  seq_in_index  column_name  definition  direction  storing  implicit  visible  visibility
+rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       1             b_old        b_old       ASC        false    false     true     1
+rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       2             b            b           N/A        true     false     true     1
+rename_add_alter_pk_tbl  rename_add_alter_pk_tbl_pkey  false       3             a            a           N/A        true     false     true     1
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rename_add_alter_pk_tbl];
+----
+CREATE TABLE public.rename_add_alter_pk_tbl (
+  b_old INT8 NOT NULL,
+  b INT8 NULL,
+  a INT8 NOT NULL DEFAULT 0:::INT8,
+  CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (b_old ASC),
+  FAMILY f (b_old, b, a)
+) WITH (schema_locked = true);
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+statement ok
+UPDATE rename_add_alter_pk_tbl SET a = 10 WHERE b_old = 2;
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+statement ok
+ALTER TABLE rename_add_alter_pk_tbl RENAME COLUMN b_old TO b_orig,
+              ADD COLUMN b_old INT NOT NULL DEFAULT 100,
+              ALTER PRIMARY KEY USING COLUMNS (a);
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+query IIII colnames,rowsort
+SELECT b_old, b_orig, a, b FROM rename_add_alter_pk_tbl;
+----
+b_old  b_orig  a   b
+100    1       0   10
+100    2       10  20
+
+skipif config local-legacy-schema-changer local-mixed-25.2 local-mixed-25.3 local-mixed-25.4
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE rename_add_alter_pk_tbl];
+----
+CREATE TABLE public.rename_add_alter_pk_tbl (
+  b_orig INT8 NOT NULL,
+  b INT8 NULL,
+  a INT8 NOT NULL DEFAULT 0:::INT8,
+  b_old INT8 NOT NULL DEFAULT 100:::INT8,
+  CONSTRAINT rename_add_alter_pk_tbl_pkey PRIMARY KEY (a ASC),
+  UNIQUE INDEX rename_add_alter_pk_tbl_b_orig_key (b_orig ASC),
+  FAMILY f (b_orig, b, a, b_old)
+) WITH (schema_locked = true);

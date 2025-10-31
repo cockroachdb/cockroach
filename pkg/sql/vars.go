@@ -3731,6 +3731,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_use_max_frequency_selectivity`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_use_max_frequency_selectivity`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_use_max_frequency_selectivity", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerUseMaxFrequencySelectivity(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`optimizer_prove_implication_with_virtual_computed_columns`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_prove_implication_with_virtual_computed_columns`),
 		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {

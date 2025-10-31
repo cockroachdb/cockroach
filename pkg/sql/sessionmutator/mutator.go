@@ -1098,3 +1098,7 @@ func (m *SessionDataMutator) SetOptimizerClampLowHistogramSelectivity(val bool) 
 func (m *SessionDataMutator) SetOptimizerClampInequalitySelectivity(val bool) {
 	m.Data.OptimizerClampInequalitySelectivity = val
 }
+
+func (m *SessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
+	m.Data.OptimizerUseMaxFrequencySelectivity = val
+}

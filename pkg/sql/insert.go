@@ -335,7 +335,7 @@ func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) 
 			return false, err
 		}
 
-		// Are we done yet with the current batch?
+		// Are we done yet with the current SQL-level batch?
 		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize ||
 			n.run.ti.b.ApproximateMutationBytes() >= n.run.ti.maxBatchByteSize {
 			break
