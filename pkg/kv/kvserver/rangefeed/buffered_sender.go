@@ -182,7 +182,7 @@ func (bs *BufferedSender) sendBuffered(
 	if !ok {
 		return errNoSuchStream
 	}
-	nextState, err := bs.nextPerQueueStateLocked(status, ev)
+	nextState, err := bs.nextPerStreamStateLocked(status, ev)
 	if nextState == streamErrored {
 		// We will be admitting this event but no events after this.
 		assertTrue(err == nil, "expected error event to be admitted")
@@ -209,11 +209,11 @@ func (bs *BufferedSender) sendBuffered(
 	return nil
 }
 
-// nextPerQueueStateLocked returns the next state that should be stored for the
+// nextPerStreamStateLocked returns the next state that should be stored for the
 // stream related to the given rangefeed event. If an error is returned, the
 // event should not be admitted and the given error should be returned to the
 // client.
-func (bs *BufferedSender) nextPerQueueStateLocked(
+func (bs *BufferedSender) nextPerStreamStateLocked(
 	status streamStatus, ev *kvpb.MuxRangeFeedEvent,
 ) (streamState, error) {
 	// An error should always put us into stateErrored, so let's do that first.
