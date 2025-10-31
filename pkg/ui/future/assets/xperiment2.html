@@ -1,15 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.js" integrity="sha384-ezjq8118wdwdRMj+nX4bevEi+cDLTbhLAeFF688VK8tPDGeLUe0WoY2MZtSla72F" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.js" integrity="sha384-ezjq8118wdwdRMj+nX4bevEi+cDLTbhLAeFF688VK8tPDGeLUe0WoY2MiBZtSla72F" crossorigin="anonymous"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel=stylesheet href=https://unpkg.com/missing.css@1.2.0>
   	<link href="https://cdn.jsdelivr.net/npm/prismjs@v1.x/themes/prism.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
+    <style>
+      .u-tooltip {
+        position: absolute;
+        display: none;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        pointer-events: none;
+        z-index: 1000;
+      }
+      .u-time {
+        margin-bottom: 4px;
+        font-weight: bold;
+      }
+      .u-series {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .u-marker {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 2px solid;
+      }
+      .u-label {
+        font-weight: 500;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px;
+        border-radius: 4px;
+      }
+      .status.loading {
+        background: #f0f0f0;
+        color: #666;
+      }
+      .status.error {
+        background: #ffebee;
+        color: #c62828;
+      }
+      .status.success {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+    </style>
   </head>
 
   <body>
   <div class="fullscreen container center align-content:center flex-switch">
+    <div id="status" class="status loading">Loading metric data...</div>
     <div id="graph1"></div>
   </div>
 
@@ -34,48 +84,28 @@ const seriesPalette = [
   "#DCCD4B",
 ];
 
-
-// logic to decide when to show a metric based on the query's result
-function canShowMetric(result) {
-  return !isEmpty(result.datapoints);
-}
-
-function formatMetricData(
-  metrics,
-  data,
-) {
-  const formattedData = [];
-
-  each(metrics, (s, idx) => {
-    const result = data.results[idx];
-    if (result && canShowMetric(result)) {
-      const transform = s.props.transform ?? (d => d);
-      const scale = s.props.scale ?? 1;
-      const scaledAndTransformedValues = transform(result.datapoints).map(
-        v => ({
-          ...v,
-          // if defined scale/transform it, otherwise remain undefined
-          value: v.value && scale * v.value,
-        }),
-      );
-
-      formattedData.push({
-        values: scaledAndTransformedValues,
-        key: s.props.title || s.props.name,
-        area: true,
-        fillOpacity: 0.1,
-        color: s.props.color,
-      });
-    }
+// Helper function to format timestamps
+function formatTime(timestamp) {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
   });
-
-  return formattedData;
 }
 
-function hoverTooltipPlugin(
-  xFormatter,
-  yFormatter,
-) {
+// Helper function to format byte values
+function formatBytes(bytes) {
+  if (bytes == null) return '--';
+  if (bytes >= 1e12) return (bytes / 1e12).toFixed(2) + ' TB';
+  if (bytes >= 1e9) return (bytes / 1e9).toFixed(2) + ' GB';
+  if (bytes >= 1e6) return (bytes / 1e6).toFixed(2) + ' MB';
+  if (bytes >= 1e3) return (bytes / 1e3).toFixed(2) + ' KB';
+  return bytes.toFixed(0) + ' B';
+}
+
+// Hover tooltip plugin adapted from the React component
+function hoverTooltipPlugin(xFormatter, yFormatter) {
   const shiftX = 10;
   const shiftY = 10;
   let tooltipLeftOffset = 0;
@@ -104,9 +134,9 @@ function hoverTooltipPlugin(
   seriesNode.appendChild(dataNode);
   tooltip.appendChild(seriesNode);
 
-  let seriesIdx: number = null;
-  let dataIdx: number = null;
-  let over: HTMLDivElement;
+  let seriesIdx = null;
+  let dataIdx = null;
+  let over;
   let tooltipVisible = false;
 
   function showTooltip() {
@@ -125,12 +155,10 @@ function hoverTooltipPlugin(
     }
   }
 
-  function setTooltip(u: uPlot) {
+  function setTooltip(u) {
     showTooltip();
 
-    // `yAxis` is used instead of `y` here because that's below in the
-    // `uPlot` config as the custom scale that we define.n
-    const top = u.valToPos(u.data[seriesIdx][dataIdx], "yAxis");
+    const top = u.valToPos(u.data[seriesIdx][dataIdx], u.series[seriesIdx].scale);
     const lft = u.valToPos(u.data[0][dataIdx], "x");
 
     tooltip.style.top = tooltipTopOffset + top + shiftX + "px";
@@ -142,7 +170,7 @@ function hoverTooltipPlugin(
 
     const stroke = u.series[seriesIdx].stroke;
     if (typeof stroke === "function" && stroke.length === 0) {
-      markerNode.style.background = stroke(u, seriesIdx) as string;
+      markerNode.style.background = stroke(u, seriesIdx);
     } else if (typeof stroke === "string") {
       markerNode.style.borderColor = stroke;
     }
@@ -151,7 +179,7 @@ function hoverTooltipPlugin(
   return {
     hooks: {
       ready: [
-        (u: uPlot) => {
+        (u) => {
           over = u.over;
           tooltipLeftOffset = parseFloat(over.style.left);
           tooltipTopOffset = parseFloat(over.style.top);
@@ -159,7 +187,7 @@ function hoverTooltipPlugin(
         },
       ],
       setCursor: [
-        (u: uPlot) => {
+        (u) => {
           const c = u.cursor;
 
           if (dataIdx !== c.idx) {
@@ -170,7 +198,7 @@ function hoverTooltipPlugin(
         },
       ],
       setSeries: [
-        (u: uPlot, sidx: number) => {
+        (u, sidx) => {
           if (seriesIdx !== sidx) {
             seriesIdx = sidx;
 
@@ -183,34 +211,99 @@ function hoverTooltipPlugin(
   };
 }
 
-// configureUPlotLineChart constructs the uplot Options object based on
-// information about the metrics, axis, and data that we'd like to plot.
-// Most of the settings are defined as functions instead of static values
-// in order to take advantage of auto-updating behavior built into uPlot
-// when we send new data to the uPlot object. This will ensure that all
-// axis labeling and extent settings get updated properly.
-configureUPlotLineChart = (
-  metrics: React.ReactElement<MetricProps>[],
-  axis: React.ReactElement<AxisProps>,
-  data: TSResponse,
-  setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
-  getLatestXAxisDomain: () => AxisDomain,
-  getLatestYAxisDomain: () => AxisDomain,
-) => {
-  const formattedRaw = formatMetricData(metrics, data);
-  // Copy palette over since we mutate it in the `series` function
-  // below to cycle through the colors. This ensures that we always
-  // start from the same color for each graph so a single-series
-  // graph will always have the first color, etc.
-  const strokeColors = without(
-    seriesPalette,
-    // Exclude custom colors provided in metrics from default list of colors.
-    ...formattedRaw.filter(r => !!r.color).map(r => r.color),
-  );
+// Convert nanoseconds to milliseconds
+function nanoToMilli(nanos) {
+  if (typeof nanos === 'string') {
+    return Math.floor(parseInt(nanos) / 1000000);
+  }
+  return Math.floor(nanos / 1000000);
+}
 
-  // Please see https://github.com/leeoniya/uPlot/tree/master/docs for
-  // information on how to construct this object.
-  return {
+// Fetch time series data from CockroachDB
+async function fetchTimeSeriesData(metricName, durationMinutes = 30) {
+  const endNanos = Date.now() * 1000000; // Current time in nanoseconds
+  const startNanos = endNanos - (durationMinutes * 60 * 1000000000); // Duration ago in nanoseconds
+  const sampleNanos = 10 * 1000000000; // 10 seconds in nanoseconds
+
+  const request = {
+    start_nanos: startNanos,
+    end_nanos: endNanos,
+    queries: [
+      {
+        name: metricName,
+        downsampler: "AVG",
+        source_aggregator: "SUM",
+        derivative: "NONE",
+        sources: []
+      }
+    ],
+    sample_nanos: sampleNanos
+  };
+
+  // Use relative URL if we're on localhost:8080, otherwise use absolute URL
+  let tsQueryUrl = 'http://localhost:8080/ts/query';
+  if (window.location.hostname === 'localhost' && window.location.port === '8080') {
+    tsQueryUrl = '/ts/query';
+  }
+
+  try {
+    const response = await fetch(tsQueryUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching time series data:', error);
+    throw error;
+  }
+}
+
+// Convert TimeSeriesQueryResponse to uPlot format
+function convertToUPlotData(response) {
+  if (!response || !response.results || response.results.length === 0) {
+    return [[]];
+  }
+
+  const allData = [];
+
+  // Process each result (we might have multiple sources)
+  response.results.forEach((result, idx) => {
+    if (!result.datapoints || result.datapoints.length === 0) {
+      return;
+    }
+
+    // Extract timestamps and values
+    const timestamps = [];
+    const values = [];
+
+    result.datapoints.forEach(dp => {
+      timestamps.push(nanoToMilli(dp.timestamp_nanos));
+      values.push(dp.value);
+    });
+
+    // For the first result, add timestamps as the first array
+    if (idx === 0) {
+      allData.push(timestamps);
+    }
+
+    allData.push(values);
+  });
+
+  return allData.length > 0 ? allData : [[]];
+}
+
+// Configure and create the uPlot chart
+function createChart(data, metricName = "cr.node.sys.rss") {
+  const opts = {
     width: 947,
     height: 300,
     cursor: {
@@ -221,122 +314,149 @@ configureUPlotLineChart = (
     },
     legend: {
       show: true,
-
-      // This setting sets the default legend behavior to isolate
-      // a series when it's clicked in the legend.
       isolate: true,
       markers: {
-        stroke: () => {
-          return null;
-        },
-        fill: (u: uPlot, i: number) => {
+        stroke: () => null,
+        fill: (u, i) => {
           const stroke = u.series[i].stroke;
           if (typeof stroke === "function" && stroke.length === 0) {
-            return stroke(u, i) as string;
+            return stroke(u, i);
           } else if (typeof stroke === "string") {
             return stroke;
           }
         },
       },
     },
-    // By default, uPlot expects unix seconds in the x axis.
-    // This setting defaults it to milliseconds which our
-    // internal functions already supported.
+    // Use milliseconds for timestamps
     ms: 1,
-    // These settings govern how the individual series are
-    // drawn and how their values are displayed in the legend.
     series: [
       {
-        value: (_u, rawValue) => getLatestXAxisDomain().guideFormat(rawValue),
+        label: "Time",
+        value: (u, rawValue) => formatTime(rawValue),
       },
-      // Generate a series object for reach of our results
-      // picking colors from our palette.
-      ...formattedRaw.map(result => {
-        let color: string;
-        // Assign custom provided color, otherwise assign from
-        // the list of default colors.
-        if (result.color) {
-          color = result.color;
-        } else {
-          color = strokeColors.shift();
-          strokeColors.push(color);
-        }
-
-        return {
-          show: true,
-          scale: "yAxis",
-          width: 1,
-          label: result.key,
-          stroke: color,
-          points: {
-            show: false,
-          },
-          // value determines how these values show up in the legend
-          value: (_u: uPlot, rawValue: number) =>
-            getLatestYAxisDomain().guideFormat(rawValue),
-          spanGaps: false,
-        };
-      }),
+      {
+        show: true,
+        scale: "y",
+        label: "RSS Memory",
+        stroke: seriesPalette[0],
+        width: 1.5,
+        points: {
+          show: false,
+        },
+        value: (u, rawValue) => formatBytes(rawValue),
+        spanGaps: false,
+      },
     ],
     axes: [
       {
-        values: (_u, vals) => vals.map(getLatestXAxisDomain().tickFormat),
-        splits: () => getLatestXAxisDomain().ticks,
+        // X-axis (time)
+        values: (u, vals) => vals.map(v => formatTime(v)),
+        splits: (u, axisIdx, scaleMin, scaleMax) => {
+          const range = scaleMax - scaleMin;
+          const tickCount = 6;
+          const tickSize = range / tickCount;
+          const ticks = [];
+          for (let i = 0; i <= tickCount; i++) {
+            ticks.push(scaleMin + i * tickSize);
+          }
+          return ticks;
+        },
       },
       {
-        // This label will get overridden in the linegraph's update
-        // callback when we change the y Axis domain.
-        label:
-          axis.props.label +
-          (getLatestYAxisDomain().label
-            ? ` (${getLatestYAxisDomain().label})`
-            : ""),
-        values: (_u, vals) => vals.map(getLatestYAxisDomain().tickFormat),
-        splits: () => {
-          const domain = getLatestYAxisDomain();
-          return [domain.extent[0], ...domain.ticks, domain.extent[1]];
-        },
-        scale: "yAxis",
+        // Y-axis
+        label: "Memory (RSS)",
+        values: (u, vals) => vals.map(v => formatBytes(v)),
         labelGap: 5,
+        scale: "y",
       },
     ],
     scales: {
       x: {
-        range: () => getLatestXAxisDomain().extent,
+        time: false,
       },
-      yAxis: {
-        range: () => getLatestYAxisDomain().extent,
+      y: {
+        auto: true,
       },
     },
     plugins: [
-      hoverTooltipPlugin(
-        getLatestXAxisDomain().guideFormat,
-        getLatestYAxisDomain().guideFormat,
-      ),
+      hoverTooltipPlugin(formatTime, formatBytes),
     ],
     hooks: {
-      // setSelect is a hook that fires when a selection is made on the graph
-      // by dragging a range to zoom.
       setSelect: [
-        self => {
-          // From what I understand, `self.select` contains the pixel edges
-          // of the user's selection. Then I use the `posToIdx` to tell me
-          // what the xAxis range is of the pixels.
-          setMetricsFixedWindow(
-            self.data[0][self.posToIdx(self.select.left)],
-            self.data[0][self.posToIdx(self.select.left + self.select.width)],
-          );
+        (self) => {
+          // Handle zooming
+          if (self.select && self.select.width > 0) {
+            const leftIdx = self.posToIdx(self.select.left);
+            const rightIdx = self.posToIdx(self.select.left + self.select.width);
+            console.log('Zoom selection:', {
+              startTime: formatTime(self.data[0][leftIdx]),
+              endTime: formatTime(self.data[0][rightIdx])
+            });
+          }
         },
       ],
     },
   };
+
+  const graphEl = document.getElementById('graph1');
+  return new uPlot(opts, data, graphEl);
 }
 
+// Update status message
+function updateStatus(message, type = 'loading') {
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = message;
+  statusEl.className = `status ${type}`;
+}
 
+// Main initialization function
+async function initializeChart() {
+  let chart = null;
+  const metricName = 'cr.node.sys.rss';
+
+  async function fetchAndUpdate() {
+    try {
+      updateStatus(`Fetching ${metricName} data...`, 'loading');
+
+      const response = await fetchTimeSeriesData(metricName, 30);
+      const uPlotData = convertToUPlotData(response);
+
+      if (uPlotData.length <= 1 || uPlotData[0].length === 0) {
+        updateStatus(`No data available for ${metricName}`, 'error');
+        return;
+      }
+
+      const dataPoints = uPlotData[0].length;
+      updateStatus(`Displaying ${dataPoints} data points for ${metricName}`, 'success');
+
+      if (chart) {
+        // Update existing chart
+        chart.setData(uPlotData);
+      } else {
+        // Create new chart
+        chart = createChart(uPlotData, metricName);
+      }
+    } catch (error) {
+      updateStatus(`Error: ${error.message}`, 'error');
+      console.error('Failed to fetch or display data:', error);
+    }
+  }
+
+  // Initial fetch
+  await fetchAndUpdate();
+
+  // Refresh data every 10 seconds
+  setInterval(fetchAndUpdate, 10000);
+}
+
+// Initialize the chart when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+  initializeChart();
+});
 
   </script>
 
   <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.x/components/prism-core.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.x/plugins/autoloader/prism-autoloader.min.js"></script>  
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@v1.x/plugins/autoloader/prism-autoloader.min.js"></script>
   </body>
 </html>

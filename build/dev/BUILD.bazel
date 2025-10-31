@@ -8,7 +8,7 @@ sh_binary(
         "$(location //pkg/cmd/cockroach-short:cockroach-short)",
     ],
     data = [
-        "//pkg/cmd/cockroach-short:cockroach-short",
+        "//pkg/cmd/cockroach-short",
     ],
     visibility = ["//visibility:public"],
 )

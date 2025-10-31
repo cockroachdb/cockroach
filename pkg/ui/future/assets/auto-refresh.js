@@ -8,7 +8,7 @@
   const config = {
     checkInterval: 1000,     // Check every second when server is up
     retryInterval: 250,      // Check every 250ms when server is down
-    endpoint: '/future/index.html',  // Endpoint to check
+    endpoint: '/future/login',  // Endpoint to check
     showIndicator: true,
     debug: true,
     // Optional: Custom validation function
@@ -45,7 +45,7 @@
     // Fade out after 2 seconds
     setTimeout(() => {
       if (indicator && !isServerDown) {
-        indicator.style.opacity = '0.3';
+        indicator.style.opacity = '0';
       }
     }, 2000);
   }

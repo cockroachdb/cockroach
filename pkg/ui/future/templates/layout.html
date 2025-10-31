@@ -1,0 +1,41 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="assets/htmx.min.js"></script>
+    <script defer src="assets/alpine.min.js"></script>
+    <script src="assets/auto-refresh.js"></script>
+    <link rel=stylesheet href="assets/missing.css">
+  </head>
+  <body>
+  <div class="flex-row align-items:center padding crowded border-block-end">
+    <div class="flex-grow:2">
+      <img src="/future/assets/crl.svg" alt="CockroachDB Logo" width="200">
+    </div>
+    {{if .Insecure}}<chip class="warn">Insecure Mode</chip>{{end}}
+  </div>
+  <div class="flex-row align-items:center padding crowded border-block-end">
+    <div class="<h3> flex-grow:2">Cluster id: {{.ClusterID}}</div>
+    <chip class="info">{{.Version}}</chip>
+  </div>
+  <div class="sidebar-layout">
+    <header>
+      <ul role="list">
+        <li>Overview</li>
+        <li>Metrics</li>
+        <li>Databases</li>
+        <li>SQL Activity</li>
+        <li>Insights</li>
+        <li>Top Ranges</li>
+        <li>Jobs</li>
+        <li>Schedules</li>
+        <li>Advanced Debug</li>
+      </ul>
+    </header>
+    <div class="padding">
+      {{block "content" .}}{{end}}
+    </div>
+  </div>
+  </body>
+</html>
+{{end}}

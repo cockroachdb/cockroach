@@ -3,8 +3,15 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "future",
     srcs = ["future.go"],
-    embedsrcs = glob(["assets/**"]),
+    embedsrcs = glob([
+        "assets/**",
+        "templates/**",
+    ]),
     importpath = "github.com/cockroachdb/cockroach/pkg/ui/future",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/log"],
+    deps = [
+        "//pkg/base",
+        "//pkg/util/log",
+        "@com_github_gorilla_mux//:mux",
+    ],
 )

@@ -11,82 +11,134 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/gorilla/mux"
 )
 
 //go:embed assets/*
 var assetsFS embed.FS
 
-func MakeFutureHandler() http.HandlerFunc {
-	mux := http.ServeMux{}
+//go:embed templates/*
+var templatesFS embed.FS
 
-	// Serve the inline template for both root and /index.html
-	serveTemplate := func(w http.ResponseWriter, r *http.Request) {
-		tpl, err := template.New("index").Parse(`
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <script src="assets/htmx.min.js"></script>
-    <script defer src="assets/alpine.min.js"></script>
-    <script src="assets/auto-refresh.js"></script>
-    <link rel=stylesheet href="assets/missing.css">
-  </head>
+// Parsed templates stored at package level
+var templates *template.Template
 
-  <body>
-  <div class="fullscreen container center align-content:center flex-switch">
-    <div>
-      <h3>Log in to the DB Console</h3>
-      <form method="POST" class="flex-column">
-        <div>
-          <label for="username">Username:</label>
-          <input type="text" id="username"></input>          
-        </div>
-        <div>
-          <label for="password">Password:</label>
-          <input type="password" id="password"></input>
-        </div>
-        <div>
-          <strong>
-            <button type="submit">Log In</button>
-          </strong>
-        </div>
-      </form>
-    </div>
-    <div>
-      <h4>A user with a password is required to log in to the DB Console on secure clusters.</h4>
-      <p>
-        Create a user with this SQL command:
-        <code class="language-sql">
-          CREATE USER craig WITH PASSWORD 'cockroach';
-        </code>
-      </p>
-      <p>
-        <a href="#">Read more about configuring login</a>
-      </p>
-    </div>
-  </div>
-  </body>
-</html>
-			`)
-		if err != nil {
-			http.Error(w, "bad template", 500)
-			return
-		}
-		err = tpl.Execute(w, nil)
-		if err != nil {
-			http.Error(w, "bad template", 500)
-			return
-		}
+func init() {
+	// Parse all templates at startup
+	var err error
+	templates, err = template.ParseFS(templatesFS, "templates/*.html")
+	if err != nil {
+		panic("Failed to parse templates: " + err.Error())
 	}
-
-	//mux.HandleFunc("/", serveTemplate)
-	mux.HandleFunc("/future/index.html", serveTemplate)
-	mux.HandleFunc("/future/assets/", HandleAssets)
-
-	return mux.ServeHTTP
 }
 
-func HandleAssets(w http.ResponseWriter, r *http.Request) {
+// Config contains the configuration parameters for the future handler.
+type Config struct {
+	Insecure bool
+	NodeID   *base.NodeIDContainer
+	Version  string
+	// ClusterID can be added later when available
+}
+
+// TemplateData is the data passed to templates
+type TemplateData struct {
+	Insecure  bool
+	NodeID    string
+	Version   string
+	ClusterID string
+}
+
+func MakeFutureHandler(cfg Config) http.HandlerFunc {
+	// Create a new Gorilla Mux router
+	router := mux.NewRouter()
+
+	// Prefix all routes with /future
+	futureRouter := router.PathPrefix("/future").Subrouter()
+
+	// Serve the overview page for root
+	futureRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		handleOverview(w, r, cfg)
+	}).Methods("GET")
+
+	// Serve the login page
+	futureRouter.HandleFunc("/login", handleLogin).Methods("GET")
+
+	// Serve the metrics page
+	futureRouter.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		handleMetrics(w, r, cfg)
+	}).Methods("GET")
+
+	// Serve static assets
+	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
+
+	return router.ServeHTTP
+}
+
+// handleOverview serves the overview.html template
+func handleOverview(w http.ResponseWriter, r *http.Request, cfg Config) {
+	// Set content type
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Prepare template data
+	data := makeTemplateData(cfg)
+
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "overview.html", data)
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleLogin serves the login.html template
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	// Set content type
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Execute the pre-parsed template (login doesn't use layout, so no data needed)
+	err := templates.ExecuteTemplate(w, "login.html", nil)
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// handleMetrics serves the metrics.html template
+func handleMetrics(w http.ResponseWriter, r *http.Request, cfg Config) {
+	// Set content type
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Prepare template data
+	data := makeTemplateData(cfg)
+
+	// Execute the pre-parsed template
+	err := templates.ExecuteTemplate(w, "metrics.html", data)
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
+}
+
+// makeTemplateData creates template data from config
+func makeTemplateData(cfg Config) TemplateData {
+	data := TemplateData{
+		Insecure:  cfg.Insecure,
+		Version:   cfg.Version,
+		ClusterID: "96db9afc-e23c-43fe-99b6-6ce891cd87f8", // TODO: Get from actual cluster
+	}
+	if cfg.NodeID != nil {
+		data.NodeID = cfg.NodeID.String()
+	}
+	return data
+}
+
+// handleAssets serves static assets from the embedded filesystem
+func handleAssets(w http.ResponseWriter, r *http.Request) {
 	log.Dev.Warningf(r.Context(), "REQUESTING: %s", r.URL.Path)
 
 	// Get the requested path and strip the /future/assets/ prefix
@@ -115,12 +167,17 @@ func HandleAssets(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Expires", "0")
 
 	// Detect and set content type based on file extension
-	if strings.HasSuffix(requestPath, ".js") {
+	switch {
+	case strings.HasSuffix(requestPath, ".js"):
 		w.Header().Set("Content-Type", "application/javascript")
-	} else if strings.HasSuffix(requestPath, ".css") {
+	case strings.HasSuffix(requestPath, ".css"):
 		w.Header().Set("Content-Type", "text/css")
-	} else if strings.HasSuffix(requestPath, ".html") {
+	case strings.HasSuffix(requestPath, ".html"):
 		w.Header().Set("Content-Type", "text/html")
+	case strings.HasSuffix(requestPath, ".json"):
+		w.Header().Set("Content-Type", "application/json")
+	case strings.HasSuffix(requestPath, ".svg"):
+		w.Header().Set("Content-Type", "image/svg+xml")
 	}
 
 	// Write the file contents
