@@ -61,6 +61,7 @@ go_library(
         "//pkg/sql/faketreeeval",
         "//pkg/sql/flowinfra",
         "//pkg/sql/gcjob",
+        "//pkg/sql/inspect",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",

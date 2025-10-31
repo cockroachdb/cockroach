@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/inspect"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -328,12 +329,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 		tblDesc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
 		if len(tblDesc.PublicNonPrimaryIndexes()) > 0 {
-			checks, err := sql.InspectChecksForTable(ctx, nil /* p */, tblDesc)
+			checks, err := inspect.ChecksForTable(ctx, nil /* p */, tblDesc)
 			if err != nil {
 				return err
 			}
 
-			job, err := sql.TriggerInspectJob(
+			job, err := inspect.TriggerJob(
 				ctx,
 				fmt.Sprintf("import-validation-%s", tblDesc.GetName()),
 				p.ExecCfg(),

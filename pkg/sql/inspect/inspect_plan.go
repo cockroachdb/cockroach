@@ -109,13 +109,13 @@ func newInspectRun(
 		// No INDEX options or INDEX ALL specified - inspect all indexes.
 		switch stmt.Typ {
 		case tree.InspectTable:
-			checks, err := sql.InspectChecksForTable(ctx, p, run.table)
+			checks, err := ChecksForTable(ctx, p, run.table)
 			if err != nil {
 				return inspectRun{}, err
 			}
 			run.checks = checks
 		case tree.InspectDatabase:
-			if checks, err := sql.InspectChecksForDatabase(ctx, p, run.db); err != nil {
+			if checks, err := checksForDatabase(ctx, p, run.db); err != nil {
 				return inspectRun{}, err
 			} else {
 				run.checks = checks
@@ -152,7 +152,7 @@ func newInspectRun(
 			}
 		}
 
-		if checks, err := sql.InspectChecksByIndexNames(ctx, p, run.namedIndexes); err != nil {
+		if checks, err := checksByIndexNames(ctx, p, run.namedIndexes); err != nil {
 			return inspectRun{}, err
 		} else {
 			run.checks = checks
@@ -236,7 +236,7 @@ func inspectPlanHook(
 		// the job record creation happens transactionally.
 		plannerTxn := p.InternalSQLTxn()
 
-		sj, err := sql.TriggerInspectJob(ctx, tree.AsString(stmt), p.ExecCfg(), plannerTxn, run.checks, run.asOfTimestamp)
+		sj, err := TriggerJob(ctx, tree.AsString(stmt), p.ExecCfg(), plannerTxn, run.checks, run.asOfTimestamp)
 		if err != nil {
 			return err
 		}
