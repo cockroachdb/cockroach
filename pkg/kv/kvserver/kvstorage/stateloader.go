@@ -357,6 +357,24 @@ func (s StateLoader) ClearRaftReplicaID(stateWO StateWO) error {
 	return stateWO.ClearUnversioned(s.RaftReplicaIDKey(), storage.ClearOptions{})
 }
 
+// LoadReplicaMark loads the ReplicaMark of the range. Returns an error if the
+// mark could not be loaded, or it violates the invariant.
+func (s StateLoader) LoadReplicaMark(ctx context.Context, stateRO StateRO) (ReplicaMark, error) {
+	var mark ReplicaMark
+	if _, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RangeTombstoneKey(), hlc.Timestamp{},
+		&mark.RangeTombstone, storage.MVCCGetOptions{},
+	); err != nil {
+		return ReplicaMark{}, err
+	} else if _, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RaftReplicaIDKey(), hlc.Timestamp{},
+		&mark.RaftReplicaID, storage.MVCCGetOptions{},
+	); err != nil {
+		return ReplicaMark{}, err
+	}
+	return mark, mark.check()
+}
+
 // LoadRangeTombstone loads the RangeTombstone of the range.
 func (s StateLoader) LoadRangeTombstone(
 	ctx context.Context, stateRO StateRO,
