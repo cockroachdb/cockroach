@@ -585,3 +585,136 @@ statement ok
 DROP TABLE t_aost;
 
 subtest end
+
+subtest inspect_non_key_encodable_types
+
+statement ok
+CREATE TABLE tsvector_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  tsv TSVECTOR NOT NULL,
+  INDEX idx_a_tsv (a) STORING (tsv)
+);
+
+statement ok
+INSERT INTO tsvector_tbl VALUES
+  (1, 10, 'hello world'::TSVECTOR),
+  (2, 20, 'foo bar'::TSVECTOR);
+
+# First verify that datums_to_bytes does not support TSVECTOR
+statement error pq: illegal argument 0 of type tsvector
+SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
+
+# TSVECTOR cannot be key-encoded, so the hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE tsvector_tbl WITH OPTIONS INDEX (idx_a_tsv);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+CREATE TABLE tsquery_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  tsq TSQUERY NOT NULL,
+  INDEX idx_a_tsq (a) STORING (tsq)
+);
+
+statement ok
+INSERT INTO tsquery_tbl VALUES
+  (1, 10, 'search & term'::TSQUERY),
+  (2, 20, 'another | query'::TSQUERY);
+
+# First verify that datums_to_bytes does not support TSQUERY
+statement error pq: illegal argument 0 of type tsquery
+SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
+
+# TSQUERY cannot be key-encoded, so the hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE tsquery_tbl WITH OPTIONS INDEX (idx_a_tsq);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+CREATE TABLE pgvector_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  vec VECTOR(3) NOT NULL,
+  INDEX idx_a_vec (a) STORING (vec)
+);
+
+statement ok
+INSERT INTO pgvector_tbl VALUES
+  (1, 10, '[1.0, 2.0, 3.0]'::VECTOR(3)),
+  (2, 20, '[4.0, 5.0, 6.0]'::VECTOR(3));
+
+# First verify that datums_to_bytes does not support VECTOR
+statement error pq: illegal argument 0 of type vector
+SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
+
+# VECTOR cannot be key-encoded, so the hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE pgvector_tbl WITH OPTIONS INDEX (idx_a_vec);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+# Test with multiple problematic types in the same index.
+statement ok
+CREATE TABLE multi_type_tbl (
+  id INT PRIMARY KEY,
+  a INT,
+  tsv TSVECTOR,
+  tsq TSQUERY NOT NULL,
+  vec VECTOR(2),
+  INDEX idx_a_multi (a) STORING (tsv, tsq, vec)
+);
+
+statement ok
+INSERT INTO multi_type_tbl VALUES
+  (1, 10, 'word1 word2'::TSVECTOR, 'search'::TSQUERY, '[1.0, 2.0]'::VECTOR(2)),
+  (2, 20, NULL, 'query'::TSQUERY, NULL);
+
+# Verify that datums_to_bytes fails on each type individually.
+statement error pq: illegal argument 0 of type tsvector
+SELECT crdb_internal.datums_to_bytes('word1 word2'::TSVECTOR);
+
+statement error pq: illegal argument 0 of type tsquery
+SELECT crdb_internal.datums_to_bytes('search'::TSQUERY);
+
+statement error pq: illegal argument 0 of type vector
+SELECT crdb_internal.datums_to_bytes('[1.0, 2.0]'::VECTOR(2));
+
+# Multiple non-key-encodable types: hash precheck will be skipped.
+# The JOIN-based check should work fine.
+statement ok
+INSPECT TABLE multi_type_tbl WITH OPTIONS INDEX (idx_a_multi);
+
+query TI
+SELECT * FROM last_inspect_job;
+----
+succeeded  1
+
+statement ok
+DROP TABLE tsvector_tbl;
+
+statement ok
+DROP TABLE tsquery_tbl;
+
+statement ok
+DROP TABLE pgvector_tbl;
+
+statement ok
+DROP TABLE multi_type_tbl;
+
+subtest end
