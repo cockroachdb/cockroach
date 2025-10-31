@@ -8,17 +8,18 @@ package rangefeed
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 //            ┌─────────────────┐
@@ -104,15 +105,41 @@ const (
 	// streamOverflowing is the state we are in when the stream has reached its
 	// limit and is waiting to deliver an error.
 	streamOverflowing streamState = iota
-	// streamOverflowed means the stream has overflowed and the error has been
-	// placed in the queue.
-	streamOverflowed streamState = iota
+	// streamErrored means an error has been enqueued for this stream and further
+	// buffered sends will be ignored. Streams in this state will not be found in
+	// the status map.
+	streamErrored streamState = iota
 )
+
+func (s streamState) String() string {
+	switch s {
+	case streamActive:
+		return "active"
+	case streamOverflowing:
+		return "overflowing"
+	case streamErrored:
+		return "errored"
+	default:
+		return "unknown"
+	}
+}
+
+func (s streamState) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s", redact.SafeString(s.String()))
+}
 
 type streamStatus struct {
 	// queueItems is the number of items for a given stream in the event queue.
 	queueItems int64
 	state      streamState
+}
+
+func (s streamStatus) String() string {
+	return fmt.Sprintf("%s [queue_len:%d]", s.state, s.queueItems)
+}
+
+func (s streamStatus) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s", redact.SafeString(s.String()))
 }
 
 func NewBufferedSender(
@@ -145,55 +172,28 @@ func (bs *BufferedSender) sendBuffered(
 	// request. If the stream has hit its limit, we return an error to the
 	// registration. This error should be the next event that is sent to
 	// stream.
-	//
-	// NB: We don't error if the stream status is not found as this may be an
-	// event for an already closed stream. Such events are possible while the
-	// registration publishes the catch up scan buffer.
 	status, ok := bs.queueMu.byStream[ev.StreamID]
-	if ok {
-		switch status.state {
-		case streamActive:
-			if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
-				if ev.Error != nil {
-					// If _this_ event is an error, no use sending another error. This stream
-					// is going down. Admit this error and mark the stream as overflowed.
-					status.state = streamOverflowed
-				} else {
-					// This stream is at capacity, return an error to the registration that it
-					// should send back to us after cleaning up.
-					status.state = streamOverflowing
-					return newRetryErrBufferCapacityExceeded()
-				}
-			}
-		case streamOverflowing:
-			// The unbufferedRegistration is the only component that sends non-error
-			// events to our stream. In response to the error we return when moving to
-			// stateOverflowing, it should immediately send us an error and mark itself
-			// as disconnected.
-			//
-			// The only unfortunate exception is if we get disconnected while flushing
-			// the catch-up scan buffer. In this case we admit the event and stay in
-			// state overflowing until we actually receive the error.
-			//
-			// TODO(ssd): Given the above exception, we should perhaps just move
-			// directly to streamOverflowed. But, I think instead we want to remove
-			// that exception if possible.
-			if ev.Error != nil {
-				status.state = streamOverflowed
-			}
-		case streamOverflowed:
-			// If we are overflowed, we don't expect any further events because the
-			// registration should have disconnected in response to the error.
-			//
-			// TODO(ssd): Consider adding an assertion here.
-			return nil
-		default:
-			panic(fmt.Sprintf("unhandled stream state: %v", status.state))
-		}
-		// We are admitting this event.
+	if !ok {
+		// We don't error if the stream status is not found as this may be an
+		// event for an already closed stream. Such events are possible while the
+		// registration publishes the catch up scan buffer.
+		//
+		// The client ignores such events, but we drop it here regardless.
+		return nil
+	}
+	nextState, shouldAdmit, err := bs.nextPerQueueStateLocked(status, ev)
+	status.state = nextState
+	if shouldAdmit {
 		status.queueItems++
+	}
+	if nextState == streamErrored {
+		delete(bs.queueMu.byStream, ev.StreamID)
+	} else {
 		bs.queueMu.byStream[ev.StreamID] = status
+	}
 
+	if err != nil || !shouldAdmit {
+		return err
 	}
 
 	// TODO(wenyihu6): pass an actual context here
@@ -207,8 +207,46 @@ func (bs *BufferedSender) sendBuffered(
 	return nil
 }
 
+func (bs *BufferedSender) nextPerQueueStateLocked(
+	status streamStatus, ev *kvpb.MuxRangeFeedEvent,
+) (streamState, bool, error) {
+	// An error should always put us into stateErrored, so let's do that first.
+	if ev.Error != nil {
+		if status.state == streamErrored {
+			assumedUnreachable("unexpected buffered event on stream in state streamErrored")
+		}
+		return streamErrored, true, nil
+	}
+
+	switch status.state {
+	case streamActive:
+		if bs.queueMu.perStreamCapacity > 0 && status.queueItems == bs.queueMu.perStreamCapacity {
+			// This stream is at capacity, return an error to the registration that it
+			// should send back to us after cleaning up.
+			return streamOverflowing, false, newRetryErrBufferCapacityExceeded()
+		}
+		// Happy path.
+		return streamActive, true, nil
+	case streamOverflowing:
+		// The only place we do concurrent buffered sends is during catch-up scan
+		// publishing which may be concurrent with a disconnect. The catch-up scan
+		// will stop publishing if it receives an error and try to send an error
+		// back. A disconnect only sends an error. This path exclusively handles non
+		// errors.
+		assumedUnreachable("unexpected buffered event on stream in state streamOverflowing")
+		return streamOverflowing, false, nil
+	case streamErrored:
+		// This is unexpected because streamErrored streams are removed from the
+		// status map and future sends are ignored.
+		assumedUnreachable("unexpected buffered event on stream in state streamErrored")
+		return streamErrored, false, nil
+	default:
+		panic(fmt.Sprintf("unhandled stream state: %v", status.state))
+	}
+}
+
 // sendUnbuffered sends the event directly to the underlying
-// ServerStreamSender.  It bypasses the buffer and thus may block.
+// ServerStreamSender. It bypasses the buffer and thus may block.
 func (bs *BufferedSender) sendUnbuffered(ev *kvpb.MuxRangeFeedEvent) error {
 	return bs.sender.Send(ev)
 }
@@ -273,22 +311,8 @@ func (bs *BufferedSender) addStream(streamID int64) {
 	if _, ok := bs.queueMu.byStream[streamID]; !ok {
 		bs.queueMu.byStream[streamID] = streamStatus{}
 	} else {
-		if buildutil.CrdbTestBuild {
-			panic(fmt.Sprintf("stream %d already exists in buffered sender", streamID))
-		}
+		assumedUnreachable(fmt.Sprintf("stream %d already exists in buffered sender", streamID))
 	}
-}
-
-// removeStream removes the per-stream state tracking from the sender.
-//
-// TODO(ssd): There may be items still in the queue when removeStream is called.
-// We'd like to solve this by removing this as a possibility. But this is OK
-// since we will eventually process the events and the client knows to ignore
-// them.
-func (bs *BufferedSender) removeStream(streamID int64) {
-	bs.queueMu.Lock()
-	defer bs.queueMu.Unlock()
-	delete(bs.queueMu.byStream, streamID)
 }
 
 // cleanup is called when the sender is stopped. It is expected to free up
@@ -307,6 +331,18 @@ func (bs *BufferedSender) len() int {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
 	return int(bs.queueMu.buffer.len())
+}
+
+func (bs *BufferedSender) TestingBufferSummary() string {
+	bs.queueMu.Lock()
+	defer bs.queueMu.Unlock()
+
+	summary := &strings.Builder{}
+	fmt.Fprintf(summary, "buffered sender: queue_len=%d streams=%d", bs.queueMu.buffer.len(), len(bs.queueMu.byStream))
+	for id, stream := range bs.queueMu.byStream {
+		fmt.Fprintf(summary, "\n    %d: %s", id, stream)
+	}
+	return summary.String()
 }
 
 // Used for testing only.
