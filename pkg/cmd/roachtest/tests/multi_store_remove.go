@@ -13,12 +13,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -68,6 +71,7 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	)
 
 	c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
+	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), c.Conn(ctx, t.L(), 1)))
 
 	// Confirm that there are 6 stores live.
 	t.Status("store setup")
@@ -134,6 +138,9 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err := c.StartE(ctx, t.L(), startOpts, startSettings, node); err != nil {
 		t.Fatalf("restarting node: %s", err)
 	}
+	// Example: with 12 stores per node, since we removed n1's last one, we did remove
+	// s12.
+	removedStoreID := multiStoreStoresPerNode
 
 	// Wait for the store to be marked as dead.
 	t.Status("awaiting store death")
@@ -151,32 +158,30 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("awaiting store death: %s", err)
 	}
 
-	// Wait for up-replication.
-	// NOTE: At the time of writing, under-replicated ranges are computed using
-	// node liveness, rather than store liveness, so we instead compare the range
-	// count to the current per-store replica count to compute whether all there
-	// are still under-replicated ranges from the dead store.
-	// TODO(travers): Once #123561 is solved, re-work this.
-	t.Status("awaiting up-replication")
-	tStart := timeutil.Now()
-	var oldReplicas int
+	// Wait until no ranges remain on the removed store.
+	t.Status("awaiting range relocation")
+	sr := sqlutils.MakeSQLRunner(conn)
 	for {
-		var ranges, replicas int
-		if err := conn.QueryRowContext(ctx,
-			`SELECT
-			    (SELECT count(1) FROM crdB_internal.ranges) AS ranges
-			  , (SELECT sum(range_count) FROM crdb_internal.kv_store_status) AS replicas`,
-		).Scan(&ranges, &replicas); err != nil {
-			t.Fatalf("replication status: %s", err)
-		}
-		if replicas == 3*ranges {
-			t.L().Printf("up-replication complete")
+		res := sr.QueryStr(t, `
+SELECT
+  (SELECT count(*) FROM crdb_internal.ranges_no_leases
+   WHERE $1::INT = ANY(replicas)) AS cnt,
+  ARRAY(
+    SELECT range_id
+    FROM crdb_internal.ranges_no_leases
+    WHERE $1::INT = ANY(replicas)
+    ORDER BY range_id
+    LIMIT 10) AS sample;
+`, removedStoreID)
+		cnt := res[0][0]
+		sample := res[0][1]
+
+		if cnt == "0" {
+			t.L().Printf("all ranges moved off removed store")
 			break
 		}
-		if timeutil.Since(tStart) > 30*time.Second || oldReplicas != replicas {
-			t.L().Printf("still waiting for replication (%d / %d)", replicas, 3*ranges)
-		}
-		oldReplicas = replicas
+
+		t.L().Printf("%s ranges remain on removed store; for example: %s", cnt, sample)
 		time.Sleep(5 * time.Second)
 	}
 	t.Status("done")
