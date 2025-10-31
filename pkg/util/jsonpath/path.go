@@ -316,7 +316,7 @@ func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
 
 // isSupportedPathPattern returns true if the given paths matches one of
 // the following patterns, which can be supported by the inverted index:
-// - keychain mode: $.[key|wildcard].[key|wildcard]...
+// - keychain mode: $.[key|wildcard].[key|wildcard]...(*)
 // - end value mode: $.[key|wildcard]? (@.[key|wildcard].[key|wildcard]... == [string|number|null|boolean])
 // We might call this function recursively if a Path is a Filter, which contains
 // child Paths. If isSupportedPathPattern is called within a Filter, atRoot
@@ -350,6 +350,9 @@ func isSupportedPathPattern(ps []Path, atRoot bool) bool {
 	for i := 1; i < len(ps); i++ {
 		switch pt := ps[i].(type) {
 		case Wildcard, Key:
+		case AnyKey:
+			// We only allow AnyKey at the end of the root path.
+			return i == len(ps)-1 && atRoot
 		case Filter:
 			// We only allow filter at the end of the path.
 			if i != len(ps)-1 {
@@ -569,11 +572,43 @@ func buildInvertedIndexSpans(
 					}
 					resultExpression = addSpanToResult(resultExpression, inverted.MakeSingleValSpan(arrayKeys[0]))
 				} else {
-					// Meaning this is of the keychain mode. (See isSupportedPathPattern).
-					resultExpression = addSpanToResult(resultExpression, inverted.Span{
+					resSpans := []inverted.Span{{
 						Start: baseKey,
-						End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(baseKey)),
-					})
+						End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(baseKey[:len(baseKey):len(baseKey)])),
+					}}
+					// If the last path component is an AnyKey, it means the
+					// current key must not be an end key (since AnyKey matches
+					// any key under the current object/array). For example, for
+					// path $.a.b.*, the following won't match because "b" is the
+					// end key:
+					// - {"a": {"b": "d"}}
+					// - {"a": {"b": ["c"]}}
+					// But the following will match:
+					// - {"a": {"b": {"c": "d"}}}
+					// - {"a": {"b": [{"c": {"d": "e"}}]}}
+					// In these 2 cases, after "b", there is still "c"
+					// as the next key, so "b" is not an end key.
+					if _, isAnyKey := pathComponents[len(pathComponents)-1].(AnyKey); isAnyKey {
+						// asEndValKey means the baseKey is mapped to an end value
+						// in the json object. (e.g. {"a": {"b": "d"}})
+						asEndValKey := encoding.AddJSONPathTerminator(baseKey[:len(baseKey):len(baseKey)])
+						asEndValKeySpan := inverted.Span{
+							Start: asEndValKey,
+							End:   keysbase.PrefixEnd(asEndValKey),
+						}
+						// asEndArrayValKey means the baseKey is mapped to an end value
+						// in the array object. (e.g. {"a": {"b": ["c"]}}})
+						asEndArrayValKey := encoding.AddJSONPathTerminator(encoding.EncodeArrayAscending(encoding.AddJSONPathSeparator(baseKey[:len(baseKey):len(baseKey)])))
+						asEndArrayValKeySpan := inverted.Span{
+							Start: asEndArrayValKey,
+							End:   keysbase.PrefixEnd(asEndArrayValKey),
+						}
+						resSpans = inverted.SubtractSpans(resSpans, []inverted.Span{asEndValKeySpan, asEndArrayValKeySpan})
+					}
+
+					for _, sp := range resSpans {
+						resultExpression = addSpanToResult(resultExpression, sp)
+					}
 				}
 			}
 			return resultExpression

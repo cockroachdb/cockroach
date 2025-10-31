@@ -13883,3 +13883,34 @@ project
                      ├── ["a"/Arr/"x"/Arr/False, "a"/Arr/"x"/Arr/False]
                      ├── ["a"/"x"/False, "a"/"x"/False]
                      └── ["a"/"x"/Arr/False, "a"/"x"/Arr/False]
+
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b.*')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, "a"/Arr/"b")
+      │         ├── ["a"/Arr/"b"/PrefixEnd, "a"/Arr/"b"/Arr)
+      │         ├── ["a"/Arr/"b"/Arr/PrefixEnd, "a"/Arr/Arr/)
+      │         ├── [???, "a"/"b")
+      │         ├── ["a"/"b"/PrefixEnd, "a"/"b"/Arr)
+      │         └── ["a"/"b"/Arr/PrefixEnd, "a"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, "a"/Arr/"b")
+                     ├── ["a"/Arr/"b"/PrefixEnd, "a"/Arr/"b"/Arr)
+                     ├── ["a"/Arr/"b"/Arr/PrefixEnd, "a"/Arr/Arr/)
+                     ├── [???, "a"/"b")
+                     ├── ["a"/"b"/PrefixEnd, "a"/"b"/Arr)
+                     └── ["a"/"b"/Arr/PrefixEnd, "a"/Arr/)
