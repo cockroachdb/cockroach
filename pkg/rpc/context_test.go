@@ -193,6 +193,7 @@ func TestClockOffsetInClientPingRequest(t *testing.T) {
 }
 
 func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/154839")
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
