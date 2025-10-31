@@ -163,6 +163,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -192,6 +193,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -221,6 +223,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -250,6 +253,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -279,6 +283,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -308,6 +313,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -337,6 +343,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 104
@@ -668,6 +675,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 105
@@ -697,6 +705,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 105
@@ -726,6 +735,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 105
@@ -755,6 +765,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 105
@@ -784,6 +795,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 105
@@ -813,6 +825,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 105
