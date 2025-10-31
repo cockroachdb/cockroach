@@ -3258,12 +3258,10 @@ func TestRaftRemoveRace(t *testing.T) {
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
-		replID, err := sl.LoadRaftReplicaID(ctx, s2.StateEngine())
+		// Verify the ReplicaMark does not indicate a destroyed replica. See #12130.
+		mark, err := sl.LoadReplicaMark(ctx, s2.StateEngine())
 		require.NoError(t, err)
-		ts, err := sl.LoadRangeTombstone(ctx, s2.StateEngine())
-		require.NoError(t, err)
-		// ReplicaID leads the RangeTombstone, which means a replica exists.
-		require.GreaterOrEqual(t, replID.ReplicaID, ts.NextReplicaID)
+		require.True(t, mark.Exists(), "replica must exist")
 	}
 }
 
