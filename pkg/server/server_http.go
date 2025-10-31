@@ -184,6 +184,9 @@ func (s *httpServer) setupRoutes(
 			}
 			return nil
 		},
+		GetClusterID: func() string {
+			return s.cfg.ClusterIDContainer.Get().String()
+		},
 		Flags:    flags,
 		Settings: s.cfg.Settings,
 	})

@@ -74,25 +74,6 @@ var indexHTML = []byte(`<!DOCTYPE html>
 </html>
 `)
 
-type indexHTMLArgs struct {
-	// Insecure means disable auth entirely - anyone can use.
-	Insecure         bool
-	LoggedInUser     *string
-	Tag              string
-	Version          string
-	NodeID           string
-	OIDCAutoLogin    bool
-	OIDCLoginEnabled bool
-	OIDCButtonText   string
-	FeatureFlags     serverpb.FeatureFlags
-
-	OIDCGenerateJWTAuthTokenEnabled bool
-
-	LicenseType               string
-	SecondsUntilLicenseExpiry int64
-	IsManaged                 bool
-}
-
 // OIDCUIConf is a variable that stores data required by the
 // Admin UI to display and manage the OIDC login flow. It is
 // provided by the `oidcAuthenticationServer` at runtime
@@ -123,12 +104,13 @@ Binary built without web UI.
 
 // Config contains the configuration parameters for Handler.
 type Config struct {
-	Insecure bool
-	NodeID   *base.NodeIDContainer
-	GetUser  func(ctx context.Context) *string
-	OIDC     OIDCUI
-	Flags    serverpb.FeatureFlags
-	Settings *cluster.Settings
+	Insecure     bool
+	NodeID       *base.NodeIDContainer
+	GetUser      func(ctx context.Context) *string
+	GetClusterID func() string
+	OIDC         OIDCUI
+	Flags        serverpb.FeatureFlags
+	Settings     *cluster.Settings
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
@@ -166,7 +148,7 @@ func Handler(cfg Config) http.Handler {
 		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
 		major, minor := build.BranchReleaseSeries()
-		args := indexHTMLArgs{
+		args := future.IndexHTMLArgs{
 			Insecure:         cfg.Insecure,
 			LoggedInUser:     cfg.GetUser(r.Context()),
 			Tag:              buildInfo.Tag,
@@ -187,13 +169,11 @@ func Handler(cfg Config) http.Handler {
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()
 		}
+		if cfg.GetClusterID != nil {
+			args.ClusterID = cfg.GetClusterID()
+		}
 		if futurePath.MatchString(r.URL.Path) {
-			futureConfig := future.Config{
-				Insecure: cfg.Insecure,
-				NodeID:   cfg.NodeID,
-				Version:  args.Version,
-			}
-			future.MakeFutureHandler(futureConfig).ServeHTTP(w, r)
+			future.MakeFutureHandler(args).ServeHTTP(w, r)
 			return
 		}
 		if uiConfigPath.MatchString(r.URL.Path) {

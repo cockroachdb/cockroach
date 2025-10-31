@@ -16,13 +16,13 @@
   </div>
   <div class="flex-row align-items:center padding crowded border-block-end">
     <div class="<h3> flex-grow:2">Cluster id: {{.ClusterID}}</div>
-    <chip class="info">{{.Version}}</chip>
+    <chip class="info">{{.Tag}}</chip>
   </div>
   <div class="sidebar-layout">
     <header>
       <ul role="list">
-        <li>Overview</li>
-        <li>Metrics</li>
+        <li><a href="overview">Overview</a></li>
+        <li><a href="metrics">Metrics</a></li>
         <li>Databases</li>
         <li>SQL Activity</li>
         <li>Insights</li>
@@ -33,7 +33,7 @@
       </ul>
     </header>
     <div class="padding">
-      {{block "content" .}}{{end}}
+      {{template "page-content" .}}
     </div>
   </div>
   </body>

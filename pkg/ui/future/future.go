@@ -12,9 +12,30 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/gorilla/mux"
 )
+
+type IndexHTMLArgs struct {
+	// Insecure means disable auth entirely - anyone can use.
+	Insecure         bool
+	LoggedInUser     *string
+	Tag              string
+	Version          string
+	NodeID           string
+	ClusterID        string
+	OIDCAutoLogin    bool
+	OIDCLoginEnabled bool
+	OIDCButtonText   string
+	FeatureFlags     serverpb.FeatureFlags
+
+	OIDCGenerateJWTAuthTokenEnabled bool
+
+	LicenseType               string
+	SecondsUntilLicenseExpiry int64
+	IsManaged                 bool
+}
 
 //go:embed assets/*
 var assetsFS embed.FS
@@ -50,15 +71,20 @@ type TemplateData struct {
 	ClusterID string
 }
 
-func MakeFutureHandler(cfg Config) http.HandlerFunc {
+func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Create a new Gorilla Mux router
 	router := mux.NewRouter()
 
 	// Prefix all routes with /future
 	futureRouter := router.PathPrefix("/future").Subrouter()
 
-	// Serve the overview page for root
+	// Redirect root to overview
 	futureRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/future/overview", http.StatusFound)
+	}).Methods("GET")
+
+	// Serve the overview page
+	futureRouter.HandleFunc("/overview", func(w http.ResponseWriter, r *http.Request) {
 		handleOverview(w, r, cfg)
 	}).Methods("GET")
 
@@ -77,15 +103,12 @@ func MakeFutureHandler(cfg Config) http.HandlerFunc {
 }
 
 // handleOverview serves the overview.html template
-func handleOverview(w http.ResponseWriter, r *http.Request, cfg Config) {
+func handleOverview(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Set content type
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	// Prepare template data
-	data := makeTemplateData(cfg)
-
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "overview.html", data)
+	err := templates.ExecuteTemplate(w, "overview.html", cfg)
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
@@ -108,15 +131,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMetrics serves the metrics.html template
-func handleMetrics(w http.ResponseWriter, r *http.Request, cfg Config) {
+func handleMetrics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	// Set content type
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
-	// Prepare template data
-	data := makeTemplateData(cfg)
-
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "metrics.html", data)
+	err := templates.ExecuteTemplate(w, "metrics.html", cfg)
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
@@ -124,31 +144,14 @@ func handleMetrics(w http.ResponseWriter, r *http.Request, cfg Config) {
 	}
 }
 
-// makeTemplateData creates template data from config
-func makeTemplateData(cfg Config) TemplateData {
-	data := TemplateData{
-		Insecure:  cfg.Insecure,
-		Version:   cfg.Version,
-		ClusterID: "96db9afc-e23c-43fe-99b6-6ce891cd87f8", // TODO: Get from actual cluster
-	}
-	if cfg.NodeID != nil {
-		data.NodeID = cfg.NodeID.String()
-	}
-	return data
-}
-
 // handleAssets serves static assets from the embedded filesystem
 func handleAssets(w http.ResponseWriter, r *http.Request) {
-	log.Dev.Warningf(r.Context(), "REQUESTING: %s", r.URL.Path)
-
 	// Get the requested path and strip the /future/assets/ prefix
 	requestPath := r.URL.Path
 	requestPath = strings.TrimPrefix(requestPath, "/future/assets/")
 
 	// Construct the path within the embedded filesystem
 	embedPath := "assets/" + requestPath
-
-	log.Dev.Warningf(r.Context(), "SERVING embedded: %s", embedPath)
 
 	// Try to read the file from the embedded filesystem
 	data, err := assetsFS.ReadFile(embedPath)

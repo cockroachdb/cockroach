@@ -11,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/server/serverpb",
         "//pkg/util/log",
         "@com_github_gorilla_mux//:mux",
     ],
