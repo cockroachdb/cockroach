@@ -702,20 +702,39 @@ func TestDecommissionSelf(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resp.Status)
 
-	// The nodes should now have been (or soon become) decommissioned.
+	// The nodes should now have been (or soon become) decommissioned. In a cruel
+	// twist of fate, the decommissioned nodes may not find out about that,
+	// however. This is because the other nodes may learn that (say) n4 is
+	// decommissioned before n4 does, and will block all communication with it,
+	// which includes receiving an updated liveness record. So we only verify that
+	// the non-decommissioned nodes see the decommissioned nodes as such, but
+	// don't verify the decommissioned nodes' own view of their (or anyone's, really)
+	// liveness.
 	for i := 0; i < tc.NumServers(); i++ {
 		srv := tc.Server(i)
-		expect := livenesspb.MembershipStatus_ACTIVE
+		var omit bool
 		for _, nodeID := range decomNodeIDs {
 			if srv.NodeID() == nodeID {
-				expect = livenesspb.MembershipStatus_DECOMMISSIONED
-				break
+				omit = true
 			}
 		}
-		require.Eventually(t, func() bool {
-			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
-			return ok && liveness.Membership == expect
-		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+		if omit {
+			continue
+		}
+		nl := srv.NodeLiveness().(*liveness.NodeLiveness)
+		testutils.SucceedsSoon(t, func() error {
+			entry, ok := nl.GetLiveness(srv.NodeID())
+			if !ok || entry.Membership != livenesspb.MembershipStatus_ACTIVE {
+				return errors.Errorf("n%d not ACTIVE: %v", srv.NodeID(), entry.Membership)
+			}
+			for _, nodeID := range decomNodeIDs {
+				entry, ok := nl.GetLiveness(nodeID)
+				if !ok || entry.Membership != livenesspb.MembershipStatus_DECOMMISSIONED {
+					return errors.Errorf("n%d not DECOMMISSIONED: %v", srv.NodeID(), entry.Membership)
+				}
+			}
+			return nil
+		})
 	}
 }
 
