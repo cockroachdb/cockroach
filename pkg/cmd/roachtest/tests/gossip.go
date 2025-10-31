@@ -132,7 +132,7 @@ SELECT node_id
 
 				for i := range liveNodes {
 					if liveNodes[i] != expLiveNodes[i] {
-						t.L().Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
+						t.L().Printf("%d: gossip not ok (mismatched view of live nodes); expected %+v, got %+v (%.0fs)\n",
 							i, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
 						return false
 					}

@@ -60,7 +60,7 @@ func TestParseClusterUri(t *testing.T) {
 	for _, test := range tests {
 		uri, err := ParseClusterUri(test.uri)
 		if test.err != "" {
-			require.ErrorContains(t, err, test.err, "expected error parsing %s", test.uri)
+			require.ErrorContainsf(t, err, test.err, "expected error parsing %s", test.uri)
 		} else {
 			require.NoError(t, err)
 			require.Equal(t, uri.Serialize(), test.uri)
