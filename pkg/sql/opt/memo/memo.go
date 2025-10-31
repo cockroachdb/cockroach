@@ -209,6 +209,7 @@ type Memo struct {
 	internal                                   bool
 	usePre_25_2VariadicBuiltins                bool
 	useExistsFilterHoistRule                   bool
+	useMaxFrequencySelectivity                 bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -314,6 +315,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		internal:                                   evalCtx.SessionData().Internal,
 		usePre_25_2VariadicBuiltins:                evalCtx.SessionData().UsePre_25_2VariadicBuiltins,
 		useExistsFilterHoistRule:                   evalCtx.SessionData().OptimizerUseExistsFilterHoistRule,
+		useMaxFrequencySelectivity:                 evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity,
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
 	}
 	m.metadata.Init()
@@ -492,6 +494,7 @@ func (m *Memo) IsStale(
 		m.internal != evalCtx.SessionData().Internal ||
 		m.usePre_25_2VariadicBuiltins != evalCtx.SessionData().UsePre_25_2VariadicBuiltins ||
 		m.useExistsFilterHoistRule != evalCtx.SessionData().OptimizerUseExistsFilterHoistRule ||
+		m.useMaxFrequencySelectivity != evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity ||
 		m.txnIsoLevel != evalCtx.TxnIsoLevel {
 		return true, nil
 	}

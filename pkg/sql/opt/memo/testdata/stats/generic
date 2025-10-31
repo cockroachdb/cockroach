@@ -254,6 +254,27 @@ select
  └── filters
       └── i:2 = $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
 
+# Fallback to ~row_count/distinct_count if
+# optimizer_use_max_frequency_selectivity is false.
+norm set=(optimizer_use_max_frequency_selectivity=false)
+SELECT * FROM t WHERE i = $1
+----
+select
+ ├── columns: k:1(int!null) i:2(int!null) s:3(string)
+ ├── has-placeholder
+ ├── stats: [rows=24.25, distinct(2)=1, null(2)=0]
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── scan t
+ │    ├── columns: k:1(int!null) i:2(int) s:3(string)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=41, null(2)=30]
+ │    │   histogram(2)=  0   30   0  0  90  10   180  10   270  20   360  30
+ │    │                <--- NULL --- 0 ---- 100 ----- 200 ----- 300 ----- 400
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── i:2 = $1 [type=bool, outer=(2), constraints=(/2: (/NULL - ]), fd=()-->(2)]
+
 # Similar case as above, but with opt to ensure the correct row counts are used
 # for new memo groups.
 opt

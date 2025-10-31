@@ -4581,6 +4581,9 @@ func (sb *statisticsBuilder) selectivityFromMaxFrequencies(
 ) (selectivity, selectivityUpperBound props.Selectivity, maxFreqCols opt.ColSet) {
 	selectivity = props.OneSelectivity
 	selectivityUpperBound = props.OneSelectivity
+	if !sb.evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity {
+		return selectivity, selectivityUpperBound, opt.ColSet{}
+	}
 	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
 		c := opt.MakeColSet(col)
 		inputColStat, inputStats := sb.colStatFromInput(c, e)
