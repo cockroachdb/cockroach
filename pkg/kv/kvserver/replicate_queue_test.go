@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -618,7 +617,7 @@ func checkReplicaCount(
 	rangeDesc *roachpb.RangeDescriptor,
 	voterCount, nonVoterCount int,
 ) (bool, error) {
-	err := forceScanOnAllReplicationQueues(tc)
+	err := forceScanOnAllReplicationAndSplitQueues(tc)
 	if err != nil {
 		log.KvDistribution.Infof(ctx, "store.ForceReplicationScanAndProcess() failed with: %s", err)
 		return false, err
@@ -1544,7 +1543,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 		" num_replicas=5, num_voters=1")
 	require.NoError(t, err)
 	testutils.SucceedsSoon(t, func() error {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			return err
 		}
 		scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
@@ -1559,7 +1558,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 
 	checkRelocated := func(t *testing.T, voterStores, nonVoterStores []roachpb.StoreID) {
 		testutils.SucceedsSoon(t, func() error {
-			if err := forceScanOnAllReplicationQueues(tc); err != nil {
+			if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 				return err
 			}
 			scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
@@ -1665,7 +1664,7 @@ func TestReplicateQueueShouldQueueNonVoter(t *testing.T) {
 	// Make sure that the range has conformed to the constraints we just set
 	// above.
 	require.Eventually(t, func() bool {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			log.KvDistribution.Warningf(ctx, "received error while forcing a replicateQueue scan: %s", err)
 			return false
 		}
@@ -1785,13 +1784,24 @@ func toggleReplicationQueues(tc *testcluster.TestCluster, active bool) {
 	}
 }
 
-func forceScanOnAllReplicationQueues(tc *testcluster.TestCluster) (err error) {
+func forceScanOnAllReplicationAndSplitQueues(tc *testcluster.TestCluster) (err error) {
+	// We force scans on the replication and split queues because sometimes splits
+	// are necessary to apply zone config changes, which then lead to further
+	// replication decisions. See #156530 for an example of this.
 	for _, s := range tc.Servers {
-		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			return store.ForceReplicationScanAndProcess()
-		})
+		if err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
+			if err := store.ForceReplicationScanAndProcess(); err != nil {
+				return err
+			}
+			if err := store.ForceSplitScanAndProcess(); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
-	return err
+	return nil
 }
 
 func toggleSplitQueues(tc *testcluster.TestCluster, active bool) {
@@ -2189,12 +2199,6 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	defer testutils.StartExecTrace(t, scope.GetDirectory()).Finish(t)
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	// NB: Ensure that tables created by the test start off on their own range.
-	// This ensures that any span config changes made by the test don't have to
-	// first induce a split, which is a known source of flakiness.
-	spanconfigstore.StorageCoalesceAdjacentSetting.Override(ctx, &st.SV, false)
-	spanconfigstore.TenantCoalesceAdjacentSetting.Override(ctx, &st.SV, false)
 
 	// Create 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
 	const numNodes = 7
@@ -2202,7 +2206,6 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	regions := [numNodes]int{1, 1, 1, 2, 2, 3, 3}
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
-			Settings: st,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{
@@ -2237,7 +2240,7 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 	setConstraintFn("RANGE meta", 7, 7, "")
 	setConstraintFn("RANGE default", 7, 7, "")
 	testutils.SucceedsSoon(t, func() error {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
 			return err
 		}
 		s, err := sqlutils.RowsToDataDrivenOutput(sqlutils.MakeSQLRunner(tc.Conns[0]).Query(t, `
@@ -2271,36 +2274,64 @@ SELECT * FROM (
 		t *testing.T,
 		tc *testcluster.TestCluster,
 		db *gosql.DB,
-	) (numVoters, numNonVoters int, err error) {
-		if err := forceScanOnAllReplicationQueues(tc); err != nil {
-			return 0, 0, err
+	) (numVoters, numNonVoters int, _ roachpb.RangeDescriptor, err error) {
+		if err := forceScanOnAllReplicationAndSplitQueues(tc); err != nil {
+			return 0, 0, roachpb.RangeDescriptor{}, err
 		}
 
-		var rangeID roachpb.RangeID
-		if err := db.QueryRow("SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1").Scan(&rangeID); err != nil {
-			return 0, 0, err
+		var key roachpb.Key
+		require.NoError(t,
+			db.QueryRow(`
+SELECT start_key from crdb_internal.ranges_no_leases WHERE range_id IN
+(SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1);
+`).Scan(&key))
+		desc, err := tc.LookupRange(key)
+		if err != nil {
+			return 0, 0, roachpb.RangeDescriptor{}, err
 		}
+
 		iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
-			if replica, err := s.GetReplica(rangeID); err == nil && replica.OwnsValidLease(ctx, replica.Clock().NowAsClockTimestamp()) {
+			if replica, err := s.GetReplica(desc.RangeID); err == nil && replica.OwnsValidLease(ctx,
+				replica.Clock().NowAsClockTimestamp()) {
 				desc := replica.Desc()
 				numVoters = len(desc.Replicas().VoterDescriptors())
 				numNonVoters = len(desc.Replicas().NonVoterDescriptors())
 			}
 			return nil
 		})
-		return numVoters, numNonVoters, nil
+		return numVoters, numNonVoters, desc, nil
 	}
 
 	// Ensure we are meeting our ZONE survival configuration.
+	logMore := time.After(15 * time.Second)
 	testutils.SucceedsSoon(t, func() error {
-		numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
+		numVoters, numNonVoters, desc, err := computeNumberOfReplicas(t, tc, db)
+
 		require.NoError(t, err)
+		select {
+		default:
+		case <-logMore:
+			// If the retry loop has been stuck for a while, log the span config
+			// as seen by each store. For it to apply, the range's span needs to
+			// be contained in the start key's span config. If this is not the
+			// case, it can explain why the replication changes are not being made.
+			iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
+				cfg, sp, err := s.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
+				if err != nil {
+					return err
+				}
+				t.Logf("s%d: r%d %s -> span config %s %s", s.StoreID(), desc.RangeID, desc.RSpan(), sp, &cfg)
+				return nil
+			})
+		}
+
 		if numVoters != 3 {
-			return errors.Newf("expected 3 voters; got %d", numVoters)
+			return errors.Newf("expected 3 voters for r%d; got %d", desc.RangeID, numVoters)
 		}
 		if numNonVoters != 2 {
-			return errors.Newf("expected 2 non-voters; got %v", numNonVoters)
+			return errors.Newf("expected 2 non-voters for r%d; got %v", desc.RangeID, numNonVoters)
 		}
+		t.Logf("success: %d has %d voters and %d non-voters", desc.RangeID, numVoters, numNonVoters)
 		return nil
 	})
 
@@ -2316,13 +2347,13 @@ SELECT * FROM (
 
 	// Ensure we are meeting our REGION survival configuration.
 	testutils.SucceedsSoon(t, func() error {
-		numVoters, numNonVoters, err := computeNumberOfReplicas(t, tc, db)
+		numVoters, numNonVoters, desc, err := computeNumberOfReplicas(t, tc, db)
 		require.NoError(t, err)
 		if numVoters != 5 {
-			return errors.Newf("expected 5 voters; got %d", numVoters)
+			return errors.Newf("expected 5 voters for r%d; got %d", desc.RangeID, numVoters)
 		}
 		if numNonVoters != 0 {
-			return errors.Newf("expected 0 non-voters; got %v", numNonVoters)
+			return errors.Newf("expected 0 non-voters for r%d; got %v", desc.RangeID, numNonVoters)
 		}
 		return nil
 	})

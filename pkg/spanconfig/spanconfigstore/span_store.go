@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// TenantCoalesceAdjacentSetting is a public cluster setting that
+// tenantCoalesceAdjacentSetting is a public cluster setting that
 // controls whether we coalesce adjacent ranges across all secondary
 // tenant keyspaces if they have the same span config.
-var TenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
+var tenantCoalesceAdjacentSetting = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"spanconfig.tenant_coalesce_adjacent.enabled",
 	`collapse adjacent ranges with the same span configs across all secondary tenant keyspaces`,
@@ -157,7 +157,7 @@ func (s *spanConfigStore) computeSplitKey(
 				return roachpb.RKey(match.span.Key), nil
 			}
 		} else {
-			if !TenantCoalesceAdjacentSetting.Get(&s.settings.SV) {
+			if !tenantCoalesceAdjacentSetting.Get(&s.settings.SV) {
 				return roachpb.RKey(match.span.Key), nil
 			}
 		}
