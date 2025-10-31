@@ -370,6 +370,9 @@ const (
 	// The maximum number of times a replica is retried when it repeatedly returns
 	// stale lease info.
 	sameReplicaRetryLimit = 10
+	// InLeaseTransferBackoffTraceMessage is traced when DistSender backs off as a
+	// result of a NotLeaseholderError. It is exported for testing.
+	InLeaseTransferBackoffTraceMessage = "backing off due to NotLeaseHolderErr with stale info"
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -2899,6 +2902,7 @@ func (ds *DistSender) sendToReplicas(
 			// If we get a gRPC error against the leaseholder, we don't want to
 			// backoff and keep trying the request against the same leaseholder.
 			if lh := routing.Leaseholder(); lh != nil && lh.IsSame(curReplica) {
+				log.VEventf(ctx, 2, "RPC error and lh %s != curReplica %s; marking leaseholder as unavailable", lh, curReplica)
 				leaseholderUnavailable = true
 			}
 		} else {
@@ -3008,6 +3012,7 @@ func (ds *DistSender) sendToReplicas(
 					// error out when the transport is exhausted even if multiple replicas
 					// return NLHEs to different replicas all returning RUEs.
 					replicaUnavailableError = br.Error.GoError()
+					log.VEventf(ctx, 2, "got RUE from lh and lh equals curReplica; marking as leaseholderUnavailable")
 					leaseholderUnavailable = true
 				} else if replicaUnavailableError == nil {
 					// This is the first time we see a RUE. Record it, such that we'll
@@ -3054,6 +3059,8 @@ func (ds *DistSender) sendToReplicas(
 					// prevents accidentally returning a replica unavailable
 					// error too aggressively.
 					if updatedLeaseholder {
+						log.VEventf(ctx, 2,
+							"updated leaseholder; resetting leaseholderUnavailable and routing to leaseholder")
 						leaseholderUnavailable = false
 						routeToLeaseholder = true
 						// If we changed the leaseholder, reset the transport to try all the
@@ -3130,7 +3137,10 @@ func (ds *DistSender) sendToReplicas(
 					shouldBackoff := !updatedLeaseholder && !intentionallySentToFollower && !leaseholderUnavailable
 					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)
-						log.VErrEventf(ctx, 2, "backing off due to NotLeaseHolderErr with stale info")
+						log.VErrEventf(ctx, 2,
+							InLeaseTransferBackoffTraceMessage+
+								" (updatedLH=%t intentionallySentToFollower=%t leaseholderUnavailable=%t)",
+							updatedLeaseholder, intentionallySentToFollower, leaseholderUnavailable)
 					} else {
 						inTransferRetry.Reset() // The following Next() call will not block.
 					}
