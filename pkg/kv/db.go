@@ -226,6 +226,10 @@ func (s *CrossRangeTxnWrapperSender) Send(
 		return br, pErr
 	}
 
+	// Before retrying the batch in a transaction, strip the header's timestamp.
+	// It may have been set to try a follower read, but it's not allowed in a txn.
+	ba.Header.Timestamp = hlc.Timestamp{}
+
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()

@@ -122,6 +122,16 @@ func exceptContextCanceled(err error) bool {
 		strings.Contains(err.Error(), "query execution canceled")
 }
 
+const followerReadsOffset = 2 * time.Second
+
+func makeFollowerReadTimestamp(ts hlc.Timestamp) hlc.Timestamp {
+	return ts.Add(-followerReadsOffset.Nanoseconds(), 0)
+}
+func configureBatchForFollowerReads(b *kv.Batch, ts hlc.Timestamp) {
+	b.Header.Timestamp = makeFollowerReadTimestamp(ts)
+	b.Header.RoutingPolicy = kvpb.RoutingPolicy_NEAREST
+}
+
 func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,
@@ -188,6 +198,15 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		})
 		var savedTxn *kv.Txn
 		txnErr := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Attempt to set a follower reads timestamp only on the first iteration.
+			// Setting it again and again on retries can lead to starvation.
+			if o.FollowerReadEligible && savedTxn == nil {
+				followerReadTs := makeFollowerReadTimestamp(db.Clock().Now())
+				err := txn.SetFixedTimestamp(ctx, followerReadTs)
+				if err != nil {
+					panic(err)
+				}
+			}
 			if err := txn.SetIsoLevel(o.IsoLevel); err != nil {
 				panic(err)
 			}
@@ -251,7 +270,7 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 			}
 			if o.CommitInBatch != nil {
 				b := txn.NewBatch()
-				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch)
+				applyBatchOp(ctx, b, txn.CommitInBatch, o.CommitInBatch, nil /* clock */)
 				// The KV api disallows use of a txn after an operation on it errors.
 				if r := o.CommitInBatch.Result; r.Type == ResultType_Error {
 					return errors.DecodeError(ctx, *r.Err)
@@ -349,6 +368,13 @@ func applyClientOp(
 			} else {
 				b.Get(o.Key)
 			}
+			if !inTxn && o.FollowerReadEligible {
+				kvDB, ok := db.(*kv.DB)
+				if !ok {
+					panic(errors.AssertionFailedf("unexpected transactional interface"))
+				}
+				configureBatchForFollowerReads(b, kvDB.Clock().Now())
+			}
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -421,6 +447,13 @@ func applyClientOp(
 				} else {
 					b.Scan(o.Key, o.EndKey)
 				}
+			}
+			if !inTxn && o.FollowerReadEligible {
+				kvDB, ok := db.(*kv.DB)
+				if !ok {
+					panic(errors.AssertionFailedf("unexpected transactional interface"))
+				}
+				configureBatchForFollowerReads(b, kvDB.Clock().Now())
 			}
 		})
 		o.Result = resultInit(ctx, err)
@@ -531,7 +564,15 @@ func applyClientOp(
 		o.Result = resultInit(ctx, err)
 	case *BatchOperation:
 		b := &kv.Batch{}
-		applyBatchOp(ctx, b, db.Run, o)
+		if inTxn {
+			applyBatchOp(ctx, b, db.Run, o, nil /* clock */)
+		} else {
+			kvDB, ok := db.(*kv.DB)
+			if !ok {
+				panic(errors.AssertionFailedf("unexpected transactional interface"))
+			}
+			applyBatchOp(ctx, b, db.Run, o, kvDB.Clock())
+		}
 	case *SavepointCreateOperation:
 		txn, ok := db.(*kv.Txn) // savepoints are only allowed with transactions
 		if !ok {
@@ -589,7 +630,11 @@ func setLastReqSeq(b *kv.Batch, seq kvnemesisutil.Seq) {
 }
 
 func applyBatchOp(
-	ctx context.Context, b *kv.Batch, run func(context.Context, *kv.Batch) error, o *BatchOperation,
+	ctx context.Context,
+	b *kv.Batch,
+	run func(context.Context, *kv.Batch) error,
+	o *BatchOperation,
+	clock *hlc.Clock,
 ) {
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
@@ -673,6 +718,9 @@ func applyBatchOp(
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}
+	}
+	if clock != nil && o.FollowerReadEligible {
+		configureBatchForFollowerReads(b, clock.Now())
 	}
 	ts, err := batchRun(ctx, run, b)
 	o.Result = resultInit(ctx, err)

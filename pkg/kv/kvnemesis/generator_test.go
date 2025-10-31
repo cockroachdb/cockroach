@@ -138,6 +138,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.GetExistingForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.GetExistingFollowerRead++
 					} else {
 						client.GetExisting++
 					}
@@ -168,6 +170,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.GetMissingForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.GetMissingFollowerRead++
 					} else {
 						client.GetMissing++
 					}
@@ -226,6 +230,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.ReverseScanForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.ReverseScanFollowerRead++
 					} else {
 						client.ReverseScan++
 					}
@@ -257,6 +263,8 @@ func TestRandStep(t *testing.T) {
 						} else {
 							client.ScanForShare++
 						}
+					} else if o.FollowerReadEligible {
+						client.ScanFollowerRead++
 					} else {
 						client.Scan++
 					}
