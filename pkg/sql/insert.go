@@ -378,3 +378,11 @@ func (n *insertNode) enableAutoCommit() {
 func (n *insertNode) rowsWritten() int64 {
 	return n.run.ti.rowsWritten
 }
+
+func (n *insertNode) indexRowsWritten() int64 {
+	return n.run.ti.indexRowsWritten
+}
+
+func (n *insertNode) indexBytesWritten() int64 {
+	return n.run.ti.indexBytesWritten
+}

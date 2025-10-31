@@ -228,6 +228,14 @@ func (n *upsertNode) rowsWritten() int64 {
 	return n.run.tw.rowsWritten
 }
 
+func (n *upsertNode) indexRowsWritten() int64 {
+	return n.run.tw.indexRowsWritten
+}
+
+func (n *upsertNode) indexBytesWritten() int64 {
+	return n.run.tw.indexBytesWritten
+}
+
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
 }
