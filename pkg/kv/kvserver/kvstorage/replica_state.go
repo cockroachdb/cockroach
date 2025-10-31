@@ -126,14 +126,26 @@ func CreateUninitializedReplica(
 	id roachpb.FullReplicaID,
 ) error {
 	sl := MakeStateLoader(id.RangeID)
-	// Before creating the replica, see if there is a tombstone which would
-	// indicate that this replica has been removed.
-	// TODO(pav-kv): should also check that there is no existing replica, i.e.
-	// ReplicaID load should find nothing.
-	if ts, err := sl.LoadRangeTombstone(ctx, stateRW.RO); err != nil {
+	// Before creating the replica, see if there is a tombstone or an existing
+	// replica which would indicate that our ReplicaID is stale and can not come
+	// back to this Store again.
+	if mark, err := sl.LoadReplicaMark(ctx, stateRW.RO); err != nil {
 		return err
-	} else if id.ReplicaID < ts.NextReplicaID {
+	} else if mark.Destroyed(id.ReplicaID) {
 		return &kvpb.RaftGroupDeletedError{}
+	} else if mark.Is(id.ReplicaID) {
+		// TODO(pav-kv): this branch is possible because we don't load uninitialized
+		// replicas on server start, and the caller of CreateUninitializedReplica
+		// does not handle replicas that exist only in storage. We fall through, and
+		// write RaftReplicaID again. This is not critical, but we should instead
+		// return early.
+	} else if mark.Exists() {
+		// TODO(pav-kv): similarly to the above, but there is a replica with an
+		// older ReplicaID. Falling through here is a bug, because our new replica
+		// can inherit a non-empty HardState that does not belong to it. An existing
+		// Term and Vote in it is mostly inconsequential, but the Lead/LeadEpoch can
+		// be incorrect and result in unknown liveness effects.
+		_ = 0 // make linter happy
 	}
 
 	// Write the RaftReplicaID for this replica. This is the only place in the

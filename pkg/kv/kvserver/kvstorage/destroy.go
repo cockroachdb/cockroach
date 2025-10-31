@@ -10,7 +10,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -90,23 +89,17 @@ func DestroyReplica(
 func destroyReplicaImpl(
 	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
 ) error {
-	if next <= info.ReplicaID {
-		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
-	}
 	sl := MakeStateLoader(info.RangeID)
-	// Assert that the ReplicaID in storage matches the one being removed.
-	if loaded, err := sl.LoadRaftReplicaID(ctx, rw.State.RO); err != nil {
+	// Assert that the ReplicaID in storage matches the one being removed, and the
+	// replica is not already destroyed. Also assert that the next ReplicaID
+	// correctly marks our replica as destroyed.
+	mark, err := sl.LoadReplicaMark(ctx, rw.State.RO)
+	if err != nil {
 		return err
-	} else if id := loaded.ReplicaID; id != info.ReplicaID {
-		return errors.AssertionFailedf("%v has a mismatching ID %d", info.FullReplicaID, id)
-	}
-	// Assert that the provided tombstone moves the existing one strictly forward.
-	// A failure would indicate that something is wrong in the replica lifecycle.
-	if ts, err := sl.LoadRangeTombstone(ctx, rw.State.RO); err != nil {
+	} else if !mark.Is(info.ReplicaID) {
+		return errors.AssertionFailedf("%v has a mismatching mark %+v", info.FullReplicaID, mark)
+	} else if mark, err = mark.Destroy(next); err != nil {
 		return err
-	} else if next <= ts.NextReplicaID {
-		return errors.AssertionFailedf("%v cannot rewind tombstone from %d to %d",
-			info.FullReplicaID, ts.NextReplicaID, next)
 	}
 
 	_ = DestroyReplicaTODO
@@ -138,10 +131,9 @@ func destroyReplicaImpl(
 	); err != nil {
 		return err
 	}
-	// Save a tombstone to ensure that replica IDs never get reused.
-	if err := sl.SetRangeTombstone(ctx, rw.State.WO, kvserverpb.RangeTombstone{
-		NextReplicaID: next, // NB: NextReplicaID > 0
-	}); err != nil {
+	// Save a tombstone to ensure that replica IDs never get reused. Note that we
+	// also clear the RaftReplicaID key below.
+	if err := sl.SetRangeTombstone(ctx, rw.State.WO, mark.RangeTombstone); err != nil {
 		return err
 	}
 
