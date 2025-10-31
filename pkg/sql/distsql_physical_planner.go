@@ -989,7 +989,8 @@ type PlanningCtx struct {
 	// isLocal is set to true if we're planning this query on a single node.
 	isLocal bool
 	// distSQLProhibitedErr, if set, indicates why the plan couldn't be
-	// distributed.
+	// distributed. If any part of the plan isn't distributable, then this is
+	// guaranteed to be non-nil.
 	distSQLProhibitedErr error
 	planner              *planner
 
@@ -1031,11 +1032,11 @@ type PlanningCtx struct {
 	// query).
 	subOrPostQuery bool
 
-	// mustUseLeafTxn, if set, indicates that this PlanningCtx is used to handle
+	// flowConcurrency will be non-zero when this PlanningCtx is used to handle
 	// one of the plans that will run in parallel with other plans. As such, the
 	// DistSQL planner will need to use the LeafTxn (even if it's not needed
 	// based on other "regular" factors).
-	mustUseLeafTxn bool
+	flowConcurrency distsql.ConcurrencyKind
 
 	// onFlowCleanup contains non-nil functions that will be called after the
 	// local flow finished running and is being cleaned up. It allows us to
@@ -4371,7 +4372,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 	// expecting is in fact RowsAffected. RowsAffected statements return a single
 	// row with the number of rows affected by the statement, and are the only
 	// types of statement where it's valid to invoke a plan's fast path.
-	wrapper := newPlanNodeToRowSource(
+	wrapper, err := newPlanNodeToRowSource(
 		n,
 		runParams{
 			extendedEvalCtx: &evalCtx,
@@ -4380,6 +4381,9 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		useFastPath,
 		firstNotWrapped,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	localProcIdx := p.AddLocalProcessor(wrapper)
 	var input []execinfrapb.InputSyncSpec

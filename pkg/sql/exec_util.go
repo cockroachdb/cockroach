@@ -2092,8 +2092,10 @@ func shouldDistributeGivenRecAndMode(
 // the plan.
 //
 // The returned error, if any, indicates why we couldn't distribute the plan.
-// Note that it's possible that we choose to not distribute the plan while
-// nil error is returned.
+// Note that it's possible that we choose to not distribute the plan while nil
+// error is returned (but it's guaranteed that if some part of the plan isn't
+// distributable, then non-nil error is returned).
+//
 // WARNING: in some cases when this method returns
 // physicalplan.FullyDistributedPlan, the plan might actually run locally. This
 // is the case when
@@ -2112,23 +2114,9 @@ func (p *planner) getPlanDistribution(
 		return plan.physPlan.Distribution, nil
 	}
 
-	// If this transaction has modified or created any types, it is not safe to
-	// distribute due to limitations around leasing descriptors modified in the
-	// current transaction.
-	if p.Descriptors().HasUncommittedDescriptors() {
-		return physicalplan.LocalPlan, nil
-	}
-
+	// Check DistSQL-supportability as the first order of business in order to
+	// find whether usage of DistSQL is prohibited by features of the plan.
 	sd := p.SessionData()
-	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
-		return physicalplan.LocalPlan, nil
-	}
-
-	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
-	if _, ok := plan.planNode.(*zeroNode); ok {
-		return physicalplan.LocalPlan, nil
-	}
-
 	// Determine whether the txn has buffered some writes.
 	txnHasBufferedWrites := p.txn.HasBufferedWrites()
 	if sd.BufferedWritesEnabled && p.curPlan.main == plan {
@@ -2144,9 +2132,24 @@ func (p *planner) getPlanDistribution(
 	}
 	rec, err := checkSupportForPlanNode(ctx, plan.planNode, &p.distSQLVisitor, sd, txnHasBufferedWrites)
 	if err != nil {
-		// Don't use distSQL for this request.
 		log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
 		return physicalplan.LocalPlan, err
+	}
+
+	// If this transaction has modified or created any types, it is not safe to
+	// distribute due to limitations around leasing descriptors modified in the
+	// current transaction.
+	if p.Descriptors().HasUncommittedDescriptors() {
+		return physicalplan.LocalPlan, nil
+	}
+
+	if sd.DistSQLMode == sessiondatapb.DistSQLOff {
+		return physicalplan.LocalPlan, nil
+	}
+
+	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
+	if _, ok := plan.planNode.(*zeroNode); ok {
+		return physicalplan.LocalPlan, nil
 	}
 
 	if shouldDistributeGivenRecAndMode(rec, sd.DistSQLMode) {
