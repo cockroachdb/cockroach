@@ -104,6 +104,8 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		`ALTER ROLE ALL SET create_table_with_schema_locked=false`,
 		`CREATE USER test_admin`,
 		`GRANT admin TO test_admin`,
+		`SET disable_wait_for_jobs_notice=true`,
+		`ALTER ROLE ALL SET disable_wait_for_jobs_notice=true`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			t.Fatal(err)

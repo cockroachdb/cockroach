@@ -4118,6 +4118,7 @@ disable_optimizer_rules                                          ·
 disable_partially_distributed_plans                              off
 disable_plan_gists                                               off
 disable_vec_union_eager_cancellation                             off
+disable_wait_for_jobs_notice                                     off
 disallow_full_table_scans                                        off
 distribute_group_by_row_count_threshold                          1000
 distribute_join_row_count_threshold                              1000

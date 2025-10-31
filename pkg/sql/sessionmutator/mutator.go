@@ -1098,3 +1098,7 @@ func (m *SessionDataMutator) SetOptimizerClampLowHistogramSelectivity(val bool) 
 func (m *SessionDataMutator) SetOptimizerClampInequalitySelectivity(val bool) {
 	m.Data.OptimizerClampInequalitySelectivity = val
 }
+
+func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
+	m.Data.DisableWaitForJobsNotice = val
+}
