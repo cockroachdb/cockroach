@@ -352,6 +352,11 @@ func (s StateLoader) SetRaftReplicaID(
 	)
 }
 
+// ClearRaftReplicaID clears the RaftReplicaID key.
+func (s StateLoader) ClearRaftReplicaID(stateWO StateWO) error {
+	return stateWO.ClearUnversioned(s.RaftReplicaIDKey(), storage.ClearOptions{})
+}
+
 // LoadRangeTombstone loads the RangeTombstone of the range.
 func (s StateLoader) LoadRangeTombstone(
 	ctx context.Context, stateRO StateRO,

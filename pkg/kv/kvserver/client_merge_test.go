@@ -3963,25 +3963,27 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				// doesn't yet exist in the engine, so we set it manually.
 				//
 				// The deletion also extends to the RangeTombstoneKey.
+				sl := kvstorage.MakeStateLoader(rangeID)
 				require.NoError(t, sst.ClearRawRange(
 					keys.RangeGCThresholdKey(rangeID),
-					keys.RangeTombstoneKey(rangeID),
+					sl.RangeTombstoneKey(),
 					true, false,
 				))
-				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetRangeTombstone(
+				require.NoError(t, sl.SetRangeTombstone(
 					context.Background(), &sst,
 					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
 				))
-				{
-					// Ditto for the unreplicated version, where the first key happens to
-					// be the HardState.
-					sl := rditer.Select(rangeID, rditer.SelectOpts{
-						UnreplicatedByRangeID: true,
-					})
-					require.Len(t, sl, 1)
-					s := sl[0]
-					require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
-				}
+				// Ditto for the unreplicated RangeID keys. Note that it is also split
+				// into two range clears, to work around the RaftReplicaID key.
+				require.NoError(t, sst.ClearRawRange(
+					keys.RaftHardStateKey(rangeID), sl.RaftReplicaIDKey(), true, false,
+				))
+				require.NoError(t, sl.ClearRaftReplicaID(&sst))
+				require.NoError(t, sst.ClearRawRange(
+					sl.RaftTruncatedStateKey(),
+					keys.MakeRangeIDUnreplicatedPrefix(rangeID).PrefixEnd(),
+					true, false,
+				))
 
 				require.NoError(t, sst.Finish())
 				expectedSSTs = append(expectedSSTs, sstFile.Data())
