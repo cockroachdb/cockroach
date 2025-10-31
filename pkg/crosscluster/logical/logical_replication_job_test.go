@@ -895,6 +895,9 @@ func TestRandomTables(t *testing.T) {
 	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
+	// TODO(#148303): Remove this once the crud writer supports tables with array primary keys.
+	runnerA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
+
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 
 	var tableName, streamStartStmt string

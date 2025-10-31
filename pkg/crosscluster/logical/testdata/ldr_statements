@@ -92,7 +92,7 @@ DELETE FROM [108 AS replication_target] WHERE ((((id = $1::INT8) AND (name IS NO
 # discount_price is included because its part of the primary key.
 show-select table=products
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.name, replication_target.unit_price, replication_target.quantity, replication_target.total_value, replication_target.last_updated FROM ROWS FROM (unnest($1::INT8[], $2::DECIMAL(10,2)[])) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [108 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.total_value = key_list.key2)
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.name, replication_target.unit_price, replication_target.quantity, replication_target.total_value, replication_target.last_updated FROM ROWS FROM (unnest($1::INT8[], $2::DECIMAL[])) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [108 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.total_value = key_list.key2)
 
 # Test a table with an expression, inverted index, and partial index. The
 # indexes are not expected to impact the INSERT/UPDATE/DELETE statements.

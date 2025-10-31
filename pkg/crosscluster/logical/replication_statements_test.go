@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"slices"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -68,16 +67,7 @@ func TestReplicationStatements(t *testing.T) {
 
 		asSql := tree.Serialize(&p)
 		_, err := db.Exec(asSql)
-		require.NoError(t, err)
-	}
-
-	getTypes := func(desc catalog.TableDescriptor) []*types.T {
-		columns := getColumnSchema(desc)
-		types := make([]*types.T, len(columns))
-		for i, col := range columns {
-			types[i] = col.column.GetType()
-		}
-		return types
+		require.NoError(t, err, "statement: %s", asSql)
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
@@ -95,10 +85,10 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				insertStmt, err := newInsertStatement(desc)
+				insertStmt, types, err := newInsertStatement(desc)
 				require.NoError(t, err)
 
-				prepareStatement(t, sqlDB, getTypes(desc), insertStmt)
+				prepareStatement(t, sqlDB, types, insertStmt)
 
 				return insertStmt.SQL
 			case "show-update":
@@ -107,12 +97,11 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				updateStmt, err := newUpdateStatement(desc)
+				updateStmt, types, err := newUpdateStatement(desc)
 				require.NoError(t, err)
 
 				// update expects previous and current values to be passed as
 				// parameters.
-				types := slices.Concat(getTypes(desc), getTypes(desc))
 				prepareStatement(t, sqlDB, types, updateStmt)
 
 				return updateStmt.SQL
@@ -124,10 +113,9 @@ func TestReplicationStatements(t *testing.T) {
 
 				// delete expects previous and current values to be passed as
 				// parameters.
-				deleteStmt, err := newDeleteStatement(desc)
+				deleteStmt, types, err := newDeleteStatement(desc)
 				require.NoError(t, err)
 
-				types := slices.Concat(getTypes(desc), getTypes(desc))
 				prepareStatement(t, sqlDB, types, deleteStmt)
 
 				return deleteStmt.SQL
@@ -137,18 +125,10 @@ func TestReplicationStatements(t *testing.T) {
 
 				desc := getTableDesc(tableName)
 
-				stmt, err := newBulkSelectStatement(desc)
+				stmt, types, err := newBulkSelectStatement(desc)
 				require.NoError(t, err)
 
-				allColumns := getColumnSchema(desc)
-				var primaryKeyTypes []*types.T
-				for _, col := range allColumns {
-					if col.isPrimaryKey {
-						primaryKeyTypes = append(primaryKeyTypes, types.MakeArray(col.column.GetType()))
-					}
-				}
-
-				prepareStatement(t, sqlDB, primaryKeyTypes, stmt)
+				prepareStatement(t, sqlDB, types, stmt)
 
 				return stmt.SQL
 			default:

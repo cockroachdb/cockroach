@@ -253,27 +253,16 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type rangefeedTestType bool
+type rangefeedTestType string
 
-var (
-	scheduledProcessorWithUnbufferedSender rangefeedTestType
-	scheduledProcessorWithBufferedSender   rangefeedTestType
+const (
+	scheduledProcessorWithUnbufferedSender rangefeedTestType = "unbuffered_sender"
+	scheduledProcessorWithBufferedSender   rangefeedTestType = "buffered_sender"
 )
 
 var testTypes = []rangefeedTestType{
 	scheduledProcessorWithUnbufferedSender,
 	scheduledProcessorWithBufferedSender,
-}
-
-func (t rangefeedTestType) String() string {
-	switch t {
-	case scheduledProcessorWithUnbufferedSender:
-		return "scheduled"
-	case scheduledProcessorWithBufferedSender:
-		return "scheduled/registration=buffered"
-	default:
-		panic("unknown rangefeed test type")
-	}
 }
 
 type testConfig struct {
@@ -422,6 +411,7 @@ func newTestProcessor(
 			EventChanCap:     testProcessorEventCCap,
 			Metrics:          NewMetrics(),
 		},
+		feedType: scheduledProcessorWithUnbufferedSender,
 	}
 	for _, o := range opts {
 		o(&cfg)

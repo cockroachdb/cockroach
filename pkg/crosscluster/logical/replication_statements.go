@@ -19,6 +19,7 @@ import (
 
 type columnSchema struct {
 	column       catalog.Column
+	columnType   *types.T
 	isPrimaryKey bool
 	isComputed   bool
 }
@@ -58,6 +59,7 @@ func getColumnSchema(table catalog.TableDescriptor) []columnSchema {
 
 		result = append(result, columnSchema{
 			column:       col,
+			columnType:   col.GetType().Canonical(),
 			isPrimaryKey: isPrimaryKey[col.GetID()],
 			isComputed:   isComputed,
 		})
@@ -86,12 +88,14 @@ func newTypedPlaceholder(idx int, col catalog.Column) (*tree.CastExpr, error) {
 // in the table. Parameters are ordered by column ID.
 func newInsertStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	columns := getColumnSchema(table)
-
 	columnNames := make(tree.NameList, 0, len(columns))
 	parameters := make(tree.Exprs, 0, len(columns))
+	paramTypes := make([]*types.T, 0, len(columns))
 	for i, col := range columns {
+		paramTypes = append(paramTypes, col.columnType)
+
 		// NOTE: this consumes a placholder ID because its part of the tree.Datums,
 		// but it doesn't show up in the query because computed columns are not
 		// needed for insert statements.
@@ -102,7 +106,7 @@ func newInsertStatement(
 		var err error
 		parameter, err := newTypedPlaceholder(i+1, col.column)
 		if err != nil {
-			return statements.Statement[tree.Statement]{}, err
+			return statements.Statement[tree.Statement]{}, nil, err
 		}
 
 		columnNames = append(columnNames, tree.Name(col.column.GetName()))
@@ -129,7 +133,11 @@ func newInsertStatement(
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return toParsedStatement(insert)
+	stmt, err := toParsedStatement(insert)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
 }
 
 // newMatchesLastRow creates a WHERE clause for matching all columns of a row.
@@ -183,16 +191,16 @@ func newMatchesLastRow(columns []columnSchema, startParamIdx int) (tree.Expr, er
 // Parameters are ordered by column ID.
 func newUpdateStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	columns := getColumnSchema(table)
-
 	// Create WHERE clause for matching the previous row values
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
 	}
 
 	exprs := make(tree.UpdateExprs, 0, len(columns))
+	paramTypes := make([]*types.T, 0, 2*len(columns))
 	for i, col := range columns {
 		if col.isComputed {
 			// Skip computed columns since they are not needed to fully specify the
@@ -208,13 +216,22 @@ func newUpdateStatement(
 		// are for the where clause.
 		placeholder, err := newTypedPlaceholder(len(columns)+i+1, col.column)
 		if err != nil {
-			return statements.Statement[tree.Statement]{}, err
+			return statements.Statement[tree.Statement]{}, nil, err
 		}
 
 		exprs = append(exprs, &tree.UpdateExpr{
 			Names: names,
 			Expr:  placeholder,
 		})
+	}
+
+	// Add parameter types for WHERE clause (previous values)
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.columnType)
+	}
+	// Add parameter types for SET clause (new values)
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.columnType)
 	}
 
 	// Create the final update statement
@@ -228,7 +245,12 @@ func newUpdateStatement(
 		Returning: tree.AbsentReturningClause,
 	}
 
-	return toParsedStatement(update)
+	stmt, err := toParsedStatement(update)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+
+	return stmt, paramTypes, nil
 }
 
 // newDeleteStatement returns a statement that can be used to delete a row from
@@ -239,13 +261,19 @@ func newUpdateStatement(
 // Parameters are ordered by column ID.
 func newDeleteStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	columns := getColumnSchema(table)
 
 	// Create WHERE clause for matching the row to delete
 	whereClause, err := newMatchesLastRow(columns, 1)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+
+	// Create parameter types for WHERE clause
+	paramTypes := make([]*types.T, 0, len(columns))
+	for _, col := range columns {
+		paramTypes = append(paramTypes, col.columnType)
 	}
 
 	// Create the final delete statement
@@ -261,7 +289,11 @@ func newDeleteStatement(
 		Returning: &tree.ReturningExprs{tree.StarSelectExpr()},
 	}
 
-	return toParsedStatement(delete)
+	stmt, err := toParsedStatement(delete)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
 }
 
 // newBulkSelectStatement returns a statement that can be used to query
@@ -289,26 +321,32 @@ func newDeleteStatement(
 //			AND replication_target.secondary_id = key_list.key2
 func newBulkSelectStatement(
 	table catalog.TableDescriptor,
-) (statements.Statement[tree.Statement], error) {
+) (statements.Statement[tree.Statement], []*types.T, error) {
 	cols := getColumnSchema(table)
-	primaryKeyColumns := make([]catalog.Column, 0, len(cols))
+	primaryKeyColumns := make([]columnSchema, 0, len(cols))
 	for _, col := range cols {
 		if col.isPrimaryKey {
-			primaryKeyColumns = append(primaryKeyColumns, col.column)
+			primaryKeyColumns = append(primaryKeyColumns, col)
 		}
+	}
+
+	// Create parameter types for primary key arrays
+	paramTypes := make([]*types.T, 0, len(primaryKeyColumns))
+	for _, pkCol := range primaryKeyColumns {
+		paramTypes = append(paramTypes, types.MakeArray(pkCol.columnType))
 	}
 
 	// keyListName is the name of the CTE that contains the primary keys supplied
 	// via array parameters.
 	keyListName, err := tree.NewUnresolvedObjectName(1, [3]string{"key_list"}, tree.NoAnnotation)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
 	}
 
 	// targetName is used to name the user's table.
 	targetName, err := tree.NewUnresolvedObjectName(1, [3]string{"replication_target"}, tree.NoAnnotation)
 	if err != nil {
-		return statements.Statement[tree.Statement]{}, err
+		return statements.Statement[tree.Statement]{}, nil, err
 	}
 
 	// Create the `SELECT unnest($1::[]INT, $2::[]INT) WITH ORDINALITY AS key_list(key1, key2, index)` table expression.
@@ -320,7 +358,7 @@ func newBulkSelectStatement(
 		})
 		primaryKeyExprs = append(primaryKeyExprs, &tree.CastExpr{
 			Expr:       &tree.Placeholder{Idx: tree.PlaceholderIdx(i)},
-			Type:       types.MakeArray(pkCol.GetType()),
+			Type:       types.MakeArray(pkCol.columnType),
 			SyntaxMode: tree.CastShort,
 		})
 	}
@@ -379,7 +417,7 @@ func newBulkSelectStatement(
 	// Construct the JOIN clause for the final query.
 	var joinCond tree.Expr
 	for i, pkCol := range primaryKeyColumns {
-		colName := tree.Name(pkCol.GetName())
+		colName := tree.Name(pkCol.column.GetName())
 		keyColName := fmt.Sprintf("key%d", i+1)
 
 		eqExpr := &tree.ComparisonExpr{
@@ -430,7 +468,11 @@ func newBulkSelectStatement(
 		},
 	}
 
-	return toParsedStatement(selectStmt)
+	stmt, err := toParsedStatement(selectStmt)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
 }
 
 func toParsedStatement(stmt tree.Statement) (statements.Statement[tree.Statement], error) {
