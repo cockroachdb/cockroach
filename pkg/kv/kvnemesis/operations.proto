@@ -17,6 +17,7 @@ import "util/hlc/timestamp.proto";
 message BatchOperation {
   repeated Operation ops = 1 [(gogoproto.nullable) = false];
   Result result = 2 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 3;
 }
 
 enum ClosureTxnType {
@@ -35,6 +36,7 @@ message ClosureTxnOperation {
   roachpb.Transaction txn = 6;
   bool buffered_writes = 8;
   double user_priority = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
+  bool follower_read_eligible = 10;
 }
 
 message GetOperation {
@@ -44,6 +46,7 @@ message GetOperation {
   bool guaranteed_durability = 4;
   bool skip_locked = 5;
   Result result = 6 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 7;
 }
 
 message ScanOperation {
@@ -55,6 +58,7 @@ message ScanOperation {
   bool skip_locked = 6;
   bool reverse = 7;
   Result result = 8 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 9;
 }
 
 message PutOperation {
