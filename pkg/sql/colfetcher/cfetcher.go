@@ -601,6 +601,16 @@ func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) 
 		//     will actually fetch more KVs than necessary, but we'll decode
 		//     limitHint number of rows.
 		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(maxKeysPerRow))
+		if maxKeysPerRow > 1 {
+			// NB: when there are multiple column families, we compare the prefix of
+			// each KV against the last to determine row boundaries. Make sure to
+			// fetch one extra KV over the limit to prevent a second (larger) batch
+			// from being issued.
+			//
+			// TODO(drewk): we could also avoid this increment if the index contains
+			// the max column family and that family contains a non-nullable column.
+			firstBatchLimit++
+		}
 	}
 	return firstBatchLimit
 }
