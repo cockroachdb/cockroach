@@ -136,12 +136,12 @@ func destroyReplicaImpl(
 	// First, clear all RangeID-local replicated keys. Also, include all
 	// RangeID-local unreplicated keys < RangeTombstoneKey as a drive-by, since we
 	// decided that these (currently none) belong to the state machine engine.
-	tombstoneKey := keys.RangeTombstoneKey(info.RangeID)
+	span := roachpb.Span{
+		Key:    keys.MakeRangeIDReplicatedPrefix(info.RangeID),
+		EndKey: keys.RangeTombstoneKey(info.RangeID),
+	}
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, reader, writer,
-		keys.MakeRangeIDReplicatedPrefix(info.RangeID),
-		tombstoneKey,
-		ClearRangeThresholdPointKeys(),
+		ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
@@ -151,18 +151,39 @@ func destroyReplicaImpl(
 	}); err != nil {
 		return err
 	}
-	// Clear the rest of the RangeID-local unreplicated keys.
-	// TODO(pav-kv): decompose this further to delete raft and state machine keys
-	// separately. Currently, all the remaining keys in this span belong to the
-	// raft engine except the RaftReplicaID.
+
+	// Clear the rest of the RangeID-local unreplicated keys. These are all raft
+	// engine keys, except for RaftReplicaIDKey. Make a stop at the latter, and
+	// clear it manually (note that it always exists for an existing replica, and
+	// we have asserted that above).
+	//
+	// TODO(pav-kv): make a helper for piece-wise clearing, instead of using a
+	// series of ClearRangeWithHeuristic.
+	span = roachpb.Span{
+		Key:    span.EndKey.Next(), // RangeTombstoneKey.Next()
+		EndKey: keys.RaftReplicaIDKey(info.RangeID),
+	}
+	// TODO(#152845): with separated raft storage, clear only the unapplied suffix
+	// of the raft log, which is in this span.
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, reader, writer,
-		tombstoneKey.Next(),
-		keys.MakeRangeIDUnreplicatedPrefix(info.RangeID).PrefixEnd(),
-		ClearRangeThresholdPointKeys(),
+		ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
+	// TODO(#152845): this key should be cleared in the state machine engine.
+	if err := sl.ClearRaftReplicaID(writer); err != nil {
+		return err
+	}
+	span = roachpb.Span{
+		Key:    span.EndKey.Next(), // RaftReplicaIDKey.Next()
+		EndKey: keys.MakeRangeIDUnreplicatedPrefix(info.RangeID).PrefixEnd(),
+	}
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+
 	// Finally, clear all the user keys (MVCC keyspace and the corresponding
 	// system and lock table keys), if info.Keys is not empty.
 	for _, span := range rditer.Select(info.RangeID, rditer.SelectOpts{
