@@ -1158,11 +1158,15 @@ func LoadSQLDescsFromBackupsAtTime(
 		asOf = lastBackupManifest.EndTime
 	}
 
-	for _, b := range backupManifests {
+	// TODO(msbutler): this logic can be removed because we already crop backup
+	// manifests that are too new. Keeping this around in case there is a bug
+	// upstream.
+	for i, b := range backupManifests {
 		if asOf.Less(b.StartTime) {
 			break
 		}
 		lastBackupManifest = b
+		lastIterFactory = layerToBackupManifestFileIterFactory[i]
 	}
 
 	// From this point on we try to load descriptors based on descriptor
