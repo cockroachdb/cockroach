@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -154,7 +155,7 @@ type State interface {
 	// ClusterUsageInfo returns the usage information for the entire cluster.
 	ClusterUsageInfo() *ClusterUsageInfo
 	// TickClock modifies the state Clock time to Tick.
-	TickClock(time.Time)
+	TickClock(types.Tick)
 	// Clock returns the state Clock.
 	Clock() timeutil.TimeSource
 	// UpdateStorePool modifies the state of the StorePool for the Store with

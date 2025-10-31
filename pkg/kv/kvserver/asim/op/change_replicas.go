@@ -6,10 +6,9 @@
 package op
 
 import (
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -24,7 +23,7 @@ type ChangeReplicasOp struct {
 // NewChangeReplicasOp returns a new ChangeReplicasOp.
 // TODO(wenyihu6): unused for now - will be integrated with mma simulation
 func NewChangeReplicasOp(
-	tick time.Time, rangeID roachpb.RangeID, changes kvpb.ReplicationChanges,
+	tick types.Tick, rangeID roachpb.RangeID, changes kvpb.ReplicationChanges,
 ) *ChangeReplicasOp {
 	return &ChangeReplicasOp{
 		baseOp:  newBaseOp(tick),

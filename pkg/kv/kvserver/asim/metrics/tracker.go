@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 )
 
 // StoreMetrics tracks metrics per-store in a simulation run. Each metrics
 // struct is associated with a tick.
 type StoreMetrics struct {
-	Tick                time.Time
+	Tick                types.Tick
 	StoreID             int64
 	QPS                 int64
 	CPU                 int64
@@ -92,7 +93,7 @@ type StoreMetricsListener interface {
 // StoreMetrics information when ticked.
 type Tracker struct {
 	storeListeners []StoreMetricsListener
-	lastTick       time.Time
+	lastTick       types.Tick
 	interval       time.Duration
 }
 
@@ -112,8 +113,10 @@ func (mt *Tracker) Register(listeners ...StoreMetricsListener) {
 
 // Tick updates all listeners attached to the metrics tracker with the state at
 // the tick given.
-func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
-	if mt.lastTick.Add(mt.interval).After(tick) {
+func (mt *Tracker) Tick(ctx context.Context, tick types.Tick, s state.State) {
+	// On the first call (lastTick is zero-valued), we should output metrics
+	// immediately. After that, check if enough time has passed.
+	if mt.lastTick.Tick != 0 && mt.lastTick.FromWallTime(mt.lastTick.WallTime().Add(mt.interval)).After(tick) {
 		// Nothing to do yet.
 		return
 	}
@@ -181,4 +184,7 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 	for _, listener := range mt.storeListeners {
 		listener.Listen(ctx, sms)
 	}
+
+	// Update lastTick to mark when we output metrics.
+	mt.lastTick = tick
 }

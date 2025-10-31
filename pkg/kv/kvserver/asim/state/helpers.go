@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -83,19 +84,20 @@ func NewStorePool(
 	return sp
 }
 
-// OffsetTick offsets start time by adding tick number of seconds to it.
-// TODO(kvoli): Use a dedicated tick package, which would contain methods such
-// as this. Deprecating direct use of time.
-func OffsetTick(start time.Time, tick int64) time.Time {
-	tickTime := start.Add(time.Duration(tick) * time.Second)
-	return tickTime
+// OffsetTick creates a Tick from a start time and tick count, where each tick
+// represents one second.
+func OffsetTick(start time.Time, tick int64) types.Tick {
+	return types.Tick{
+		Start: start,
+		Tick:  time.Second,
+		Count: int(tick),
+	}
 }
 
-// ReverseOffsetTick converts an offset time from the start time, into the
-// number of ticks (seconds) since the start.
-func ReverseOffsetTick(start, tickTime time.Time) int64 {
-	offSetTickTime := tickTime.Sub(start)
-	return int64(offSetTickTime.Seconds())
+// ReverseOffsetTick converts a Tick back to its tick count (number of seconds
+// since the start time).
+func ReverseOffsetTick(start time.Time, tick types.Tick) int64 {
+	return int64(tick.Count)
 }
 
 // TestDistributeQPSCounts distributes QPS evenly among the leaseholder

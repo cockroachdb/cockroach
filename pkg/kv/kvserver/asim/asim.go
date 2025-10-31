@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/storerebalancer"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -31,7 +32,7 @@ type Simulator struct {
 	log.AmbientContext
 	onRecording func(storeID state.StoreID, atDuration time.Duration, rec tracingpb.Recording)
 
-	curr time.Time
+	curr types.Tick
 	end  time.Time
 	// interval is the step between ticks for active simulaton components, such
 	// as the queues, store rebalancer and state changers. It should be set lower
@@ -69,7 +70,7 @@ type Simulator struct {
 }
 
 func (s *Simulator) Curr() time.Time {
-	return s.curr
+	return s.curr.WallTime()
 }
 
 func (s *Simulator) State() state.State {
@@ -110,7 +111,11 @@ func NewSimulator(
 		// onRecording is intentionally nil if settings.OnRecording is nil, to
 		// short-circuit trace creation overhead in that case.
 		onRecording: onRecording,
-		curr:        settings.StartTime,
+		curr: types.Tick{
+			Start: settings.StartTime,
+			Tick:  settings.TickInterval,
+			Count: 0,
+		},
 		end:         settings.StartTime.Add(duration),
 		interval:    settings.TickInterval,
 		generators:  wgs,
@@ -135,7 +140,7 @@ func NewSimulator(
 
 	for _, store := range initialState.Stores() {
 		storeID := store.StoreID()
-		s.addStore(storeID, settings.StartTime)
+		s.addStore(storeID, s.curr)
 	}
 	s.state.RegisterConfigChangeListener(s)
 
@@ -149,7 +154,7 @@ func (s *Simulator) StoreAddNotify(storeID state.StoreID, _ state.State) {
 	s.addStore(storeID, s.curr)
 }
 
-func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
+func (s *Simulator) addStore(storeID state.StoreID, tick types.Tick) {
 	allocator := s.state.Allocator(storeID)
 	storePool := s.state.StorePool(storeID)
 	store, _ := s.state.Store(storeID)
@@ -222,10 +227,10 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 
 // GetNextTickTime returns a simulated tick time, or an indication that the
 // simulation is done.
-func (s *Simulator) GetNextTickTime() (done bool, tick time.Time) {
-	s.curr = s.curr.Add(s.interval)
-	if s.curr.After(s.end) {
-		return true, time.Time{}
+func (s *Simulator) GetNextTickTime() (done bool, tick types.Tick) {
+	s.curr = s.curr.Add(1)
+	if s.curr.WallTime().After(s.end) {
+		return true, types.Tick{}
 	}
 	return false, s.curr
 }
@@ -257,7 +262,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 			break
 		}
 
-		s.AddLogTag("tick", tick.Format(time.StampMilli))
+		s.AddLogTag("tick", tick)
 		ctx = s.AmbientContext.AnnotateCtx(ctx)
 
 		// Update the store clocks with the current tick time.
@@ -294,7 +299,7 @@ func (s *Simulator) RunSim(ctx context.Context) {
 }
 
 // tickWorkload gets the next workload events and applies them to state.
-func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
+func (s *Simulator) tickWorkload(ctx context.Context, tick types.Tick) {
 	s.shuffler(
 		len(s.generators),
 		func(i, j int) { s.generators[i], s.generators[j] = s.generators[j], s.generators[i] },
@@ -308,7 +313,7 @@ func (s *Simulator) tickWorkload(ctx context.Context, tick time.Time) {
 // tickStateChanges ticks atomic pending changes, in the changer. Then, for
 // each store ticks the pending operations such as relocate range and lease
 // transfers.
-func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
+func (s *Simulator) tickStateChanges(ctx context.Context, tick types.Tick) {
 	s.changer.Tick(ctx, tick, s.state)
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
@@ -320,22 +325,22 @@ func (s *Simulator) tickStateChanges(ctx context.Context, tick time.Time) {
 // tickGossip puts the current tick store descriptors into the state
 // exchange. It then updates the exchanged descriptors for each store's store
 // pool.
-func (s *Simulator) tickGossip(ctx context.Context, tick time.Time) {
+func (s *Simulator) tickGossip(ctx context.Context, tick types.Tick) {
 	s.gossip.Tick(ctx, tick, s.state)
 }
 
-func (s *Simulator) tickStoreClocks(tick time.Time) {
+func (s *Simulator) tickStoreClocks(tick types.Tick) {
 	s.state.TickClock(tick)
 }
 
 func (s *Simulator) doAndMaybeTrace(
 	ctx context.Context,
 	storeID state.StoreID,
-	tick time.Time,
+	tick types.Tick,
 	op string,
 	f func(ctx context.Context),
 ) {
-	atDuration := tick.Sub(s.settings.StartTime)
+	atDuration := tick.AsDuration()
 
 	var finishAndGetRecording func() tracingpb.Recording
 	if s.onRecording != nil {
@@ -350,7 +355,7 @@ func (s *Simulator) doAndMaybeTrace(
 // tickQueues iterates over the next replicas for each store to
 // consider. It then enqueues each of these and ticks the replicate queue for
 // processing.
-func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.State) {
+func (s *Simulator) tickQueues(ctx context.Context, tick types.Tick, state state.State) {
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
@@ -381,7 +386,7 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 		}
 
 		for {
-			r := s.pacers[storeID].Next(tick)
+			r := s.pacers[storeID].Next(tick.WallTime())
 			if r == nil {
 				// No replicas to consider at this tick.
 				break
@@ -405,7 +410,7 @@ func (s *Simulator) tickQueues(ctx context.Context, tick time.Time, state state.
 
 // tickStoreRebalancers iterates over the store rebalancers in the cluster and
 // ticks their control loop.
-func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, state state.State) {
+func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick types.Tick, state state.State) {
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
@@ -417,7 +422,9 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 
 // tickStoreRebalancers iterates over the multi-metric store rebalancers in the
 // cluster and ticks their control loop.
-func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, state state.State) {
+func (s *Simulator) tickMMStoreRebalancers(
+	ctx context.Context, tick types.Tick, state state.State,
+) {
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
@@ -428,11 +435,11 @@ func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, 
 }
 
 // tickMetrics prints the metrics up to the given tick.
-func (s *Simulator) tickMetrics(ctx context.Context, tick time.Time) {
+func (s *Simulator) tickMetrics(ctx context.Context, tick types.Tick) {
 	s.metrics.Tick(ctx, tick, s.state)
 }
 
 // tickEvents ticks the registered simulation events.
-func (s *Simulator) tickEvents(ctx context.Context, tick time.Time) {
+func (s *Simulator) tickEvents(ctx context.Context, tick types.Tick) {
 	s.eventExecutor.TickEvents(ctx, tick, s.state, s.history)
 }

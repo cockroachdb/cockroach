@@ -19,6 +19,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/asim/types",
         "//pkg/roachpb",
         "@com_github_cockroachdb_errors//:errors",
     ],

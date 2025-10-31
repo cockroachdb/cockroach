@@ -31,7 +31,7 @@ func Example_noWriters() {
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval)
 
-	m.Tick(ctx, start, s)
+	m.Tick(ctx, state.OffsetTick(start, 0), s)
 	// Output:
 }
 
@@ -41,7 +41,7 @@ func Example_tickEmptyState() {
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
-	m.Tick(ctx, start, s)
+	m.Tick(ctx, state.OffsetTick(start, 0), s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,0,0,0
@@ -55,7 +55,7 @@ func TestTickEmptyState(t *testing.T) {
 	var buf bytes.Buffer
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(&buf))
 
-	m.Tick(ctx, start, s)
+	m.Tick(ctx, state.OffsetTick(start, 0), s)
 
 	expected :=
 		"tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves\n" +
@@ -69,7 +69,7 @@ func Example_multipleWriters() {
 	s := state.LoadConfig(state.ComplexConfig, state.SingleRangeConfig, config.DefaultSimulationSettings())
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout, os.Stdout))
 
-	m.Tick(ctx, start, s)
+	m.Tick(ctx, state.OffsetTick(start, 0), s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
@@ -84,14 +84,14 @@ func Example_leaseTransfer() {
 	m := metrics.NewTracker(testingMetricsInterval, metrics.NewClusterMetricsTracker(os.Stdout))
 
 	changer := state.NewReplicaChanger()
-	changer.Push(state.TestingStartTime(), &state.LeaseTransferChange{
+	changer.Push(state.OffsetTick(state.TestingStartTime(), 0), &state.LeaseTransferChange{
 		RangeID:        1,
 		TransferTarget: 2,
 		Author:         1,
 		Wait:           0,
 	})
-	changer.Tick(ctx, state.TestingStartTime(), s)
-	m.Tick(ctx, start, s)
+	changer.Tick(ctx, state.OffsetTick(state.TestingStartTime(), 0), s)
+	m.Tick(ctx, state.OffsetTick(start, 0), s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//2022-03-21 11:00:00 +0000 UTC,1,0,0,0,0,0,0,0,0,1,0,0
@@ -122,7 +122,7 @@ func Example_rebalance() {
 	}
 	c.Apply(ctx, s)
 
-	m.Tick(ctx, start, s)
+	m.Tick(ctx, state.OffsetTick(start, 0), s)
 	// Output:
 	//tick,c_ranges,c_write,c_write_b,c_read,c_read_b,s_ranges,s_write,s_write_b,s_read,s_read_b,c_lease_moves,c_replica_moves,c_replica_b_moves
 	//2022-03-21 11:00:00 +0000 UTC,1,3,21,2,9,1,7,2,9,0,1,7

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,7 +149,10 @@ func TestRandWorkloadGenerator(t *testing.T) {
 		end := start.Add(tc.duration)
 
 		// Generate the workload events.
-		ops := workLoadGenerator.Tick(end)
+		// Create a base tick and convert the end time to a Tick.
+		baseTick := types.Tick{Start: start, Tick: time.Second, Count: 0}
+		endTick := baseTick.FromWallTime(end)
+		ops := workLoadGenerator.Tick(endTick)
 
 		stats := summary(ops, cycleLength)
 		count := stats.reads + stats.writes
