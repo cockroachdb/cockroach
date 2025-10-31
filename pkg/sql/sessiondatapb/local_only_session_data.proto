@@ -749,6 +749,10 @@ message LocalOnlySessionData {
   // clamp the selectivity of open-ended inequality filters (e.g. <, >, !=)
   // but not (=, BETWEEN etc.) to a minimum threshold.
   bool optimizer_clamp_inequality_selectivity = 190;
+  // StatsAsOf is an optional timestamp that, when set, stats selection
+  // will be based on the age gap between the stats creation timestamp and
+  // the StatsAsOf timestamp, rather than the current time.
+  util.hlc.Timestamp stats_as_of = 191 [(gogoproto.nullable) = false];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

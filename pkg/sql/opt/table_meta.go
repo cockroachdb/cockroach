@@ -8,6 +8,7 @@ package opt
 import (
 	"context"
 	"math/rand"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -214,6 +215,11 @@ type TableMeta struct {
 		cached     *intsets.Fast
 		notVisible *intsets.Fast
 	}
+
+	// CanaryWindowSize determines the time duration for which a newly collected
+	// stats is in a "canary" state before it is promoted to a stable state.
+	// See TableDescriptor.CanaryWindowSize for details.
+	CanaryWindowSize time.Duration
 }
 
 // IsIndexNotVisible returns true if the given index is not visible, and false
@@ -293,6 +299,7 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 		Alias:                        from.Alias,
 		IgnoreForeignKeys:            from.IgnoreForeignKeys,
 		IgnoreUniqueWithoutIndexKeys: from.IgnoreUniqueWithoutIndexKeys,
+		CanaryWindowSize:             from.CanaryWindowSize,
 		// Annotations are not copied.
 	}
 

@@ -358,6 +358,13 @@ func TestTenantLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
+func TestTenantLogic_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "canary_stats")
+}
+
 func TestTenantLogic_cascade(
 	t *testing.T,
 ) {
