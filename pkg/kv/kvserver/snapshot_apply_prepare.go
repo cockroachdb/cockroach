@@ -149,7 +149,9 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 	for _, sub := range s.subsume {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
-			opts, err := kvstorage.SubsumeReplica(ctx, reader, w, sub)
+			opts, err := kvstorage.SubsumeReplica(
+				ctx, kvstorage.TODOReaderWriter(reader, w), sub,
+			)
 			s.cleared = append(s.cleared, rditer.Select(sub.RangeID, opts)...)
 			return err
 		}); err != nil {
