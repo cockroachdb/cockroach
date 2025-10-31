@@ -2006,6 +2006,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.AmbientCtx, s.recorder, base.DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
+	// high cardinality metrics collector
+	s.tsDB.PollSource(
+		s.cfg.AmbientCtx, s.recorder, base.DefaultHighCardinalityMetricsSampleInterval, ts.Resolution1m, s.stopper,
+	)
+
 	// Export statistics to graphite, if enabled by configuration.
 	var graphiteOnce sync.Once
 	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {

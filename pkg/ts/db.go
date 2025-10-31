@@ -29,6 +29,7 @@ var (
 	// version upgrade, the rollup threshold is used instead.
 	deprecatedResolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
 	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
+	resolution1mDefaultRollupThreshold           = 10 * 24 * time.Hour
 	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
 	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
 	storeDataTimeout                             = 1 * time.Minute
@@ -54,6 +55,18 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 	resolution10sDefaultRollupThreshold,
 	settings.WithPublic)
 
+
+// Resolution1mStorageTTL defines the maximum age of data that will be retained
+// at the 1 minute resolution. Data older than this is subject to being "rolled
+// up" into the 30 minute resolution and then deleted.
+var Resolution1mStorageTTL = settings.RegisterDurationSetting(
+	settings.SystemVisible, // currently used in DB Console.
+	"timeseries.storage.resolution_1m.ttl",
+	"the maximum age of time series data stored at the 1 minute resolution. Data older than this "+
+		"is subject to rollup and deletion.",
+	resolution1mDefaultRollupThreshold,
+	settings.WithPublic)
+
 // Resolution30mStorageTTL defines the maximum age of data that will be
 // retained at the 30 minute resolution. Data older than this is subject to
 // deletion.
@@ -64,6 +77,8 @@ var Resolution30mStorageTTL = settings.RegisterDurationSetting(
 		"is subject to deletion.",
 	resolution30mDefaultPruneThreshold,
 	settings.WithPublic)
+
+
 
 // DB provides Cockroach's Time Series API.
 type DB struct {
@@ -89,6 +104,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 			return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 		},
 		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
+		Resolution1m:   func() int64 { return Resolution1mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
 		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
