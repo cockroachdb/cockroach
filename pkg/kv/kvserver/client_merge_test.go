@@ -2549,10 +2549,12 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	})
 
 	// Be extra paranoid and verify the exact value of the replica tombstone.
-	checkTombstone := func(eng storage.Engine) {
-		ts, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadRangeTombstone(ctx, eng)
+	checkTombstone := func(stateRO kvstorage.StateRO) {
+		mark, err := kvstorage.MakeStateLoader(rhsDesc.RangeID).LoadReplicaMark(ctx, stateRO)
 		require.NoError(t, err)
-		require.Equal(t, roachpb.ReplicaID(math.MaxInt32), ts.NextReplicaID)
+		require.Equal(t, kvstorage.ReplicaMark{
+			RangeTombstone: kvserverpb.RangeTombstone{NextReplicaID: kvstorage.MergedTombstoneReplicaID},
+		}, mark)
 	}
 	checkTombstone(store0.StateEngine())
 	checkTombstone(store1.StateEngine())

@@ -3259,18 +3259,15 @@ func TestRaftRemoveRace(t *testing.T) {
 	}
 	tc.AddVotersOrFatal(t, key, targets...)
 
-	sl := kvstorage.MakeStateLoader(desc.RangeID)
-	s2 := tc.GetFirstStoreFromServer(t, 2)
 	for i := 0; i < 10; i++ {
 		tc.RemoveVotersOrFatal(t, key, tc.Target(2))
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
-		replID, err := sl.LoadRaftReplicaID(ctx, s2.StateEngine())
+		// Verify the ReplicaMark does not indicate a destroyed replica. See #12130.
+		mark, err := kvstorage.MakeStateLoader(desc.RangeID).LoadReplicaMark(
+			ctx, tc.GetFirstStoreFromServer(t, 2).StateEngine())
 		require.NoError(t, err)
-		ts, err := sl.LoadRangeTombstone(ctx, s2.StateEngine())
-		require.NoError(t, err)
-		// ReplicaID leads the RangeTombstone, which means a replica exists.
-		require.GreaterOrEqual(t, replID.ReplicaID, ts.NextReplicaID)
+		require.True(t, mark.Exists(), "replica must exist")
 	}
 }
 
@@ -5347,9 +5344,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 		ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 			t.Helper()
-			ts, err := kvstorage.MakeStateLoader(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
+			mark, err := kvstorage.MakeStateLoader(rangeID).LoadReplicaMark(ctx, store.StateEngine())
 			require.NoError(t, err)
-			require.Zero(t, ts.NextReplicaID)
+			require.True(t, mark.Exists())
 		}
 		getHardState := func(
 			t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
