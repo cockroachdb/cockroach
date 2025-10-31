@@ -519,11 +519,11 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Try to remove range 1 again.
 	require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
-	// Try to add a range with previously-used (but now removed) ID.
-	repl2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplica(repl2Dup); err == nil {
-		t.Fatal("expected error inserting a duplicated range")
-	}
+	// Try to create a replica with a previously-used (but now removed) ID. It must
+	// trip on the ReplicaMark assertion.
+	require.Panics(t, func() {
+		createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
+	})
 	// Add another range with different key range and then test lookup.
 	repl3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
 	if err := store.AddReplica(repl3); err != nil {
@@ -678,16 +678,15 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		},
 		stopper)
 
-	// Remove range 1.
+	// Remove range 1, so that it doesn't span the entire keyspace.
 	repl1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	assert.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
+	require.NoError(t, err)
+	require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, "test"))
 
-	// Add 10 new ranges.
+	// Add 10 new ranges. Don't reuse range ID 1, since it's illegal to create a replica with
+	// ReplicaID below the RangeTombstone.
 	const newCount = 10
-	for i := 0; i < newCount; i++ {
+	for i := 1; i <= newCount; i++ {
 		repl := createReplica(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddReplica(repl); err != nil {
 			t.Fatal(err)
@@ -697,7 +696,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	// Verify two passes of the visit, the second one in-order.
 	visitor := newStoreReplicaVisitor(store)
 	exp := make(map[roachpb.RangeID]struct{})
-	for i := 0; i < newCount; i++ {
+	for i := 1; i <= newCount; i++ {
 		exp[roachpb.RangeID(i+1)] = struct{}{}
 	}
 
