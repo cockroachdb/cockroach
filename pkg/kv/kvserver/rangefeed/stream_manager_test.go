@@ -8,13 +8,13 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -90,16 +90,16 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
 		testServerStream := newTestServerStream()
 		smMetrics := NewStreamManagerMetrics()
 		st := cluster.MakeTestingClusterSettings()
 		s := newSender(t, testServerStream, st, rt)
 		sm := NewStreamManager(s, smMetrics)
 		require.NoError(t, sm.Start(ctx, stopper))
-
 		rng, _ := randutil.NewTestRand()
 
 		// [activeStreamStart,activeStreamEnd) are in the active streams.
@@ -112,12 +112,13 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 
 		t.Run("mixed operations of add and disconnect stream", func(t *testing.T) {
 			const ops = 1000
-			var wg sync.WaitGroup
+			g := ctxgroup.WithContext(ctx)
 			for i := 0; i < ops; i++ {
 				addStream := rng.Intn(2) == 0
 				require.LessOrEqualf(t, activeStreamStart, activeStreamEnd, "test programming error")
 				if addStream || activeStreamStart == activeStreamEnd {
 					streamID := activeStreamEnd
+					sm.RegisteringStream(streamID)
 					sm.AddStream(streamID, &cancelCtxDisconnector{
 						cancel: func() {
 							actualSum.Add(1)
@@ -127,18 +128,24 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 					})
 					activeStreamEnd++
 				} else {
-					wg.Add(1)
-					go func(id int64) {
-						defer wg.Done()
-						sm.DisconnectStream(id, newErrBufferCapacityExceeded())
-					}(activeStreamStart)
+					streamID := activeStreamStart
+					g.Go(func() error {
+						sm.DisconnectStream(streamID, newErrBufferCapacityExceeded())
+						return nil
+					})
 					activeStreamStart++
 				}
 			}
 
-			wg.Wait()
+			require.NoError(t, g.Wait())
 			require.Equal(t, int32(activeStreamStart), actualSum.Load())
 			testServerStream.waitForEventCount(t, int(activeStreamStart))
+			// We stop the stopper as a way to coordinate with the send loop in the
+			// case of a buffered sender, which needs to call the OnError callback
+			// before the below counters will be correct. Stopping the stopper kills
+			// the run loop of the buffered sender but doesn't call any cleanup
+			// routines.
+			stopper.Stop(ctx)
 			expectedActiveStreams := activeStreamEnd - activeStreamStart
 			require.Equal(t, int(expectedActiveStreams), sm.activeStreamCount())
 			waitForRangefeedCount(t, smMetrics, int(expectedActiveStreams))
