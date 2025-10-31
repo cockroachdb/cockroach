@@ -1,0 +1,17 @@
+statement ok
+CREATE TABLE t (c1 INT8);
+CREATE TABLE u (c1 INT8);
+
+query I colnames
+SELECT * FROM t
+----
+c1
+
+statement ok
+DROP TABLE t
+
+# FIXME: Why does the drop break this
+query ITTTT colnames
+SELECT * FROM u
+----
+c1  crdb_internal_mvcc_timestamp  tableoid  crdb_internal_origin_id  crdb_internal_origin_timestamp

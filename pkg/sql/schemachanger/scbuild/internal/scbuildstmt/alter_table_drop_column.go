@@ -328,6 +328,8 @@ func walkColumnDependencies(
 				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr,
 				*scpb.TriggerDeps:
 				fn(e, op, objType)
+			case *scpb.ColumnHidden: // FIXME: broken out for debugger
+				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {
 					fn(e, op, objType)

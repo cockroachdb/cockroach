@@ -139,6 +139,13 @@ func TestReadCommittedLogic_alter_column_type(
 	runLogicTest(t, "alter_column_type")
 }
 
+func TestReadCommittedLogic_alter_column_visible(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_column_visible")
+}
+
 func TestReadCommittedLogic_alter_database_convert_to_schema(
 	t *testing.T,
 ) {

@@ -133,7 +133,7 @@ ElementState:
     columnId: 4.294967292e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -143,7 +143,7 @@ ElementState:
     columnId: 4.294967293e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -153,7 +153,7 @@ ElementState:
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -163,7 +163,7 @@ ElementState:
     columnId: 4.294967295e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -206,6 +206,22 @@ ElementState:
 - ColumnFamily:
     familyId: 0
     name: primary
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 108
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
     tableId: 108
   Status: PUBLIC
 - ColumnName:
@@ -273,6 +289,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -305,6 +322,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -352,6 +370,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: true
     tableId: 108
@@ -382,6 +401,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -411,6 +431,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -440,6 +461,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -469,6 +491,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -498,6 +521,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -527,6 +551,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 108
@@ -902,7 +927,7 @@ ElementState:
     columnId: 4.294967292e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -912,7 +937,7 @@ ElementState:
     columnId: 4.294967293e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -922,7 +947,7 @@ ElementState:
     columnId: 4.294967294e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -932,7 +957,7 @@ ElementState:
     columnId: 4.294967295e+09
     generatedAsIdentitySequenceOption: ""
     generatedAsIdentityType: 0
-    isHidden: true
+    isHidden: false
     isInaccessible: false
     isSystemColumn: true
     pgAttributeNum: 0
@@ -1002,6 +1027,22 @@ ElementState:
 - ColumnFamily:
     familyId: 0
     name: primary
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967292e+09
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967293e+09
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967294e+09
+    tableId: 111
+  Status: PUBLIC
+- ColumnHidden:
+    columnId: 4.294967295e+09
     tableId: 111
   Status: PUBLIC
 - ColumnName:
@@ -1079,6 +1120,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1157,6 +1199,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1220,6 +1263,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1283,6 +1327,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: true
     tableId: 111
@@ -1345,6 +1390,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1374,6 +1420,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1403,6 +1450,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1432,6 +1480,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1461,6 +1510,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1490,6 +1540,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: false
     tableId: 111
@@ -1519,6 +1570,7 @@ ElementState:
     elementCreationMetadata:
       in231OrLater: true
       in243OrLater: true
+      in261OrLater: true
     familyId: 0
     isVirtual: true
     tableId: 111

@@ -58,7 +58,7 @@ func migrateDeprecatedFields(
 		}
 	}
 
-	// Migrate ComputeExpr field  to separate ColumnComputeExpression target.
+	// Migrate ComputeExpr field to separate ColumnComputeExpression target.
 	if columnType := target.GetColumnType(); columnType != nil {
 		if columnType.ComputeExpr != nil {
 			newTarget := MakeTarget(
@@ -75,7 +75,24 @@ func migrateDeprecatedFields(
 			migrated = true
 		}
 	}
-	return
+
+	if column := target.GetColumn(); column != nil {
+		if column.IsHidden && version.IsActive(clusterversion.V26_1) {
+			newTarget := MakeTarget(
+				AsTargetStatus(target.TargetStatus),
+				&ColumnHidden{
+					TableID:  column.TableID,
+					ColumnID: column.ColumnID,
+				},
+				&target.Metadata,
+			)
+			newTargets = append(newTargets, newTarget)
+			column.IsHidden = false
+			migrated = true
+		}
+	}
+
+	return migrated, newTargets
 }
 
 // migrateTargetElement migrates an individual target at a given index.
