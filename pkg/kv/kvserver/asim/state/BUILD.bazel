@@ -71,6 +71,7 @@ go_test(
     deps = [
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/types",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/load",
