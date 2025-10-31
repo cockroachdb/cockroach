@@ -1526,7 +1526,7 @@ func TestProcessorBackpressure(t *testing.T) {
 		// The sender should be blocked for at least 3 seconds.
 		select {
 		case <-doneC:
-			t.Fatal("send unexpectely succeeded")
+			t.Fatal("send unexpectedly succeeded")
 		case <-time.After(3 * time.Second):
 		case <-ctx.Done():
 		}

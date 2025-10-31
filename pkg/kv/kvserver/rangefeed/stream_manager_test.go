@@ -38,13 +38,8 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
 		smMetrics := NewStreamManagerMetrics()
-		var s sender
-		switch rt {
-		case scheduledProcessorWithUnbufferedSender:
-			s = NewUnbufferedSender(testServerStream)
-		default:
-			t.Fatalf("unknown rangefeed test type %v", rt)
-		}
+		st := cluster.MakeTestingClusterSettings()
+		s := newSender(t, testServerStream, st, rt)
 
 		sm := NewStreamManager(s, smMetrics)
 		require.NoError(t, sm.Start(ctx, stopper))
@@ -100,13 +95,8 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
 		smMetrics := NewStreamManagerMetrics()
-		var s sender
-		switch rt {
-		case scheduledProcessorWithUnbufferedSender:
-			s = NewUnbufferedSender(testServerStream)
-		default:
-			t.Fatalf("unknown rangefeed test type %v", rt)
-		}
+		st := cluster.MakeTestingClusterSettings()
+		s := newSender(t, testServerStream, st, rt)
 		sm := NewStreamManager(s, smMetrics)
 		require.NoError(t, sm.Start(ctx, stopper))
 
@@ -177,15 +167,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		testServerStream := newTestServerStream()
 		smMetrics := NewStreamManagerMetrics()
 		st := cluster.MakeTestingClusterSettings()
-		var s sender
-		switch rt {
-		case scheduledProcessorWithUnbufferedSender:
-			s = NewUnbufferedSender(testServerStream)
-		case scheduledProcessorWithBufferedSender:
-			s = NewBufferedSender(testServerStream, st, NewBufferedSenderMetrics())
-		default:
-			t.Fatalf("unknown rangefeed test type %v", rt)
-		}
+		s := newSender(t, testServerStream, st, rt)
 
 		sm := NewStreamManager(s, smMetrics)
 		stopper := stop.NewStopper()
@@ -274,4 +256,18 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			})
 		})
 	})
+}
+
+func newSender(
+	t *testing.T, s *testServerStream, st *cluster.Settings, rt rangefeedTestType,
+) sender {
+	switch rt {
+	case scheduledProcessorWithUnbufferedSender:
+		return NewUnbufferedSender(s)
+	case scheduledProcessorWithBufferedSender:
+		return NewBufferedSender(s, st, NewBufferedSenderMetrics())
+	default:
+		t.Fatalf("unknown rangefeed test type %v", rt)
+		return nil
+	}
 }
