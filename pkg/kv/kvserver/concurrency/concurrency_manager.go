@@ -611,7 +611,7 @@ func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcqui
 	}
 }
 
-// OnLockMissing implements the Lockmanager interface.
+// OnLockMissing implements the LockManager interface.
 func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
 	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
 		// We don't currently expect any errors other than assertion failures that represent
@@ -668,7 +668,7 @@ func (m *managerImpl) OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, in
 }
 
 // OnRangeSubumeEval implements the RangeStateListener interface. It is called
-// during evalutation of Subsume. The returned LockAcquisition structs represent
+// during evaluation of Subsume. The returned LockAcquisition structs represent
 // held locks that we may want to flush to disk as replicated.
 func (m *managerImpl) OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64) {
 	if !UnreplicatedLockReliabilityMerge.Get(&m.st.SV) {
@@ -701,8 +701,8 @@ func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquis
 		m.twq.ClearGE(rhsStartKey)
 		return lockToMove
 	} else {
-		// TODO(ssd): We could call ClearGE here but ignore the
-		// response. But for now we leave the old behaviour unchanged.
+		// TODO(ssd): We could call ClearGE here but ignore the response. But for
+		// now we leave the old behavior unchanged.
 		const disable = false
 		m.lt.Clear(disable)
 		m.twq.Clear(disable)
@@ -751,13 +751,13 @@ func (m *managerImpl) LockTableMetrics() LockTableMetrics {
 func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int64) {
 	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
 	approximateBatchSize := int64(0)
-	acquistions := make([]*roachpb.LockAcquisition, 0)
+	acquisitions := make([]*roachpb.LockAcquisition, 0)
 	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) bool {
 		approximateBatchSize += storage.ApproximateLockTableSize(acq)
-		acquistions = append(acquistions, acq)
+		acquisitions = append(acquisitions, acq)
 		return true
 	})
-	return acquistions, approximateBatchSize
+	return acquisitions, approximateBatchSize
 }
 
 // TestingLockTableString implements the MetricExporter interface.
