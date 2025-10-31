@@ -596,6 +596,10 @@ type TableDescriptor interface {
 	// one k/v pair per family in the table, just like a primary index.
 	IndexKeysPerRow(idx Index) int
 
+	// MaxFamilyIDForIndex returns the maximum column family ID used to encode a
+	// row for the given index.
+	MaxFamilyIDForIndex(idx Index) (descpb.FamilyID, error)
+
 	// IndexFetchSpecKeyAndSuffixColumns returns information about the key and
 	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
 	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
