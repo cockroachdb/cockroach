@@ -68,7 +68,8 @@ func TestDestroyReplica(t *testing.T) {
 	})
 	mutate("destroy", func(rw storage.ReadWriter) {
 		require.NoError(t, DestroyReplica(
-			ctx, rw, rw, DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
+			ctx, TODOReadWriter(rw),
+			DestroyReplicaInfo{FullReplicaID: r.id, Keys: r.keys}, r.id.ReplicaID+1,
 		))
 	})
 

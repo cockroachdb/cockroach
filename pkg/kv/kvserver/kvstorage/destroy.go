@@ -82,35 +82,27 @@ type DestroyReplicaInfo struct {
 // This call issues all writes ordered by key. This is to support a large
 // variety of uses, including SSTable generation for snapshot application.
 func DestroyReplica(
-	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
-	info DestroyReplicaInfo,
-	next roachpb.ReplicaID,
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
 ) error {
-	return destroyReplicaImpl(ctx, reader, writer, info, next)
+	return destroyReplicaImpl(ctx, rw, info, next)
 }
 
 func destroyReplicaImpl(
-	ctx context.Context,
-	reader storage.Reader,
-	writer storage.Writer,
-	info DestroyReplicaInfo,
-	next roachpb.ReplicaID,
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
 ) error {
 	if next <= info.ReplicaID {
 		return errors.AssertionFailedf("%v must not survive its own tombstone", info.FullReplicaID)
 	}
 	sl := MakeStateLoader(info.RangeID)
 	// Assert that the ReplicaID in storage matches the one being removed.
-	if loaded, err := sl.LoadRaftReplicaID(ctx, reader); err != nil {
+	if loaded, err := sl.LoadRaftReplicaID(ctx, rw.State.RO); err != nil {
 		return err
 	} else if id := loaded.ReplicaID; id != info.ReplicaID {
 		return errors.AssertionFailedf("%v has a mismatching ID %d", info.FullReplicaID, id)
 	}
 	// Assert that the provided tombstone moves the existing one strictly forward.
 	// A failure would indicate that something is wrong in the replica lifecycle.
-	if ts, err := sl.LoadRangeTombstone(ctx, reader); err != nil {
+	if ts, err := sl.LoadRangeTombstone(ctx, rw.State.RO); err != nil {
 		return err
 	} else if next <= ts.NextReplicaID {
 		return errors.AssertionFailedf("%v cannot rewind tombstone from %d to %d",
@@ -141,12 +133,13 @@ func destroyReplicaImpl(
 		EndKey: keys.RangeTombstoneKey(info.RangeID),
 	}
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		ctx, rw.State.RO, rw.State.WO,
+		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
 	// Save a tombstone to ensure that replica IDs never get reused.
-	if err := sl.SetRangeTombstone(ctx, writer, kvserverpb.RangeTombstone{
+	if err := sl.SetRangeTombstone(ctx, rw.State.WO, kvserverpb.RangeTombstone{
 		NextReplicaID: next, // NB: NextReplicaID > 0
 	}); err != nil {
 		return err
@@ -166,12 +159,12 @@ func destroyReplicaImpl(
 	// TODO(#152845): with separated raft storage, clear only the unapplied suffix
 	// of the raft log, which is in this span.
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		ctx, rw.Raft.RO, rw.Raft.WO,
+		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
-	// TODO(#152845): this key should be cleared in the state machine engine.
-	if err := sl.ClearRaftReplicaID(writer); err != nil {
+	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
 		return err
 	}
 	span = roachpb.Span{
@@ -179,7 +172,8 @@ func destroyReplicaImpl(
 		EndKey: keys.MakeRangeIDUnreplicatedPrefix(info.RangeID).PrefixEnd(),
 	}
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+		ctx, rw.Raft.RO, rw.Raft.WO,
+		span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 	); err != nil {
 		return err
 	}
@@ -190,7 +184,8 @@ func destroyReplicaImpl(
 		Ranged: rditer.SelectAllRanged(info.Keys),
 	}) {
 		if err := storage.ClearRangeWithHeuristic(
-			ctx, reader, writer, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
+			ctx, rw.State.RO, rw.State.WO,
+			span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
@@ -206,14 +201,14 @@ func destroyReplicaImpl(
 // function clears.
 // TODO(pav-kv): get rid of SelectOpts.
 func SubsumeReplica(
-	ctx context.Context, reader storage.Reader, writer storage.Writer, info DestroyReplicaInfo,
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo,
 ) (rditer.SelectOpts, error) {
 	// Forget about the user keys.
 	info.Keys = roachpb.RSpan{}
 	return rditer.SelectOpts{
 		ReplicatedByRangeID:   true,
 		UnreplicatedByRangeID: true,
-	}, destroyReplicaImpl(ctx, reader, writer, info, MergedTombstoneReplicaID)
+	}, destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
 }
 
 // RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
