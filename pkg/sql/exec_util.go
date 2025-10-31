@@ -4479,6 +4479,10 @@ func (m *sessionDataMutator) SetOptimizerClampInequalitySelectivity(val bool) {
 	m.data.OptimizerClampInequalitySelectivity = val
 }
 
+func (m *sessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
+	m.data.OptimizerUseMaxFrequencySelectivity = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
