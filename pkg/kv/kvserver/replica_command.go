@@ -2393,21 +2393,6 @@ func prepareChangeReplicasTrigger(
 	return crt, nil
 }
 
-func within10s(ctx context.Context, fn func() error) error {
-	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
-	var err error
-	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
-		err = fn()
-		if err == nil {
-			return nil
-		}
-	}
-	if err != nil {
-		return err
-	}
-	return ctx.Err()
-}
-
 type changeReplicasTxnArgs struct {
 	db *kv.DB
 
@@ -2544,7 +2529,12 @@ func execChangeReplicasTxn(
 
 			// NB: we haven't written any intents yet, so even in the unlikely case in which
 			// this is held up, we won't block anyone else.
-			if err := within10s(ctx, func() error {
+			if err := (retry.Options{
+				InitialBackoff: 100 * time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     time.Second,
+				MaxDuration:    10 * time.Second,
+			}).Do(ctx, func(ctx context.Context) error {
 				if args.testAllowDangerousReplicationChanges {
 					return nil
 				}

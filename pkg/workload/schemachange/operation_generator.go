@@ -3456,6 +3456,71 @@ func (og *operationGenerator) validate(ctx context.Context, tx pgx.Tx) (*opStmt,
 	return validateStmt, errors.Errorf("Validation FAIL:\n%s", strings.Join(errs, "\n"))
 }
 
+func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	stmt := makeOpStmt(OpStmtDML)
+
+	var sb strings.Builder
+	sb.WriteString("INSPECT ")
+
+	if og.randIntn(2) == 0 {
+		tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		tableExists, err := og.tableExists(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
+		sb.WriteString("TABLE ")
+		sb.WriteString(tableName.String())
+		if !tableExists {
+			stmt.expectedExecErrors.add(pgcode.UndefinedTable)
+		}
+	} else {
+		database, err := og.getDatabase(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		useExisting := og.randIntn(100) < og.pctExisting(true)
+		var databaseName string
+		if useExisting {
+			databaseName = database
+		} else {
+			databaseName = fmt.Sprintf("inspect_db_%s", og.newUniqueSeqNumSuffix())
+			stmt.expectedExecErrors.add(pgcode.InvalidCatalogName)
+		}
+		sb.WriteString("DATABASE ")
+		sb.WriteString(databaseName)
+	}
+
+	asof := og.randomInspectAsOfClause()
+	sb.WriteString(asof)
+	// If we use an ASOF time with inspect, chances are it will conflict with
+	// the timestamp chosen for the transaction, and return an "inconsistent AS
+	// OF SYSTEM TIME timestamp" error.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{pgcode.FeatureNotSupported, asof != ""},
+	})
+
+	// Always run DETACHED as this allows us to use INSPECT inside of a
+	// transaction. We have post-processing at the end of the run to verify
+	// INSPECT didn't find any issues.
+	sb.WriteString(" WITH OPTIONS DETACHED")
+	stmt.sql = sb.String()
+
+	return stmt, nil
+}
+
+func (og *operationGenerator) randomInspectAsOfClause() string {
+	// Use AS OF SYSTEM TIME infrequently (~10% of the time) because transactions
+	// are never started with AS OF SYSTEM TIME, and INSPECT with AS OF inside a
+	// transaction without AS OF can cause conflicts.
+	if og.randIntn(10) == 0 {
+		return fmt.Sprintf(" AS OF SYSTEM TIME '-%ds'", og.randIntn(30)+1)
+	}
+	return ""
+}
+
 type column struct {
 	name                tree.Name
 	typ                 *types.T
