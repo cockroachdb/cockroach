@@ -519,11 +519,11 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 	}
 	// Try to remove range 1 again.
 	require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
-	// Try to add a range with previously-used (but now removed) ID.
-	repl2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplica(repl2Dup); err == nil {
-		t.Fatal("expected error inserting a duplicated range")
-	}
+	// Try to create a replica with a previously-used (but now removed) ID. It must
+	// trip on the ReplicaMark assertion.
+	require.Panics(t, func() {
+		createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
+	})
 	// Add another range with different key range and then test lookup.
 	repl3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
 	if err := store.AddReplica(repl3); err != nil {
