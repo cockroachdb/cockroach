@@ -731,6 +731,9 @@ message LocalOnlySessionData {
   // hint - if available - when comparing against
   // DistributeScanRowCountThreshold.
   bool use_soft_limit_for_distribute_scan = 185;
+  // OptimizerUseMaxFrequencySelectivity, when true, indicates that the
+  // optimizer should use max frequency for selectivity estimation.
+  bool optimizer_use_max_frequency_selectivity = 191;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
