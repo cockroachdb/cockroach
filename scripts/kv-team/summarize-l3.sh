@@ -64,17 +64,17 @@ q_open_rel_blockers="is:issue is:open label:C-test-failure label:release-blocker
 open_rel_blockers_count=$(count open "${q_open_rel_blockers}")
 relblockersmd=$(mdghurl "Release Blockers" "${q_open_rel_blockers}")
 
-q_roachtest_queue="is:issue label:O-roachtest label:T-kv,T-kv-replication -label:C-bug,X-infra-flake,X-duplicate,X-unactionable created:>=2022-12-01"
+q_roachtest_queue="is:issue label:O-roachtest label:T-kv,T-kv-replication -label:C-bug,X-infra-flake,X-duplicate,X-unactionable,X-invalid"
 roachtest_queue_count=$(count all "${q_roachtest_queue}")
 roachtestqueuemd=$(mdghurl "Roachtest Triage" "${q_roachtest_queue}")
 
-q_triage_queue="is:issue label:O-robot -label:O-roachtest label:C-test-failure label:T-kv,T-kv-replication -label:C-bug,X-infra-flake,X-duplicate,X-unactionable created:>=2023-04-17"
+q_triage_queue="is:issue label:O-robot -label:O-roachtest label:C-test-failure label:T-kv,T-kv-replication -label:C-bug,X-infra-flake,X-duplicate,X-unactionable,X-invalid"
 triage_queue_count=$(count all "${q_triage_queue}")
 triagequeuemd=$(mdghurl "Unit Test Triage" "${q_triage_queue}")
 
 q_open_test_failures="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication"
 open_test_failures_count=$(count open "${q_open_test_failures}")
-q_open_test_failures_dedup="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication -label:x-duplicate -label:O-perturbation"
+q_open_test_failures_dedup="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication -label:X-infra-flake -label:X-duplicate -label:X-unactionable -label:X-invalid -label:O-perturbation"
 open_test_failures_dedup_count=$(count open "${q_open_test_failures_dedup}")
 openfailuresmd=$(mdghurl "Open Test Failures" "${q_open_test_failures_dedup}")
 
