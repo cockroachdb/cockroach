@@ -370,6 +370,9 @@ const (
 	// The maximum number of times a replica is retried when it repeatedly returns
 	// stale lease info.
 	sameReplicaRetryLimit = 10
+	// InLeaseTransferBackoffTraceMessage is traced when DistSender backs off as a
+	// result of a NotLeaseholderError. It is exported for testing.
+	InLeaseTransferBackoffTraceMessage = "backing off due to NotLeaseHolderErr with stale info"
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -3135,8 +3138,8 @@ func (ds *DistSender) sendToReplicas(
 					if shouldBackoff {
 						ds.metrics.InLeaseTransferBackoffs.Inc(1)
 						log.VErrEventf(ctx, 2,
-							"backing off due to NotLeaseHolderErr with stale info "+
-								"(updatedLH=%t intentionallySentToFollower=%t leaseholderUnavailable=%t)",
+							InLeaseTransferBackoffTraceMessage+
+								" (updatedLH=%t intentionallySentToFollower=%t leaseholderUnavailable=%t)",
 							updatedLeaseholder, intentionallySentToFollower, leaseholderUnavailable)
 					} else {
 						inTransferRetry.Reset() // The following Next() call will not block.

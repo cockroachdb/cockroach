@@ -863,7 +863,6 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 			requireRUEs := func(t *testing.T, dbs []*kv.DB) {
 				t.Helper()
 				for _, db := range dbs {
-					backoffMetric := (db.NonTransactionalSender().(*kv.CrossRangeTxnWrapperSender)).Wrapped().(*kvcoord.DistSender).Metrics().InLeaseTransferBackoffs
 					ctx, finishAndGetRec := tracing.ContextWithRecordingSpan(context.Background(), db.Tracer, "requireRUEs")
 					defer func() {
 						rec := finishAndGetRec()
@@ -872,13 +871,12 @@ func TestReplicaCircuitBreaker_Partial_Retry(t *testing.T) {
 						}
 						t.Logf("failure trace:\n%s", rec)
 					}()
-					initialBackoff := backoffMetric.Count()
 					err := db.Put(ctx, key, value)
-					// Verify that we did not perform any backoff while executing this request.
-					require.EqualValues(t, 0, backoffMetric.Count()-initialBackoff)
 					require.Error(t, err)
 					require.True(t, errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)),
 						"expected ReplicaUnavailableError, got %v", err)
+					// Verify that we did not perform any backoff while executing this request.
+					require.NotContains(t, finishAndGetRec(), kvcoord.InLeaseTransferBackoffTraceMessage)
 				}
 				t.Logf("writes failed with ReplicaUnavailableError")
 			}
