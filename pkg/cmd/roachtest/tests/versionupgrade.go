@@ -326,6 +326,11 @@ func runHTTPRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// test is concerned about testing cluster startup. We don't want the
 		// framework to bootstrap the cluster before we can start running hooks.
 		mixedversion.MinimumBootstrapVersion("v24.2.0"),
+		// There is a known bug where the framework attempts to always enforce
+		// at least one skip upgrade if enabled, even if the minimum bootstrap
+		// version does not allow for it. This was fixed in #146857, but not
+		// backported.
+		mixedversion.DisableSkipVersionUpgrades,
 	)
 
 	// Any http request requiring auth will do.
