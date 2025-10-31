@@ -732,11 +732,12 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := kvstorage.MakeStateLoader(desc.RangeID)
-				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engines.StateEngine())
+				mark, err := sl.LoadReplicaMark(ctx, store.engines.StateEngine())
 				require.NoError(t, err)
+				require.True(t, mark.Exists())
 				localDataViews = append(localDataViews, localDataView{
 					RangeID:       desc.RangeID,
-					RaftReplicaID: int(raftReplicaID.ReplicaID),
+					RaftReplicaID: int(mark.ReplicaID),
 				})
 				return nil
 			})
