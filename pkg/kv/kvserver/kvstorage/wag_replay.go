@@ -43,11 +43,7 @@ func loadPersistedRangeState(
 	ctx context.Context, stateRO StateRO, rangeID roachpb.RangeID,
 ) (persistedRangeState, error) {
 	sl := MakeStateLoader(rangeID)
-	rid, err := sl.LoadRaftReplicaID(ctx, stateRO)
-	if err != nil {
-		return persistedRangeState{}, err
-	}
-	ts, err := sl.LoadRangeTombstone(ctx, stateRO)
+	mark, err := sl.LoadReplicaMark(ctx, stateRO)
 	if err != nil {
 		return persistedRangeState{}, err
 	}
@@ -56,8 +52,8 @@ func loadPersistedRangeState(
 		return persistedRangeState{}, err
 	}
 	state := persistedRangeState{
-		replicaID:              rid.ReplicaID,
-		tombstoneNextReplicaID: ts.NextReplicaID,
+		replicaID:              mark.ReplicaID,
+		tombstoneNextReplicaID: mark.NextReplicaID,
 		appliedIndex:           as.RaftAppliedIndex,
 	}
 	return state, state.validate()
