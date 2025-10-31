@@ -422,7 +422,9 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick types.Tick, s
 
 // tickStoreRebalancers iterates over the multi-metric store rebalancers in the
 // cluster and ticks their control loop.
-func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick types.Tick, state state.State) {
+func (s *Simulator) tickMMStoreRebalancers(
+	ctx context.Context, tick types.Tick, state state.State,
+) {
 	stores := s.state.Stores()
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
