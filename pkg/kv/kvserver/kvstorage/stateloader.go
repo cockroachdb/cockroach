@@ -320,6 +320,24 @@ func (s StateLoader) SetForceFlushIndex(
 		hlc.Timestamp{}, ffIndex, storage.MVCCWriteOptions{Stats: ms})
 }
 
+// LoadReplicaMark loads the ReplicaMark of the range. Returns an error if the
+// mark could not be loaded, or its invariant does not hold.
+func (s StateLoader) LoadReplicaMark(ctx context.Context, stateRO StateRO) (ReplicaMark, error) {
+	var mark ReplicaMark
+	if _, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RangeTombstoneKey(), hlc.Timestamp{},
+		&mark.RangeTombstone, storage.MVCCGetOptions{},
+	); err != nil {
+		return ReplicaMark{}, err
+	} else if _, err := storage.MVCCGetProto(
+		ctx, stateRO, s.RaftReplicaIDKey(), hlc.Timestamp{},
+		&mark.RaftReplicaID, storage.MVCCGetOptions{},
+	); err != nil {
+		return ReplicaMark{}, err
+	}
+	return mark, mark.check()
+}
+
 // LoadRaftReplicaID loads the RaftReplicaID. Returns an empty RaftReplicaID if
 // the key is not found, which can only happen if the replica does not exist.
 // The caller must assert if they don't expect a missing replica.
