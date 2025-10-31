@@ -122,6 +122,34 @@ func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
 	return numUsedFamilies
 }
 
+// MaxFamilyIDForIndex implements the TableDescriptor interface.
+func (desc *wrapper) MaxFamilyIDForIndex(idx catalog.Index) (descpb.FamilyID, error) {
+	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
+		// The list of families is sorted by ID.
+		return desc.Families[len(desc.Families)-1].ID, nil
+	}
+	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
+		// Secondary indexes always include the 0th family. If there are no stored
+		// columns or no additional families, then the max family ID is that of the
+		// 0th family.
+		return desc.Families[0].ID, nil
+	}
+	// Calculate the max column family used by the secondary index. We
+	// only need to look at the stored columns because column families are only
+	// applicable to the value part of the KV. Iterate in reverse order, since
+	// the list of families is sorted by ID, and we want the max family ID.
+	storedColumnIDs := idx.CollectSecondaryStoredColumnIDs()
+	for i := len(desc.Families) - 1; i >= 0; i-- {
+		family := desc.Families[i]
+		for _, columnID := range family.ColumnIDs {
+			if storedColumnIDs.Contains(columnID) {
+				return family.ID, nil
+			}
+		}
+	}
+	return 0, errors.AssertionFailedf("could not find max column family for index %d", idx.GetID())
+}
+
 // BuildIndexName returns an index name that is not equal to any
 // of tableDesc's indexes, roughly following Postgres's conventions for naming
 // anonymous indexes. For example:

@@ -1440,8 +1440,12 @@ func (cf *cFetcher) finalizeBatch() {
 // getCurrentColumnFamilyID returns the column family id of the key in
 // cf.machine.nextKV.Key.
 func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
-	// If the table only has 1 column family, and its ID is 0, we know that the
+	// If the index only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
+	// TODO(drewk): once we know all nodes are at least 26.2, we can perform this
+	// optimization whenever cf.table.spec.MaxKeysPerRow == 1, since at that point
+	// MaxFamilyID is always for the just index being scanned, not the whole
+	// table.
 	if cf.table.spec.MaxFamilyID == 0 {
 		return 0, nil
 	}
