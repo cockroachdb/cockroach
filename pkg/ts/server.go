@@ -339,7 +339,7 @@ func (s *Server) Query(
 					datapoints, sources, err := s.db.Query(
 						ctx,
 						query,
-						Resolution10s,
+						s.db.selectDiskResolutionForQuery(query, timespan, Resolution10s),
 						timespan,
 						memContexts[queryIdx],
 					)
@@ -575,4 +575,33 @@ func dumpTimeseriesAllSources(
 		}
 	}
 	return nil
+}
+
+// selectDiskResolutionForQuery selects the appropriate storage resolution for an individual query
+// based on multiple factors including data age, metric type, and query requirements.
+func (db *DB) selectDiskResolutionForQuery(
+	query tspb.Query, timespan QueryTimespan, fallbackResolution Resolution,
+) Resolution {
+	nowNanos := timespan.NowNanos
+
+	if rollupResolution, ok := fallbackResolution.TargetRollupResolution(); ok {
+		// Get the storage TTL for the fallback resolution
+		rollupThreshold := nowNanos - db.PruneThreshold(fallbackResolution)
+
+		// Only use the rollup resolution if the query's sample duration is compatible
+		if timespan.SampleDurationNanos >= rollupResolution.SampleDuration() {
+			// If the entire query is for old data that has been rolled up, use rollup resolution.
+			if timespan.EndNanos < rollupThreshold {
+				return rollupResolution
+			}
+
+			// If the query spans both new and old data, prefer the coarser resolution to minimize processing.
+			if timespan.StartNanos < rollupThreshold {
+				return rollupResolution
+			}
+		}
+	}
+
+	// All data is recent or sample duration is too small - use the fallback resolution (typically 10s).
+	return fallbackResolution
 }
