@@ -58,10 +58,39 @@
   </head>
 
   <body>
-  <div class="fullscreen container center align-content:center flex-switch">
+  <main>
+    <section class="tool-bar margin-block">
+      <form class="flex-row" x-data="{ custom: false }">
+        <div>
+          <label for=category>Interval:</label>
+          <select id=category placeholder="Select a category..." x-on:change="custom = $event.target.value === 'Custom'">
+            <option>Last 10m</option>
+            <option>Last 30m</option>
+            <option>Last 1h</option>
+            <option>Custom</option>
+          </select>
+        </div>
+        <div>
+          <label for="start-time">Start:</label>
+          <input
+            type="datetime-local"
+            id="start-time"
+            name="start-time"
+            value="" x-bind:disabled="!custom" />
+        </div>
+        <div>
+          <label for="end-time">End:</label>
+          <input
+            type="datetime-local"
+            id="end-time"
+            name="end-time"
+            value="" x-bind:disabled="!custom" />
+        </div>
+      </form>
+    </section>
     <div id="status" class="status loading">Loading metric data...</div>
     <div id="graph1"></div>
-  </div>
+  </main>
 
   <script>
 // Global set of colors for graph series.
@@ -341,7 +370,7 @@ function createChart(data, metricName = "cr.node.sys.rss") {
         stroke: seriesPalette[0],
         width: 1.5,
         points: {
-          show: false,
+          show: true,
         },
         value: (u, rawValue) => formatBytes(rawValue),
         spanGaps: false,
