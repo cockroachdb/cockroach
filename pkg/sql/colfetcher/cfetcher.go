@@ -1004,7 +1004,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 			}
 
-			if familyID == cf.table.spec.MaxFamilyID {
+			if familyID == cf.table.spec.MaxFamilyIDForIndex {
 				// We know the row can't have any more keys, so finalize the row.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateInitFetch
@@ -1439,9 +1439,9 @@ func (cf *cFetcher) finalizeBatch() {
 // getCurrentColumnFamilyID returns the column family id of the key in
 // cf.machine.nextKV.Key.
 func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
-	// If the table only has 1 column family, and its ID is 0, we know that the
+	// If the index only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
-	if cf.table.spec.MaxFamilyID == 0 {
+	if cf.table.spec.MaxFamilyIDForIndex == 0 {
 		return 0, nil
 	}
 	// The column family is encoded in the final bytes of the key. The last
