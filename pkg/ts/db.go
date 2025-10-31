@@ -121,11 +121,26 @@ type DataSource interface {
 	GetTimeSeriesData() []tspb.TimeSeriesData
 }
 
+// A ChildMetricsDataSource can be queried for high-cardinality child metrics data.
+type ChildMetricsDataSource interface {
+	GetChildMetricsData() []tspb.TimeSeriesData
+}
+
 // poller maintains information for a polling process started by PollSource().
 type poller struct {
 	log.AmbientContext
 	db        *DB
 	source    DataSource
+	frequency time.Duration
+	r         Resolution
+	stopper   *stop.Stopper
+}
+
+// childMetricsPoller maintains information for a child metrics polling process.
+type childMetricsPoller struct {
+	log.AmbientContext
+	db        *DB
+	source    ChildMetricsDataSource
 	frequency time.Duration
 	r         Resolution
 	stopper   *stop.Stopper
@@ -152,6 +167,88 @@ func (db *DB) PollSource(
 		stopper:        stopper,
 	}
 	return p.start()
+}
+
+// PollChildMetricsSource begins a Goroutine which periodically queries the supplied
+// ChildMetricsDataSource for high-cardinality child metrics data, storing the returned 
+// data in the server. This provides a dedicated polling path for child metrics that can
+// be controlled independently via cluster settings.
+func (db *DB) PollChildMetricsSource(
+	ambient log.AmbientContext,
+	source ChildMetricsDataSource,
+	frequency time.Duration,
+	r Resolution,
+	stopper *stop.Stopper,
+) (firstDone <-chan struct{}) {
+	ambient.AddLogTag("ts-poll-child", nil)
+	p := &childMetricsPoller{
+		AmbientContext: ambient,
+		db:             db,
+		source:         source,
+		frequency:      frequency,
+		r:              r,
+		stopper:        stopper,
+	}
+	return p.start()
+}
+
+// start begins the goroutine for the child metrics poller.
+func (p *childMetricsPoller) start() (firstDone <-chan struct{}) {
+	ch := make(chan struct{}) // closed on completion of first poll
+	ctx, hdl, err := p.stopper.GetHandle(
+		p.AnnotateCtx(context.Background()), stop.TaskOpts{TaskName: "ts-child-poller"},
+	)
+	if err != nil {
+		close(ch)
+		return ch
+	}
+	go func(ctx context.Context, ch chan struct{}) {
+		defer hdl.Activate(ctx).Release(ctx)
+		var ticker timeutil.Timer
+		ticker.Reset(0) // poll immediately
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				ticker.Reset(p.frequency)
+				p.poll(ctx)
+				if ch != nil {
+					close(ch)
+					ch = nil
+				}
+			case <-p.stopper.ShouldQuiesce():
+				return
+			}
+		}
+	}(ctx, ch)
+	return ch
+}
+
+// poll retrieves child metrics data from the underlying ChildMetricsDataSource.
+func (p *childMetricsPoller) poll(ctx context.Context) {
+	if !TimeseriesStorageEnabled.Get(&p.db.st.SV) {
+		return
+	}
+
+	if err := p.stopper.RunTask(ctx, "ts.child-poller: poll", func(ctx context.Context) {
+		data := p.source.GetChildMetricsData()
+		if len(data) == 0 {
+			return
+		}
+
+		const opName = "ts-child-poll"
+		ctx, span := p.AnnotateCtxWithSpan(ctx, opName)
+		defer span.Finish()
+		if err := timeutil.RunWithTimeout(ctx, opName, storeDataTimeout,
+			func(ctx context.Context) error {
+				return p.db.StoreData(ctx, p.r, data)
+			},
+		); err != nil {
+			log.Dev.Warningf(ctx, "error writing child metrics time series data: %s", err)
+		}
+	}); err != nil {
+		log.Dev.Warningf(ctx, "%v", err)
+	}
 }
 
 // start begins the goroutine for this poller, which will periodically request

@@ -14,7 +14,9 @@ import (
 	"math"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+
 	// Import the logmetrics package to trigger its own init function, which inits and injects
 	// metrics functionality into pkg/util/log.
 	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
@@ -107,6 +110,15 @@ var bugfix149481Enabled = settings.RegisterBoolSetting(
 		"https://github.com/cockroachdb/cockroach/issues/149481",
 	true,
 	settings.WithVisibility(settings.Reserved))
+
+// ChildMetricsTimeSeriesEnabled controls whether to collect high-cardinality child metrics
+// into the time series database. This is separate from ChildMetricsEnabled which controls
+// Prometheus exports, allowing independent control of child metrics collection vs export.
+var ChildMetricsTimeSeriesEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "timeseries.child_metrics.enabled",
+	"enables the collection of high-cardinality child metrics into the time series database",
+	false,
+	settings.WithPublic)
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -503,6 +515,91 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	return data
 }
 
+// GetChildMetricsData serializes only child metrics for consumption by
+// CockroachDB's time series system. This implements a specialized DataSource
+// interface for high-cardinality child metrics collection.
+func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
+	// Check if child metrics time series collection is enabled via cluster setting
+	if !ChildMetricsTimeSeriesEnabled.Get(&mr.settings.SV) {
+		return nil
+	}
+
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
+	if mr.mu.nodeRegistry == nil {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Dev.Warning(context.TODO(), "MetricsRecorder.GetChildMetricsData() called before NodeID allocation")
+		}
+		return nil
+	}
+
+	data := make([]tspb.TimeSeriesData, 0)
+
+	// Record child metrics from node-level registries only
+	now := mr.clock.Now()
+	recorder := registryRecorder{
+		registry:       mr.mu.nodeRegistry,
+		format:         nodeTimeSeriesPrefix,
+		source:         mr.mu.desc.NodeID.String(),
+		timestampNanos: now.UnixNano(),
+	}
+	recorder.recordChildx(&data)
+	
+	// Record child metrics from app registry for system tenant
+	recorder.registry = mr.mu.appRegistry
+	recorder.recordChildx(&data)
+	
+	// Record child metrics from log registry
+	recorder.registry = mr.mu.logRegistry
+	recorder.recordChildx(&data)
+	
+	// Record child metrics from system registry
+	recorder.registry = mr.mu.sysRegistry
+	recorder.recordChildx(&data)
+
+	// Record child metrics from app-level registries for secondary tenants
+	for tenantID, r := range mr.mu.tenantRegistries {
+		tenantRecorder := registryRecorder{
+			registry:       r,
+			format:         nodeTimeSeriesPrefix,
+			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+			timestampNanos: now.UnixNano(),
+		}
+		tenantRecorder.recordChildx(&data)
+	}
+
+	// Record child metrics from store-level registries
+	tIDLabel := multitenant.TenantIDLabel
+	for storeID, r := range mr.mu.storeRegistries {
+		storeRecorder := registryRecorder{
+			registry:       r,
+			format:         storeTimeSeriesPrefix,
+			source:         storeID.String(),
+			timestampNanos: now.UnixNano(),
+		}
+		storeRecorder.recordChildx(&data)
+
+		// Record child metrics for secondary tenant store metrics
+		for tenantID := range mr.mu.tenantRegistries {
+			tenantStoreRecorder := registryRecorder{
+				registry:       r,
+				format:         storeTimeSeriesPrefix,
+				source:         tsutil.MakeTenantSource(storeID.String(), tenantID.String()),
+				timestampNanos: now.UnixNano(),
+			}
+			tenantIDStr := tenantID.String()
+			tenantStoreRecorder.recordChild(&data, kvbase.TenantsStorageMetricsSet, &prometheusgo.LabelPair{
+				Name:  &tIDLabel,
+				Value: &tenantIDStr,
+			})
+		}
+	}
+
+	return data
+}
+
 // GetMetricsMetadata returns the metadata from all metrics tracked in the node's
 // nodeRegistry and a randomly selected storeRegistry.
 //
@@ -883,6 +980,89 @@ func (rr registryRecorder) recordChild(
 					},
 				},
 			})
+		}
+		promIter.Each(m.Label, processChildMetric)
+	})
+}
+
+// sanitizeAlphanumeric removes all non-alphanumeric characters from a string,
+// keeping only letters, numbers, and underscores for metric name compatibility.
+func sanitizeAlphanumeric(s string) string {
+	var result strings.Builder
+	result.Grow(len(s)) // Pre-allocate capacity
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+// recordChildx filters the metrics in the registry down to those provided in
+// the metricsFilter argument, and iterates through any child metrics that
+// may exist on said metric. Records up to 1000 child metrics to prevent
+// unbounded memory usage and performance issues.
+//
+// NB: Only available for Counter and Gauge metrics.
+func (rr registryRecorder) recordChildx(
+	dest *[]tspb.TimeSeriesData,
+) {
+	const maxChildMetrics = 1000
+	var childMetricsCount int
+
+	labels := rr.registry.GetLabels()
+	rr.registry.Each(func(name string, v interface{}) {
+		prom, ok := v.(metric.PrometheusExportable)
+		if !ok {
+			return
+		}
+		promIter, ok := v.(metric.PrometheusIterable)
+		if !ok {
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
+
+		processChildMetric := func(metric *prometheusgo.Metric) {
+			if childMetricsCount >= maxChildMetrics {
+				return // Stop processing once we hit the limit
+			}
+
+			// Sanitize and sort labels in one step
+			sanitizedLabels := make([]struct{ key, value string }, len(metric.Label))
+			for i, label := range metric.Label {
+				sanitizedLabels[i].key = sanitizeAlphanumeric(label.GetName())
+				sanitizedLabels[i].value = sanitizeAlphanumeric(label.GetValue())
+			}
+			sort.Slice(sanitizedLabels, func(i, j int) bool {
+				return sanitizedLabels[i].key < sanitizedLabels[j].key
+			})
+
+			// Build labels suffix using sanitized and sorted key-value pairs
+			var labelsSuffix string
+			for _, label := range sanitizedLabels {
+				labelsSuffix += fmt.Sprintf("___%s_%s", label.key, label.value)
+			}
+
+			var value float64
+			if metric.Gauge != nil {
+				value = *metric.Gauge.Value
+			} else if metric.Counter != nil {
+				value = *metric.Counter.Value
+			} else {
+				return
+			}
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   fmt.Sprintf(rr.format, prom.GetName(false /* useStaticLabels */) + labelsSuffix),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
 	})
