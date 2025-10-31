@@ -126,23 +126,21 @@ func CreateUninitializedReplica(
 	id roachpb.FullReplicaID,
 ) error {
 	sl := MakeStateLoader(id.RangeID)
-	// Before creating the replica, see if there is a tombstone or a newer replica
-	// which would indicate that our replica has been removed.
-	if ts, err := sl.LoadRangeTombstone(ctx, stateRW.RO); err != nil {
+	// Before creating the replica, see if there is a tombstone or an existing
+	// replica which would indicate that our ReplicaID is stale and can not come
+	// back to this Store again.
+	if mark, err := sl.LoadReplicaMark(ctx, stateRW.RO); err != nil {
 		return err
-	} else if id.ReplicaID < ts.NextReplicaID {
+	} else if mark.Destroyed(id.ReplicaID) {
 		return &kvpb.RaftGroupDeletedError{}
-	} else if rID, err := sl.LoadRaftReplicaID(ctx, stateRW.RO); err != nil {
-		return err
-	} else if rID.ReplicaID > id.ReplicaID {
-		return &kvpb.RaftGroupDeletedError{}
-	} else if rID.ReplicaID == id.ReplicaID {
+	} else if mark.Is(id.ReplicaID) {
 		return nil // the replica already exists
-	} else if rID.ReplicaID != 0 {
+	} else if mark.Exists() {
 		// TODO(pav-kv): there is a replica with an older ReplicaID. We must destroy
 		// it, and create a new one. Right now, the code falls through and writes
 		// the new RaftReplicaID, but this replica can already have a non-empty
 		// HardState. This is a bug.
+		_ = 0 // make linter happy
 	}
 
 	// Write the RaftReplicaID for this replica. This is the only place in the
