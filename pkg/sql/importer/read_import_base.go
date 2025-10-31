@@ -594,7 +594,7 @@ func runParallelImport(
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {
-			if err := pacer.Pace(ctx); err != nil {
+			if _, err := pacer.Pace(ctx); err != nil {
 				return err
 			}
 			// Skip rows if needed.
@@ -712,7 +712,7 @@ func (p *parallelImporter) importWorker(
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
 			// Pace the admission control before processing each row.
-			if err := pacer.Pace(ctx); err != nil {
+			if _, err := pacer.Pace(ctx); err != nil {
 				return err
 			}
 

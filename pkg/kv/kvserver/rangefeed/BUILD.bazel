@@ -40,6 +40,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/storage/fs",
+        "//pkg/util",
         "//pkg/util/admission",
         "//pkg/util/bufalloc",
         "//pkg/util/buildutil",

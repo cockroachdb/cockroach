@@ -751,7 +751,7 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 		// TODO(irfansharif): Add tests for the SELECT queries issued by the TTL
 		// to ensure that they have local plans with a single TableReader
 		// processor in multi-node clusters.
-		if err := f.admissionPacer.Pace(ctx); err != nil {
+		if _, err := f.admissionPacer.Pace(ctx); err != nil {
 			return err
 		}
 	} else if f.responseAdmissionQ != nil {

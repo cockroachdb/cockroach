@@ -361,7 +361,7 @@ func (s *FileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) (roachp
 
 	empty := true
 	for iter.SeekGE(storage.MVCCKey{Key: keys.MinKey}); ; iter.Next() {
-		if err := s.pacer.Pace(ctx); err != nil {
+		if _, err := s.pacer.Pace(ctx); err != nil {
 			return nil, err
 		}
 		if valid, err := iter.Valid(); !valid || err != nil {
