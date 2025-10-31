@@ -7,10 +7,10 @@ Put: 0,0 /Local/RangeID/123/u/RaftReplicaID (0x0169f67b757266747200): replica_id
 Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:100 term:20 
 >> sst:
 Put: 0,0 /Local/RangeID/101/u/RangeTombstone (0x0169ed757266746200): next_replica_id:2147483647 
-Delete (Sized at 30): 0,0 /Local/RangeID/101/u/RaftReplicaID (0x0169ed757266747200): 
+Delete: 0,0 /Local/RangeID/101/u/RaftReplicaID (0x0169ed757266747200): 
 >> sst:
 Put: 0,0 /Local/RangeID/102/u/RangeTombstone (0x0169ee757266746200): next_replica_id:2147483647 
-Delete (Sized at 30): 0,0 /Local/RangeID/102/u/RaftReplicaID (0x0169ee757266747200): 
+Delete: 0,0 /Local/RangeID/102/u/RaftReplicaID (0x0169ee757266747200): 
 >> sst:
 Delete (Sized at 27): /Local/Lock"y\xff" 0300000000000000000000000000000000 (0x017a6b1279ff000100030000000000000000000000000000000012): 
 >> sst:
