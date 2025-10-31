@@ -60,32 +60,32 @@ function mdghurl() {
 
 
 
-q_open_rel_blockers="is:issue is:open label:C-test-failure label:release-blocker,GA-blocker label:T-kv,T-kv-replication"
+q_open_rel_blockers="is:issue is:open label:C-test-failure label:release-blocker,GA-blocker label:T-kv,T-kv-replication,T-admission-control"
 open_rel_blockers_count=$(count open "${q_open_rel_blockers}")
 relblockersmd=$(mdghurl "Release Blockers" "${q_open_rel_blockers}")
 
-q_roachtest_queue="is:issue label:O-roachtest label:T-kv,T-kv-replication -label:C-bug,X-infra-flake,X-duplicate,X-unactionable,X-invalid"
+q_roachtest_queue="is:issue label:O-roachtest label:T-kv,T-kv-replication,T-admission-control -label:C-bug,X-infra-flake,X-duplicate,X-unactionable,X-invalid"
 roachtest_queue_count=$(count all "${q_roachtest_queue}")
 roachtestqueuemd=$(mdghurl "Roachtest Triage" "${q_roachtest_queue}")
 
-q_triage_queue="is:issue label:O-robot -label:O-roachtest label:C-test-failure label:T-kv,T-kv-replication -label:C-bug,X-infra-flake,X-duplicate,X-unactionable,X-invalid"
+q_triage_queue="is:issue label:O-robot -label:O-roachtest label:C-test-failure label:T-kv,T-kv-replication,T-admission-control -label:C-bug,X-infra-flake,X-duplicate,X-unactionable,X-invalid"
 triage_queue_count=$(count all "${q_triage_queue}")
 triagequeuemd=$(mdghurl "Unit Test Triage" "${q_triage_queue}")
 
-q_open_test_failures="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication"
+q_open_test_failures="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication,T-admission-control"
 open_test_failures_count=$(count open "${q_open_test_failures}")
-q_open_test_failures_dedup="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication -label:X-infra-flake -label:X-duplicate -label:X-unactionable -label:X-invalid -label:O-perturbation"
+q_open_test_failures_dedup="is:issue is:open label:C-test-failure,skipped-test label:T-kv,T-kv-replication,T-admission-control -label:X-infra-flake -label:X-duplicate -label:X-unactionable -label:X-invalid -label:O-perturbation"
 open_test_failures_dedup_count=$(count open "${q_open_test_failures_dedup}")
 openfailuresmd=$(mdghurl "Open Test Failures" "${q_open_test_failures_dedup}")
 
 # Github `..` issue filtering is inclusive on the end day.
 ghweek="${sat1}..${fri}"
 
-q_created_in_week="created:$ghweek is:issue label:C-test-failure label:T-kv"
+q_created_in_week="created:$ghweek is:issue label:C-test-failure label:T-kv,T-kv-replication,T-admission-control"
 created=$(count all "${q_created_in_week}")
 createdmd=$(mdghurl "Created" "${q_created_in_week}")
 
-q_closed_in_week="closed:$ghweek is:issue label:C-test-failure label:T-kv"
+q_closed_in_week="closed:$ghweek is:issue label:C-test-failure label:T-kv,T-kv-replication,T-admission-control"
 closed=$(count all "${q_closed_in_week}")
 closedmd=$(mdghurl "Closed" "${q_closed_in_week}")
 
