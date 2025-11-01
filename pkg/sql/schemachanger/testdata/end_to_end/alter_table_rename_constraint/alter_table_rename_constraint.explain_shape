@@ -1,0 +1,8 @@
+/* setup */
+CREATE TABLE t (x INT PRIMARY KEY, y INT, CONSTRAINT cc CHECK (x > 10));
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t RENAME CONSTRAINT cc TO cc_renamed;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› RENAME CONSTRAINT ‹cc› TO ‹cc_renamed›;
+ └── execute 2 system table mutations transactions

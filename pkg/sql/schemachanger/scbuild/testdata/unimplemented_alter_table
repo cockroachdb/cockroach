@@ -13,10 +13,6 @@ CREATE TABLE defaultdb.foo (
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo RENAME CONSTRAINT foobar TO baz
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
 ----
 
