@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -206,8 +207,16 @@ func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, nodeDNString: "CN=foo"},
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true,
 			rootDNString: "CN=foo", nodeDNString: "CN=bar"},
+		// Test case for disallow root login functionality
+		{systemID: stid, ous: nil, commonName: "root", expErr: "root login has been disallowed"},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
+			// Enable root login blocking for the specific test case
+			if tc.expErr == "root login has been disallowed" {
+				security.EnableDisallowRootLogin(true)
+				defer security.EnableDisallowRootLogin(false)
+			}
+
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
 			if err != nil {
 				t.Fatal(err)
@@ -1272,3 +1281,107 @@ func (m mockAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.Tenant
 }
 
 type contextKey struct{}
+
+// TestServerpbEndpointAccess ensures root user access to serverpb admin and status endpoints
+// works correctly with authentication (considering disallow-root-login flag) and authorization.
+func TestServerpbEndpointAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	systemTenantID := roachpb.SystemTenantID
+	const noError = ""
+
+	// Helper to create a certificate with a given common name
+	createCert := func(t *testing.T, commonName string) *x509.Certificate {
+		cert := &x509.Certificate{
+			Subject: pkix.Name{
+				CommonName: commonName,
+			},
+		}
+		var err error
+		cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
+		require.NoError(t, err)
+		return cert
+	}
+
+	// Helper to create a context with peer certificate
+	createContextWithCert := func(cert *x509.Certificate) context.Context {
+		tlsInfo := credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{cert},
+			},
+		}
+		p := peer.Peer{AuthInfo: tlsInfo}
+		return peer.NewContext(context.Background(), &p)
+	}
+
+	t.Run("authentication", func(t *testing.T) {
+		// Test root user authentication with disallow-root-login flag
+		for _, disallowRoot := range []bool{false, true} {
+			testName := "disallow_root_login_disabled"
+			expectedError := noError
+			if disallowRoot {
+				testName = "disallow_root_login_enabled"
+				expectedError = "failed to perform RPC, as root login has been disallowed"
+			}
+
+			t.Run(testName, func(t *testing.T) {
+				if disallowRoot {
+					security.EnableDisallowRootLogin(true)
+					defer security.EnableDisallowRootLogin(false)
+				}
+
+				cert := createCert(t, "root")
+				ctx := createContextWithCert(cert)
+
+				sv := &settings.Values{}
+				sv.Init(ctx, settings.TestOpaque)
+
+				// Perform authentication - this is where the root login check happens
+				_, err := rpc.TestingAuthenticateTenant(ctx, systemTenantID, sv, false /* enableDRPC */)
+
+				if expectedError == noError {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.Equal(t, codes.Unauthenticated, status.Code(err))
+					require.Regexp(t, expectedError, err)
+				}
+			})
+		}
+	})
+
+	t.Run("authorization", func(t *testing.T) {
+		// Test root user authorization to access serverpb endpoints
+		endpoints := map[string]interface{}{
+			"/cockroach.server.serverpb.Admin/Liveness":      &serverpb.LivenessRequest{},
+			"/cockroach.server.serverpb.Status/Nodes":        &serverpb.NodesRequest{},
+			"/cockroach.server.serverpb.Status/TenantRanges": &serverpb.TenantRangesRequest{},
+			"/cockroach.server.serverpb.Status/Gossip":       &serverpb.GossipRequest{},
+			"/cockroach.server.serverpb.Status/Ranges":       &serverpb.RangesRequest{},
+			"/cockroach.server.serverpb.Status/EngineStats":  &serverpb.EngineStatsRequest{},
+		}
+
+		for method, req := range endpoints {
+			t.Run(strings.ReplaceAll(method, "/", "_"), func(t *testing.T) {
+				cert := createCert(t, "root")
+				ctx := createContextWithCert(cert)
+
+				sv := &settings.Values{}
+				sv.Init(ctx, settings.TestOpaque)
+
+				// Test authorization with mock authorizer
+				err := rpc.TestingAuthorizeTenantRequest(ctx, sv, systemTenantID, method, req, mockAuthorizer{
+					hasCrossTenantRead:                 true,
+					hasCapabilityForBatch:              true,
+					hasNodestatusCapability:            true,
+					hasTSDBQueryCapability:             true,
+					hasNodelocalStorageCapability:      true,
+					hasExemptFromRateLimiterCapability: true,
+					hasTSDBAllCapability:               true,
+				})
+
+				require.NoError(t, err)
+			})
+		}
+	})
+}
