@@ -307,6 +307,18 @@ type HistogramBucket struct {
 	UpperBound tree.Datum
 }
 
+// IsDelimiter returns true if this bucket is a delimiter bucket. Delimiter
+// buckets are found in partial statistics and do not represent actual data.
+// They serve as markers separating groups of buckets corresponding to
+// the spans over which the partial statistic was collected. Using null as the
+// UpperBound is sufficient to identify a delimiter bucket since we do not
+// create null buckets normally, except in the first bucket where we store
+// non-zero null counts as NumEq.
+func (b HistogramBucket) IsDelimiter() bool {
+	return b.NumEq == 0 && b.NumRange == 0 && b.DistinctRange == 0 &&
+		b.UpperBound == tree.DNull
+}
+
 // ForeignKeyConstraint represents a foreign key constraint. A foreign key
 // constraint has an origin (or referencing) side and a referenced side. For
 // example:
