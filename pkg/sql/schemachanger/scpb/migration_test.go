@@ -137,3 +137,42 @@ func TestDeprecatedTriggerDeps(t *testing.T) {
 	require.Equal(t, catid.DescID(112), triggerDeps.UsesRelations[0].ID)
 	require.Equal(t, catid.DescID(113), triggerDeps.UsesRelations[1].ID)
 }
+
+// TestDeprecatedColumnGeneratedAsIdentity will ensure that a ColumnGeneratedAsIdentity
+// element is added.
+func TestDeprecatedColumnGeneratedAsIdentity(t *testing.T) {
+	state := DescriptorState{
+		Targets: []Target{
+			MakeTarget(ToPublic,
+				&Column{
+					TableID:                           100,
+					GeneratedAsIdentityType:           catpb.GeneratedAsIdentityType_GENERATED_ALWAYS,
+					GeneratedAsIdentitySequenceOption: "Hello",
+				},
+				nil,
+			),
+		},
+		CurrentStatuses: []Status{Status_PUBLIC},
+		TargetRanks:     []uint32{1},
+	}
+	migrationOccurred := MigrateDescriptorState(
+		clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()},
+		1,
+		&state,
+	)
+	require.True(t, migrationOccurred)
+	require.Len(t, state.CurrentStatuses, 2)
+	require.Len(t, state.Targets, 2)
+	require.NotNil(t, state.Targets[0].GetColumn())
+	col := state.Targets[0].GetColumn()
+	require.Equal(t, col.GeneratedAsIdentityType, catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN)
+	require.Equal(t, col.GeneratedAsIdentitySequenceOption, "")
+	cge := state.Targets[1].GetColumnGeneratedAsIdentity()
+	require.NotNil(t, cge)
+	require.Equal(t, cge.TableID, col.TableID)
+	require.Equal(t, cge.ColumnID, col.ColumnID)
+	require.Equal(t, cge.Type, catpb.GeneratedAsIdentityType_GENERATED_ALWAYS)
+	require.Equal(t, cge.SequenceOption, "Hello")
+	require.Equal(t, state.CurrentStatuses[1], Status_PUBLIC)
+	require.Equal(t, state.TargetRanks[1], uint32(2))
+}

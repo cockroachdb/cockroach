@@ -290,6 +290,18 @@ func alterTableAddColumn(
 		}
 		b.IncrementSchemaChangeAddColumnQualificationCounter("on_update")
 	}
+	// create and add the identitiy element if needed
+	if spec.colType.ElementCreationMetadata.In_26_1OrLater &&
+		spec.col.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+		spec.generatedAsID = &scpb.ColumnGeneratedAsIdentity{
+			TableID:        tbl.TableID,
+			ColumnID:       spec.col.ColumnID,
+			Type:           spec.col.GeneratedAsIdentityType,
+			SequenceOption: spec.col.GeneratedAsIdentitySequenceOption,
+		}
+		spec.col.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+		spec.col.GeneratedAsIdentitySequenceOption = ""
+	}
 	// Add secondary indexes for this column.
 	backing := addColumn(b, spec, t)
 	if idx != nil {
@@ -458,6 +470,7 @@ type addColumnSpec struct {
 	compute          *scpb.ColumnComputeExpression
 	transientCompute *scpb.ColumnComputeExpression
 	comment          *scpb.ColumnComment
+	generatedAsID    *scpb.ColumnGeneratedAsIdentity
 	unique           bool
 	notNull          bool
 }
@@ -493,6 +506,9 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 		if spec.comment != nil {
 			b.Add(spec.comment)
+		}
+		if spec.generatedAsID != nil {
+			b.Add(spec.generatedAsID)
 		}
 		// Don't need to modify primary indexes for virtual columns.
 		if spec.colType.IsVirtual {
