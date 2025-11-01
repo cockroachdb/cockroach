@@ -239,6 +239,6 @@ being if that seems opportune.
 * Change the lease transfer mechanism so a transferrer can transfer its
   timestamp cache's high water mark which would act as the low water mark of the
   recipient's timestamp cache. This is conditioned on not [inserting reads in
-  the command queue](https://forum.cockroachlabs.com/t/why-do-we-keep-read-commands-in-the-command-queue/360).
+  the command queue](https://web.archive.org/web/20210419190146/https://forum.cockroachlabs.com/t/why-do-we-keep-read-commands-in-the-command-queue/360).
 
 # Unresolved questions

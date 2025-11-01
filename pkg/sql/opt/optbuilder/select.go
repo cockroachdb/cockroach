@@ -1000,7 +1000,7 @@ func (b *Builder) buildSequenceSelect(
 func (b *Builder) buildWithOrdinality(inScope *scope) (outScope *scope) {
 	col := b.synthesizeColumn(inScope, scopeColName("ordinality"), types.Int, nil, nil /* scalar */)
 
-	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
+	// See https://web.archive.org/web/20201129203138/https://www.cockroachlabs.com/docs/stable/query-order.html
 	// for the semantics around WITH ORDINALITY and ordering.
 
 	input := inScope.expr

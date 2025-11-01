@@ -168,4 +168,4 @@ contains the expression used to compute the column otherwise.
 # Unresolved Questions
 [Partitioning]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md
 [Query planning changes in the RFC]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md#query-planning-changes
-[MySQL's extension]: https://dev.mysql.com/doc/refman/5.7/en/columns-table.html
+[MySQL's extension]: https://dev.mysql.com/doc/refman/8.4/en/information-schema-columns-table.html 

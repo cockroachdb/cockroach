@@ -684,8 +684,8 @@ func addFrac(d Duration, unit Duration, f float64) (Duration, error) {
 // when a naive conversion would incorrectly truncate due to floating point
 // inaccuracies. This function should match the semantics of rint() from
 // Postgres. See:
-// https://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/backend/utils/adt/timestamp.c;h=449164ae7e5b00f6580771017888d4922685a73c;hb=HEAD#l1511
-// https://git.postgresql.org/gitweb/?p=postgresql.git;a=blob;f=src/port/rint.c;h=d59d9ab774307b7db2f7cb2347815a30da563fc5;hb=HEAD
+// https://github.com/postgres/postgres/blob/REL9_1_STABLE/src/backend/utils/adt/timestamp.c
+// https://github.com/postgres/postgres/blob/REL9_1_STABLE/src/port/rint.c
 func floatToNanos(f float64) int64 {
 	return int64(math.Round(f * float64(time.Second.Nanoseconds())))
 }

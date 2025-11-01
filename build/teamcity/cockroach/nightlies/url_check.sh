@@ -14,5 +14,5 @@ source "$dir/teamcity-support.sh"  # For $root
 source "$dir/teamcity-bazel-support.sh"  # For run_bazel
 
 tc_start_block "Run url check"
-run_bazel build/teamcity/cockroach/nightlies/url_check_impl.sh
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e GITHUB_API_TOKEN -e GOOGLE_EPHEMERAL_CREDENTIALS -e TC_BUILD_BRANCH" run_bazel build/teamcity/cockroach/nightlies/url_check_impl.sh
 tc_end_block "Run url check"
