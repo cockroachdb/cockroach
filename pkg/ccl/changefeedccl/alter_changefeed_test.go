@@ -2183,3 +2183,34 @@ func getNFromSet[K cmp.Ordered](rnd *rand.Rand, s map[K]struct{}, n int) []K {
 	})
 	return ks[:n]
 }
+
+// TODO(#156484): Break this test up, assert payloads, make sure that
+// you can't set include on an exclude changefeed and vice versa,
+// you cannot change the target, and you cannot unset include if
+// you've set exclude and vice versa.
+func TestAlterChangefeedSetFilterOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		require.NoError(t, feed.Pause())
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET INCLUDE TABLES foo`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET EXCLUDE TABLES foo`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET INCLUDE TABLES`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET EXCLUDE TABLES`, feed.JobID()))
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
