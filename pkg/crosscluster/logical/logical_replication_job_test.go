@@ -1027,6 +1027,9 @@ func TestPreviouslyInterestingTables(t *testing.T) {
 	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
 
+	runnerA.Exec(t, "SET CLUSTER SETTING logical_replication.deprecated_udf_writer.enabled = true")
+	runnerB.Exec(t, "SET CLUSTER SETTING logical_replication.deprecated_udf_writer.enabled = true")
+
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 
 	type testCase struct {
@@ -1840,6 +1843,9 @@ func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {
 	ctx := context.Background()
 	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer server.Stopper().Stop(ctx)
+
+	dbA.Exec(t, "SET CLUSTER SETTING logical_replication.deprecated_udf_writer.enabled = true")
+	dbB.Exec(t, "SET CLUSTER SETTING logical_replication.deprecated_udf_writer.enabled = true")
 
 	lwwFunc := `CREATE OR REPLACE FUNCTION repl_apply(action STRING, proposed tab, existing tab, prev tab, existing_mvcc_timestamp DECIMAL, existing_origin_timestamp DECIMAL, proposed_mvcc_timestamp DECIMAL)
 	RETURNS string
