@@ -8,6 +8,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 func PromptYesNo(msg string, defaultYes bool) bool {
@@ -211,16 +213,40 @@ func ValidateAndConfigure(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	validArchitectures := []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS, vm.ArchS390x}
+
 	// Validate architecture flag, if set.
 	if archOpt := cmd.Flags().Lookup("arch"); archOpt != nil && archOpt.Changed {
-		arch := vm.CPUArch(strings.ToLower(archOpt.Value.String()))
 
-		if arch != vm.ArchAMD64 && arch != vm.ArchARM64 && arch != vm.ArchFIPS && arch != vm.ArchS390x {
-			printErrAndExit(fmt.Errorf("unsupported architecture %q", arch))
+		var architecturesToValidate = []string{}
+		switch v := archOpt.Value.(type) {
+		case pflag.SliceValue:
+			architecturesToValidate = v.GetSlice()
+		default:
+			architecturesToValidate = []string{archOpt.Value.String()}
 		}
-		if string(arch) != archOpt.Value.String() {
-			// Set the canonical value.
-			_ = cmd.Flags().Set("arch", string(arch))
+
+		normalizedArchitectures := make([]string, 0)
+		for _, archStr := range architecturesToValidate {
+
+			arch := vm.CPUArch(strings.ToLower(archStr))
+
+			if !slices.Contains(validArchitectures, arch) {
+				printErrAndExit(fmt.Errorf("unsupported architecture %q", archStr))
+			}
+
+			// Canonicalize architecture flag value.
+			normalizedArchitectures = append(normalizedArchitectures, string(arch))
+		}
+
+		// Replace the value by accessing the underlying slice directly
+		// This is a bit hacky but works with pflag
+		if sliceValue, ok := archOpt.Value.(pflag.SliceValue); ok {
+			// For StringSliceVar, replace the entire slice
+			_ = sliceValue.Replace(normalizedArchitectures)
+		} else {
+			// For StringVar, just set the first value
+			_ = cmd.Flags().Set("arch", normalizedArchitectures[0])
 		}
 	}
 

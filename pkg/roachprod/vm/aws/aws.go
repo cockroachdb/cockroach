@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/flagstub"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/utils/packer"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -34,6 +36,21 @@ import (
 
 // ProviderName is aws.
 const ProviderName = "aws"
+
+// Base AMI image names and owners for dynamic AMI resolution
+const (
+	DefaultImageFamilyAMD64 = "ubuntu-jammy-22.04-amd64-server"
+	DefaultImageFamilyARM64 = "ubuntu-jammy-22.04-arm64-server"
+	DefaultImageFamilyFIPS  = "ubuntu-focal-20.04-amd64-pro-fips-server"
+
+	DefaultImageOwnerAMD64 = "ubuntu"
+	DefaultImageOwnerARM64 = DefaultImageOwnerAMD64
+	DefaultImageOwnerFIPS  = "ubuntu-pro-fips-server"
+
+	DefaultImageOwnerAccountAMD64 = "099720109477" // Ubuntu's official AWS account ID
+	DefaultImageOwnerAccountARM64 = DefaultImageOwnerAccountAMD64
+	DefaultImageOwnerAccountFIPS  = "679593333241" // Canonical's marketplace account
+)
 
 //go:embed config.json
 var configJson []byte
@@ -125,6 +142,129 @@ func Init() error {
 	}
 	vm.Providers[ProviderName] = providerInstance
 	return nil
+}
+
+// findAMIByName finds an AMI name and ID by searching for images with a specific
+// name pattern. // Similar to GCE's approach, this queries AWS to find the image
+// dynamically.
+func findAMIByPattern(
+	l *logger.Logger, region, owner, namePattern string,
+) (amiID string, amiName string, err error) {
+	args := []string{
+		"ec2", "describe-images",
+		"--region", region,
+		"--owners", owner,
+		"--filters", fmt.Sprintf("Name=name,Values=%s", namePattern),
+		// Use a custom delimiter between ImageId and Name for easy splitting.
+		"--query", "Images | sort_by(@, &CreationDate) | [-1] | join(`|`, [ImageId, Name])",
+		"--output", "text",
+	}
+
+	cmd := exec.Command("aws", args...)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", "", errors.Wrapf(err, "failed to find AMI with name pattern %s (owner %s) in region %s", namePattern, owner, region)
+	}
+
+	result := strings.TrimSpace(string(output))
+	if result == "" || result == "None" {
+		return "", "", errors.Newf("no AMI found with name pattern %s (owner %s) in region %s", namePattern, owner, region)
+	}
+
+	parts := strings.SplitN(result, "|", 2)
+	if len(parts) != 2 {
+		return "", "", errors.Newf("unexpected output format: %s", result)
+	}
+	amiID = parts[0]
+	// Extract the AMI name from the full path (e.g., "ubuntu-eks/.../ubuntu-jammy-..." -> "ubuntu-jammy-...")
+	amiName = path.Base(parts[1])
+
+	return amiID, amiName, nil
+}
+
+// resolveAMI resolves an AMI ID for the given region and architecture.
+// It follows the GCE pattern:
+// 1. Try to find a pre-baked roachprod image (baseName-roachprod-checksum)
+// 2. Fall back to finding the base image by name
+// Results are cached to avoid repeated AWS API calls when creating multiple VMs.
+func (p *Provider) resolveAMI(
+	l *logger.Logger, region string, arch vm.CPUArch,
+) (amiID string, amiName string, preBaked bool, err error) {
+	// Check cache first
+	cacheKey := fmt.Sprintf("%s:%s", region, arch)
+	p.amiCache.Lock()
+	defer p.amiCache.Unlock()
+	if p.amiCache.amis == nil {
+		p.amiCache.amis = make(map[string]amiInfo)
+	}
+	if cachedAMI, ok := p.amiCache.amis[cacheKey]; ok {
+		return cachedAMI.id, cachedAMI.name, cachedAMI.preBaked, nil
+	}
+
+	// Determine base image name and owner based on architecture
+	owner := DefaultImageOwnerAccountAMD64
+	namePattern := fmt.Sprintf(
+		"%s/images/hvm-*/%s-*",
+		DefaultImageOwnerAMD64,
+		DefaultImageFamilyAMD64,
+	)
+	switch arch {
+	case vm.ArchAMD64:
+		// Defaults are already set for amd64.
+		// Used to ensure that the switch is exhaustive.
+	case vm.ArchARM64:
+		owner = DefaultImageOwnerAccountARM64
+		namePattern = fmt.Sprintf(
+			"%s/images/hvm-*/%s-*",
+			DefaultImageOwnerARM64,
+			DefaultImageFamilyARM64,
+		)
+	case vm.ArchFIPS:
+		owner = DefaultImageOwnerAccountFIPS
+		namePattern = fmt.Sprintf(
+			"%s/images/hvm-*/%s-*",
+			DefaultImageOwnerFIPS,
+			DefaultImageFamilyFIPS,
+		)
+	default:
+		return "", "", false, errors.Newf("unsupported architecture: %s", arch)
+	}
+
+	// Find latest base AMI
+	baseAmiID, baseAmiName, err := findAMIByPattern(l, region, owner, namePattern)
+	if err != nil {
+		return "", "", false, err
+	}
+
+	// First, try to find a pre-baked roachprod image
+	checksum := vm.ComputeStartupTemplateChecksum(awsStartupScriptTemplate)
+	bakedImageName := fmt.Sprintf(
+		"%s-%s-%s",
+		baseAmiName,
+		packer.RoachprodPreBakedImageIdentifier,
+		checksum,
+	)
+
+	// Look for pre-baked image (owned by self)
+	amiID, amiName, err = findAMIByPattern(l, region, "self", bakedImageName)
+	if err == nil && amiID != "" {
+		// Cache the result
+		p.amiCache.amis[cacheKey] = amiInfo{
+			id:       amiID,
+			name:     amiName,
+			preBaked: true,
+		}
+		return amiID, amiName, true, nil
+	}
+
+	// Cache the result
+	p.amiCache.amis[cacheKey] = amiInfo{
+		id:       baseAmiID,
+		name:     baseAmiName,
+		preBaked: false,
+	}
+
+	return baseAmiID, baseAmiName, false, nil
 }
 
 // ebsDisk represent EBS disk device.
@@ -284,6 +424,12 @@ type ProviderOpts struct {
 	BootDiskOnly bool
 }
 
+type amiInfo struct {
+	id       string
+	name     string
+	preBaked bool
+}
+
 // Provider implements the vm.Provider interface for AWS.
 type Provider struct {
 	// Profile to manage cluster in
@@ -294,6 +440,13 @@ type Provider struct {
 
 	// aws accounts to perform action in, used by gcCmd only as it clean ups multiple aws accounts
 	AccountIDs []string
+
+	// Cache for AMI ID lookups to avoid repeated AWS API calls
+	amiCache struct {
+		syncutil.Mutex
+		// Key: "region:arch" -> AMI ID
+		amis map[string]amiInfo
+	}
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -1354,6 +1507,55 @@ func (p *Provider) runInstance(
 		}
 	}
 
+	// Determine architecture based on machine type or explicit arch flag
+	var arch vm.CPUArch
+	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
+		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
+
+	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
+		return nil, errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
+	}
+
+	// Determine architecture
+	if opts.Arch == string(vm.ArchFIPS) {
+		arch = vm.ArchFIPS
+	} else if useArmAMI || opts.Arch == string(vm.ArchARM64) {
+		arch = vm.ArchARM64
+	} else {
+		arch = vm.ArchAMD64
+	}
+
+	// Resolve AMI ID (checks for pre-baked image, falls back to base image)
+	var imageID string
+	startupScriptMode := vm.StartupScriptAll
+	if providerOpts.ImageAMI != "" {
+		// User explicitly provided an AMI ID
+		imageID = providerOpts.ImageAMI
+	} else {
+		var err error
+		amiID, amiName, preBaked, err := p.resolveAMI(l, az.Region.Name, arch)
+		if err != nil {
+			return nil, errors.Wrapf(err, "failed to resolve AMI for region %s, arch %s", az.Region.Name, arch)
+		}
+		imageID = amiID
+		if preBaked {
+			startupScriptMode = vm.StartupScriptRuntimeOnly
+			l.Printf(
+				"DEBUG: using pre-baked image %s (%s) in region %s\n",
+				amiName,
+				amiID,
+				az.Region.Name,
+			)
+		} else {
+			l.Printf(
+				"DEBUG: pre-baked image not found in region %s, using base image %s (%s) (startup will be slower)\n",
+				az.Region.Name,
+				amiName,
+				imageID,
+			)
+		}
+	}
+
 	filename, err := writeStartupScript(
 		name,
 		extraMountOpts,
@@ -1362,6 +1564,7 @@ func (p *Provider) runInstance(
 		opts.Arch == string(vm.ArchFIPS),
 		providerOpts.RemoteUserName,
 		providerOpts.BootDiskOnly,
+		startupScriptMode,
 	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not write AWS startup script to temp file")
@@ -1370,32 +1573,6 @@ func (p *Provider) runInstance(
 		_ = os.Remove(filename)
 	}()
 
-	withFlagOverride := func(cfg string, fl *string) string {
-		if *fl == "" {
-			return cfg
-		}
-		return *fl
-	}
-	imageID := withFlagOverride(az.Region.AMI_X86_64, &providerOpts.ImageAMI)
-	useArmAMI := strings.Index(machineType, "6g.") == 1 || strings.Index(machineType, "6gd.") == 1 ||
-		strings.Index(machineType, "7g.") == 1 || strings.Index(machineType, "7gd.") == 1
-	if useArmAMI && (opts.Arch != "" && opts.Arch != string(vm.ArchARM64)) {
-		return nil, errors.Errorf("machine type %s is arm64, but requested arch is %s", machineType, opts.Arch)
-	}
-	//TODO(srosenberg): remove this once we have a better way to detect ARM64 machines
-	if useArmAMI {
-		imageID = withFlagOverride(az.Region.AMI_ARM64, &providerOpts.ImageAMI)
-		// N.B. use arbitrary instanceIdx to suppress the same info for every other instance being created.
-		if instanceIdx == 0 {
-			l.Printf("Using ARM64 AMI: %s for machine type: %s", imageID, machineType)
-		}
-	}
-	if opts.Arch == string(vm.ArchFIPS) {
-		imageID = withFlagOverride(az.Region.AMI_FIPS, &providerOpts.ImageAMI)
-		if instanceIdx == 0 {
-			l.Printf("Using FIPS-enabled AMI: %s for machine type: %s", imageID, machineType)
-		}
-	}
 	args := []string{
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
