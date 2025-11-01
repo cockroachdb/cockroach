@@ -45,37 +45,48 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 		require.NoError(t, sm.Start(ctx, stopper))
 		defer sm.Stop(ctx)
 
-		const streamID = 0
+		var sid int64
+		nextStreamID := func() int64 {
+			sid++
+			return sid
+		}
+
 		err := kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER))
-		errEvent := makeMuxRangefeedErrorEvent(int64(streamID), 1, err)
+		errEvent := func(streamID int64) *kvpb.MuxRangeFeedEvent {
+			return makeMuxRangefeedErrorEvent(streamID, 1, err)
+		}
 
 		t.Run("basic operation", func(t *testing.T) {
 			var num atomic.Int32
-			sm.AddStream(int64(streamID), &cancelCtxDisconnector{
+			streamID := nextStreamID()
+			sm.RegisteringStream(streamID)
+			sm.AddStream(streamID, &cancelCtxDisconnector{
 				cancel: func() {
 					num.Add(1)
-					require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
+					require.NoError(t, sm.sender.sendBuffered(errEvent(streamID), nil))
 				},
 			})
 			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 0, testServerStream.totalEventsSent())
-			sm.DisconnectStream(int64(streamID), err)
-			testServerStream.waitForEvent(t, errEvent)
+			sm.DisconnectStream(streamID, err)
+			testServerStream.waitForEvent(t, errEvent(streamID))
 			require.Equal(t, int32(1), num.Load())
 			require.Equal(t, 1, testServerStream.totalEventsSent())
 			waitForRangefeedCount(t, smMetrics, 0)
 			testServerStream.reset()
 		})
 		t.Run("disconnect stream on the same stream is idempotent", func(t *testing.T) {
-			sm.AddStream(int64(streamID), &cancelCtxDisconnector{
+			streamID := nextStreamID()
+			sm.RegisteringStream(streamID)
+			sm.AddStream(streamID, &cancelCtxDisconnector{
 				cancel: func() {
-					require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
+					require.NoError(t, sm.sender.sendBuffered(errEvent(streamID), nil))
 				},
 			})
 			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
-			sm.DisconnectStream(int64(streamID), err)
-			sm.DisconnectStream(int64(streamID), err)
-			testServerStream.waitForEvent(t, errEvent)
+			sm.DisconnectStream(streamID, err)
+			sm.DisconnectStream(streamID, err)
+			testServerStream.waitForEvent(t, errEvent(streamID))
 			require.Equalf(t, 1, testServerStream.totalEventsSent(),
 				"expected only 1 error event but got %s", testServerStream.String())
 			waitForRangefeedCount(t, smMetrics, 0)

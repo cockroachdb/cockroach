@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -444,5 +445,11 @@ func (ubr *unbufferedRegistration) waitForCaughtUp(ctx context.Context) error {
 func assertTrue(cond bool, msg string) {
 	if buildutil.CrdbTestBuild && !cond {
 		panic(msg)
+	}
+}
+
+func assumedUnreachable(msg string) {
+	if buildutil.CrdbTestBuild {
+		panic(fmt.Sprintf("assumed unreachable code reached: %s", msg))
 	}
 }
