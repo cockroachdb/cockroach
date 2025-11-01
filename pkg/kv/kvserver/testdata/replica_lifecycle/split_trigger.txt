@@ -39,7 +39,7 @@ Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_appli
 print-range-state
 ----
 range desc: r1:{a-m} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5}
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
 		lease: repl=(n2,s2):2 seq=0 start=0,0 type=LeaseLeader term=10 min-exp=0.000000100,0 pro=0,0 acq=Unspecified
 range desc: r2:{m-z} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 		lease: repl=(n2,s2):2 seq=0 start=0,0 type=LeaseExpiration exp=0.000000109,0 pro=0,0 acq=Unspecified
@@ -88,7 +88,7 @@ Put: 0,0 /Local/RangeID/4/r/RangeAppliedState (0x01698c727261736b00): raft_appli
 print-range-state sort-keys=true
 ----
 range desc: r1:{a-f} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5}
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseEpoch epo=20 min-exp=0,0 pro=0,0 acq=Unspecified
 range desc: r3:{f-m} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 		lease: repl=(n1,s1):1 seq=0 start=0,0 type=LeaseEpoch epo=20 min-exp=0,0 pro=0,0 acq=Unspecified

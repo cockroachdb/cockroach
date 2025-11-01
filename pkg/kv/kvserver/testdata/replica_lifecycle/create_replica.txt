@@ -29,4 +29,4 @@ print-range-state
 range desc: r1:{a-d} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 		replica (n1/s1): id=1 uninitialized
 range desc: r2:{d-k} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
-		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5}
+		replica (n1/s1): id=1 HardState={Term:5,Vote:0,Commit:10} TruncatedState={Index:10,Term:5} LastIdx=10

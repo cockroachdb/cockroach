@@ -1302,6 +1302,9 @@ type SplitTriggerHelperInput struct {
 // splitTriggerHelper continues the work begun by splitTrigger, but has a
 // reduced scope that has all stats-related concerns bundled into a
 // splitStatsHelper.
+//
+// TODO(arul): consider having this function write keys to the batch in sorted
+// order, much like how destroyReplicaImpl does.
 func splitTriggerHelper(
 	ctx context.Context,
 	rec EvalContext,
