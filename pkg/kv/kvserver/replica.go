@@ -2035,12 +2035,11 @@ func (r *Replica) assertStateRaftMuLockedReplicaMuRLocked(
 			log.KvExec.Fatalf(ctx, "replica's replicaID %d diverges from descriptor %+v", r.replicaID, r.shMu.state.Desc)
 		}
 	}
-	diskReplID, err := r.raftMu.stateLoader.LoadRaftReplicaID(ctx, reader)
+	mark, err := r.raftMu.stateLoader.LoadReplicaMark(ctx, reader)
 	if err != nil {
 		log.KvExec.Fatalf(ctx, "%s", err)
-	}
-	if diskReplID.ReplicaID != r.replicaID {
-		log.KvExec.Fatalf(ctx, "disk replicaID %d does not match in-mem %d", diskReplID, r.replicaID)
+	} else if !mark.Is(r.replicaID) {
+		log.KvExec.Fatalf(ctx, "disk ReplicaMark %+v mismatches in-mem ReplicaID %d", mark, r.replicaID)
 	}
 }
 

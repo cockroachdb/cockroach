@@ -3980,10 +3980,10 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := kvstorage.MakeStateLoader(repl.RangeID).LoadRaftReplicaID(
+	mark, err := kvstorage.MakeStateLoader(repl.RangeID).LoadReplicaMark(
 		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
-	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
+	require.True(t, mark.Is(7))
 }
 
 // TestSplitPreApplyInitializesTruncatedState ensures that the Raft truncated

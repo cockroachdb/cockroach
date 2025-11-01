@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
 
@@ -739,13 +740,12 @@ func (e *quorumRecoveryEnv) handleDumpStore(t *testing.T, d datadriven.TestData)
 				descriptorViews = append(descriptorViews, descriptorView(desc))
 
 				sl := kvstorage.MakeStateLoader(desc.RangeID)
-				raftReplicaID, err := sl.LoadRaftReplicaID(ctx, store.engine)
-				if err != nil {
-					t.Fatalf("failed to load Raft replica ID: %v", err)
-				}
+				mark, err := sl.LoadReplicaMark(ctx, store.engine)
+				require.NoError(t, err)
+				require.True(t, mark.Exists())
 				localDataViews = append(localDataViews, localDataView{
 					RangeID:       desc.RangeID,
-					RaftReplicaID: int(raftReplicaID.ReplicaID),
+					RaftReplicaID: int(mark.ReplicaID),
 				})
 				return nil
 			})
