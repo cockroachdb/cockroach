@@ -10,10 +10,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -167,47 +170,16 @@ func (ex *connExecutor) recordStatementSummary(
 	stmtErr error,
 	stats topLevelQueryStats,
 ) appstatspb.StmtFingerprintID {
-	phaseTimes := ex.statsCollector.PhaseTimes()
-
-	// Collect the statistics.
-	idleLatRaw := phaseTimes.GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
-	idleLatSec := idleLatRaw.Seconds()
-	runLatRaw := phaseTimes.GetRunLatency()
-	runLatSec := runLatRaw.Seconds()
-	parseLatSec := phaseTimes.GetParsingLatency().Seconds()
-	planLatSec := phaseTimes.GetPlanningLatency().Seconds()
-	// We want to exclude any overhead to reduce possible confusion.
-	svcLatRaw := phaseTimes.GetServiceLatencyNoOverhead()
-	svcLatSec := svcLatRaw.Seconds()
-
-	// processing latency: contributing towards SQL results.
-	processingLatSec := parseLatSec + planLatSec + runLatSec
-
-	// overhead latency: txn/retry management, error checking, etc
-	execOverheadSec := svcLatSec - processingLatSec
 
 	stmt := &planner.stmt
 	flags := planner.curPlan.flags
 	ex.recordStatementLatencyMetrics(
-		stmt, flags, automaticRetryTxnCount+automaticRetryStmtCount, runLatRaw, svcLatRaw,
+		stmt, flags, automaticRetryTxnCount+automaticRetryStmtCount, ex.statsCollector.RunLatency(), ex.statsCollector.ServiceLatency(),
 	)
-
-	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 
 	idxRecommendations := idxrecommendations.FormatIdxRecommendations(planner.instrumentation.indexRecs)
 	queryLevelStats, queryLevelStatsOk := planner.instrumentation.GetQueryLevelStats()
 
-	var sqlInstanceIDs []int64
-	var kvNodeIDs []int32
-	if queryLevelStatsOk {
-		sqlInstanceIDs = make([]int64, 0, len(queryLevelStats.SQLInstanceIDs))
-		for _, sqlInstanceID := range queryLevelStats.SQLInstanceIDs {
-			sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
-		}
-		kvNodeIDs = queryLevelStats.KVNodeIDs
-	}
-	startTime := phaseTimes.GetSessionPhaseTime(sessionphase.PlannerStartExecStmt).ToUTC()
-	implicitTxn := flags.IsSet(planFlagImplicitTxn)
 	stmtFingerprintID := planner.instrumentation.fingerprintId
 	autoRetryReason := ex.state.mu.autoRetryReason
 	if automaticRetryStmtCount > 0 {
@@ -221,50 +193,31 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.metrics.EngineMetrics.StatementIndexBytesWritten.Inc(stats.indexBytesWritten)
 
 	if ex.statsCollector.EnabledForTransaction() {
-		recordedStmtStats := &sqlstats.RecordedStmtStats{
-			FingerprintID:        stmtFingerprintID,
-			QuerySummary:         stmt.StmtSummary,
-			Generic:              flags.IsSet(planFlagGeneric),
-			DistSQL:              flags.ShouldBeDistributed(),
-			Vec:                  flags.IsSet(planFlagVectorized),
-			ImplicitTxn:          implicitTxn,
-			PlanHash:             planner.instrumentation.planGist.Hash(),
-			SessionID:            ex.planner.extendedEvalCtx.SessionID,
-			StatementID:          stmt.QueryID,
-			AutoRetryCount:       automaticRetryTxnCount + automaticRetryStmtCount,
-			Failed:               stmtErr != nil,
-			AutoRetryReason:      autoRetryReason,
-			RowsAffected:         rowsAffected,
-			IdleLatencySec:       idleLatSec,
-			ParseLatencySec:      parseLatSec,
-			PlanLatencySec:       planLatSec,
-			RunLatencySec:        runLatSec,
-			ServiceLatencySec:    svcLatSec,
-			OverheadLatencySec:   execOverheadSec,
-			BytesRead:            stats.bytesRead,
-			RowsRead:             stats.rowsRead,
-			RowsWritten:          stats.rowsWritten,
-			Nodes:                sqlInstanceIDs,
-			KVNodeIDs:            kvNodeIDs,
-			StatementType:        stmt.AST.StatementType(),
-			PlanGist:             planner.instrumentation.planGist.String(),
-			StatementError:       stmtErr,
-			IndexRecommendations: idxRecommendations,
-			Query:                stmt.StmtNoConstants,
-			StartTime:            startTime,
-			EndTime:              startTime.Add(svcLatRaw),
-			FullScan:             fullScan,
-			ExecStats:            queryLevelStats,
+		b := NewRecordedStatementStatsBuilder(
+			stmtFingerprintID,
+			ex.planner.extendedEvalCtx.SessionID,
+			planner.SessionData().Database,
+			stmt,
+			ex.statsCollector.CurrentApplicationName(),
+		).
+			LatencyRecorder(ex.statsCollector).
+			QueryLevelStats(stats).
+			ExecStats(queryLevelStats).
+			PlanFlags(flags).
 			// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 			// converting to strings.
-			Indexes:       planner.instrumentation.indexesUsed.Strings(),
-			Database:      planner.SessionData().Database,
-			QueryTags:     stmt.QueryTags,
-			App:           ex.statsCollector.CurrentApplicationName(),
-			UnderOuterTxn: ex.extraTxnState.underOuterTxn,
+			Indexes(planner.instrumentation.indexesUsed.Strings()).
+			PlanGist(planner.instrumentation.planGist).StatementError(stmtErr).
+			AutoRetry(automaticRetryTxnCount+automaticRetryStmtCount, autoRetryReason).
+			RowsAffected(rowsAffected).
+			IndexRecommendations(idxRecommendations).
+			QueryTags(stmt.QueryTags)
+
+		if ex.extraTxnState.underOuterTxn {
+			b.UnderOuterTxn()
 		}
 
-		ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
+		ex.statsCollector.RecordStatement(ctx, b.Build())
 	}
 
 	// Record statement execution statistics if span is recorded and no error was
@@ -313,11 +266,16 @@ func (ex *connExecutor) recordStatementSummary(
 		ex.extraTxnState.transactionStatementsHash.Add(uint64(stmtFingerprintID))
 	}
 	ex.extraTxnState.numRows += rowsAffected
-	ex.extraTxnState.idleLatency += idleLatRaw
+	ex.extraTxnState.idleLatency += ex.statsCollector.IdleLatency()
 
 	if log.V(2) {
 		// ages since significant epochs
-		sessionAge := phaseTimes.GetSessionAge().Seconds()
+		sessionAge := ex.statsCollector.PhaseTimes().GetSessionAge().Seconds()
+		parseLatSec := ex.statsCollector.ParsingLatency().Seconds()
+		planLatSec := ex.statsCollector.PlanningLatency().Seconds()
+		runLatSec := ex.statsCollector.RunLatency().Seconds()
+		svcLatSec := ex.statsCollector.ServiceLatency().Seconds()
+		execOverheadSec := ex.statsCollector.ExecOverheadLatency().Seconds()
 
 		log.Dev.Infof(ctx,
 			"query stats: %d rows, %d retries, "+
@@ -397,4 +355,144 @@ func (ex *connExecutor) updateOptCounters(planFlags planFlags) {
 // We only want to keep track of DML (Data Manipulation Language) statements in our latency metrics.
 func shouldIncludeStmtInLatencyMetrics(stmt *Statement) bool {
 	return stmt.AST.StatementType() == tree.TypeDML
+}
+
+type RecordedStatementStatsBuilder struct {
+	stmtStats *sqlstats.RecordedStmtStats
+}
+
+func NewRecordedStatementStatsBuilder(
+	fingerprintId appstatspb.StmtFingerprintID,
+	sessionId clusterunique.ID,
+	database string,
+	stmt sqlstats.StatementMetadata,
+	appName string,
+) *RecordedStatementStatsBuilder {
+	return &RecordedStatementStatsBuilder{
+		stmtStats: &sqlstats.RecordedStmtStats{
+			FingerprintID: fingerprintId,
+			QuerySummary:  stmt.Summary(),
+			StatementType: stmt.StatementType(),
+			SessionID:     sessionId,
+			StatementID:   stmt.GetQueryID(),
+			Query:         stmt.Fingerprint(),
+			Database:      database,
+			App:           appName,
+		},
+	}
+}
+
+func (b *RecordedStatementStatsBuilder) LatencyRecorder(
+	recorder sqlstats.StatementLatencyRecorder,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.RunLatencySec = recorder.RunLatency().Seconds()
+	b.stmtStats.IdleLatencySec = recorder.IdleLatency().Seconds()
+	b.stmtStats.ServiceLatencySec = recorder.ServiceLatency().Seconds()
+	b.stmtStats.ParseLatencySec = recorder.ParsingLatency().Seconds()
+	b.stmtStats.PlanLatencySec = recorder.PlanningLatency().Seconds()
+	b.stmtStats.OverheadLatencySec = recorder.ExecOverheadLatency().Seconds()
+	b.stmtStats.StartTime = recorder.StartTime()
+	b.stmtStats.EndTime = recorder.EndTime()
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryLevelStats(
+	stats topLevelQueryStats,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.BytesRead = stats.bytesRead
+	b.stmtStats.RowsRead = stats.rowsRead
+	b.stmtStats.RowsWritten = stats.rowsWritten
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) ExecStats(
+	queryLevelStats *execstats.QueryLevelStats,
+) *RecordedStatementStatsBuilder {
+	if queryLevelStats == nil {
+		return b
+	}
+
+	var sqlInstanceIDs []int64
+	var kvNodeIDs []int32
+	sqlInstanceIDs = make([]int64, 0, len(queryLevelStats.SQLInstanceIDs))
+	for _, sqlInstanceID := range queryLevelStats.SQLInstanceIDs {
+		sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
+	}
+	kvNodeIDs = queryLevelStats.KVNodeIDs
+	b.stmtStats.KVNodeIDs = kvNodeIDs
+	b.stmtStats.Nodes = sqlInstanceIDs
+	b.stmtStats.ExecStats = queryLevelStats
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) Indexes(indexes []string) *RecordedStatementStatsBuilder {
+	b.stmtStats.Indexes = indexes
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) PlanFlags(
+	planFlags planFlags,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.Generic = planFlags.IsSet(planFlagGeneric)
+	b.stmtStats.DistSQL = planFlags.ShouldBeDistributed()
+	b.stmtStats.Vec = planFlags.IsSet(planFlagVectorized)
+	b.stmtStats.ImplicitTxn = planFlags.IsSet(planFlagImplicitTxn)
+	b.stmtStats.FullScan = planFlags.IsSet(planFlagContainsFullIndexScan) || planFlags.IsSet(planFlagContainsFullTableScan)
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) PlanGist(
+	planGist explain.PlanGist,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.PlanGist = planGist.String()
+	b.stmtStats.PlanHash = planGist.Hash()
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) StatementError(
+	stmtErr error,
+) *RecordedStatementStatsBuilder {
+	if stmtErr == nil {
+		return b
+	}
+	b.stmtStats.StatementError = stmtErr
+	b.stmtStats.Failed = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) AutoRetry(
+	autoRetryCount int, autoRetryReason error,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.AutoRetryCount = autoRetryCount
+	b.stmtStats.AutoRetryReason = autoRetryReason
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) RowsAffected(
+	rowsAffected int,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.RowsAffected = rowsAffected
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) IndexRecommendations(
+	idxRecommendations []string,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.IndexRecommendations = idxRecommendations
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) UnderOuterTxn() *RecordedStatementStatsBuilder {
+	b.stmtStats.UnderOuterTxn = true
+	return b
+}
+func (b *RecordedStatementStatsBuilder) QueryTags(
+	queryTags []sqlcommenter.QueryTag,
+) *RecordedStatementStatsBuilder {
+	b.stmtStats.QueryTags = queryTags
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) Build() *sqlstats.RecordedStmtStats {
+	return b.stmtStats
 }
