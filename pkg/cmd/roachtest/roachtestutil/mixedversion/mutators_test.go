@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -249,4 +250,77 @@ func TestClusterSettingMutator(t *testing.T) {
 		Rand:     rng,
 		Values:   generator,
 	}))
+}
+
+// TestSinglePartitionStrategy tests that the single partition strategy
+// correctly selects exactly two nodes to partition.
+func TestSinglePartitionStrategy(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+
+	nodes := option.NodeListOption{1, 2, 3, 4}
+	strategy := singlePartitionStrategy{}
+	partitions, unavailableNodes, err := strategy.selectPartitions(rng, nil, nodes)
+	require.NoError(t, err)
+	// We should only see one partition created between two nodes.
+	require.Len(t, partitions, 1)
+	require.Len(t, partitions[0].Source, 1)
+	require.Len(t, partitions[0].Destination, 1)
+
+	// The partitioned nodes should be different.
+	require.NotEqual(t, partitions[0].Source[0], partitions[0].Destination[0])
+	// We should mark both partitioned nodes as unavailable.
+	require.Equal(t, len(unavailableNodes), 2)
+
+	t.Logf("generated partition: %s", partitions[0])
+}
+
+// TestProtectedPartitionStrategy tests that the protected partition strategy
+// correctly selects protected nodes and partitions only unprotected nodes.
+func TestProtectedPartitionStrategy(t *testing.T) {
+	rng, _ := randutil.NewTestRand()
+
+	nodes := option.NodeListOption{1, 2, 3, 4}
+	strategy := &protectedPartitionStrategy{
+		quorum: 2,
+	}
+
+	// Select protected nodes
+	protectedNodes, err := strategy.selectProtectedNodes(rng, nodes)
+	require.NoError(t, err)
+	require.Len(t, protectedNodes, 2)
+
+	t.Logf("protected nodes: %v", protectedNodes)
+
+	// Generate partitions
+	partitions, unavailableNodes, err := strategy.selectPartitions(rng, protectedNodes, nodes)
+	t.Logf("generated partitions %v", partitions)
+	t.Logf("unavailable nodes: %v", unavailableNodes)
+
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(partitions), 1, "should create at least 1 partition")
+
+	// We should never see a partition between two protected nodes.
+	for _, p := range partitions {
+		srcContainsProtectedNode, dstContainsProtectedNode := false, false
+		for _, protectedNode := range protectedNodes {
+			if p.Source.Contains(install.Node(protectedNode)) {
+				srcContainsProtectedNode = true
+			}
+			if p.Destination.Contains(install.Node(protectedNode)) {
+				dstContainsProtectedNode = true
+			}
+		}
+		require.False(t, srcContainsProtectedNode && dstContainsProtectedNode)
+	}
+
+	// Since the protected nodes can always talk to each other to establish
+	// quorum, they should never be marked unavailable.
+	unavailableMap := make(map[int]bool)
+	for _, n := range unavailableNodes {
+		unavailableMap[n] = true
+	}
+
+	for _, n := range protectedNodes {
+		require.False(t, unavailableMap[n], "protected node %d should not be marked unavailable", n)
+	}
 }
