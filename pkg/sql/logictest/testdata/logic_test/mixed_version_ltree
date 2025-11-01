@@ -1,4 +1,4 @@
-# LogicTest: cockroach-go-testserver-configs
+# LogicTest: cockroach-go-testserver-25.2 cockroach-go-testserver-25.3
 
 # Sanity check that LTREE type is only allowed to be used once the cluster is
 # upgraded to 25.4.

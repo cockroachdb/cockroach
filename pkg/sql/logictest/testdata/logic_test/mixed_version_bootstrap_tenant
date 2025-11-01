@@ -34,17 +34,24 @@ GROUP BY 2, 3
 
 # Check that the bootstrapped data for tenants remains the same in a
 # mixed-version cluster regardless of whether the old or the new executable
-# was used to create them. Only the 'version' value in system.settings are
-# allowed to differ due to the "lastUpdated" column which is time-dependent.
+# was used to create them. Only the 'version' value in system.settings and
+# table descriptors in system.descriptor are allowed to differ, as system
+# tables may evolve between versions.
 #
 # Note: the version KV is volatile due to the "lastUpdated" column.
+# Table descriptor keys follow the pattern /Table/3/1/<tableID>/2/1
 query TTT
 SELECT k, is_present_in, v FROM bootstrapped_tenant_data
-WHERE is_present_in <> 'both' AND k <> '/Table/6/1/"version"/0'
+WHERE is_present_in <> 'both'
+  AND k <> '/Table/6/1/"version"/0'
+  AND k NOT LIKE '/Table/3/1/%/2/1'
 ORDER BY 1, 2
 ----
 
 # This is the same test as above, deliberately expressed as a statement error
 # assertion to prevent accidental rewrites.
 statement error pgcode 22012 division by zero
-SELECT 1/count(*) FROM bootstrapped_tenant_data WHERE is_present_in <> 'both' AND k <> '/Table/6/1/"version"/0'
+SELECT 1/count(*) FROM bootstrapped_tenant_data
+WHERE is_present_in <> 'both'
+  AND k <> '/Table/6/1/"version"/0'
+  AND k NOT LIKE '/Table/3/1/%/2/1'
