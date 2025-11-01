@@ -1,0 +1,59 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Cockroach Demo",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "program": "${workspaceFolder}/cockroach-short",
+            "args": [
+                "demo",
+                "--empty",
+                "--max-sql-memory",
+                "5G"
+            ],
+            "console": "integratedTerminal",
+            "preLaunchTask": "build cockroach for launch (short)",
+            "substitutePath": [
+                {
+                    "from": "${workspaceFolder}",
+                    "to": ""
+                }
+            ]
+        },
+        {
+            "name": "Launch Cockroach Demo",
+            "type": "go",
+            "request": "launch",
+            "mode": "exec",
+            "program": "${workspaceFolder}/cockroach-short",
+            "args": [
+                "demo",
+                "--empty",
+                "--max-sql-memory",
+                "5G"
+            ],
+            "console": "integratedTerminal",
+            "substitutePath": [
+                {
+                    "from": "${workspaceFolder}",
+                    "to": ""
+                }
+            ]
+        },
+        {
+            "name": "Attach to Process",
+            "type": "go",
+            "request": "attach",
+            "processId": "${command:pickProcess}",
+            "mode": "local",
+            "substitutePath": [
+                {
+                    "from": "${user}/go/src",
+                    "to": ""
+                }
+            ]
+        }
+    ]
+}
