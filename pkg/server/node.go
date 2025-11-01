@@ -1158,29 +1158,23 @@ func (n *Node) startPeriodicLivenessCompaction(
 				_ = n.stores.VisitStores(func(store *kvserver.Store) error {
 					store.VisitReplicas(func(repl *kvserver.Replica) bool {
 						span := repl.Desc().KeySpan().AsRawSpanWithNoLocals()
-						if keys.NodeLivenessSpan.Overlaps(span) {
-
-							// The CompactRange() method expects the start and end keys to be
-							// encoded.
-							startEngineKey :=
-								storage.EngineKey{
-									Key: span.Key,
-								}.Encode()
-
-							endEngineKey :=
-								storage.EngineKey{
-									Key: span.EndKey,
-								}.Encode()
-
-							timeBeforeCompaction := timeutil.Now()
-							if err := store.StateEngine().CompactRange(
-								context.Background(), startEngineKey, endEngineKey); err != nil {
-								log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
-							}
-
-							log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
-								repl, timeutil.Since(timeBeforeCompaction))
+						if !keys.NodeLivenessSpan.Overlaps(span) {
+							return true
 						}
+
+						// CompactRange() expects the start and end keys to be encoded.
+						startEngineKey := storage.EngineKey{Key: span.Key}.Encode()
+						endEngineKey := storage.EngineKey{Key: span.EndKey}.Encode()
+
+						timeBeforeCompaction := timeutil.Now()
+						if err := store.StateEngine().CompactRange(
+							context.Background(), startEngineKey, endEngineKey,
+						); err != nil {
+							log.Dev.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
+						}
+
+						log.Dev.Infof(ctx, "finished compacting liveness replica: %+v and it took: %+v",
+							repl, timeutil.Since(timeBeforeCompaction))
 						return true
 					})
 					return nil
