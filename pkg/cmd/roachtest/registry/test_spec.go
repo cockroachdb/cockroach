@@ -459,12 +459,13 @@ const (
 	Acceptance            = "acceptance"
 	Perturbation          = "perturbation"
 	MixedVersion          = "mixedversion"
+	VecIndex              = "vecindex"
 )
 
 var allSuites = []string{
 	Nightly, Weekly, ReleaseQualification, ORM, Driver, Tool, Quick, Fixtures,
 	Pebble, PebbleNightlyWrite, PebbleNightlyYCSB, PebbleNightlyYCSBRace, Roachtest, Acceptance,
-	Perturbation, MixedVersion,
+	Perturbation, MixedVersion, VecIndex,
 }
 
 // SuiteSet represents a set of suites.
