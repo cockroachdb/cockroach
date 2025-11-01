@@ -3,6 +3,160 @@
 statement ok
 SET create_table_with_schema_locked=false
 
+subtest create_table_as_partition
+
+statement ok
+CREATE TABLE feature (
+  id,
+  enabled,
+  feature,
+  PRIMARY KEY (enabled, id)
+)
+PARTITION BY LIST (enabled) (
+  PARTITION on VALUES IN (true),
+  PARTITION off VALUES IN (false)
+)
+AS
+VALUES
+  (1, true, 'dark_mode'),
+  (2, false, 'beta_access')
+
+statement ok
+CREATE TABLE traffic (
+  id,
+  source,
+  page,
+  PRIMARY KEY (source, id)
+)
+PARTITION BY LIST (source) (
+  PARTITION a VALUES IN ('a'),
+  PARTITION b VALUES IN ('b'),
+  PARTITION other VALUES IN ('c', 'd', 'e')
+)
+AS
+VALUES
+  (1, 'a', 'home'),
+  (2, 'b', 'home'),
+  (3, 'c', 'index')
+
+statement ok
+CREATE TABLE orders (
+  id,
+  country,
+  state,
+  item,
+  PRIMARY KEY (country, state, id)
+)
+PARTITION BY LIST (country, state) (
+  PARTITION usa_ny VALUES IN (('us', 'ny')),
+  PARTITION usa_ca VALUES IN (('us', 'ca')),
+  PARTITION unknown VALUES IN (('unknown', 'unknown'))
+)
+AS
+SELECT 100, 'us', 'ny', 'Widget A'
+UNION
+SELECT 101, 'us', 'ca', 'Widget B'
+
+statement ok
+CREATE TABLE users_by_id (
+  id,
+  name,
+  PRIMARY KEY (id)
+)
+PARTITION BY RANGE (id) (
+  PARTITION low VALUES FROM (MINVALUE) TO (1000),
+  PARTITION high VALUES FROM (1000) TO (MAXVALUE)
+)
+AS
+VALUES
+  (500, 'Anna'),
+  (1500, 'Brian')
+
+statement ok
+CREATE TABLE sales (
+  id,
+  sale_date,
+  amount,
+  PRIMARY KEY (sale_date, id)
+)
+PARTITION BY RANGE (sale_date) (
+  PARTITION q1 VALUES FROM (DATE '2024-01-01') TO (DATE '2024-04-01'),
+  PARTITION q2 VALUES FROM (DATE '2024-04-01') TO (DATE '2024-07-01')
+)
+AS
+VALUES
+  (1, DATE '2024-02-15', 100),
+  (2, DATE '2024-06-10', 250)
+
+statement ok
+CREATE TABLE inventory (
+  item_code,
+  stock,
+  PRIMARY KEY (item_code)
+)
+PARTITION BY RANGE (item_code) (
+  PARTITION a_m VALUES FROM ('A') TO ('N'),
+  PARTITION n_z VALUES FROM ('N') TO (MAXVALUE)
+)
+AS
+VALUES
+  ('Apple123', 1),
+  ('Zebra999', 2)
+
+statement ok
+CREATE TABLE students (
+  id,
+  name,
+  country,
+  expected_graduation_date,
+  PRIMARY KEY (country, expected_graduation_date, id)
+)
+PARTITION BY LIST (country)(
+    PARTITION australia VALUES IN ('AU','NZ')
+      PARTITION BY RANGE (expected_graduation_date) (
+        PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'),
+        PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)
+      ),
+    PARTITION north_america VALUES IN ('US','CA')
+      PARTITION BY RANGE (expected_graduation_date) (
+        PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'),
+        PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+      )
+)
+AS
+VALUES
+  (1, 'Alice', 'AU', DATE '2017-08-15'),
+  (2, 'Bob', 'US', DATE '2017-08-15')
+
+statement error declared partition columns \(c\) do not match first 1 columns in index being partitioned \(rowid\)
+CREATE TABLE a (a)
+PARTITION BY LIST (c) (
+   PARTITION p1 VALUES IN (1)
+)
+AS
+SELECT 1
+
+statement ok
+CREATE TABLE IF NOT EXISTS users_nothing (
+  id,
+  username,
+  PRIMARY KEY(username, id)
+)
+PARTITION BY NOTHING
+WITH (ttl = 'on', ttl_expire_after = '5 minutes')
+AS
+SELECT 1, 'Alice'
+UNION ALL
+SELECT 2, 'Bob'
+ON COMMIT PRESERVE ROWS
+
+statement ok
+ALTER TABLE users_nothing
+PARTITION BY LIST (username) (
+  PARTITION a VALUES IN ('Alice'),
+  PARTITION b VALUES IN ('Bob')
+)
+
 subtest regression_42858
 
 statement ok
