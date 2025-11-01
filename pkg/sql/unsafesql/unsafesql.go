@@ -48,7 +48,13 @@ func CheckInternalsAccess(
 	stmt tree.Statement,
 	ann *tree.Annotations,
 	sv *settings.Values,
+	alwaysAllowAccess func() bool,
 ) error {
+
+	if alwaysAllowAccess != nil && alwaysAllowAccess() {
+		return nil
+	}
+
 	// If the querier is internal, we should allow it.
 	if sd.Internal || sd.IsInternalAppName() {
 		return nil
