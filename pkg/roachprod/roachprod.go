@@ -2013,6 +2013,7 @@ func InitProviders() map[string]string {
 			vm.Providers[prov.name] = flagstub.New(prov.empty, reason)
 		} else if err := prov.init(); err != nil {
 			providersState[prov.name] = "Inactive - " + err.Error()
+			fmt.Printf("%s encountered an error during provider initialization: %s\n", prov.name, err)
 		} else {
 			providersState[prov.name] = "Active"
 		}
