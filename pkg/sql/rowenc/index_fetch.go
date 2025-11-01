@@ -69,6 +69,11 @@ func InitIndexFetchSpec(
 			s.MaxFamilyID = id
 		}
 	}
+	var err error
+	s.MaxFamilyIDForIndex, err = table.MaxFamilyIDForIndex(index)
+	if err != nil {
+		return err
+	}
 
 	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 

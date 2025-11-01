@@ -85,6 +85,7 @@ go_test(
     srcs = [
         "bytes_read_test.go",
         "main_test.go",
+        "scan_limit_test.go",
         "vectorized_batch_size_test.go",
     ],
     deps = [
@@ -92,6 +93,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql/sem/eval",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
