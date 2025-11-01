@@ -17,6 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -327,11 +329,17 @@ func TestExplainKVInfo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderMetamorphic(t,
-		"this test expects a precise number of scan requests, which is not upheld "+
-			"in the metamorphic configuration that edits the kv batch size.")
 	ctx := context.Background()
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, godb, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				SQLEvalContext: &eval.TestingKnobs{
+					ForceProductionValues: true,
+				},
+			},
+		},
+	)
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, "CREATE TABLE ab (a PRIMARY KEY, b) AS SELECT g, g FROM generate_series(1,1000) g(g)")
@@ -590,8 +598,13 @@ func TestExplainAnalyzeSQLNodes(t *testing.T) {
 
 	c := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer c.Stopper().Stop(context.Background())
-	r := sqlutils.MakeSQLRunner(c.ApplicationLayer(0).SQLConn(t))
 
+	if c.DefaultTenantDeploymentMode().IsExternal() {
+		c.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
+	r := sqlutils.MakeSQLRunner(c.ApplicationLayer(0).SQLConn(t))
 	r.Exec(t, `CREATE TABLE kv (k INT PRIMARY KEY, v INT);`)
 	r.Exec(t, `INSERT INTO kv SELECT i, i FROM generate_series (1, 300) AS g(i);`)
 	r.Exec(t, `ANALYZE kv;`)

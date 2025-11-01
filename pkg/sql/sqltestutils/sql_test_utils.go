@@ -70,15 +70,15 @@ func DisableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) 
 // SetShortRangeFeedIntervals is a helper to set the cluster settings
 // pertaining to rangefeeds to short durations. This is helps tests which
 // rely on zone/span configuration changes to propagate.
-func SetShortRangeFeedIntervals(t *testing.T, db sqlutils.DBHandle) {
-	tdb := sqlutils.MakeSQLRunner(db)
+func SetShortRangeFeedIntervals(t *testing.T, srv serverutils.TestServerInterface) {
+	systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
 	short := "'20ms'"
 	if util.RaceEnabled {
 		short = "'200ms'"
 	}
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
 }
 
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.

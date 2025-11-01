@@ -643,7 +643,9 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(156146),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	testDB := sqlutils.MakeSQLRunner(sqlDB)
@@ -1737,8 +1739,11 @@ func TestAbortedTxnLocks(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127),
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	var TransactionStatus string
 
@@ -2425,8 +2430,9 @@ func TestInternalAppNamePrefix(t *testing.T) {
 	ctx := context.Background()
 	params := base.TestServerArgs{}
 	params.Insecure = true
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create a test table.
 	_, err := sqlDB.Exec("CREATE TABLE test (k INT PRIMARY KEY, v INT)")
@@ -2434,13 +2440,9 @@ func TestInternalAppNamePrefix(t *testing.T) {
 
 	t.Run("app name set at conn init", func(t *testing.T) {
 		// Create a connection.
-		connURL := url.URL{
-			Scheme: "postgres",
-			User:   url.User(username.RootUser),
-			Host:   s.AdvSQLAddr(),
-		}
+		connURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
+		defer cleanup()
 		q := connURL.Query()
-		q.Add("sslmode", "disable")
 		q.Add("application_name", catconstants.InternalAppNamePrefix+"mytest")
 		connURL.RawQuery = q.Encode()
 		db, err := gosql.Open("postgres", connURL.String())
@@ -2462,15 +2464,7 @@ func TestInternalAppNamePrefix(t *testing.T) {
 
 	t.Run("app name set in session", func(t *testing.T) {
 		// Create a connection.
-		connURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(username.RootUser),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", connURL.String())
-		require.NoError(t, err)
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(username.RootUser))
 		runner := sqlutils.MakeSQLRunner(db)
 
 		// Get initial metric values

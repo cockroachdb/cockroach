@@ -34,7 +34,9 @@ func TestDropTenantSynchronous(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("latest version", func(t *testing.T) {
-		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+		s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		})
 		defer s.Stopper().Stop(ctx)
 		testDestroyTenantSynchronous(ctx, t, sqlDB, kvDB)
 	})
@@ -48,6 +50,7 @@ func TestDropTenantSynchronous(t *testing.T) {
 						ClusterVersionOverride:         clusterversion.MinSupported.Version(),
 					},
 				},
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 		}
 		var (
@@ -91,7 +94,9 @@ func TestGetTenantIds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 	idb := s.ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
