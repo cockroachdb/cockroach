@@ -263,7 +263,7 @@ func makeVersionFixtureAndFatal(
 	// cluster version might be 2.0, so we can only use the 2.0 or
 	// 2.1 binary, but not the 19.1 binary (as 19.1 and 2.0 are not
 	// compatible).
-	binaryVersion, err := clusterupgrade.BinaryVersion(ctx, dbFunc(1))
+	binaryVersion, err := clusterupgrade.BinaryVersion(ctx, t.L(), dbFunc(1))
 	if err != nil {
 		t.Fatalf("fetching binary version on n1: %v", err)
 	}

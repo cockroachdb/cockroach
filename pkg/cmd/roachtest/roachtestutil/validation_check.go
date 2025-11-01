@@ -46,7 +46,7 @@ func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql
 	defer cancel()
 
 	// Speed up consistency checks. The test is done, so let's go full throttle.
-	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
+	_, err := ExecWithRetry(ctx, l, db, ClusterSettingRetryOpts, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
 	if err != nil {
 		return errors.Wrap(err, "unable to set 'server.consistency_check.max_rate'")
 	}
@@ -107,14 +107,18 @@ FROM crdb_internal.check_consistency(false, '', '') as t;`)
 
 // CheckInvalidDescriptors returns an error if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
-func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
+func CheckInvalidDescriptors(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
 	var invalidIDs string
+	l.Printf("checking for invalid descriptors")
 	if err := timeutil.RunWithTimeout(ctx, "descriptor validation", time.Minute, func(ctx context.Context) error {
 		// Because crdb_internal.invalid_objects is a virtual table, by default, the
 		// query will take a lease on the database sqlDB is connected to and only run
 		// the query on the given database. The "" prefix prevents this lease
 		// acquisition and allows the query to fetch all descriptors in the cluster.
-		rows, err := db.QueryContext(ctx, `SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
+		//
+		// This often times out when the cluster is overloaded. Since this is just
+		// for validation, we retry with a relatively high backoff.
+		rows, err := QueryWithRetry(ctx, l, db, ClusterSettingRetryOpts, `SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
 		if err != nil {
 			return err
 		}

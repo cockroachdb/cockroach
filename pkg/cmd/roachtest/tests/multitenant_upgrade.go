@@ -284,7 +284,7 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 					}
 					defer tenantDB.Close()
 
-					binaryVersion, err := clusterupgrade.BinaryVersion(ctx, tenantDB)
+					binaryVersion, err := clusterupgrade.BinaryVersion(ctx, l, tenantDB)
 					if err != nil {
 						return errors.Wrapf(err, "failed to query binary version for %s on n%d", tenant.name, n)
 					}

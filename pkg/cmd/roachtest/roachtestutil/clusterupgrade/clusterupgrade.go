@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -156,10 +157,22 @@ func LatestPatchRelease(series string) (*Version, error) {
 // associated with the given database connection.
 // NB: version means major.minor[-internal]; the patch level isn't
 // returned. For example, a binary of version 19.2.4 will return 19.2.
-func BinaryVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
+func BinaryVersion(ctx context.Context, l *logger.Logger, db *gosql.DB) (roachpb.Version, error) {
 	zero := roachpb.Version{}
 	var sv string
-	if err := db.QueryRowContext(ctx, `SELECT crdb_internal.node_executable_version();`).Scan(&sv); err != nil {
+	rows, err := roachtestutil.QueryWithRetry(
+		ctx, l, db, roachtestutil.ClusterSettingRetryOpts, `SELECT crdb_internal.node_executable_version();`,
+	)
+	if err != nil {
+		return zero, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return zero, fmt.Errorf("no rows returned")
+	}
+
+	if err := rows.Scan(&sv); err != nil {
 		return zero, err
 	}
 
@@ -176,10 +189,22 @@ func BinaryVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
 // in the background plus gossip asynchronicity.
 // NB: cluster versions are always major.minor[-internal]; there isn't
 // a patch level.
-func ClusterVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) {
+func ClusterVersion(ctx context.Context, l *logger.Logger, db *gosql.DB) (roachpb.Version, error) {
 	zero := roachpb.Version{}
 	var sv string
-	if err := db.QueryRowContext(ctx, `SHOW CLUSTER SETTING version`).Scan(&sv); err != nil {
+	rows, err := roachtestutil.QueryWithRetry(
+		ctx, l, db, roachtestutil.ClusterSettingRetryOpts, `SHOW CLUSTER SETTING version`,
+	)
+	if err != nil {
+		return zero, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return zero, fmt.Errorf("no rows returned")
+	}
+
+	if err := rows.Scan(&sv); err != nil {
 		return zero, err
 	}
 
@@ -483,7 +508,7 @@ func WaitForClusterUpgrade(
 	timeout time.Duration,
 ) error {
 	firstNode := nodes[0]
-	newVersion, err := BinaryVersion(ctx, dbFunc(firstNode))
+	newVersion, err := BinaryVersion(ctx, l, dbFunc(firstNode))
 	if err != nil {
 		return err
 	}
@@ -496,7 +521,7 @@ func WaitForClusterUpgrade(
 		retryCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		err := opts.Do(retryCtx, func(ctx context.Context) error {
-			currentVersion, err := ClusterVersion(ctx, dbFunc(node))
+			currentVersion, err := ClusterVersion(ctx, l, dbFunc(node))
 			if err != nil {
 				return err
 			}
