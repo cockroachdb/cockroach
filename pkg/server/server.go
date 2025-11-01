@@ -684,7 +684,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storeLiveness = storeliveness.NewNodeContainer(stopper, options, transport, knobs)
 	}
 
-	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer)
+	ctSender := sidetransport.NewSender(stopper, st, clock, kvNodeDialer, rpcContext.UseDRPC)
 	ctReceiver := sidetransport.NewReceiver(nodeIDContainer, stopper, stores, nil /* testingKnobs */)
 	var policyRefresher *policyrefresher.PolicyRefresher
 	{
@@ -2133,7 +2133,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
 		// Pass our own node ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(
-			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.cfg.Settings)
+			ctx, s.kvNodeDialer, s.rpcContext.NodeID.Get(), s.rpcContext.UseDRPC)
 		if err != nil {
 			return err
 		}

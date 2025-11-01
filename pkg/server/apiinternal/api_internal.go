@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -64,14 +63,14 @@ type apiInternalServer struct {
 // RPC services. It establishes connections to the RPC services and registers
 // all REST endpoints.
 func NewAPIInternalServer(
-	ctx context.Context, nd rpcbase.NodeDialer, localNodeID roachpb.NodeID, cs *cluster.Settings,
+	ctx context.Context, nd rpcbase.NodeDialer, localNodeID roachpb.NodeID, useDPRC bool,
 ) (*apiInternalServer, error) {
-	status, err := serverpb.DialStatusClient(nd, ctx, localNodeID, cs)
+	status, err := serverpb.DialStatusClient(nd, ctx, localNodeID, useDPRC)
 	if err != nil {
 		return nil, err
 	}
 
-	admin, err := serverpb.DialAdminClient(nd, ctx, localNodeID, cs)
+	admin, err := serverpb.DialAdminClient(nd, ctx, localNodeID, useDPRC)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +82,7 @@ func NewAPIInternalServer(
 		rpcbase.DefaultClass,
 		tspb.NewGRPCTimeSeriesClientAdapter,
 		tspb.NewDRPCTimeSeriesClientAdapter,
-		cs,
+		useDPRC,
 	)
 	if err != nil {
 		return nil, err

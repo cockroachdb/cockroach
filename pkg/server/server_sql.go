@@ -1278,7 +1278,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				Dialer:           cfg.kvNodeDialer,
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
-				Settings:         cfg.Settings,
+				UseDRPC:          cfg.rpcContext.UseDRPC,
 			})
 		} else {
 			c = upgradecluster.NewTenantCluster(
@@ -1286,7 +1286,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 					Dialer:         cfg.sqlInstanceDialer,
 					InstanceReader: cfg.sqlInstanceReader,
 					DB:             cfg.db,
-					Settings:       cfg.Settings,
+					UseDRPC:        cfg.rpcContext.UseDRPC,
 				})
 		}
 		systemDeps = upgrade.SystemDeps{
