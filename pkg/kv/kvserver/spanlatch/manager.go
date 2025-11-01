@@ -279,6 +279,19 @@ func (m *Manager) AcquireOptimistic(
 	return lg
 }
 
+func (m *Manager) AcquireFromEmpty(spans *spanset.SpanSet) (*Guard, error) {
+	lg := newGuard(spans, poison.Policy_Error, nil)
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if n := m.numLatchesLocked(); n != 0 {
+		return nil, errors.AssertionFailedf("expected no latches in latch manager but found %d", n)
+	}
+	m.insertLocked(lg)
+	return lg, nil
+}
+
 // WaitFor waits for conflicting latches on the spans without adding
 // any latches itself. Fast path for operations that only require past latches
 // to be released without blocking new latches.
@@ -463,6 +476,17 @@ func (m *Manager) insertLocked(lg *Guard) {
 			}
 		}
 	}
+}
+
+func (m *Manager) numLatchesLocked() int {
+	num := 0
+	for s := range spanset.NumSpanScope {
+		sm := &m.scopes[s]
+		num += sm.trees[spanset.SpanReadOnly].Len()
+		num += sm.trees[spanset.SpanReadWrite].Len()
+		num += sm.readSet.len
+	}
+	return num
 }
 
 func (m *Manager) nextIDLocked() uint64 {
