@@ -1,4 +1,4 @@
-# LogicTest: !local-mixed-25.2 !local-mixed-25.3
+# LogicTest: !local-mixed-25.2 !local-mixed-25.3 !local-prepared
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
@@ -92,3 +92,89 @@ query I
 SELECT count(*) FROM system.statement_hints;
 ----
 0
+
+# Test that hints are loaded for matching statements.
+
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM xy WHERE x > y',
+  'SELECT * FROM xy WHERE x > y'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SELECT * FROM xy WHERE x > y
+
+query I
+SELECT usage_count
+FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.session.statement-hints'
+----
+1
+
+statement ok
+EXPLAIN SELECT * FROM xy WHERE x > y
+
+query I
+SELECT usage_count
+FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.session.statement-hints'
+----
+2
+
+statement ok
+EXPLAIN ANALYZE SELECT * FROM xy WHERE x > y
+
+query I
+SELECT usage_count
+FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.session.statement-hints'
+----
+3
+
+statement ok
+PREPARE p AS SELECT * FROM xy WHERE x > y
+
+statement ok
+EXECUTE p
+
+query I
+SELECT usage_count
+FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.session.statement-hints'
+----
+5
+
+statement ok
+SELECT crdb_internal.clear_statement_hints_cache()
+
+statement ok
+SELECT * FROM xy WHERE x > y
+
+query I
+SELECT usage_count
+FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.session.statement-hints'
+----
+6
+
+statement ok
+DELETE FROM system.statement_hints WHERE true
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+SELECT * FROM xy WHERE x > y
+
+statement ok
+EXECUTE p
+
+query I
+SELECT usage_count
+FROM crdb_internal.feature_usage
+WHERE feature_name = 'sql.session.statement-hints'
+----
+6

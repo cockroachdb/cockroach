@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -72,8 +73,15 @@ func (ex *connExecutor) execPrepare(
 		ex.deletePreparedStmt(ctx, "")
 	}
 
-	stmt := makeStatement(parseCmd.Statement, ex.server.cfg.GenerateID(),
-		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())))
+	var statementHintsCache *hints.StatementHintsCache
+	if ex.executorType != executorTypeInternal {
+		statementHintsCache = ex.server.cfg.StatementHintsCache
+	}
+	stmt := makeStatement(
+		ctx, parseCmd.Statement, ex.server.cfg.GenerateID(),
+		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())),
+		statementHintsCache,
+	)
 	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
@@ -236,6 +244,9 @@ func (ex *connExecutor) prepare(
 		prepared.Statement.NumPlaceholders = origNumPlaceholders
 		prepared.StatementNoConstants = stmt.StmtNoConstants
 		prepared.StatementSummary = stmt.StmtSummary
+		prepared.Hints = stmt.Hints
+		prepared.HintIDs = stmt.HintIDs
+		prepared.HintsGeneration = stmt.HintsGeneration
 
 		// Point to the prepared state, which can be further populated during query
 		// preparation.

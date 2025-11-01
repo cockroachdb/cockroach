@@ -102,5 +102,8 @@ func InsertHintIntoDB(
 	if err != nil {
 		return 0, err
 	}
+	// TODO(michae2,drewk): Consider calling
+	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
+	// local node's cache.
 	return int64(tree.MustBeDInt(row[0])), nil
 }

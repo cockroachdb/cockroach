@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -92,6 +94,10 @@ type StatementHintsCache struct {
 	// generation is incremented any time the hint cache is updated by the
 	// rangefeed.
 	generation atomic.Int64
+
+	// frontier is the walltime of the rangefeed watcher frontier time, which is
+	// polled by goroutines in Await.
+	frontier atomic.Int64
 }
 
 // cacheSize is the size of the entries to store in the cache.
@@ -135,7 +141,18 @@ func NewStatementHintsCache(
 			return s > int(cacheSize.Get(&st.SV))
 		},
 	})
+	hintsCache.generation.Store(1)
 	return hintsCache
+}
+
+// Clear removes all entries from the StatementHintsCache.
+func (c *StatementHintsCache) Clear() {
+	defer c.generation.Add(1)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.hintCache.Clear()
+	// TODO(michae2): Consider whether we should also delete hintedHashes and
+	// restart the rangefeed.
 }
 
 // ============================================================================
@@ -213,6 +230,7 @@ func (c *StatementHintsCache) onUpdate(
 		log.Dev.Info(ctx, "statement_hints rangefeed applying incremental update")
 		c.handleIncrementalUpdate(ctx, update)
 	}
+	c.frontier.Store(update.Timestamp.WallTime)
 }
 
 // handleInitialScan builds the hintedHashes map and adds it to
@@ -250,6 +268,7 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 	defer c.generation.Add(1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	for _, ev := range update.Events {
 		// Drop outdated entries from hintCache.
 		c.mu.hintCache.Del(ev.hash)
@@ -356,6 +375,30 @@ var _ rangefeedbuffer.Event = &bufferEvent{}
 // ============================================================================
 // Reading from the cache.
 // ============================================================================
+
+// Await blocks until the StatementHintsCache's rangefeed watcher catches up
+// with the present. After Await returns, MaybeGetStatementHints should
+// accurately reflect all hints that were modified before the call to Await
+// (assuming the ctx was not canceled).
+func (c *StatementHintsCache) Await(ctx context.Context, st *cluster.Settings) {
+	// The frontier timestamp comes from the rangefeed, and could be up to
+	// kv.closed_timestamp.target_duration +
+	// kv.rangefeed.closed_timestamp_refresh_interval behind the present.
+	targetDuration := closedts.TargetDuration.Get(&st.SV)
+	refreshInterval := kvserver.RangeFeedRefreshInterval.Get(&st.SV)
+	const fudge = 10 * time.Millisecond
+	waitUntil := c.clock.Now().AddDuration(targetDuration + refreshInterval + fudge).WallTime
+
+	// Await is only used for testing, so we don't need to wake up immediately. We
+	// can get away with polling the frontier time.
+	for frontier := c.frontier.Load(); frontier < waitUntil; frontier = c.frontier.Load() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(waitUntil-frontier) * time.Nanosecond):
+		}
+	}
+}
 
 // GetGeneration returns the current generation, which will change if any
 // modifications happen to the cache.

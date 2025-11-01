@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -577,6 +578,12 @@ func (ep *DummyEvalPlanner) ClearQueryPlanCache() {}
 
 // ClearTableStatsCache is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
+
+// ClearStatementHintsCache is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ClearStatementHintsCache() {}
+
+// AwaitStatementHintsCache is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) AwaitStatementHintsCache(ctx context.Context, st *cluster.Settings) {}
 
 // RetryCounter is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) RetryCounter() int {

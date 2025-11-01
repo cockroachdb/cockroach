@@ -416,7 +416,7 @@ func TestHintCacheGeneration(t *testing.T) {
 	}
 
 	// The initial scan should increment the generation.
-	waitForGenerationInc(0)
+	waitForGenerationInc(1)
 	generationAfterInitialScan := getGenerationAssertNoChange()
 
 	// Insert a hint - generation should increment.
