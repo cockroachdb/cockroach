@@ -797,7 +797,7 @@ type clusterFactory struct {
 	// counter is incremented with every new cluster. It's used as part of the cluster's name.
 	// Accessed atomically.
 	counter atomic.Uint64
-	// The registry with whom all clustered will be registered.
+	// The registry with whom all clusters will be registered.
 	r *clusterRegistry
 	// artifactsDir is the directory in which the cluster creation log file will be placed.
 	artifactsDir string
@@ -977,7 +977,7 @@ func (f *clusterFactory) newCluster(
 		if i > 1 {
 			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
-		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, "cluster-create", genName+retryStr+".log")
+		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, clusterCreateDir, genName+retryStr+".log")
 		l, err := logger.RootLogger(logPath, teeOpt)
 		if err != nil {
 			log.Fatalf("%v", err)
