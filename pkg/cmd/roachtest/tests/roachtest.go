@@ -81,6 +81,18 @@ func registerRoachtest(r registry.Registry) {
 			monitorFatalTestGlobal(ctx, t, c)
 		},
 	})
+
+	// Manual test for verifying framework behavior in a test success scenario
+	r.Add(registry.TestSpec{
+		Name:             "roachtest/manual/success",
+		Owner:            registry.OwnerTestEng,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.ManualOnly,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.L().Printf("hello")
+		},
+	})
 }
 
 // monitorFatalTest will always fail with a node logging a fatal error in a
