@@ -495,3 +495,183 @@ func TestConcurrentUpdatesAndReinitialiseMetric(t *testing.T) {
 		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 	})
 }
+
+// TestHighCardinalityMetricsWithOptions tests all high cardinality metric types
+// (Counter, Gauge, Histogram) with both custom and default options.
+func TestHighCardinalityMetricsWithOptions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test with custom options
+	t.Run("CustomOptions", func(t *testing.T) {
+		// Save and restore the original values
+		originalMaxLabelValues := metric.MaxLabelValues
+		originalRetentionTime := metric.RetentionTimeTillEviction
+		defer func() {
+			metric.MaxLabelValues = originalMaxLabelValues
+			metric.RetentionTimeTillEviction = originalRetentionTime
+		}()
+
+		const customCacheSize = 5
+		const customRetention = 2 * time.Second
+
+		// Set the package-level variables directly since they're cached at package load time
+		metric.MaxLabelValues = 5
+		metric.RetentionTimeTillEviction = 2 * time.Second
+
+		r := metric.NewRegistry()
+		writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+		// Create all three metric types with custom options
+		counter := NewHighCardinalityCounter(
+			metric.HighCardinalityMetricOptions{
+				Metadata:                  metric.Metadata{Name: "custom_options_counter"},
+				MaxLabelValues:            customCacheSize,
+				RetentionTimeTillEviction: customRetention,
+			},
+			"database", "application_name",
+		)
+		r.AddMetric(counter)
+
+		gauge := NewHighCardinalityGauge(
+			metric.HighCardinalityMetricOptions{
+				Metadata:                  metric.Metadata{Name: "custom_options_gauge"},
+				MaxLabelValues:            customCacheSize,
+				RetentionTimeTillEviction: customRetention,
+			},
+			"database", "application_name",
+		)
+		r.AddMetric(gauge)
+
+		histogram := NewHighCardinalityHistogram(
+			metric.HistogramOptions{
+				Metadata: metric.Metadata{
+					Name: "custom_options_histogram",
+				},
+				Duration:     base.DefaultHistogramWindowInterval(),
+				MaxVal:       100,
+				SigFigs:      1,
+				BucketConfig: metric.Percent100Buckets,
+				HighCardinalityOpts: metric.HighCardinalityMetricOptions{
+					MaxLabelValues:            customCacheSize,
+					RetentionTimeTillEviction: customRetention,
+				},
+			},
+			"database", "application_name",
+		)
+		r.AddMetric(histogram)
+
+		// Initialize with label slice caches
+		labelSliceCache := metric.NewLabelSliceCache()
+		counter.InitializeMetrics(labelSliceCache)
+		gauge.InitializeMetrics(labelSliceCache)
+		histogram.InitializeMetrics(labelSliceCache)
+
+		// Add more entries than the custom cache size
+		for i := 0; i < customCacheSize+3; i++ {
+			counter.Inc(1, "db1", strconv.Itoa(i))
+			gauge.Update(int64(i+1), "db1", strconv.Itoa(i))
+			histogram.RecordValue(int64(i+1), "db1", strconv.Itoa(i))
+		}
+
+		// Wait for custom retention time to pass
+		time.Sleep(customRetention + 500*time.Millisecond)
+
+		testFile := "HighCardinalityMetrics_custom_options_pre_eviction.txt"
+		if metric.HdrEnabled() {
+			testFile = "HighCardinalityMetrics_custom_options_pre_eviction_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+		// Add new entries to trigger eviction
+		for i := customCacheSize + 3; i < customCacheSize+6; i++ {
+			counter.Inc(1, "db2", strconv.Itoa(i))
+			gauge.Inc(5, "db2", strconv.Itoa(i))
+			histogram.RecordValue(int64(i+10), "db2", strconv.Itoa(i))
+		}
+
+		testFile = "HighCardinalityMetrics_custom_options_post_eviction.txt"
+		if metric.HdrEnabled() {
+			testFile = "HighCardinalityMetrics_custom_options_post_eviction_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+		// Verify that old entries were evicted
+		for i := 0; i < 3; i++ {
+			metricKey := metric.LabelSliceCacheKey(metricKey("db1", strconv.Itoa(i)))
+			_, ok := labelSliceCache.Get(metricKey)
+			require.False(t, ok, "old entry should have been evicted")
+		}
+	})
+
+	// Test with default options
+	t.Run("DefaultOptions", func(t *testing.T) {
+		r := metric.NewRegistry()
+		writePrometheusMetrics := WritePrometheusMetricsFunc(r)
+
+		// Create all three metric types with default options
+		counter := NewHighCardinalityCounter(
+			metric.HighCardinalityMetricOptions{
+				Metadata:                  metric.Metadata{Name: "default_options_counter"},
+				MaxLabelValues:            0, // Should default to 5000
+				RetentionTimeTillEviction: 0, // Should default to 20 seconds
+			},
+			"database", "application_name",
+		)
+		r.AddMetric(counter)
+
+		gauge := NewHighCardinalityGauge(
+			metric.HighCardinalityMetricOptions{
+				Metadata:                  metric.Metadata{Name: "default_options_gauge"},
+				MaxLabelValues:            0, // Should default to 5000
+				RetentionTimeTillEviction: 0, // Should default to 20 seconds
+			},
+			"database", "application_name",
+		)
+		r.AddMetric(gauge)
+
+		histogram := NewHighCardinalityHistogram(
+			metric.HistogramOptions{
+				Metadata: metric.Metadata{
+					Name: "default_options_histogram",
+				},
+				Duration:     base.DefaultHistogramWindowInterval(),
+				MaxVal:       100,
+				SigFigs:      1,
+				BucketConfig: metric.Percent100Buckets,
+				HighCardinalityOpts: metric.HighCardinalityMetricOptions{
+					MaxLabelValues:            0, // Should default to 5000
+					RetentionTimeTillEviction: 0, // Should default to 20 seconds
+				},
+			},
+			"database", "application_name",
+		)
+		r.AddMetric(histogram)
+
+		// Initialize with label slice caches
+		labelSliceCache := metric.NewLabelSliceCache()
+		counter.InitializeMetrics(labelSliceCache)
+		gauge.InitializeMetrics(labelSliceCache)
+		histogram.InitializeMetrics(labelSliceCache)
+
+		// Add a few entries
+		for i := 0; i < 10; i++ {
+			counter.Inc(1, "db1", strconv.Itoa(i))
+			gauge.Update(int64(i+1), "db1", strconv.Itoa(i))
+			histogram.RecordValue(int64(i+1), "db1", strconv.Itoa(i))
+		}
+
+		testFile := "HighCardinalityMetrics_default_options.txt"
+		if metric.HdrEnabled() {
+			testFile = "HighCardinalityMetrics_default_options_hdr.txt"
+		}
+		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
+
+		// Verify all entries are still present (shouldn't evict with default settings)
+		for i := 0; i < 10; i++ {
+			metricKey := metric.LabelSliceCacheKey(metricKey("db1", strconv.Itoa(i)))
+			labelSliceValue, ok := labelSliceCache.Get(metricKey)
+			require.True(t, ok, "entry should still be present with default settings")
+			require.Equal(t, int64(3), labelSliceValue.Counter.Load())
+		}
+	})
+}
