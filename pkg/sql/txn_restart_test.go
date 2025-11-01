@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1212,7 +1210,7 @@ func TestNonRetryableError(t *testing.T) {
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args kvserverbase.FilterArgs) *kvpb.Error {
 			if req, ok := args.Req.(*kvpb.GetRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) {
 					hitError = true
 					return kvpb.NewErrorWithTxn(fmt.Errorf("testError"), args.Hdr.Txn)
 				}
@@ -1253,14 +1251,15 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	}
 
 	testKey := []byte("test_key")
-	var s serverutils.TestServerInterface
+	var s serverutils.ApplicationLayerInterface
+	var nodeID roachpb.NodeID
 	var clockUpdate, restartDone int32
 	testingResponseFilter := func(
 		ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
 	) *kvpb.Error {
 		for _, ru := range ba.Requests {
 			if req := ru.GetGet(); req != nil {
-				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) {
 					if atomic.LoadInt32(&clockUpdate) == 0 {
 						atomic.AddInt32(&clockUpdate, 1)
 						// Hack to advance the transaction timestamp on a
@@ -1280,7 +1279,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						txn := ba.Txn.Clone()
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
-						txn.UpdateObservedTimestamp(s.NodeID(), now)
+						txn.UpdateObservedTimestamp(nodeID, now)
 						return kvpb.NewErrorWithTxn(kvpb.NewReadWithinUncertaintyIntervalError(now.ToTimestamp(), now, txn, now.ToTimestamp(), now), txn)
 					}
 				}
@@ -1298,9 +1297,11 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	params, _ := createTestServerParamsAllowTenants()
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
-	var sqlDB *gosql.DB
-	s, sqlDB, _ = serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(156333)
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s = srv.ApplicationLayer()
+	nodeID = srv.NodeID()
 
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`
@@ -1358,7 +1359,7 @@ func TestFlushUncommittedDescriptorCacheOnRestart(t *testing.T) {
 			}
 
 			if req, ok := args.Req.(*kvpb.GetRequest); ok {
-				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
+				if bytes.Contains(req.Key, testKey) {
 					atomic.AddInt32(&restartDone, 1)
 					// Return ReadWithinUncertaintyIntervalError.
 					txn := args.Hdr.Txn
@@ -1403,39 +1404,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	createTable := func(db *gosql.DB) {
-		sqlutils.CreateTable(t, db, "t",
-			"num INT PRIMARY KEY",
-			3, /* numRows */
-			sqlutils.ToRowFn(sqlutils.RowIdxFn))
-	}
-
-	// We can't programmatically get the targetKey since it's used before
-	// the test cluster is created.
-	// targetKey is represents one of the rows in the table.
-	// +2 since the first two available ids are allocated to the database and
-	// public schema.
-	var firstTableID uint32
-	var codec keys.SQLCodec
-	func() {
-		tc := serverutils.StartCluster(t, 3, /* numNodes */
-			base.TestClusterArgs{
-				ReplicationMode: base.ReplicationManual,
-				ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
-			})
-		defer tc.Stopper().Stop(context.Background())
-		db := tc.ServerConn(0)
-		createTable(db)
-		row := db.QueryRow("SELECT 't'::REGCLASS::OID")
-		require.NotNil(t, row)
-		require.NoError(t, row.Scan(&firstTableID))
-		codec = tc.Server(0).Codec()
-	}()
-	indexID := uint32(1)
-	valInTable := uint64(2)
-	indexKey := codec.IndexPrefix(firstTableID, indexID)
-	targetKey := encoding.EncodeUvarintAscending(indexKey, valInTable)
-
+	var targetKey atomic.Value
 	restarted := true
 
 	tc := serverutils.StartCluster(t, 3, /* numNodes */
@@ -1448,7 +1417,14 @@ func TestDistSQLRetryableError(t *testing.T) {
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 							TestingEvalFilter: func(fArgs kvserverbase.FilterArgs) *kvpb.Error {
 								_, ok := fArgs.Req.(*kvpb.ScanRequest)
-								if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {
+								if !ok {
+									return nil
+								}
+								key, ok := targetKey.Load().([]byte)
+								if !ok {
+									return nil
+								}
+								if fArgs.Req.Header().Key.Equal(key) && fArgs.Hdr.Txn.Epoch == 0 {
 									restarted = true
 									err := kvpb.NewReadWithinUncertaintyIntervalError(
 										fArgs.Hdr.Timestamp, /* readTS */
@@ -1478,9 +1454,11 @@ func TestDistSQLRetryableError(t *testing.T) {
 	}
 
 	db := tc.ServerConn(0)
-	createTable(db)
+	sqlutils.CreateTable(t, db, "t",
+		"num INT PRIMARY KEY",
+		3, /* numRows */
+		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	// We're going to split one of the tables, but node 4 is unaware of this.
 	_, err := db.Exec(fmt.Sprintf(`
 	ALTER TABLE "t" SPLIT AT VALUES (1), (2), (3);
 	ALTER TABLE "t" EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 2), (ARRAY[%d], 3);
@@ -1491,6 +1469,13 @@ func TestDistSQLRetryableError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	var tableID uint32
+	row := db.QueryRow("SELECT 't'::REGCLASS::OID")
+	require.NotNil(t, row)
+	require.NoError(t, row.Scan(&tableID))
+	indexKey := tc.ApplicationLayer(0).Codec().IndexPrefix(tableID, 1 /* indexID */)
+	targetKey.Store(encoding.EncodeUvarintAscending(indexKey, 2 /* v */))
 
 	db.SetMaxOpenConns(1)
 
@@ -1520,7 +1505,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	}
 
 	// Let's make sure that DISTSQL will actually be used.
-	row := txn.QueryRow(`SELECT info FROM [EXPLAIN SELECT count(1) FROM t] WHERE info LIKE 'distribution%'`)
+	row = txn.QueryRow(`SELECT info FROM [EXPLAIN SELECT count(1) FROM t] WHERE info LIKE 'distribution%'`)
 	var automatic string
 	if err := row.Scan(&automatic); err != nil {
 		t.Fatal(err)

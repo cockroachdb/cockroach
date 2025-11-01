@@ -64,11 +64,9 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	hostDB.Exec(t, "ALTER TENANT test GRANT ALL CAPABILITIES")
-	err = tc.Server(0).TenantController().WaitForTenantCapabilities(ctx, testTenantID, map[tenantcapabilitiespb.ID]string{
-		tenantcapabilitiespb.CanUseNodelocalStorage: "true",
-	}, "")
-	require.NoError(t, err)
+	tc.GrantTenantCapabilities(
+		ctx, t, testTenantID,
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanUseNodelocalStorage: "true"})
 
 	tenantSQL := sqlutils.MakeSQLRunner(tenantDB)
 	tenantSQL.Exec(t, "CREATE TABLE foo AS SELECT generate_series(1, 4000)")

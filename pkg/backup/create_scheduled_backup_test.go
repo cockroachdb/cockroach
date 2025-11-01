@@ -100,8 +100,8 @@ func newTestHelper(t *testing.T, testKnobs ...func(*base.TestingKnobs)) (*testHe
 		Settings:      cluster.MakeClusterSettings(),
 		ExternalIODir: dir,
 		// Some scheduled backup tests fail when run within a tenant. More
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		// investigation is required.
+		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798),
 		Knobs:             knobs,
 	}
 	jobs.PollJobsMetricsInterval.Override(context.Background(), &args.Settings.SV, 250*time.Millisecond)

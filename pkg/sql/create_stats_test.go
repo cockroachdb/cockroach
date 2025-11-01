@@ -59,6 +59,10 @@ func TestStatsWithLowTTL(t *testing.T) {
 				},
 			},
 		},
+		// In external-process mode the tenant doesn't have kvpb.GCRequest
+		// capability (and this capability can't be granted at the time of
+		// writing either), so we skip the external mode only.
+		DefaultTestTenant: base.TestSkipForExternalProcessMode(),
 	})
 	defer s.Stopper().Stop(context.Background())
 

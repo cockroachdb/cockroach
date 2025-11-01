@@ -24,20 +24,13 @@ func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantProbabilisticOnly,
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 
-	if srv.TenantController().StartedDefaultTestTenant() {
-		// explicitly enabling CanViewNodeInfo capability for the secondary/application tenant
-		_, err := srv.SystemLayer().SQLConn(t).Exec(
-			`ALTER TENANT [$1] GRANT CAPABILITY can_view_node_info=true`,
-			serverutils.TestTenantID().ToUint64(),
-		)
-		require.NoError(t, err)
-		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(),
-			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}, "")
+	if srv.DeploymentMode().IsExternal() {
+		require.NoError(t, srv.GrantTenantCapabilities(
+			context.Background(), serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewNodeInfo: "true"}))
 	}
 	s := srv.ApplicationLayer()
 	require.NoError(t, validateGossipResponse(s))

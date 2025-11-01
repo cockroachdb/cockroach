@@ -263,6 +263,7 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := createTestServerParamsAllowTenants()
+	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127)
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 

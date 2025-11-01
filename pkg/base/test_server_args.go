@@ -326,7 +326,8 @@ type DefaultTestTenantOptions struct {
 	// warn".
 	noWarnImplicitInterfaces bool
 
-	// If test tenant is disabled, issue and label to link in log message.
+	// If test tenant is disabled, issue and label to link in log message. These
+	// can be left unset if one of the tenant modes is explicitly skipped.
 	issueNum int
 	label    string
 }
@@ -378,11 +379,6 @@ var (
 	// unless there is a good reason to do so. We want the common case
 	// to use TestTenantProbabilistic or TestTenantProbabilisticOnly.
 	SharedTestTenantAlwaysEnabled = DefaultTestTenantOptions{testBehavior: ttEnabled | ttSharedProcess, allowAdditionalTenants: true}
-
-	// TODOTestTenantDisabled should not be used anymore. Use the
-	// other values instead.
-	// TODO(#76378): Review existing tests and use the proper value instead.
-	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
 
 	// TestRequiresExplicitSQLConnection is used when the test is unable to pass
 	// the cluster as an option in the connection URL. The test could still
@@ -578,6 +574,12 @@ func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTena
 // problem.
 func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
 	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+// TestSkipForExternalProcessMode disables selecting the external process
+// virtual cluster for tests that are not applicable to that mode.
+func TestSkipForExternalProcessMode() DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(0 /* issueNumber */)
 }
 
 func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {

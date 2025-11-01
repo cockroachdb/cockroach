@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 
 	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156327),
 	)()
 
 	defer serverutils.TestingGlobalDRPCOption(

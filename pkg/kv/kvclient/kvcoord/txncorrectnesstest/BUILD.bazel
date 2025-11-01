@@ -16,7 +16,6 @@ go_test(
         "write_skew_anomaly_test.go",
     ],
     deps = [
-        "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",  # keep
         "//pkg/kv/kvserver",

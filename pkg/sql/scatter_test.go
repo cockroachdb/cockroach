@@ -49,10 +49,6 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	// Even though we disabled merges via the store testing knob, we must also
-	// disable the setting in order for manual splits to be allowed.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
-
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
