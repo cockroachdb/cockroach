@@ -218,19 +218,30 @@ func (s *txnSeqNumAllocator) epochBumpedLocked() {
 }
 
 // createSavepointLocked is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) createSavepointLocked(ctx context.Context, sp *savepoint) {
+func (s *txnSeqNumAllocator) createSavepointLocked(ctx context.Context, sp *savepoint) error {
+	// Increment the write sequence on savepoint creation and assign this sequence
+	// to the savepoint. This allows us to distinguish between all operations
+	// (writes and locking reads) that happened before the savepoint and those
+	// that happened after.
+	if err := s.stepWriteSeqLocked(ctx); err != nil {
+		return err
+	}
 	sp.seqNum = s.writeSeq
+	return nil
 }
 
 // releaseSavepointLocked is part of the txnInterceptor interface.
 func (*txnSeqNumAllocator) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
-func (s *txnSeqNumAllocator) rollbackToSavepointLocked(context.Context, savepoint) {
-	// Nothing to restore. The seq nums keep increasing. The TxnCoordSender has
-	// added a range of sequence numbers to the ignored list. It may have also
-	// manually stepped the write seqnum to distinguish the ignored range from
-	// any future operations.
+func (s *txnSeqNumAllocator) rollbackToSavepointLocked(ctx context.Context, _ savepoint) error {
+	// The TxnCoordSender has added a range of sequence numbers to the ignored
+	// list. We manually stepped the write seqnum to distinguish the ignored range
+	// from any future operations.
+	if err := s.stepWriteSeqLocked(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // closeLocked is part of the txnInterceptor interface.
