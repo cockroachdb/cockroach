@@ -77,7 +77,7 @@ const jepsenRepo = "https://github.com/cockroachdb/jepsen"
 const repoBranch = "tc-nightly-main"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
-const binaryVersion = "0.1.0-6699eb4-standalone"
+const binaryVersion = "0.1.0-bd82e2e-standalone"
 
 var jepsenNemeses = []struct {
 	name, config string
