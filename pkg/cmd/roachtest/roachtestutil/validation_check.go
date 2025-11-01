@@ -40,13 +40,14 @@ import (
 //
 // The consistency check may not get enough time to complete, but will return
 // any inconsistencies that it did find before timing out.
-func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
+func CheckReplicaDivergenceOnDB(ctx context.Context, c cluster.Cluster, l *logger.Logger, db *gosql.DB) error {
 	// Cancel context if we error out, so the check doesn't keep running.
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Speed up consistency checks. The test is done, so let's go full throttle.
 	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
+	c.CaptureSideEyeSnapshot(ctx)
 	if err != nil {
 		return errors.Wrap(err, "unable to set 'server.consistency_check.max_rate'")
 	}
