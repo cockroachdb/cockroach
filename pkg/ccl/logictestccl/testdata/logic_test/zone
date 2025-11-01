@@ -28,7 +28,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -77,7 +76,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -126,7 +124,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -148,7 +145,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -194,7 +190,6 @@ query T retry,nosort
 EXECUTE p
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -211,7 +206,6 @@ query T retry,nosort
 EXECUTE p
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -238,7 +232,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -262,7 +255,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -321,7 +313,6 @@ query T retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -370,7 +361,6 @@ query T retry,nosort
 EXECUTE p
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -385,7 +375,6 @@ query T retry,nosort
 EXECUTE p
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -417,7 +406,6 @@ query T retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -434,7 +422,6 @@ query T retry
 EXPLAIN SELECT * FROM t36642 WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -494,7 +481,6 @@ query T retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -512,7 +498,6 @@ query T retry
 EXPLAIN SELECT * FROM t36644 WHERE k=10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats

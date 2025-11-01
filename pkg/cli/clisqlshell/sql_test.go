@@ -218,7 +218,6 @@ func Example_misc_table() {
 	//            info
 	// --------------------------
 	//   distribution: local
-	//   vectorized: true
 	//
 	//   • render
 	//   │
@@ -226,7 +225,7 @@ func Example_misc_table() {
 	//         missing stats
 	//         table: t@t_pkey
 	//         spans: FULL SCAN
-	// (9 rows)
+	// (8 rows)
 }
 
 func Example_in_memory() {
