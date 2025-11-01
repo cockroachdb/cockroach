@@ -132,6 +132,7 @@ const (
 	OptLaggingRangesPollingInterval       = `lagging_ranges_polling_interval`
 	OptIgnoreDisableChangefeedReplication = `ignore_disable_changefeed_replication`
 	OptEncodeJSONValueNullAsObject        = `encode_json_value_null_as_object`
+	OptCreateKafkaTopics                  = `create_kafka_topics`
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
@@ -430,6 +431,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptLaggingRangesPollingInterval:       durationOption,
 	OptIgnoreDisableChangefeedReplication: flagOption,
 	OptEncodeJSONValueNullAsObject:        flagOption,
+	OptCreateKafkaTopics:                  enum("yes", "no", "auto").orEmptyMeans("auto"),
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 	OptRangeDistributionStrategy:          enum(string(ChangefeedRangeDistributionStrategyDefault), string(ChangefeedRangeDistributionStrategyBalancedSimple)),
 	OptHeadersJSONColumnName:              stringOption,
@@ -455,7 +457,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptCreateKafkaTopics)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -686,6 +688,26 @@ func (s StatementOptions) HasEndTime() bool {
 // GetEndTime returns the user-provided end time.
 func (s StatementOptions) GetEndTime() string {
 	return s.m[OptEndTime]
+}
+
+type CreateKafkaTopics string
+
+const (
+	CreateKafkaTopicsAuto CreateKafkaTopics = "auto"
+	CreateKafkaTopicsYes  CreateKafkaTopics = "yes"
+	CreateKafkaTopicsNo   CreateKafkaTopics = "no"
+)
+
+func (s StatementOptions) GetCreateKafkaTopics() (CreateKafkaTopics, error) {
+	if _, ok := s.m[OptCreateKafkaTopics]; !ok {
+		return CreateKafkaTopicsAuto, nil
+	}
+
+	rawVal, err := s.getEnumValue(OptCreateKafkaTopics)
+	if err != nil {
+		return CreateKafkaTopicsAuto, err
+	}
+	return CreateKafkaTopics(rawVal), nil
 }
 
 func (s StatementOptions) getEnumValue(k string) (string, error) {

@@ -8364,6 +8364,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_twmb_franz_go_pkg_kfake",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/twmb/franz-go/pkg/kfake",
+        sha256 = "eb4c77ce423b9da1cccc2f49e08de9540734dd341291bf017abf6c2b4114f66a",
+        strip_prefix = "github.com/twmb/franz-go/pkg/kfake@v0.0.0-20241015012055-0a9996b613b1",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/twmb/franz-go/pkg/kfake/com_github_twmb_franz_go_pkg_kfake-v0.0.0-20241015012055-0a9996b613b1.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_twmb_franz_go_pkg_kmsg",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/twmb/franz-go/pkg/kmsg",
