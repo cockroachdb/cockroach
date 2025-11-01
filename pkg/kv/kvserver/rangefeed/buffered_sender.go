@@ -74,6 +74,9 @@ type BufferedSender struct {
 	// Note that lockedMuxStream wraps the underlying grpc server stream, ensuring
 	// thread safety.
 	sender ServerStreamSender
+	// sendBufSize is the number of items we pop from the queue at a time. Exposed for
+	// testing.
+	sendBufSize int
 
 	// queueMu protects the buffer queue.
 	queueMu struct {
@@ -96,6 +99,8 @@ type BufferedSender struct {
 	// sharing the metrics.
 	metrics *BufferedSenderMetrics
 }
+
+const defaultSendBufSize = 64
 
 type streamState int64
 
@@ -148,8 +153,9 @@ func NewBufferedSender(
 	sender ServerStreamSender, settings *cluster.Settings, bsMetrics *BufferedSenderMetrics,
 ) *BufferedSender {
 	bs := &BufferedSender{
-		sender:  sender,
-		metrics: bsMetrics,
+		sendBufSize: defaultSendBufSize,
+		sender:      sender,
+		metrics:     bsMetrics,
 	}
 	bs.notifyDataC = make(chan struct{}, 1)
 	bs.queueMu.buffer = newEventQueue()
@@ -264,6 +270,8 @@ func (bs *BufferedSender) sendUnbuffered(ev *kvpb.MuxRangeFeedEvent) error {
 func (bs *BufferedSender) run(
 	ctx context.Context, stopper *stop.Stopper, onError func(streamID int64),
 ) error {
+	eventsBuf := make([]sharedMuxEvent, 0, bs.sendBufSize)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -276,39 +284,47 @@ func (bs *BufferedSender) run(
 			return nil
 		case <-bs.notifyDataC:
 			for {
-				e, success := bs.popFront()
-				if !success {
+				eventsBuf = bs.popEvents(eventsBuf[:0], bs.sendBufSize)
+				if len(eventsBuf) == 0 {
 					break
 				}
 
-				bs.metrics.BufferedSenderQueueSize.Dec(1)
-				err := bs.sender.Send(e.ev)
-				e.alloc.Release(ctx)
-				if e.ev.Error != nil {
-					onError(e.ev.StreamID)
+				bs.metrics.BufferedSenderQueueSize.Dec(int64(len(eventsBuf)))
+				for _, evt := range eventsBuf {
+					// TODO(ssd): This might be another location where we could transform
+					// multiple events into BulkEvents. We can't just throw them all in a
+					// bulk event though since we are processing events for different
+					// streams here.
+					err := bs.sender.Send(evt.ev)
+					evt.alloc.Release(ctx)
+					if evt.ev.Error != nil {
+						onError(evt.ev.StreamID)
+					}
+					if err != nil {
+						return err
+					}
 				}
-				if err != nil {
-					return err
-				}
+				clear(eventsBuf) // Clear so referenced MuxRangeFeedEvents can be GC'd.
 			}
 		}
 	}
 }
 
-// popFront pops the front event from the buffer queue. It returns the event and
-// a boolean indicating if the event was successfully popped.
-func (bs *BufferedSender) popFront() (e sharedMuxEvent, success bool) {
+// popEvents appends up to eventsToPop events into dest, returning the appended slice.
+func (bs *BufferedSender) popEvents(dest []sharedMuxEvent, eventsToPop int) []sharedMuxEvent {
 	bs.queueMu.Lock()
 	defer bs.queueMu.Unlock()
-	event, ok := bs.queueMu.buffer.popFront()
-	if ok {
+	dest = bs.queueMu.buffer.popFrontInto(dest, eventsToPop)
+
+	// Update accounting for everything we popped.
+	for _, event := range dest {
 		state, streamFound := bs.queueMu.byStream[event.ev.StreamID]
 		if streamFound {
 			state.queueItems--
 			bs.queueMu.byStream[event.ev.StreamID] = state
 		}
 	}
-	return event, ok
+	return dest
 }
 
 // addStream initializes the per-stream tracking for the given streamID.
