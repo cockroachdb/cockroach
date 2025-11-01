@@ -4624,10 +4624,10 @@ def go_deps():
         name = "com_github_hashicorp_yamux",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/hashicorp/yamux",
-        sha256 = "d8a888d6a4ecbc09f2f3663cb47aa2d064298eeb1491f4761a43ae95e93ba035",
-        strip_prefix = "github.com/hashicorp/yamux@v0.0.0-20190923154419-df201c70410d",
+        sha256 = "8ba2b4b2d37260d4aeabf85ac9c26841a287a264c02bc629f40f19d2bd977df4",
+        strip_prefix = "github.com/hashicorp/yamux@v0.1.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/yamux/com_github_hashicorp_yamux-v0.0.0-20190923154419-df201c70410d.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/hashicorp/yamux/com_github_hashicorp_yamux-v0.1.2.zip",
         ],
     )
     go_repository(
@@ -10890,10 +10890,10 @@ def go_deps():
         name = "io_storj_drpc",
         build_file_proto_mode = "disable_global",
         importpath = "storj.io/drpc",
-        sha256 = "98b44a51f82873f93f77da80230212ab40f35044e8d38645cb1392ae03462f0b",
-        strip_prefix = "github.com/cockroachdb/drpc@v0.0.0-20250924114114-78d4e121902a",
+        sha256 = "0cf8d229ad8dd861f63eb605cf60bc6984f45d124b95a26e6db35519154eb4ad",
+        strip_prefix = "github.com/shubhamdhama/drpc@v0.0.0-20251031102708-4118e5fe12dc",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/drpc/com_github_cockroachdb_drpc-v0.0.0-20250924114114-78d4e121902a.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shubhamdhama/drpc/com_github_shubhamdhama_drpc-v0.0.0-20251031102708-4118e5fe12dc.zip",
         ],
     )
     go_repository(

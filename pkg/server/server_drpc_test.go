@@ -11,8 +11,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,13 +26,10 @@ func TestDRPCSelectQuery(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), testutils.SucceedsSoonDuration())
 		defer cancel()
 
-		st := cluster.MakeTestingClusterSettings()
-		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &st.SV, true)
-
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				Settings: st,
-				Insecure: insecure,
+				DefaultDRPCOption: base.TestDRPCEnabled,
+				Insecure:          insecure,
 			},
 		})
 		defer tc.Stopper().Stop(ctx)
