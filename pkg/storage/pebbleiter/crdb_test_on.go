@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -26,12 +27,14 @@ type Iterator = *assertionIter
 // MaybeWrap returns the provided Pebble iterator, wrapped with double close
 // detection.
 func MaybeWrap(iter *pebble.Iterator) Iterator {
-	return &assertionIter{Iterator: iter, closedCh: make(chan struct{})}
+	rng, _ := randutil.NewPseudoRand()
+	return &assertionIter{Iterator: iter, rng: rng, closedCh: make(chan struct{})}
 }
 
 // assertionIter wraps a *pebble.Iterator with assertion checking.
 type assertionIter struct {
 	*pebble.Iterator
+	rng      *rand.Rand
 	closed   bool
 	closedCh chan struct{}
 	// unsafeBufs hold buffers used for returning values with short lifetimes to
@@ -243,11 +246,11 @@ func (i *assertionIter) PrevWithLimit(limit []byte) pebble.IterValidityState {
 // to the caller. This is used to ensure that the client respects the Pebble
 // iterator interface and the lifetimes of buffers it returns.
 func (i *assertionIter) maybeMangleBufs() {
-	if rand.Intn(2) == 0 {
+	if i.rng.Intn(2) == 0 {
 		idx := i.unsafeBufs.idx
 		zero(i.unsafeBufs.key[idx])
 		zero(i.unsafeBufs.val[idx])
-		if rand.Intn(2) == 0 {
+		if i.rng.Intn(2) == 0 {
 			// Switch to a new buffer for the next iterator position.
 			i.unsafeBufs.idx = (i.unsafeBufs.idx + 1) % 2
 		}
@@ -273,7 +276,7 @@ func (i *assertionIter) maybeSaveAndMangleRangeKeyBufs() {
 	// Randomly zero them to ensure we catch bugs where they're reused.
 	idx := i.rangeKeyBufs.idx
 	mangleBuf := &i.rangeKeyBufs.bufs[idx]
-	if rand.Intn(2) == 0 {
+	if i.rng.Intn(2) == 0 {
 		mangleBuf.mangle()
 	}
 	// If the new iterator position has range keys, copy them to our buffers.
@@ -283,7 +286,7 @@ func (i *assertionIter) maybeSaveAndMangleRangeKeyBufs() {
 	if _, hasRange := i.Iterator.HasPointAndRange(); !hasRange {
 		return
 	}
-	switchBuffers := rand.Intn(2) == 0
+	switchBuffers := i.rng.Intn(2) == 0
 	if switchBuffers {
 		// Switch to a new buffer for the new range key state.
 		i.rangeKeyBufs.idx = (idx + 1) % 2
