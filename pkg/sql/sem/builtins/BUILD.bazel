@@ -66,6 +66,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/randgen/randgencfg",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/hintpb",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
         "//pkg/sql/memsize",

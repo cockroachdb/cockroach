@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -146,8 +146,6 @@ func NewStatementHintsCache(
 func (c *StatementHintsCache) Start(
 	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
 ) error {
-	// TODO(drewk): in a follow-up commit, block until the initial scan is done
-	// so that statements without hints don't have to check the LRU cache.
 	return c.startRangefeedInternal(ctx, sysTableResolver)
 }
 
@@ -292,7 +290,7 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 		})
 		for {
 			log.VEventf(ctx, 1, "checking hints for fingerprint hash %d @ %v", hash, refreshTS)
-			hasHints, err := c.checkForStatementHintsInDB(ctx, hash)
+			hasHints, err := CheckForStatementHintsInDB(ctx, c.db.Executor(), hash)
 			if err != nil {
 				log.Dev.Warningf(ctx, "failed to check hints for hash %d: %v", hash, err)
 				if retryOnError.Next() {
@@ -322,27 +320,6 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 			}
 		}
 	})
-}
-
-// checkForStatementHintsInDB queries the system.statement_hints table to
-// determine if there are any hints for the given fingerprint hash. The caller
-// must be able to retry if an error is returned.
-func (c *StatementHintsCache) checkForStatementHintsInDB(
-	ctx context.Context, statementHash int64,
-) (hasHints bool, retErr error) {
-	const opName = "get-plan-hints"
-	const getHintsStmt = `SELECT hash FROM system.statement_hints WHERE "hash" = $1 LIMIT 1`
-	it, err := c.db.Executor().QueryIteratorEx(
-		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
-		getHintsStmt, statementHash,
-	)
-	if err != nil {
-		return false, err
-	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, it.Close())
-	}()
-	return it.Next(ctx)
 }
 
 // decodeHashFromStatementHintsKey decodes the query hash from a range feed
@@ -392,7 +369,7 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 // retrieving them.
 func (c *StatementHintsCache) MaybeGetStatementHints(
 	ctx context.Context, statementFingerprint string,
-) (hints []StatementHint, ids []int64) {
+) (hints []hintpb.StatementHintUnion, ids []int64) {
 	hash := fnv.New64()
 	_, err := hash.Write([]byte(statementFingerprint))
 	if err != nil {
@@ -450,7 +427,7 @@ func (c *StatementHintsCache) maybeWaitForRefreshLocked(
 // released while reading from the db, and then reacquired.
 func (c *StatementHintsCache) addCacheEntryLocked(
 	ctx context.Context, statementHash int64, statementFingerprint string,
-) (hints []StatementHint, ids []int64) {
+) (hints []hintpb.StatementHintUnion, ids []int64) {
 	c.mu.AssertHeld()
 
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -467,7 +444,8 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		c.mu.Unlock()
 		defer c.mu.Lock()
 		log.VEventf(ctx, 1, "reading hints for query %s", statementFingerprint)
-		err = c.getStatementHintsFromDB(ctx, statementHash, entry)
+		entry.ids, entry.fingerprints, entry.hints, err =
+			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash)
 		log.VEventf(ctx, 1, "finished reading hints for query %s", statementFingerprint)
 	}()
 
@@ -482,47 +460,6 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		return nil, nil
 	}
 	return entry.getMatchingHints(statementFingerprint)
-}
-
-// getStatementHintsFromDB queries the system.statement_hints table for hints
-// matching the given fingerprint hash. It is able to handle the case when
-// multiple fingerprints match the hash, as well as the case when there are no
-// hints for the fingerprint. Results are ordered by row ID.
-func (c *StatementHintsCache) getStatementHintsFromDB(
-	ctx context.Context, statementHash int64, entry *cacheEntry,
-) (retErr error) {
-	const opName = "get-plan-hints"
-	const getHintsStmt = `
-    SELECT "row_id", "fingerprint", "hint"
-    FROM system.statement_hints
-    WHERE "hash" = $1
-    ORDER BY "row_id" ASC`
-	it, err := c.db.Executor().QueryIteratorEx(
-		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
-		getHintsStmt, statementHash,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		retErr = errors.CombineErrors(retErr, it.Close())
-	}()
-	for {
-		ok, err := it.Next(ctx)
-		if !ok || err != nil {
-			return err
-		}
-		datums := it.Cur()
-		rowID := int64(tree.MustBeDInt(datums[0]))
-		fingerprint := string(tree.MustBeDString(datums[1]))
-		hint, err := NewStatementHint([]byte(tree.MustBeDBytes(datums[2])))
-		if err != nil {
-			return err
-		}
-		entry.ids = append(entry.ids, rowID)
-		entry.fingerprints = append(entry.fingerprints, fingerprint)
-		entry.hints = append(entry.hints, hint)
-	}
 }
 
 type cacheEntry struct {
@@ -542,7 +479,7 @@ type cacheEntry struct {
 	// be duplicate entries in the fingerprints slice.
 	// TODO(drewk): consider de-duplicating the fingerprint strings to reduce
 	// memory usage.
-	hints        []StatementHint
+	hints        []hintpb.StatementHintUnion
 	fingerprints []string
 	ids          []int64
 }
@@ -551,7 +488,7 @@ type cacheEntry struct {
 // fingerprint, or nil if they don't exist. The results are in order of row ID.
 func (entry *cacheEntry) getMatchingHints(
 	statementFingerprint string,
-) (hints []StatementHint, ids []int64) {
+) (hints []hintpb.StatementHintUnion, ids []int64) {
 	for i := range entry.hints {
 		if entry.fingerprints[i] == statementFingerprint {
 			hints = append(hints, entry.hints[i])
