@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -66,7 +66,7 @@ var scpTimeout = func() time.Duration {
 // components.
 type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
-	cloud.Cluster
+	cloudcluster.Cluster
 
 	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
 	// the list of nodes the operation pertains to.
@@ -93,7 +93,7 @@ type SyncedCluster struct {
 //
 // See ListNodes for a description of the node selector string.
 func NewSyncedCluster(
-	metadata *cloud.Cluster, nodeSelector string, settings ClusterSettings,
+	metadata *cloudcluster.Cluster, nodeSelector string, settings ClusterSettings,
 ) (*SyncedCluster, error) {
 	c := &SyncedCluster{
 		Cluster:         *metadata,

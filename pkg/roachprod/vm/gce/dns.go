@@ -95,19 +95,19 @@ type dnsProvider struct {
 	resolvers []*net.Resolver
 }
 
-func NewDNSProvider() *dnsProvider {
+func NewDNSProvider(opts DNSProviderOpts) *dnsProvider {
 	return NewDNSProviderWithExec(func(cmd *exec.Cmd) ([]byte, error) {
 		return cmd.CombinedOutput()
-	})
+	}, opts)
 }
 
-func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
+func NewDNSProviderWithExec(execFn ExecFn, opts DNSProviderOpts) *dnsProvider {
 	return &dnsProvider{
-		dnsProject:    defaultDNSProject,
-		publicZone:    dnsDefaultZone,
-		publicDomain:  dnsDefaultDomain,
-		managedZone:   dnsDefaultManagedZone,
-		managedDomain: dnsDefaultManagedDomain,
+		dnsProject:    opts.DNSProject,
+		publicZone:    opts.PublicZone,
+		publicDomain:  opts.PublicDomain,
+		managedZone:   opts.ManagedZone,
+		managedDomain: opts.ManagedDomain,
 		recordsCache: struct {
 			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
@@ -119,6 +119,20 @@ func NewDNSProviderWithExec(execFn ExecFn) *dnsProvider {
 		execFn:    execFn,
 		resolvers: googleDNSResolvers(),
 	}
+}
+
+// DNSProviderOpts are the options for the DNS provider.
+type DNSProviderOpts struct {
+	DNSProject    string
+	PublicZone    string
+	PublicDomain  string
+	ManagedZone   string
+	ManagedDomain string
+}
+
+// NewFromGCEDNSProviderOpts creates a new DNSProviderOpts from a gce.dnsOpts.
+func (o *DNSProviderOpts) NewFromGCEDNSProviderOpts(opts dnsOpts) DNSProviderOpts {
+	return DNSProviderOpts(opts)
 }
 
 // CreateRecords implements the vm.DNSProvider interface.
@@ -194,7 +208,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 	return nil
 }
 
-// LookupSRVRecords implements the vm.DNSProvider interface.
+// LookupRecords implements the vm.DNSProvider interface.
 func (n *dnsProvider) LookupRecords(
 	ctx context.Context, recordType vm.DNSType, name string,
 ) ([]vm.DNSRecord, error) {
@@ -283,6 +297,26 @@ func (n *dnsProvider) DeleteSRVRecordsBySubdomain(ctx context.Context, subdomain
 // the public zone.
 func (n *dnsProvider) Domain() string {
 	return n.managedDomain
+}
+
+// PublicDomain implements the vm.DNSProvider interface.
+// This is the domain used for the public zone with A records.
+func (n *dnsProvider) PublicDomain() string {
+	return n.publicDomain
+}
+
+// SyncDNS implements the vm.DNSProvider interface.
+func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return n.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+// SyncDNSWithContext implements the vm.DNSProvider interface.
+func (n *dnsProvider) SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms vm.List) error {
+	return n.syncPublicDNS(ctx, l, vms)
+}
+
+func (n *dnsProvider) ProviderName() string {
+	return ProviderName
 }
 
 // lookupSRVRecords uses standard net tools to perform a DNS lookup. This
@@ -417,27 +451,26 @@ func (n *dnsProvider) normaliseName(name string) string {
 // syncPublicDNS syncs the public DNS zone with the given list of VMs.
 //
 // Note that this operates on the public DNS zone, not the managed zone.
-func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
+func (p *dnsProvider) syncPublicDNS(
+	ctx context.Context, l *logger.Logger, vms vm.List,
+) (err error) {
 	if p.publicDomain == "" {
 		return nil
 	}
-
-	defer func() {
-		if err != nil {
-			err = errors.Wrapf(err, "syncing DNS for %s", p.publicDomain)
-		}
-	}()
 
 	f, err := os.CreateTemp(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	// Keep imported zone file in dry run mode.
 	defer func() {
-		if err := os.Remove(f.Name()); err != nil {
-			l.Errorf("removing %s failed: %v", f.Name(), err)
+		f.Close()
+		if errRemove := os.Remove(f.Name()); errRemove != nil {
+			l.Errorf("removing %s failed: %v", f.Name(), errRemove)
+		}
+		if err != nil {
+			err = errors.Wrapf(err, "syncing DNS for %s", p.publicDomain)
 		}
 	}()
 
@@ -451,11 +484,10 @@ func (p *dnsProvider) syncPublicDNS(l *logger.Logger, vms vm.List) (err error) {
 		zoneBuilder.WriteString(entry)
 	}
 	fmt.Fprint(f, zoneBuilder.String())
-	f.Close()
 
 	args := []string{"--project", p.dnsProject, "dns", "record-sets", "import",
 		f.Name(), "-z", p.publicZone, "--delete-all-existing", "--zone-file-format"}
-	cmd := exec.Command("gcloud", args...)
+	cmd := exec.CommandContext(ctx, "gcloud", args...)
 	output, err := cmd.CombinedOutput()
 
 	return errors.Wrapf(err,
