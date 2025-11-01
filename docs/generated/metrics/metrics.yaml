@@ -269,6 +269,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: See Description.
       essential: true
+    - name: rpc.connection.tcp_cwnd
+      exported_name: rpc_connection_tcp_cwnd
+      description: Gauge of the TCP congestion window.
+      y_axis_label: Bytes
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: See Description.
+      essential: true
     - name: rpc.connection.tcp_rtt
       exported_name: rpc_connection_tcp_rtt
       description: |
