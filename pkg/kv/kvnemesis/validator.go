@@ -1051,14 +1051,14 @@ func (v *validator) checkAtomic(atomicType string, result Result) {
 		// of writing, checkAtomicCommitted doesn't capitalize on this unconditional
 		// presence yet, and most unit tests don't specify it for reads.
 		if !result.OptionalTimestamp.IsSet() {
-			err := errors.AssertionFailedf("operation has no execution timestamp: %s", result)
+			err := errors.AssertionFailedf("operation has no execution timestamp: %v", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicCommitted(`committed `+atomicType, observations, result.OptionalTimestamp)
 	} else if resultIsAmbiguous(result) {
 		// An ambiguous result shouldn't have an execution timestamp.
 		if result.OptionalTimestamp.IsSet() {
-			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %s", result)
+			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %v", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicAmbiguous(`ambiguous `+atomicType, observations)

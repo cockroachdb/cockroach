@@ -629,6 +629,8 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
+	// This allows more operations to be eligible for follower reads.
+	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 
 	// In liveness mode, set up zone config constraints to ensure all ranges
 	// have a voter on nodes 1 and 2, the nodes guaranteed to be available.
@@ -665,6 +667,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 func logMetricsReport(t testing.TB, tc *testcluster.TestCluster) {
 	metricsOfInterest := []string{
+		"follower_reads.success_count",
 		// Raft command metrics
 		"raft.commands.proposed",
 		"raft.commands.reproposed.new-lai",

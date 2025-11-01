@@ -111,6 +111,9 @@ type ClosureTxnConfig struct {
 type ClientOperationConfig struct {
 	// GetMissing is an operation that Gets a key that definitely doesn't exist.
 	GetMissing int
+	// GetMissingFollowerRead is an operation that Gets a key that definitely
+	// doesn't exist, and is marked eligible to be served as a follower read.
+	GetMissingFollowerRead int
 	// GetMissingForUpdate is an operation that Gets a key that definitely doesn't
 	// exist using a locking read with strength lock.Exclusive.
 	GetMissingForUpdate int
@@ -146,6 +149,9 @@ type ClientOperationConfig struct {
 	GetMissingForShareSkipLockedGuaranteedDurability int
 	// GetExisting is an operation that Gets a key that likely exists.
 	GetExisting int
+	// GetExistingFollowerRead is an operation that Gets a key that likely exists,
+	// and is marked eligible to be served as a follower read.
+	GetExistingFollowerRead int
 	// GetExistingForUpdate is an operation that Gets a key that likely exists
 	// using a locking read with strength lock.Exclusive.
 	GetExistingForUpdate int
@@ -203,6 +209,9 @@ type ClientOperationConfig struct {
 	CPutAllowIfDoesNotExist int
 	// Scan is an operation that Scans a key range that may contain values.
 	Scan int
+	// ScanFollowerRead is an operation that Scans a key range that may contain
+	// values, and is marked eligible to be served as a follower read.
+	ScanFollowerRead int
 	// ScanForUpdate is an operation that Scans a key range that may contain
 	// values using a per-key locking scan with strength lock.Exclusive.
 	ScanForUpdate int
@@ -240,6 +249,10 @@ type ClientOperationConfig struct {
 	// ReverseScan is an operation that Scans a key range that may contain
 	// values in reverse key order.
 	ReverseScan int
+	// ReverseScanFollowerRead is an operation that Scans a key range that may
+	// contain values in reverse key order, and is marked eligible to be served as
+	// a follower read.
+	ReverseScanFollowerRead int
 	// ReverseScanForUpdate is an operation that Scans a key range that may
 	// contain values using a per-key locking scan with strength lock.Exclusive in
 	// reverse key order.
@@ -419,16 +432,18 @@ type FaultConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:                                        1,
-		GetMissingForUpdate:                               1,
-		GetMissingForUpdateGuaranteedDurability:           1,
-		GetMissingForUpdateSkipLocked:                     1,
-		GetMissingForUpdateSkipLockedGuaranteedDurability: 1,
-		GetMissingForShare:                                1,
-		GetMissingForShareGuaranteedDurability:            1,
-		GetMissingForShareSkipLocked:                      1,
-		GetMissingForShareSkipLockedGuaranteedDurability:  1,
+		GetMissing:                                         1,
+		GetMissingFollowerRead:                             1,
+		GetMissingForUpdate:                                1,
+		GetMissingForUpdateGuaranteedDurability:            1,
+		GetMissingForUpdateSkipLocked:                      1,
+		GetMissingForUpdateSkipLockedGuaranteedDurability:  1,
+		GetMissingForShare:                                 1,
+		GetMissingForShareGuaranteedDurability:             1,
+		GetMissingForShareSkipLocked:                       1,
+		GetMissingForShareSkipLockedGuaranteedDurability:   1,
 		GetExisting:                                        1,
+		GetExistingFollowerRead:                            1,
 		GetExistingForUpdate:                               1,
 		GetExistingForUpdateGuaranteedDurability:           1,
 		GetExistingForShare:                                1,
@@ -447,6 +462,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		CPutNoMatch:                         1,
 		CPutAllowIfDoesNotExist:             1,
 		Scan:                                1,
+		ScanFollowerRead:                    1,
 		ScanForUpdate:                       1,
 		ScanForUpdateGuaranteedDurability:   1,
 		ScanForShare:                        1,
@@ -457,6 +473,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		ScanForShareSkipLocked:                      1,
 		ScanForShareSkipLockedGuaranteedDurability:  1,
 		ReverseScan:                                        1,
+		ReverseScanFollowerRead:                            1,
 		ReverseScanForUpdate:                               1,
 		ReverseScanForUpdateGuaranteedDurability:           1,
 		ReverseScanForShare:                                1,
@@ -953,6 +970,7 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
+	addOpGen(allowed, randGetMissingFollowerRead, c.GetMissingFollowerRead)
 	addOpGen(allowed, randGetMissingForUpdate, c.GetMissingForUpdate)
 	addOpGen(
 		allowed, randGetMissingForUpdateGuaranteedDurability, c.GetMissingForUpdateGuaranteedDurability,
@@ -984,6 +1002,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
+		addOpGen(allowed, randGetExistingFollowerRead, c.GetExistingFollowerRead)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
 		addOpGen(
 			allowed,
@@ -1016,6 +1035,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		addOpGen(allowed, randDelMustAcquireExclusiveLockExisting, c.DeleteMustAcquireExclusiveLockExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
+	addOpGen(allowed, randScanFollowerRead, c.ScanFollowerRead)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
 	addOpGen(allowed, randScanForUpdateGuaranteedDurability, c.ScanForUpdateGuaranteedDurability)
 	addOpGen(allowed, randScanForShare, c.ScanForShare)
@@ -1034,6 +1054,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		c.ScanForShareSkipLockedGuaranteedDurability,
 	)
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
+	addOpGen(allowed, randReverseScanFollowerRead, c.ReverseScanFollowerRead)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 	addOpGen(
 		allowed,
@@ -1071,6 +1092,12 @@ func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) 
 
 func randGetMissing(_ *generator, rng *rand.Rand) Operation {
 	return get(randKey(rng))
+}
+
+func randGetMissingFollowerRead(_ *generator, rng *rand.Rand) Operation {
+	op := get(randKey(rng))
+	op.Get.FollowerReadEligible = true
+	return op
 }
 
 func randGetMissingForUpdate(g *generator, rng *rand.Rand) Operation {
@@ -1134,6 +1161,13 @@ func randGetMissingForShareSkipLockedGuaranteedDurability(g *generator, rng *ran
 func randGetExisting(g *generator, rng *rand.Rand) Operation {
 	key := randSliceKey(rng, maps.Keys(g.keys))
 	return get(key)
+}
+
+func randGetExistingFollowerRead(g *generator, rng *rand.Rand) Operation {
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	op := get(key)
+	op.Get.FollowerReadEligible = true
+	return op
 }
 
 func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
@@ -1436,6 +1470,13 @@ func randScan(g *generator, rng *rand.Rand) Operation {
 	return scan(key, endKey)
 }
 
+func randScanFollowerRead(g *generator, rng *rand.Rand) Operation {
+	key, endKey := randSpan(rng)
+	op := scan(key, endKey)
+	op.Scan.FollowerReadEligible = true
+	return op
+}
+
 func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	op := randScan(g, rng)
 	op.Scan.ForUpdate = true
@@ -1497,6 +1538,13 @@ func randScanForShareSkipLockedGuaranteedDurability(g *generator, rng *rand.Rand
 func randReverseScan(g *generator, rng *rand.Rand) Operation {
 	op := randScan(g, rng)
 	op.Scan.Reverse = true
+	return op
+}
+
+func randReverseScanFollowerRead(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.Reverse = true
+	op.Scan.FollowerReadEligible = true
 	return op
 }
 
@@ -1833,12 +1881,23 @@ func restartRandNode(g *generator, rng *rand.Rand) Operation {
 	return restartNode(randNode)
 }
 
+func isFollowerReadEligibleOp(op Operation) bool {
+	if op.Get != nil && op.Get.FollowerReadEligible {
+		return true
+	}
+	if op.Scan != nil && op.Scan.FollowerReadEligible {
+		return true
+	}
+	return false
+}
+
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
 		g.registerClientOps(&allowed, c)
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
+		followerReadEligible := true
 		var addedForwardScan, addedReverseScan bool
 
 		// TODO(ssd): MutateBatchHeader is disallowed with Puts because of
@@ -1849,6 +1908,8 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 
 		for i := 0; i < numOps; i++ {
 			ops[i] = g.selectOp(rng, allowed)
+			// The batch is eligible for follower reads only if all its ops are.
+			followerReadEligible = followerReadEligible && isFollowerReadEligibleOp(ops[i])
 			if ops[i].Scan != nil {
 				if !ops[i].Scan.Reverse {
 					if addedReverseScan {
@@ -1883,7 +1944,9 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 				addedBatchHeaderMutation = true
 			}
 		}
-		return batch(ops...)
+		op := batch(ops...)
+		op.Batch.FollowerReadEligible = followerReadEligible
+		return op
 	}
 }
 
@@ -1933,6 +1996,7 @@ func makeClosureTxn(
 		// Stack of savepoint indexes/ids.
 		// The last element of the slice is the top of the stack.
 		var spIDs []int
+		followerReadEligible := true
 		for i := range ops {
 			// In each iteration, we start with the allowed non-savepoint ops,
 			// and we add the valid savepoint ops in registerSavepointOps.
@@ -1943,6 +2007,8 @@ func makeClosureTxn(
 			// allowed savepoint ops changes. See registerSavepointOps.
 			g.registerSavepointOps(&allowedIncludingSavepointOps, savepointOps, spIDs, i)
 			ops[i] = g.selectOp(rng, allowedIncludingSavepointOps)
+			// The transaction is eligible for follower reads only if all its ops are.
+			followerReadEligible = followerReadEligible && isFollowerReadEligibleOp(ops[i])
 			// Now that a random op is selected, we may need to update the stack of
 			// existing savepoints. See maybeUpdateSavepoints.
 			maybeUpdateSavepoints(&spIDs, ops[i])
@@ -1958,6 +2024,7 @@ func makeClosureTxn(
 			}
 			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch)(g, rng).Batch
 		}
+		op.ClosureTxn.FollowerReadEligible = followerReadEligible
 		return op
 	}
 }
