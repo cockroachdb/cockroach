@@ -102,7 +102,7 @@ func newReplicaLogStorageTest(t *testing.T) *replicaLogStorageTest {
 	st := cluster.MakeTestingClusterSettings()
 	eng := storage.NewDefaultInMemForTesting()
 	sideloaded := logstore.NewDiskSideloadStorage(st, rangeID,
-		eng.GetAuxiliaryDir(), nil /* limiter: unused */, eng)
+		eng.GetAuxiliaryDir(), nil /* limiter: unused */, eng.Env())
 
 	rt.ls = &replicaLogStorage{
 		ctx:     context.Background(),
