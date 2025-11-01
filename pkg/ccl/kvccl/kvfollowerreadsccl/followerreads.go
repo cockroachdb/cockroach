@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 )
 
 // ClosedTimestampPropagationSlack is used by follower_read_timestamp() as a
@@ -198,9 +199,13 @@ func (o *followerReadOracle) useClosestOracle(
 var followerReadOraclePolicy = replicaoracle.RegisterPolicy(newFollowerReadOracle)
 
 type bulkOracle struct {
-	cfg       replicaoracle.Config
-	locFilter roachpb.Locality
-	streaks   StreakConfig
+	cfg        replicaoracle.Config
+	locFilters []roachpb.Locality
+
+	// strictFiltering, if true, will return an error if no replicas match the
+	// locality filter.
+	strictFiltering bool
+	streaks         StreakConfig
 }
 
 // StreakConfig controls the streak-preferring behavior of oracles that support
@@ -241,13 +246,17 @@ func (s StreakConfig) shouldExtend(streak, fewestSpansAssigned, assigned int) bo
 
 var _ replicaoracle.Oracle = bulkOracle{}
 
-// NewBulkOracle returns an oracle for planning bulk operations, which will plan
+// NewStreakBulkOracle returns an oracle for planning bulk operations, which will plan
 // balancing randomly across all replicas (if follower reads are enabled).
-// TODO(dt): respect streak preferences when using locality filtering. #120755.
-func NewBulkOracle(
-	cfg replicaoracle.Config, locFilter roachpb.Locality, streaks StreakConfig,
+// TODO(dt): unify the streak bulk oracle and locality filtering bulk oracle. #120755.
+func NewStreakBulkOracle(cfg replicaoracle.Config, streaks StreakConfig) replicaoracle.Oracle {
+	return bulkOracle{cfg: cfg, streaks: streaks}
+}
+
+func NewLocalityFilteringBulkOracle(
+	cfg replicaoracle.Config, strict bool, localityFilters ...roachpb.Locality,
 ) replicaoracle.Oracle {
-	return bulkOracle{cfg: cfg, locFilter: locFilter, streaks: streaks}
+	return bulkOracle{cfg: cfg, strictFiltering: strict, locFilters: localityFilters}
 }
 
 // ChoosePreferredReplica implements the replicaoracle.Oracle interface.
@@ -267,17 +276,22 @@ func (r bulkOracle) ChoosePreferredReplica(
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, false, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
 	}
-	if r.locFilter.NonEmpty() {
+	if len(r.locFilters) > 0 {
 		var matches []int
 		for i := range replicas {
-			if ok, _ := replicas[i].Locality.Matches(r.locFilter); ok {
-				matches = append(matches, i)
+			for _, filter := range r.locFilters {
+				if ok, _ := replicas[i].Locality.Matches(filter); ok {
+					matches = append(matches, i)
+				}
 			}
 		}
 		// TODO(dt): ideally we'd just filter `replicas`  here, then continue on to
 		// the code below to pick one as normal, just from the filtered slice.
 		if len(matches) > 0 {
 			return replicas[matches[randutil.FastUint32()%uint32(len(matches))]].ReplicaDescriptor, true, nil
+		} else if r.strictFiltering {
+			return roachpb.ReplicaDescriptor{}, false,
+				errors.Newf("no replicas for range %d with span [%s,%s) match locality filters %s", desc.RangeID, desc.StartKey, desc.EndKey, r.locFilters)
 		}
 	}
 
