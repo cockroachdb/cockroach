@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -365,6 +366,21 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 
 	if params.DefaultTenantName == "" {
 		params.DefaultTenantName = defaultTestTenantName
+	}
+
+	var evalTestingKnobs *eval.TestingKnobs
+	if params.Knobs.SQLEvalContext != nil {
+		evalTestingKnobs = params.Knobs.SQLEvalContext.(*eval.TestingKnobs)
+	} else {
+		evalTestingKnobs = &eval.TestingKnobs{}
+		params.Knobs.SQLEvalContext = evalTestingKnobs
+	}
+
+	if evalTestingKnobs.UnsafeOverride == nil {
+		v := true
+		evalTestingKnobs.UnsafeOverride = func() *bool {
+			return &v
+		}
 	}
 
 	srv, err := srvFactoryImpl.New(params)

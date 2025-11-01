@@ -1,4 +1,5 @@
 # LogicTest: !local-prepared
+# knob-opt: allow-unsafe
 
 subtest lost_table_data
 

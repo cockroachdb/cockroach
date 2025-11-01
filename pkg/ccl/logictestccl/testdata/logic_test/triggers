@@ -1,4 +1,5 @@
 # LogicTest: !local-legacy-schema-changer !local-prepared
+# knob-opt: allow-unsafe
 
 # Include some hidden columns that won't be visible to triggers.
 statement ok
