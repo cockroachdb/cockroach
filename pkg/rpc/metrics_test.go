@@ -134,7 +134,7 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 			if tc.shouldRecord {
 				expectedCount = 1
 			}
-			assertGrpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
+			assertRpcMetrics(t, requestMetrics.Duration.ToPrometheusMetrics(), map[string]uint64{
 				fmt.Sprintf("%s %s", tc.methodName, tc.statusCode): expectedCount,
 			})
 		})
@@ -209,7 +209,7 @@ func TestGatewayRequestRecoveryInterceptor(t *testing.T) {
 	})
 }
 
-func assertGrpcMetrics(
+func assertRpcMetrics(
 	t *testing.T, metrics []*io_prometheus_client.Metric, expected map[string]uint64,
 ) {
 	t.Helper()
