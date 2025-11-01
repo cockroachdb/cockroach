@@ -52,6 +52,9 @@ func calculateConfidenceInterval(newValues, oldValues []float64) ConfidenceInter
 // resample samples a slice of values with replacement.
 func resample(r *rand.Rand, src, dest []float64) {
 	length := len(src)
+	if length == 0 {
+		return
+	}
 	for i := range dest {
 		dest[i] = src[r.Intn(length)]
 	}
@@ -68,6 +71,9 @@ func hash(data []float64) int64 {
 
 // median returns the median of a sorted slice of values.
 func median(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
 	length := len(values)
 	if length%2 == 0 {
 		return (values[length/2] + values[length/2-1]) / 2
