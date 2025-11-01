@@ -109,7 +109,11 @@ func newEventConsumer(
 		if encodingOpts.Envelope == changefeedbase.OptEnvelopeEnriched {
 			var schemaInfo map[descpb.ID]tableSchemaInfo
 			if inSet(changefeedbase.EnrichedPropertySource, encodingOpts.EnrichedProperties) {
-				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets)
+				targetTS := spec.SchemaTS
+				if targetTS == nil || targetTS.IsEmpty() {
+					targetTS = &spec.Feed.StatementTime
+				}
+				schemaInfo, err = GetTableSchemaInfo(ctx, cfg, feed.Targets, *targetTS)
 				if err != nil {
 					return nil, err
 				}

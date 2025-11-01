@@ -448,7 +448,15 @@ func generateAndValidateNewTargets(
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg())
+	targetTS := prevProgress.GetHighWater()
+	if targetTS == nil || targetTS.IsEmpty() {
+		targetTS = &prevDetails.StatementTime
+	}
+	// targetTS := statementTime
+	// if prevProgress.GetHighWater() != nil && !prevProgress.GetHighWater().IsEmpty() {
+	// 	targetTS = *prevProgress.GetHighWater()
+	// }
+	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg(), *targetTS)
 	if err != nil {
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
