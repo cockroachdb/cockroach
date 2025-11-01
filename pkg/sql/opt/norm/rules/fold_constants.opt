@@ -101,6 +101,19 @@ $result
 =>
 $result
 
+[FoldComparisonWithAny, Normalize]
+(AnyScalar
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* & (IsTuple $right)
+    $cmp:* &
+        (Let
+            ($result $ok):(FoldComparisonWithAny $cmp $left $right)
+            $ok
+        )
+)
+=>
+$result
+
 # FoldComparison is similar to FoldBinary, but it involves a comparison
 # operation. As with FoldBinary, FoldComparison applies as long as the
 # evaluation would not cause an error.
