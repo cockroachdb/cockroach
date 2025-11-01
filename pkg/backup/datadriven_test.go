@@ -608,7 +608,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				d.ScanArgs(t, "testingKnobCfg", &testingKnobCfg)
 			}
 			if d.HasArg("disable-tenant") {
-				defaultTestTenant = base.TODOTestTenantDisabled
+				defaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798)
 			}
 
 			// TODO(ssd): Once TestServer starts up reliably enough:
