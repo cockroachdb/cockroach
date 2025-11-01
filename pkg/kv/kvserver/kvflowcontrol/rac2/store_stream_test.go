@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,11 +59,11 @@ func TestBlockedStreamLogging(t *testing.T) {
 
 	numBlocked := 0
 	createStreamAndExhaustTokens := func(id uint64, checkMetric bool) {
-		p.Eval(makeStream(id)).Deduct(ctx, admissionpb.RegularWorkClass, kvflowcontrol.Tokens(numTokens), AdjNormal)
+		p.Eval(makeStream(id)).Deduct(ctx, RegularWC, kvflowcontrol.Tokens(numTokens), AdjNormal)
 		if checkMetric {
 			p.UpdateMetricGauges()
-			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[EvalToken].BlockedCount[elastic].Value())
-			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[EvalToken].BlockedCount[regular].Value())
+			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[EvalToken].BlockedCount[ElasticWC].Value())
+			require.Equal(t, int64(numBlocked+1), p.tokenMetrics.StreamMetrics[EvalToken].BlockedCount[RegularWC].Value())
 		}
 		numBlocked++
 	}
@@ -248,28 +247,28 @@ func TestStreamTokenCounterProviderInspect(t *testing.T) {
 
 	record("No streams.")
 
-	p.Eval(stream(1)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(1)).Deduct(ctx, RegularWC, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Single stream with 1 MiB of eval regular tokens deducted.")
 
-	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(1)).Deduct(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Single stream with 1 MiB of elastic+regular (send+eval) tokens deducted.")
 
-	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Eval(stream(2)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Eval(stream(3)).Deduct(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(1)).Return(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(2)).Deduct(ctx, RegularWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(3)).Deduct(ctx, RegularWC, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Three streams, with 1 MiB of regular tokens deducted each.")
 
-	p.Send(stream(1)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Send(stream(2)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Send(stream(3)).Deduct(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(1)).Deduct(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(2)).Deduct(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(3)).Deduct(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Three streams, with 1 MiB of elastic send tokens deducted from each.")
 
-	p.Eval(stream(1)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Eval(stream(2)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Eval(stream(3)).Return(ctx, admissionpb.RegularWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Send(stream(1)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Send(stream(2)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
-	p.Send(stream(3)).Return(ctx, admissionpb.ElasticWorkClass, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(1)).Return(ctx, RegularWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(2)).Return(ctx, RegularWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Eval(stream(3)).Return(ctx, RegularWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(1)).Return(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(2)).Return(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
+	p.Send(stream(3)).Return(ctx, ElasticWC, 1<<20 /* 1 MiB */, AdjNormal)
 	record("Three streams, all tokens returned.")
 }
 
@@ -298,8 +297,11 @@ func (n *testingTokenGrantNotification) String() string {
 		n.name, n.handle.id, n.deducted, n.deduction, state)
 }
 
-func (n *testingTokenGrantNotification) Notify(ctx context.Context) {
-	n.tc.Deduct(ctx, admissionpb.ElasticWorkClass, n.deduction, AdjNormal)
+func (n *testingTokenGrantNotification) Notify(ctx context.Context, wc WorkClassOrInflight) {
+	if wc != ElasticWC {
+		panic("test is only setup for elastic token notification")
+	}
+	n.tc.Deduct(ctx, ElasticWC, n.deduction, AdjNormal)
 	n.deducted += n.deduction
 }
 
@@ -341,7 +343,8 @@ func TestSendTokenWatcher(t *testing.T) {
 	notifications := make(map[string]*testingTokenGrantNotification)
 	streamOrderng := make(map[kvflowcontrol.Stream][]string)
 	zeroedCounters := make(map[kvflowcontrol.Stream]struct{})
-	watcher := NewSendTokenWatcher(stopper, clock)
+	sendTokenWatcherWC := ElasticWC
+	watcher := NewSendTokenWatcher(stopper, clock, ElasticWC)
 	provider := NewStreamTokenCounterProvider(
 		cluster.MakeTestingClusterSettings(), hlc.NewClockForTesting(nil))
 
@@ -408,7 +411,7 @@ func TestSendTokenWatcher(t *testing.T) {
 					if _, ok := zeroedCounters[stream]; !ok {
 						// Zero the token counter if its the first time we're seeing it. We
 						// want all streams to start with 0 elastic tokens.
-						tc.adjust(ctx, admissionpb.ElasticWorkClass,
+						tc.adjust(ctx, sendTokenWatcherWC,
 							-kvflowcontrol.Tokens(kvflowcontrol.ElasticTokensPerStream.Default()),
 							AdjNormal)
 						zeroedCounters[stream] = struct{}{}

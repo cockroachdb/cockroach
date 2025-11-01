@@ -9,11 +9,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # There should be no tracked entries for the range.
 stream_state range_id=1
@@ -41,11 +41,11 @@ range_id=1
   term=1 index=3 pri=NormalPri size=1MiB
 ----
 t1/s1: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -80,11 +80,11 @@ range_id=1
   store_id=2 term=1 to_index=1 pri=NormalPri
 ----
 t1/s1: eval reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
-       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Send an empty event so that replicaSendStreams are aware of the update to
 # match.
@@ -92,11 +92,11 @@ raft_event
 range_id=1
 ----
 t1/s1: eval reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
-       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
-       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
+       send reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 stream_state range_id=1
 ----
@@ -155,11 +155,11 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=0
 ----
 t1/s1: eval reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
-       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB
+       send reg=+15 MiB/+16 MiB ela=+7.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
-       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB
+       send reg=+14 MiB/+16 MiB ela=+6.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 
 # Close the range controller. This should return the tracked deductions for
 # entry 3 on s1 and [2,3] on s2.
@@ -173,8 +173,8 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=0
 ----
 t1/s1: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
-       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB
+       send reg=+16 MiB/+16 MiB ela=+8.0 MiB/+8.0 MiB inflight=+64 MiB/+64 MiB

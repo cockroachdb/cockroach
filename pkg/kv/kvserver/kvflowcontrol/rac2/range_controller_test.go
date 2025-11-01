@@ -84,7 +84,7 @@ func (s *testingRCState) init(t *testing.T, ctx context.Context) {
 	s.ts = timeutil.NewManualTime(timeutil.UnixEpoch)
 	s.clock = hlc.NewClockForTesting(s.ts)
 	s.ssTokenCounter = NewStreamTokenCounterProvider(s.settings, s.clock)
-	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts)
+	s.sendTokenWatcher = NewSendTokenWatcher(s.stopper, s.ts, ElasticWC)
 	s.probeToCloseScheduler = &testingProbeToCloseTimerScheduler{state: s}
 	s.waitForEvalConfig = NewWaitForEvalConfig(s.settings)
 	s.evalMetrics = NewEvalWaitMetrics()
@@ -322,15 +322,15 @@ func (s *testingRCState) maybeSetInitialTokens(r testingRange) {
 			s.setTokenCounters[stream] = struct{}{}
 			if s.initialRegularTokens != -1 {
 				s.ssTokenCounter.Eval(stream).testingSetTokens(s.testCtx,
-					admissionpb.RegularWorkClass, s.initialRegularTokens)
+					RegularWC, s.initialRegularTokens)
 				s.ssTokenCounter.Send(stream).testingSetTokens(s.testCtx,
-					admissionpb.RegularWorkClass, s.initialRegularTokens)
+					RegularWC, s.initialRegularTokens)
 			}
 			if s.initialElasticTokens != -1 {
 				s.ssTokenCounter.Eval(stream).testingSetTokens(s.testCtx,
-					admissionpb.ElasticWorkClass, s.initialElasticTokens)
+					ElasticWC, s.initialElasticTokens)
 				s.ssTokenCounter.Send(stream).testingSetTokens(s.testCtx,
-					admissionpb.ElasticWorkClass, s.initialElasticTokens)
+					ElasticWC, s.initialElasticTokens)
 			}
 		}
 	}
@@ -1210,7 +1210,7 @@ func TestRangeController(t *testing.T) {
 						})
 					}
 					tc.adjust(ctx,
-						admissionpb.WorkClassFromPri(pri),
+						WorkClassOrInflight(admissionpb.WorkClassFromPri(pri)),
 						kvflowcontrol.Tokens(tokens),
 						AdjNormal,
 					)

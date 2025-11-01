@@ -10,11 +10,11 @@ range_id=1 tenant_id=1 local_replica_id=1 next_raft_index=1
 ----
 r1: [(n1,s1):1*,(n2,s2):2,(n3,s3):3]
 t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 metrics
 ----
@@ -48,11 +48,11 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Cancel the context for the high priority evaluation 'a'.
 cancel_context range_id=1 name=a
@@ -67,11 +67,11 @@ adjust_tokens
   store_id=2 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -85,11 +85,11 @@ adjust_tokens
   store_id=3 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -110,13 +110,13 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=-1
 ----
 t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Start a new high priority evaluation 'c'. It should not complete due to lack
 # of quorum.
@@ -132,13 +132,13 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Check the state. The high priority evaluation 'c' should now complete.
 check_state
@@ -172,13 +172,13 @@ adjust_tokens
   store_id=3 pri=HighPri tokens=-1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Check the state. The high priority evaluation 'd' should complete despite the
 # non-voter replica lacking tokens.
@@ -207,13 +207,13 @@ adjust_tokens
   store_id=3 pri=LowPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -230,13 +230,13 @@ adjust_tokens
   store_id=4 pri=LowPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -254,13 +254,13 @@ adjust_tokens
   store_id=4 pri=LowPri tokens=-1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Test behavior when changing leaseholder.
 set_leaseholder range_id=1 replica_id=2
@@ -331,15 +331,15 @@ adjust_tokens
   store_id=5 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -360,15 +360,15 @@ adjust_tokens
   store_id=3 pri=LowPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -403,15 +403,15 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=-1
 ----
 t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 set_leaseholder range_id=1 replica_id=5
 ----
@@ -440,15 +440,15 @@ adjust_tokens
   store_id=3 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Start another evaluation 'j' on r1, it should also not complete until the
 # leader (s1) has tokens, despite both the leaseholder (s3) and a quorum
@@ -473,15 +473,15 @@ adjust_tokens
   store_id=1 pri=HighPri tokens=1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 check_state
 ----
@@ -503,15 +503,15 @@ adjust_tokens
   store_id=3 pri=HighPri tokens=-1
 ----
 t1/s1: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s2: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s3: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s4: eval reg=+0 B/+1 B ela=+0 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 t1/s5: eval reg=+1 B/+1 B ela=+1 B/+1 B
-       send reg=+0 B/+1 B ela=+0 B/+1 B
+       send reg=+0 B/+1 B ela=+0 B/+1 B inflight=+64 MiB/+64 MiB
 
 # Start an evaluation 'k' on r1, that does not complete since the leaseholder
 # (s3) has no tokens.
