@@ -1,0 +1,51 @@
+# LogicTest: !local-prepared
+
+statement ok
+DROP TABLE IF EXISTS canary_table;
+
+# To avoid test flake.
+statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
+CREATE TABLE canary_table (x int primary key, y int, FAMILY (x, y)) WITH (canary_window = '20s');
+
+query TT
+SHOW CREATE TABLE canary_table
+----
+canary_table  CREATE TABLE public.canary_table (
+                x INT8 NOT NULL,
+                y INT8 NULL,
+                CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
+                FAMILY fam_0_x_y (x, y)
+              ) WITH (canary_window = '20s');
+
+let $table_creation_ts
+SELECT now()
+
+statement ok
+ALTER TABLE canary_table SET (canary_window = '30s');
+
+# Test the gating with a value that exceeds the maximum allowed canary window.
+statement error canary window size 72h0m0s exceeds maximum allowed value of 48 hours
+ALTER TABLE canary_table SET (canary_window = '259200s');
+
+query TT
+SHOW CREATE TABLE canary_table
+----
+canary_table  CREATE TABLE public.canary_table (
+                x INT8 NOT NULL,
+                y INT8 NULL,
+                CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
+                FAMILY fam_0_x_y (x, y)
+              ) WITH (canary_window = '30s');
+
+query T
+SELECT create_statement FROM crdb_internal.create_statements AS OF SYSTEM TIME '$table_creation_ts' WHERE descriptor_name = 'canary_table';
+----
+CREATE TABLE public.canary_table (
+  x INT8 NOT NULL,
+  y INT8 NULL,
+  CONSTRAINT canary_table_pkey PRIMARY KEY (x ASC),
+  FAMILY fam_0_x_y (x, y)
+) WITH (canary_window = '20s')
