@@ -826,6 +826,7 @@ type feedTestOptions struct {
 	locality                     roachpb.Locality
 	forceKafkaV1ConnectionCheck  bool
 	allowChangefeedErr           bool
+	cloudStorageFileSize         int64
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -921,6 +922,12 @@ func withAllowChangefeedErr(
 ) feedTestOption {
 	return func(opts *feedTestOptions) {
 		opts.allowChangefeedErr = true
+	}
+}
+
+func withCloudStorageFileSize(fileSize int64) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.cloudStorageFileSize = fileSize
 	}
 }
 
@@ -1502,7 +1509,7 @@ func makeFeedFactoryWithOptions(
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
 		}
-		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
+		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir, options.cloudStorageFileSize)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*cloudFeedFactory).configureUserDB(userDB)
 		return f, func() {
