@@ -47,6 +47,36 @@ type Filter struct {
 	ExcludeTables map[string]struct{}
 }
 
+func NewFilterFromChangefeedDetails(details jobspb.ChangefeedDetails) (Filter, error) {
+	if len(details.TargetSpecifications) != 1 {
+		return Filter{}, errors.AssertionFailedf("expected one database target specification")
+	}
+	dbDescID := details.TargetSpecifications[0].DescID
+	if dbDescID == 0 {
+		return Filter{}, errors.AssertionFailedf("database descriptor ID is 0")
+	}
+	filterList := details.TargetSpecifications[0].FilterList
+	if filterList == nil {
+		return Filter{}, errors.AssertionFailedf("filter list is nil")
+	}
+
+	filteredTables := make(map[string]struct{})
+	for table := range filterList.Tables {
+		filteredTables[table] = struct{}{}
+	}
+
+	var wFilter Filter
+	switch filterList.FilterType {
+	case tree.ExcludeFilter:
+		wFilter = Filter{DatabaseID: dbDescID, ExcludeTables: filteredTables}
+	case tree.IncludeFilter:
+		wFilter = Filter{DatabaseID: dbDescID, IncludeTables: filteredTables}
+	default:
+		return Filter{}, errors.AssertionFailedf("expected exclude or include filter")
+	}
+	return wFilter, nil
+}
+
 func (f Filter) String() string {
 	return fmt.Sprintf("Filter{database_id=%d, include_tables=%v, exclude_tables=%v}",
 		f.DatabaseID, slices.Collect(maps.Keys(f.IncludeTables)),
@@ -92,8 +122,51 @@ func (d TableDiff) size() int64 {
 	return d.Added.size() + d.Dropped.size() + int64(d.AsOf.Size())
 }
 
+func (d TableDiff) String() string {
+	return fmt.Sprintf("TableDiff{Added: %s, Dropped: %s, AsOf: %s}", d.Added.String(), d.Dropped.String(), d.AsOf.String())
+}
+
 func compareTableDiffsByTS(a, b TableDiff) int {
 	return a.AsOf.Compare(b.AsOf)
+}
+
+type AddedTable struct {
+	Table Table
+	AsOf  hlc.Timestamp
+}
+
+type RemovedTable struct {
+	Table Table
+	AsOf  hlc.Timestamp
+}
+
+type TableDiffs []TableDiff
+
+func (d TableDiffs) Adds() []AddedTable {
+	var adds []AddedTable
+	for _, diff := range d {
+		if diff.Added.ID != 0 {
+			adds = append(adds, AddedTable{Table: diff.Added, AsOf: diff.AsOf})
+		}
+	}
+	return adds
+}
+
+func (d TableDiffs) Removes() []RemovedTable {
+	var removes []RemovedTable
+	for _, diff := range d {
+		if diff.Dropped.ID != 0 {
+			removes = append(removes, RemovedTable{Table: diff.Dropped, AsOf: diff.AsOf})
+		}
+	}
+	return removes
+}
+
+func (d TableDiffs) Frontier() hlc.Timestamp {
+	if len(d) == 0 {
+		return hlc.Timestamp{}
+	}
+	return d[0].AsOf
 }
 
 type TableSet struct {
@@ -111,6 +184,11 @@ type Watcher struct {
 	mon     *mon.BytesMonitor
 	acc     mon.BoundAccount // set on Start
 	started bool
+
+	// lastPoppedFrontier is the last frontier timestamp that was passed to
+	// PopUnchangedUpTo(). It's used to detect invalid uses of
+	// PopUnchangedUpTo(). It's not perfect but it's better than nothing.
+	lastPoppedFrontier hlc.Timestamp
 
 	mu struct {
 		syncutil.Mutex
@@ -254,20 +332,27 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		setErr(func() error {
 			var table, prevTable Table
 			var err error
+			var ok bool
 
 			if kv.Value.IsPresent() {
-				table, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
+				table, ok, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
 				if err != nil {
 					return err
+				}
+				if !ok {
+					return nil
 				}
 			}
 
 			if kv.PrevValue.IsPresent() {
-				kvpb := roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
-				kvpb.Value.Timestamp = kv.Value.Timestamp
-				prevTable, err = w.kvToTable(ctx, kvpb, dec)
+				pv := kv.PrevValue
+				pv.Timestamp = kv.Value.Timestamp
+				prevTable, ok, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: pv}, dec)
 				if err != nil {
 					return err
+				}
+				if !ok {
+					return nil
 				}
 			}
 
@@ -368,12 +453,24 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	}
 }
 
+var errRepeatedPopCall = errors.AssertionFailedf(
+	"PopUnchangedUpTo called with non-advancing timestamp: upTo is less than or equal to lastPoppedFrontier; this indicates a bug in the caller",
+)
+
+// TODO(#...): return an error if the database is dropped, to alert the caller that we're never going to get any more diffs.
+
 // PopUnchangedUpTo returns true if the tableset is unchanged between when it
 // (or popDiffsUpTo()) was last called (or the initialTS) and the given timestamp
 // [inclusive, exclusive). It discards data older than the last call to it
 func (w *Watcher) PopUnchangedUpTo(
 	ctx context.Context, upTo hlc.Timestamp,
-) (unchanged bool, diffs []TableDiff, err error) {
+) (unchanged bool, diffs TableDiffs, err error) {
+	// Check that the frontier is advancing.
+	if upTo.Compare(w.lastPoppedFrontier) <= 0 {
+		return false, nil, errors.Wrapf(errRepeatedPopCall, "upTo=%s, lastPoppedFrontier=%s", upTo, w.lastPoppedFrontier)
+	}
+	w.lastPoppedFrontier = upTo
+
 	// TODO: we technically dont need to wait for resolved here if there already
 	// are diffs buffered > upTo. But this seems tricky to implement rn.
 
@@ -488,31 +585,51 @@ func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
 
 func (w *Watcher) kvToTable(
 	ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder,
-) (Table, error) {
+) (_ Table, ok bool, _ error) {
 	if log.V(2) {
-		log.Changefeed.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
+		log.Changefeed.Infof(ctx, "decoding %s@%s", kv.Key, kv.Value.Timestamp)
 	}
 
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
 	}
 
+	if log.V(2) {
+		log.Changefeed.Infof(ctx, "row: %s", row.DebugString())
+	}
+
+	var notATable bool
 	var tableID descpb.ID
 	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		switch col.Name {
 		case "id":
 			tableID = descpb.ID(tree.MustBeDInt(d))
+		// Ensure that parentID and parentSchemaID are not 0, as they indicate a database or schema and not a table.
+		case "parentID":
+			parentID := descpb.ID(tree.MustBeDInt(d))
+			if parentID == 0 {
+				notATable = true
+			}
+		case "parentSchemaID":
+			parentSchemaID := descpb.ID(tree.MustBeDInt(d))
+			if parentSchemaID == 0 {
+				notATable = true
+			}
 		}
 		return nil
 	})
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
+	}
+
+	if notATable {
+		return Table{}, false, nil
 	}
 
 	nameInfo, err := catalogkeys.DecodeNameMetadataKey(w.execCfg.Codec, kv.Key)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
 	}
 
 	table := Table{
@@ -520,7 +637,7 @@ func (w *Watcher) kvToTable(
 		ID:       tableID,
 	}
 
-	return table, nil
+	return table, true, nil
 }
 
 func mkConsumerID(id int64) int64 {

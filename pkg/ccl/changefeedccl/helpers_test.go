@@ -939,6 +939,7 @@ func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
 		`knobs.RaiseRetryableError`,
 		`test error`,
 		`context canceled`,
+		errDatabaseTargetsChanged.Error(),
 	}
 	shouldIgnoreErr := func(err error) bool {
 		if err == nil || errors.Is(err, context.Canceled) {
