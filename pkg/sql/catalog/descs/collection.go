@@ -367,7 +367,8 @@ func WithOnlyVersionBump() WriteDescOption {
 }
 
 type getAllOptions struct {
-	allowLeased bool
+	allowLeased  bool
+	withMetaData bool
 }
 
 // GetAllOption defines functional options for GetAll* methods.
@@ -381,9 +382,21 @@ func (c allowLeasedOption) apply(opts *getAllOptions) {
 	opts.allowLeased = bool(c)
 }
 
+type withMetaDataOption bool
+
+func (c withMetaDataOption) apply(opts *getAllOptions) {
+	opts.withMetaData = bool(c)
+}
+
 // WithAllowLeased configures GetAll* methods to allow leased descriptors.
 func WithAllowLeased() GetAllOption {
 	return allowLeasedOption(true)
+}
+
+// WithMetaData configures GetAll* methods to fetch comments and zone
+// configs.
+func WithMetaData() GetAllOption {
+	return withMetaDataOption(true)
 }
 
 // applyGetAllOptions applies the provided functional options to a getAllOptions struct.
@@ -922,7 +935,7 @@ func (tc *Collection) GetAll(
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	ret, err := tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
+	ret, err := tc.aggregateAllLayers(ctx, txn, options, stored)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -947,7 +960,7 @@ func (tc *Collection) GetAllComments(
 	if err != nil {
 		return nil, err
 	}
-	const allowLeased = false
+	var allowLeased = getAllOptions{}
 	comments, err := tc.aggregateAllLayers(ctx, txn, allowLeased, kvComments)
 	if err != nil {
 		return nil, err
@@ -974,7 +987,7 @@ func (tc *Collection) GetAllDatabases(
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
-	ret, err := tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
+	ret, err := tc.aggregateAllLayers(ctx, txn, options, stored)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -1001,9 +1014,9 @@ func (tc *Collection) GetAllSchemasInDatabase(
 	}
 	var ret nstree.MutableCatalog
 	if db.HasPublicSchemaWithDescriptor() {
-		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
+		ret, err = tc.aggregateAllLayers(ctx, txn, options, stored)
 	} else {
-		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, schemadesc.GetPublicSchema())
+		ret, err = tc.aggregateAllLayers(ctx, txn, options, stored, schemadesc.GetPublicSchema())
 	}
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -1045,7 +1058,7 @@ func (tc *Collection) GetAllObjectsInSchema(
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
-		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, sc)
+		ret, err = tc.aggregateAllLayers(ctx, txn, options, stored, sc)
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
@@ -1083,7 +1096,7 @@ func (tc *Collection) GetAllInDatabase(
 	}); err != nil {
 		return nstree.Catalog{}, err
 	}
-	ret, err := tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, schemasSlice...)
+	ret, err := tc.aggregateAllLayers(ctx, txn, options, stored, schemasSlice...)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
@@ -1120,9 +1133,9 @@ func (tc *Collection) GetAllTablesInDatabase(
 	}
 	var ret nstree.MutableCatalog
 	if db.HasPublicSchemaWithDescriptor() {
-		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored)
+		ret, err = tc.aggregateAllLayers(ctx, txn, options, stored)
 	} else {
-		ret, err = tc.aggregateAllLayers(ctx, txn, options.allowLeased, stored, schemadesc.GetPublicSchema())
+		ret, err = tc.aggregateAllLayers(ctx, txn, options, stored, schemadesc.GetPublicSchema())
 	}
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -1147,7 +1160,7 @@ func (tc *Collection) GetAllTablesInDatabase(
 func (tc *Collection) aggregateAllLayers(
 	ctx context.Context,
 	txn *kv.Txn,
-	allowLeased bool,
+	getAllOptions getAllOptions,
 	stored nstree.Catalog,
 	schemas ...catalog.SchemaDescriptor,
 ) (ret nstree.MutableCatalog, _ error) {
@@ -1246,8 +1259,11 @@ func (tc *Collection) aggregateAllLayers(
 	tc.deletedDescs.ForEach(descIDs.Remove)
 	allDescs := make([]catalog.Descriptor, descIDs.Len())
 	flags := defaultUnleasedFlags()
-	if allowLeased {
+	if getAllOptions.allowLeased {
 		flags.layerFilters.withoutLeased = false
+	}
+	if getAllOptions.withMetaData {
+		flags.layerFilters.withMetadata = true
 	}
 	if err := getDescriptorsByID(
 		ctx, tc, txn, flags, allDescs, descIDs.Ordered()...,

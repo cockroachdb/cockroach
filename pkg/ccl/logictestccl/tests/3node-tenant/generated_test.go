@@ -1954,53 +1954,11 @@ func TestTenantLogic_show_completions(
 	runLogicTest(t, "show_completions")
 }
 
-func TestTenantLogic_show_create(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create")
-}
-
-func TestTenantLogic_show_create_all_routines(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_routines")
-}
-
-func TestTenantLogic_show_create_all_schemas(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_schemas")
-}
-
-func TestTenantLogic_show_create_all_tables(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_tables")
-}
-
-func TestTenantLogic_show_create_all_tables_builtin(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_tables_builtin")
-}
-
 func TestTenantLogic_show_create_all_triggers(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_create_all_triggers")
-}
-
-func TestTenantLogic_show_create_all_types(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "show_create_all_types")
 }
 
 func TestTenantLogic_show_create_redact(

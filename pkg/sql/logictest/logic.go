@@ -1825,6 +1825,18 @@ func (t *logicTest) newCluster(
 				t.Fatal(err)
 			}
 		}
+		if cfg.EnableLeasedDescriptorSupport {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//

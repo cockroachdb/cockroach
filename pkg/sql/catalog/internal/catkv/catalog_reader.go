@@ -35,6 +35,9 @@ type CatalogReader interface {
 	// is known to be in the cache.
 	IsIDInCache(id descpb.ID) bool
 
+	// IsCommentInCache return true when the comment is cached for this descriptor.
+	IsCommentInCache(id descpb.ID) bool
+
 	// IsNameInCache return true when all the by-name catalog data for this name
 	// key is known to be in the cache.
 	IsNameInCache(key descpb.NameInfo) bool
@@ -92,6 +95,7 @@ type CatalogReader interface {
 		ids []descpb.ID,
 		isDescriptorRequired bool,
 		expectedType catalog.DescriptorType,
+		opts ...GetByIDOption,
 	) (nstree.Catalog, error)
 
 	// GetByNames reads the system.namespace entries for the given keys, but
@@ -107,6 +111,30 @@ func NewUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
 	return &catalogReader{
 		codec: codec,
 	}
+}
+
+// getByIDOptions options supported by GetByID.
+type getByIDOptions struct {
+	withoutDescriptor bool
+	withoutZoneConfig bool
+	withoutComments   bool
+}
+
+// GetByIDOption are options that GetByID supports.
+type GetByIDOption interface {
+	apply(*getByIDOptions)
+}
+
+func WithoutDescriptor() GetByIDOption {
+	return getByIDWithoutDescriptor(true)
+}
+
+// getByIDWithoutDescriptor avoids fetching the descriptor for this ID.
+type getByIDWithoutDescriptor bool
+
+// apply implements GetByIDOption.
+func (g getByIDWithoutDescriptor) apply(o *getByIDOptions) {
+	o.withoutDescriptor = bool(g)
 }
 
 // catalogReader implements the CatalogReader interface by building catalogQuery
@@ -132,6 +160,11 @@ func (cr catalogReader) Cache() nstree.Catalog {
 
 // IsIDInCache is part of the CatalogReader interface.
 func (cr catalogReader) IsIDInCache(_ descpb.ID) bool {
+	return false
+}
+
+// IsIDInCache is part of the CatalogReader interface.
+func (cr catalogReader) IsCommentInCache(_ descpb.ID) bool {
 	return false
 }
 
@@ -342,10 +375,15 @@ func (cr catalogReader) GetByIDs(
 	ids []descpb.ID,
 	isDescriptorRequired bool,
 	expectedType catalog.DescriptorType,
+	opts ...GetByIDOption,
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 	if len(ids) == 0 {
 		return nstree.Catalog{}, nil
+	}
+	var options getByIDOptions
+	for _, opt := range opts {
+		opt.apply(&options)
 	}
 	cq := catalogQuery{
 		codec:                cr.codec,
@@ -359,22 +397,34 @@ func (cr catalogReader) GetByIDs(
 		forEachDescriptorIDSpan(ids, func(startID descpb.ID, endID descpb.ID) {
 			// Only a single descriptor run, so generate a Get request.
 			if startID == endID {
-				get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
-				for _, t := range catalogkeys.AllCommentTypes {
-					scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+				if !options.withoutDescriptor {
+					get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
 				}
-				get(ctx, b, config.MakeZoneKey(codec, startID))
+				if !options.withoutComments {
+					for _, t := range catalogkeys.AllCommentTypes {
+						scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+					}
+				}
+				if !options.withoutZoneConfig {
+					get(ctx, b, config.MakeZoneKey(codec, startID))
+				}
 			} else {
 				// Otherwise, generate a Scan request instead. The end key is exclusive,
 				// so we will need to increment the endID.
-				scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
-					catalogkeys.MakeDescMetadataKey(codec, endID+1))
-				for _, t := range catalogkeys.AllCommentTypes {
-					scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
-						catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+				if !options.withoutDescriptor {
+					scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
+						catalogkeys.MakeDescMetadataKey(codec, endID+1))
 				}
-				scanRange(ctx, b, config.MakeZoneKey(codec, startID),
-					config.MakeZoneKey(codec, endID+1))
+				if !options.withoutComments {
+					for _, t := range catalogkeys.AllCommentTypes {
+						scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
+							catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+					}
+				}
+				if !options.withoutZoneConfig {
+					scanRange(ctx, b, config.MakeZoneKey(codec, startID),
+						config.MakeZoneKey(codec, endID+1))
+				}
 			}
 		})
 	})
