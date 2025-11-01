@@ -98,9 +98,33 @@ type singleRangeBatch struct {
 	// not be empty. Note that TargetBytes of at least minTargetBytes is
 	// necessary but might not be sufficient for the response to be non-empty.
 	minTargetBytes int64
+	sortByPos      bool
 }
 
 var _ sort.Interface = &singleRangeBatch{}
+
+// sortSlice sorts the slice r.reqs[start:end] in-place either by the keys of
+// the requests (if sortByPos is false) or by the positions (if sortByPos is
+// true).
+func (r *singleRangeBatch) sortSlice(start, end int, sortByPos bool) {
+	sortBatch := singleRangeBatch{
+		reqs:      r.reqs[start:end],
+		positions: r.positions[start:end],
+		sortByPos: sortByPos,
+	}
+	if r.subRequestIdx != nil {
+		sortBatch.subRequestIdx = r.subRequestIdx[start:end]
+	}
+	if !sortByPos {
+		// Set up keys for sorting.
+		for i := range sortBatch.reqs {
+			sortBatch.reqsKeys = append(
+				sortBatch.reqsKeys, sortBatch.reqs[i].GetInner().Header().Key,
+			)
+		}
+	}
+	sort.Sort(&sortBatch)
+}
 
 // deepCopyRequests updates the singleRangeBatch to have deep-copies of all KV
 // requests (Gets and Scans).
@@ -170,8 +194,12 @@ func (r *singleRangeBatch) Swap(i, j int) {
 	}
 }
 
-// Less returns true if r.reqs[i]'s key comes before r.reqs[j]'s key.
+// Less returns true when r.sortByPos is false if r.reqs[i]'s key comes before
+// r.reqs[j]'s key. Otherwise, returns true if r.positions[i] < r.positions[j].
 func (r *singleRangeBatch) Less(i, j int) bool {
+	if r.sortByPos {
+		return r.positions[i] < r.positions[j]
+	}
 	return r.reqsKeys[i].Compare(r.reqsKeys[j]) < 0
 }
 
@@ -288,6 +316,10 @@ type requestsProvider interface {
 	// nextLocked) from the provider. The lock of the provider must be already
 	// held. Panics if there are no requests.
 	removeNextLocked()
+	// lowerPriorityRequestCount returns the number of singleRangeRequests with a
+	// lower priority than the provided one. The lock of the provider must be
+	// already held. Panics if used in OutOfOrder mode.
+	lowerPriorityRequestCountLocked(priority int) int
 }
 
 type requestsProviderBase struct {
@@ -387,6 +419,10 @@ func (p *outOfOrderRequestsProvider) removeNextLocked() {
 	// Use the last request so that we could reuse its slot if resume request is
 	// added.
 	p.requests = p.requests[:len(p.requests)-1]
+}
+
+func (p *outOfOrderRequestsProvider) lowerPriorityRequestCountLocked(priority int) int {
+	panic(errors.AssertionFailedf("lowerPriorityRequestCountLocked called in OutOfOrder mode"))
 }
 
 // inOrderRequestsProvider is a requestProvider that maintains a min heap of all
@@ -515,4 +551,15 @@ func (p *inOrderRequestsProvider) removeNextLocked() {
 		panic(errors.AssertionFailedf("removeNextLocked called when requestsProvider is empty"))
 	}
 	p.heapRemoveFirst()
+}
+
+func (p *inOrderRequestsProvider) lowerPriorityRequestCountLocked(priority int) int {
+	p.Mutex.AssertHeld()
+	var count int
+	for i := range p.requests {
+		if p.requests[i].priority() < priority {
+			count++
+		}
+	}
+	return count
 }

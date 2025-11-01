@@ -2051,6 +2051,8 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	intents *[]roachpb.Intent,
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
+	expensiveLogEnabled bool,
+	idxInBatch int,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2084,7 +2086,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		return false, err
 	}
 	defer iter.Close()
-	if log.ExpensiveLogEnabled(ctx, 3) {
+	if expensiveLogEnabled && idxInBatch < 32 {
 		defer func() {
 			ss := iter.Stats().Stats
 			log.VEventf(ctx, 3, "lock table scan stats: %s", ss.String())
