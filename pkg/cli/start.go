@@ -193,9 +193,6 @@ func initTempStorageConfig(
 	// target, if any. If we can't find one, we use the first StoreSpec in the
 	// list.
 	//
-	// While we look, we also clean up any abandoned temporary directories. We
-	// don't know which store spec was used previously—and it may change if
-	// encryption gets enabled after the fact—so we check each store.
 	specIdxDisk := -1
 	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
@@ -210,11 +207,6 @@ func initTempStorageConfig(
 		}
 		if specIdxDisk == -1 {
 			specIdxDisk = i
-		}
-		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
-		if err := fs.CleanupTempDirs(recordPath); err != nil {
-			return base.TempStorageConfig{}, errors.Wrap(err,
-				"could not cleanup temporary directories from record file")
 		}
 	}
 
@@ -433,6 +425,13 @@ func runStartInternal(
 	signal.Notify(signalCh, DrainSignals...)
 	if exitAbruptlySignal != nil {
 		signal.Notify(signalCh, exitAbruptlySignal)
+	}
+
+	// We try to delete old leftover temporary folders
+	// This is ran before we exitIfDiskFull so that we have a chance of
+	// freeing some space
+	if err := cleanupOldTempDirs(serverCfg.Stores.Specs); err != nil {
+		return err
 	}
 
 	// Check for stores with full disks and exit with an informative exit
@@ -1396,6 +1395,20 @@ func maybeWarnMemorySizes(ctx context.Context) {
 				humanizeutil.IBytes(maxRecommendedMem))
 		}
 	}
+}
+
+func cleanupOldTempDirs(specs []base.StoreSpec) error {
+	for _, spec := range specs {
+		if spec.InMemory {
+			continue
+		}
+		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
+		err := fs.CleanupTempDirs(recordPath)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
