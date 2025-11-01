@@ -64,6 +64,7 @@ import (
 func TestFlowControlBasicV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -159,6 +160,7 @@ ORDER BY name ASC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 	setRACv2DebugVModule(t)
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
@@ -280,6 +282,7 @@ func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -535,6 +538,7 @@ func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 func TestFlowControlCrashedNodeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -648,6 +652,7 @@ func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	setRACv2DebugVModule(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	const numServers int = 5
 
@@ -1167,6 +1172,7 @@ func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 func TestFlowControlClassPrioritizationV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1263,6 +1269,7 @@ func TestFlowControlClassPrioritizationV2(t *testing.T) {
 func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1390,6 +1397,7 @@ func TestFlowControlUnquiescedRangeV2(t *testing.T) {
 func TestFlowControlTransferLeaseV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1480,6 +1488,7 @@ func TestFlowControlTransferLeaseV2(t *testing.T) {
 func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1598,6 +1607,7 @@ func TestFlowControlLeaderNotLeaseholderV2(t *testing.T) {
 func TestFlowControlGranterAdmitOneByOneV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1710,6 +1720,7 @@ func isTestGeneratedPut(ctx context.Context) bool {
 func TestFlowControlSendQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/156181")
 
 	ctx := context.Background()
 	const numNodes = 5
