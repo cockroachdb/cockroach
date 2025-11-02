@@ -4331,8 +4331,9 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.IngestCount.Update(int64(m.Ingest.Count))
 	sm.ValueSeparationBytesReferenced.Update(int64(m.BlobFiles.ReferencedValueSize))
 	sm.ValueSeparationBytesUnreferenced.Update(int64(m.BlobFiles.ValueSize - m.BlobFiles.ReferencedValueSize))
-	sm.ValueSeparationBlobFileCount.Update(int64(m.BlobFiles.Live.All.Count))
-	sm.ValueSeparationBlobFileSize.Update(int64(m.BlobFiles.Live.All.Bytes))
+	liveBlobFiles := m.BlobFiles.Live.Total()
+	sm.ValueSeparationBlobFileCount.Update(int64(liveBlobFiles.Count))
+	sm.ValueSeparationBlobFileSize.Update(int64(liveBlobFiles.Bytes))
 	sm.ValueSeparationValueRetrievalCount.Update(int64(m.Iterator.ValueRetrievalCount))
 	// NB: `UpdateIfHigher` is used here since there is a race in pebble where
 	// sometimes the WAL is rotated but metrics are retrieved prior to the update
@@ -4350,7 +4351,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
-	sm.SSTableZombieBytes.Update(int64(m.Table.Zombie.All.Bytes))
+	sm.SSTableZombieBytes.Update(int64(m.Table.Physical.Zombie.Total().Bytes))
 	remoteTables := m.RemoteTablesTotal()
 	sm.SSTableRemoteBytes.Update(int64(remoteTables.Bytes))
 	sm.SSTableRemoteCount.Update(int64(remoteTables.Count))
