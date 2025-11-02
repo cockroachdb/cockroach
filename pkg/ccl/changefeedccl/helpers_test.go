@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -941,7 +942,7 @@ func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
 		`context canceled`,
 	}
 	shouldIgnoreErr := func(err error) bool {
-		if err == nil || errors.Is(err, context.Canceled) {
+		if err == nil || errors.Is(err, context.Canceled) || grpcutil.IsClosedConnection(err) {
 			return true
 		}
 		for _, ignoreErr := range ignoreErrs {
