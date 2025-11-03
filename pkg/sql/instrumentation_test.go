@@ -38,7 +38,7 @@ func TestSampledStatsCollection(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 	tt := s.ApplicationLayer()
-	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).localSqlStats
+	sv, sqlStats := &tt.ClusterSettings().SV, tt.SQLServer().(*Server).sqlStatsSystem
 
 	sqlutils.CreateTable(
 		t, db, "test", "x INT", 10, sqlutils.ToRowFn(sqlutils.RowIdxFn),

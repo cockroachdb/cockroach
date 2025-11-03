@@ -89,13 +89,12 @@ func (s *statusServer) ResetSQLStats(
 	}
 
 	response := &serverpb.ResetSQLStatsResponse{}
-	localSQLStats := s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider()
-	persistedSQLStats := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
+	sqlStats := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
 
 	// If we need to reset persisted stats, we delegate to persisted sql stats,
 	// which will trigger a system table truncation and RPC fanout under the hood.
 	if req.ResetPersistedStats {
-		if err := persistedSQLStats.ResetClusterSQLStats(ctx); err != nil {
+		if err := sqlStats.ResetClusterSQLStats(ctx); err != nil {
 			return nil, err
 		}
 
@@ -114,7 +113,7 @@ func (s *statusServer) ResetSQLStats(
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			err := localSQLStats.Reset(ctx)
+			err := sqlStats.ResetLocalStats(ctx)
 			return response, err
 		}
 		status, err := s.dialNode(ctx, requestedNodeID)
@@ -222,7 +221,7 @@ func (s *statusServer) drainSqlStatsLocal(
 ) (*serverpb.DrainStatsResponse, error) {
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
-	statsProvider := s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider()
+	statsProvider := s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider()
 	stmtStats, txnstats, fpCount := statsProvider.DrainStats(ctx)
 	log.Dev.VInfof(ctx,
 		1,

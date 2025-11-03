@@ -67,8 +67,7 @@ type StatsCollector struct {
 
 	statsIngester *SQLStatsIngester
 
-	st    *cluster.Settings
-	knobs *sqlstats.TestingKnobs
+	st *cluster.Settings
 }
 
 // NewStatsCollector returns an instance of StatsCollector.
@@ -78,7 +77,6 @@ func NewStatsCollector(
 	ingester *SQLStatsIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
-	knobs *sqlstats.TestingKnobs,
 ) *StatsCollector {
 	s := &StatsCollector{
 		flushTarget:        appStats,
@@ -86,7 +84,6 @@ func NewStatsCollector(
 		uniqueServerCounts: uniqueServerCounts,
 		statsIngester:      ingester,
 		st:                 st,
-		knobs:              knobs,
 	}
 
 	s.sendStats = s.enabled()
@@ -162,33 +159,20 @@ func (s *StatsCollector) enabled() bool {
 }
 
 // RecordStatement records the statistics of a statement.
-func (s *StatsCollector) RecordStatement(_ctx context.Context, value *sqlstats.RecordedStmtStats) {
+func (s *StatsCollector) RecordStatement(ctx context.Context, value *sqlstats.RecordedStmtStats) {
 	if !s.sendStats {
 		return
 	}
-	s.stmtFingerprintID = value.FingerprintID
-	s.statsIngester.BufferStatement(value)
-
-	if s.knobs != nil && s.knobs.SynchronousSQLStats {
-		// Flush buffer and wait for the stats ingester to finish writing.
-		s.statsIngester.guard.ForceSync()
-		<-s.statsIngester.syncStatsTestingCh
-	}
+	s.statsIngester.RecordStatement(ctx, value)
 }
 
 // RecordTransaction sends the transaction statistics to the stats ingester.
-func (s *StatsCollector) RecordTransaction(_ctx context.Context, value *sqlstats.RecordedTxnStats) {
+func (s *StatsCollector) RecordTransaction(ctx context.Context, value *sqlstats.RecordedTxnStats) {
 	if !s.sendStats {
 		return
 	}
 
-	s.statsIngester.BufferTransaction(value)
-
-	if s.knobs != nil && s.knobs.SynchronousSQLStats {
-		// Flush buffer and wait for the stats ingester to finish writing.
-		s.statsIngester.guard.ForceSync()
-		<-s.statsIngester.syncStatsTestingCh
-	}
+	s.statsIngester.RecordTransaction(ctx, value)
 }
 
 func (s *StatsCollector) EnabledForTransaction() bool {

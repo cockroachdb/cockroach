@@ -148,7 +148,7 @@ func (s *Server) NewInternalSession(
 	csm.config.metrics = metrics
 	csm.config.monitor = monitor
 	csm.config.sd = sd
-	csm.config.appStats = s.localSqlStats.GetApplicationStats(sessionName)
+	csm.config.appStats = s.sqlStatsSystem.GetApplicationStats(sessionName)
 
 	return ISessionFactoryHook(ctx, csm)
 }

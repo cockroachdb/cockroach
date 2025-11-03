@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sssystem"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -92,7 +92,7 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		t.Run("server", func(t *testing.T) {
 			datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 				reporter := test.server.DiagnosticsReporter().(*diagnostics.Reporter)
-				statsController := test.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+				statsController := test.server.SQLServer().(*sql.Server).GetSQLStatsProvider()
 				return test.RunTest(td, test.serverDB, reporter.ReportDiagnostics, statsController)
 			})
 		})
@@ -102,7 +102,7 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 			t.Run("tenant", func(t *testing.T) {
 				datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 					reporter := test.tenant.DiagnosticsReporter().(*diagnostics.Reporter)
-					statsController := test.tenant.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+					statsController := test.tenant.SQLServer().(*sql.Server).GetSQLStatsProvider()
 					return test.RunTest(td, test.tenantDB, reporter.ReportDiagnostics, statsController)
 				})
 			})
@@ -182,7 +182,7 @@ func (tt *telemetryTest) RunTest(
 	td *datadriven.TestData,
 	db *gosql.DB,
 	reportDiags func(ctx context.Context),
-	statsController *sslocal.SQLStats,
+	statsController *sssystem.SQLStats,
 ) (out string) {
 	defer func() {
 		if out == "" {
@@ -261,7 +261,7 @@ func (tt *telemetryTest) RunTest(
 
 	case "sql-stats":
 		// Report diagnostics once to reset the stats.
-		if err := statsController.Reset(ctx); err != nil {
+		if err := statsController.ResetLocalStats(ctx); err != nil {
 			td.Fatalf(tt.t, "error resetting sql stats: %s", err)
 		}
 		reportDiags(ctx)
@@ -271,7 +271,7 @@ func (tt *telemetryTest) RunTest(
 		if err != nil {
 			fmt.Fprintf(&buf, "error: %v\n", err)
 		}
-		if err := statsController.Reset(ctx); err != nil {
+		if err := statsController.ResetLocalStats(ctx); err != nil {
 			td.Fatalf(tt.t, "error resetting sql stats: %s", err)
 		}
 		reportDiags(ctx)

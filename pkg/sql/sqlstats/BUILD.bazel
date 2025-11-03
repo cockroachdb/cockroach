@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "aggregate.go",
         "cluster_settings.go",
+        "metrics.go",
         "ssprovider.go",
         "test_utils.go",
     ],
@@ -29,5 +30,6 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_prometheus_client_model//go",
     ],
 )

@@ -281,7 +281,7 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 		log.Dev.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s", res.Status, b)
 		return
 	}
-	err = r.SQLServer.GetReportedSQLStatsProvider().Reset(ctx)
+	err = r.SQLServer.GetSQLStatsProvider().ResetReportedStats(ctx)
 	if err != nil {
 		log.Dev.Warningf(ctx, "failed to reset SQL stats: %s", err)
 	}

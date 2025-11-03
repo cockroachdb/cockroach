@@ -59,8 +59,8 @@ CREATE TABLE t.test (x INT PRIMARY KEY);
 	sqlServer := s.SQLServer().(*sql.Server)
 
 	// Flush stats at the beginning of the test.
-	require.NoError(t, sqlServer.GetLocalSQLStatsProvider().Reset(ctx))
-	require.NoError(t, sqlServer.GetReportedSQLStatsProvider().Reset(ctx))
+	require.NoError(t, sqlServer.GetSQLStatsProvider().ResetLocalStats(ctx))
+	require.NoError(t, sqlServer.GetSQLStatsProvider().ResetReportedStats(ctx))
 
 	// Run some queries mixed with diagnostics, and ensure that the statistics
 	// are unaffected by the calls to report diagnostics.

@@ -67,9 +67,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sssystem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -337,15 +337,7 @@ type Server struct {
 
 	cfg *ExecutorConfig
 
-	// persistedSQLStats provides the mechanisms for writing sql stats to system tables.
-	persistedSQLStats *persistedsqlstats.PersistedSQLStats
-
-	// localSqlStats tracks per-application statistics for all applications on each
-	// node. Newly collected statistics flow into localSqlStats.
-	localSqlStats *sslocal.SQLStats
-
-	// sqlStatsIngester provides the interface to consume stats about a sql execution.
-	sqlStatsIngester *sslocal.SQLStatsIngester
+	sqlStatsSystem *sssystem.SQLStats
 
 	// schemaTelemetryController is the control-plane interface for schema
 	// telemetry.
@@ -354,13 +346,6 @@ type Server struct {
 	// indexUsageStatsController is the control-plane interface for
 	// indexUsageStats.
 	indexUsageStatsController *idxusage.Controller
-
-	// reportedStats is a pool of stats that is held for reporting, and is
-	// cleared on a lower interval than sqlStats. Stats from sqlStats flow
-	// into reported stats when sqlStats is cleared.
-	reportedStats *sslocal.SQLStats
-
-	insights *insights.Provider
 
 	reCache           *tree.RegexpCache
 	toCharFormatCache *tochar.FormatCache
@@ -423,7 +408,7 @@ type Metrics struct {
 // unrelated to SQL planning and execution.
 type ServerMetrics struct {
 	// StatsMetrics contains metrics for SQL statistics collection.
-	StatsMetrics StatsMetrics
+	StatsMetrics sqlstats.Metrics
 
 	// ContentionSubsystemMetrics contains metrics related to contention
 	// subsystem.
@@ -431,9 +416,6 @@ type ServerMetrics struct {
 
 	// InsightsMetrics contains metrics related to outlier detection.
 	InsightsMetrics insights.Metrics
-
-	// IngesterMetrics contains metrics related to SQL stats ingestion.
-	IngesterMetrics sslocal.Metrics
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -441,47 +423,12 @@ type ServerMetrics struct {
 func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
-	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
-	reportedSQLStats := sslocal.NewSQLStats(
-		cfg.Settings,
-		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
-		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
-		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryCurBytesCount,
-		serverMetrics.StatsMetrics.ReportedSQLStatsMemoryMaxBytesHist,
-		nil, /* discardedStatsCount */
-		pool,
-		nil, /* reportedProvider */
-		cfg.SQLStatsTestingKnobs,
-	)
-	localSQLStats := sslocal.NewSQLStats(
-		cfg.Settings,
-		sqlstats.MaxMemSQLStatsStmtFingerprints,
-		sqlstats.MaxMemSQLStatsTxnFingerprints,
-		serverMetrics.StatsMetrics.SQLStatsMemoryCurBytesCount,
-		serverMetrics.StatsMetrics.SQLStatsMemoryMaxBytesHist,
-		serverMetrics.StatsMetrics.DiscardedStatsCount,
-		pool,
-		reportedSQLStats,
-		cfg.SQLStatsTestingKnobs,
-	)
-	sqlStatsIngester := sslocal.NewSQLStatsIngester(
-		cfg.Settings, cfg.SQLStatsTestingKnobs, serverMetrics.IngesterMetrics, insightsProvider, localSQLStats)
-	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
-	sqlstats.TxnStatsEnable.SetOnChange(&cfg.Settings.SV, func(_ context.Context) {
-		if !sqlstats.TxnStatsEnable.Get(&cfg.Settings.SV) {
-			sqlStatsIngester.Clear()
-		}
-	})
 	s := &Server{
 		cfg:               cfg,
 		Metrics:           metrics,
 		InternalMetrics:   makeMetrics(true /* internal */, &cfg.Settings.SV),
 		ServerMetrics:     serverMetrics,
 		pool:              pool,
-		localSqlStats:     localSQLStats,
-		reportedStats:     reportedSQLStats,
-		sqlStatsIngester:  sqlStatsIngester,
-		insights:          insightsProvider,
 		reCache:           tree.NewRegexpCache(512),
 		toCharFormatCache: tochar.NewFormatCache(512),
 		indexUsageStats: idxusage.NewLocalIndexUsageStats(&idxusage.Config{
@@ -493,31 +440,24 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 			&serverMetrics.ContentionSubsystemMetrics),
 		idxRecommendationsCache: idxrecommendations.NewIndexRecommendationsCache(cfg.Settings),
 	}
-
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
-	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
+	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, cfg.Settings)
 	sqlStatsInternalExecutorMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
-	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
-		Settings:                s.cfg.Settings,
-		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
-		DB: NewInternalDB(
-			s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor,
-		),
-		ClusterID:               s.cfg.NodeInfo.LogicalClusterID,
-		SQLIDContainer:          cfg.NodeInfo.NodeID,
-		JobRegistry:             s.cfg.JobRegistry,
-		FanoutServer:            cfg.SQLStatusServer,
-		Knobs:                   cfg.SQLStatsTestingKnobs,
-		FlushesSuccessful:       serverMetrics.StatsMetrics.SQLStatsFlushesSuccessful,
-		FlushDoneSignalsIgnored: serverMetrics.StatsMetrics.SQLStatsFlushDoneSignalsIgnored,
-		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
-		FlushesFailed:           serverMetrics.StatsMetrics.SQLStatsFlushesFailed,
-		FlushLatency:            serverMetrics.StatsMetrics.SQLStatsFlushLatency,
-	}, localSQLStats)
 
-	s.persistedSQLStats = persistedSQLStats
+	s.sqlStatsSystem = sssystem.NewSQLStats(
+		cfg.Settings,
+		NewInternalDB(s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor),
+		cfg.NodeInfo.LogicalClusterID,
+		cfg.NodeInfo.NodeID,
+		serverMetrics.StatsMetrics,
+		serverMetrics.InsightsMetrics,
+		cfg.SQLStatusServer,
+		pool,
+		sqlStatsInternalExecutorMonitor,
+		cfg.SQLStatsTestingKnobs)
+
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -644,46 +584,9 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 
 func makeServerMetrics(cfg *ExecutorConfig) ServerMetrics {
 	return ServerMetrics{
-		StatsMetrics: StatsMetrics{
-			SQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
-				Metadata:     MetaSQLStatsMemMaxBytes,
-				Duration:     cfg.HistogramWindowInterval,
-				MaxVal:       log10int64times1000,
-				SigFigs:      3,
-				BucketConfig: metric.MemoryUsage64MBBuckets,
-			}),
-			SQLStatsMemoryCurBytesCount: metric.NewGauge(MetaSQLStatsMemCurBytes),
-			ReportedSQLStatsMemoryMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
-				Metadata:     MetaReportedSQLStatsMemMaxBytes,
-				Duration:     cfg.HistogramWindowInterval,
-				MaxVal:       log10int64times1000,
-				SigFigs:      3,
-				BucketConfig: metric.MemoryUsage64MBBuckets,
-			}),
-			ReportedSQLStatsMemoryCurBytesCount: metric.NewGauge(MetaReportedSQLStatsMemCurBytes),
-			DiscardedStatsCount:                 metric.NewCounter(MetaDiscardedSQLStats),
-			SQLStatsFlushesSuccessful:           metric.NewCounter(MetaSQLStatsFlushesSuccessful),
-			SQLStatsFlushDoneSignalsIgnored:     metric.NewCounter(MetaSQLStatsFlushDoneSignalsIgnored),
-			SQLStatsFlushFingerprintCount:       metric.NewCounter(MetaSQLStatsFlushFingerprintCount),
-
-			SQLStatsFlushesFailed: metric.NewCounter(MetaSQLStatsFlushesFailed),
-			SQLStatsFlushLatency: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     MetaSQLStatsFlushLatency,
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.BatchProcessLatencyBuckets,
-			}),
-			SQLStatsRemovedRows: metric.NewCounter(MetaSQLStatsRemovedRows),
-			SQLTxnStatsCollectionOverhead: metric.NewHistogram(metric.HistogramOptions{
-				Mode:         metric.HistogramModePreferHdrLatency,
-				Metadata:     MetaSQLTxnStatsCollectionOverhead,
-				Duration:     6 * metricsSampleInterval,
-				BucketConfig: metric.IOLatencyBuckets,
-			}),
-		},
+		StatsMetrics:               sqlstats.NewMetrics(cfg.HistogramWindowInterval),
 		ContentionSubsystemMetrics: txnidcache.NewMetrics(),
 		InsightsMetrics:            insights.NewMetrics(),
-		IngesterMetrics:            sslocal.NewIngesterMetrics(),
 	}
 }
 
@@ -694,16 +597,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	// If a user can opt in/out of some aspect of background processing, then it
 	// should be accounted for in their costs.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-
-	s.sqlStatsIngester.Start(ctx, stopper)
-	s.persistedSQLStats.Start(ctx, stopper)
-
 	s.schemaTelemetryController.Start(ctx, stopper)
-
-	// reportedStats is periodically cleared to prevent too many SQL Stats
-	// accumulated in the reporter when the telemetry server fails.
-	// Usually it is telemetry's reporter's job to clear the reporting SQL Stats.
-	s.reportedStats.Start(ctx, stopper)
+	s.sqlStatsSystem.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
 }
@@ -723,28 +618,12 @@ func (s *Server) GetIndexUsageStatsController() *idxusage.Controller {
 // GetInsightsReader returns the insights store for the current sql.Server's
 // detected execution insights.
 func (s *Server) GetInsightsReader() *insights.LockingStore {
-	return s.insights.Store()
+	return s.sqlStatsSystem.GetInsightsReader()
 }
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
-func (s *Server) GetSQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
-	return s.persistedSQLStats
-}
-
-// GetLocalSQLStatsProvider returns the in-memory provider for the sqlstats subsystem.
-func (s *Server) GetLocalSQLStatsProvider() *sslocal.SQLStats {
-	return s.localSqlStats
-}
-
-// GetReportedSQLStatsProvider returns the provider for the in-memory reported
-// sql stats sink.
-func (s *Server) GetReportedSQLStatsProvider() *sslocal.SQLStats {
-	return s.reportedStats
-}
-
-// GetSQLStatsIngester returns the sqlstats.Ingester for the current sql.Server.
-func (s *Server) GetSQLStatsIngester() *sslocal.SQLStatsIngester {
-	return s.sqlStatsIngester
+func (s *Server) GetSQLStatsProvider() *sssystem.SQLStats {
+	return s.sqlStatsSystem
 }
 
 // GetTxnIDCache returns the txnidcache.Cache for the current sql.Server.
@@ -758,7 +637,7 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 func (s *Server) GetScrubbedStmtStats(
 	ctx context.Context,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.localSqlStats, math.MaxInt32, true)
+	return s.getScrubbedStmtStats(ctx, s.sqlStatsSystem.IterateStatementStats, math.MaxInt32, true)
 }
 
 // Avoid lint errors.
@@ -774,7 +653,7 @@ func (s *Server) GetUnscrubbedStmtStats(
 		stmtStats = append(stmtStats, *stat)
 		return nil
 	}
-	err := s.localSqlStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
+	err := s.sqlStatsSystem.IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -793,7 +672,7 @@ func (s *Server) GetUnscrubbedTxnStats(
 		txnStats = append(txnStats, *stat)
 		return nil
 	}
-	err := s.localSqlStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
+	err := s.sqlStatsSystem.IterateTransactionStats(ctx, sqlstats.IteratorOptions{}, txnStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch statement stats")
@@ -807,11 +686,11 @@ func (s *Server) GetUnscrubbedTxnStats(
 func (s *Server) GetScrubbedReportingStats(
 	ctx context.Context, limit int, includeInternal bool,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
-	return s.getScrubbedStmtStats(ctx, s.reportedStats, limit, includeInternal)
+	return s.getScrubbedStmtStats(ctx, s.sqlStatsSystem.IterateReportedStatementStats, limit, includeInternal)
 }
 
 func (s *Server) getScrubbedStmtStats(
-	ctx context.Context, statsProvider *sslocal.SQLStats, limit int, includeInternal bool,
+	ctx context.Context, iterator sssystem.IterateStatementStats, limit int, includeInternal bool,
 ) ([]appstatspb.CollectedStatementStatistics, error) {
 	salt := ClusterSecret.Get(&s.cfg.Settings.SV)
 
@@ -846,7 +725,7 @@ func (s *Server) getScrubbedStmtStats(
 		return nil
 	}
 
-	err := statsProvider.IterateStatementStats(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
+	err := iterator(ctx, sqlstats.IteratorOptions{}, stmtStatsVisitor)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to fetch scrubbed statement stats")
@@ -858,7 +737,7 @@ func (s *Server) getScrubbedStmtStats(
 // GetStmtStatsLastReset returns the time at which the statement statistics were
 // last cleared.
 func (s *Server) GetStmtStatsLastReset() time.Time {
-	return s.localSqlStats.GetLastReset()
+	return s.sqlStatsSystem.GetLastLocalReset()
 }
 
 // GetExecutorConfig returns this server's executor config.
@@ -937,7 +816,7 @@ func (s *Server) SetupConn(
 		clientComm,
 		memMetrics,
 		metrics,
-		s.localSqlStats.GetApplicationStats(sd.ApplicationName),
+		s.sqlStatsSystem.GetApplicationStats(sd.ApplicationName),
 		sessionID,
 		false, /* underOuterTxn */
 		nil,   /* postSetupFn */
@@ -1261,19 +1140,10 @@ func (s *Server) newConnExecutor(
 
 	ex.applicationName.Store(ex.sessionData().ApplicationName)
 	ex.applicationStats = applicationStats
-	// We ignore statements and transactions run by the internal executor by
-	// passing a nil writer.
-	ex.statsCollector = sslocal.NewStatsCollector(
-		s.cfg.Settings,
-		applicationStats,
-		s.sqlStatsIngester,
-		ex.phaseTimes,
-		s.localSqlStats.GetCounters(),
-		s.cfg.SQLStatsTestingKnobs,
-	)
+	ex.statsCollector = ex.server.sqlStatsSystem.NewStatsCollector(applicationStats, ex.phaseTimes)
 	ex.dataMutatorIterator.OnApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
-		ex.applicationStats = ex.server.localSqlStats.GetApplicationStats(newName)
+		ex.applicationStats = ex.server.sqlStatsSystem.GetApplicationStats(newName)
 		if strings.HasPrefix(newName, catconstants.InternalAppNamePrefix) {
 			ex.metrics = &ex.server.InternalMetrics
 		} else {
@@ -3824,7 +3694,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:                 ex.sessionDataStack,
 			ReCache:                          ex.server.reCache,
 			ToCharFormatCache:                ex.server.toCharFormatCache,
-			SQLStatsController:               ex.server.persistedSQLStats,
+			SQLStatsController:               ex.server.sqlStatsSystem,
 			SchemaTelemetryController:        ex.server.schemaTelemetryController,
 			IndexUsageStatsController:        ex.server.indexUsageStatsController,
 			ConsistencyChecker:               p.execCfg.ConsistencyChecker,
@@ -3848,8 +3718,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:       ex,
 		jobs:                 ex.extraTxnState.jobs,
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
-		persistedSQLStats:    ex.server.persistedSQLStats,
-		localSQLStats:        ex.server.localSqlStats,
+		sqlStatsSystem:       ex.server.sqlStatsSystem,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}

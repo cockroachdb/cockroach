@@ -43,7 +43,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 		sqlConn.Exec(t, stmt)
 	}
 
-	sqlStats := s.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
+	sqlStats := s.SQLServer().(*sql.Server).GetSQLStatsProvider()
 
 	// We collect all the statement fingerprint IDs so that we can test the
 	// transaction stats later.
@@ -65,7 +65,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 					// If we are running our test case, we reset the SQL Stats. The iterator
 					// should gracefully handle that.
 					if _, ok := testCases[statistics.Key.Query]; ok {
-						require.NoError(t, sqlStats.Reset(ctx))
+						require.NoError(t, sqlStats.ResetLocalStats(ctx))
 					}
 					return nil
 				}))
@@ -87,7 +87,7 @@ func TestSQLStatsIteratorWithTelemetryFlush(t *testing.T) {
 
 					for _, stmtFingerprintID := range statistics.StatementFingerprintIDs {
 						if _, ok := fingerprintIDs[stmtFingerprintID]; ok {
-							require.NoError(t, sqlStats.Reset(ctx))
+							require.NoError(t, sqlStats.ResetLocalStats(ctx))
 						}
 					}
 					return nil

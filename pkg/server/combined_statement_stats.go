@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sssystem"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -87,7 +87,7 @@ func (s *statusServer) CombinedStatementStats(
 	return getCombinedStatementStats(
 		ctx,
 		req,
-		s.sqlServer.pgServer.SQLServer.GetLocalSQLStatsProvider(),
+		s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
 		s.internalExecutor,
 		s.st,
 		s.sqlServer.execCfg.SQLStatsTestingKnobs)
@@ -103,7 +103,7 @@ type statementStatsRunner struct {
 func getCombinedStatementStats(
 	ctx context.Context,
 	req *serverpb.CombinedStatementsStatsRequest,
-	statsProvider *sslocal.SQLStats,
+	statsProvider *sssystem.SQLStats,
 	ie *sql.InternalExecutor,
 	settings *cluster.Settings,
 	testingKnobs *sqlstats.TestingKnobs,
@@ -192,7 +192,7 @@ func getCombinedStatementStats(
 	response := &serverpb.StatementsResponse{
 		Statements:                 statements,
 		Transactions:               transactions,
-		LastReset:                  statsProvider.GetLastReset(),
+		LastReset:                  statsProvider.GetLastLocalReset(),
 		InternalAppNamePrefix:      catconstants.InternalAppNamePrefix,
 		StmtsTotalRuntimeSecs:      stmtsRunTime,
 		TxnsTotalRuntimeSecs:       txnsRunTime,

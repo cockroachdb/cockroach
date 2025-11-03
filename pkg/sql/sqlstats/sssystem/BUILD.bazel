@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sssystem",
+    srcs = ["provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sssystem",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/clusterunique",
+        "//pkg/sql/isql",
+        "//pkg/sql/sessionphase",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/sqlstats/insights",
+        "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/sqlstats/sslocal",
+        "//pkg/sql/sqlstats/ssmemstorage",
+        "//pkg/util/mon",
+        "//pkg/util/stop",
+        "//pkg/util/uuid",
+    ],
+)

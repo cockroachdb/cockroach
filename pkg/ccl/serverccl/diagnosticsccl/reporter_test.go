@@ -70,7 +70,7 @@ func TestTenantReport(t *testing.T) {
 	setupCluster(t, tenantDB)
 
 	// Clear the SQL stat pool before getting diagnostics.
-	require.NoError(t, rt.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
+	require.NoError(t, rt.server.SQLServer().(*sql.Server).GetSQLStatsProvider().ResetLocalStats(ctx))
 	reporter.ReportDiagnostics(ctx)
 
 	require.Equal(t, 1, rt.diagServer.NumRequests())
@@ -179,7 +179,7 @@ func TestServerReport(t *testing.T) {
 
 		node := rt.server.MetricsRecorder().GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
-		require.NoError(t, rt.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
+		require.NoError(t, rt.server.SQLServer().(*sql.Server).GetSQLStatsProvider().ResetLocalStats(ctx))
 		rt.server.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
@@ -509,7 +509,7 @@ func TestUsageQuantization(t *testing.T) {
 	})
 
 	// Flush the SQL stat pool.
-	require.NoError(t, ts.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
+	require.NoError(t, ts.SQLServer().(*sql.Server).GetSQLStatsProvider().ResetLocalStats(ctx))
 
 	// Collect a round of statistics.
 	ts.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)

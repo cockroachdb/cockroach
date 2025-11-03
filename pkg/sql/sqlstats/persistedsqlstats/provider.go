@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -40,7 +39,6 @@ type Config struct {
 	DB                      isql.DB
 	ClusterID               func() uuid.UUID
 	SQLIDContainer          *base.SQLIDContainer
-	JobRegistry             *jobs.Registry
 	FanoutServer            serverpb.SQLStatusServer
 
 	// Metrics.

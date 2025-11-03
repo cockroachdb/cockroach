@@ -160,9 +160,9 @@ func TestSQLIngester(t *testing.T) {
 			ctx := context.Background()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-
+			sqlstats.NewMetrics(time.Second)
 			testSink := &sqlStatsTestSink{}
-			ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+			ingester := NewSQLStatsIngester(settings, nil, sqlstats.NewMetrics(time.Second), testSink)
 
 			ingester.Start(ctx, stopper, WithFlushInterval(10))
 			ingestEventsSync(ingester, tc.observations)
@@ -196,7 +196,7 @@ func TestSQLIngester_Clear(t *testing.T) {
 	defer stopper.Stop(ingesterCtx)
 	settings := cluster.MakeTestingClusterSettings()
 	testSink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), testSink)
+	ingester := NewSQLStatsIngester(settings, nil, sqlstats.NewMetrics(time.Second), testSink)
 	ingester.Start(ingesterCtx, stopper, WithoutTimedFlush())
 
 	// Fill the ingester's buffer with some data.
@@ -240,7 +240,7 @@ func TestSQLIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *t
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, sqlstats.NewMetrics(time.Second), sink)
 	ingester.Start(ctx, stopper)
 
 	// Simulate a shutdown and wait for the consumer of the ingester's channel to stop.
@@ -283,7 +283,7 @@ func TestSQLIngesterBlockedForceSync(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	sink := &sqlStatsTestSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), sink)
+	ingester := NewSQLStatsIngester(settings, nil, sqlstats.NewMetrics(time.Second), sink)
 
 	// We queue up a bunch of sync operations because it's unclear how
 	// many will proceed between the `Start()` and `Stop()` calls below.
@@ -341,7 +341,7 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 			},
 		}
 		settings := cluster.MakeTestingClusterSettings()
-		ingester := NewSQLStatsIngester(settings, knobs, NewIngesterMetrics())
+		ingester := NewSQLStatsIngester(settings, knobs, sqlstats.NewMetrics(time.Second))
 		ingester.Start(ctx, stopper)
 		ingester.BufferStatement(statementA)
 		ingester.BufferStatement(statementB)
@@ -398,7 +398,7 @@ func TestStatsCollectorIngester(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettings()
 	fakeSink := &capturingSink{}
-	ingester := NewSQLStatsIngester(settings, nil, NewIngesterMetrics(), fakeSink)
+	ingester := NewSQLStatsIngester(settings, nil, sqlstats.NewMetrics(time.Second), fakeSink)
 	ingester.Start(ctx, stopper, WithFlushInterval(10))
 
 	// Set up a StatsCollector with the ingester.
@@ -412,7 +412,6 @@ func TestStatsCollectorIngester(t *testing.T) {
 		ingester,
 		phaseTimes,
 		uniqueServerCounts,
-		nil, // knobs
 	)
 
 	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))

@@ -461,7 +461,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil, /* knobs */
 	)
 
-	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), sqlStats)
+	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sqlstats.NewMetrics(10), sqlStats)
 	ingester.Start(ctx, stopper)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
@@ -471,7 +471,6 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		ingester,
 		sessionphase.NewTimes(),
 		sqlStats.GetCounters(),
-		nil, /* knobs */
 	)
 
 	recordStats := func(testCase *tc) {
@@ -587,7 +586,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			nil,
 			nil,
 		)
-		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), sqlStats)
+		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sqlstats.NewMetrics(10), sqlStats)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,
@@ -595,7 +594,6 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			ingester,
 			sessionphase.NewTimes(),
 			sqlStats.GetCounters(),
-			nil, /* knobs */
 		)
 
 		ingester.Start(ctx, stopper)
@@ -1653,7 +1651,7 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 
 	resetMetricsForTest := func() {
 		// Reset the stats to ensure we start with a clean slate.
-		require.NoError(t, ssProvider.Reset(ctx))
+		require.NoError(t, ssProvider.ResetLocalStats(ctx))
 		discardedMetric.Reset()
 	}
 
