@@ -213,7 +213,9 @@ func waitForTombstone(
 	testutils.SucceedsSoon(t, func() error {
 		mark, err := sl.LoadReplicaMark(context.Background(), reader)
 		require.NoError(t, err)
-		if mark.Exists() {
+		// TOOD(pav-kv): some tests should check mark.Destroyed(replicaID) instead
+		// of just waiting for any tombstone.
+		if mark.NextReplicaID == 0 {
 			return fmt.Errorf("tombstone not found for range %d", rangeID)
 		}
 		tombstone = mark.RangeTombstone
