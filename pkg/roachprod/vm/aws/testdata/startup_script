@@ -155,6 +155,8 @@ if systemctl list-unit-files | grep -q '^unattended-upgrades.service'; then
     sudo rm -rf /var/log/unattended-upgrades
 fi
 
+
+
 # Update package lists
 sudo apt-get update -q
 
@@ -182,12 +184,9 @@ fi
 # N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
 # jepsen uses /usr/sbin, we create a symlink.
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
-# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
-
 if [ ! -e /usr/sbin/tcpdump ]; then
 	sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
 fi
-
 
 
 
@@ -336,7 +335,6 @@ fi
 
 if [ "$ssh_updated_config" -eq 1 ]; then
 	echo "Restarting sshd to apply updated configuration"
-	sudo service sshd restart
 	sudo service ssh restart
 fi
 
