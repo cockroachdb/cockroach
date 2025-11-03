@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script src="/future/assets/htmx.min.js"></script>
+    <script defer src="/future/assets/alpine.min.js"></script>
+    <script src="/future/assets/auto-refresh.js"></script>
+    <link rel=stylesheet href="/future/assets/missing.css">
+    <script src="/future/assets/table-sort.js"></script>
+    <meta charset="utf-8">
+  </head>
+  <body>
+    <style>
+      section.grid {
+        grid-template:
+          "name status"  auto
+          "uuid version" auto /
+          1fr   max-content;
+      }
+    </style>
+    <div class="sidebar-layout" style="height: 100vh;">
+      <header>
+        <nav>
+          <strong class="<h1>">DB Console</strong>
+            <ul role="list">
+              <li><a href="overview">Overview</a></li>
+              <li><a href="metrics">Metrics</a></li>
+              <li>Databases</li>
+              <li>SQL Activity</li>
+                <ul role="list" class="margin">
+                  <li>Statements</li>
+                  <li>Transactions</li>
+                  <li>Sessions</li>
+                </ul>
+              <li>Insights</li>
+              <li>Top Ranges</li>
+              <li>Jobs</li>
+              <li>Schedules</li>
+              <li>Advanced Debug</li>
+            </ul>
+        </nav>
+        <section aria-label="Status">
+          <chip class="ok">logged in</chip>
+          <chip class="info">v123.234</chip>
+        </section>
+      </header>
+        <main class="width:100% padding">
+          <nav class="breadcrumbs" aria-label="Breadcrumbs">
+            <ul>
+              <li class="<h1>">SQL Activity</li>
+              <li class="<h2>"><a href="#" aria-current=page>Statements</a></li>
+            </ul>
+          </nav>
+          <form class="flex-column box">
+            <div class="flex-row">
+            <div>
+              <label for=top>Top:</label>
+              <select id=top>
+                <option>25</option>
+                <option>50</option>
+                <option>100</option>
+                <option>500</option>
+                <hr />
+                <optgroup label="Loads more slowly">
+                <option>1,000</option>
+                <option>5,000</option>
+                <option>10,000</option>
+                </optgroup>
+              </select>
+            </div>
+            <div>
+              <label for=by>By:</label>
+              <select id=by>
+                <option>% of All Runtime</option>
+                <option>Contention Time</option>
+                <option>Execution Count</option>
+                <option>SQL CPU Time</option>
+                <option>Statement Time</option>
+                <hr />
+                <optgroup label="Load smore slowly">
+                  <option>Last Execution Time</option>
+                  <option>Max Latency</option>
+                  <option>Max Memory</option>
+                  <option>Min Latency</option>
+                  <option>Network</option>
+                  <option>Retries</option>
+                  <option>Rows Processed</option>
+                </optgroup>
+              </select>
+            </div>
+            <div role=radiogroup aria-labelledby=active-lbl>
+              <span id=active-lbl>Result Type:</span>
+              <div>
+                <div><label><input name=active type="radio" value="fingerprints" checked />Statement Fingerprints</label></div>
+                <div><label><input name=active type="radio" value="active" />Active Executions</label></div>
+              </div>
+            </div>
+            </div>
+            <div class="flex-row">
+            <div>
+              <label for=category>Interval:</label>
+              <select id=interval>
+                <option>Last 10m</option>
+                <option>Last 30m</option>
+                <option>Last 1h</option>
+                <option>Custom</option>
+              </select>
+            </div>
+            <div>
+              <label for="start-time">Start:</label>
+              <input
+                type="datetime-local"
+                id="start-time"
+                name="start-time"
+                x-model="$store.timeRange.startTime"
+                :disabled="$store.timeRange.interval !== 'Custom'" />
+            </div>
+            <div>
+              <label for="end-time">End:</label>
+              <input
+                type="datetime-local"
+                id="end-time"
+                name="end-time"
+                x-model="$store.timeRange.endTime"
+                :disabled="$store.timeRange.interval !== 'Custom'" />
+            </div>
+            </div>
+            <div>
+            <strong><button type="submit" class="<big>">Apply</button></strong>
+            </div>
+          </form>
+          <h3>Results - Top 100 Statement Fingerprints by % of All Runtime</h3>
+
+          <div x-data="tableSort()">
+            <table id="table-data">
+              <thead>
+                <tr>
+                  <th @click="sort('statements', 0)" style="cursor: pointer;">
+                    Statements <span x-text="getSortIndicator('statements')"></span>
+                  </th>
+                  <th @click="sort('execution-count', 1)" style="cursor: pointer;">
+                    Execution Count <span x-text="getSortIndicator('execution-count')"></span>
+                  </th>
+                  <th @click="sort('application-name', 2)" style="cursor: pointer;">
+                    Application Name <span x-text="getSortIndicator('application-name')"></span>
+                  </th>
+                  <th @click="sort('statement-time', 3)" style="cursor: pointer;">
+                    Statement Time <span x-text="getSortIndicator('statement-time')"></span>
+                  </th>
+                  <th @click="sort('sql-cpu-time', 4)" style="cursor: pointer;">
+                    SQL CPU Time <span x-text="getSortIndicator('sql-cpu-time')"></span>
+                  </th>
+                  <th @click="sort('max-latency', 5)" style="cursor: pointer;">
+                    Max Latency <span x-text="getSortIndicator('max-latency')"></span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    SHOW database
+                  </td>
+                  <td data-sort="1">
+                    1
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    SHOW application_name
+                  </td>
+                  <td data-sort="100">
+                    100
+                  </td>
+                  <td>
+                    $ cockroach demo
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                  <td data-sort="198.5">
+                    198.5 µs
+                  </td>
+                  <td data-sort="788.9">
+                    788.9 µs
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
+              <div>
+                <span x-text="paginationInfo"></span>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button
+                  @click="prevPage()"
+                  :disabled="currentPage === 1"
+                  type="button">
+                  ← Previous
+                </button>
+                <span>Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></span>
+                <button
+                  @click="nextPage()"
+                  :disabled="currentPage === totalPages"
+                  type="button">
+                  Next →
+                </button>
+              </div>
+            </div>
+          </div>
+       </main>
+      </div>
+   </body>
+</html>

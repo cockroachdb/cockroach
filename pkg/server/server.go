@@ -2151,6 +2151,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.sqlServer.ExecutorConfig(), /* execCfg */
 		s.authentication,             /* authnServer */
 		s.admin.adminServer,          /* adminServer */
+		s.status.statusServer,        /* statusServer */
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */

@@ -13,6 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/server/serverpb",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
         "@com_github_gorilla_mux//:mux",
     ],
 )

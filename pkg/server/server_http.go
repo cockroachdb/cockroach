@@ -152,6 +152,7 @@ func (s *httpServer) setupRoutes(
 	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
 	adminServer *adminServer,
+	statusServer *statusServer,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
@@ -189,6 +190,8 @@ func (s *httpServer) setupRoutes(
 		},
 		Flags:    flags,
 		Settings: s.cfg.Settings,
+		Admin:    adminServer,
+		Status:   statusServer,
 	})
 
 	// The authentication mux used here is created in "allow anonymous" mode so that the UI

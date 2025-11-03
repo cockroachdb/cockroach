@@ -111,6 +111,8 @@ type Config struct {
 	OIDC         OIDCUI
 	Flags        serverpb.FeatureFlags
 	Settings     *cluster.Settings
+	Admin        serverpb.AdminServer
+	Status       serverpb.StatusServer
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
@@ -165,6 +167,8 @@ func Handler(cfg Config) http.Handler {
 			// log.RedactionPolicyManaged is set to true only when cluster is running under
 			// managed service control.
 			IsManaged: log.RedactionPolicyManaged,
+			Admin:     cfg.Admin,
+			Status:    cfg.Status,
 		}
 		if cfg.NodeID != nil {
 			args.NodeID = cfg.NodeID.String()

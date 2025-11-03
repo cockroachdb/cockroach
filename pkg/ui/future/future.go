@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gorilla/mux"
 )
 
@@ -35,6 +36,8 @@ type IndexHTMLArgs struct {
 	LicenseType               string
 	SecondsUntilLicenseExpiry int64
 	IsManaged                 bool
+	Admin                     serverpb.AdminServer
+	Status                    serverpb.StatusServer
 }
 
 //go:embed assets/*
@@ -71,6 +74,12 @@ type TemplateData struct {
 	ClusterID string
 }
 
+// PageData combines base IndexHTMLArgs with page-specific data
+type PageData struct {
+	IndexHTMLArgs
+	Data interface{}
+}
+
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Create a new Gorilla Mux router
 	router := mux.NewRouter()
@@ -96,10 +105,41 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleMetrics(w, r, cfg)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/sqlactivity/statements", func(w http.ResponseWriter, r *http.Request) {
+		handleSqlActivityStatements(w, r, cfg)
+	}).Methods("GET")
+
 	// Serve static assets
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
 
 	return router.ServeHTTP
+}
+
+func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	resp, err := cfg.Status.CombinedStatementStats(r.Context(), &serverpb.CombinedStatementsStatsRequest{
+		Start: 0,
+		End:   timeutil.Now().Unix(),
+		FetchMode: &serverpb.CombinedStatementsStatsRequest_FetchMode{
+			StatsType: serverpb.CombinedStatementsStatsRequest_StmtStatsOnly,
+			Sort:      serverpb.StatsSortOptions_SERVICE_LAT,
+		},
+		Limit: 200,
+	})
+	if err != nil {
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// Execute the pre-parsed template
+	err = templates.ExecuteTemplate(w, "sql_activity.html", PageData{
+		IndexHTMLArgs: cfg,
+		Data:          resp,
+	})
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		return
+	}
 }
 
 // handleOverview serves the overview.html template
@@ -108,7 +148,9 @@ func handleOverview(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "overview.html", cfg)
+	err := templates.ExecuteTemplate(w, "overview.html", PageData{
+		IndexHTMLArgs: cfg,
+	})
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
@@ -136,7 +178,9 @@ func handleMetrics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// Execute the pre-parsed template
-	err := templates.ExecuteTemplate(w, "metrics.html", cfg)
+	err := templates.ExecuteTemplate(w, "metrics.html", PageData{
+		IndexHTMLArgs: cfg,
+	})
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
