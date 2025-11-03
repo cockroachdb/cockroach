@@ -14,6 +14,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+var plpgsqlFlags = tree.FmtParsable | tree.FmtPLpgSQLParen
+
 func (s *Smither) makeRoutineBodyPLpgSQL(
 	params tree.ParamTypes, rTyp *types.T, vol tree.RoutineVolatility,
 ) string {
@@ -25,7 +27,7 @@ func (s *Smither) makeRoutineBodyPLpgSQL(
 	// errors.
 	block := s.makePLpgSQLBlock(scope)
 	block.Body = append(block.Body, s.makePLpgSQLReturn(scope))
-	return "\n" + tree.AsStringWithFlags(s.makePLpgSQLBlock(scope), tree.FmtParsable)
+	return "\n" + tree.AsStringWithFlags(s.makePLpgSQLBlock(scope), plpgsqlFlags, tree.FmtInPLpgSQL(true /* inPLpgSQL */))
 }
 
 func (s *Smither) makePLpgSQLBlock(scope plpgsqlBlockScope) *ast.Block {

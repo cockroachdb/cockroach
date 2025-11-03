@@ -192,6 +192,7 @@ var prettyCfg = func() tree.PrettyCfg {
 	cfg := tree.DefaultPrettyCfg()
 	cfg.LineWidth = 120
 	cfg.Simplify = false
+	cfg.FmtFlags = tree.FmtPLpgSQLParen
 	return cfg
 }()
 
@@ -213,10 +214,10 @@ func (s *Smither) Generate() string {
 		i = 0
 
 		printCfg := prettyCfg
-		fl := tree.FmtParsable
+		fl := plpgsqlFlags
 		if s.postgres {
-			printCfg.FmtFlags = tree.FmtPGCatalog
-			fl = tree.FmtPGCatalog
+			printCfg.FmtFlags = tree.FmtPGCatalog | tree.FmtPLpgSQLParen
+			fl = tree.FmtPGCatalog | tree.FmtPLpgSQLParen
 		}
 		p, err := printCfg.Pretty(stmt)
 		if err != nil {
