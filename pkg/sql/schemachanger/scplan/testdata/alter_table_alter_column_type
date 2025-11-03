@@ -17,8 +17,8 @@ StatementPhase stage 1 of 1 with 1 MutationType op
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
           in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -42,8 +42,8 @@ PreCommitPhase stage 2 of 2 with 1 MutationType op
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
           in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -133,8 +133,8 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
       ColumnType:
         ColumnID: 2
         ElementCreationMetadata:
-          in231OrLater: true
           in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -195,8 +195,8 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
         ColumnFamilyOrderFollowsColumnID: 2
         ColumnID: 3
         ElementCreationMetadata:
-          in231OrLater: true
           in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:
@@ -324,8 +324,8 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
         ColumnFamilyOrderFollowsColumnID: 2
         ColumnID: 3
         ElementCreationMetadata:
-          in231OrLater: true
           in243OrLater: true
+          in261OrLater: true
         TableID: 104
         TypeT:
           Type:

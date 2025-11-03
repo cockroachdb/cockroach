@@ -161,7 +161,11 @@ func (p *planner) DeserializeSessionState(
 		}
 		// len(stmts) == 0 results in a nil (empty) statement.
 		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeInfo.NodeID.SQLInstanceID())
-		stmt := makeStatement(parserStmt, id, tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)))
+		stmt := makeStatement(
+			ctx, parserStmt, id,
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)),
+			evalCtx.ExecCfg.StatementHintsCache,
+		)
 
 		var placeholderTypes tree.PlaceholderTypes
 		if len(prepStmt.PlaceholderTypeHints) > 0 {

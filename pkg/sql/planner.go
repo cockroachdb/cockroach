@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1087,6 +1088,20 @@ func (p *planner) ClearQueryPlanCache() {
 func (p *planner) ClearTableStatsCache() {
 	if p.execCfg.TableStatsCache != nil {
 		p.execCfg.TableStatsCache.Clear()
+	}
+}
+
+// ClearStatementHintsCache is part of the eval.Planner interface.
+func (p *planner) ClearStatementHintsCache() {
+	if p.execCfg.StatementHintsCache != nil {
+		p.execCfg.StatementHintsCache.Clear()
+	}
+}
+
+// AwaitStatementHintsCache is part of the eval.Planner interface.
+func (p *planner) AwaitStatementHintsCache(ctx context.Context, st *cluster.Settings) {
+	if p.execCfg.StatementHintsCache != nil {
+		p.execCfg.StatementHintsCache.Await(ctx, st)
 	}
 }
 

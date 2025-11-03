@@ -275,7 +275,7 @@ func (w *WorkloadKVConverter) Worker(
 		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
-			if err := pacer.Pace(ctx); err != nil {
+			if _, err := pacer.Pace(ctx); err != nil {
 				return err
 			}
 			for colIdx, col := range cb.ColVecs() {

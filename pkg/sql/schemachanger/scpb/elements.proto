@@ -1011,6 +1011,7 @@ message FunctionSecurity {
 }
 
 message ElementCreationMetadata {
-  bool in_23_1_or_later = 1;
+  reserved 1;
   bool in_24_3_or_later = 2;
+  bool in_26_1_or_later = 3;
 }

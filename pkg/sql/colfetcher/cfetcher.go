@@ -756,7 +756,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		// reflect our prior determination of the scan's priority, so this call to
 		// Pace() should be explicitly conditional on Pacer's non-nilness.
 		if cf.pacer != nil {
-			if err := cf.pacer.Pace(ctx); err != nil {
+			if _, err := cf.pacer.Pace(ctx); err != nil {
 				return nil, err
 			}
 		}

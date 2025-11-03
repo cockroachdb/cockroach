@@ -321,27 +321,12 @@ func (p *ScheduledProcessor) stopInternal(ctx context.Context, pErr *kvpb.Error)
 	p.scheduler.StopProcessor()
 }
 
-// Register registers the stream over the specified span of keys.
-//
-// The registration will not observe any events that were consumed before this
-// method was called. It is undefined whether the registration will observe
-// events that are consumed concurrently with this call. The channel will be
-// provided an error when the registration closes.
-//
-// The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp (exclusive).
-//
-// If the method returns false, the processor will have been stopped, so calling
-// Stop is not necessary. If the method returns true, it will also return an
-// updated operation filter that includes the operations required by the new
-// registration.
-//
-// NB: startTS is exclusive; the first possible event will be at startTS.Next().
+// Register implements rangefeed.Processor.
 func (p *ScheduledProcessor) Register(
 	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIter *CatchUpIterator,
+	catchUpSnap *CatchUpSnapshot,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
@@ -359,11 +344,11 @@ func (p *ScheduledProcessor) Register(
 	bufferedStream, isBufferedStream := stream.(BufferedStream)
 	if isBufferedStream {
 		r = newUnbufferedRegistration(
-			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
 			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync)
 	} else {
 		r = newBufferedRegistration(
-			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
 			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
 	}
 

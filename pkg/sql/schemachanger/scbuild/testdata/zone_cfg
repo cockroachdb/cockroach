@@ -42,7 +42,7 @@ ALTER TABLE defaultdb.foo_index_zone_cfg ADD COLUMN j INT
 - [[ColumnName:{DescID: 105, Name: j, ColumnID: 7}, PUBLIC], ABSENT]
   {columnId: 7, name: j, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 7, TypeName: INT8}, PUBLIC], ABSENT]
-  {columnId: 7, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+  {columnId: 7, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[IndexColumn:{DescID: 105, ColumnID: 7, IndexID: 1}, PUBLIC], ABSENT]
   {columnId: 7, indexId: 1, kind: STORED, ordinalInKind: 5, tableId: 105}
 
@@ -54,7 +54,7 @@ ALTER TABLE defaultdb.foo_index_zone_cfg DROP COLUMN k
 - [[ColumnName:{DescID: 105, Name: k, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: k, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
+  {columnId: 2, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 105, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[IndexColumn:{DescID: 105, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 1, indexId: 1, tableId: 105}
 - [[IndexColumn:{DescID: 105, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC]
