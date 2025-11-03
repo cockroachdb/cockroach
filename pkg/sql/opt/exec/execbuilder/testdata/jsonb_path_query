@@ -65,12 +65,12 @@ vectorized: true
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
-            │ num spans: 2
+            │ num spans: 4
             │
             └── • scan
                   missing stats
                   table: json_tab@foo_inv
-                  spans: 2 spans
+                  spans: 4 spans
 
 query T
 EXPLAIN SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b.c') ORDER BY a;
@@ -88,12 +88,12 @@ vectorized: true
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
-            │ num spans: 4
+            │ num spans: 8
             │
             └── • scan
                   missing stats
                   table: json_tab@foo_inv
-                  spans: 4 spans
+                  spans: 8 spans
 
 query T
 EXPLAIN SELECT a, jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a;
@@ -111,12 +111,12 @@ vectorized: true
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
-            │ num spans: 3
+            │ num spans: 6
             │
             └── • scan
                   missing stats
                   table: json_tab@foo_inv
-                  spans: 3 spans
+                  spans: 6 spans
 
 query T
 EXPLAIN SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a') ORDER BY a;
@@ -134,12 +134,12 @@ vectorized: true
         │
         └── • inverted filter
             │ inverted column: b_inverted_key
-            │ num spans: 1
+            │ num spans: 2
             │
             └── • scan
                   missing stats
                   table: json_tab@foo_inv
-                  spans: 1 span
+                  spans: 2 spans
 
 # If inverted index is not hinted, we would scan the whole table.
 query T kvtrace
@@ -152,55 +152,55 @@ Scan /Table/106/{1-2}
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
 Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*].b') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
 Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a[*][*].b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a[*][*].b') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/Arr/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
 Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b[*].c') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b[*].c') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/"b"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/"b"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/"b"/Arr/}, /Table/106/2/{???-"a"/"b"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/"b"/Arr/Arr/}, /Table/106/2/{???-"a"/"b"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/"b"/Arr/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/"b"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/"b"/Arr/}, /Table/106/2/{???-Arr/"a"/"b"/Arr/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/"b"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/"b"/Arr/}, /Table/106/2/{???-"a"/Arr/"b"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/"b"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/"b"/Arr/}, /Table/106/2/{???-"a"/"b"/Arr/Arr/Arr/}, /Table/106/2/{???-"a"/"b"/Arr/Arr/}, /Table/106/2/{???-"a"/"b"/Arr/}
 Scan /Table/106/1/6/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}
 Scan /Table/106/1/11/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == true)') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"ztrue"/Arr/{True-False} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/Arr/{True-False}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/"ztrue"/{True-False} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/Arr/{True-False}
 Scan /Table/106/1/12/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b ? (@.x.y.zfalse == false)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zfalse == false)') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"zfalse"/{False-"\f"}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"zfalse"/Arr/{False-"\f"} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/"b"/"x"/"y"/"zfalse"/{False-"\f"}, /Table/106/2/"a"/"b"/"x"/"y"/"zfalse"/Arr/{False-"\f"}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zfalse"/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/"zfalse"/{False-"\f"} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"zfalse"/Arr/{False-"\f"}, /Table/106/2/"a"/"b"/"x"/"y"/"zfalse"/{False-"\f"}, /Table/106/2/"a"/"b"/"x"/"y"/"zfalse"/Arr/{False-"\f"}
 Scan /Table/106/1/13/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b ? (@.x.y.zint == 10)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.zint == 10)') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"zint"/1E+1{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"zint"/Arr/1E+1{-/PrefixEnd}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"zint"/Arr/1E+1{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"zint"/1E+1{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"zint"/Arr/1E+1{-/PrefixEnd}
 Scan /Table/106/1/14/0
 
 query T kvtrace
 SELECT jsonb_path_query(b, '$.a.b ? (@.x.y.znull == null)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.znull == null)') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"znull"/{NULL-!NULL}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"znull"/Arr/{NULL-!NULL} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/"b"/"x"/"y"/"znull"/{NULL-!NULL}, /Table/106/2/"a"/"b"/"x"/"y"/"znull"/Arr/{NULL-!NULL}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"znull"/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/"znull"/{NULL-!NULL} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"znull"/Arr/{NULL-!NULL}, /Table/106/2/"a"/"b"/"x"/"y"/"znull"/{NULL-!NULL}, /Table/106/2/"a"/"b"/"x"/"y"/"znull"/Arr/{NULL-!NULL}
 Scan /Table/106/1/15/0, /Table/106/1/16/0
 
 # Multiple jsonb_path_exists in the filter. For all select clause to be
@@ -214,30 +214,30 @@ Scan /Table/106/{1-2}
 query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}
 Scan /Table/106/1/11/0
 
 query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.b ? (@.x.y.z == "y")'), jsonb_path_query(b, '$.a.b ? (@.x.y.ztrue == true)') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b ? (@.x.y.z == "y")') OR jsonb_path_exists(b, '$.a.b ? (@.x.y.ztrue == true)') ORDER BY a;
 ----
-Scan /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"ztrue"/{True-False} ... /Table/106/2/"a"/"b"/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/Arr/{True-False}
+Scan /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/Arr/"y"/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/Arr/"ztrue"/Arr/{True-False}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/"y"{-/PrefixEnd}, /Table/106/2/Arr/"a"/Arr/"b"/Arr/Arr/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd} ... /Table/106/2/"a"/"b"/"x"/"y"/"z"/Arr/"y"{-/PrefixEnd}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/{True-False}, /Table/106/2/"a"/"b"/"x"/"y"/"ztrue"/Arr/{True-False}
 Scan /Table/106/1/11/0, /Table/106/1/12/0
 
 # Test with concatenation of different json path expressions with AND in the filter.
 query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.d') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.d') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
 Scan /Table/106/1/3/0, /Table/106/1/6/0, /Table/106/1/10/0
 
 query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}
 Scan /Table/106/1/3/0, /Table/106/1/4/0, /Table/106/1/6/0, /Table/106/1/7/0, /Table/106/1/8/0, /Table/106/1/9/0, /Table/106/1/11/0, /Table/106/1/12/0, /Table/106/1/13/0, /Table/106/1/14/0, /Table/106/1/15/0, /Table/106/1/16/0
 
 query T kvtrace
 SELECT a, jsonb_path_query(b, '$.a.b'), jsonb_path_query(b, '$.a.d') FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') AND jsonb_path_exists(b, '$.a.d') ORDER BY a;
 ----
-Scan /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}, /Table/106/2/{???-"a"/Arr/}
+Scan /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-Arr/"a"/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/Arr/}, /Table/106/2/{???-"a"/Arr/}, /Table/106/2/{???-"a"/Arr/}
 Scan /Table/106/1/3/0, /Table/106/1/6/0
