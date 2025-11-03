@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/cockroachdb/pebble/cockroachkvs"
+	"github.com/cockroachdb/pebble/metrics"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -2074,13 +2075,18 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	}
 
 	m := p.db.Metrics()
-	stats.TotalFiles = 3 /* CURRENT, MANIFEST, OPTIONS */
-	stats.TotalFiles += uint64(m.WAL.Files) + m.Table.Zombie.All.Count + uint64(m.WAL.ObsoleteFiles) + m.Table.Obsolete.All.Count
-	stats.TotalBytes = m.WAL.Size + m.Table.Zombie.All.Bytes + m.Table.Obsolete.All.Bytes
-	for _, l := range m.Levels {
-		stats.TotalFiles += l.Tables.Count
-		stats.TotalBytes += l.Tables.Bytes
-	}
+	var cs metrics.CountAndSize
+	cs.Count += 3 /* CURRENT, MANIFEST, OPTIONS */
+	cs.Count += uint64(m.WAL.Files + m.WAL.ObsoleteFiles)
+	cs.Bytes += m.WAL.Size
+	cs.Accumulate(m.Table.Physical.Live.Total())
+	cs.Accumulate(m.Table.Physical.Zombie.Total())
+	cs.Accumulate(m.Table.Physical.Obsolete.Total())
+	cs.Accumulate(m.BlobFiles.Live.Total())
+	cs.Accumulate(m.BlobFiles.Zombie.Total())
+	cs.Accumulate(m.BlobFiles.Obsolete.Total())
+	stats.TotalFiles = cs.Count
+	stats.TotalBytes = cs.Bytes
 
 	sstSizes := make(map[pebble.TableNum]uint64)
 	sstInfos, err := p.db.SSTables()

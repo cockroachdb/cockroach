@@ -1401,10 +1401,10 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 		WalPhysicalSize:            m.WAL.PhysicalSize,
 		WalBytesIn:                 m.WAL.BytesIn,
 		WalBytesWritten:            m.WAL.BytesWritten,
-		TableObsoleteCount:         int64(m.Table.Obsolete.All.Count),
-		TableObsoleteSize:          m.Table.Obsolete.All.Bytes,
-		TableZombieCount:           int64(m.Table.Zombie.All.Count),
-		TableZombieSize:            m.Table.Zombie.All.Bytes,
+		TableObsoleteCount:         int64(m.Table.Physical.Obsolete.Total().Count),
+		TableObsoleteSize:          m.Table.Physical.Obsolete.Total().Bytes,
+		TableZombieCount:           int64(m.Table.Physical.Zombie.Total().Count),
+		TableZombieSize:            m.Table.Physical.Zombie.Total().Bytes,
 		RangeKeySetsCount:          m.Keys.RangeKeySetsCount,
 	}
 	e.CacheHits, e.CacheMisses = m.BlockCache.HitsAndMisses.Aggregate()
