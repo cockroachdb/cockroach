@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -136,6 +137,13 @@ func (d *eventDecoder) decodeAndCoalesceEvents(
 		if discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && event.KeyValue.Value.RawBytes == nil {
 			continue
 		}
+
+		var err error
+		event.KeyValue.Key, err = keys.StripTenantPrefix(event.KeyValue.Key)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to strip tenant prefix")
+		}
+
 		toDecode = append(toDecode, event)
 	}
 
