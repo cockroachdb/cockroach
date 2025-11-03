@@ -313,6 +313,7 @@ func startDistChangefeed(
 		defer recv.Release()
 
 		var finishedSetupFn func(flowinfra.Flow)
+
 		if details.SinkURI != `` {
 			// We abuse the job's results channel to make CREATE CHANGEFEED wait for
 			// this before returning to the user to ensure the setup went okay. Job
@@ -322,9 +323,11 @@ func startDistChangefeed(
 			// returned by resumed jobs, then it breaks instead of returning
 			// nonsense.
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
-		}
 
-		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+			// We only store the plan diagram for changefeeds that have a sink since
+			// sinkless changefeed don't have a job record.
+			jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+		}
 
 		// Make sure to use special changefeed monitor going forward as the
 		// parent monitor for the DistSQL infrastructure. This is needed to

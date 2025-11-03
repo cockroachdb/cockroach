@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -295,7 +296,7 @@ func TestPebbleEncryption(t *testing.T) {
 		require.NoError(t, batch.PutUnversioned(roachpb.Key("a"), []byte("a")))
 		require.NoError(t, batch.Commit(true))
 		require.NoError(t, db.Flush())
-		require.Equal(t, []byte("a"), storageutils.MVCCGetRaw(t, db, storageutils.PointKey("a", 0)))
+		require.Equal(t, []byte("a"), storageutils.MVCCGetRaw(t, db, storageutils.PointKey(keys.SystemSQLCodec, "a", 0)))
 	}()
 
 	func() {
@@ -320,7 +321,7 @@ func TestPebbleEncryption(t *testing.T) {
 		db, err := storage.Open(ctx, env, settings)
 		require.NoError(t, err)
 		defer db.Close()
-		require.Equal(t, []byte("a"), storageutils.MVCCGetRaw(t, db, storageutils.PointKey("a", 0)))
+		require.Equal(t, []byte("a"), storageutils.MVCCGetRaw(t, db, storageutils.PointKey(keys.SystemSQLCodec, "a", 0)))
 
 		// Flushing should've created a new sstable under the active key.
 		stats, err := db.GetEnvStats()
