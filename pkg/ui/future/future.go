@@ -50,9 +50,20 @@ var templatesFS embed.FS
 var templates *template.Template
 
 func init() {
-	// Parse all templates at startup
+	// Parse all templates at startup with custom functions
 	var err error
-	templates, err = template.ParseFS(templatesFS, "templates/*.html")
+	funcMap := template.FuncMap{
+		"mul": func(a, b float64) float64 {
+			return a * b
+		},
+		"div": func(a, b float64) float64 {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+	}
+	templates, err = template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		panic("Failed to parse templates: " + err.Error())
 	}
@@ -129,7 +140,6 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "sql_activity.html", PageData{
 		IndexHTMLArgs: cfg,
