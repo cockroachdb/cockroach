@@ -190,7 +190,7 @@ func newWindower(
 	}
 
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		w.input = newInputStatCollector(w.input)
+		w.input = NewInputStatCollector(w.input)
 		w.ExecStatsForTrace = w.execStatsForTrace
 	}
 
@@ -816,7 +816,7 @@ func CreateWindowerSpecFunc(funcStr string) (execinfrapb.WindowerSpec_Func, erro
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (w *windower) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(w.input)
+	is, ok := GetInputStats(w.input)
 	if !ok {
 		return nil
 	}

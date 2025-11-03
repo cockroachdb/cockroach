@@ -633,7 +633,7 @@ func newJoinReader(
 		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
 			jr.contentionEventsListener.Init(flowTxn.ID())
 		}
-		jr.input = newInputStatCollector(jr.input)
+		jr.input = NewInputStatCollector(jr.input)
 		jr.fetcher = newRowFetcherStatCollector(&fetcher)
 		jr.ExecStatsForTrace = jr.execStatsForTrace
 	} else {
@@ -1298,7 +1298,7 @@ func (jr *joinReader) close() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(jr.input)
+	is, ok := GetInputStats(jr.input)
 	if !ok {
 		return nil
 	}

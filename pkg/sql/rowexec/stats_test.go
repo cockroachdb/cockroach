@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // TestInputStatCollector verifies that an inputStatCollector correctly collects
@@ -23,12 +24,13 @@ func TestInputStatCollector(t *testing.T) {
 
 	const numRows = 100
 
-	isc := newInputStatCollector(
+	isc := NewInputStatCollector(
 		distsqlutils.NewRowBuffer(types.OneIntCol, randgen.MakeIntRows(numRows, 1), distsqlutils.RowBufferArgs{}),
 	)
 	for row, meta := isc.Next(); row != nil || meta != nil; row, meta = isc.Next() {
 	}
-	if isc.stats.NumTuples.Value() != numRows {
-		t.Fatalf("counted %s rows but expected %d", isc.stats.NumTuples, numRows)
-	}
+	stats, ok := GetInputStats(isc)
+	require.True(t, ok)
+	actualRows := int(stats.NumTuples.Value())
+	require.Equalf(t, numRows, actualRows, "counted %s rows but expected %d", actualRows, numRows)
 }

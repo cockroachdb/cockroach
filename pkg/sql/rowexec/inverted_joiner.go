@@ -316,7 +316,7 @@ func newInvertedJoiner(
 		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
 			ij.contentionEventsListener.Init(flowTxn.ID())
 		}
-		ij.input = newInputStatCollector(ij.input)
+		ij.input = NewInputStatCollector(ij.input)
 		ij.fetcher = newRowFetcherStatCollector(&fetcher)
 		ij.ExecStatsForTrace = ij.execStatsForTrace
 	} else {
@@ -781,7 +781,7 @@ func (ij *invertedJoiner) close() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(ij.input)
+	is, ok := GetInputStats(ij.input)
 	if !ok {
 		return nil
 	}
