@@ -96,7 +96,7 @@ func (ag *aggregatorBase) init(
 ) error {
 	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("aggregator-mem"))
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		input = newInputStatCollector(input)
+		input = NewInputStatCollector(input)
 		ag.ExecStatsForTrace = ag.execStatsForTrace
 	}
 	ag.input = input
@@ -162,7 +162,7 @@ func (ag *aggregatorBase) init(
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (ag *aggregatorBase) execStatsForTrace() *execinfrapb.ComponentStats {
-	is, ok := getInputStats(ag.input)
+	is, ok := GetInputStats(ag.input)
 	if !ok {
 		return nil
 	}
