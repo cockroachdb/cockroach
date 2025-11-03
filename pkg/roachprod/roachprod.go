@@ -1959,6 +1959,10 @@ func StageURL(
 	return urls, nil
 }
 
+// RoachprodDisabledProviderMessage is set as the provider state if a provider
+// is included in ROACHPROD_DISABLED_PROVIDERS
+const RoachprodDisabledProviderMessage = "disabled via ROACHPROD_DISABLED_PROVIDERS"
+
 var disabledProviders = func() map[string]struct{} {
 	disabled := make(map[string]struct{})
 	for _, p := range strings.Split(os.Getenv("ROACHPROD_DISABLED_PROVIDERS"), ",") {
@@ -2006,11 +2010,10 @@ func InitProviders() map[string]string {
 		},
 	} {
 		if _, dis := disabledProviders[prov.name]; dis {
-			reason := "disabled via ROACHPROD_DISABLED_PROVIDERS"
-			providersState[prov.name] = "Inactive - " + reason
+			providersState[prov.name] = "Inactive - " + RoachprodDisabledProviderMessage
 			// We need an empty provider that emits errors or we'll
 			// crash as roachprod expects all providers to be present.
-			vm.Providers[prov.name] = flagstub.New(prov.empty, reason)
+			vm.Providers[prov.name] = flagstub.New(prov.empty, RoachprodDisabledProviderMessage)
 		} else if err := prov.init(); err != nil {
 			providersState[prov.name] = "Inactive - " + err.Error()
 		} else {
