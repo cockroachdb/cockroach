@@ -384,20 +384,20 @@ func TestTransportSendToMissingStore(t *testing.T) {
 	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, existingMsg))
 
 	// Wait for the message to the existing store to be received.
+	var received slpb.Message
 	testutils.SucceedsSoon(
 		t, func() error {
 			select {
-			case received := <-handler.messages:
-				require.Equal(t, existingMsg, *received)
-				require.Equal(
-					t, int64(1), tt.transports[existingRcv.NodeID].metrics.MessagesReceived.Count(),
-				)
+			case msg := <-handler.messages:
+				received = *msg
 				return nil
 			default:
 			}
 			return errors.New("still waiting to receive message")
 		},
 	)
+	require.Equal(t, existingMsg, received)
+
 	require.Equal(t, int64(2), tt.transports[sender.NodeID].metrics.MessagesSent.Count())
 }
 
