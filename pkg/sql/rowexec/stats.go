@@ -33,9 +33,9 @@ type inputStatCollector struct {
 var _ execinfra.RowSource = &inputStatCollector{}
 var _ execopnode.OpNode = &inputStatCollector{}
 
-// newInputStatCollector creates a new inputStatCollector that wraps the given
+// NewInputStatCollector creates a new inputStatCollector that wraps the given
 // input.
-func newInputStatCollector(input execinfra.RowSource) *inputStatCollector {
+func NewInputStatCollector(input execinfra.RowSource) execinfra.RowSource {
 	res := &inputStatCollector{RowSource: input}
 	res.stats.NumTuples.Set(0)
 	return res
@@ -154,10 +154,10 @@ func (c *rowFetcherStatCollector) NextRowInto(
 	return ok, err
 }
 
-// getInputStats is a utility function to check whether the given input is
+// GetInputStats is a utility function to check whether the given input is
 // collecting stats, returning true and the stats if so. If false is returned,
 // the input is not collecting stats.
-func getInputStats(input execinfra.RowSource) (execinfrapb.InputStats, bool) {
+func GetInputStats(input execinfra.RowSource) (execinfrapb.InputStats, bool) {
 	isc, ok := input.(*inputStatCollector)
 	if !ok {
 		return execinfrapb.InputStats{}, false
