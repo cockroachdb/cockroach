@@ -123,6 +123,14 @@ func maybeEstablishBallast(
 		currentSizeBytes = fi.Size()
 	}
 
+	// MemFS doesn't support resizing, so just return false. This exists
+	// primarily to ease testing. If starting a real cockroach binary with a
+	// store with a MemFS, we shouldn't even get this far because the StoreSpec
+	// is marked as InMemory.
+	if _, isMem := vfs.Root(fs).(*vfs.MemFS); isMem {
+		return false, nil
+	}
+
 	switch {
 	case currentSizeBytes > ballastSizeBytes:
 		// If the current ballast is too big, shrink it regardless of current

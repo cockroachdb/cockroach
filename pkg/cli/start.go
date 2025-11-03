@@ -193,9 +193,9 @@ func initTempStorageConfig(
 	// target, if any. If we can't find one, we use the first StoreSpec in the
 	// list.
 	//
-	// While we look, we also clean up any abandoned temporary directories. We
-	// don't know which store spec was used previously—and it may change if
-	// encryption gets enabled after the fact—so we check each store.
+	// Note that we already cleaned up any abandoned temporary directories from
+	// the previous process earlier in the startup sequence (see
+	// reclaimDiskSpace).
 	specIdxDisk := -1
 	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
@@ -210,11 +210,6 @@ func initTempStorageConfig(
 		}
 		if specIdxDisk == -1 {
 			specIdxDisk = i
-		}
-		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
-		if err := fs.CleanupTempDirs(recordPath); err != nil {
-			return base.TempStorageConfig{}, errors.Wrap(err,
-				"could not cleanup temporary directories from record file")
 		}
 	}
 
@@ -311,7 +306,7 @@ func initTempStorageConfig(
 		// Remove temporary directory on shutdown.
 		stopper.AddCloser(stop.CloserFn(func() {
 			unlockDirFn()
-			if err := fs.CleanupTempDirs(recordPath); err != nil {
+			if err := fs.CleanupTempDirs(ctx, vfs.Default, recordPath); err != nil {
 				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
 			}
 		}))
@@ -435,13 +430,18 @@ func runStartInternal(
 		signal.Notify(signalCh, exitAbruptlySignal)
 	}
 
+	// Set up a cancellable context for the entire start command.
+	// The context will be canceled at the end.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
 	// writes to the filesystem including log rotation. We need to guarantee
 	// that the process continues to exit with the Disk Full exit code. A
 	// flapping exit code can affect alerting, including the alerting
 	// performed within CockroachCloud.
-	if err := exitIfDiskFull(vfs.Default, serverCfg.Stores.Specs); err != nil {
+	if err := exitIfDiskFull(ctx, vfs.Default, serverCfg.Stores.Specs); err != nil {
 		return err
 	}
 
@@ -455,11 +455,6 @@ func runStartInternal(
 	// against a persistent disk stall that prevents the process from exiting or
 	// making progress.
 	log.SetMakeProcessUnavailableFunc(closeAllSockets)
-
-	// Set up a cancellable context for the entire start command.
-	// The context will be canceled at the end.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
@@ -1398,7 +1393,14 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
-func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
+func exitIfDiskFull(ctx context.Context, fs vfs.FS, specs []base.StoreSpec) error {
+	// First try to reclaim disk space by cleaning up obsolete files. It's
+	// possible this will free up enough space to allow us to start when we
+	// otherwise would not be able to.
+	if err := reclaimDiskSpace(ctx, fs, specs); err != nil {
+		return err
+	}
+
 	var cause error
 	var ballastPaths []string
 	var ballastMissing bool
@@ -1435,6 +1437,22 @@ insufficient disk space to start.`)
 %s
 may reclaim enough space to start. Proceed with caution. Complete
 disk space exhaustion may result in node loss.`, ballastPathsStr)
+	return err
+}
+
+// reclaimDiskSpace attempts to reclaim disk space by cleaning up obsolete files
+// leftover from the previous process. For example, SQL temporary directories
+// become obsolete when a process exits and can be reclaimed.
+func reclaimDiskSpace(ctx context.Context, rootFS vfs.FS, specs []base.StoreSpec) error {
+	var err error
+	// Reclaim any temporary directories.
+	for _, spec := range specs {
+		if spec.InMemory {
+			continue
+		}
+		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
+		err = errors.CombineErrors(err, fs.CleanupTempDirs(ctx, rootFS, recordPath))
+	}
 	return err
 }
 
