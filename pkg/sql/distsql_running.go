@@ -415,6 +415,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	statementSQL string,
+	workloadID uint64,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
 	thisNodeSpec, ok := flows[thisNodeID]
@@ -471,6 +472,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		TraceKV:           recv.tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
+		WorkloadID:        workloadID,
 	}
 	if localState.IsLocal {
 		// VectorizeMode is the only field that the setup code expects to be set
@@ -707,6 +709,59 @@ func (dsp *DistSQLPlanner) setupFlows(
 
 const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
 const executingParallelAndSerialChecks = "executing %d checks concurrently and %d checks serially"
+
+const (
+	WORKLOAD_ID_UNKNOWN = iota
+	WORKLOAD_ID_BULKIO
+	WORKLOAD_ID_BACKUP
+	WORKLOAD_ID_RESTORE
+	WORKLOAD_ID_IMPORT
+	WORKLOAD_ID_CDC
+	WORKLOAD_ID_JOB
+	WORKLOAD_ID_INTERNAL_UNKNOWN
+	WORKLOAD_ID_SUBQUERY
+	WORKLOAD_ID_BACKFILL
+	WORKLOAD_ID_SCHEMA_CHANGE
+)
+
+func determineWorkloadID(ctx context.Context, planCtx *PlanningCtx, txn *kv.Txn) uint64 {
+	// First check if this is a user query
+	if planCtx.planner == nil {
+		// Not a user query - determine what kind of internal operation
+		if txn == nil {
+			return WORKLOAD_ID_BULKIO
+		}
+
+		// Check for job tag
+		if jobTag, ok := logtags.FromContext(ctx).GetTag("job"); ok {
+			jobType := jobTag.ValueStr()
+			// Parse jobType to get specific workload
+			if strings.Contains(jobType, "BACKUP") {
+				return WORKLOAD_ID_BACKUP
+			} else if strings.Contains(jobType, "RESTORE") {
+				return WORKLOAD_ID_RESTORE
+			} else if strings.Contains(jobType, "IMPORT") {
+				return WORKLOAD_ID_IMPORT
+			} else if strings.Contains(jobType, "CHANGEFEED") {
+				return WORKLOAD_ID_CDC
+			}
+			return WORKLOAD_ID_JOB
+		}
+
+		return WORKLOAD_ID_INTERNAL_UNKNOWN
+	}
+
+	// It's a user query - could further classify
+	if planCtx.subOrPostQuery {
+		return WORKLOAD_ID_SUBQUERY
+	}
+
+	if planCtx.planner != nil {
+		return planCtx.planner.stmt.WorkloadID
+	}
+
+	return WORKLOAD_ID_UNKNOWN
+}
 
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
@@ -981,6 +1036,7 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.planner != nil {
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
+	workloadID := determineWorkloadID(ctx, planCtx, txn)
 
 	var flow flowinfra.Flow
 	var err error
@@ -988,7 +1044,7 @@ func (dsp *DistSQLPlanner) Run(
 		flow = i.resumableFlow.flow
 	} else {
 		ctx, flow, err = dsp.setupFlows(
-			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
+			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL, workloadID,
 		)
 		if i != nil {
 			// TODO(yuzefovich): add a check that this flow runs in a single goroutine.

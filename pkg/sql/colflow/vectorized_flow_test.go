@@ -243,6 +243,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 		nil,                     /* localVectorSources */
 		nil,                     /* onFlowCleanupEnd */
 		"",                      /* statementSQL */
+		0,                       /* workloadID */
 	)
 	vfc := newVectorizedFlowCreator(
 		flowBase, componentCreator, false, /* recordingStats */

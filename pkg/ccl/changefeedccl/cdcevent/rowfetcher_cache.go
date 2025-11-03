@@ -319,6 +319,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 			Spec:              &spec,
 			TraceKV:           c.rfArgs.traceKV,
 			TraceKVEvery:      &util.EveryN{N: c.rfArgs.traceKVLogFrequency},
+			WorkloadID:        5, // TODO(davidh): Move workloadID constants into a utils package for easy import
 		},
 	); err != nil {
 		return nil, nil, err

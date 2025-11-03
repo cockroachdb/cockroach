@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"runtime/trace"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -1838,14 +1839,29 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 		ctx = logtags.AddTag(ctx, "tenant", tenantID)
 	}
 
+	// TODO(davidh): SOME BS HERE TO ALSO SET THE PROFILE LABEL
+	wID := fmt.Sprintf("%d", args.WorkloadId)
 	// If the node is collecting a CPU profile with labels, and the sender has set
 	// pprof labels in the BatchRequest, then we apply them to the context that is
 	// going to execute the BatchRequest. These labels will help correlate server
 	// side CPU profile samples to the sender.
 	if len(args.ProfileLabels) != 0 && n.execCfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		var undo func()
-		ctx, undo = pprofutil.SetProfilerLabels(ctx, args.ProfileLabels...)
+		lbls := append(args.ProfileLabels, "workloadID", wID)
+		ctx, undo = pprofutil.SetProfilerLabels(ctx, lbls...)
 		defer undo()
+	}
+
+	for i, v := range args.ProfileLabels {
+		if v == "stmt.fingerprint.id" && wID == "0" {
+			log.Dev.Warningf(ctx, "~~~~~~~~ WORKLOAD ID IS MISSING FINGERPRINT: %s", args.ProfileLabels[i+1])
+			break
+		}
+	}
+
+	var region *trace.Region
+	if trace.IsEnabled() {
+		region = trace.StartRegion(ctx, fmt.Sprintf("Workload: %s", wID))
 	}
 
 	// Requests from tenants don't have gateway node id set but are required for
@@ -1859,6 +1875,9 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 
 	br, err := n.batchInternal(ctx, tenantID, args)
 
+	if region != nil {
+		region.End()
+	}
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC
 	// framework and not from cockroach.

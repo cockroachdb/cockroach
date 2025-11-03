@@ -356,7 +356,7 @@ func (p *planner) writeTableDescToBatch(
 
 	if tableDesc.IsNew() {
 		if err := runSchemaChangesInTxn(
-			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), WORKLOAD_ID_SCHEMA_CHANGE,
 		); err != nil {
 			return err
 		}

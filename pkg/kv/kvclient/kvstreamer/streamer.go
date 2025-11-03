@@ -272,6 +272,8 @@ type Streamer struct {
 	// need the mutex protection.
 	numRangesPerScanRequestAccountedFor int64
 
+	workloadID uint64
+
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first. If the results' mutex needs to be locked,
@@ -396,6 +398,7 @@ func NewStreamer(
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
 	reverse bool,
+	workloadID uint64,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -423,6 +426,7 @@ func NewStreamer(
 		lockStrength:           lockStrength,
 		lockDurability:         lockDurability,
 		reverse:                reverse,
+		workloadID:             workloadID,
 	}
 	s.metrics.OperatorsCount.Inc(1)
 
@@ -1406,6 +1410,7 @@ func (w *workerCoordinator) performRequestAsync(
 		// regardless of the value of headOfLine.
 		ba.AdmissionHeader.NoMemoryReservedAtSource = false
 		ba.Requests = req.reqs
+		ba.Header.WorkloadId = w.s.workloadID
 
 		if buildutil.CrdbTestBuild {
 			if w.s.mode == InOrder {

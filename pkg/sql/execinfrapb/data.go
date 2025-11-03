@@ -323,4 +323,6 @@ type DistSQLRemoteFlowInfo struct {
 	Timestamp time.Time
 	// StatementSQL is the SQL statement for which this flow is executing.
 	StatementSQL string
+	// WorkloadID is the workload for which this flow is executing.
+	WorkloadID uint64
 }

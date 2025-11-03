@@ -303,6 +303,7 @@ func newInvertedJoiner(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.WorkloadID,
 		},
 	); err != nil {
 		return nil, err

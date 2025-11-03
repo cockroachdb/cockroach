@@ -37,6 +37,8 @@ type Statement struct {
 	Prepared *prep.Statement
 
 	QueryTags []sqlcommenter.QueryTag
+
+	WorkloadID uint64
 }
 
 func makeStatement(

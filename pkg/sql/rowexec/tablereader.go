@@ -151,6 +151,7 @@ func newTableReader(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.WorkloadID,
 		},
 	); err != nil {
 		return nil, err
@@ -220,7 +221,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 		initialTS := tr.FlowCtx.Txn.ReadTimestamp()
 		err = tr.fetcher.StartInconsistentScan(
 			ctx, tr.FlowCtx.Cfg.DB.KV(), initialTS, tr.maxTimestampAge, tr.Spans,
-			bytesLimit, tr.limitHint, tr.FlowCtx.EvalCtx.QualityOfService(),
+			bytesLimit, tr.limitHint, tr.FlowCtx.EvalCtx.QualityOfService(), tr.FlowCtx.WorkloadID,
 		)
 	}
 	tr.scanStarted = true

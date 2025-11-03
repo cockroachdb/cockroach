@@ -44,7 +44,7 @@ func (d *deleteSwapNode) startExec(params runParams) error {
 
 	d.run.init(params, d.columns)
 
-	if err := d.run.td.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
+	if err := d.run.td.init(params.ctx, params.p.txn, params.EvalContext(), params.p.stmt.WorkloadID); err != nil {
 		return err
 	}
 

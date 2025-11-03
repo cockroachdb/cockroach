@@ -22,8 +22,10 @@ type tableInserter struct {
 }
 
 // init initializes the tableInserter with a Txn.
-func (ti *tableInserter) init(_ context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
-	return ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx)
+func (ti *tableInserter) init(
+	_ context.Context, txn *kv.Txn, evalCtx *eval.Context, workloadID uint64,
+) error {
+	return ti.tableWriterBase.init(txn, ti.tableDesc(), evalCtx, workloadID)
 }
 
 // row performs an insert.

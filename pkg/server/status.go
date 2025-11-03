@@ -379,6 +379,7 @@ func (b *baseStatusServer) ListLocalDistSQLFlows(
 				NodeID:    nodeIDOrZero,
 				Timestamp: f.Timestamp,
 				Stmt:      f.StatementSQL,
+				
 			}},
 		})
 	}

@@ -87,8 +87,10 @@ type tableUpserter struct {
 }
 
 // init initializes the tableUpserter with a Txn.
-func (tu *tableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Context) error {
-	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx); err != nil {
+func (tu *tableUpserter) init(
+	ctx context.Context, txn *kv.Txn, evalCtx *eval.Context, workloadID uint64,
+) error {
+	if err := tu.tableWriterBase.init(txn, tu.ri.Helper.TableDesc, evalCtx, workloadID); err != nil {
 		return err
 	}
 

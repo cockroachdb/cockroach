@@ -618,6 +618,7 @@ func NewColIndexJoin(
 			kvFetcherMemAcc,
 			spec.FetchSpec.External,
 			tableArgs.RequiresRawMVCCValues(),
+			flowCtx.WorkloadID,
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
@@ -633,6 +634,7 @@ func NewColIndexJoin(
 			kvFetcherMemAcc,
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			spec.FetchSpec.External,
+			flowCtx.WorkloadID,
 		)
 	}
 

@@ -178,6 +178,7 @@ func (cb *ColumnBackfiller) init(
 			Spec:                       &spec,
 			TraceKV:                    traceKV,
 			ForceProductionKVBatchSize: cb.evalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 9, // TODO(davidh): import workloadID constants
 		},
 	)
 }
@@ -300,6 +301,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	updateChunkSizeThresholdBytes rowinfra.BytesLimit,
 	alsoCommit bool,
 	traceKV bool,
+	workloadID uint64,
 ) (roachpb.Key, error) {
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to
 	// makeRowUpdater.
@@ -331,7 +333,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	}
 
 	// Update the fetcher to use the new txn.
-	if err := cb.fetcher.SetTxn(txn); err != nil {
+	if err := cb.fetcher.SetTxn(txn, workloadID); err != nil {
 		log.Dev.Errorf(ctx, "scan error during SetTxn: %s", err)
 		return roachpb.Key{}, err
 	}
@@ -1418,6 +1420,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			Spec:                       &spec,
 			TraceKV:                    traceKV,
 			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 9, // TODO(davidh): import workloadID constants
 		},
 	); err != nil {
 		return nil, nil, memUsedPerChunk, err

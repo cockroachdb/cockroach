@@ -34,6 +34,7 @@ type rowFetcher interface {
 		batchBytesLimit rowinfra.BytesLimit,
 		rowLimitHint rowinfra.RowLimit,
 		qualityOfService sessiondatapb.QoSLevel,
+		workloadID uint64,
 	) error
 
 	NextRow(ctx context.Context) (_ rowenc.EncDatumRow, spanID int, _ error)

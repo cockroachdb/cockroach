@@ -115,11 +115,12 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 	qualityOfService sessiondatapb.QoSLevel,
+	workloadID uint64,
 ) error {
 	start := timeutil.Now()
 	c.cpuStopWatch.Start()
 	err := c.Fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService, workloadID,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	c.cpuStopWatch.Stop()

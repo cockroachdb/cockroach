@@ -321,6 +321,7 @@ func (cb *columnBackfiller) runChunk(
 				updateChunkSizeThresholdBytes,
 				true, /*alsoCommit*/
 				cb.flowCtx.TraceKV,
+				cb.flowCtx.WorkloadID,
 			)
 			return err
 		}, isql.WithPriority(admissionpb.BulkNormalPri))

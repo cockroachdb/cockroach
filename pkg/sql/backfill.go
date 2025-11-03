@@ -2445,7 +2445,11 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 // It operates entirely on the current goroutine and is thus able to
 // reuse the planner's kv.Txn safely.
 func runSchemaChangesInTxn(
-	ctx context.Context, planner *planner, tableDesc *tabledesc.Mutable, traceKV bool,
+	ctx context.Context,
+	planner *planner,
+	tableDesc *tabledesc.Mutable,
+	traceKV bool,
+	workloadID uint64,
 ) error {
 	if tableDesc.Dropped() {
 		return nil
@@ -2501,7 +2505,7 @@ func runSchemaChangesInTxn(
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
 					if err := columnBackfillInTxn(
 						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
-						immutDesc, traceKV,
+						immutDesc, traceKV, workloadID,
 					); err != nil {
 						return err
 					}
@@ -2524,7 +2528,7 @@ func runSchemaChangesInTxn(
 				if !doneColumnBackfill && catalog.ColumnNeedsBackfill(col) {
 					if err := columnBackfillInTxn(
 						ctx, planner.Txn(), planner.ExecCfg(), planner.EvalContext(), planner.SemaCtx(),
-						immutDesc, traceKV,
+						immutDesc, traceKV, workloadID,
 					); err != nil {
 						return err
 					}
@@ -2532,7 +2536,7 @@ func runSchemaChangesInTxn(
 				}
 			} else if idx := m.AsIndex(); idx != nil {
 				if err := indexTruncateInTxn(
-					ctx, planner.InternalSQLTxn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, idx, traceKV,
+					ctx, planner.InternalSQLTxn(), planner.ExecCfg(), planner.EvalContext(), immutDesc, idx, traceKV, workloadID,
 				); err != nil {
 					return err
 				}
@@ -2889,6 +2893,7 @@ func columnBackfillInTxn(
 	semaCtx *tree.SemaContext,
 	tableDesc catalog.TableDescriptor,
 	traceKV bool,
+	workloadID uint64,
 ) error {
 	// A column backfill in the ADD state is a noop.
 	if tableDesc.Adding() {
@@ -2915,7 +2920,7 @@ func columnBackfillInTxn(
 		updateChunkSizeThresholdBytes := rowinfra.BytesLimit(columnBackfillUpdateChunkSizeThresholdBytes.Get(&evalCtx.Settings.SV))
 		const alsoCommit = false
 		sp.Key, err = backfiller.RunColumnBackfillChunk(
-			ctx, txn, tableDesc, sp, scanBatchSize, updateChunkSizeThresholdBytes, alsoCommit, traceKV,
+			ctx, txn, tableDesc, sp, scanBatchSize, updateChunkSizeThresholdBytes, alsoCommit, traceKV, workloadID,
 		)
 		if err != nil {
 			return err
@@ -2980,6 +2985,7 @@ func indexTruncateInTxn(
 	tableDesc catalog.TableDescriptor,
 	idx catalog.Index,
 	traceKV bool,
+	workloadID uint64,
 ) error {
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
@@ -2988,7 +2994,7 @@ func indexTruncateInTxn(
 			evalCtx.SessionData(), &execCfg.Settings.SV, execCfg.GetRowMetrics(evalCtx.SessionData().Internal),
 		)
 		td := tableDeleter{rd: rd}
-		if err := td.init(ctx, txn.KV(), evalCtx); err != nil {
+		if err := td.init(ctx, txn.KV(), evalCtx, workloadID); err != nil {
 			return err
 		}
 		var err error

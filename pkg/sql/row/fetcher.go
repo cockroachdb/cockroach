@@ -347,6 +347,7 @@ type FetcherInitArgs struct {
 	// row is being processed. In practice, this means that span IDs must be
 	// passed in when SpansCanOverlap is true.
 	SpansCanOverlap bool
+	WorkloadID      uint64
 }
 
 // Init sets up a Fetcher for a given table and index.
@@ -510,6 +511,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
+			workloadID:                 args.WorkloadID,
 		}
 		if args.Txn != nil {
 			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued)
@@ -536,15 +538,15 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 //
 // Note that this resets the number of batch requests issued by the Fetcher.
 // Consider using GetBatchRequestsIssued if that information is needed.
-func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
+func (rf *Fetcher) SetTxn(txn *kv.Txn, workloadID uint64) error {
 	var batchRequestsIssued int64
 	sendFn := makeSendFunc(txn, rf.args.Spec.External, &batchRequestsIssued)
-	return rf.setTxnAndSendFn(txn, sendFn)
+	return rf.setTxnAndSendFn(txn, sendFn, workloadID)
 }
 
 // setTxnAndSendFn peeks inside of the KVFetcher to update the underlying
 // txnKVFetcher with the new txn and sendFn.
-func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
+func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc, workloadID uint64) error {
 	// Disable buffered writes if any system columns are needed that require
 	// MVCC decoding.
 	if rf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
@@ -568,7 +570,7 @@ func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
 			"unexpectedly the KVBatchFetcher is %T and not *txnKVFetcher", rf.kvFetcher.KVBatchFetcher,
 		)
 	}
-	f.setTxnAndSendFn(txn, sendFn)
+	f.setTxnAndSendFn(txn, sendFn, workloadID)
 	return nil
 }
 
@@ -660,6 +662,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 	qualityOfService sessiondatapb.QoSLevel,
+	workloadID uint64,
 ) error {
 	if rf.args.StreamingKVFetcher != nil {
 		return errors.AssertionFailedf("StartInconsistentScan is called instead of StartScan")
@@ -742,7 +745,7 @@ func (rf *Fetcher) StartInconsistentScan(
 	// TODO(radu): we should commit the last txn. Right now the commit is a no-op
 	// on read transactions, but perhaps one day it will release some resources.
 
-	if err := rf.setTxnAndSendFn(txn, sendFn); err != nil {
+	if err := rf.setTxnAndSendFn(txn, sendFn, workloadID); err != nil {
 		return err
 	}
 

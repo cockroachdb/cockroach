@@ -385,7 +385,7 @@ func (ds *ServerImpl) setupFlow(
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
 		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
-		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
+		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(), req.WorkloadID,
 	)
 
 	// req always contains the desired vectorize mode, regardless of whether we
@@ -416,6 +416,9 @@ func (ds *ServerImpl) setupFlow(
 		}
 		if req.StatementSQL != "" {
 			bld.Add("distsql.stmt", req.StatementSQL)
+		}
+		if req.WorkloadID != 0 {
+			bld.Add("workload.id", req.WorkloadID)
 		}
 		bld.Add("distsql.gateway", req.Flow.Gateway)
 		if req.EvalContext.SessionData.ApplicationName != "" {
@@ -488,6 +491,7 @@ func (ds *ServerImpl) newFlowContext(
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
+	workloadID uint64,
 ) execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
@@ -504,6 +508,7 @@ func (ds *ServerImpl) newFlowContext(
 		Local:          localState.IsLocal,
 		Gateway:        isGatewayNode,
 		DiskMonitor:    diskMonitor,
+		WorkloadID:     workloadID,
 	}
 
 	if localState.IsLocal && localState.Collection != nil {

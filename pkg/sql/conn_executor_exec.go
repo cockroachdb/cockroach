@@ -570,6 +570,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx = ih.Setup(ctx, ex, p, &stmt, os.ImplicitTxn.Get(),
 		ex.state.mu.priority, ex.state.mu.autoRetryCounter)
 
+	// TODO(davidh): need to figure out different fingerprinting because
+	// implicitTxn doesn't make sense to have here, and not sure about
+	// "database", why not "app" too?
+	stmt.WorkloadID = uint64(appstatspb.ConstructStatementFingerprintID(stmt.StmtNoConstants, os.ImplicitTxn.Get(), p.SessionData().Database))
+
 	// Note that here we always unconditionally defer a function that takes care
 	// of finishing the instrumentation helper. This is needed since in order to
 	// support plan-gist-matching of the statement diagnostics we might not know
@@ -4397,11 +4402,15 @@ func (ex *connExecutor) execWithProfiling(
 		} else {
 			stmtNoConstants = tree.FormatStatementHideConstants(ast)
 		}
+		// Calculate the statement fingerprint ID
+		stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
+			stmtNoConstants, ex.implicitTxn(), ex.sessionData().Database)
 		labels := pprof.Labels(
 			"appname", ex.sessionData().ApplicationName,
 			"addr", remoteAddr,
 			"stmt.tag", ast.StatementTag(),
 			"stmt.no.constants", stmtNoConstants,
+			"stmt.fingerprint.id", fmt.Sprintf("%d", stmtFingerprintId),
 		)
 		pprof.Do(ctx, labels, func(ctx context.Context) {
 			err = op(ctx)
