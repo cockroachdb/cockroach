@@ -36,6 +36,24 @@ type SQLTranslator struct {
 	txn      descs.Txn
 	pts      protectedts.Storage
 	settings *cluster.Settings
+	opts     sqlTranslatorOpts
+}
+
+// sqlTranslatorOpts captures options for a SQLTranslator.
+type sqlTranslatorOpts struct {
+	// ignoreInvalidPTSTargets teaches the translator to skip over any PTS with an
+	// invalid target.
+	ignoreInvalidPTSTargets bool
+}
+
+type SQLTranslatorOpt func(*sqlTranslatorOpts)
+
+// WithIgnoreInvalidPTSTargets configures the SQLTranslator to skip over any
+// PTS with an invalid target.
+func WithIgnoreInvalidPTSTargets() SQLTranslatorOpt {
+	return func(opts *sqlTranslatorOpts) {
+		opts.ignoreInvalidPTSTargets = true
+	}
 }
 
 // Factory is used to construct transaction-scoped SQLTranslators.
@@ -67,14 +85,18 @@ func NewFactory(
 // NewSQLTranslator constructs and returns a transaction-scoped
 // spanconfig.SQLTranslator. The caller must ensure that the collection and
 // internal executor and the transaction are associated with each other.
-func (f *Factory) NewSQLTranslator(txn descs.Txn) *SQLTranslator {
-	return &SQLTranslator{
+func (f *Factory) NewSQLTranslator(txn descs.Txn, opts ...SQLTranslatorOpt) *SQLTranslator {
+	translator := SQLTranslator{
 		codec:    f.codec,
 		knobs:    f.knobs,
 		txn:      txn,
 		pts:      f.ptsProvider.WithTxn(txn),
 		settings: f.settings,
 	}
+	for _, opt := range opts {
+		opt(&translator.opts)
+	}
+	return &translator
 }
 
 // Translate is part of the spanconfig.SQLTranslator interface.
@@ -168,17 +190,19 @@ func (s *SQLTranslator) generateSystemSpanConfigRecords(
 			systemTarget = spanconfig.MakeEntireKeyspaceTarget()
 		} else {
 			systemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, sourceTenantID)
+		}
+
+		if err == nil {
+			clusterSystemRecord, err := spanconfig.MakeRecord(
+				spanconfig.MakeTargetFromSystemTarget(systemTarget),
+				roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{ProtectionPolicies: clusterProtections}})
 			if err != nil {
 				return nil, err
 			}
-		}
-		clusterSystemRecord, err := spanconfig.MakeRecord(
-			spanconfig.MakeTargetFromSystemTarget(systemTarget),
-			roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{ProtectionPolicies: clusterProtections}})
-		if err != nil {
+			records = append(records, clusterSystemRecord)
+		} else if !s.opts.ignoreInvalidPTSTargets {
 			return nil, err
 		}
-		records = append(records, clusterSystemRecord)
 	}
 
 	// Aggregate tenant target protections.
@@ -187,7 +211,11 @@ func (s *SQLTranslator) generateSystemSpanConfigRecords(
 		tenantProtection := protection
 		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, tenantProtection.GetTenantID())
 		if err != nil {
-			return nil, err
+			if s.opts.ignoreInvalidPTSTargets {
+				continue
+			} else {
+				return nil, err
+			}
 		}
 		tenantSystemRecord, err := spanconfig.MakeRecord(
 			spanconfig.MakeTargetFromSystemTarget(systemTarget),
