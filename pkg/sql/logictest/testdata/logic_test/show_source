@@ -184,6 +184,7 @@ optimizer_use_improved_zigzag_join_costing                       on
 optimizer_use_limit_ordering_for_streaming_group_by              on
 optimizer_use_lock_elision_multiple_families                     off
 optimizer_use_lock_op_for_serializable                           off
+optimizer_use_max_frequency_selectivity                          on
 optimizer_use_merged_partial_statistics                          on
 optimizer_use_multicol_stats                                     on
 optimizer_use_not_visible_indexes                                off
