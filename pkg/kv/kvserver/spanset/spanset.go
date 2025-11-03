@@ -85,6 +85,7 @@ type Span struct {
 type SpanSet struct {
 	spans           [NumSpanAccess][NumSpanScope][]Span
 	allowUndeclared bool
+	forbiddenKeys   []roachpb.Span
 }
 
 var spanSetPool = sync.Pool{
@@ -114,6 +115,8 @@ func (s *SpanSet) Release() {
 		}
 	}
 	s.allowUndeclared = false
+	// Clear forbidden keys.
+	s.forbiddenKeys = nil
 	spanSetPool.Put(s)
 }
 
@@ -156,6 +159,7 @@ func (s *SpanSet) Copy() *SpanSet {
 		}
 	}
 	n.allowUndeclared = s.allowUndeclared
+	n.forbiddenKeys = append(n.forbiddenKeys, s.forbiddenKeys...)
 	return n
 }
 
@@ -199,6 +203,13 @@ func (s *SpanSet) AddMVCC(access SpanAccess, span roachpb.Span, timestamp hlc.Ti
 	}
 
 	s.spans[access][scope] = append(s.spans[access][scope], Span{Span: span, Timestamp: timestamp})
+}
+
+// AddForbiddenKey adds a span that should not be accessed by this spanset.
+// Any attempt to access a span that overlaps with a forbidden span will result in
+// an error from CheckAllowed.
+func (s *SpanSet) AddForbiddenKey(span roachpb.Span) {
+	s.forbiddenKeys = append(s.forbiddenKeys, span)
 }
 
 // Merge merges all spans in s2 into s. s2 is not modified.
@@ -340,6 +351,14 @@ func (s *SpanSet) CheckAllowedAt(
 func (s *SpanSet) checkAllowed(
 	access SpanAccess, span roachpb.Span, check func(SpanAccess, Span) bool,
 ) error {
+	// Check if the span overlaps with any forbidden spans.
+	for _, forbiddenSpan := range s.forbiddenKeys {
+		if span.Overlaps(forbiddenSpan) {
+			return errors.Errorf("cannot %s span %s: overlaps with forbidden span %s",
+				access, span, forbiddenSpan)
+		}
+	}
+
 	if s.allowUndeclared {
 		// If the request has specified that undeclared spans are allowed, do
 		// nothing.

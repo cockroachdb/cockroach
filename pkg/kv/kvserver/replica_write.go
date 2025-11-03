@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -24,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -808,14 +809,22 @@ func (r *Replica) newBatchedEngine(g *concurrency.Guard) (storage.Batch, *storag
 		opLogger = storage.NewOpLoggerBatch(batch)
 		batch = opLogger
 	}
-	if util.RaceEnabled {
+	if buildutil.CrdbTestBuild {
 		// During writes we may encounter a versioned value newer than the request
 		// timestamp, and may have to retry at a higher timestamp. This is still
 		// safe as we're only ever writing at timestamps higher than the timestamp
 		// any write latch would be declared at. But because of this, we don't
 		// assert on access timestamps using spanset.NewBatchAt.
-		batch = spanset.NewBatch(batch, g.LatchSpans())
+		spans := g.LatchSpans()
+		raftHardStateKey := keys.RaftHardStateKey(r.RangeID)
+		spans.AddForbiddenKey(roachpb.Span{Key: raftHardStateKey, EndKey: raftHardStateKey.Next()})
+		raftLogPrefix := keys.RaftLogPrefix(r.RangeID)
+		spans.AddForbiddenKey(roachpb.Span{Key: raftLogPrefix, EndKey: raftLogPrefix.PrefixEnd()})
+		raftTruncatedStateKey := keys.RaftTruncatedStateKey(r.RangeID)
+		spans.AddForbiddenKey(roachpb.Span{Key: raftTruncatedStateKey, EndKey: raftTruncatedStateKey.Next()})
+		batch = spanset.NewBatch(batch, spans)
 	}
+
 	return batch, opLogger
 }
 
