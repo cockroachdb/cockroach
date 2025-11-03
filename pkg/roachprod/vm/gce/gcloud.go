@@ -42,9 +42,9 @@ const (
 	ProviderName = "gce"
 
 	// Auto discovery of latest images based on image families.
-	DefaultImageFamilyAMD64  = "ubuntu-2204-lts"
-	DefaultImageFamilyARM64  = "ubuntu-2204-lts-arm64"
-	DefaultImageFamilyFIPS   = "ubuntu-pro-fips-2004-lts"
+	DefaultImageFamilyAMD64  = "ubuntu-2404-lts-amd64"
+	DefaultImageFamilyARM64  = "ubuntu-2404-lts-arm64"
+	DefaultImageFamilyFIPS   = "ubuntu-pro-fips-updates-2204-lts"
 	DefaultImageProjectAMD64 = "ubuntu-os-cloud"
 	DefaultImageProjectARM64 = DefaultImageProjectAMD64
 	DefaultImageProjectFIPS  = "ubuntu-os-pro-cloud"
@@ -1421,6 +1421,10 @@ func (p *Provider) computeInstanceArgs(
 	project := p.GetProject()
 
 	// Fixed args.
+	if opts.Arch == "" {
+		// Default to AMD64.
+		opts.Arch = string(vm.ArchAMD64)
+	}
 
 	if opts.Arch == string(vm.ArchARM64) && !providerOpts.useArmAMI() {
 		return nil, cleanUpFn, errors.Errorf("Requested arch is arm64, but machine type is %s. Do specify a t2a VM", providerOpts.MachineType)
