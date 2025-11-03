@@ -441,7 +441,9 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 	var changefeedLimiter *rate.Limiter
 	if *changefeedMaxRate > 0 {
-		changefeedLimiter = rate.NewLimiter(rate.Limit(*changefeedMaxRate), 1)
+		ratePerSecond := *changefeedMaxRate
+		burst := max(int(ratePerSecond), 1)
+		changefeedLimiter = rate.NewLimiter(rate.Limit(ratePerSecond), burst)
 	}
 
 	maybeLogRandomSeed(ctx, gen)
