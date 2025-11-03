@@ -226,6 +226,15 @@ func (s *CrossRangeTxnWrapperSender) Send(
 		return br, pErr
 	}
 
+	// Before retrying the batch in a transaction, strip the header's timestamp.
+	// It may have been set to try a follower read, but it's not allowed in a txn
+	// (see comment near Header.Timestamp). Currently, this non-transactional API
+	// is used for follower reads only by KVNemesis.
+	//
+	// We can end up here if the batch contains transactional requests and spans
+	// multiple ranges.
+	ba.Header.Timestamp = hlc.Timestamp{}
+
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		txn.SetDebugName("auto-wrap")
 		b := txn.NewBatch()
