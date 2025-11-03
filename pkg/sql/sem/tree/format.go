@@ -343,6 +343,11 @@ type FmtCtx struct {
 	// indexedTypeFormatter is an optional interceptor for formatting
 	// IDTypeReferences differently than normal.
 	indexedTypeFormatter func(*FmtCtx, *OIDTypeReference)
+
+	// inDoBlock, if set, indicates that we're formatting a node within DO block
+	// context.
+	inDoBlock bool
+
 	// small scratch buffer to reduce allocations.
 	scratch [64]byte
 }
@@ -404,6 +409,14 @@ func FmtLocation(loc *time.Location) FmtCtxOption {
 	}
 }
 
+// FmtInDoBlock modifies FmtCtx to indicate whether we're in the DO block
+// context.
+func FmtInDoBlock(inDoBlock bool) FmtCtxOption {
+	return func(ctx *FmtCtx) {
+		ctx.inDoBlock = inDoBlock
+	}
+}
+
 // NewFmtCtx creates a FmtCtx; only flags that don't require Annotations
 // can be used.
 func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
@@ -423,14 +436,15 @@ func NewFmtCtx(f FmtFlags, opts ...FmtCtxOption) *FmtCtx {
 // original.
 func (ctx *FmtCtx) Clone() *FmtCtx {
 	newCtx := fmtCtxPool.Get().(*FmtCtx)
+	newCtx.dataConversionConfig = ctx.dataConversionConfig
+	newCtx.location = ctx.location
 	newCtx.flags = ctx.flags
 	newCtx.ann = ctx.ann
 	newCtx.indexedVarFormat = ctx.indexedVarFormat
 	newCtx.placeholderFormat = ctx.placeholderFormat
 	newCtx.tableNameFormatter = ctx.tableNameFormatter
 	newCtx.indexedTypeFormatter = ctx.indexedTypeFormatter
-	newCtx.dataConversionConfig = ctx.dataConversionConfig
-	newCtx.location = ctx.location
+	newCtx.inDoBlock = ctx.inDoBlock
 	return newCtx
 }
 

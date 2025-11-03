@@ -1438,6 +1438,14 @@ type CaseExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CaseExpr) Format(ctx *FmtCtx) {
+	if ctx.inDoBlock {
+		// For some reason, when we're in DO block context in some scenarios the
+		// CASE expression cannot be parsed without parenthesis, so we
+		// unconditionally add them. This should be harmless if they aren't
+		// needed.
+		ctx.WriteByte('(')
+		defer ctx.WriteByte(')')
+	}
 	ctx.WriteString("CASE ")
 	if node.Expr != nil {
 		ctx.FormatNode(node.Expr)
