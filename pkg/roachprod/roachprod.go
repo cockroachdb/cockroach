@@ -1131,12 +1131,13 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 }
 
 type PGURLOptions struct {
-	Database           string
-	Secure             install.SecureOption
-	External           bool
-	VirtualClusterName string
-	SQLInstance        int
-	Auth               install.PGAuthMode
+	Database                string
+	Secure                  install.SecureOption
+	External                bool
+	VirtualClusterName      string
+	SQLInstance             int
+	Auth                    install.PGAuthMode
+	DisallowUnsafeInternals bool
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -1171,7 +1172,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth, opts.Database))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth, opts.Database, opts.DisallowUnsafeInternals))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
@@ -2951,7 +2952,7 @@ func LoadBalancerPgURL(
 	if err != nil {
 		return "", err
 	}
-	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth, opts.Database), nil
+	return c.NodeURL(addr.IP, port, opts.VirtualClusterName, serviceMode, opts.Auth, opts.Database, opts.DisallowUnsafeInternals), nil
 }
 
 // LoadBalancerIP resolves the IP of a load balancer serving the
