@@ -39,13 +39,13 @@ const ProviderName = "aws"
 
 // Base AMI image names and owners for dynamic AMI resolution
 const (
-	DefaultImageFamilyAMD64 = "ubuntu-jammy-22.04-amd64-server"
-	DefaultImageFamilyARM64 = "ubuntu-jammy-22.04-arm64-server"
-	DefaultImageFamilyFIPS  = "ubuntu-focal-20.04-amd64-pro-fips-server"
+	DefaultImageFamilyAMD64 = "ubuntu-noble-24.04-amd64-server"
+	DefaultImageFamilyARM64 = "ubuntu-noble-24.04-arm64-server"
+	DefaultImageFamilyFIPS  = "ubuntu-jammy-22.04-amd64-pro-fips-updates-server"
 
 	DefaultImageOwnerAMD64 = "ubuntu"
 	DefaultImageOwnerARM64 = DefaultImageOwnerAMD64
-	DefaultImageOwnerFIPS  = "ubuntu-pro-fips-server"
+	DefaultImageOwnerFIPS  = "ubuntu-pro-fips-updates-server"
 
 	DefaultImageOwnerAccountAMD64 = "099720109477" // Ubuntu's official AWS account ID
 	DefaultImageOwnerAccountARM64 = DefaultImageOwnerAccountAMD64

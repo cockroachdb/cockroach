@@ -207,6 +207,12 @@ if systemctl list-unit-files | grep -q '^unattended-upgrades.service'; then
     sudo rm -rf /var/log/unattended-upgrades
 fi
 
+{{ if .EnableFIPS }}
+# Wait for cloud-init to finish in case it's enabling FIPS/FIPS-Updates
+# because this will update the package lists.
+sudo cloud-init status --wait || true
+{{ end }}
+
 # Update package lists
 sudo apt-get update -q
 
@@ -287,9 +293,12 @@ const startupScriptFIPS = `
 # Install ubuntu-advantage-tools if not already installed.
 sudo apt-get install -yq ubuntu-advantage-tools jq
 # Enable FIPS (in practice, it's often already enabled at this point).
-fips_status=$(sudo pro status --format json | jq '.services[] | select(.name == "fips") | .status')
+# Check both "fips" and "fips-updates" services
+fips_status=$(sudo pro status --format json | jq '.services[] | select(.name == "fips" or .name == "fips-updates") | .status')
 if [ "$fips_status" != '"enabled"' ]; then
-	sudo ua enable fips --assume-yes
+	# Enable fips (ubuntu < 22.04) or fips-updates (ubuntu 22.04+)
+	# depending on which service is available.
+	sudo ua enable $(sudo pro status --format json | jq -r '.services[] | select(.name == "fips" or .name == "fips-updates") | .name') --assume-yes
 fi
 {{ end }}`
 
@@ -435,7 +444,6 @@ fi
 
 if [ "$ssh_updated_config" -eq 1 ]; then
 	echo "Restarting sshd to apply updated configuration"
-	sudo service sshd restart
 	sudo service ssh restart
 fi`
 
@@ -443,12 +451,9 @@ const startupScriptTcpdump = `
 # N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
 # jepsen uses /usr/sbin, we create a symlink.
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html
-# FIPS is still on Ubuntu 20.04 however, so don't create if using FIPS.
-{{ if not .EnableFIPS }}
 if [ ! -e /usr/sbin/tcpdump ]; then
 	sudo ln -s /usr/bin/tcpdump /usr/sbin/tcpdump
-fi
-{{ end }}`
+fi`
 
 const startupScriptTimersAndServices = `
 for timer in apt-daily-upgrade.timer apt-daily.timer e2scrub_all.timer fstrim.timer man-db.timer e2scrub_all.timer ; do
