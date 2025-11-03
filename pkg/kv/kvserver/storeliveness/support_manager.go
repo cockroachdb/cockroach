@@ -432,7 +432,7 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 // maxReceiveQueueSize is the maximum number of messages the receive queue can
 // store. If message consumption is slow (e.g. due to a disk stall) and the
 // queue reaches maxReceiveQueueSize, incoming messages will be dropped.
-const maxReceiveQueueSize = 10000
+const maxReceiveQueueSize = 10_000
 
 var receiveQueueSizeLimitReachedErr = errors.Errorf("store liveness receive queue is full")
 

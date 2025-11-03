@@ -398,6 +398,7 @@ func TestTransportSendToMissingStore(t *testing.T) {
 			return errors.New("still waiting to receive message")
 		},
 	)
+
 	require.Equal(t, int64(2), tt.transports[sender.NodeID].metrics.MessagesSent.Count())
 }
 
