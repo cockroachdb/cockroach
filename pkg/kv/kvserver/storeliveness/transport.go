@@ -26,7 +26,11 @@ import (
 
 const (
 	// Outgoing messages are queued per-node on a channel of this size.
-	sendBufferSize = 1000
+	// This is set to 100_000 because the receiver side has
+	// maxReceiveQueueSize = 10_000 per store.
+	// Since this is a per-node queue that may handle messages for multiple
+	// stores, it should be at least 10x the per-store queue size.
+	maxSendQueueSize = 100_000
 
 	// When no message has been queued for this duration, the corresponding
 	// instance of processQueue will shut down.
@@ -52,9 +56,51 @@ type MessageHandler interface {
 	HandleMessage(msg *slpb.Message) error
 }
 
+var sendQueueSizeLimitReachedErr = errors.Errorf("store liveness send queue is full")
+
 // sendQueue is a queue of outgoing Messages.
 type sendQueue struct {
-	messages chan slpb.Message
+	// msgs is a slice of messages that are queued to be sent.
+	mu struct {
+		syncutil.Mutex
+		msgs []slpb.Message
+	}
+	// directSend is the channel used to signal the processQueue goroutine.
+	directSend chan struct{}
+	// size is the total size of the messages in the queue.
+	size int64
+}
+
+func newSendQueue() sendQueue {
+	return sendQueue{
+		directSend: make(chan struct{}, 1),
+	}
+}
+
+func (q *sendQueue) Append(msg *slpb.Message) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	// Drop messages if maxSendQueueSize is reached.
+	if len(q.mu.msgs) >= maxSendQueueSize {
+		return sendQueueSizeLimitReachedErr
+	}
+	q.mu.msgs = append(q.mu.msgs, *msg)
+	q.size += int64(msg.Size())
+	select {
+	case q.directSend <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func (q *sendQueue) Drain() ([]slpb.Message, int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	msgs := q.mu.msgs
+	q.mu.msgs = nil
+	size := q.size
+	q.size = 0
+	return msgs, size
 }
 
 // Transport handles the RPC messages for Store Liveness.
@@ -248,12 +294,7 @@ func (t *Transport) EnqueueMessage(ctx context.Context, msg slpb.Message) (enque
 		}
 	}
 
-	select {
-	case q.messages <- msg:
-		t.metrics.SendQueueSize.Inc(1)
-		t.metrics.SendQueueBytes.Inc(int64(msg.Size()))
-		return true
-	default:
+	if err := q.Append(&msg); err != nil {
 		if logQueueFullEvery.ShouldLog() {
 			log.KvExec.Warningf(
 				t.AnnotateCtx(context.Background()),
@@ -263,6 +304,10 @@ func (t *Transport) EnqueueMessage(ctx context.Context, msg slpb.Message) (enque
 		t.metrics.MessagesSendDropped.Inc(1)
 		return false
 	}
+
+	t.metrics.SendQueueSize.Inc(1)
+	t.metrics.SendQueueBytes.Inc(int64(msg.Size()))
+	return true
 }
 
 // getQueue returns the queue for the specified node ID and a boolean
@@ -270,7 +315,7 @@ func (t *Transport) EnqueueMessage(ctx context.Context, msg slpb.Message) (enque
 func (t *Transport) getQueue(nodeID roachpb.NodeID) (*sendQueue, bool) {
 	queue, ok := t.queues.Load(nodeID)
 	if !ok {
-		q := sendQueue{messages: make(chan slpb.Message, sendBufferSize)}
+		q := newSendQueue()
 		queue, ok = t.queues.LoadOrStore(nodeID, &q)
 	}
 	return queue, ok
@@ -292,15 +337,11 @@ func (t *Transport) startProcessNewQueue(
 		// writing to the queue concurrently, so it's possible that we won't
 		// account for a few messages below.
 		if ok {
-			for {
-				select {
-				case m := <-q.messages:
-					t.metrics.MessagesSendDropped.Inc(1)
-					t.metrics.SendQueueSize.Dec(1)
-					t.metrics.SendQueueBytes.Dec(int64(m.Size()))
-				default:
-					return
-				}
+			msgs, msgsSize := q.Drain()
+			if len(msgs) > 0 {
+				t.metrics.MessagesSendDropped.Inc(int64(len(msgs)))
+				t.metrics.SendQueueSize.Dec(int64(len(msgs)))
+				t.metrics.SendQueueBytes.Dec(msgsSize)
 			}
 		}
 	}
@@ -375,23 +416,30 @@ func (t *Transport) processQueue(
 			t.metrics.SendQueueIdle.Inc(1)
 			return nil
 
-		case msg := <-q.messages:
-			batch.Messages = append(batch.Messages, msg)
-			t.metrics.SendQueueSize.Dec(1)
-			t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
-
-			// Pull off as many queued requests as possible within batchDuration.
-			batchTimer.Reset(batchDuration)
-			for done := false; !done; {
-				select {
-				case msg = <-q.messages:
-					batch.Messages = append(batch.Messages, msg)
-					t.metrics.SendQueueSize.Dec(1)
-					t.metrics.SendQueueBytes.Dec(int64(msg.Size()))
-				case <-batchTimer.C:
-					done = true
-				}
+		case <-q.directSend:
+			// Sleep for batchDuration to batch messages, then drain all accumulated
+			// messages at once. We use sleep-then-drain instead of a timer-based
+			// batching mechanism (e.g., select between timer and message channel)
+			// to avoid frequent goroutine wake-ups.
+			//
+			// With timer-based batching, the goroutine would wake up on each message
+			// arrival during the batching window (since select would immediately
+			// match the message channel case). This creates a pattern where the
+			// goroutine wakes up repeatedly during batching, causing spikes in
+			// runnable goroutines and suboptimal scheduling behavior.
+			//
+			// By sleeping first and then draining all messages in a single operation,
+			// we ensure the goroutine wakes up only once per batch period, after
+			// the batching window has elapsed. This keeps the runnable goroutine
+			// count stable and reduces scheduling overhead.
+			time.Sleep(batchDuration)
+			var batchMessagesSize int64
+			batch.Messages, batchMessagesSize = q.Drain()
+			if len(batch.Messages) == 0 {
+				continue
 			}
+			t.metrics.SendQueueSize.Dec(int64(len(batch.Messages)))
+			t.metrics.SendQueueBytes.Dec(batchMessagesSize)
 
 			batch.Now = t.clock.NowAsClockTimestamp()
 			if err = stream.Send(batch); err != nil {
