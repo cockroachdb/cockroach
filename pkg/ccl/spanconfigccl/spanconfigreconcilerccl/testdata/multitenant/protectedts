@@ -63,9 +63,21 @@ protect record-id=2 ts=2
 tenants 1,10
 ----
 
+# We lay an invalid PTS before reconciliation to test that it is cleaned up by
+# the full reconciler.
+protect record-id=3 ts=4 tenant=10
+tenants 1
+----
+
 # Start the reconciliation loop for the secondary tenant.
 reconcile tenant=10
 ----
+
+# Verify that the full reconciler cleaned up the invalid PTS target.
+query-sql tenant=10
+SELECT count(*) FROM system.protected_ts_records;
+----
+0
 
 # We should see protected timestamp record mutations as the host tenant.
 mutations
@@ -158,7 +170,7 @@ upsert /Tenant/10/Table/10{6-7}            rangefeed_enabled=true
 upsert /Tenant/10/Table/10{7-8}            rangefeed_enabled=true
 
 # Write a protected timestamp record on the cluster as a secondary tenant.
-protect record-id=3 ts=3 cluster tenant=10
+protect record-id=4 ts=3 cluster tenant=10
 cluster
 ----
 
@@ -196,12 +208,26 @@ delete {source=1,target=1}
 delete {source=1,target=10}
 
 # Release all the protected timestamp records from the secondary tenant.
-release record-id=3 tenant=10
+release record-id=4 tenant=10
 ----
 
 mutations tenant=10
 ----
 delete {source=10,target=10}
+
+# Ensure that the incremental reconciler will ignore and drop invalid PTS
+# targets.
+protect record-id=5 ts=4 tenant=10
+tenants 1
+----
+
+mutations tenant=10
+----
+
+query-sql tenant=10
+SELECT count(*) FROM system.protected_ts_records;
+----
+0
 
 # All system span config targets should have been removed at this point.
 state limit=5
