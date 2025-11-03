@@ -639,16 +639,16 @@ func buildInvertedIndexSpans(
 			// Encode as array element: {"key": [...]}.
 			nextPrefixes = append(nextPrefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(prefix[:len(prefix):len(prefix)], keyName, false /* end */)))
 		}
-	case Wildcard:
+	case Root, Wildcard:
 		prefixBytesLen := len(prefixBytes)
 		for i := 0; i < prefixBytesLen; i++ {
-			// Wildcard can unwrap one extra layer of array.
+			// Wildcard or Root can unwrap one extra layer of array.
 			prefix := prefixBytes[i]
 			prefixBytes = append(prefixBytes, encoding.EncodeArrayAscending(prefix[:len(prefix):len(prefix)]))
 		}
 		nextPrefixes = prefixBytes
-	case Root, Current:
-		// For non-Key components, pass through existing prefixes unchanged.
+	case Current:
+		// For Current (@), pass through existing prefixes unchanged.
 		nextPrefixes = prefixBytes
 	default:
 		// This is a pattern we don't support for inverted index.
