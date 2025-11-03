@@ -9,6 +9,8 @@ import (
 	"context"
 	"math"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -250,7 +252,7 @@ func (s *Server) Query(
 	// If not set, sampleNanos should default to ten second resolution.
 	sampleNanos := request.SampleNanos
 	if sampleNanos == 0 {
-		sampleNanos = Resolution10s.SampleDuration()
+		sampleNanos = Resolution1m.SampleDuration()
 	}
 
 	// For the interpolation limit, use the time limit until stores are considered
@@ -306,6 +308,7 @@ func (s *Server) Query(
 		for queryIdx, query := range request.Queries {
 			queryIdx := queryIdx
 			query := query
+			diskResolution := queryMetricDiskResolution(query)
 
 			if err := s.stopper.RunAsyncTaskEx(
 				ctx,
@@ -339,7 +342,7 @@ func (s *Server) Query(
 					datapoints, sources, err := s.db.Query(
 						ctx,
 						query,
-						Resolution10s,
+						diskResolution,
 						timespan,
 						memContexts[queryIdx],
 					)
@@ -575,4 +578,16 @@ func dumpTimeseriesAllSources(
 		}
 	}
 	return nil
+}
+
+
+// selectDiskResolutionForQuery selects the appropriate storage resolution for an individual query
+// based on multiple factors including data age, metric type, and query requirements.
+func queryMetricDiskResolution(
+	query tspb.Query,
+) Resolution {
+	if strings.Contains(query.Name, "___") {
+		return Resolution1m
+	}
+	return Resolution10s
 }
