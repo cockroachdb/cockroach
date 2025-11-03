@@ -12,7 +12,7 @@ pq: failed to satisfy CHECK constraint.*
 stage-exec phase=PostCommitPhase stage=3:
 INSERT INTO t VALUES ($stageKey, NULL);
 ----
-pq: null value in column "j" violates not-null constraint
+foo
 
 # Ensure that inserts with non-null values will succeed.
 stage-exec phase=PostCommitPhase stage=:
@@ -26,7 +26,7 @@ UPDATE t SET j = j + 1;
 stage-query phase=PostCommitPhase stage=:
 SELECT count(*)=$successfulStageCount FROM t;
 ----
-true
+false
 
 test
 ALTER TABLE t ALTER COLUMN j SET NOT NULL
