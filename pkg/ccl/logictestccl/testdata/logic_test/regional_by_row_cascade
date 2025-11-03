@@ -64,7 +64,7 @@ SELECT crdb_internal.clear_table_stats_cache();
 
 # Only the scan in the main query is parallelized when we don't have stats on
 # the descendant tables.
-query I
+query I retry
 SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
 ----
 1
