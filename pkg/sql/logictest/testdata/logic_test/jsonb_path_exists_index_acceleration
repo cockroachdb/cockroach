@@ -557,6 +557,31 @@ SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '
 statement error index "foo_inv" is inverted and cannot be used for this query
 SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a ? (@.b == $x)', '{"x": "c"}') ORDER BY a;
 
+statement ok
+INSERT INTO json_tab VALUES
+(20,'[{"b": {"x": "y"}, "a": "x"}, null]'),
+(21,'[[{"b": {"x": "y"}, "a": "x"}], null]');
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$."b"[*]');
+----
+20
+
+query I
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.b');
+----
+20
+
+query I
+SELECT a FROM json_tab@primary WHERE jsonb_path_exists(b, '$."b"[*]');
+----
+20
+
+query I
+SELECT a FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$."b"[*]');
+----
+20
+
 subtest anykey
 
 statement ok
