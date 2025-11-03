@@ -1141,3 +1141,25 @@ statement ok
 DROP TABLE composite_pk
 
 subtest end
+
+subtest test_backfill_149236
+
+statement ok
+set autocommit_before_ddl=off;
+
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE test_backfill_149236 (a INT PRIMARY KEY, b INT, vec1 VECTOR(3));
+
+statement error pgcode 0A000 vector index build not supported with the legacy schema changer
+CREATE VECTOR INDEX idx ON test_backfill_149236 (vec1);
+
+statement ok
+COMMIT;
+
+statement ok
+SET autocommit_before_ddl=on;
+
+subtest end
