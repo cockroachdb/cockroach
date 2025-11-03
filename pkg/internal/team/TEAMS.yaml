@@ -7,7 +7,6 @@ cockroachdb/docs:
     cockroachdb/docs-infra-prs: other
 cockroachdb/sql-foundations:
   aliases:
-    cockroachdb/sql-syntax-prs: other
     cockroachdb/sqlproxy-prs: other
     cockroachdb/sql-api-prs: other
   label: T-sql-foundations
