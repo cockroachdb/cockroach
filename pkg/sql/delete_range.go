@@ -50,6 +50,10 @@ type deleteRangeNode struct {
 	// the SQL row that increased rowCount last. It is maintained across
 	// different BatchRequests in order to not double count the same SQL row.
 	curRowPrefix []byte
+
+	// kvCPUTimeAccum tracks the cumulative CPU time (in nanoseconds) that KV
+	// reported in BatchResponse headers during the execution of this delete range.
+	kvCPUTimeAccum int64
 }
 
 var _ planNode = &deleteRangeNode{}
@@ -73,6 +77,10 @@ func (d *deleteRangeNode) indexBytesWritten() int64 {
 func (d *deleteRangeNode) returnsRowsAffected() bool {
 	// DeleteRange always returns the number of rows deleted.
 	return true
+}
+
+func (d *deleteRangeNode) kvCPUTime() int64 {
+	return d.kvCPUTimeAccum
 }
 
 // startExec implements the planNode interface.
@@ -122,6 +130,11 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 				return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 			}
 
+			// Accumulate CPU time from the BatchResponse.
+			if br := b.RawResponse(); br != nil && br.CPUTime > 0 {
+				d.kvCPUTimeAccum += br.CPUTime
+			}
+
 			spans = spans[:0]
 			var err error
 			if spans, err = d.processResults(b.Results, spans); err != nil {
@@ -144,6 +157,12 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 		}
+
+		// Accumulate CPU time from the BatchResponse.
+		if br := b.RawResponse(); br != nil && br.CPUTime > 0 {
+			d.kvCPUTimeAccum += br.CPUTime
+		}
+
 		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
 			return err
 		} else if len(resumeSpans) != 0 {
