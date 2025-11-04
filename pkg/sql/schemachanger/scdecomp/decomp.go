@@ -238,18 +238,7 @@ func GetSequenceOptions(
 	sequenceID descpb.ID, opts *descpb.TableDescriptor_SequenceOpts,
 ) []*scpb.SequenceOption {
 	// Compute the default sequence options.
-	defaultOpts := descpb.TableDescriptor_SequenceOpts{
-		Increment: 1,
-	}
-	err := schemaexpr.AssignSequenceOptions(&defaultOpts,
-		nil,
-		64,
-		true,
-		nil,
-	)
-	if err != nil {
-		panic(err)
-	}
+	defaultOpts := schemaexpr.DefaultSequenceOptions()
 	var sequenceOptions []*scpb.SequenceOption
 	addSequenceOption := func(key string, defaultValue, value interface{}) {
 		// Nil or empty values can be skipped. Or values which

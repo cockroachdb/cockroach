@@ -133,6 +133,7 @@ func doCreateSequence(b BuildCtx, n *tree.CreateSequence) *scpb.Sequence {
 	// Add any sequence options.
 	options := scdecomp.GetSequenceOptions(sequenceElem.SequenceID, &tempSequenceOpts)
 	for _, opt := range options {
+		// TODO(bghal): only add options that differ from defaults?
 		b.Add(opt)
 	}
 	// Add any sequence owned by element.

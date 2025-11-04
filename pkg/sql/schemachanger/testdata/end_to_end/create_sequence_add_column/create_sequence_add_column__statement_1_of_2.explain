@@ -12,7 +12,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
  │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
- │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
  │         │    ├── ABSENT → PUBLIC Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
@@ -55,7 +55,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
       │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
-      │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+      │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
       │    │    ├── PUBLIC → ABSENT Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
       │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
       │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
@@ -74,7 +74,7 @@ Schema change plan for CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MI
            │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 101 (public)}
            │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
-           │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+           │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
            │    ├── ABSENT → PUBLIC Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
            │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
            │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
