@@ -1,3 +1,5 @@
+# LogicTest: default-configs 3node-tenant local-leased-descriptors
+
 statement ok
 CREATE DATABASE d
 

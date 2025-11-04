@@ -57,7 +57,21 @@ type byIDStateValue struct {
 	// this descriptor ID.
 	hasScanNamespaceForDatabaseEntries bool
 	hasScanNamespaceForDatabaseSchemas bool
-	hasGetDescriptorEntries            bool
+	hasDescriptor                      bool
+	hasComment                         bool
+	hasZoneConfig                      bool
+}
+
+func (b byIDStateValue) HasRequiredDescriptorEntries(
+	desc bool, comment bool, zoneConfig bool,
+) bool {
+	return (!desc || b.hasDescriptor) &&
+		(!comment || b.hasComment) &&
+		(!zoneConfig || b.hasZoneConfig)
+}
+
+func (s byIDStateValue) HasDescriptorEntries() bool {
+	return s.hasComment && s.hasZoneConfig && s.hasDescriptor
 }
 
 type byNameStateValue struct {
@@ -100,7 +114,12 @@ func (c *cachedCatalogReader) Cache() nstree.Catalog {
 
 // IsIDInCache is part of the CatalogReader interface.
 func (c *cachedCatalogReader) IsIDInCache(id descpb.ID) bool {
-	return c.byIDState[id].hasGetDescriptorEntries
+	return c.byIDState[id].HasDescriptorEntries()
+}
+
+// IsCommentInCache is part of the CatalogReader interface.
+func (c *cachedCatalogReader) IsCommentInCache(id descpb.ID) bool {
+	return c.byIDState[id].hasComment
 }
 
 // IsNameInCache is part of the CatalogReader interface.
@@ -179,7 +198,7 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 	// These ids don't have corresponding descriptors but some of them may have
 	// zone configs.
 	{
-		s := byIDStateValue{hasGetDescriptorEntries: true}
+		s := byIDStateValue{hasDescriptor: true, hasZoneConfig: true, hasComment: true}
 		c.setByIDState(keys.RootNamespaceID, s)
 		for _, id := range keys.PseudoTableIDs {
 			c.setByIDState(descpb.ID(id), s)
@@ -203,7 +222,9 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 		var nameState byNameStateValue
 		idState.hasScanNamespaceForDatabaseEntries = true
 		idState.hasScanNamespaceForDatabaseSchemas = true
-		idState.hasGetDescriptorEntries = true
+		idState.hasDescriptor = true
+		idState.hasComment = true
+		idState.hasZoneConfig = true
 		nameState.hasGetNamespaceEntries = true
 		c.setByIDState(desc.GetID(), idState)
 		ni := descpb.NameInfo{
@@ -339,11 +360,20 @@ func (c *cachedCatalogReader) GetByIDs(
 	ids []descpb.ID,
 	isDescriptorRequired bool,
 	expectedType catalog.DescriptorType,
+	opts ...GetByIDOption,
 ) (nstree.Catalog, error) {
 	numUncached := 0
+	var options getByIDOptions
+	if len(opts) == 0 {
+		opts = withDefaultOptions()
+	}
+	for _, opt := range opts {
+		opt.apply(&options)
+	}
 	// Move any uncached IDs to the front of the slice.
 	for i, id := range ids {
-		if c.byIDState[id].hasGetDescriptorEntries || c.hasScanAll {
+		if c.byIDState[id].HasRequiredDescriptorEntries(options.withDescriptor,
+			options.withComments, options.withZoneConfig) || c.hasScanAll {
 			continue
 		}
 		if desc := c.systemDatabaseCache.lookupDescriptor(c.version, id); desc != nil {
@@ -354,7 +384,7 @@ func (c *cachedCatalogReader) GetByIDs(
 	}
 	if numUncached > 0 && !(c.hasScanAll && !isDescriptorRequired) {
 		uncachedIDs := ids[:numUncached]
-		read, err := c.cr.GetByIDs(ctx, txn, uncachedIDs, isDescriptorRequired, expectedType)
+		read, err := c.cr.GetByIDs(ctx, txn, uncachedIDs, isDescriptorRequired, expectedType, opts...)
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
@@ -363,7 +393,10 @@ func (c *cachedCatalogReader) GetByIDs(
 		}
 		for _, id := range uncachedIDs {
 			s := c.byIDState[id]
-			s.hasGetDescriptorEntries = true
+			// Set flags based on what was read for us.
+			s.hasDescriptor = s.hasDescriptor || options.withDescriptor
+			s.hasComment = s.hasComment || options.withComments
+			s.hasZoneConfig = s.hasZoneConfig || options.withZoneConfig
 			c.setByIDState(id, s)
 		}
 	}
