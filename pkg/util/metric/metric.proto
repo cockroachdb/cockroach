@@ -104,6 +104,10 @@ message Metadata {
   // how_to_use is an extended description of how to use this metric
   // with a running cluster. This is required if `essential` is true.
   required string how_to_use = 12 [(gogoproto.nullable) = false];
+  // enable_low_freq_child_collection enables child metrics to be collected
+  // in the low-frequency child metrics poller. When true, child metrics with
+  // labels will be recorded in the time series database.
+  optional bool enable_low_freq_child_collection = 13 [(gogoproto.nullable) = false];
 
-  // Next ID: 10 (then 13).
+  // Next ID: 10 (then 14).
 }

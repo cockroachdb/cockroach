@@ -998,10 +998,9 @@ func sanitizeAlphanumeric(s string) string {
 	return result.String()
 }
 
-// recordChildx filters the metrics in the registry down to those provided in
-// the metricsFilter argument, and iterates through any child metrics that
-// may exist on said metric. Records up to 1000 child metrics to prevent
-// unbounded memory usage and performance issues.
+// recordChildx iterates through metrics in the registry and processes child metrics
+// for those that have EnableLowFreqChildCollection set to true in their metadata.
+// Records up to 1000 child metrics to prevent unbounded memory usage and performance issues.
 //
 // NB: Only available for Counter and Gauge metrics.
 func (rr registryRecorder) recordChildx(
@@ -1018,6 +1017,17 @@ func (rr registryRecorder) recordChildx(
 		}
 		promIter, ok := v.(metric.PrometheusIterable)
 		if !ok {
+			return
+		}
+
+		// Check if the metric has child collection enabled in its metadata
+		if iterable, ok := v.(metric.Iterable); ok {
+			metadata := iterable.GetMetadata()
+			if !metadata.EnableLowFreqChildCollection {
+				return // Skip this metric if child collection is not enabled
+			}
+		} else {
+			// If we can't get metadata, skip child collection for safety
 			return
 		}
 		m := prom.ToPrometheusMetric()
