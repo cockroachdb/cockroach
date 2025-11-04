@@ -1552,6 +1552,36 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 		true)
 }
 
+// TestTruncateLarge truncates a large number of tables in a single transaction.
+func TestTruncateLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "truncating a large number of tables")
+
+	ctx := context.Background()
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	createCommand := strings.Builder{}
+	truncateCommand := strings.Builder{}
+	sqlDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='5m'")
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.max_batch_size='1m'")
+	// Generate the truncate and create table commands.
+	const numTables = 500
+	truncateCommand.WriteString("TRUNCATE TABLE ")
+	for i := range numTables {
+		createCommand.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY, j INT, k INT, INDEX (j), INDEX (k), UNIQUE (j, k));\n", i))
+		truncateCommand.WriteString(fmt.Sprintf("t%d", i))
+		if i != numTables-1 {
+			truncateCommand.WriteString(", ")
+		}
+	}
+	// Execute the create commands first.
+	sqlDB.Exec(t, createCommand.String())
+	// Truncate all of the tables.
+	sqlDB.Exec(t, truncateCommand.String())
+}
+
 func BenchmarkDropLargeDatabaseWithGenerateTestObjects(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
