@@ -3409,3 +3409,42 @@ NOTICE: i: 4 j: 2
 NOTICE: outer_counter: 4 inner_counter: 8
 
 subtest end
+
+# Regression test for a failure to step the read sequence number after catching
+# an exception and restoring a savepoint (#156412).
+subtest regression_156412
+
+statement ok
+CREATE TABLE t122278 (pk INT PRIMARY KEY);
+
+statement ok
+CREATE FUNCTION f(n INT) RETURNS INT AS $$
+  BEGIN
+    BEGIN
+      IF n = 0 THEN
+        RETURN 1 // 0;
+      END IF;
+    EXCEPTION
+      WHEN division_by_zero THEN
+        RETURN (SELECT 100 + count(*) FROM t122278);
+    END;
+    RETURN 1 // 0;
+  EXCEPTION
+    WHEN division_by_zero THEN
+      RETURN (SELECT 200 + count(*) FROM t122278);
+  END
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO t122278 values (1);
+
+statement ok
+SELECT f(0);
+
+statement ok
+COMMIT;
+
+subtest end
