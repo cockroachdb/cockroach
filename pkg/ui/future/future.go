@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -63,6 +64,9 @@ func init() {
 				return 0
 			}
 			return toFloat64(a) / bVal
+		},
+		"eq": func(a, b interface{}) bool {
+			return a == b
 		},
 		"formatTime":    formatTimeWrapper,
 		"formatBytes":   formatBytesWrapper,
@@ -207,6 +211,23 @@ type PageData struct {
 	Data interface{}
 }
 
+// SQLActivityParams holds the form parameters for SQL activity page
+type SQLActivityParams struct {
+	Top           int
+	By            string
+	StartTime     string
+	EndTime       string
+	Timezone      string
+	ResultCount   int
+	SortByDisplay string
+}
+
+// SQLActivityData combines the API response with form parameters
+type SQLActivityData struct {
+	Statements *serverpb.StatementsResponse
+	Params     SQLActivityParams
+}
+
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Create a new Gorilla Mux router
 	router := mux.NewRouter()
@@ -243,28 +264,115 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 }
 
 func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	// Parse query parameters with defaults
+	topStr := r.URL.Query().Get("top")
+	byStr := r.URL.Query().Get("by")
+
+	// Set defaults
+	top := 100
+	by := "% of All Runtime"
+
+	// Parse top parameter
+	if topStr != "" {
+		if val, err := fmt.Sscanf(topStr, "%d", &top); err == nil && val == 1 {
+			// Successfully parsed
+		} else {
+			top = 100 // fallback to default
+		}
+	}
+
+	// Parse by parameter
+	if byStr != "" {
+		by = byStr
+	}
+
+	// Map the "by" dropdown to the enum value
+	sortOption := mapSortByToEnum(by)
+
+	// Calculate time range (for now, use last hour)
+	now := timeutil.Now()
+	startTime := now.Add(-1 * time.Hour)
+	endTime := now
+
+	// Get timezone (default to America/New_York for now)
+	timezone := "America/New_York"
+
 	resp, err := cfg.Status.CombinedStatementStats(r.Context(), &serverpb.CombinedStatementsStatsRequest{
-		Start: 0,
-		End:   timeutil.Now().Unix(),
+		Start: startTime.Unix(),
+		End:   endTime.Unix(),
 		FetchMode: &serverpb.CombinedStatementsStatsRequest_FetchMode{
 			StatsType: serverpb.CombinedStatementsStatsRequest_StmtStatsOnly,
-			Sort:      serverpb.StatsSortOptions_SERVICE_LAT,
+			Sort:      sortOption,
 		},
-		Limit: 200,
+		Limit: int64(top),
 	})
 	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to get statement stats: %v", err)
+		http.Error(w, "Failed to get statement stats", http.StatusInternalServerError)
 		return
 	}
+
+	// Format timestamps for display
+	loc, _ := timeutil.LoadLocation(timezone)
+	startTimeStr := startTime.In(loc).Format("15:04")
+	endTimeStr := endTime.In(loc).Format("15:04")
+
+	// Build the data structure with params
+	data := SQLActivityData{
+		Statements: resp,
+		Params: SQLActivityParams{
+			Top:           top,
+			By:            by,
+			StartTime:     startTimeStr,
+			EndTime:       endTimeStr,
+			Timezone:      timezone,
+			ResultCount:   len(resp.Statements),
+			SortByDisplay: by,
+		},
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Execute the pre-parsed template
 	err = templates.ExecuteTemplate(w, "sql_activity.html", PageData{
 		IndexHTMLArgs: cfg,
-		Data:          resp,
+		Data:          data,
 	})
 	if err != nil {
 		log.Dev.Warningf(r.Context(), "Failed to execute template: %v", err)
 		http.Error(w, "Failed to render template", http.StatusInternalServerError)
 		return
+	}
+}
+
+// mapSortByToEnum maps the dropdown display text to the protobuf enum value
+func mapSortByToEnum(sortBy string) serverpb.StatsSortOptions {
+	switch sortBy {
+	case "% of All Runtime":
+		return serverpb.StatsSortOptions_PCT_RUNTIME
+	case "Contention Time":
+		return serverpb.StatsSortOptions_CONTENTION_TIME
+	case "Execution Count":
+		return serverpb.StatsSortOptions_EXECUTION_COUNT
+	case "SQL CPU Time":
+		return serverpb.StatsSortOptions_CPU_TIME
+	case "Statement Time":
+		return serverpb.StatsSortOptions_SERVICE_LAT
+	case "Last Execution Time":
+		return serverpb.StatsSortOptions_LAST_EXEC
+	case "Max Latency":
+		return serverpb.StatsSortOptions_LATENCY_INFO_MAX
+	case "Max Memory":
+		return serverpb.StatsSortOptions_MAX_MEMORY
+	case "Min Latency":
+		return serverpb.StatsSortOptions_LATENCY_INFO_MIN
+	case "Network":
+		return serverpb.StatsSortOptions_NETWORK
+	case "Retries":
+		return serverpb.StatsSortOptions_RETRIES
+	case "Rows Processed":
+		return serverpb.StatsSortOptions_ROWS_PROCESSED
+	default:
+		return serverpb.StatsSortOptions_PCT_RUNTIME
 	}
 }
 

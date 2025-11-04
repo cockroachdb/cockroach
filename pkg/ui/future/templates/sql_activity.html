@@ -50,50 +50,43 @@
               <li class="<h2>"><a href="#" aria-current=page>Statements</a></li>
             </ul>
           </nav>
-          <form class="flex-column box">
+          <form class="flex-column box" method="GET" action="/future/sqlactivity/statements">
             <div class="flex-row">
-            <div>
-              <label for=top>Top:</label>
-              <select id=top>
-                <option>25</option>
-                <option>50</option>
-                <option>100</option>
-                <option>500</option>
-                <hr />
-                <optgroup label="Loads more slowly">
-                <option>1,000</option>
-                <option>5,000</option>
-                <option>10,000</option>
-                </optgroup>
-              </select>
-            </div>
-            <div>
-              <label for=by>By:</label>
-              <select id=by>
-                <option>% of All Runtime</option>
-                <option>Contention Time</option>
-                <option>Execution Count</option>
-                <option>SQL CPU Time</option>
-                <option>Statement Time</option>
-                <hr />
-                <optgroup label="Load smore slowly">
-                  <option>Last Execution Time</option>
-                  <option>Max Latency</option>
-                  <option>Max Memory</option>
-                  <option>Min Latency</option>
-                  <option>Network</option>
-                  <option>Retries</option>
-                  <option>Rows Processed</option>
-                </optgroup>
-              </select>
-            </div>
-            <div role=radiogroup aria-labelledby=active-lbl>
-              <span id=active-lbl>Result Type:</span>
               <div>
-                <div><label><input name=active type="radio" value="fingerprints" checked />Statement Fingerprints</label></div>
-                <div><label><input name=active type="radio" value="active" />Active Executions</label></div>
+                <label for=top>Top:</label>
+                <select id=top name=top>
+                  <option value="25" {{if eq .Data.Params.Top 25}}selected{{end}}>25</option>
+                  <option value="50" {{if eq .Data.Params.Top 50}}selected{{end}}>50</option>
+                  <option value="100" {{if eq .Data.Params.Top 100}}selected{{end}}>100</option>
+                  <option value="500" {{if eq .Data.Params.Top 500}}selected{{end}}>500</option>
+                  <hr />
+                  <optgroup label="Loads more slowly">
+                  <option value="1000" {{if eq .Data.Params.Top 1000}}selected{{end}}>1,000</option>
+                  <option value="5000" {{if eq .Data.Params.Top 5000}}selected{{end}}>5,000</option>
+                  <option value="10000" {{if eq .Data.Params.Top 10000}}selected{{end}}>10,000</option>
+                  </optgroup>
+                </select>
               </div>
-            </div>
+              <div>
+                <label for=by>By:</label>
+                <select id=by name=by>
+                  <option {{if eq .Data.Params.By "% of All Runtime"}}selected{{end}}>% of All Runtime</option>
+                  <option {{if eq .Data.Params.By "Contention Time"}}selected{{end}}>Contention Time</option>
+                  <option {{if eq .Data.Params.By "Execution Count"}}selected{{end}}>Execution Count</option>
+                  <option {{if eq .Data.Params.By "SQL CPU Time"}}selected{{end}}>SQL CPU Time</option>
+                  <option {{if eq .Data.Params.By "Statement Time"}}selected{{end}}>Statement Time</option>
+                  <hr />
+                  <optgroup label="Load smore slowly">
+                    <option {{if eq .Data.Params.By "Last Execution Time"}}selected{{end}}>Last Execution Time</option>
+                    <option {{if eq .Data.Params.By "Max Latency"}}selected{{end}}>Max Latency</option>
+                    <option {{if eq .Data.Params.By "Max Memory"}}selected{{end}}>Max Memory</option>
+                    <option {{if eq .Data.Params.By "Min Latency"}}selected{{end}}>Min Latency</option>
+                    <option {{if eq .Data.Params.By "Network"}}selected{{end}}>Network</option>
+                    <option {{if eq .Data.Params.By "Retries"}}selected{{end}}>Retries</option>
+                    <option {{if eq .Data.Params.By "Rows Processed"}}selected{{end}}>Rows Processed</option>
+                  </optgroup>
+                </select>
+              </div>
             </div>
             <div class="flex-row">
             <div>
@@ -128,7 +121,8 @@
             <strong><button type="submit" class="<big>">Apply</button></strong>
             </div>
           </form>
-          <h3>Results - Top 100 Statement Fingerprints by % of All Runtime</h3>
+          <h3>Results - Top {{.Data.Params.ResultCount}} Statement Fingerprints by {{.Data.Params.SortByDisplay}}</h3>
+          <p>Showing aggregated stats from {{.Data.Params.StartTime}} to {{.Data.Params.EndTime}} ({{.Data.Params.Timezone}})</p>
 
           <div x-data="tableSort()" style="overflow-x: auto;">
             <table id="table-data">
@@ -188,7 +182,7 @@
                 </tr>
               </thead>
               <tbody>
-                {{range .Data.Statements}}
+                {{range .Data.Statements.Statements}}
                 <tr>
                   <td>
                     {{.Key.KeyData.Query}}
