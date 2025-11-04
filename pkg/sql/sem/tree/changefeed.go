@@ -41,6 +41,15 @@ func (l FilterType) String() string {
 	return []string{"EXCLUDE", "INCLUDE"}[l]
 }
 
+// DefaultChangefeedFilterOption returns the default filter that excludes nothing.
+// This is used when unsetting filters or when no explicit filter is specified.
+func DefaultChangefeedFilterOption() ChangefeedFilterOption {
+	return ChangefeedFilterOption{
+		FilterType: ExcludeFilter,
+		Tables:     TableNames{},
+	}
+}
+
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
 	TableTargets   ChangefeedTableTargets
