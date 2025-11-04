@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -883,7 +884,9 @@ func (b *Builder) buildSubquery(
 			if err != nil {
 				return err
 			}
-			err = fn(plan, tree.RoutineBodyStmt{} /* stmtForDistSQLDiagram */, true /* isFinalPlan */)
+			recorder := tree.NewStatementLatencyRecorder()
+			recorder.RecordPhase(tree.RoutineStatementStarted, crtime.NowMono())
+			err = fn(plan, tree.RoutineBodyStmt{} /* stmt */, recorder, true /* isFinalPlan */)
 			if err != nil {
 				return err
 			}
@@ -1175,6 +1178,9 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 		format := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
 		for i := range stmts {
+			latencyRecorder := tree.NewStatementLatencyRecorder()
+			latencyRecorder.RecordPhase(tree.RoutineStatementStarted, crtime.NowMono())
+			latencyRecorder.RecordPhase(tree.RoutineStatementStartParsing, crtime.NowMono())
 			var bodyStmt tree.RoutineBodyStmt
 			stmt := stmts[i]
 			props := stmtProps[i]
@@ -1208,7 +1214,8 @@ func (b *Builder) buildRoutinePlanGenerator(
 				AppName:        appName,
 				FingerprintId:  uint64(fpId),
 			}
-
+			latencyRecorder.RecordPhase(tree.RoutineStatementEndParsing, crtime.NowMono())
+			latencyRecorder.RecordPhase(tree.RoutineStatementStartPlanning, crtime.NowMono())
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1312,8 +1319,9 @@ func (b *Builder) buildRoutinePlanGenerator(
 					return expectedLazyRoutineError("subquery")
 				}
 			}
+			latencyRecorder.RecordPhase(tree.RoutineStatementEndPlanning, crtime.NowMono())
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
-			err = fn(plan, bodyStmt, isFinalPlan)
+			err = fn(plan, bodyStmt, latencyRecorder, isFinalPlan)
 			if err != nil {
 				return err
 			}

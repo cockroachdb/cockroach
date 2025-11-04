@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -329,7 +330,7 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 	rrw := NewRowResultWriter(&g.rch)
 	var cursorHelper *plpgsqlCursorHelper
 	err = g.expr.ForEachPlan(ctx, ef, rrw, g.args,
-		func(plan tree.RoutinePlan, stmt tree.RoutineBodyStmt, isFinalPlan bool) error {
+		func(plan tree.RoutinePlan, stmt tree.RoutineBodyStmt, latencyRecorder *tree.RoutineStatementLatencyRecorder, isFinalPlan bool) error {
 			stmtIdx++
 			opName := "routine-stmt-" + g.expr.Name + "-" + strconv.Itoa(stmtIdx)
 			ctx, sp := tracing.ChildSpan(ctx, opName)
@@ -372,26 +373,30 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 
 			// Run the plan.
 			params := runParams{ctx, g.p.ExtendedEvalContext(), g.p}
-			var builder sqlstats.RecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder, topLevelQueryStats, PlanInfo]
+			var builder sqlstats.RecordedStatementStatsBuilder[*tree.RoutineStatementLatencyRecorder, topLevelQueryStats, PlanInfo]
 			if stmt.FingerprintId != 0 {
-				builder = sqlstats.NewRecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder, topLevelQueryStats, PlanInfo](
+				builder = sqlstats.NewRecordedStatementStatsBuilder[*tree.RoutineStatementLatencyRecorder, topLevelQueryStats, PlanInfo](
 					appstatspb.StmtFingerprintID(stmt.FingerprintId),
 					g.p.extendedEvalCtx.SessionID,
 					stmt.DbName,
 					stmt.FingerprintStr,
 					stmt.SummaryStr,
 					clusterunique.ID{},
-					stmt.StmtType, stmt.AppName,
-					PlanInfo{
+					stmt.StmtType,
+					stmt.AppName, PlanInfo{
 						planFlags: g.p.curPlan.flags, // TODO: Is this right?
 						planGist:  explain.PlanGist{},
 					})
 				defer func() {
-					g.p.ExtendedEvalContext().sqlStatsIngester.RecordStatement(builder.Build())
+					latencyRecorder.RecordPhase(tree.RoutineStatementEnd, crtime.NowMono())
+					// TODO: only record if statement stats recording is enabled. We can also avoid building the
+					// 	tree.RoutineBodyStmt struct passed into this function if stats recording is disabled.
+					g.p.ExtendedEvalContext().sqlStatsIngester.RecordStatement(builder.LatencyRecorder(latencyRecorder).Build())
 				}()
 			}
+			latencyRecorder.RecordPhase(tree.RoutineStatementStartExec, crtime.NowMono())
 			queryStats, err := runPlanInsidePlan(ctx, params, plan.(*planComponents), w, g, stmt.StmtString)
-
+			latencyRecorder.RecordPhase(tree.RoutineStatementEndExec, crtime.NowMono())
 			if err != nil {
 				builder = builder.StatementError(err)
 				return err

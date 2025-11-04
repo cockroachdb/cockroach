@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +46,7 @@ type RoutineBodyStmt struct {
 // to specify the SQL stmt corresponding to the plan.
 // - isFinalPlan is true if no more plans will be generated after the current
 // plan.
-type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmt RoutineBodyStmt, isFinalPlan bool) error
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmt RoutineBodyStmt, latencyRecorder *RoutineStatementLatencyRecorder, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather than exec.Plan to avoid
@@ -411,4 +412,63 @@ func (node *TxnControlExpr) Format(ctx *FmtCtx) {
 func (node *TxnControlExpr) Walk(v Visitor) Expr {
 	// Cannot walk into a TxnOp, so this is a no-op.
 	return node
+}
+
+type RoutineStatementPhase int
+
+const (
+	RoutineStatementStarted RoutineStatementPhase = iota
+	RoutineStatementStartParsing
+	RoutineStatementEndParsing
+	RoutineStatementStartPlanning
+	RoutineStatementEndPlanning
+	RoutineStatementStartExec
+	RoutineStatementEndExec
+	RoutineStatementEnd
+	RoutineStatementNumPhases
+)
+
+type RoutineStatementLatencyRecorder struct {
+	times [RoutineStatementNumPhases]crtime.Mono
+}
+
+func NewStatementLatencyRecorder() *RoutineStatementLatencyRecorder {
+	return &RoutineStatementLatencyRecorder{}
+}
+
+func (r *RoutineStatementLatencyRecorder) RecordPhase(
+	phase RoutineStatementPhase, time crtime.Mono,
+) {
+	r.times[phase] = time
+}
+
+func (r *RoutineStatementLatencyRecorder) RunLatency() time.Duration {
+	return r.times[RoutineStatementEndExec].Sub(r.times[RoutineStatementStartExec])
+}
+
+// IdleLatency There is no idle latency for routine statements
+func (r *RoutineStatementLatencyRecorder) IdleLatency() time.Duration {
+	return 0
+}
+
+func (r *RoutineStatementLatencyRecorder) ServiceLatency() time.Duration {
+	return r.times[RoutineStatementEndExec].Sub(r.times[RoutineStatementStarted])
+}
+func (r *RoutineStatementLatencyRecorder) ParsingLatency() time.Duration {
+	return r.times[RoutineStatementEndParsing].Sub(r.times[RoutineStatementStartParsing])
+}
+func (r *RoutineStatementLatencyRecorder) PlanningLatency() time.Duration {
+	return r.times[RoutineStatementEndPlanning].Sub(r.times[RoutineStatementStartPlanning])
+}
+func (r *RoutineStatementLatencyRecorder) ProcessingLatency() time.Duration {
+	return r.ServiceLatency() // TODO: is there a difference between processing latency and service latency?
+}
+func (r *RoutineStatementLatencyRecorder) ExecOverheadLatency() time.Duration {
+	return r.ServiceLatency() - r.ProcessingLatency() // Will be 0 since processing and service latency are the same
+}
+func (r *RoutineStatementLatencyRecorder) StartTime() time.Time {
+	return r.times[RoutineStatementStarted].ToUTC()
+}
+func (r *RoutineStatementLatencyRecorder) EndTime() time.Time {
+	return r.times[RoutineStatementEnd].ToUTC()
 }
