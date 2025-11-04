@@ -1145,6 +1145,503 @@ func TestAlterChangefeedDatabaseScope(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestUseRootUserConnection)
 }
 
+// TestAlterChangefeedDatabaseLevelChangefeedFilters tests that we can alter a
+// database level changefeed to set/unset include/exclude filters. We do not
+// create or drop any tables in this test once we create the changefeed so that
+// it doesn't depend on the table watcher functionality.
+func TestAlterChangefeedDatabaseLevelChangefeedFilters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The cases in this test will either a) create a changefeed with no filter,
+	// and then remove the filter with an ALTER CHANGEFEED, or b) create a
+	// changefeed with a filter and then remove the filter with an `ALTER
+	// CHANGEFEED UNSET (INCLUDE|EXCLUDE)` statement.
+	// expectActiveFilter is true if we expect there to be an active filter at
+	// the end of the test (case a) or false if we expect there to be no active
+	// filter (case b) at the end of the test when we make out assertions.
+	type filterTestCase struct {
+		name               string
+		createStmt         string
+		alterStmt          string
+		expectActiveFilter bool
+	}
+
+	testCases := []filterTestCase{
+		{
+			name:               "set_exclude",
+			createStmt:         "CREATE CHANGEFEED FOR DATABASE d",
+			alterStmt:          "SET EXCLUDE TABLES foo",
+			expectActiveFilter: true,
+		},
+		{
+			name:               "set_include",
+			createStmt:         "CREATE CHANGEFEED FOR DATABASE d",
+			alterStmt:          "SET INCLUDE TABLES bar",
+			expectActiveFilter: true,
+		},
+		{
+			name:               "unset_include",
+			createStmt:         "CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES bar",
+			alterStmt:          "UNSET INCLUDE TABLES",
+			expectActiveFilter: false,
+		},
+		{
+			name:               "unset_exclude",
+			createStmt:         "CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo",
+			alterStmt:          "UNSET EXCLUDE TABLES",
+			expectActiveFilter: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+				foo := feed(t, f, tc.createStmt)
+				defer closeFeed(t, foo)
+
+				jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+				sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+				waitForJobState(sqlDB, t, jobID, `paused`)
+
+				sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d %s`, jobID, tc.alterStmt))
+
+				sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+				waitForJobState(sqlDB, t, jobID, `running`)
+
+				// This event will be filtered out in the case where our ALTER
+				// statement SET a filter, but will be emitted in the case
+				// where our ALTER statement UNSET a filter.
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+
+				// These events should always be emitted.
+				sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+				sqlDB.Exec(t, `UPSERT INTO bar VALUES (0, 'updated')`)
+
+				expectedPayloads := []string{
+					`bar: [0]->{"after": {"a": 0, "b": "initial"}}`,
+					`bar: [0]->{"after": {"a": 0, "b": "updated"}}`,
+				}
+				if !tc.expectActiveFilter {
+					expectedPayloads = append([]string{`foo: [0]->{"after": {"a": 0, "b": "initial"}}`}, expectedPayloads...)
+				}
+
+				assertPayloads(t, foo, expectedPayloads)
+			}
+			cdcTest(t, testFn, feedTestEnterpriseSinks)
+		})
+	}
+}
+
+// TestAlterChangefeedDatabaseLevelChangefeedDoesntRemoveFilter tests that we don't
+// remove the filter when we do an ALTER CHANGEFEED that doesn't explicitly
+// set or unset a filter.
+func TestAlterChangefeedDatabaseLevelChangefeedDoesntRemoveFilter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`)
+		defer closeFeed(t, foo)
+
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET DIFF`, jobID))
+
+		sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `running`)
+
+		// This event should still be excluded.
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+
+		// These events should be emitted with diff.
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO bar VALUES (0, 'updated')`)
+
+		assertPayloads(t, foo, []string{
+			`bar: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+			`bar: [0]->{"after": {"a": 0, "b": "updated"}, "before": {"a": 0, "b": "initial"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestAlterChangefeedDatabaseLevelChangefeedRemainsDatabaseLevel tests that we
+// don't silently convert a database level changefeed to a table level changefeed
+// when we do an unrelated alter.
+func TestAlterChangefeedDatabaseLevelChangefeedRemainsDatabaseLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo`)
+		defer closeFeed(t, foo)
+
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET DIFF`, jobID))
+		// This should not fail, which it would if the changefeeed were
+		// silently converted to a table-level changefeed.
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET EXCLUDE TABLES`, jobID))
+
+		sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `running`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO bar VALUES (0, 'updated')`)
+
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+			`bar: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+			`bar: [0]->{"after": {"a": 0, "b": "updated"}, "before": {"a": 0, "b": "initial"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestAlterChangefeedDatabaseLevelChangefeedDiff tests that we can alter a
+// database level changefeed to turn on the diff option. We do not create or
+// drop any tables in this test once we create the changefeed so that it doesn't
+// depend on the table watcher functionality.
+func TestAlterChangefeedDatabaseLevelChangefeedDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH initial_scan='no'`)
+		defer closeFeed(t, foo)
+
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET DIFF`, jobID))
+
+		sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `running`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO bar VALUES (0, 'updated')`)
+
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+			`bar: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+			`bar: [0]->{"after": {"a": 0, "b": "updated"}, "before": {"a": 0, "b": "initial"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestAlterChangefeedDatabaseLevelChangefeedFailsOnTargetAlter tests that
+// ADD and DROP operations fail on database level changefeeds.
+func TestAlterChangefeedDatabaseLevelChangefeedFailsOnTargetAlter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, op := range []string{"ADD", "DROP"} {
+		testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+			sqlDB := sqlutils.MakeSQLRunner(s.DB)
+			sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+			foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+			defer closeFeed(t, foo)
+
+			jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+			sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+			waitForJobState(sqlDB, t, jobID, `paused`)
+
+			sqlDB.ExpectErr(
+				t,
+				"pq: cannot alter targets for a database level changefeed",
+				fmt.Sprintf(`ALTER CHANGEFEED %d %s foo`, jobID, op),
+			)
+		}
+
+		cdcTest(t, testFn, feedTestEnterpriseSinks)
+	}
+}
+
+// TestAlterChangefeedDatabaseLevelChangefeedMultipleSetClauses tests that
+// a single ALTER statement can include multiple SET clauses and all changes
+// are respected.
+func TestAlterChangefeedDatabaseLevelChangefeedMultipleSetClauses(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+		defer closeFeed(t, foo)
+
+		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `paused`)
+
+		// Alter with both SET diff and SET INCLUDE TABLES in a single statement
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff SET INCLUDE TABLES foo`, jobID))
+
+		sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+		waitForJobState(sqlDB, t, jobID, `running`)
+
+		// Insert into both tables
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}, "before": {"a": 0, "b": "initial"}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
+// TestAlterChangefeedDatabaseLevelChangefeedFilterSemantics tests various
+// filter alteration behaviors including replacement and switching between
+// INCLUDE/EXCLUDE modes.
+func TestAlterChangefeedDatabaseLevelChangefeedFilterSemantics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type alterSpec struct {
+		stmt string
+		// When expectedErr is non-empty, this alter is expected to fail with this error.
+		expectedErr string
+	}
+
+	type filterTestCase struct {
+		name       string
+		createStmt string
+		alters     []alterSpec
+		// expectPayloads maps a table name to whether payloads are expected after
+		// the alter statement(s).
+		expectPayloads map[string]bool
+	}
+
+	testCases := []filterTestCase{
+		{
+			name:       "exclude_replaces_exclude_single",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo",
+			alters:     []alterSpec{{stmt: "SET EXCLUDE TABLES bar"}},
+			// Altering the changefeed to exclude bar means that bar is the only
+			// excluded table. foo is no longer excluded.
+			expectPayloads: map[string]bool{"foo": true, "bar": false, "baz": true},
+		},
+		{
+			name:           "exclude_replaces_with_multiple",
+			createStmt:     "CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES foo",
+			alters:         []alterSpec{{stmt: "SET EXCLUDE TABLES foo, bar"}},
+			expectPayloads: map[string]bool{"foo": false, "bar": false, "baz": true},
+		},
+		{
+			name:       "include_replaces_include",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo",
+			alters:     []alterSpec{{stmt: "SET INCLUDE TABLES bar"}},
+			// Altering the changefeed to include bar means that bar is the only
+			// included table. foo is no longer included.
+			expectPayloads: map[string]bool{"foo": false, "bar": true, "baz": false},
+		},
+		{
+			// This test is the same as the previous one, except that SET INCLUDE
+			// foo and SET INCLUDE bar are in a single ALTER CHANGEFEED statement.
+			name:           "include_replaces_include_single_alter",
+			createStmt:     "CREATE CHANGEFEED FOR DATABASE d",
+			alters:         []alterSpec{{stmt: "SET INCLUDE TABLES foo SET INCLUDE TABLES bar"}},
+			expectPayloads: map[string]bool{"foo": false, "bar": true, "baz": false},
+		},
+		{
+			name:           "include_replaces_with_multiple",
+			createStmt:     "CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo",
+			alters:         []alterSpec{{stmt: "SET INCLUDE TABLES foo, bar"}},
+			expectPayloads: map[string]bool{"foo": true, "bar": true, "baz": false},
+		},
+		{
+			name:       "include_then_exclude_single_alter_fails",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{
+					stmt:        "SET INCLUDE TABLES foo SET EXCLUDE TABLES bar",
+					expectedErr: "cannot alter filter type from INCLUDE to EXCLUDE",
+				},
+			},
+		},
+		{
+			name:       "include_then_exclude_single_alter_fails_same_table",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{
+					stmt:        "SET INCLUDE TABLES foo SET EXCLUDE TABLES foo",
+					expectedErr: "cannot alter filter type from INCLUDE to EXCLUDE",
+				},
+			},
+		},
+		{
+			name:       "include_then_exclude_two_alters_fails",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{stmt: "SET INCLUDE TABLES foo"},
+				{
+					stmt:        "SET EXCLUDE TABLES bar",
+					expectedErr: "cannot alter filter type from INCLUDE to EXCLUDE",
+				},
+			},
+		},
+		{
+			name:       "exclude_then_include_single_alter_fails",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{
+					stmt:        "SET EXCLUDE TABLES foo SET INCLUDE TABLES bar",
+					expectedErr: "cannot alter filter type from EXCLUDE to INCLUDE",
+				},
+			},
+		},
+		{
+			name:       "exclude_then_include_two_alters_fails",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{stmt: "SET EXCLUDE TABLES foo"},
+				{
+					stmt:        "SET INCLUDE TABLES bar",
+					expectedErr: "cannot alter filter type from EXCLUDE to INCLUDE",
+				},
+			},
+		},
+		{
+			name:           "unset_include_when_no_filter_is_fine",
+			createStmt:     "CREATE CHANGEFEED FOR DATABASE d",
+			alters:         []alterSpec{{stmt: "UNSET INCLUDE TABLES"}},
+			expectPayloads: map[string]bool{"foo": true, "bar": true, "baz": true},
+		},
+		{
+			name:           "unset_exclude_when_no_filter_is_fine",
+			createStmt:     "CREATE CHANGEFEED FOR DATABASE d",
+			alters:         []alterSpec{{stmt: "UNSET EXCLUDE TABLES"}},
+			expectPayloads: map[string]bool{"foo": true, "bar": true, "baz": true},
+		},
+		{
+			name:       "set_include_then_unset_exclude_fails",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{stmt: "SET INCLUDE TABLES foo"},
+				{
+					stmt:        "UNSET EXCLUDE TABLES",
+					expectedErr: "cannot alter filter type from INCLUDE to EXCLUDE",
+				},
+			},
+		},
+		{
+			name:       "unset_include_then_set_exclude_single_alter",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo",
+			alters:     []alterSpec{{stmt: "UNSET INCLUDE TABLES SET EXCLUDE TABLES bar"}},
+			// UNSET INCLUDE clears the filter, then SET EXCLUDE should succeed
+			// since the filter check passes when tables list is empty.
+			expectPayloads: map[string]bool{"foo": true, "bar": false, "baz": true},
+		},
+		{
+			name:       "set_exclude_then_unset_include_fails",
+			createStmt: "CREATE CHANGEFEED FOR DATABASE d",
+			alters: []alterSpec{
+				{stmt: "SET EXCLUDE TABLES foo"},
+				{
+					stmt:        "UNSET INCLUDE TABLES",
+					expectedErr: "cannot alter filter type from EXCLUDE to INCLUDE",
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
+				sqlDB.Exec(t, `CREATE TABLE baz (a INT PRIMARY KEY, b STRING)`)
+
+				feed := feed(t, f, tc.createStmt)
+				defer closeFeed(t, feed)
+
+				jobID := feed.(cdctest.EnterpriseTestFeed).JobID()
+
+				sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+				waitForJobState(sqlDB, t, jobID, `paused`)
+
+				for _, alter := range tc.alters {
+					if alter.expectedErr != "" {
+						sqlDB.ExpectErr(
+							t,
+							alter.expectedErr,
+							fmt.Sprintf(`ALTER CHANGEFEED %d %s`, jobID, alter.stmt),
+						)
+						// If we expect an error, that's the end of the test.
+						return
+					}
+
+					sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d %s`, jobID, alter.stmt))
+				}
+
+				sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+				waitForJobState(sqlDB, t, jobID, `running`)
+
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'foo')`)
+				sqlDB.Exec(t, `INSERT INTO bar VALUES (0, 'bar')`)
+				sqlDB.Exec(t, `INSERT INTO baz VALUES (0, 'baz')`)
+
+				var expected []string
+				for _, table := range []string{"foo", "bar", "baz"} {
+					if tc.expectPayloads[table] {
+						expectation := fmt.Sprintf(
+							`%s: [0]->{"after": {"a": 0, "b": "%s"}}`, table, table,
+						)
+						expected = append(expected, expectation)
+					}
+				}
+
+				assertPayloads(t, feed, expected)
+			}
+
+			cdcTest(t, testFn, feedTestEnterpriseSinks)
+		})
+	}
+}
+
 func TestAlterChangefeedDatabaseScopeUnqualifiedName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
