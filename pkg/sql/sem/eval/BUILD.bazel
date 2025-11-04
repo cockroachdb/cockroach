@@ -116,6 +116,7 @@ go_test(
     name = "eval_test",
     srcs = [
         "cast_map_test.go",
+        "cast_rand_test.go",
         "cast_test.go",
         "compare_test.go",
         "eval_internal_test.go",

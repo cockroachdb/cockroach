@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -130,6 +131,10 @@ func Decode(
 		}
 		if err != nil {
 			return nil, nil, err
+		}
+		if valType.Oid() == oidext.T_citext {
+			d, err := a.NewDCIText(r)
+			return d, rkey, err
 		}
 		d, err := a.NewDCollatedString(r, valType.Locale())
 		return d, rkey, err
