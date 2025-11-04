@@ -867,7 +867,8 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 		) s ON s.db_id = tbm.db_id
 		WHERE 
 		(
-			EXISTS (
+			$ = 'admin'
+			OR EXISTS (
 				SELECT 1
 				FROM system.role_members rm
 				WHERE rm.member = $
@@ -882,7 +883,7 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 		)
 		AND n."parentID" = 0
 		AND n."parentSchemaID" = 0
-`, userName, userName)
+`, userName, userName, userName)
 
 	return query
 }
