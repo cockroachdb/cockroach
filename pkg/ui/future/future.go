@@ -55,6 +55,12 @@ func init() {
 	// Parse all templates at startup with custom functions
 	var err error
 	funcMap := template.FuncMap{
+		"sub": func(a, b interface{}) float64 {
+			return toFloat64(a) - toFloat64(b)
+		},
+		"add": func(a, b interface{}) float64 {
+			return toFloat64(a) + toFloat64(b)
+		},
 		"mul": func(a, b interface{}) float64 {
 			return toFloat64(a) * toFloat64(b)
 		},
@@ -227,8 +233,9 @@ type SQLActivityParams struct {
 
 // SQLActivityData combines the API response with form parameters
 type SQLActivityData struct {
-	Statements *serverpb.StatementsResponse
-	Params     SQLActivityParams
+	Statements    *serverpb.StatementsResponse
+	Params        SQLActivityParams
+	TotalWorkload float64 // Sum of (count * service_lat.mean) across all statements
 }
 
 func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
@@ -347,9 +354,16 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	startTimeStr := startTime.In(loc).Format("2006-01-02 15:04:05")
 	endTimeStr := endTime.In(loc).Format("2006-01-02 15:04:05")
 
+	// Calculate total workload (sum of count * service_lat.mean across all statements)
+	var totalWorkload float64
+	for _, stmt := range resp.Statements {
+		totalWorkload += float64(stmt.Stats.Count) * stmt.Stats.ServiceLat.Mean
+	}
+
 	// Build the data structure with params
 	data := SQLActivityData{
-		Statements: resp,
+		Statements:    resp,
+		TotalWorkload: totalWorkload,
 		Params: SQLActivityParams{
 			Top:           top,
 			By:            by,

@@ -209,8 +209,8 @@
                   <td data-sort="{{mul .Stats.ServiceLat.Mean 1000000000}}">
                     {{formatTime (mul .Stats.ServiceLat.Mean 1000000000)}}
                   </td>
-                  <td data-sort="{{mul (mul .Stats.ServiceLat.Mean .Stats.Count) 1000000000}}">
-                    -
+                  <td data-sort="{{if ne $.Data.TotalWorkload 0.0}}{{div (mul .Stats.ServiceLat.Mean .Stats.Count) $.Data.TotalWorkload}}{{else}}0{{end}}">
+                    {{if ne $.Data.TotalWorkload 0.0}}{{printf "%.2f%%" (mul 100.0 (div (mul .Stats.ServiceLat.Mean .Stats.Count) $.Data.TotalWorkload))}}{{else}}-{{end}}
                   </td>
                   <td data-sort="{{.Stats.ExecStats.ContentionTime.Mean}}">
                     {{formatTime .Stats.ExecStats.ContentionTime.Mean}}
@@ -224,8 +224,8 @@
                   <td data-sort="{{mul .Stats.LatencyInfo.Max 1000000000}}">
                     {{formatTime (mul .Stats.LatencyInfo.Max 1000000000)}}
                   </td>
-                  <td data-sort="{{.Stats.RowsRead.Mean}}">
-                    {{formatNumber .Stats.RowsRead.Mean}}
+                  <td data-sort="{{add .Stats.RowsRead.Mean .Stats.RowsWritten.Mean}}">
+                    {{formatNumber .Stats.RowsRead.Mean}} Reads / {{formatNumber .Stats.RowsWritten.Mean}} Writes
                   </td>
                   <td data-sort="{{.Stats.BytesRead.Mean}}">
                     {{formatBytes .Stats.BytesRead.Mean}}
@@ -236,8 +236,8 @@
                   <td data-sort="{{.Stats.ExecStats.NetworkBytes.Mean}}">
                     {{formatBytes .Stats.ExecStats.NetworkBytes.Mean}}
                   </td>
-                  <td data-sort="{{.Stats.MaxRetries}}">
-                    {{formatNumber .Stats.MaxRetries}}
+                  <td data-sort="{{sub .Stats.Count .Stats.FirstAttemptCount}}">
+                    {{formatNumber (sub .Stats.Count .Stats.FirstAttemptCount)}}
                   </td>
                   <td data-sort="{{.Stats.LastExecTimestamp.Unix}}">
                     {{if .Stats.LastExecTimestamp.IsZero}}-{{else}}{{.Stats.LastExecTimestamp.Format "2006-01-02 15:04:05"}}{{end}}
