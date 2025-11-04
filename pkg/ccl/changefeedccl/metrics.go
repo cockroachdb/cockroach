@@ -58,7 +58,8 @@ const defaultSLIScope = "default"
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
-	EmittedMessages             *aggmetric.AggCounter
+	EmittedRowMessages          *aggmetric.AggCounter
+	EmittedResolvedMessages     *aggmetric.AggCounter
 	EmittedBatchSizes           *aggmetric.AggHistogram
 	FilteredMessages            *aggmetric.AggCounter
 	MessageSize                 *aggmetric.AggHistogram
@@ -849,14 +850,27 @@ var (
 )
 
 func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *AggMetrics {
-	metaChangefeedEmittedMessages := metric.Metadata{
-		Name:        "changefeed.emitted_messages",
-		Help:        "Messages emitted by all feeds",
-		Measurement: "Messages",
-		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_CHANGEFEEDS,
-		HowToUse:    `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of changes being streamed from the CockroachDB cluster.`,
+	metaChangefeedEmittedRowMessages := metric.Metadata{
+		Name:         "changefeed.emitted_row_messages",
+		Help:         "Row messages emitted by all feeds",
+		Measurement:  "Messages",
+		Unit:         metric.Unit_COUNT,
+		Essential:    true,
+		Category:     metric.Metadata_CHANGEFEEDS,
+		HowToUse:     `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of row changes being streamed from the CockroachDB cluster.`,
+		LabeledName:  "changefeed.emitted_messages",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelName, "row"),
+	}
+	metaChangefeedEmittedResolvedMessages := metric.Metadata{
+		Name:         "changefeed.emitted_resolved_messages",
+		Help:         "Resolved timestamp messages emitted by all feeds",
+		Measurement:  "Messages",
+		Unit:         metric.Unit_COUNT,
+		Essential:    true,
+		Category:     metric.Metadata_CHANGEFEEDS,
+		HowToUse:     `This metric provides a useful context when assessing the state of changefeeds. This metric characterizes the rate of resolved timestamp messages being streamed from the CockroachDB cluster.`,
+		LabeledName:  "changefeed.emitted_messages",
+		StaticLabels: metric.MakeLabelPairs(metric.LabelName, "resolved"),
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
 		Name:        "changefeed.emitted_batch_sizes",
@@ -1115,10 +1129,10 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
-	emittedMessagesBuilder := aggmetric.MakeBuilder("scope", "message_type")
 	a := &AggMetrics{
-		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
-		EmittedMessages: emittedMessagesBuilder.Counter(metaChangefeedEmittedMessages),
+		ErrorRetries:            b.Counter(metaChangefeedErrorRetries),
+		EmittedRowMessages:      b.Counter(metaChangefeedEmittedRowMessages),
+		EmittedResolvedMessages: b.Counter(metaChangefeedEmittedResolvedMessages),
 		EmittedBatchSizes: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedEmittedBatchSizes,
 			Duration:     histogramWindow,
@@ -1255,8 +1269,8 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	sm := &sliMetrics{
-		EmittedRowMessages:          a.EmittedMessages.AddChild(scope, "row"),
-		EmittedResolvedMessages:     a.EmittedMessages.AddChild(scope, "resolved"),
+		EmittedRowMessages:          a.EmittedRowMessages.AddChild(scope),
+		EmittedResolvedMessages:     a.EmittedResolvedMessages.AddChild(scope),
 		EmittedBatchSizes:           a.EmittedBatchSizes.AddChild(scope),
 		FilteredMessages:            a.FilteredMessages.AddChild(scope),
 		MessageSize:                 a.MessageSize.AddChild(scope),
