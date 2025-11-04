@@ -83,7 +83,7 @@ var (
 
 	testClusterBaseClusterArgs = base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(127241),
+			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
