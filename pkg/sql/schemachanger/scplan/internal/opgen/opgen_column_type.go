@@ -71,11 +71,6 @@ func init() {
 
 func referencedTypeIDs(this *scpb.ColumnType) []catid.DescID {
 	var ids catalog.DescriptorIDSet
-	if this.ComputeExpr != nil {
-		for _, id := range this.ComputeExpr.UsesTypeIDs {
-			ids.Add(id)
-		}
-	}
 	for _, id := range this.ClosedTypeIDs {
 		ids.Add(id)
 	}
