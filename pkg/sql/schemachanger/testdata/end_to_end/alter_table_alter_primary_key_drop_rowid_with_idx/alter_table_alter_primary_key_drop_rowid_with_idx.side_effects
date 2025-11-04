@@ -814,8 +814,7 @@ update progress of schema change job #1: "Pending: Validating index (2 operation
 commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 23 with 2 ValidationType ops
-validate forward indexes [8] in table #104
-validate forward indexes [4] in table #104
+validate forward indexes [8 4] in table #104
 commit transaction #17
 begin transaction #18
 ## PostCommitPhase stage 16 of 23 with 17 MutationType ops
