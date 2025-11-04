@@ -157,6 +157,7 @@ type ImmediateMutationVisitor interface {
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
 	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
 	SetSequenceOption(context.Context, SetSequenceOption) error
+	UnsetSequenceOption(context.Context, UnsetSequenceOption) error
 	InitSequence(context.Context, InitSequence) error
 	CreateDatabaseDescriptor(context.Context, CreateDatabaseDescriptor) error
 	AddNamedRangeZoneConfig(context.Context, AddNamedRangeZoneConfig) error
@@ -874,6 +875,11 @@ func (op CreateSequenceDescriptor) Visit(ctx context.Context, v ImmediateMutatio
 // Visit is part of the ImmediateMutationOp interface.
 func (op SetSequenceOption) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.SetSequenceOption(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op UnsetSequenceOption) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.UnsetSequenceOption(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

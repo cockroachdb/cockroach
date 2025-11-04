@@ -1548,6 +1548,11 @@ func (s *TestState) InitializeSequence(ctx context.Context, id descpb.ID, startV
 	return nil
 }
 
+func (s *TestState) SetSequence(ctx context.Context, seq *scexec.SequenceToSet) error {
+	s.LogSideEffectf("sequence %d value to %d", seq.ID, seq.Value)
+	return nil
+}
+
 // CheckMaxSchemaObjects is part of the scexec.Catalog interface.
 func (s *TestState) CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error {
 	// In tests, we don't enforce the limit.

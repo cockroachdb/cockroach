@@ -275,6 +275,20 @@ func (mr *MockCatalogMockRecorder) Run(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockCatalog)(nil).Run), arg0)
 }
 
+// SetSequence mocks base method.
+func (m *MockCatalog) SetSequence(arg0 context.Context, arg1 *scexec.SequenceToSet) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetSequence", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetSequence indicates an expected call of SetSequence.
+func (mr *MockCatalogMockRecorder) SetSequence(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSequence", reflect.TypeOf((*MockCatalog)(nil).SetSequence), arg0, arg1)
+}
+
 // UpdateComment mocks base method.
 func (m *MockCatalog) UpdateComment(arg0 context.Context, arg1 catalogkeys.CommentKey, arg2 string) error {
 	m.ctrl.T.Helper()

@@ -14,7 +14,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │    │    ├── PUBLIC     → DELETE_ONLY PrimaryIndex:{DescID: 107 (tbl_serial_id_seq-), IndexID: 1 (primary-)}
       │    │    ├── WRITE_ONLY → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (serial_id-)}
       │    │    ├── PUBLIC     → ABSENT      ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id-)}
-      │    │    ├── PUBLIC     → ABSENT      ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id-), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
+      │    │    ├── PUBLIC     → ABSENT      ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id-), Value: " INCREMENT 32 MINVALUE 0 START 0", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
       │    │    ├── MERGE_ONLY → DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
       │    │    ├── PUBLIC     → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
       │    │    ├── WRITE_ONLY → DELETE_ONLY TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}
@@ -45,9 +45,9 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │    │    ├── PUBLIC      → DROPPED Sequence:{DescID: 107 (tbl_serial_id_seq-)}
       │    │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 107 (tbl_serial_id_seq-), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (#104)}
       │    │    ├── PUBLIC      → ABSENT  SchemaChild:{DescID: 107 (tbl_serial_id_seq-), ReferencedDescID: 105 (#105)}
-      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "INCREMENT"}
-      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "MINVALUE"}
-      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "START"}
+      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "INCREMENT", Value: "32"}
+      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "MINVALUE", Value: "0"}
+      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 107 (tbl_serial_id_seq-), Name: "START", Value: "0"}
       │    │    ├── PUBLIC      → ABSENT  Column:{DescID: 107 (tbl_serial_id_seq-), ColumnID: 1 (value-)}
       │    │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 107 (tbl_serial_id_seq-), ColumnFamilyID: 0, ColumnID: 1 (value-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 107 (tbl_serial_id_seq-), Name: "value", ColumnID: 1 (value-)}
@@ -69,9 +69,9 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │         ├── MarkDescriptorAsDropped {"DescriptorID":107}
       │         ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"tbl_serial_id_se...","SchemaID":105}}
       │         ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
-      │         ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.SequenceOpt..."}
-      │         ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.SequenceOpt..."}
-      │         ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.SequenceOpt..."}
+      │         ├── UnsetSequenceOption {"Key":"INCREMENT","SequenceID":107}
+      │         ├── UnsetSequenceOption {"Key":"MINVALUE","SequenceID":107}
+      │         ├── UnsetSequenceOption {"Key":"START","SequenceID":107}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":107}
       │         ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":107}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}

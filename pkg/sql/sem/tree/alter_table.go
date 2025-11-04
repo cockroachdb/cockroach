@@ -527,7 +527,7 @@ type AlterTableDropStored struct {
 	Column Name
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableDropStored) GetColumn() Name {
 	return node.Column
 }
@@ -778,7 +778,7 @@ type AlterTableAddIdentity struct {
 	Qualification ColumnQualification
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableAddIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -814,7 +814,7 @@ type AlterTableSetIdentity struct {
 	GeneratedAsIdentityType GeneratedIdentityType
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableSetIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -843,7 +843,7 @@ type AlterTableIdentity struct {
 	SeqOptions SequenceOptions
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -873,7 +873,7 @@ type AlterTableDropIdentity struct {
 	IfExists bool
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableDropIdentity) GetColumn() Name {
 	return node.Column
 }

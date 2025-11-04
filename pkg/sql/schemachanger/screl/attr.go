@@ -119,7 +119,6 @@ const (
 	// PolicyID is an attribute for row-level security policies to uniquely
 	// identify a policy within a table.
 	PolicyID
-
 	// GeneratedAsIdentityType is the type for a generated as identity column.
 	// It's value must be in catpb.GeneratedAsIdentityType.
 	GeneratedAsIdentityType
@@ -295,6 +294,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.SequenceOption)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
 		rel.EntityAttr(Name, "Key"),
+		rel.EntityAttr(Value, "Value"),
 	),
 	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

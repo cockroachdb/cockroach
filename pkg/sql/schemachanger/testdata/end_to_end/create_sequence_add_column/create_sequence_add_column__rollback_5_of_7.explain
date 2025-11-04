@@ -43,7 +43,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │    │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "admin"}
       │    │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 105 (sq1-), Name: "root"}
       │    │    ├── PUBLIC      → DROPPED Sequence:{DescID: 105 (sq1-)}
-      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 105 (sq1-), Name: "START"}
+      │    │    ├── PUBLIC      → ABSENT  SequenceOption:{DescID: 105 (sq1-), Name: "START", Value: "32"}
       │    │    ├── PUBLIC      → ABSENT  SchemaChild:{DescID: 105 (sq1-), ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC      → ABSENT  Column:{DescID: 105 (sq1-), ColumnID: 1 (value-)}
       │    │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 105 (sq1-), ColumnFamilyID: 0, ColumnID: 1 (value-), TypeName: "INT8"}
@@ -60,7 +60,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │    │    └── PUBLIC      → ABSENT  IndexData:{DescID: 104 (t), IndexID: 3}
       │    └── 24 Mutation operations
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.SequenceOpt..."}
+      │         ├── UnsetSequenceOption {"Key":"START","SequenceID":105}
       │         ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
       │         ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":105}
       │         ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":105}

@@ -293,7 +293,7 @@ func alterTableAddColumn(
 			seqOptions = *ptr
 		}
 		// Versions from 26.1 GeneratedAsIdentity will have a separate element for
-		// GeneratedAsIdentity. Older versios store it in the column element.
+		// GeneratedAsIdentity. Older versions store it in the column element.
 		if spec.colType.ElementCreationMetadata.In_26_1OrLater {
 			spec.generatedAsID = &scpb.ColumnGeneratedAsIdentity{
 				TableID:        tbl.TableID,

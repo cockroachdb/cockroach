@@ -412,7 +412,7 @@ func (d *txnDeps) Run(ctx context.Context) error {
 	return nil
 }
 
-// InitializeSequence implements the scexec.Caatalog interface.
+// InitializeSequence implements the scexec.Catalog interface.
 func (d *txnDeps) InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error {
 	batch, err := d.getOrCreateBatch(ctx)
 	if err != nil {
@@ -420,6 +420,17 @@ func (d *txnDeps) InitializeSequence(ctx context.Context, id descpb.ID, startVal
 	}
 	sequenceKey := d.codec.SequenceKey(uint32(id))
 	batch.Inc(sequenceKey, startVal)
+	return nil
+}
+
+// SetSequence implements the scexec.Catalog interface.
+func (d *txnDeps) SetSequence(ctx context.Context, seq *scexec.SequenceToSet) error {
+	batch, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	sequenceKey := d.codec.SequenceKey(uint32(seq.ID))
+	batch.PutMustAcquireExclusiveLock(sequenceKey, seq.Value)
 	return nil
 }
 
@@ -445,11 +456,20 @@ func (d *txnDeps) Reset(ctx context.Context) error {
 // maybeFlushBatch flushes the current batch if it exceeds the maximum size.
 func (d *txnDeps) maybeFlushBatch(ctx context.Context) error {
 	if int64(d.batch.ApproximateMutationBytes()) > batchFlushThresholdSize.Get(&d.settings.SV) {
-		if err := d.Run(ctx); err != nil {
+		err := d.flushBatch(ctx)
+		if err != nil {
 			return err
 		}
-		d.batch = d.txn.KV().NewBatch()
 	}
+	return nil
+}
+
+// flushBatch flushes the current batch.
+func (d *txnDeps) flushBatch(ctx context.Context) error {
+	if err := d.Run(ctx); err != nil {
+		return err
+	}
+	d.batch = d.txn.KV().NewBatch()
 	return nil
 }
 
