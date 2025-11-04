@@ -13,11 +13,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -55,19 +58,35 @@ func TestTablesetBasic(t *testing.T) {
 
 	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
 	filter := tableset.Filter{
-		DatabaseID:    dbID,
-		ExcludeTables: map[string]struct{}{"exclude_me": {}, "exclude_me_also": {}},
+		DatabaseID: dbID,
+		TableFilter: jobspb.FilterList{
+			FilterType: tree.ExcludeFilter,
+			Tables: map[string]pbtypes.Empty{
+				"defaultdb.public.exclude_me":      {},
+				"defaultdb.public.exclude_me_also": {},
+			},
+		},
 	}
 	filterWithIncludes := tableset.Filter{
-		DatabaseID:    dbID,
-		IncludeTables: map[string]struct{}{"foo": {}, "bar": {}, "baz": {}, "foober": {}},
+		DatabaseID: dbID,
+		TableFilter: jobspb.FilterList{
+			FilterType: tree.IncludeFilter,
+			Tables: map[string]pbtypes.Empty{
+				"defaultdb.public.foo":    {},
+				"defaultdb.public.bar":    {},
+				"defaultdb.public.baz":    {},
+				"defaultdb.public.foober": {},
+			},
+		},
 	}
 
 	testutils.RunValues(t, "filter", []tableset.Filter{filter, filterWithIncludes}, func(t *testing.T, filter tableset.Filter) {
-		spawn := func(initialTS hlc.Timestamp) (watcher *tableset.Watcher, shutdown func()) {
+		spawn := func(t *testing.T, initialTS hlc.Timestamp) (watcher *tableset.Watcher, shutdown func()) {
+			var err error
 			ctx, spawnCancel := context.WithCancel(ctx)
 
-			watcher = tableset.NewWatcher(filter, &execCfg, mm, 42)
+			watcher, err = tableset.NewWatcher(ctx, filter, &execCfg, mm, 42)
+			require.NoError(t, err)
 			eg, ctx := errgroup.WithContext(ctx)
 
 			eg.Go(func() error {
@@ -97,103 +116,91 @@ func TestTablesetBasic(t *testing.T) {
 		t.Run("no changes", func(t *testing.T) {
 			defer cleanup()
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 		})
 
 		t.Run("unrelated schema changes on a watched table", func(t *testing.T) {
 			defer cleanup()
 			mkTable("foo")
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			db.Exec(t, "ALTER TABLE foo ADD COLUMN bar int default 42")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 
 			db.Exec(t, "ALTER TABLE foo DROP COLUMN bar")
 
-			unchanged, diffs, err = watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err = watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 		})
 
 		t.Run("create & drop ignored table", func(t *testing.T) {
 			defer cleanup()
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			mkTable("exclude_me")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 
 			db.Exec(t, "DROP TABLE exclude_me")
 
-			unchanged, diffs, err = watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err = watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 		})
 
 		t.Run("add watched table", func(t *testing.T) {
 			defer cleanup()
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			mkTable("foo")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Len(t, diffs, 1)
-			assert.Equal(t, "foo", diffs[0].Added.Name)
-			assert.Zero(t, diffs[0].Dropped.Name)
-			assert.False(t, unchanged)
+			assert.Len(t, adds, 1)
+			assert.Equal(t, "foo", adds[0].Table.Name)
 		})
 
 		t.Run("drop watched table", func(t *testing.T) {
 			defer cleanup()
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			mkTable("foo")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Len(t, diffs, 1)
-			assert.Equal(t, "foo", diffs[0].Added.Name)
-			assert.Zero(t, diffs[0].Dropped.Name)
-			assert.False(t, unchanged)
+			assert.Len(t, adds, 1)
+			assert.Equal(t, "foo", adds[0].Table.Name)
 
 			db.Exec(t, "DROP TABLE foo")
 
-			unchanged, diffs, err = watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err = watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Len(t, diffs, 1)
-			assert.Equalf(t, "foo", diffs[0].Dropped.Name, "got %+v", diffs)
-			assert.Zero(t, diffs[0].Added.Name)
-			assert.False(t, unchanged)
+			assert.Empty(t, adds)
 		})
 
 		t.Run("multiple updates", func(t *testing.T) {
 			defer cleanup()
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			mkTable("foo")
@@ -202,22 +209,18 @@ func TestTablesetBasic(t *testing.T) {
 
 			db.Exec(t, "DROP TABLE foo")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.GreaterOrEqual(t, len(diffs), 3)
-			assert.False(t, unchanged)
+			assert.GreaterOrEqual(t, len(adds), 3)
 			// should contain foo, bar, baz add and foo drop
-			assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-				return diff.Added.Name == "foo"
+			assertContainsFunc(t, adds, func(add tableset.TableAdd) bool {
+				return add.Table.Name == "foo"
 			})
-			assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-				return diff.Added.Name == "bar"
+			assertContainsFunc(t, adds, func(add tableset.TableAdd) bool {
+				return add.Table.Name == "bar"
 			})
-			assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-				return diff.Added.Name == "baz"
-			})
-			assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-				return diff.Dropped.Name == "foo"
+			assertContainsFunc(t, adds, func(add tableset.TableAdd) bool {
+				return add.Table.Name == "baz"
 			})
 		})
 		t.Run("rename watched table", func(t *testing.T) {
@@ -225,86 +228,72 @@ func TestTablesetBasic(t *testing.T) {
 
 			mkTable("foo")
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			db.Exec(t, "ALTER TABLE foo RENAME TO bar")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			// NOTE: caller needs to know that this is a rename by checking table ids.
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			// a rename looks like a drop then an add.
-			// they SHOULD always be in the same txn, i think.
-			// NOTE: we don't actually need to restart the changefeed if we see this.. but we have no way to know that.
-			assert.Len(t, diffs, 2)
-			assert.False(t, unchanged)
-			assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-				return diff.Added.Name == "bar"
-			})
-			assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-				return diff.Dropped.Name == "foo"
+			assert.Len(t, adds, 1)
+			assertContainsFunc(t, adds, func(add tableset.TableAdd) bool {
+				return add.Table.Name == "bar"
 			})
 		})
 		t.Run("rename ignored table", func(t *testing.T) {
 			defer cleanup()
 			mkTable("exclude_me")
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			db.Exec(t, "ALTER TABLE exclude_me RENAME TO exclude_me_also")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 		})
 		t.Run("rename watched table to ignored table", func(t *testing.T) {
 			defer cleanup()
 			mkTable("foo")
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			db.Exec(t, "ALTER TABLE foo RENAME TO exclude_me")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			// NOTE: this means that we'll keep watching the old table forever. This aligns with existing changefeed behavior.
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			// a rename looks like a drop then an add. since we ignore the new name, we only see the drop.
-			assert.Len(t, diffs, 1)
-			assert.Zero(t, diffs[0].Added.Name)
-			assert.Equalf(t, "foo", diffs[0].Dropped.Name, "got %+v", diffs)
-			assert.False(t, unchanged)
+			assert.Empty(t, adds)
 		})
 		t.Run("rename ignored table to watched table", func(t *testing.T) {
 			defer cleanup()
 			mkTable("exclude_me")
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			db.Exec(t, "ALTER TABLE exclude_me RENAME TO foo")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			// a rename looks like a drop then an add. since we ignore the original table, we only see the add.
-			assert.Len(t, diffs, 1)
-			assert.Zero(t, diffs[0].Dropped.Name)
-			assert.Equal(t, "foo", diffs[0].Added.Name)
-			assert.False(t, unchanged)
+			assert.Len(t, adds, 1)
+			assert.Equal(t, "foo", adds[0].Table.Name)
 		})
 		t.Run("schemas and databases ignored", func(t *testing.T) {
 			defer cleanup()
 
-			watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			watcher, shutdown := spawn(t, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			defer shutdown()
 
 			db.Exec(t, "CREATE SCHEMA foo")
 			db.Exec(t, "CREATE DATABASE bar")
 
-			unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+			adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 			require.NoError(t, err)
-			assert.Empty(t, diffs)
-			assert.True(t, unchanged)
+			assert.Empty(t, adds)
 		})
 	})
 }
@@ -332,7 +321,8 @@ func TestTablesetNonIdempotentProtection(t *testing.T) {
 
 	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
 	filter := tableset.Filter{DatabaseID: dbID}
-	watcher := tableset.NewWatcher(filter, &execCfg, mm, 42)
+	watcher, err := tableset.NewWatcher(ctx, filter, &execCfg, mm, 42)
+	require.NoError(t, err)
 
 	db.Exec(t, "CREATE TABLE foo (id int primary key)")
 
@@ -342,12 +332,12 @@ func TestTablesetNonIdempotentProtection(t *testing.T) {
 	})
 
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-	_, _, err := watcher.PopUnchangedUpTo(ctx, ts)
+	_, err = watcher.PopUpTo(ctx, ts)
 	require.NoError(t, err)
 
-	_, _, err = watcher.PopUnchangedUpTo(ctx, ts)
+	_, err = watcher.PopUpTo(ctx, ts)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "PopUnchangedUpTo called with non-advancing timestamp")
+	require.Contains(t, err.Error(), "PopUpTo called with non-advancing timestamp")
 }
 
 func TestWatcherDropDatabase(t *testing.T) {
@@ -375,7 +365,8 @@ func TestWatcherDropDatabase(t *testing.T) {
 
 	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
 	filter := tableset.Filter{DatabaseID: dbID}
-	watcher := tableset.NewWatcher(filter, &execCfg, mm, 42)
+	watcher, err := tableset.NewWatcher(ctx, filter, &execCfg, mm, 42)
+	require.NoError(t, err)
 
 	db.Exec(t, "CREATE TABLE foo (id int primary key)")
 	db.Exec(t, "CREATE TABLE bar (id int primary key)")
@@ -387,17 +378,9 @@ func TestWatcherDropDatabase(t *testing.T) {
 
 	db.Exec(t, "DROP DATABASE defaultdb")
 
-	unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+	adds, err := watcher.PopUpTo(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 	require.NoError(t, err)
-	assert.False(t, unchanged)
-	assert.Len(t, diffs, 2)
-	assert.Len(t, diffs.Removes(), 2)
-	assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-		return diff.Dropped.Name == "foo"
-	})
-	assertContainsFunc(t, diffs, func(diff tableset.TableDiff) bool {
-		return diff.Dropped.Name == "bar"
-	})
+	assert.Empty(t, adds)
 
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
@@ -423,7 +406,7 @@ func getDatabaseID(
 }
 
 func assertContainsFunc(
-	t *testing.T, diffs []tableset.TableDiff, f func(diff tableset.TableDiff) bool,
+	t *testing.T, adds []tableset.TableAdd, f func(add tableset.TableAdd) bool,
 ) {
-	assert.Greater(t, slices.IndexFunc(diffs, f), -1)
+	assert.Greater(t, slices.IndexFunc(adds, f), -1)
 }

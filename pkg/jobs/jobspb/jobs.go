@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -177,4 +178,17 @@ func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) 
 func (d *ChangefeedDetails) IsDatabaseLevelChangefeed() bool {
 	return len(d.TargetSpecifications) == 1 &&
 		d.TargetSpecifications[0].Type == ChangefeedTargetSpecification_DATABASE
+}
+
+// Matches returns true if the filter list matches this fully qualified table name.
+func (f *FilterList) Matches(fqTable string) bool {
+	switch f.FilterType {
+	case tree.ExcludeFilter:
+		_, ok := f.Tables[fqTable]
+		return !ok
+	case tree.IncludeFilter:
+		_, ok := f.Tables[fqTable]
+		return ok
+	}
+	return true
 }
