@@ -1,4 +1,4 @@
-# LogicTest: local 3node-tenant
+# LogicTest: local local-mixed-25.2 local-mixed-25.3 local-mixed-25.4 3node-tenant
 
 statement error a role/user named admin already exists
 CREATE ROLE admin
@@ -1532,25 +1532,31 @@ subtest end
 
 subtest validate_alter_provisioned_user_restrictions
 
+skipif config local-mixed-25.2
 # Changing PROVISIONSRC privilege for provisioned users is disallowed even for
 # ADMIN users, they can only be dropped.
 statement ok
 DROP ROLE testuser
 
+skipif config local-mixed-25.2
 statement ok
 CREATE USER testuser with PROVISIONSRC 'ldap:example.com'
 
+skipif config local-mixed-25.2
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER ROLE testuser WITH PROVISIONSRC 'ldap:example.com'
 
+skipif config local-mixed-25.2
 statement ok
 SET ROLE testuser
 
+skipif config local-mixed-25.2
 # Changing users with SET ROLE should now disallow self-password/provisionsrc
 # change as role has a PROVISIONSRC privilege.
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER testuser PASSWORD 'cat'
 
+skipif config local-mixed-25.2
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
 
@@ -1559,24 +1565,30 @@ RESET ROLE
 
 user testuser
 
+skipif config local-mixed-25.2
 # Verify that now provisioned testuser can't change its own password or provisionsrc.
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER testuser PASSWORD 'xyz'
 
+skipif config local-mixed-25.2
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER CURRENT_USER PASSWORD '123'
 
+skipif config local-mixed-25.2
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
 
+skipif config local-mixed-25.2
 # Verify that provisioned testuser still cannot *remove* its own password.
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER testuser PASSWORD NULL
 
+skipif config local-mixed-25.2
 # testuser still cannot change another user's password.
 statement error pq: user testuser does not have CREATEROLE privilege
 ALTER USER testuser2 WITH PASSWORD 'abc'
 
+skipif config local-mixed-25.2
 # Verify that testuser still cannot modify other role options of itself.
 statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
 ALTER USER testuser PASSWORD 'abc' VALID UNTIL '4044-10-31'
@@ -1951,24 +1963,20 @@ subtest provisionsrc
 
 skipif config 3node-tenant
 skipif config local-mixed-25.2
-skipif config local-mixed-25.1
-skipif config local-mixed-24.3
 statement ok
 CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
 
 skipif config 3node-tenant
 skipif config local-mixed-25.2
-skipif config local-mixed-25.1
-skipif config local-mixed-24.3
 statement ok
 ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
 
-onlyif config local-mixed-24.3
-statement error SUBJECT role option is only supported after v25.3 upgrade is finalized
+onlyif config local-mixed-25.2
+statement error PROVISIONSRC role option is only supported after v25.3 upgrade is finalized
 CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
 
-onlyif config local-mixed-24.3
-statement error SUBJECT role option is only supported after v25.3 upgrade is finalized
+onlyif config local-mixed-25.2
+statement error PROVISIONSRC role option is only supported after v25.3 upgrade is finalized
 ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
 
 subtest end
