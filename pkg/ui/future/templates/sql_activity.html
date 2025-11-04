@@ -6,6 +6,7 @@
     <script src="/future/assets/auto-refresh.js"></script>
     <link rel=stylesheet href="/future/assets/missing.css">
     <script src="/future/assets/table-sort.js"></script>
+    <script src="/future/assets/timepickers.js"></script>
     <meta charset="utf-8">
   </head>
   <body>
@@ -50,7 +51,7 @@
               <li class="<h2>"><a href="#" aria-current=page>Statements</a></li>
             </ul>
           </nav>
-          <form class="flex-column box" method="GET" action="/future/sqlactivity/statements">
+          <form class="flex-column box" method="GET" action="/future/sqlactivity/statements" x-data>
             <div class="flex-row">
               <div>
                 <label for=top>Top:</label>
@@ -89,34 +90,43 @@
               </div>
             </div>
             <div class="flex-row">
-            <div>
-              <label for=category>Interval:</label>
-              <select id=interval>
-                <option>Last 10m</option>
-                <option>Last 30m</option>
-                <option>Last 1h</option>
-                <option>Custom</option>
-              </select>
+              <div>
+                <label for=interval>Interval:</label>
+                <select
+                  id=interval
+                  name=interval
+                  x-model="$store.timeRangeSQL.interval"
+                  @change="$store.timeRangeSQL.handleIntervalChange()">
+                  <option value="1h" {{if eq .Data.Params.Interval "1h"}}selected{{end}}>Past Hour</option>
+                  <option value="6h" {{if eq .Data.Params.Interval "6h"}}selected{{end}}>Past 6 Hours</option>
+                  <option value="1d" {{if eq .Data.Params.Interval "1d"}}selected{{end}}>Past Day</option>
+                  <option value="2d" {{if eq .Data.Params.Interval "2d"}}selected{{end}}>Past 2 Days</option>
+                  <option value="3d" {{if eq .Data.Params.Interval "3d"}}selected{{end}}>Past 3 Days</option>
+                  <option value="1w" {{if eq .Data.Params.Interval "1w"}}selected{{end}}>Past Week</option>
+                  <option value="2w" {{if eq .Data.Params.Interval "2w"}}selected{{end}}>Past 2 Weeks</option>
+                  <option value="1m" {{if eq .Data.Params.Interval "1m"}}selected{{end}}>Past Month</option>
+                  <option value="Custom" {{if eq .Data.Params.Interval "Custom"}}selected{{end}}>Custom</option>
+                </select>
+              </div>
+              <div>
+                <label for="start-time">Start:</label>
+                <input
+                  type="datetime-local"
+                  id="start-time"
+                  x-model="$store.timeRangeSQL.startTime"
+                  :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
+              </div>
+              <div>
+                <label for="end-time">End:</label>
+                <input
+                  type="datetime-local"
+                  id="end-time"
+                  x-model="$store.timeRangeSQL.endTime"
+                  :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
+              </div>
             </div>
-            <div>
-              <label for="start-time">Start:</label>
-              <input
-                type="datetime-local"
-                id="start-time"
-                name="start-time"
-                x-model="$store.timeRange.startTime"
-                :disabled="$store.timeRange.interval !== 'Custom'" />
-            </div>
-            <div>
-              <label for="end-time">End:</label>
-              <input
-                type="datetime-local"
-                id="end-time"
-                name="end-time"
-                x-model="$store.timeRange.endTime"
-                :disabled="$store.timeRange.interval !== 'Custom'" />
-            </div>
-            </div>
+            <input type="hidden" name="start" value="{{.Data.Params.Start}}" x-model="$store.timeRangeSQL.startSeconds" />
+            <input type="hidden" name="end" value="{{.Data.Params.End}}" x-model="$store.timeRangeSQL.endSeconds" />
             <div>
             <strong><button type="submit" class="<big>">Apply</button></strong>
             </div>

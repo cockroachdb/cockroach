@@ -215,8 +215,11 @@ type PageData struct {
 type SQLActivityParams struct {
 	Top           int
 	By            string
-	StartTime     string
-	EndTime       string
+	Interval      string // Selected interval (e.g., "1h", "Custom")
+	Start         int64  // Unix timestamp in seconds
+	End           int64  // Unix timestamp in seconds
+	StartTime     string // Formatted time for display
+	EndTime       string // Formatted time for display
 	Timezone      string
 	ResultCount   int
 	SortByDisplay string
@@ -267,10 +270,14 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 	// Parse query parameters with defaults
 	topStr := r.URL.Query().Get("top")
 	byStr := r.URL.Query().Get("by")
+	intervalStr := r.URL.Query().Get("interval")
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
 
 	// Set defaults
 	top := 100
 	by := "% of All Runtime"
+	interval := "1h" // default interval
 
 	// Parse top parameter
 	if topStr != "" {
@@ -286,20 +293,43 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 		by = byStr
 	}
 
+	// Parse interval parameter
+	if intervalStr != "" {
+		interval = intervalStr
+	}
+
 	// Map the "by" dropdown to the enum value
 	sortOption := mapSortByToEnum(by)
 
-	// Calculate time range (for now, use last hour)
-	now := timeutil.Now()
-	startTime := now.Add(-1 * time.Hour)
-	endTime := now
+	// Calculate time range - use query params if provided, otherwise default to last hour
+	var startTime, endTime time.Time
+	var startUnix, endUnix int64
+
+	if startStr != "" && endStr != "" {
+		// Parse Unix timestamps from query parameters (in seconds)
+		if val, err := fmt.Sscanf(startStr, "%d", &startUnix); err == nil && val == 1 {
+			startTime = time.Unix(startUnix, 0)
+		}
+		if val, err := fmt.Sscanf(endStr, "%d", &endUnix); err == nil && val == 1 {
+			endTime = time.Unix(endUnix, 0)
+		}
+	}
+
+	// If parsing failed or params not provided, use default (last hour)
+	if startTime.IsZero() || endTime.IsZero() {
+		now := timeutil.Now()
+		startTime = now.Add(-1 * time.Hour)
+		endTime = now
+		startUnix = startTime.Unix()
+		endUnix = endTime.Unix()
+	}
 
 	// Get timezone (default to America/New_York for now)
 	timezone := "America/New_York"
 
 	resp, err := cfg.Status.CombinedStatementStats(r.Context(), &serverpb.CombinedStatementsStatsRequest{
-		Start: startTime.Unix(),
-		End:   endTime.Unix(),
+		Start: startUnix,
+		End:   endUnix,
 		FetchMode: &serverpb.CombinedStatementsStatsRequest_FetchMode{
 			StatsType: serverpb.CombinedStatementsStatsRequest_StmtStatsOnly,
 			Sort:      sortOption,
@@ -314,8 +344,8 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 
 	// Format timestamps for display
 	loc, _ := timeutil.LoadLocation(timezone)
-	startTimeStr := startTime.In(loc).Format("15:04")
-	endTimeStr := endTime.In(loc).Format("15:04")
+	startTimeStr := startTime.In(loc).Format("2006-01-02 15:04:05")
+	endTimeStr := endTime.In(loc).Format("2006-01-02 15:04:05")
 
 	// Build the data structure with params
 	data := SQLActivityData{
@@ -323,6 +353,9 @@ func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg Ind
 		Params: SQLActivityParams{
 			Top:           top,
 			By:            by,
+			Interval:      interval,
+			Start:         startUnix,
+			End:           endUnix,
 			StartTime:     startTimeStr,
 			EndTime:       endTimeStr,
 			Timezone:      timezone,
