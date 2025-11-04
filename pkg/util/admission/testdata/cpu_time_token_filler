@@ -1,5 +1,6 @@
 init
 ----
+resetInterval()
 elapsed: 0s
 
 # Let 2s pass, 200ms at a time. Expect a call to allocateTokens

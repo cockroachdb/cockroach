@@ -1,3 +1,18 @@
+# First call to resetInterval should add refillRates to all buckets.
+# We want the buckets to start full, and cpuTimeTokenFiller calls
+# resetInterval on startup.
+resetInterval
+----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
 allocate remaining=5
 ----
 cpuTTG canBurst noBurst
@@ -30,8 +45,11 @@ tier1  3        2
 
 resetInterval
 ----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
-# No more tokens added due to burst budget.
+# No more tokens added due to bucket capacities being hit.
 allocate remaining=5
 ----
 cpuTTG canBurst noBurst
@@ -55,6 +73,9 @@ tier1  2        1
 
 resetInterval
 ----
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
 
 clear
 ----
@@ -72,6 +93,9 @@ tier1  3        2
 
 resetInterval
 ----
+cpuTTG canBurst noBurst
+tier0  5        4
+tier1  3        2
 
 clear
 ----
@@ -90,3 +114,50 @@ allocate remaining=1
 cpuTTG canBurst noBurst
 tier0  5        4
 tier1  3        2
+
+# These final cases test how cpuTimeTokenAllocator handles changes to refillRates.
+# See the comment above deltaRefillRates for a full explanation of the approach. TLDR
+# is the allocator will compute the amount of change in refillRates & add it immediately
+# to the buckets, before any calls to allocate are made. Thus, if we increase refillRates
+# by one (on all buckets), we expect one token is added to all buckets, as below.
+resetInterval increase_rates_by=1
+----
+cpuTTG canBurst noBurst
+tier0  6        5
+tier1  4        3
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# The updated refillRate is added to the buckets (in one tick for simplicity,
+# since remaining=1).
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  6        5
+tier1  4        3
+
+# Another test of a change to refillRates. If we decrease refillRates by two (on all buckets),
+# we expect two tokens to be removed from all buckets, as below.
+resetInterval increase_rates_by=-2
+----
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
+
+clear
+----
+cpuTTG canBurst noBurst
+tier0  0        0
+tier1  0        0
+
+# The updated refillRate is added to the buckets (in one tick for simplicity,
+# since remaining=1).
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  4        3
+tier1  2        1
