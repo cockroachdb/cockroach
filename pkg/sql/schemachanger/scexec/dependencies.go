@@ -118,7 +118,7 @@ type Catalog interface {
 	Reset(ctx context.Context) error
 
 	// InitializeSequence initializes the initial value for a sequence.
-	InitializeSequence(id descpb.ID, startVal int64)
+	InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error
 
 	// CheckMaxSchemaObjects checks if the number of schema objects in the
 	// cluster plus the new objects being created would exceed the configured
