@@ -120,6 +120,15 @@ var ChildMetricsTimeSeriesEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+// MaxMetricsLabels controls the maximum number of metrics labels that can be created
+// to prevent unbounded memory usage and performance issues.
+var MaxMetricsLabels = settings.RegisterIntSetting(
+	settings.ApplicationLevel, "server.max_metrics_labels",
+	"maximum number of metrics labels that can be created to prevent unbounded memory usage",
+	1024,
+	settings.WithPublic,
+	settings.IntInRange(1, 10000))
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -462,6 +471,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 		format:         nodeTimeSeriesPrefix,
 		source:         mr.mu.desc.NodeID.String(),
 		timestampNanos: now.UnixNano(),
+		settings:       mr.settings,
 	}
 	recorder.record(&data)
 	// Now record the app metrics for the system tenant.
@@ -481,6 +491,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 			format:         nodeTimeSeriesPrefix,
 			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
 			timestampNanos: now.UnixNano(),
+			settings:       mr.settings,
 		}
 		tenantRecorder.record(&data)
 	}
@@ -493,6 +504,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 			format:         storeTimeSeriesPrefix,
 			source:         storeID.String(),
 			timestampNanos: now.UnixNano(),
+			settings:       mr.settings,
 		}
 		storeRecorder.record(&data)
 
@@ -503,6 +515,7 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 				format:         storeTimeSeriesPrefix,
 				source:         tsutil.MakeTenantSource(storeID.String(), tenantID.String()),
 				timestampNanos: now.UnixNano(),
+				settings:       mr.settings,
 			}
 			tenantID := tenantID.String()
 			tenantStoreRecorder.recordChild(&data, kvbase.TenantsStorageMetricsSet, &prometheusgo.LabelPair{
@@ -544,6 +557,7 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 		format:         nodeTimeSeriesPrefix,
 		source:         mr.mu.desc.NodeID.String(),
 		timestampNanos: now.UnixNano(),
+		settings:       mr.settings,
 	}
 	recorder.recordChildx(&data)
 	
@@ -566,6 +580,7 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 			format:         nodeTimeSeriesPrefix,
 			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
 			timestampNanos: now.UnixNano(),
+			settings:       mr.settings,
 		}
 		tenantRecorder.recordChildx(&data)
 	}
@@ -578,6 +593,7 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 			format:         storeTimeSeriesPrefix,
 			source:         storeID.String(),
 			timestampNanos: now.UnixNano(),
+			settings:       mr.settings,
 		}
 		storeRecorder.recordChildx(&data)
 
@@ -588,6 +604,7 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 				format:         storeTimeSeriesPrefix,
 				source:         tsutil.MakeTenantSource(storeID.String(), tenantID.String()),
 				timestampNanos: now.UnixNano(),
+				settings:       mr.settings,
 			}
 			tenantIDStr := tenantID.String()
 			tenantStoreRecorder.recordChild(&data, kvbase.TenantsStorageMetricsSet, &prometheusgo.LabelPair{
@@ -855,6 +872,7 @@ type registryRecorder struct {
 	format         string
 	source         string
 	timestampNanos int64
+	settings       *cluster.Settings
 }
 
 // extractValue extracts the metric value(s) for the given metric and passes it, along with the metric name, to the
@@ -1000,13 +1018,16 @@ func sanitizeAlphanumeric(s string) string {
 
 // recordChildx iterates through metrics in the registry and processes child metrics
 // for those that have EnableLowFreqChildCollection set to true in their metadata.
-// Records up to 1000 child metrics to prevent unbounded memory usage and performance issues.
+// Records up to the configured maximum child metrics to prevent unbounded memory usage and performance issues.
 //
 // NB: Only available for Counter and Gauge metrics.
 func (rr registryRecorder) recordChildx(
 	dest *[]tspb.TimeSeriesData,
 ) {
-	const maxChildMetrics = 1000
+	maxChildMetrics := 1024 // Default value
+	if rr.settings != nil {
+		maxChildMetrics = int(MaxMetricsLabels.Get(&rr.settings.SV))
+	}
 	var childMetricsCount int
 
 	labels := rr.registry.GetLabels()

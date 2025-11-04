@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1228,6 +1229,10 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 }
 
 func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
+	return a.getOrCreateScopeWithSettings(scope, nil)
+}
+
+func (a *AggMetrics) getOrCreateScopeWithSettings(scope string, settings *cluster.Settings) (*sliMetrics, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -1247,10 +1252,13 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	}
 
 	if scope != defaultSLIScope {
-		const failSafeMax = 1024
-		if len(a.mu.sliMetrics) == failSafeMax {
+		maxLabels := int64(1024) // Default value if no settings provided
+		if settings != nil {
+			maxLabels = status.MaxMetricsLabels.Get(&settings.SV)
+		}
+		if int64(len(a.mu.sliMetrics)) >= maxLabels {
 			return nil, pgerror.Newf(pgcode.ConfigurationLimitExceeded,
-				"too many metrics labels; max %d", failSafeMax)
+				"too many metrics labels; max %d", maxLabels)
 		}
 	}
 
