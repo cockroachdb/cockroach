@@ -1147,12 +1147,21 @@ type optOutOfMetamorphicEnrichedEnvelope struct {
 	reason string
 }
 
+type optOutOfMetamorphicDBLevelChangefeed struct {
+	reason string
+}
+
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
 	t.Helper()
 
 	create, args, forced, err := maybeForceEnrichedEnvelope(t, create, f, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	create, err = maybeForceDBLevelChangefeed(t, create, f, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1169,6 +1178,19 @@ func feed(
 	}
 
 	return feed
+}
+
+func maybeForceDBLevelChangefeed(
+	t testing.TB, create string, f cdctest.TestFeedFactory, args []any,
+) (newCreate string, err error) {
+	fmt.Println("maybeForceDBLevelChangefeed", create, args)
+	for _, arg := range args {
+		if o, ok := arg.(optOutOfMetamorphicDBLevelChangefeed); ok {
+			t.Logf("opted out of DB level changefeed for %s: %s", create, o.reason)
+		}
+	}
+	// return create, nil
+	return `CREATE CHANGEFEED FOR DATABASE d`, nil
 }
 
 func maybeForceEnrichedEnvelope(
