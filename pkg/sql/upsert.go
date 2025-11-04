@@ -233,6 +233,10 @@ func (n *upsertNode) returnsRowsAffected() bool {
 	return !n.run.tw.rowsNeeded
 }
 
+func (n *upsertNode) kvCpuTime() int64 {
+	return n.run.tw.kvCpuTime
+}
+
 func (n *upsertNode) enableAutoCommit() {
 	n.run.tw.enableAutoCommit()
 }
