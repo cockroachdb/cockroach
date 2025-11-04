@@ -1092,7 +1092,10 @@ func TestChangefeedQuotedTableNameTopicName(t *testing.T) {
 		sqlDB.Exec(t, `UPSERT INTO "MyTable" VALUES (0, 'updated')`)
 
 		foo := feed(t, f,
-			`CREATE CHANGEFEED FOR d.public."MyTable" WITH diff, full_table_name`)
+			`CREATE CHANGEFEED FOR d.public."MyTable" WITH diff, full_table_name`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "fully-qualified table names are simplified when converted to db-level feed filters",
+			})
 		defer closeFeed(t, foo)
 
 		// The topic name should be d.public.MyTable and not d.public._u0022_MyTable_u0022_
@@ -4276,7 +4279,8 @@ func TestChangefeedJobControl(t *testing.T) {
 		ChangefeedJobPermissionsTestSetup(t, s)
 
 		createFeed := func(stmt string) (cdctest.EnterpriseTestFeed, func()) {
-			successfulFeed := feed(t, f, stmt)
+			successfulFeed := feed(t, f, stmt, optOutOfMetamorphicDBLevelChangefeed{
+				reason: "tests table level changefeed permissions"})
 			closeCf := func() {
 				closeFeed(t, successfulFeed)
 			}
@@ -5707,28 +5711,40 @@ func TestChangefeedLowFrequencyNotices(t *testing.T) {
 	t.Run("no options specified", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
 	t.Run("normal resolved and min_checkpoint_frequency", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='10s'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='10s'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
 	t.Run("low resolved timestamp", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='200ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='200ms'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `the 'resolved' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
 	})
 	t.Run("low min_checkpoint_frequency timestamp", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH min_checkpoint_frequency='200ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH min_checkpoint_frequency='200ms'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `the 'min_checkpoint_frequency' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
 	})
@@ -5764,7 +5780,10 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	t.Run("kafka", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
 	})
@@ -5772,7 +5791,10 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	t.Run("pubsub v2", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makePubsubFeedFactory(s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'gcpubsub://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'gcpubsub://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		// Pubsub doesn't sanitize the topic name.
 		require.Equal(t, `changefeed will emit to topic ☃`, actual)
@@ -5781,7 +5803,10 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	t.Run("webhooks does not emit anything", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makePubsubFeedFactory(s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'webhook-https://does.not.matter/'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'webhook-https://does.not.matter/'`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "test requires split_column_families NOT to be set",
+			})
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `(no notice)`, actual)
 	})
@@ -8205,10 +8230,15 @@ func TestChangefeedTelemetry(t *testing.T) {
 		// Reset the counts.
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-		// Start some feeds (and read from them to make sure they've started.
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		// Start some feeds (and read from them to make sure they've started).
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "db-level changefeeds do not have a static number of tables for telemetry",
+		})
 		defer closeFeed(t, foo)
-		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`)
+		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`,
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "db-level changefeeds do not have a static number of tables for telemetry",
+			})
 		defer closeFeed(t, fooBar)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1}}`,
@@ -8489,7 +8519,9 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	defer closeSink()
 
 	atomic.StoreInt32(&shouldDrain, 1)
-	feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+	feed := feed(t, f, "CREATE CHANGEFEED FOR foo", optOutOfMetamorphicDBLevelChangefeed{
+		reason: "changefeed watches tables not in the default database",
+	})
 	defer closeFeed(t, feed)
 
 	jobID := feed.(cdctest.EnterpriseTestFeed).JobID()
@@ -8654,7 +8686,10 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 	defer closeSink()
 
 	proceed <- struct{}{} // Allow changefeed to start.
-	feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no', min_checkpoint_frequency='100ms'")
+	feed := feed(t, f, "CREATE CHANGEFEED FOR foo WITH initial_scan='no', min_checkpoint_frequency='100ms'",
+		optOutOfMetamorphicDBLevelChangefeed{
+			reason: "changefeed watches tables not in the default database",
+		})
 	defer closeFeed(t, feed)
 
 	jf := feed.(cdctest.EnterpriseTestFeed)
@@ -8829,7 +8864,8 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	defer DiscardMessages(testFeed)()
 
 	// Ensure the changefeed is able to complete in a reasonable amount of time.
-	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitDurationForState(5*time.Minute, func(s jobs.State) bool {
+	require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).WaitDurationForState(time.Minute, func(s jobs.State) bool {
+		require.NoError(t, testFeed.(cdctest.EnterpriseTestFeed).FetchTerminalJobErr())
 		return s == jobs.StateSucceeded
 	}))
 }
@@ -10860,7 +10896,9 @@ func TestAlterChangefeedTelemetryLogs(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, b STRING)`)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "db level changefeeds don't support ADD/DROP TARGETS in ALTER CHANGEFEEDs",
+		})
 		defer closeFeed(t, testFeed)
 		feed := testFeed.(cdctest.EnterpriseTestFeed)
 
