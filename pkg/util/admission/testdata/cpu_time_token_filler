@@ -1,5 +1,7 @@
 init
 ----
+allocateTokens(1)
+resetInterval(true)
 elapsed: 0s
 
 # Let 2s pass, 200ms at a time. Expect a call to allocateTokens
@@ -28,7 +30,7 @@ elapsed: 800ms
 advance dur=200ms
 ----
 allocateTokens(1)
-resetInterval()
+resetInterval(false)
 allocateTokens(1000)
 elapsed: 1s
 
@@ -55,7 +57,7 @@ elapsed: 1.8s
 advance dur=200ms
 ----
 allocateTokens(1)
-resetInterval()
+resetInterval(false)
 allocateTokens(1000)
 elapsed: 2s
 
@@ -64,7 +66,7 @@ elapsed: 2s
 advance dur=1000ms
 ----
 allocateTokens(1)
-resetInterval()
+resetInterval(false)
 allocateTokens(1000)
 elapsed: 3s
 
@@ -87,7 +89,7 @@ elapsed: 3.8s
 advance dur=200ms
 ----
 allocateTokens(1)
-resetInterval()
+resetInterval(false)
 allocateTokens(1000)
 elapsed: 4s
 

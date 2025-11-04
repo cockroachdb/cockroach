@@ -22,6 +22,16 @@ try-get tier=tier0 v=1
 ----
 kvtier0: tryGet(1) returned false
 
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 1
+
+# Returns tokens used since last call to get-tokens-used.
+# So should be zero.
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 0
+
 # More simple tryGet calls. This time, tier1 work is admitted.
 init tier0=2 tier1=1
 ----
@@ -59,6 +69,10 @@ try-get tier=tier0 v=1
 ----
 kvtier0: tryGet(1) returned false
 
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 2
+
 # returnGrant adds tokens to the buckets, when a positive count is used.
 init tier0=1 tier1=1
 ----
@@ -89,6 +103,10 @@ cpuTTG canBurst noBurst
 tier0  -1       0
 tier1  -1       0
 
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 1
+
 # Simple tookWithoutPermission test.
 init tier0=3 tier1=3
 ----
@@ -113,6 +131,10 @@ try-get tier=tier1 v=1
 ----
 kvtier1: tryGet(1) returned false
 
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 3
+
 # Test granting. A single tier0 request will be admitted.
 init tier0waiter=2 tier1waiter=1
 ----
@@ -126,6 +148,10 @@ return-grant tier=tier0 v=2
 ----
 kvtier0: returnGrant(2)
 kvtier0: granted in chain 0, and returning 2
+
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 0
 
 # Test granting. Two tier1 requests will be admitted.
 init tier0=-1 tier0burst=-1 tier1=-1 tier1burst=-1 tier1waiter=1
@@ -149,6 +175,10 @@ kvtier1: granted in chain 0, and returning 1
 cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        0
+
+get-tokens-used
+----
+get-tokens-used-in-interval() returned -1
 
 # Simple tryGet calls, with burst this time.
 init tier0burst=1
@@ -174,6 +204,10 @@ try-get tier=tier0 burst v=1
 ----
 kvtier0: tryGet(1) returned false
 
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 1
+
 # Test granting, with burst. After the call to return-grant, only tier1 burst will
 # have enough tokens to grant. So grant a tier1 request.
 init tier0burst=-1 tier0=-1 tier1burst=0 tier1=-1 tier1waiter=1 tier1burstwaiter
@@ -188,6 +222,10 @@ return-grant tier=tier0 v=1
 ----
 kvtier0: returnGrant(1)
 kvtier1: granted in chain 0, and returning 1
+
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 0
 
 # Test granting, with burst. After the call to return-grant, only tier1 no-burst will
 # have enough tokens to grant. So no grant, since the tier1 waiting request is a burst request.
@@ -205,6 +243,10 @@ kvtier0: returnGrant(1)
 cpuTTG canBurst noBurst
 tier0  0        0
 tier1  0        1
+
+get-tokens-used
+----
+get-tokens-used-in-interval() returned -1
 
 # Test refill, which is the interface cpuTimeTokenFiller uses to add tokens to
 # the buckets. The final allocation of tokens in the buckets is a result of
@@ -225,3 +267,7 @@ refill([[5 4] [3 1]] [[4 3] [10 1]])
 cpuTTG canBurst noBurst
 tier0  3        2
 tier1  2        0
+
+get-tokens-used
+----
+get-tokens-used-in-interval() returned 1
