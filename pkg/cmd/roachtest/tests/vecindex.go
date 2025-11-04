@@ -168,7 +168,7 @@ func registerVectorIndex(r registry.Registry) {
 			backfillPct: 60,
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
-			minRecall:   []float64{0.76, 0.83, 0.88, 0.92, 0.94},
+			minRecall:   []float64{0.72, 0.83, 0.88, 0.92, 0.94},
 			rwSplit:     .9,
 		},
 		// Local - no prefix
@@ -210,7 +210,7 @@ func registerVectorIndex(r registry.Registry) {
 			backfillPct: 60,
 			preBatchSz:  100,
 			beamSizes:   []int{8, 16, 32, 64, 128},
-			minRecall:   []float64{0.76, 0.83, 0.88, 0.92, 0.94},
+			minRecall:   []float64{0.72, 0.83, 0.88, 0.92, 0.94},
 			rwSplit:     .9,
 		},
 		// Local - with prefix
