@@ -156,7 +156,7 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 			t.Fatal(err)
 		}
 
-		catchUpTolerance := time.Duration(float64(catchUpDur) * (1 - catchUpToleranceMultiplier))
+		catchUpTolerance := time.Duration(float64(catchUpDur) * (catchUpToleranceMultiplier - 1))
 		catchUpTotalDuration := catchUpDur + opts.changefeedDelay + catchUpTolerance
 		if opts.duration > 0 && opts.duration < catchUpTotalDuration {
 			t.Fatalf(
@@ -177,9 +177,12 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 	// We initialize the workload in two steps so that we can grab a logical
 	// timestamp that will definitely be from after the table creation but before
 	// the rows are inserted.
-	initCmd := fmt.Sprintf("./cockroach workload init kv --splits=%d --read-percent 0 --min-block-bytes=1024 --max-block-bytes=1024 {pgurl:1-%d}",
-		opts.splits, nodes)
-	c.Run(ctx, option.WithNodes(c.WorkloadNode()), initCmd)
+	init1Opts := []string{
+		fmt.Sprintf("--splits=%d", opts.splits),
+	}
+	init1Cmd := fmt.Sprintf("./cockroach workload init kv %s {pgurl:1-%d}",
+		strings.Join(init1Opts, " "), nodes)
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), init1Cmd)
 
 	if err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db); err != nil {
 		t.Fatal(err)
@@ -193,11 +196,21 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 	}
 
 	t.Status("inserting rows")
-	initCmd = fmt.Sprintf("./cockroach workload init kv --insert-count %d --read-percent 0 --data-loader=insert --min-block-bytes=1024 --max-block-bytes=1024 {pgurl:1-%d}",
-		insertCount, nodes)
-	c.Run(ctx, option.WithNodes(c.WorkloadNode()), initCmd)
+	init2Opts := []string{
+		fmt.Sprintf("--insert-count=%d", insertCount),
+		"--data-loader=insert",
+		"--min-block-bytes=1024",
+		"--max-block-bytes=1024",
+	}
+	if opts.zipfian {
+		init2Opts = append(init2Opts, "--zipfian")
+	}
 
-	t.L().Printf("initializing workload: %s", initCmd)
+	init2Cmd := fmt.Sprintf("./cockroach workload init kv %s {pgurl:1-%d}",
+		strings.Join(init2Opts, " "), nodes)
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), init2Cmd)
+
+	t.L().Printf("initializing workload: %s", init2Cmd)
 	if opts.expectChangefeedCatchesUp {
 		t.L().Printf("catch-up expected to take %s", catchUpDur)
 	}
@@ -205,7 +218,7 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 	t.Status("running workload with changefeed")
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
-		workloadOpts := []string{
+		runOpts := []string{
 			"--tolerate-errors",
 			roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(len(c.CRDBNodes())*64)),
 			fmt.Sprintf(" --histograms=%s/%s", t.PerfArtifactsDir(), "stats.json"),
@@ -219,12 +232,12 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 			fmt.Sprintf("--max-rate=%d", opts.writeMaxRate),
 		}
 		if opts.zipfian {
-			workloadOpts = append(workloadOpts, "--zipfian")
+			runOpts = append(runOpts, "--zipfian")
 		}
 
 		// TODO(ssd): Add read load to increase CPU utilization on the cluster.
 		cmd := fmt.Sprintf("./cockroach workload run kv --read-percent 0 %s {pgurl:1-%d}",
-			strings.Join(workloadOpts, " "),
+			strings.Join(runOpts, " "),
 			nodes,
 		)
 		t.L().Printf("running workload: %s", cmd)
@@ -437,11 +450,16 @@ func registerKVRangefeed(r registry.Registry) {
 	}
 
 	for _, opts := range testConfigs {
-		testName := fmt.Sprintf("kv-rangefeed/write-rate=%d/sink-rate=%d/catchup=%s/splits=%d",
+		dist := ""
+		if opts.zipfian {
+			dist = "/dist=zipfian"
+		}
+		testName := fmt.Sprintf("kv-rangefeed/write-rate=%d/sink-rate=%d/catchup=%s/splits=%d%s",
 			opts.writeMaxRate,
 			int64(float64(opts.writeMaxRate)*opts.sinkProvisioning),
 			opts.catchUpInterval,
 			opts.splits,
+			dist,
 		)
 		r.Add(registry.TestSpec{
 			Name:      testName,
