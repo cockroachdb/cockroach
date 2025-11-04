@@ -131,6 +131,18 @@ func TestReplicationStatements(t *testing.T) {
 				prepareStatement(t, sqlDB, types, stmt)
 
 				return stmt.SQL
+			case "show-point-select":
+				var tableName string
+				d.ScanArgs(t, "table", &tableName)
+
+				desc := getTableDesc(tableName)
+
+				stmt, types, err := newPointSelectStatement(desc)
+				require.NoError(t, err)
+
+				prepareStatement(t, sqlDB, types, stmt)
+
+				return stmt.SQL
 			default:
 				return "unknown command: " + d.Cmd
 			}
