@@ -149,6 +149,11 @@ type KVBatchFetcher interface {
 	// able to handle a case of uninitialized fetcher.
 	GetBatchRequestsIssued() int64
 
+	// GetKVCPUTime returns the cumulative CPU time as reported by KV BatchResponses
+	// processed by this fetcher throughout its lifetime. It is safe for concurrent
+	// use and is able to handle a case of uninitialized fetcher.
+	GetKVCPUTime() int64
+
 	// Close releases the resources of this KVBatchFetcher. Must be called once
 	// the fetcher is no longer in use. Note that observability-related methods
 	// can still be safely called after Close.
@@ -499,6 +504,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	} else if !args.WillUseKVProvider {
 		var kvPairsRead int64
 		var batchRequestsIssued int64
+		var kvCPUTime int64
 		fetcherArgs := newTxnKVFetcherArgs{
 			reverse:                    args.Reverse,
 			lockStrength:               args.LockStrength,
@@ -511,9 +517,10 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			forceProductionKVBatchSize: args.ForceProductionKVBatchSize,
 			kvPairsRead:                &kvPairsRead,
 			batchRequestsIssued:        &batchRequestsIssued,
+			kvCPUTime:                  &kvCPUTime,
 		}
 		if args.Txn != nil {
-			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued)
+			fetcherArgs.sendFn = makeSendFunc(args.Txn, args.Spec.External, &batchRequestsIssued, &kvCPUTime)
 			fetcherArgs.admission.requestHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.admission.responseQ = args.Txn.DB().SQLKVResponseAdmissionQ
 			fetcherArgs.admission.pacerFactory = args.Txn.DB().AdmissionPacerFactory
@@ -539,7 +546,8 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 // Consider using GetBatchRequestsIssued if that information is needed.
 func (rf *Fetcher) SetTxn(txn *kv.Txn) error {
 	var batchRequestsIssued int64
-	sendFn := makeSendFunc(txn, rf.args.Spec.External, &batchRequestsIssued)
+	var kvCPUTime int64
+	sendFn := makeSendFunc(txn, rf.args.Spec.External, &batchRequestsIssued, &kvCPUTime)
 	return rf.setTxnAndSendFn(txn, sendFn)
 }
 
@@ -1405,6 +1413,15 @@ func (rf *Fetcher) GetBytesRead() int64 {
 		return 0
 	}
 	return rf.kvFetcher.GetBytesRead()
+}
+
+// GetKVCPUTime returns CPU time (in nanoseconds) as reported by KV BatchResponses
+// processed by the underlying KVFetcher.
+func (rf *Fetcher) GetKVCPUTime() int64 {
+	if rf == nil || rf.kvFetcher == nil {
+		return 0
+	}
+	return rf.kvFetcher.GetKVCPUTime()
 }
 
 // GetBatchRequestsIssued returns total number of BatchRequests issued by the

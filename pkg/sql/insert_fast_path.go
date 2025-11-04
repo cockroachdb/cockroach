@@ -82,6 +82,11 @@ type insertFastPathRun struct {
 	// fkSpanMap is used to de-duplicate FK existence checks. Only used if there
 	// is more than one input row.
 	fkSpanMap map[string]struct{}
+
+	// kvCPUTime tracks the cumulative CPU time (in nanoseconds) that KV reported
+	// in BatchResponse headers for FK and uniqueness check batches. The KVCPUTime
+	// performed by the INSERT is tracked by the table inserter (insertRun.ti.kvCPUTime).
+	kvCPUTime int64
 }
 
 // insertFastPathFKUniqSpanInfo records information about each Request in the
@@ -314,6 +319,11 @@ func (n *insertFastPathNode) runUniqChecks(params runParams) error {
 		return err.GoError()
 	}
 
+	// Accumulate CPU time from the BatchResponse.
+	if br.CPUTime > 0 {
+		n.run.kvCPUTime += br.CPUTime
+	}
+
 	for i := range br.Responses {
 		resp := br.Responses[i].GetInner().(*kvpb.ScanResponse)
 		if len(resp.Rows) > 0 {
@@ -340,6 +350,11 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
+	}
+
+	// Accumulate CPU time from the BatchResponse.
+	if br.CPUTime > 0 {
+		n.run.kvCPUTime += br.CPUTime
 	}
 
 	for i := range br.Responses {
@@ -372,6 +387,11 @@ func (n *insertFastPathNode) runFKUniqChecks(params runParams) error {
 	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
+	}
+
+	// Accumulate CPU time from the BatchResponse.
+	if br.CPUTime > 0 {
+		n.run.kvCPUTime += br.CPUTime
 	}
 
 	for i := range br.Responses {
@@ -550,6 +570,10 @@ func (n *insertFastPathNode) indexBytesWritten() int64 {
 
 func (n *insertFastPathNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
+}
+
+func (n *insertFastPathNode) kvCPUTime() int64 {
+	return n.run.ti.kvCPUTime + n.run.kvCPUTime
 }
 
 // See planner.autoCommit.

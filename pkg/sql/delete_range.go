@@ -50,6 +50,10 @@ type deleteRangeNode struct {
 	// the SQL row that increased rowCount last. It is maintained across
 	// different BatchRequests in order to not double count the same SQL row.
 	curRowPrefix []byte
+
+	// kvCPUTimeAccum tracks the cumulative CPU time (in nanoseconds) that KV
+	// reported in BatchResponse headers during the execution of this delete range.
+	kvCPUTimeAccum int64
 }
 
 var _ planNode = &deleteRangeNode{}
@@ -73,6 +77,10 @@ func (d *deleteRangeNode) indexBytesWritten() int64 {
 func (d *deleteRangeNode) returnsRowsAffected() bool {
 	// DeleteRange always returns the number of rows deleted.
 	return true
+}
+
+func (d *deleteRangeNode) kvCPUTime() int64 {
+	return d.kvCPUTimeAccum
 }
 
 // startExec implements the planNode interface.
@@ -124,7 +132,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 
 			spans = spans[:0]
 			var err error
-			if spans, err = d.processResults(b.Results, spans); err != nil {
+			if spans, err = d.processResults(b, spans); err != nil {
 				return err
 			}
 		}
@@ -144,7 +152,8 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		if err := params.p.txn.CommitInBatch(ctx, b); err != nil {
 			return row.ConvertBatchError(ctx, d.desc, b, false /* alwaysConvertCondFailed */)
 		}
-		if resumeSpans, err := d.processResults(b.Results, nil /* resumeSpans */); err != nil {
+
+		if resumeSpans, err := d.processResults(b, nil /* resumeSpans */); err != nil {
 			return err
 		} else if len(resumeSpans) != 0 {
 			// This shouldn't ever happen - we didn't pass a limit into the batch.
@@ -189,8 +198,13 @@ func (d *deleteRangeNode) deleteSpans(params runParams, b *kv.Batch, spans roach
 // encountered during result processing, they're appended to the resumeSpans
 // input parameter.
 func (d *deleteRangeNode) processResults(
-	results []kv.Result, resumeSpans []roachpb.Span,
+	b *kv.Batch, resumeSpans []roachpb.Span,
 ) (roachpb.Spans, error) {
+	results := b.Results
+	if br := b.RawResponse(); br != nil && br.CPUTime > 0 {
+		d.kvCPUTimeAccum += br.CPUTime
+	}
+
 	if !d.autoCommitEnabled {
 		defer func() {
 			// Make a copy of curRowPrefix to avoid referencing the memory from
