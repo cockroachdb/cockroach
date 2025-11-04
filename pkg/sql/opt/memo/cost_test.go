@@ -8,8 +8,8 @@ package memo
 import "testing"
 
 type testAux struct {
-	fullScanCount        uint8
-	unboundedCardinality bool
+	fullScanCount      uint16
+	unboundedReadCount uint16
 }
 
 func TestCostLess(t *testing.T) {
@@ -39,8 +39,8 @@ func TestCostLess(t *testing.T) {
 		{Cost{C: 2.0, Flags: CostFlags{}}, Cost{C: 1.0, Flags: CostFlags{UnboundedCardinality: true}}, true},
 		{Cost{C: 1.0, Flags: CostFlags{UnboundedCardinality: true}}, Cost{C: 2.0, Flags: CostFlags{}}, false},
 		// Auxiliary information should not affect the comparison.
-		{Cost{C: 1.0, aux: testAux{0, false}}, Cost{C: 1.0, aux: testAux{1, true}}, false},
-		{Cost{C: 1.0, aux: testAux{1, true}}, Cost{C: 1.0, aux: testAux{0, false}}, false},
+		{Cost{C: 1.0, aux: testAux{0, 0}}, Cost{C: 1.0, aux: testAux{1, 1}}, false},
+		{Cost{C: 1.0, aux: testAux{1, 1}}, Cost{C: 1.0, aux: testAux{0, 0}}, false},
 	}
 	for _, tc := range testCases {
 		if tc.left.Less(tc.right) != tc.expected {
@@ -59,10 +59,8 @@ func TestCostAdd(t *testing.T) {
 		{Cost{C: 1.5}, Cost{C: 2.5}, Cost{C: 4.0}},
 		{Cost{C: 1.0, Flags: CostFlags{FullScanPenalty: true}}, Cost{C: 2.0}, Cost{C: 3.0, Flags: CostFlags{FullScanPenalty: true}}},
 		{Cost{C: 1.0}, Cost{C: 2.0, Flags: CostFlags{HugeCostPenalty: true}}, Cost{C: 3.0, Flags: CostFlags{HugeCostPenalty: true}}},
-		{Cost{C: 1.0, aux: testAux{1, false}}, Cost{C: 1.0, aux: testAux{2, false}}, Cost{C: 2.0, aux: testAux{3, false}}},
-		{Cost{C: 1.0, aux: testAux{200, false}}, Cost{C: 1.0, aux: testAux{100, false}}, Cost{C: 2.0, aux: testAux{255, false}}},
-		{Cost{C: 1.0, aux: testAux{1, false}}, Cost{C: 1.0, aux: testAux{2, true}}, Cost{C: 2.0, aux: testAux{3, true}}},
-		{Cost{C: 1.0, aux: testAux{200, true}}, Cost{C: 1.0, aux: testAux{100, false}}, Cost{C: 2.0, aux: testAux{255, true}}},
+		{Cost{C: 1.0, aux: testAux{1, 4}}, Cost{C: 1.0, aux: testAux{2, 5}}, Cost{C: 2.0, aux: testAux{3, 9}}},
+		{Cost{C: 1.0, aux: testAux{65530, 65530}}, Cost{C: 1.0, aux: testAux{100, 100}}, Cost{C: 2.0, aux: testAux{65535, 65535}}},
 	}
 	for _, tc := range testCases {
 		tc.left.Add(tc.right)
