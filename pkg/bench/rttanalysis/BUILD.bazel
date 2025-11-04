@@ -65,6 +65,7 @@ go_test(
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/server/serverpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
