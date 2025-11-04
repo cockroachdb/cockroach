@@ -86,6 +86,13 @@ func (i *immediateVisitor) SetSequenceOption(ctx context.Context, op scop.SetSeq
 	return sequenceOptionMeta[op.Key].SetFunc(op.Value)
 }
 
+// TODO: implement
+func (i *immediateVisitor) UnsetSequenceOption(
+	ctx context.Context, op scop.UnsetSequenceOption,
+) error {
+	panic("unimplemented")
+}
+
 func (i *immediateVisitor) InitSequence(ctx context.Context, op scop.InitSequence) error {
 	sc, err := i.checkOutTable(ctx, op.SequenceID)
 	if err != nil {
