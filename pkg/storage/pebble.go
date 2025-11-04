@@ -512,7 +512,7 @@ var (
 		"the minimum size of a value that will be separated into a blob file given the value is "+
 			"latency tolerant (in the range local keyspace) or likely MVCC garbage",
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.latency_tolerant_minimum_size",
-			10 /* 10 bytes (default) */, 1 /* 1 byte (minimum) */, 256 /* 256 bytes (maximum) */)),
+			32 /* 32 bytes (default) */, 25 /* 25 bytes (minimum) */, 512 /* 512 bytes (maximum) */)),
 		settings.IntWithMinimum(1),
 	)
 )
