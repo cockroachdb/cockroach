@@ -142,6 +142,10 @@ func (u *updateSwapNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
 
+func (u *updateSwapNode) kvCpuTime() int64 {
+	return u.run.tu.kvCpuTime
+}
+
 func (u *updateSwapNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }
