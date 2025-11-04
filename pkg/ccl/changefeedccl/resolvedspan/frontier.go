@@ -446,8 +446,6 @@ type maybeTablePartitionedFrontier interface {
 	// on a per-table basis, the iterator will return a single frontier
 	// with descpb.InvalidID.
 	Frontiers() iter.Seq2[descpb.ID, span.ReadOnlyFrontier]
-	// GetFrontier returns the frontier for the given partition if it is present.
-	GetFrontier(partition descpb.ID) span.ReadOnlyFrontier
 }
 
 var _ maybeTablePartitionedFrontier = (*span.MultiFrontier[descpb.ID])(nil)
@@ -469,11 +467,6 @@ func (f notTablePartitionedFrontier) Frontiers() iter.Seq2[descpb.ID, span.ReadO
 	return func(yield func(descpb.ID, span.ReadOnlyFrontier) bool) {
 		yield(descpb.InvalidID, f.spanFrontier)
 	}
-}
-
-// GetFrontier implements maybeTablePartitionedFrontier.
-func (f notTablePartitionedFrontier) GetFrontier(partition descpb.ID) span.ReadOnlyFrontier {
-	return nil
 }
 
 // A TableCodec does table-related decoding/encoding.
