@@ -7,6 +7,7 @@ package future
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
@@ -53,20 +54,135 @@ func init() {
 	// Parse all templates at startup with custom functions
 	var err error
 	funcMap := template.FuncMap{
-		"mul": func(a, b float64) float64 {
-			return a * b
+		"mul": func(a, b interface{}) float64 {
+			return toFloat64(a) * toFloat64(b)
 		},
-		"div": func(a, b float64) float64 {
-			if b == 0 {
+		"div": func(a, b interface{}) float64 {
+			bVal := toFloat64(b)
+			if bVal == 0 {
 				return 0
 			}
-			return a / b
+			return toFloat64(a) / bVal
 		},
+		"formatTime":    formatTimeWrapper,
+		"formatBytes":   formatBytesWrapper,
+		"formatNumber":  formatNumberWrapper,
+		"formatPercent": formatPercentWrapper,
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseFS(templatesFS, "templates/*.html")
 	if err != nil {
 		panic("Failed to parse templates: " + err.Error())
 	}
+}
+
+// toFloat64 converts various numeric types to float64
+func toFloat64(val interface{}) float64 {
+	switch v := val.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case uint:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case uint32:
+		return float64(v)
+	default:
+		return 0
+	}
+}
+
+// Wrapper functions that accept interface{} and convert to float64
+func formatTimeWrapper(val interface{}) string {
+	return formatTime(toFloat64(val))
+}
+
+func formatBytesWrapper(val interface{}) string {
+	return formatBytes(toFloat64(val))
+}
+
+func formatNumberWrapper(val interface{}) string {
+	return formatNumber(toFloat64(val))
+}
+
+func formatPercentWrapper(val interface{}) string {
+	return formatPercent(toFloat64(val))
+}
+
+// formatTime formats nanoseconds into human-readable time with appropriate units
+func formatTime(nanos float64) string {
+	if nanos == 0 {
+		return "0 ns"
+	}
+	if nanos < 1000 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", nanos), "0"), ".") + " ns"
+	}
+	micros := nanos / 1000
+	if micros < 1000 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", micros), "0"), ".") + " µs"
+	}
+	millis := micros / 1000
+	if millis < 1000 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", millis), "0"), ".") + " ms"
+	}
+	secs := millis / 1000
+	if secs < 60 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", secs), "0"), ".") + " s"
+	}
+	mins := secs / 60
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", mins), "0"), ".") + " min"
+}
+
+// formatBytes formats bytes into human-readable format with appropriate units
+func formatBytes(bytes float64) string {
+	if bytes == 0 {
+		return "0 B"
+	}
+	if bytes < 1024 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", bytes), "0"), ".") + " B"
+	}
+	kb := bytes / 1024
+	if kb < 1024 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", kb), "0"), ".") + " KB"
+	}
+	mb := kb / 1024
+	if mb < 1024 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", mb), "0"), ".") + " MB"
+	}
+	gb := mb / 1024
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", gb), "0"), ".") + " GB"
+}
+
+// formatNumber formats large numbers with appropriate suffixes (K, M, B)
+func formatNumber(num float64) string {
+	if num == 0 {
+		return "0"
+	}
+	if num < 1000 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", num), "0"), ".")
+	}
+	k := num / 1000
+	if k < 1000 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", k), "0"), ".") + "K"
+	}
+	m := k / 1000
+	if m < 1000 {
+		return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", m), "0"), ".") + "M"
+	}
+	b := m / 1000
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.1f", b), "0"), ".") + "B"
+}
+
+// formatPercent formats a decimal as a percentage
+func formatPercent(val float64) string {
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", val*100), "0"), ".") + "%"
 }
 
 // Config contains the configuration parameters for the future handler.

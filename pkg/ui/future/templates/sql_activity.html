@@ -130,7 +130,7 @@
           </form>
           <h3>Results - Top 100 Statement Fingerprints by % of All Runtime</h3>
 
-          <div x-data="tableSort()">
+          <div x-data="tableSort()" style="overflow-x: auto;">
             <table id="table-data">
               <thead>
                 <tr>
@@ -140,17 +140,50 @@
                   <th @click="sort('execution-count', 1)" style="cursor: pointer;">
                     Execution Count <span x-text="getSortIndicator('execution-count')"></span>
                   </th>
-                  <th @click="sort('application-name', 2)" style="cursor: pointer;">
+                  <th @click="sort('database', 2)" style="cursor: pointer;">
+                    Database <span x-text="getSortIndicator('database')"></span>
+                  </th>
+                  <th @click="sort('application-name', 3)" style="cursor: pointer;">
                     Application Name <span x-text="getSortIndicator('application-name')"></span>
                   </th>
-                  <th @click="sort('statement-time', 3)" style="cursor: pointer;">
+                  <th @click="sort('statement-time', 4)" style="cursor: pointer;">
                     Statement Time <span x-text="getSortIndicator('statement-time')"></span>
                   </th>
-                  <th @click="sort('sql-cpu-time', 4)" style="cursor: pointer;">
+                  <th @click="sort('pct-runtime', 5)" style="cursor: pointer;">
+                    % of All Runtime <span x-text="getSortIndicator('pct-runtime')"></span>
+                  </th>
+                  <th @click="sort('contention-time', 6)" style="cursor: pointer;">
+                    Contention Time <span x-text="getSortIndicator('contention-time')"></span>
+                  </th>
+                  <th @click="sort('sql-cpu-time', 7)" style="cursor: pointer;">
                     SQL CPU Time <span x-text="getSortIndicator('sql-cpu-time')"></span>
                   </th>
-                  <th @click="sort('max-latency', 5)" style="cursor: pointer;">
+                  <th @click="sort('min-latency', 8)" style="cursor: pointer;">
+                    Min Latency <span x-text="getSortIndicator('min-latency')"></span>
+                  </th>
+                  <th @click="sort('max-latency', 9)" style="cursor: pointer;">
                     Max Latency <span x-text="getSortIndicator('max-latency')"></span>
+                  </th>
+                  <th @click="sort('rows-processed', 10)" style="cursor: pointer;">
+                    Rows Processed <span x-text="getSortIndicator('rows-processed')"></span>
+                  </th>
+                  <th @click="sort('bytes-read', 11)" style="cursor: pointer;">
+                    Bytes Read <span x-text="getSortIndicator('bytes-read')"></span>
+                  </th>
+                  <th @click="sort('max-memory', 12)" style="cursor: pointer;">
+                    Max Memory <span x-text="getSortIndicator('max-memory')"></span>
+                  </th>
+                  <th @click="sort('network', 13)" style="cursor: pointer;">
+                    Network <span x-text="getSortIndicator('network')"></span>
+                  </th>
+                  <th @click="sort('retries', 14)" style="cursor: pointer;">
+                    Retries <span x-text="getSortIndicator('retries')"></span>
+                  </th>
+                  <th @click="sort('last-exec-time', 15)" style="cursor: pointer;">
+                    Last Execution Time <span x-text="getSortIndicator('last-exec-time')"></span>
+                  </th>
+                  <th @click="sort('fingerprint-id', 16)" style="cursor: pointer;">
+                    Statement Fingerprint ID <span x-text="getSortIndicator('fingerprint-id')"></span>
                   </th>
                 </tr>
               </thead>
@@ -161,19 +194,52 @@
                     {{.Key.KeyData.Query}}
                   </td>
                   <td data-sort="{{.Stats.Count}}">
-                    {{.Stats.Count}}
+                    {{formatNumber .Stats.Count}}
+                  </td>
+                  <td>
+                    {{.Key.KeyData.Database}}
                   </td>
                   <td>
                     {{.Key.KeyData.App}}
                   </td>
-                  <td data-sort="{{mul .Stats.ServiceLat.Mean 1000000}}">
-                    {{printf "%.1f" (mul .Stats.ServiceLat.Mean 1000000)}} µs
+                  <td data-sort="{{mul .Stats.ServiceLat.Mean 1000000000}}">
+                    {{formatTime (mul .Stats.ServiceLat.Mean 1000000000)}}
                   </td>
-                  <td data-sort="{{div .Stats.ExecStats.CPUSQLNanos.Mean 1000}}">
-                    {{printf "%.1f" (div .Stats.ExecStats.CPUSQLNanos.Mean 1000)}} µs
+                  <td data-sort="{{mul (mul .Stats.ServiceLat.Mean .Stats.Count) 1000000000}}">
+                    -
                   </td>
-                  <td data-sort="{{mul .Stats.LatencyInfo.Max 1000000}}">
-                    {{printf "%.1f" (mul .Stats.LatencyInfo.Max 1000000)}} µs
+                  <td data-sort="{{.Stats.ExecStats.ContentionTime.Mean}}">
+                    {{formatTime .Stats.ExecStats.ContentionTime.Mean}}
+                  </td>
+                  <td data-sort="{{.Stats.ExecStats.CPUSQLNanos.Mean}}">
+                    {{formatTime .Stats.ExecStats.CPUSQLNanos.Mean}}
+                  </td>
+                  <td data-sort="{{mul .Stats.LatencyInfo.Min 1000000000}}">
+                    {{formatTime (mul .Stats.LatencyInfo.Min 1000000000)}}
+                  </td>
+                  <td data-sort="{{mul .Stats.LatencyInfo.Max 1000000000}}">
+                    {{formatTime (mul .Stats.LatencyInfo.Max 1000000000)}}
+                  </td>
+                  <td data-sort="{{.Stats.RowsRead.Mean}}">
+                    {{formatNumber .Stats.RowsRead.Mean}}
+                  </td>
+                  <td data-sort="{{.Stats.BytesRead.Mean}}">
+                    {{formatBytes .Stats.BytesRead.Mean}}
+                  </td>
+                  <td data-sort="{{.Stats.ExecStats.MaxMemUsage.Mean}}">
+                    {{formatBytes .Stats.ExecStats.MaxMemUsage.Mean}}
+                  </td>
+                  <td data-sort="{{.Stats.ExecStats.NetworkBytes.Mean}}">
+                    {{formatBytes .Stats.ExecStats.NetworkBytes.Mean}}
+                  </td>
+                  <td data-sort="{{.Stats.MaxRetries}}">
+                    {{formatNumber .Stats.MaxRetries}}
+                  </td>
+                  <td data-sort="{{.Stats.LastExecTimestamp.Unix}}">
+                    {{if .Stats.LastExecTimestamp.IsZero}}-{{else}}{{.Stats.LastExecTimestamp.Format "2006-01-02 15:04:05"}}{{end}}
+                  </td>
+                  <td>
+                    {{.ID}}
                   </td>
                 </tr>
                 {{end}}
