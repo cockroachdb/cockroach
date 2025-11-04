@@ -78,10 +78,8 @@ func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
 
 		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
 		defer closeFeed(t, dbcf)
-		assertPayloads(t, dbcf, []string{
-			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
-			`bar: [1]->{"after": {"a": 1, "b": "initial"}}`,
-		})
+		// Unlike the table-level changefeed, tcf, database level changefeeds
+		// do not perform an initial scan by default.
 		waitForJobState(sqlDB, t, dbcf.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
 
 		t.Run("without watched tables", func(t *testing.T) {

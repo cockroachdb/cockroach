@@ -230,9 +230,18 @@ func changefeedPlanHook(
 		return nil, nil, false, err
 	}
 
-	// Treat all tables inside a database as if "split_column_families" is set.
 	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		// Treat all tables inside a database as if "split_column_families" is set.
 		rawOpts[changefeedbase.OptSplitColumnFamilies] = `yes`
+
+		// The default behavior for a database-level changefeed is
+		// NOT to perform an initial scan, unlike table-level changefeeds.
+		_, initialScanSet := rawOpts[changefeedbase.OptInitialScan]
+		_, initialScanOnlySet := rawOpts[changefeedbase.OptInitialScanOnly]
+		_, noInitialScanSet := rawOpts[changefeedbase.OptNoInitialScan]
+		if !initialScanOnlySet && !noInitialScanSet && !initialScanSet {
+			rawOpts[changefeedbase.OptInitialScan] = `no`
+		}
 	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
@@ -1462,6 +1471,16 @@ func validateDetailsAndOptions(
 	if err := opts.ValidateForCreateChangefeed(details.Select != ""); err != nil {
 		return err
 	}
+	if isDBLevelChangefeed(details) {
+		scanType, err := opts.GetInitialScanType()
+		if err != nil {
+			return err
+		}
+		if scanType == changefeedbase.OnlyInitialScan {
+			return errors.Errorf(
+				`cannot specify %s on a database level changefeed`, changefeedbase.OptInitialScanOnly)
+		}
+	}
 	if opts.HasEndTime() {
 		scanType, err := opts.GetInitialScanType()
 		if err != nil {
@@ -2121,6 +2140,14 @@ func getQualifiedTableNameObj(
 		tree.Name(desc.GetName()),
 	)
 	return tbName, nil
+}
+
+func isDBLevelChangefeed(details jobspb.ChangefeedDetails) bool {
+	targetSpecs := details.TargetSpecifications
+	if len(targetSpecs) == 0 {
+		return false
+	}
+	return targetSpecs[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE
 }
 
 // getChangefeedTargetName gets a table name with or without the dots
