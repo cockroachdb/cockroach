@@ -3207,6 +3207,8 @@ message BatchResponse {
     // The field is cleared by the DistSender because it refers routing
     // information not exposed by the KV API.
     repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
+    // CpuTime is tracked in Replica.Send.
+    int64 cpu_time = 8;
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];

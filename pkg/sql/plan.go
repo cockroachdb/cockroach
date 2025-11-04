@@ -146,6 +146,8 @@ func (n *singleInputPlanNode) SetInput(i int, p planNode) error {
 type mutationPlanNode interface {
 	planNode
 
+	// TODO: KV CPU time
+
 	// rowsWritten returns the number of table rows modified by this planNode.
 	// It does not include rows written to secondary indexes. It should only be
 	// called once Next returns false.

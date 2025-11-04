@@ -270,10 +270,10 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 }
 
 func makeSendFunc(
-	txn *kv.Txn, ext *fetchpb.IndexFetchSpec_ExternalRowData, batchRequestsIssued *int64,
+	txn *kv.Txn, ext *fetchpb.IndexFetchSpec_ExternalRowData, batchRequestsIssued *int64, kvCpuTime *int64,
 ) sendFunc {
 	if ext != nil {
-		return makeExternalSpanSendFunc(ext, txn.DB(), batchRequestsIssued)
+		return makeExternalSpanSendFunc(ext, txn.DB(), batchRequestsIssued, kvCpuTime)
 	}
 	return func(
 		ctx context.Context,
@@ -284,6 +284,10 @@ func makeSendFunc(
 		if err != nil {
 			return nil, err.GoError()
 		}
+		if res.CpuTime > 0 && kvCpuTime != nil {
+			log.Dev.Infof(ctx, "accumulating CPU time %v", res.CpuTime)
+			atomic.AddInt64(kvCpuTime, res.CpuTime)
+		}
 		// Note that in some code paths there is no concurrency when using the
 		// sendFunc, but we choose to unconditionally use atomics here since its
 		// overhead should be negligible in the grand scheme of things anyway.
@@ -293,7 +297,7 @@ func makeSendFunc(
 }
 
 func makeExternalSpanSendFunc(
-	ext *fetchpb.IndexFetchSpec_ExternalRowData, db *kv.DB, batchRequestsIssued *int64,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData, db *kv.DB, batchRequestsIssued *int64, kvCpuTime *int64,
 ) sendFunc {
 	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 		for _, req := range ba.Requests {
@@ -330,6 +334,10 @@ func makeExternalSpanSendFunc(
 				return nil
 			})
 
+		if res.CpuTime > 0 && kvCpuTime != nil {
+			log.Dev.Infof(ctx, "accumulating CPU time %v", res.CpuTime)
+			atomic.AddInt64(kvCpuTime, res.CpuTime)
+		}
 		// Note that in some code paths there is no concurrency when using the
 		// sendFunc, but we choose to unconditionally use atomics here since its
 		// overhead should be negligible in the grand scheme of things anyway.
@@ -350,6 +358,7 @@ type newTxnKVFetcherArgs struct {
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
+	kvCpuTime                  *int64
 	rawMVCCValues              bool
 
 	admission struct { // groups AC-related fields
@@ -388,7 +397,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		args.admission.pacerFactory,
 		args.admission.settingsValues,
 	)
-	f.kvBatchMetrics.init(args.kvPairsRead, args.batchRequestsIssued)
+	f.kvBatchMetrics.init(args.kvPairsRead, args.batchRequestsIssued, args.kvCpuTime)
 	return f
 }
 
@@ -652,6 +661,11 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		f.kvPairsRead = 0
 		for i := range f.responses {
 			f.kvPairsRead += f.responses[i].GetInner().Header().NumKeys
+		}
+		// Accumulate CPU time from the BatchResponse header.
+		if br.CpuTime > 0 && f.kvBatchMetrics.atomics.kvCpuTime != nil {
+			log.Dev.Infof(ctx, "accumulating CPU time %v", br.CpuTime)
+			atomic.AddInt64(f.kvBatchMetrics.atomics.kvCpuTime, br.CpuTime)
 		}
 	} else {
 		f.responses = nil
@@ -1069,12 +1083,14 @@ type kvBatchMetrics struct {
 		bytesRead           int64
 		kvPairsRead         *int64
 		batchRequestsIssued *int64
+		kvCpuTime           *int64
 	}
 }
 
-func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued *int64) {
+func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued, kvCpuTime *int64) {
 	h.atomics.kvPairsRead = kvPairsRead
 	h.atomics.batchRequestsIssued = batchRequestsIssued
+	h.atomics.kvCpuTime = kvCpuTime
 }
 
 // Record records metrics for the given batch response. It should be called
@@ -1116,4 +1132,12 @@ func (h *kvBatchMetrics) GetBatchRequestsIssued() int64 {
 		return 0
 	}
 	return atomic.LoadInt64(h.atomics.batchRequestsIssued)
+}
+
+// GetKVCpuTime implements the KVBatchFetcher interface.
+func (h *kvBatchMetrics) GetKVCpuTime() int64 {
+	if h == nil || h.atomics.kvCpuTime == nil {
+		return 0
+	}
+	return atomic.LoadInt64(h.atomics.kvCpuTime)
 }

@@ -91,7 +91,12 @@ type KVReader interface {
 	// GetKVCPUTime returns the CPU time consumed *on the current goroutine* by
 	// KV requests. It must be safe for concurrent use. It is used to calculate
 	// the SQL CPU time.
+	// TODO(alyshan): think of naming.
 	GetKVCPUTime() time.Duration
+	// GetKVResponseCPUTime returns the CPU time as reported by KV BatchResponses
+	// processed by the KVReader throughout its lifetime so far.
+	// TODO(alyshan): think of naming.
+	GetKVResponseCPUTime() int64
 	// UsedStreamer returns whether the Streamer API was used by the KVReader.
 	UsedStreamer() bool
 }

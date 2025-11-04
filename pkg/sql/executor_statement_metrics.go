@@ -169,6 +169,8 @@ func (ex *connExecutor) recordStatementSummary(
 ) appstatspb.StmtFingerprintID {
 	phaseTimes := ex.statsCollector.PhaseTimes()
 
+	log.Dev.Infof(ctx, "recordStatementSummary CPU time %v", stats.kvCpuTime)
+
 	// Collect the statistics.
 	idleLatRaw := phaseTimes.GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
 	idleLatSec := idleLatRaw.Seconds()
