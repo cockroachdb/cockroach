@@ -9,6 +9,7 @@ import (
 	"context"
 	"maps"
 	"net/url"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -55,6 +56,9 @@ func alterChangefeedTypeCheck(
 	toCheck := []exprutil.ToTypeCheck{
 		exprutil.Ints{alterChangefeedStmt.Jobs},
 	}
+	// TODO(#156806): Validate the options for ADD and UNSET alter commands
+	// to fail when 'PREPARE'ing an ALTER CHANGEFEED statement specifying an
+	// invalid option.
 	for _, cmd := range alterChangefeedStmt.Cmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedSetOptions:
@@ -130,6 +134,18 @@ func alterChangefeedPlanHook(
 
 		newChangefeedStmt := &tree.CreateChangefeed{}
 
+		// DB-level feeds should have exactly one target specification, but
+		// table-level feeds should have at least one.
+		if len(prevDetails.TargetSpecifications) == 0 {
+			return errors.AssertionFailedf("no target specifications found for changefeed")
+		}
+
+		if prevDetails.TargetSpecifications[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE {
+			newChangefeedStmt.Level = tree.ChangefeedLevelDatabase
+		} else {
+			newChangefeedStmt.Level = tree.ChangefeedLevelTable
+		}
+
 		prevOpts, err := getPrevOpts(job.Payload().Description, prevDetails.Opts)
 		if err != nil {
 			return err
@@ -149,9 +165,35 @@ func alterChangefeedPlanHook(
 		if err := validateSettings(ctx, st != changefeedbase.OnlyInitialScan, p.ExecCfg()); err != nil {
 			return err
 		}
+		if newChangefeedStmt.Level == tree.ChangefeedLevelDatabase && st != changefeedbase.NoInitialScan {
+			return errors.Errorf("cannot perform initial scan on a database level changefeed")
+		}
+
+		// DB-level feeds have a DatabaseTarget in the changefeed statement,
+		// unlike table-level feeds which have TableTargets. Set those here.
+		if newChangefeedStmt.Level == tree.ChangefeedLevelDatabase {
+			targetSpec := prevDetails.TargetSpecifications[0]
+			txn := p.InternalSQLTxn()
+			databaseDescriptor, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Database(ctx, targetSpec.DescID)
+			if err != nil {
+				return err
+			}
+			dbName := databaseDescriptor.GetName()
+			newChangefeedStmt.DatabaseTarget = tree.ChangefeedDatabaseTarget(dbName)
+		}
+
+		isAlteringTargets := slices.ContainsFunc(alterChangefeedStmt.Cmds, func(cmd tree.AlterChangefeedCmd) bool {
+			_, isAdd := cmd.(*tree.AlterChangefeedAddTarget)
+			_, isDrop := cmd.(*tree.AlterChangefeedDropTarget)
+			return isAdd || isDrop
+		})
+		if isAlteringTargets && newChangefeedStmt.Level == tree.ChangefeedLevelDatabase {
+			return errors.Errorf("cannot alter targets for a database level changefeed")
+		}
 
 		newTargets, newProgress, newStatementTime, originalSpecs, err := generateAndValidateNewTargets(
 			ctx, exprEval, p,
+			newChangefeedStmt.Level,
 			alterChangefeedStmt.Cmds,
 			newOptions,
 			prevDetails, job.Progress(),
@@ -160,7 +202,57 @@ func alterChangefeedPlanHook(
 		if err != nil {
 			return err
 		}
-		newChangefeedStmt.TableTargets = newTargets
+
+		// Only table-level feeds should have table targets in their changefeed statement.
+		if newChangefeedStmt.Level == tree.ChangefeedLevelTable {
+			newChangefeedStmt.TableTargets = newTargets
+		}
+
+		// Now we process the filters. Only DB-level feeds should have filters.
+		filters := generateNewFilters(alterChangefeedStmt.Cmds)
+		if len(filters) > 0 && newChangefeedStmt.Level != tree.ChangefeedLevelDatabase {
+			return errors.Errorf("filters are only supported for database level changefeeds")
+		}
+
+		// We add the existing filter state to the changefeed statement for
+		// DB-level feeds. This ensures that existing filters are preserved when
+		// we alter options unrelated to filters and that we can error if we try
+		// to set both include and exclude filters at the same time.
+		if newChangefeedStmt.Level == tree.ChangefeedLevelDatabase {
+			targetSpec := prevDetails.TargetSpecifications[0]
+			filterOpt, err := parseFilterOptionFromTargetSpec(targetSpec)
+			if err != nil {
+				return err
+			}
+			newChangefeedStmt.FilterOption = filterOpt
+		}
+
+		// For table-level feeds, this should be a no-op since there are no
+		// filters as asserted above. Otherwise, apply each filter in order.
+		for _, filter := range filters {
+			currentFilter := newChangefeedStmt.FilterOption
+			// Note that the no-filters state is represented by FilterType = exclude
+			// with an empty tables list. In that state, it's perfectly valid to
+			// set or unset an Include filter.
+			if len(currentFilter.Tables) > 0 && currentFilter.FilterType != filter.FilterType {
+				return errors.Errorf("cannot alter filter type from %s to %s", currentFilter.FilterType, filter.FilterType)
+			}
+			if len(filter.Tables) > 0 {
+				newChangefeedStmt.FilterOption = tree.ChangefeedFilterOption{
+					FilterType: filter.FilterType,
+					Tables:     filter.Tables,
+				}
+			} else {
+				// When unsetting a filter, the default case is to EXCLUDE nothing.
+				// This will be the result after doing either UNSET INCLUDE TABLES
+				// or UNSET EXCLUDE TABLES. INCLUDE with an empty tables list is
+				// not a valid filter.
+				newChangefeedStmt.FilterOption = tree.ChangefeedFilterOption{
+					FilterType: tree.ExcludeFilter,
+					Tables:     tree.TableNames{},
+				}
+			}
+		}
 
 		if prevDetails.Select != "" {
 			query, err := cdceval.ParseChangefeedExpression(prevDetails.Select)
@@ -218,7 +310,13 @@ func alterChangefeedPlanHook(
 		}
 
 		newDetails := jobRecord.Details.(jobspb.ChangefeedDetails)
-		newDetails.Opts[changefeedbase.OptInitialScan] = ``
+		if newChangefeedStmt.Level != tree.ChangefeedLevelDatabase {
+			// If the changefeed is a table-level changefeed, we set the initial
+			// scan option to its default value of "yes" so that we can do an
+			// initial scan for new targets. We do not allow initial scans on
+			// database level changefeeds.
+			newDetails.Opts[changefeedbase.OptInitialScan] = ``
+		}
 
 		// newStatementTime will either be the StatementTime of the job prior to the
 		// alteration, or it will be the high watermark of the job.
@@ -375,6 +473,7 @@ func generateAndValidateNewTargets(
 	ctx context.Context,
 	exprEval exprutil.Evaluator,
 	p sql.PlanHookState,
+	level tree.ChangefeedLevel,
 	alterCmds tree.AlterChangefeedCmds,
 	opts changefeedbase.StatementOptions,
 	prevDetails jobspb.ChangefeedDetails,
@@ -387,7 +486,38 @@ func generateAndValidateNewTargets(
 	map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
 	error,
 ) {
+	if level == tree.ChangefeedLevelTable {
+		return generateAndValidateNewTargetsForTableLevelFeed(
+			ctx, exprEval, p, alterCmds, opts, prevDetails, prevProgress, sinkURI,
+		)
+	}
 
+	// Since we do not allow initial scans on database level changefeeds
+	// and database level feeds do not support ADD/DROP tables commands,
+	// we do not need to call generateAndValidateNewTargetsForTableLevelFeed.
+	// When filter changes result in changes to which tables are being tracked,
+	// we can rely on startDistChangefeed to handle removing/adding tables to
+	// the progress.
+	return tree.ChangefeedTableTargets{}, &prevProgress, prevDetails.StatementTime,
+		make(map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification), nil
+}
+
+func generateAndValidateNewTargetsForTableLevelFeed(
+	ctx context.Context,
+	exprEval exprutil.Evaluator,
+	p sql.PlanHookState,
+	alterCmds tree.AlterChangefeedCmds,
+	opts changefeedbase.StatementOptions,
+	prevDetails jobspb.ChangefeedDetails,
+	prevProgress jobspb.Progress,
+	sinkURI string,
+) (
+	tree.ChangefeedTableTargets,
+	*jobspb.Progress,
+	hlc.Timestamp,
+	map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
+	error,
+) {
 	type targetKey struct {
 		TableID    descpb.ID
 		FamilyName tree.Name
@@ -928,6 +1058,60 @@ func fetchSpansForDescs(p sql.PlanHookState, spanIDs []spanID) (primarySpans []r
 		primarySpans = append(primarySpans, primarySpan)
 	}
 	return primarySpans
+}
+
+// Filter represents a single filter configuration for a changefeed.
+// It contains information about which tables to include or exclude.
+type Filter struct {
+	// FilterType indicates whether this is an include or exclude filter
+	FilterType tree.FilterType
+	// Tables contains the list of table names to filter
+	Tables tree.TableNames
+}
+
+// parseFilterOptionFromTargetSpec parses the existing filter option from the
+// target specification so that it can be used to generate the new filter option.
+func parseFilterOptionFromTargetSpec(
+	targetSpec jobspb.ChangefeedTargetSpecification,
+) (tree.ChangefeedFilterOption, error) {
+	var tables tree.TableNames
+	if targetSpec.FilterList == nil {
+		return tree.ChangefeedFilterOption{}, errors.AssertionFailedf("filter list is nil")
+	}
+	for table := range targetSpec.FilterList.Tables {
+		// Parse the fully-qualified table name string back into a TableName object.
+		unresolvedName, err := parser.ParseTableName(table)
+		if err != nil {
+			return tree.ChangefeedFilterOption{}, err
+		}
+		tableName := unresolvedName.ToTableName()
+		tables = append(tables, tableName)
+	}
+	return tree.ChangefeedFilterOption{
+		FilterType: targetSpec.FilterList.FilterType,
+		Tables:     tables,
+	}, nil
+}
+
+// generateNewFilters processes alter changefeed commands and extracts filter changes.
+// It returns a slice of Filter structs containing all filter modifications.
+func generateNewFilters(alterCmds tree.AlterChangefeedCmds) (filters []Filter) {
+	for _, cmd := range alterCmds {
+		switch v := cmd.(type) {
+		case *tree.AlterChangefeedSetFilterOption:
+			filters = append(filters, Filter{
+				FilterType: v.ChangefeedFilterOption.FilterType,
+				Tables:     v.ChangefeedFilterOption.Tables,
+			})
+		case *tree.AlterChangefeedUnsetFilterOption:
+			filters = append(filters, Filter{
+				FilterType: v.ChangefeedFilterOption.FilterType,
+				Tables:     nil,
+			})
+		}
+	}
+
+	return filters
 }
 
 func getPrevOpts(prevDescription string, opts map[string]string) (map[string]string, error) {
