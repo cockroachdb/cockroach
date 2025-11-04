@@ -27,7 +27,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t_j_seq+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq+)}
  │         │    ├── ABSENT → PUBLIC ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq+)], Expr: nextval(105:::REGCLASS)}
- │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: ""}
+ │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         └── 29 Mutation operations
@@ -79,7 +79,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │    │    │    ├── PUBLIC → ABSENT UserPrivileges:{DescID: 105 (t_j_seq+), Name: "root"}
  │    │    │    ├── PUBLIC → ABSENT SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq+)}
  │    │    │    ├── PUBLIC → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq+)], Expr: nextval(105:::REGCLASS)}
- │    │    │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: ""}
+ │    │    │    └── PUBLIC → ABSENT ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
  │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    └── 1 Mutation operation
@@ -102,7 +102,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER CO
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (t_j_seq+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC SequenceOwner:{DescID: 104 (t), ColumnID: 2 (j), ReferencedDescID: 105 (t_j_seq+)}
  │         │    ├── ABSENT → PUBLIC ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j), ReferencedSequenceIDs: [105 (t_j_seq+)], Expr: nextval(105:::REGCLASS)}
- │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), GeneratedAsIdentityType: GENERATED_ALWAYS, Value: ""}
+ │         │    └── ABSENT → PUBLIC ColumnGeneratedAsIdentity:{DescID: 104 (t), ColumnID: 2 (j), Value: "", GeneratedAsIdentityType: GENERATED_ALWAYS}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
  │         └── 33 Mutation operations
