@@ -381,7 +381,9 @@ func TestChangefeedAlterPTS(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
 		f2 := feed(t, f, `CREATE CHANGEFEED FOR table foo with protect_data_from_gc_on_pause,
-			resolved='1s', min_checkpoint_frequency='1s'`)
+			resolved='1s', min_checkpoint_frequency='1s'`, optOutOfMetamorphicDBLevelChangefeed{
+			reason: "test initializes multiple tables but doesn't watch all of them",
+		})
 		defer closeFeed(t, f2)
 
 		getNumPTSRecords := func() int {

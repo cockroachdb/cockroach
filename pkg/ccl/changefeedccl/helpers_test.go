@@ -1147,12 +1147,21 @@ type optOutOfMetamorphicEnrichedEnvelope struct {
 	reason string
 }
 
+type optOutOfMetamorphicDBLevelChangefeed struct {
+	reason string
+}
+
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
 	t.Helper()
 
 	create, args, forced, err := maybeForceEnrichedEnvelope(t, create, f, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	create, args, err = maybeForceDBLevelChangefeed(t, create, f, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1169,6 +1178,107 @@ func feed(
 	}
 
 	return feed
+}
+
+func maybeForceDBLevelChangefeed(
+	t testing.TB, create string, f cdctest.TestFeedFactory, args []any,
+) (newCreate string, newArgs []any, err error) {
+	for i, arg := range args {
+		if o, ok := arg.(optOutOfMetamorphicDBLevelChangefeed); ok {
+			t.Logf("opted out of DB level changefeed for %s: %s", create, o.reason)
+			newArgs = slices.Clone(args)
+			newArgs = slices.Delete(newArgs, i, i+1)
+			return create, newArgs, nil
+		}
+	}
+
+	switch f := f.(type) {
+	case *externalConnectionFeedFactory:
+		return maybeForceDBLevelChangefeed(t, create, f.TestFeedFactory, args)
+	case *sinklessFeedFactory:
+		t.Logf("did not force DB level changefeed for %s because %T is not supported", create, f)
+		return create, args, nil
+	}
+
+	createStmt, err := parser.ParseOne(create)
+	if err != nil {
+		return "", nil, err
+	}
+	createAST := createStmt.AST.(*tree.CreateChangefeed)
+	if createAST.Select != nil {
+		t.Logf("did not force DB level changefeed for %s because it is a CDC query", create)
+		return create, args, nil
+	}
+
+	if createAST.Level == tree.ChangefeedLevelDatabase {
+		t.Logf("did not force DB level changefeed for %s because it is already a DB level changefeed", create)
+		return create, args, nil
+	}
+
+	opts := createAST.Options
+	// Read the initial scan type from the options so that we can force it to "yes"
+	// for DB level changefeeds in the default case.
+	initialScanType := ``
+	hasCursor := false
+	for _, opt := range opts {
+		key := opt.Key.String()
+		if strings.EqualFold(key, "initial_scan") {
+			if opt.Value != nil {
+				initialScanType = opt.Value.String()
+			}
+			if strings.EqualFold(initialScanType, "'only'") {
+				t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
+				return create, args, nil
+			}
+		}
+		if strings.EqualFold(key, "initial_scan_only") {
+			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
+			return create, args, nil
+		}
+		if strings.EqualFold(key, "no_initial_scan") {
+			initialScanType = "no"
+		}
+		if strings.EqualFold(key, "cursor") {
+			hasCursor = true
+		}
+		// Since DB level feeds set split column families, and split column families is incompatible
+		// with resolved for kafka and pubsub sinks, we skip DB level feeds metamorphic testing in
+		// that case.
+		if strings.EqualFold(key, "resolved") {
+			switch f.(type) {
+			case *kafkaFeedFactory, *pubsubFeedFactory:
+				t.Logf("did not force DB level changefeed for %s because it set resolved", create)
+				return create, args, nil
+			}
+		}
+	}
+
+	for _, target := range createAST.TableTargets {
+		if target.FamilyName != "" {
+			t.Logf("did not force DB level changefeed for %s because it has column family %s", create, target.FamilyName)
+			return create, args, nil
+		}
+	}
+
+	// Keep the options as is but make it a DB level changefeed.
+	createStmt.AST.(*tree.CreateChangefeed).Level = tree.ChangefeedLevelDatabase
+	createStmt.AST.(*tree.CreateChangefeed).TableTargets = nil
+	createStmt.AST.(*tree.CreateChangefeed).DatabaseTarget = tree.ChangefeedDatabaseTarget("d")
+
+	// Unlike table-level changefeeds, database-level changefeeds do not perform
+	// an initial scan by default. To convert a default table level feed into an
+	// equivalent DB level feed, we need to explicitly set the initial scan type.
+	if initialScanType == "" && !hasCursor {
+		createStmt.AST.(*tree.CreateChangefeed).Options = append(createStmt.AST.(*tree.CreateChangefeed).Options, tree.KVOption{
+			Key:   "initial_scan",
+			Value: tree.NewDString("yes"),
+		})
+	}
+	t.Logf("forcing DB level changefeed for %s", create)
+	create = tree.AsStringWithFlags(createStmt.AST, tree.FmtShowPasswords)
+
+	t.Logf("forced DB level changefeed result: %s", create)
+	return create, args, nil
 }
 
 func maybeForceEnrichedEnvelope(
