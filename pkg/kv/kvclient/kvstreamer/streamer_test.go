@@ -70,6 +70,7 @@ func getStreamer(
 		limitBytes,
 		acc,
 		nil, /* kvPairsRead */
+		nil, /* kvCPUTime */
 		lock.None,
 		lock.Unreplicated,
 		reverse,
@@ -131,6 +132,7 @@ func TestStreamerLimitations(t *testing.T) {
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
 				nil,           /* kvPairsRead */
+				nil,           /* kvCpuTime */
 				lock.None,
 				lock.Unreplicated,
 				false, /* reverse */

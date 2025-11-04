@@ -309,6 +309,10 @@ func (u *updateNode) returnsRowsAffected() bool {
 	return !u.run.rowsNeeded
 }
 
+func (u *updateNode) kvCPUTime() int64 {
+	return u.run.tu.kvCPUTime
+}
+
 func (u *updateNode) enableAutoCommit() {
 	u.run.tu.enableAutoCommit()
 }

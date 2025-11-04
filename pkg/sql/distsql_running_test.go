@@ -1251,9 +1251,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 	ctx := context.Background()
 	// testQuery will be updated throughout the test to the current target.
 	var testQuery atomic.Value
-	// The callback will send number of rows read and rows written (for each
-	// ProducerMetadata.Metrics object) on these channels, respectively.
-	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh := make(chan int64), make(chan int64), make(chan int64)
+	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh, kvCPUTimeCh := make(chan int64), make(chan int64), make(chan int64), make(chan int64)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
@@ -1266,6 +1264,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 							rowsReadCh <- meta.Metrics.RowsRead
 							rowsWrittenCh <- meta.Metrics.RowsWritten
 							indexRowsWrittenCh <- meta.Metrics.IndexRowsWritten
+							kvCPUTimeCh <- meta.Metrics.KVCPUTime
 						}
 						return row, batch, meta
 					}
@@ -1381,7 +1380,7 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			}()
 			// In the main goroutine, loop until the query is completed while
 			// accumulating the top-level query stats.
-			var rowsRead, rowsWritten, indexRowsWritten int64
+			var rowsRead, rowsWritten, indexRowsWritten, kvCPUTime int64
 		LOOP:
 			for {
 				select {
@@ -1391,6 +1390,8 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 					rowsWritten += written
 				case written := <-indexRowsWrittenCh:
 					indexRowsWritten += written
+				case cpuTime := <-kvCPUTimeCh:
+					kvCPUTime += cpuTime
 				case err := <-errCh:
 					require.NoError(t, err)
 					break LOOP
@@ -1399,6 +1400,9 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			require.Equal(t, tc.expRowsRead, rowsRead)
 			require.Equal(t, tc.expRowsWritten, rowsWritten)
 			require.Equal(t, tc.expIndexRowsWritten, indexRowsWritten)
+			if rowsWritten > 0 || rowsRead > 0 {
+				require.Positive(t, kvCPUTime, "KVCPUTime should be positive")
+			}
 		})
 	}
 }

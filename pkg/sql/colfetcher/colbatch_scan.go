@@ -257,6 +257,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
 	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
 	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
@@ -274,6 +275,13 @@ func (s *ColBatchScan) GetKVPairsRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.cf.getKVPairsRead()
+}
+
+// GetKVResponseCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetKVResponseCPUTime() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getKVCPUTime()
 }
 
 // GetBatchRequestsIssued is part of the colexecop.KVReader interface.

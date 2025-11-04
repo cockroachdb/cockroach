@@ -264,6 +264,10 @@ func (d *deleteNode) returnsRowsAffected() bool {
 	return !d.run.rowsNeeded
 }
 
+func (d *deleteNode) kvCPUTime() int64 {
+	return d.run.td.kvCPUTime
+}
+
 func (d *deleteNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
 }
