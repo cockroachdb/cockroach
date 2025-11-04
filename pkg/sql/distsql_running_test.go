@@ -1226,7 +1226,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 	var testQuery atomic.Value
 	// The callback will send number of rows read and rows written (for each
 	// ProducerMetadata.Metrics object) on these channels, respectively.
-	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh := make(chan int64), make(chan int64), make(chan int64)
+	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh, kvCpuTimeCh := make(chan int64), make(chan int64), make(chan int64), make(chan int64)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
@@ -1239,6 +1239,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 							rowsReadCh <- meta.Metrics.RowsRead
 							rowsWrittenCh <- meta.Metrics.RowsWritten
 							indexRowsWrittenCh <- meta.Metrics.IndexRowsWritten
+							kvCpuTimeCh <- meta.Metrics.KvCpuTime
 						}
 						return row, batch, meta
 					}
@@ -1354,7 +1355,7 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			}()
 			// In the main goroutine, loop until the query is completed while
 			// accumulating the top-level query stats.
-			var rowsRead, rowsWritten, indexRowsWritten int64
+			var rowsRead, rowsWritten, indexRowsWritten, kvCpuTime int64
 		LOOP:
 			for {
 				select {
@@ -1364,6 +1365,8 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 					rowsWritten += written
 				case written := <-indexRowsWrittenCh:
 					indexRowsWritten += written
+				case cpuTime := <-kvCpuTimeCh:
+					kvCpuTime += cpuTime
 				case err := <-errCh:
 					require.NoError(t, err)
 					break LOOP
@@ -1372,6 +1375,11 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			require.Equal(t, tc.expRowsRead, rowsRead)
 			require.Equal(t, tc.expRowsWritten, rowsWritten)
 			require.Equal(t, tc.expIndexRowsWritten, indexRowsWritten)
+			// KvCpuTime should be non-negative for reads.
+			// TODO(alyshan): Accumulate KV CPU time for writes.
+			if rowsRead > 0 {
+				require.Greater(t, kvCpuTime, int64(0), "KvCpuTime should be positive for reads")
+			}
 		})
 	}
 }
