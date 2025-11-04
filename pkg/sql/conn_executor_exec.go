@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	// This import is needed here to properly inject tree.ValidateJSONPath from
 	// pkg/util/jsonpath/parser/parse.go.
 	_ "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
@@ -3327,6 +3328,8 @@ type topLevelQueryStats struct {
 	// client receiving the PGWire protocol messages (as well as construcing
 	// those messages).
 	clientTime time.Duration
+	// kvCPUTime is the CPU time consumed by KV operations during query execution.
+	kvCPUTime time.Duration
 	// NB: when adding another field here, consider whether
 	// forwardInnerQueryStats method needs an adjustment.
 }
@@ -3339,6 +3342,7 @@ func (s *topLevelQueryStats) add(other *topLevelQueryStats) {
 	s.indexRowsWritten += other.indexRowsWritten
 	s.networkEgressEstimate += other.networkEgressEstimate
 	s.clientTime += other.clientTime
+	s.kvCPUTime += other.kvCPUTime
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and
