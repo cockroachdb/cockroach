@@ -516,6 +516,10 @@ func listFailuresFromTestXML(
 	failures := make(map[scopedTest][]testEvent)
 	for _, suite := range suites.Suites {
 		pkg := suite.Name
+		dotIdx := strings.LastIndexByte(pkg, '.')
+		if dotIdx > 0 {
+			pkg = pkg[:dotIdx]
+		}
 		for _, testCase := range suite.TestCases {
 			var result *buildutil.XMLMessage
 			if testCase.Failure != nil {
