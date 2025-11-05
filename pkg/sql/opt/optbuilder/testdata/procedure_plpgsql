@@ -813,34 +813,34 @@ call
                 │                        │    │                             │                        ├── columns: "_stmt_exec_ret_2":17
                 │                        │    │                             │                        ├── project
                 │                        │    │                             │                        │    ├── columns: foo:16
-                │                        │    │                             │                        │    ├── right-join (cross)
+                │                        │    │                             │                        │    ├── barrier
                 │                        │    │                             │                        │    │    ├── columns: i:7
-                │                        │    │                             │                        │    │    ├── barrier
-                │                        │    │                             │                        │    │    │    ├── columns: i:7!null
-                │                        │    │                             │                        │    │    │    └── limit
-                │                        │    │                             │                        │    │    │         ├── columns: i:7!null
-                │                        │    │                             │                        │    │    │         ├── project
-                │                        │    │                             │                        │    │    │         │    ├── columns: i:7!null
-                │                        │    │                             │                        │    │    │         │    └── insert t
-                │                        │    │                             │                        │    │    │         │         ├── columns: k:6!null i:7!null s:8!null
-                │                        │    │                             │                        │    │    │         │         ├── insert-mapping:
-                │                        │    │                             │                        │    │    │         │         │    ├── column1:11 => k:6
-                │                        │    │                             │                        │    │    │         │         │    ├── column2:12 => i:7
-                │                        │    │                             │                        │    │    │         │         │    └── column3:13 => s:8
-                │                        │    │                             │                        │    │    │         │         ├── return-mapping:
-                │                        │    │                             │                        │    │    │         │         │    ├── column1:11 => k:6
-                │                        │    │                             │                        │    │    │         │         │    ├── column2:12 => i:7
-                │                        │    │                             │                        │    │    │         │         │    └── column3:13 => s:8
-                │                        │    │                             │                        │    │    │         │         └── values
-                │                        │    │                             │                        │    │    │         │              ├── columns: column1:11!null column2:12!null column3:13!null
-                │                        │    │                             │                        │    │    │         │              └── tuple
-                │                        │    │                             │                        │    │    │         │                   ├── const: 1
-                │                        │    │                             │                        │    │    │         │                   ├── const: 2
-                │                        │    │                             │                        │    │    │         │                   └── const: 'foo'
-                │                        │    │                             │                        │    │    │         └── const: 1
-                │                        │    │                             │                        │    │    ├── values
-                │                        │    │                             │                        │    │    │    └── tuple
-                │                        │    │                             │                        │    │    └── filters (true)
+                │                        │    │                             │                        │    │    └── right-join (cross)
+                │                        │    │                             │                        │    │         ├── columns: i:7
+                │                        │    │                             │                        │    │         ├── limit
+                │                        │    │                             │                        │    │         │    ├── columns: i:7!null
+                │                        │    │                             │                        │    │         │    ├── project
+                │                        │    │                             │                        │    │         │    │    ├── columns: i:7!null
+                │                        │    │                             │                        │    │         │    │    └── insert t
+                │                        │    │                             │                        │    │         │    │         ├── columns: k:6!null i:7!null s:8!null
+                │                        │    │                             │                        │    │         │    │         ├── insert-mapping:
+                │                        │    │                             │                        │    │         │    │         │    ├── column1:11 => k:6
+                │                        │    │                             │                        │    │         │    │         │    ├── column2:12 => i:7
+                │                        │    │                             │                        │    │         │    │         │    └── column3:13 => s:8
+                │                        │    │                             │                        │    │         │    │         ├── return-mapping:
+                │                        │    │                             │                        │    │         │    │         │    ├── column1:11 => k:6
+                │                        │    │                             │                        │    │         │    │         │    ├── column2:12 => i:7
+                │                        │    │                             │                        │    │         │    │         │    └── column3:13 => s:8
+                │                        │    │                             │                        │    │         │    │         └── values
+                │                        │    │                             │                        │    │         │    │              ├── columns: column1:11!null column2:12!null column3:13!null
+                │                        │    │                             │                        │    │         │    │              └── tuple
+                │                        │    │                             │                        │    │         │    │                   ├── const: 1
+                │                        │    │                             │                        │    │         │    │                   ├── const: 2
+                │                        │    │                             │                        │    │         │    │                   └── const: 'foo'
+                │                        │    │                             │                        │    │         │    └── const: 1
+                │                        │    │                             │                        │    │         ├── values
+                │                        │    │                             │                        │    │         │    └── tuple
+                │                        │    │                             │                        │    │         └── filters (true)
                 │                        │    │                             │                        │    └── projections
                 │                        │    │                             │                        │         └── variable: i:7 [as=foo:16]
                 │                        │    │                             │                        └── projections
