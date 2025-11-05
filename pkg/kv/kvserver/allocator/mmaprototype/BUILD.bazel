@@ -15,6 +15,7 @@ go_library(
         "rebalance_advisor.go",
         "store_load_summary.go",
         "store_set.go",
+        "store_status.go",
         "top_k_replicas.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype",
