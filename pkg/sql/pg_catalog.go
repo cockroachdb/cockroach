@@ -3246,7 +3246,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 		if err = forEachTableDesc(ctx, p, dbContext, opts,
 			func(ctx context.Context, descCtx tableDescContext) error {
 				db, table := descCtx.database, descCtx.table
-				privDesc, err := p.getPrivilegeDescriptor(ctx, table)
+				privDesc, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 				if err != nil {
 					return err
 				}

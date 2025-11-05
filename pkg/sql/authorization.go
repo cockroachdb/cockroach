@@ -156,7 +156,7 @@ func (p *planner) HasPrivilege(
 	// permission check).
 	p.maybeAuditSensitiveTableAccessEvent(privilegeObject, privilegeKind)
 
-	privs, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
+	privs, err := p.getImmutablePrivilegeDescriptor(ctx, privilegeObject)
 	if err != nil {
 		return false, err
 	}
@@ -209,7 +209,7 @@ func (p *planner) HasAnyPrivilege(
 		return true, nil
 	}
 
-	privs, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
+	privs, err := p.getImmutablePrivilegeDescriptor(ctx, privilegeObject)
 	if err != nil {
 		return false, err
 	}
@@ -373,7 +373,7 @@ func (p *planner) getOwnerOfPrivilegeObject(
 	if d, ok := privilegeObject.(catalog.TableDescriptor); ok && d.IsVirtualTable() {
 		return username.NodeUserName(), nil
 	}
-	privDesc, err := p.getPrivilegeDescriptor(ctx, privilegeObject)
+	privDesc, err := p.getImmutablePrivilegeDescriptor(ctx, privilegeObject)
 	if err != nil {
 		return username.SQLUsername{}, err
 	}
