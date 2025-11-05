@@ -741,11 +741,17 @@ func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Con
 func getWriterType(
 	ctx context.Context, mode jobspb.LogicalReplicationDetails_ApplyMode, settings *cluster.Settings,
 ) (sqlclustersettings.LDRWriterType, error) {
+	// TODO(jeffswenson): delete the kv and legacy sql ldr writers
 	switch mode {
 	case jobspb.LogicalReplicationDetails_Immediate:
 		return sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&settings.SV)), nil
 	case jobspb.LogicalReplicationDetails_Validated:
-		return sqlclustersettings.LDRWriterTypeSQL, nil
+		if crosscluster.LogicalReplicationUDFWriterEnabled.Get(&settings.SV) {
+			// If the UDF writer is enabled, fall back to the legacy SQL writer for
+			// validated mode.
+			return sqlclustersettings.LDRWriterTypeSQL, nil
+		}
+		return sqlclustersettings.LDRWriterTypeCRUD, nil
 	default:
 		return "", errors.Newf("unknown logical replication writer type: %s", mode)
 	}

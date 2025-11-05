@@ -11198,3 +11198,94 @@ func TestBackupRestoreFunctionDependenciesRevisionHistory(t *testing.T) {
 
 	checkFunctions("test6")
 }
+
+func TestBackupRestoreDatabaseRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dataDir, dirCleanupFunc := testutils.TempDir(t)
+	defer dirCleanupFunc()
+
+	_, sqlDB, cleanupFn := backupRestoreTestSetupEmpty(t, singleNode, dataDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+
+	// Helper function to check if a database exists.
+	checkDatabase := func(dbName string, shouldExist bool) {
+		var count int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM system.namespace WHERE name = $1 AND "parentID" = 0`, dbName).Scan(&count)
+		if shouldExist {
+			if count != 1 {
+				t.Fatalf("expected database %s to exist, but it doesn't", dbName)
+			}
+		} else {
+			if count != 0 {
+				t.Fatalf("expected database %s to not exist, but it does", dbName)
+			}
+		}
+	}
+
+	sqlDB.Exec(t, `CREATE DATABASE test_db`)
+
+	// T1: Full cluster backup with revision history.
+	backupPath := "nodelocal://1/database_revision_backup"
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, backupPath)
+
+	// T2: Capture timestamp after backup (database exists).
+	var t2 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t2)
+
+	sqlDB.Exec(t, `DROP DATABASE test_db`)
+
+	checkDatabase("test_db", false)
+
+	// T3: Capture timestamp after dropping database.
+	var t3 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t3)
+
+	sqlDB.Exec(t, `CREATE DATABASE ephemeral`)
+
+	// T4: Capture timestamp the has the ephemeral database.
+	var t4 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t4)
+
+	sqlDB.Exec(t, `DROP DATABASE ephemeral`)
+
+	// T5: Capture timestamp after dropping ephemeral database.
+	var t5 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&t5)
+
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, backupPath)
+
+	// Choose one of the 4 restores to run, to reduce test runtime:
+	i := rand.Intn(4)
+
+	switch i {
+	case 0:
+		// Restore AOST t2 -> expect database to exist.
+		restoreQuery := fmt.Sprintf(
+			"RESTORE FROM LATEST IN $1 AS OF SYSTEM TIME %s", t2)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+		checkDatabase("test_db", true)
+
+		sqlDB.Exec(t, `DROP DATABASE test_db`)
+	case 1:
+		// Restore AOST t3 -> expect database to not exist.
+		restoreQuery := fmt.Sprintf(
+			"RESTORE FROM LATEST IN $1 AS OF SYSTEM TIME %s", t3)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+		checkDatabase("test_db", false)
+	case 2:
+		// Restore AOST t4 -> ephemeral db exists.
+		restoreQuery := fmt.Sprintf(
+			"RESTORE FROM LATEST IN $1 AS OF SYSTEM TIME %s", t4)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+		checkDatabase("ephemeral", true)
+
+		sqlDB.Exec(t, `DROP DATABASE ephemeral`)
+	case 3:
+		restoreQuery := fmt.Sprintf(
+			"RESTORE FROM LATEST IN $1 AS OF SYSTEM TIME %s", t5)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+		checkDatabase("ephemeral", false)
+	}
+}
