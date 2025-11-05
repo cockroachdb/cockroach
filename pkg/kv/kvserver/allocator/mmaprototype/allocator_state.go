@@ -1209,7 +1209,7 @@ func sortTargetCandidateSetAndPick(
 	// ones that have notMatchedLeasePreferenceIndex.
 	j = 0
 	for _, cand := range cands.candidates {
-		if cand.leasePreferenceIndex == notMatchedLeasePreferencIndex {
+		if cand.leasePreferenceIndex == notMatchedLeasePreferenceIndex {
 			break
 		}
 		j++

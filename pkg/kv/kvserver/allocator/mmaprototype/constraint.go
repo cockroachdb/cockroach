@@ -1945,10 +1945,10 @@ func (l localityTiers) diversityScore(other localityTiers) float64 {
 	return 0
 }
 
-const notMatchedLeasePreferencIndex = math.MaxInt32
+const notMatchedLeasePreferenceIndex = math.MaxInt32
 
 // matchedLeasePreferenceIndex returns the index of the lease preference that
-// matches, else notMatchedLeasePreferencIndex
+// matches, else notMatchedLeasePreferenceIndex
 func matchedLeasePreferenceIndex(
 	storeID roachpb.StoreID,
 	leasePreferences []internedLeasePreference,
@@ -1962,7 +1962,7 @@ func matchedLeasePreferenceIndex(
 			return int32(j)
 		}
 	}
-	return notMatchedLeasePreferencIndex
+	return notMatchedLeasePreferenceIndex
 }
 
 // Avoid unused lint errors.
