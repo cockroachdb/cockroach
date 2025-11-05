@@ -307,6 +307,11 @@ define JoinPrivate {
     # SkipReorderJoins indicates whether the ReorderJoins rule should match this
     # join.
     SkipReorderJoins bool
+
+    # ParameterizedCols is the set of columns that are equivalent to placeholder
+    # values. These columns are typically created when exploring parameterized
+    # joins for generic query plans.
+    ParameterizedCols ColSet
 }
 
 # IndexJoin represents an inner join between an input expression and a primary

@@ -1003,6 +1003,7 @@ project
            │         ├── key columns: [17] = [9]
            │         ├── lookup columns are key
            │         ├── cardinality: [0 - 1]
+           │         ├── parameterized columns: (17)
            │         ├── has-placeholder
            │         ├── key: ()
            │         ├── fd: ()-->(9,12,17), (9)==(17), (17)==(9)
@@ -1068,6 +1069,7 @@ project
            │         ├── key columns: [17] = [9]
            │         ├── lookup columns are key
            │         ├── cardinality: [0 - 1]
+           │         ├── parameterized columns: (17)
            │         ├── has-placeholder
            │         ├── key: ()
            │         ├── fd: ()-->(9,12,17), (9)==(17), (17)==(9)

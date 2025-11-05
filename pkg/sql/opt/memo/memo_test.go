@@ -510,6 +510,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
 	notStale()
 
+	// Stale optimizer_use_max_frequency_selectivity.
+	evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity = false
+	notStale()
+
 	// Stale optimizer_prove_implication_with_virtual_computed_columns.
 	evalCtx.SessionData().OptimizerProveImplicationWithVirtualComputedColumns = true
 	stale()

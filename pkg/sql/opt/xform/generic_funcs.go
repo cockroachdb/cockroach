@@ -36,7 +36,7 @@ func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
 // placeholders or stable expressions, ok=false is returned.
 func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	filters memo.FiltersExpr,
-) (values memo.RelExpr, newFilters memo.FiltersExpr, ok bool) {
+) (values memo.RelExpr, newFilters memo.FiltersExpr, parameterizedCols opt.ColSet, ok bool) {
 	var exprs memo.ScalarListExpr
 	var cols opt.ColList
 	placeholderCols := make(map[tree.PlaceholderIdx]opt.ColumnID)
@@ -58,6 +58,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 			placeholderCols[idx] = col
 			exprs = append(exprs, t)
 			cols = append(cols, col)
+			parameterizedCols.Add(col)
 			return c.e.f.ConstructVariable(col)
 
 		case *memo.FunctionExpr:
@@ -70,6 +71,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 				col := c.e.f.Metadata().AddColumn("", t.DataType())
 				exprs = append(exprs, t)
 				cols = append(cols, col)
+				parameterizedCols.Add(col)
 				return c.e.f.ConstructVariable(col)
 			}
 		}
@@ -97,7 +99,7 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 	// If no placeholders or stable expressions were replaced, there is nothing
 	// to do.
 	if len(exprs) == 0 {
-		return nil, nil, false
+		return nil, nil, opt.ColSet{}, false
 	}
 
 	// Create the Values expression with one row and one column for each
@@ -113,14 +115,15 @@ func (c *CustomFuncs) GenerateParameterizedJoinValuesAndFilters(
 		ID:   c.e.f.Metadata().NextUniqueID(),
 	})
 
-	return values, newFilters, true
+	return values, newFilters, parameterizedCols, true
 }
 
 // ParameterizedJoinPrivate returns JoinPrivate that disabled join reordering and
 // merge join exploration.
-func (c *CustomFuncs) ParameterizedJoinPrivate() *memo.JoinPrivate {
+func (c *CustomFuncs) ParameterizedJoinPrivate(parameterizedCols opt.ColSet) *memo.JoinPrivate {
 	return &memo.JoinPrivate{
-		Flags:            memo.DisallowMergeJoin,
-		SkipReorderJoins: true,
+		Flags:             memo.DisallowMergeJoin,
+		ParameterizedCols: parameterizedCols,
+		SkipReorderJoins:  true,
 	}
 }
