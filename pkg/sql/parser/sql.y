@@ -967,7 +967,10 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 }
 func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
     return u.val.(tree.ChangefeedFilterOption)
-} 
+}
+func (u *sqlSymUnion) filterType() tree.FilterType {
+    return u.val.(tree.FilterType)
+}
 
 %}
 
@@ -1607,7 +1610,8 @@ func (u *sqlSymUnion) changefeedFilterOption() tree.ChangefeedFilterOption {
 %type <tree.ReturningClause> returning_clause
 %type <tree.TableExprs> opt_using_clause
 %type <tree.RefreshDataOption> opt_clear_data
-%type <tree.ChangefeedFilterOption> db_level_changefeed_filter_option
+%type <tree.ChangefeedFilterOption> db_level_changefeed_filter_option optional_db_level_changefeed_filter_option
+%type <tree.FilterType> include_or_exclude
 
 %type <tree.BatchParam> batch_param
 %type <[]tree.BatchParam> batch_param_list
@@ -6273,7 +6277,7 @@ create_changefeed_stmt:
       Level: tree.ChangefeedLevelTable,
     }
   }
-| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
+| CREATE_CHANGEFEED_FOR_DATABASE CHANGEFEED FOR DATABASE database_name optional_db_level_changefeed_filter_option opt_changefeed_sink opt_with_options
   {
     $$.val = &tree.CreateChangefeed{
       DatabaseTarget: tree.ChangefeedDatabaseTarget($5),
@@ -6504,6 +6508,16 @@ opt_using_clause:
     $$.val = tree.TableExprs{}
   }
 
+optional_db_level_changefeed_filter_option:
+  db_level_changefeed_filter_option
+  {
+    $$.val = $1.changefeedFilterOption()
+  }
+| /* EMPTY */ 
+  {
+    $$.val = tree.ChangefeedFilterOption{}
+  }
+
 db_level_changefeed_filter_option:
   EXCLUDE TABLES table_name_list
   {
@@ -6512,10 +6526,6 @@ db_level_changefeed_filter_option:
 | INCLUDE TABLES table_name_list
   {
     $$.val = tree.ChangefeedFilterOption{Tables: $3.tableNames(), FilterType: tree.IncludeFilter}
-  }
-| /* EMPTY */ 
-  {
-    $$.val = tree.ChangefeedFilterOption{}
   }
 
 
@@ -7044,7 +7054,32 @@ alter_changefeed_cmd:
       Options: $2.nameList(),
     }
   }
+| SET db_level_changefeed_filter_option 
+  {
+    $$.val = &tree.AlterChangefeedSetFilterOption{
+      ChangefeedFilterOption: $2.changefeedFilterOption(),
+    }
+  }
+| UNSET include_or_exclude TABLES
+  {
+    $$.val = &tree.AlterChangefeedUnsetFilterOption{
+      ChangefeedFilterOption: tree.ChangefeedFilterOption{
+        FilterType: $2.filterType(),
+        Tables:     tree.TableNames{},
+      },
+    }
+  }
 
+include_or_exclude:
+  INCLUDE
+  {
+    $$.val = tree.IncludeFilter
+  }
+  | EXCLUDE
+  {
+    $$.val = tree.ExcludeFilter
+  }
+  
 // %Help: ALTER BACKUP - alter an existing backup's encryption keys
 // %Category: CCL
 // %Text:
