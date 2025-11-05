@@ -216,6 +216,17 @@ SELECT to_json((1, 2, 'hello', NULL, NULL))
 {"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
 
 query T
+SELECT to_json(('$'::JSONPATH, '$.foo'::JSONPATH))
+----
+{"f1": "$", "f2": "$.\"foo\""}
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query T
+SELECT to_json(('foo'::LTREE, 'bar'::LTREE))
+----
+{"f1": "foo", "f2": "bar"}
+
+query T
 SELECT to_jsonb(123::INT)
 ----
 123
@@ -612,6 +623,17 @@ query T
 SELECT json_build_object('a'::tsvector, 1, 'b'::tsquery, 2)
 ----
 {"'a'": 1, "'b'": 2}
+
+query T
+SELECT json_build_object('$'::JSONPATH, 1)
+----
+{"$": 1}
+
+skipif config local-mixed-25.2 local-mixed-25.3
+query T
+SELECT json_build_object('foo'::LTREE, 2)
+----
+{"foo": 2}
 
 query T
 SELECT json_extract_path('{"a": 1}', 'a')
