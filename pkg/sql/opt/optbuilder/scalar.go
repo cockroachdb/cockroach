@@ -895,6 +895,8 @@ func (b *Builder) constructUnary(
 var SupportedCRDBInternalBuiltins = map[string]struct{}{
 	// LOCKED: Do not add to this list.
 	// Supported builtins should now be added to information_schema.
+	// More information can be found at the below document:
+	// https://docs.google.com/document/d/1STbb8bljTzK_jXRIJrxtijWsPhGErdH1vZdunzPwXvs/edit?tab=t.0
 	`crdb_internal.datums_to_bytes`:           {},
 	`crdb_internal.increment_feature_counter`: {},
 }
