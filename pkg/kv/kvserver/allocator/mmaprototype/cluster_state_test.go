@@ -63,6 +63,53 @@ func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
 	return vec
 }
 
+func parseStatusFromArgs(t *testing.T, d *datadriven.TestData) Status {
+	var status Status
+	if d.HasArg("health") {
+		healthStr := dd.ScanArg[string](t, d, "health")
+		found := false
+		for i := Health(0); i < healthCount; i++ {
+			if i.String() == healthStr {
+				status.Health = i
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("unknown health: %s", healthStr)
+		}
+	}
+	if d.HasArg("leases") {
+		leaseStr := dd.ScanArg[string](t, d, "leases")
+		found := false
+		for i := LeaseDisposition(0); i < leaseDispositionCount; i++ {
+			if i.String() == leaseStr {
+				status.Disposition.Lease = i
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("unknown lease disposition: %s", leaseStr)
+		}
+	}
+	if d.HasArg("replicas") {
+		replicaStr := dd.ScanArg[string](t, d, "replicas")
+		found := false
+		for i := ReplicaDisposition(0); i < replicaDispositionCount; i++ {
+			if i.String() == replicaStr {
+				status.Disposition.Replica = i
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("unknown replica disposition: %s", replicaStr)
+		}
+	}
+	return status
+}
+
 func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 	var msg StoreLoadMsg
 	for _, v := range strings.Fields(in) {
@@ -333,8 +380,10 @@ func TestClusterState(t *testing.T) {
 						ss := cs.stores[storeID]
 						ns := cs.nodes[ss.NodeID]
 						fmt.Fprintf(&buf,
-							"store-id=%v node-id=%v reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq=%d\n",
-							ss.StoreID, ss.NodeID, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU, ss.loadSeqNum,
+							"store-id=%v node-id=%v status=%s reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq"+
+								"=%d\n",
+							ss.StoreID, ss.NodeID, ss.status, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU,
+							ss.loadSeqNum,
 						)
 						for ls, topk := range ss.adjusted.topKRanges {
 							n := topk.len()
@@ -354,8 +403,21 @@ func TestClusterState(t *testing.T) {
 					for _, next := range strings.Split(d.Input, "\n") {
 						sal := parseStoreAttributedAndLocality(t, next)
 						cs.setStore(sal)
+						// For convenience, in these tests, stores start out
+						// healthy.
+						cs.stores[sal.StoreID].status = Status{Health: HealthOK}
 					}
 					return printNodeListMeta()
+
+				case "set-store-status":
+					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
+					ss, ok := cs.stores[storeID]
+					if !ok {
+						t.Fatalf("store %d not found", storeID)
+					}
+					status := parseStatusFromArgs(t, d)
+					ss.status = MakeStatus(status.Health, status.Disposition.Lease, status.Disposition.Replica)
+					return ss.status.String()
 
 				case "store-load-msg":
 					msg := parseStoreLoadMsg(t, d.Input)
