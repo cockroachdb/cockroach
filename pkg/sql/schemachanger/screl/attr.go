@@ -120,6 +120,10 @@ const (
 	// identify a policy within a table.
 	PolicyID
 
+	// GeneratedAsIdentityType is the type for a generated as identity column.
+	// It's value must be in catpb.GeneratedAsIdentityType.
+	GeneratedAsIdentityType
+
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
 	AttrMax = iota - 1
@@ -330,6 +334,8 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.ColumnGeneratedAsIdentity)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(GeneratedAsIdentityType, "Type"),
+		rel.EntityAttr(Value, "SequenceOption"),
 	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),

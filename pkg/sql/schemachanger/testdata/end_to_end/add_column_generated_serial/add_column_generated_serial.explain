@@ -13,7 +13,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (serial_id+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), Expr: unique_rowid()}
- │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}
@@ -44,7 +44,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (serial_id+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), Expr: unique_rowid()}
- │    │    │    ├── PUBLIC        → ABSENT ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}
@@ -63,7 +63,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (serial_id+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), Expr: unique_rowid()}
- │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}

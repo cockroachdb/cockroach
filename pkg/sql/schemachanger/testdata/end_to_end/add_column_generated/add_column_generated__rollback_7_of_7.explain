@@ -14,7 +14,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │    │    ├── PUBLIC                → DELETE_ONLY PrimaryIndex:{DescID: 107 (tbl_serial_id_seq-), IndexID: 1 (primary-)}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY Column:{DescID: 106 (tbl), ColumnID: 2 (serial_id-)}
       │    │    ├── PUBLIC                → ABSENT      ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id-)}
-      │    │    ├── PUBLIC                → ABSENT      ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id-)}
+      │    │    ├── PUBLIC                → ABSENT      ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id-), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey+)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey-)}
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 106 (tbl), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (tbl_pkey+)}

@@ -2219,6 +2219,17 @@ func isShardColumn(b BuildCtx, col *scpb.Column) bool {
 	return found
 }
 
+// retrieveColumnGeneratedAsIdentityElem returns the element for GeneratedAsIdentity.
+// Returns nil in versions before 26.1.
+func retrieveColumnGeneratedAsIdentityElem(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (generatedAsIdentity *scpb.ColumnGeneratedAsIdentity) {
+	return b.QueryByID(tableID).FilterColumnGeneratedAsIdentity().Filter(
+		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnGeneratedAsIdentity) bool {
+			return e.ColumnID == columnID
+		}).MustGetZeroOrOneElement()
+}
+
 // retrieveColumnGeneratedAsIdentityType returns the GeneratedAsIdentityType.
 // Handles versions before 26.1 that store it in Column.GeneratedAsIdentityType.
 func retrieveColumnGeneratedAsIdentityType(
@@ -2227,10 +2238,7 @@ func retrieveColumnGeneratedAsIdentityType(
 	// First try to retrieve it from ColumnGeneratedAsIdentity. This may be nil
 	// if the column is not a generated identity column or the cluster version is older
 	// than 26.1. In that case, will return Column.GeneratedAsIdentityType.
-	colGeneratedAsID := b.QueryByID(tableID).FilterColumnGeneratedAsIdentity().Filter(
-		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnGeneratedAsIdentity) bool {
-			return e.ColumnID == columnID
-		}).MustGetZeroOrOneElement()
+	colGeneratedAsID := retrieveColumnGeneratedAsIdentityElem(b, tableID, columnID)
 	if colGeneratedAsID != nil {
 		return colGeneratedAsID.Type
 	}
