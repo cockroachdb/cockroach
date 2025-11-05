@@ -724,7 +724,6 @@ func TestDataDriven(t *testing.T) {
 					dns = scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold) || dns
 					dns = scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay) || dns
 					dns = scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold) || dns
-					dns = scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective) || dns
 					var snapshotRateMiB int
 					dns = scanIfExists(t, d, "rebalancing_snapshot_rate_mib", &snapshotRateMiB) || dns
 					if snapshotRateMiB != 0 {
@@ -744,6 +743,17 @@ func TestDataDriven(t *testing.T) {
 								IsClusterSetting: true,
 								Key:              "LBRebalancingMode",
 								Value:            rebalanceMode,
+							}})
+					}
+
+					var rebalanceObjective int64
+					if scanIfExists(t, d, "rebalance_objective", &rebalanceObjective) {
+						events = append(events, scheduled.ScheduledEvent{
+							At: settingsGen.Settings.StartTime.Add(delay),
+							TargetEvent: event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingObjective",
+								Value:            rebalanceObjective,
 							}})
 					}
 					return ""

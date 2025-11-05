@@ -29,8 +29,6 @@ const (
 	defaultSplitStatRetention      = 10 * time.Minute
 	defaultSeed                    = 42
 	defaultLBRebalancingInterval   = time.Minute
-	defaultLBRebalanceQPSThreshold = 0.1
-	defaultLBRebalancingObjective  = 0 // QPS
 )
 
 const DefaultNodeCPURateCapacityNanos = 8 * 1e9        // 8 vcpus
@@ -101,8 +99,6 @@ type SimulationSettings struct {
 	// SplitStatRetention is the duration which recorded load will be retained
 	// and factored into load based splitting decisions.
 	SplitStatRetention time.Duration
-	// LBRebalancingObjective is the load objective to balance.
-	LBRebalancingObjective int64
 	// LBRebalancingInterval controls how often the store rebalancer will
 	// consider opportunities for rebalancing.
 	LBRebalancingInterval time.Duration
@@ -141,7 +137,6 @@ func DefaultSimulationSettings() *SimulationSettings {
 		StateExchangeDelay:      defaultStateExchangeDelay,
 		SplitQPSThreshold:       defaultSplitQPSThreshold,
 		SplitStatRetention:      defaultSplitStatRetention,
-		LBRebalancingObjective:  defaultLBRebalancingObjective,
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
 		ReplicateQueueEnabled:   true,
 		LeaseQueueEnabled:       true,

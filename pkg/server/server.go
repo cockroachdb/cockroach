@@ -903,9 +903,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
 	})
 
-	mmaAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
-		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
-	allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocator, st, nil)
+	mmaAlloc, mmaAllocSync := func() (mmaprototype.Allocator, *mmaintegration.AllocatorSync) {
+		mmaAllocState := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+			rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+		allocatorSync := mmaintegration.NewAllocatorSync(storePool, mmaAllocState, st, nil)
+		// We make sure that mmaAllocState is returned through the `Allocator`
+		// interface so that when looking up callers to the interface, we see this
+		// call site.
+		return mmaAllocState, allocatorSync
+	}()
+
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
 		func(_ string, content roachpb.Value, origTimestampNanos int64) {
@@ -915,8 +922,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				return
 			}
 			storeLoadMsg := mmaintegration.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
-			mmaAllocator.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
-			mmaAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
+			mmaAlloc.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
+			mmaAlloc.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
 		},
 	)
 
@@ -931,8 +938,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		NodeLiveness:                 nodeLiveness,
 		StoreLiveness:                storeLiveness,
 		StorePool:                    storePool,
-		MMAllocator:                  mmaAllocator,
-		AllocatorSync:                allocatorSync,
+		MMAllocator:                  mmaAlloc,
+		AllocatorSync:                mmaAllocSync,
 		Transport:                    raftTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,

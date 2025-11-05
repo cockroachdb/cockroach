@@ -14,13 +14,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func BenchmarkJobs(b *testing.B) { reg.Run(b) }
 func init() {
+	// Create a minimal table descriptor for the import job.
+	tableDesc := &descpb.TableDescriptor{
+		ID:            100,
+		ParentID:      1,
+		Name:          "benchmark_table",
+		FormatVersion: descpb.InterleavedFormatVersion,
+		Version:       1,
+	}
+
 	payloadBytes, err := protoutil.Marshal(&jobspb.Payload{
-		Details:       jobspb.WrapPayloadDetails(jobspb.ImportDetails{}),
+		Details: jobspb.WrapPayloadDetails(jobspb.ImportDetails{
+			Table: jobspb.ImportDetails_Table{
+				Desc: tableDesc,
+			},
+		}),
 		UsernameProto: username.RootUserName().EncodeProto(),
 	})
 	if err != nil {

@@ -1,10 +1,5 @@
 # This test verifies that the allocator can rebalance qps load across a 7-node
 # cluster. mma-only fails here since it doesn't balance based on leases.
-# TODO(tbg): this test works because the default rebalancing objective in asim
-# was accidentally left as 'qps' (even though we use 'cpu' in production).
-# When the default changes, this test needs to override the setting and probably
-# rename the test to specify that it's about qps rebalancing in particular,
-# which otherwise sees little explicit testing.
 skip_under_ci
 ----
 
@@ -34,6 +29,11 @@ asserting: max_{stores}(qps)/mean_{stores}(qps) ≤ 1.15 at each of last 6 ticks
 assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 asserting: |qps(t)/mean_{T}(qps) - 1| ≤ 0.05 ∀ t∈T and each store (T=last 6 ticks)
+
+
+# Set rebalance objective to 0 to disable rebalancing.
+setting rebalance_objective=0
+----
 
 # The generators are then called and 2 simulation runs, named samples are
 # created and evaluated. Each sample has a fixed duration of 3 minutes.
@@ -85,6 +85,7 @@ Cluster Set Up
 Key Space
 	[0,10000): 7(rf=3), 0MiB, [s1:(7,4*),s2:(6,2*),s3:(3,0*),s4:(2,0*),s5:(1,0*),s6:(1,1*),s7:(1,0*)]
 Event
+	set LBRebalancingObjective to 0
 	set LBRebalancingMode to 2
 Workload Set Up
 	[0,10000): 95%r large-block [128-256B/op, 7000ops/s]
