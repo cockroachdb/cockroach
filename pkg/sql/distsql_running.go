@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
@@ -710,27 +711,12 @@ func (dsp *DistSQLPlanner) setupFlows(
 const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
 const executingParallelAndSerialChecks = "executing %d checks concurrently and %d checks serially"
 
-const (
-	WORKLOAD_ID_UNKNOWN = iota
-	WORKLOAD_ID_BULKIO
-	WORKLOAD_ID_BACKUP
-	WORKLOAD_ID_RESTORE
-	WORKLOAD_ID_IMPORT
-	WORKLOAD_ID_CDC
-	WORKLOAD_ID_JOB
-	WORKLOAD_ID_INTERNAL_UNKNOWN
-	WORKLOAD_ID_SUBQUERY
-	WORKLOAD_ID_BACKFILL
-	WORKLOAD_ID_SCHEMA_CHANGE
-	WORKLOAD_ID_MVCC_GC
-)
-
 func determineWorkloadID(ctx context.Context, planCtx *PlanningCtx, txn *kv.Txn) uint64 {
 	// First check if this is a user query
 	if planCtx.planner == nil {
 		// Not a user query - determine what kind of internal operation
 		if txn == nil {
-			return WORKLOAD_ID_BULKIO
+			return resourceattr.WORKLOAD_ID_BULKIO
 		}
 
 		// Check for job tag
@@ -738,30 +724,30 @@ func determineWorkloadID(ctx context.Context, planCtx *PlanningCtx, txn *kv.Txn)
 			jobType := jobTag.ValueStr()
 			// Parse jobType to get specific workload
 			if strings.Contains(jobType, "BACKUP") {
-				return WORKLOAD_ID_BACKUP
+				return resourceattr.WORKLOAD_ID_BACKUP
 			} else if strings.Contains(jobType, "RESTORE") {
-				return WORKLOAD_ID_RESTORE
+				return resourceattr.WORKLOAD_ID_RESTORE
 			} else if strings.Contains(jobType, "IMPORT") {
-				return WORKLOAD_ID_IMPORT
+				return resourceattr.WORKLOAD_ID_IMPORT
 			} else if strings.Contains(jobType, "CHANGEFEED") {
-				return WORKLOAD_ID_CDC
+				return resourceattr.WORKLOAD_ID_CDC
 			}
-			return WORKLOAD_ID_JOB
+			return resourceattr.WORKLOAD_ID_JOB
 		}
 
-		return WORKLOAD_ID_INTERNAL_UNKNOWN
+		return resourceattr.WORKLOAD_ID_INTERNAL_UNKNOWN
 	}
 
 	// It's a user query - could further classify
 	if planCtx.subOrPostQuery {
-		return WORKLOAD_ID_SUBQUERY
+		return resourceattr.WORKLOAD_ID_SUBQUERY
 	}
 
 	if planCtx.planner != nil {
 		return planCtx.planner.stmt.WorkloadID
 	}
 
-	return WORKLOAD_ID_UNKNOWN
+	return resourceattr.WORKLOAD_ID_UNKNOWN
 }
 
 // Run executes a physical plan. The plan should have been finalized using

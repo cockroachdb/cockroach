@@ -350,6 +350,7 @@ go_library(
         "//pkg/multitenant/multitenantcpu",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/obs/resourceattr",
         "//pkg/repstream",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",

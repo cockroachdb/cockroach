@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "resourceattr",
@@ -6,9 +6,17 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/obs/resourceattr",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/appstatspb",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
     ],
+)
+
+go_test(
+    name = "resourceattr_test",
+    srcs = ["resourceattr_test.go"],
+    embed = [":resourceattr"],
 )

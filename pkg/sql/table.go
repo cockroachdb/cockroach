@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -356,7 +357,7 @@ func (p *planner) writeTableDescToBatch(
 
 	if tableDesc.IsNew() {
 		if err := runSchemaChangesInTxn(
-			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), WORKLOAD_ID_SCHEMA_CHANGE,
+			ctx, p, tableDesc, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), resourceattr.WORKLOAD_ID_SCHEMA_CHANGE,
 		); err != nil {
 			return err
 		}

@@ -8,14 +8,47 @@ package resourceattr
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+const (
+	WORKLOAD_ID_UNKNOWN = iota
+	WORKLOAD_ID_BULKIO
+	WORKLOAD_ID_BACKUP
+	WORKLOAD_ID_RESTORE
+	WORKLOAD_ID_IMPORT
+	WORKLOAD_ID_CDC
+	WORKLOAD_ID_JOB
+	WORKLOAD_ID_INTERNAL_UNKNOWN
+	WORKLOAD_ID_SUBQUERY
+	WORKLOAD_ID_BACKFILL
+	WORKLOAD_ID_SCHEMA_CHANGE
+	WORKLOAD_ID_MVCC_GC
+)
+
+var workloadIDToName = map[uint64]string{
+	WORKLOAD_ID_UNKNOWN:          "UNKNOWN",
+	WORKLOAD_ID_BULKIO:           "BULKIO",
+	WORKLOAD_ID_BACKUP:           "BACKUP",
+	WORKLOAD_ID_RESTORE:          "RESTORE",
+	WORKLOAD_ID_IMPORT:           "IMPORT",
+	WORKLOAD_ID_CDC:              "CDC",
+	WORKLOAD_ID_JOB:              "JOB",
+	WORKLOAD_ID_INTERNAL_UNKNOWN: "INTERNAL_UNKNOWN",
+	WORKLOAD_ID_SUBQUERY:         "SUBQUERY",
+	WORKLOAD_ID_BACKFILL:         "BACKFILL",
+	WORKLOAD_ID_SCHEMA_CHANGE:    "SCHEMA_CHANGE",
+	WORKLOAD_ID_MVCC_GC:          "MVCC_GC",
+}
 
 type ResourceAttr struct {
 	syncutil.Mutex
@@ -85,15 +118,61 @@ func (ra *ResourceAttr) SummaryAndClear() *ResourceAttrSum {
 	return sum
 }
 
+type workloadEntry struct {
+	workloadID uint64
+	name       string
+	cpuTime    float64
+}
+
 func (ras *ResourceAttrSum) String() string {
 	if len(ras.workloadCpu) == 0 {
 		return "(empty)"
 	}
 
+	// Collect entries and find max workload name length for alignment
+	entries := make([]workloadEntry, 0, len(ras.workloadCpu))
+	maxLen := 0
+	for workloadID, cpuTime := range ras.workloadCpu {
+		name := workloadName(workloadID)
+		entries = append(entries, workloadEntry{
+			workloadID: workloadID,
+			name:       name,
+			cpuTime:    cpuTime,
+		})
+		if len(name) > maxLen {
+			maxLen = len(name)
+		}
+	}
+
+	// Sort by CPU time descending (highest first)
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].cpuTime > entries[j].cpuTime
+	})
+
 	var b strings.Builder
 	b.WriteString("\n")
-	for workloadID, cpuTime := range ras.workloadCpu {
-		fmt.Fprintf(&b, "  Workload %-10d CPU: %0.2f ns\n", workloadID, cpuTime)
+	for _, entry := range entries {
+		fmt.Fprintf(&b, "  Workload %-*s CPU: %s\n", maxLen, entry.name, formatCPUTime(entry.cpuTime))
 	}
 	return b.String()
+}
+
+func formatCPUTime(cpuTimeNanos float64) string {
+	switch {
+	case cpuTimeNanos >= 1e9:
+		return fmt.Sprintf("%8.2f s", cpuTimeNanos/1e9)
+	case cpuTimeNanos >= 1e6:
+		return fmt.Sprintf("%8.2f ms", cpuTimeNanos/1e6)
+	case cpuTimeNanos >= 1e3:
+		return fmt.Sprintf("%8.2f µs", cpuTimeNanos/1e3)
+	default:
+		return fmt.Sprintf("%8.2f ns", cpuTimeNanos)
+	}
+}
+
+func workloadName(workloadID uint64) string {
+	if name, ok := workloadIDToName[workloadID]; ok {
+		return name
+	}
+	return fmt.Sprintf("STATEMENT: %s", sqlstatsutil.EncodeStmtFingerprintIDToString(appstatspb.StmtFingerprintID(workloadID)))
 }
