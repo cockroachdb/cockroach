@@ -29,6 +29,9 @@ func registerDatabaseDrop(r registry.Registry) {
 		spec.CPU(8),
 		spec.WorkloadNode(),
 		spec.WorkloadNodeCPU(8),
+		// The use of snapshots requires workload nodes to also have an attached disk.
+		// See: https://github.com/cockroachdb/cockroach/issues/156760
+		spec.WorkloadRequiresDisk(),
 		// The dataset uses above 4TiB of data, and if we have to create the dataset
 		// via IMPORT we need some buffer. 500GiB per node (4.5TiB total) has been
 		// found to fail regularly in the past since the IMPORT job fails when any

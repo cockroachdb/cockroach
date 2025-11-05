@@ -29,6 +29,9 @@ func registerIndexBackfill(r registry.Registry) {
 		10, /* nodeCount */
 		spec.CPU(8),
 		spec.WorkloadNode(),
+		// The use of snapshots requires workload nodes to also have an attached disk.
+		// See: https://github.com/cockroachdb/cockroach/issues/156760
+		spec.WorkloadRequiresDisk(),
 		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(500),
 		spec.GCEVolumeType("pd-ssd"),
