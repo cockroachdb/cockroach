@@ -155,6 +155,7 @@ var informationSchema = virtualSchema{
 		catconstants.InformationSchemaViewRoutineUsageTableID:             informationSchemaViewRoutineUsageTable,
 		catconstants.InformationSchemaViewTableUsageTableID:               informationSchemaViewTableUsageTable,
 		catconstants.InformationSchemaViewsTableID:                        informationSchemaViewsTable,
+		catconstants.InformationSchemaCrdbIndexUsageStatsiticsTableID:     informationSchemaCrdbIndexUsageStatsTable,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -2539,6 +2540,14 @@ var informationSchemaViewTableUsageTable = virtualSchemaTable{
 		return nil
 	},
 	unimplemented: true,
+}
+
+var informationSchemaCrdbIndexUsageStatsTable = virtualSchemaTable{
+	comment: `cluster-wide index usage statistics (in-memory, not durable).` +
+		`Querying this table is an expensive operation since it creates a` +
+		`cluster-wide RPC fanout.`,
+	schema:    vtable.CRDBIndexUsageStatistics,
+	generator: indexUsageStatisticsGenerator,
 }
 
 // forEachSchema iterates over the physical and virtual schemas.
