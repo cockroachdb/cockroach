@@ -126,10 +126,12 @@ func getRelevantDescChanges(
 		}
 		for _, i := range starting {
 			switch desc := i.(type) {
-			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor, catalog.FunctionDescriptor:
 				// We need to add to interestingIDs so that if we later see a delete for
 				// this ID we still know it is interesting to us, even though we will not
 				// have a parentID at that point (since the delete is a nil desc).
+				//
+				// In other words, descriptor exists at start time, but not at end time.
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
 					interestingIDs[desc.GetID()] = struct{}{}
 				}
@@ -159,7 +161,9 @@ func getRelevantDescChanges(
 		} else if change.Desc != nil {
 			desc := backupinfo.NewDescriptorForManifest(change.Desc)
 			switch desc := desc.(type) {
-			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor:
+			case catalog.TableDescriptor, catalog.TypeDescriptor, catalog.SchemaDescriptor, catalog.FunctionDescriptor:
+				// In other words, does not exist at start or end time, but within the
+				// interval.
 				if _, ok := interestingParents[desc.GetParentID()]; ok {
 					interestingIDs[desc.GetID()] = struct{}{}
 					interestingChanges = append(interestingChanges, change)
