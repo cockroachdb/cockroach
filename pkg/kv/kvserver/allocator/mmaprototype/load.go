@@ -228,7 +228,7 @@ func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 type meansForStoreSet struct {
 	constraintsDisj
 	meansLoad
-	stores         storeIDPostingList
+	stores         storeSet
 	storeSummaries map[roachpb.StoreID]storeLoadSummary
 }
 

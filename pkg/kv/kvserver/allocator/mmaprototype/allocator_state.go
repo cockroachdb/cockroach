@@ -353,8 +353,8 @@ func (a *allocatorState) rebalanceStores(
 
 	var changes []PendingRangeChange
 	var disj [1]constraintsConj
-	var storesToExclude storeIDPostingList
-	var storesToExcludeForRange storeIDPostingList
+	var storesToExclude storeSet
+	var storesToExcludeForRange storeSet
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	scratchStores := map[roachpb.StoreID]struct{}{}
 	// The caller has a fixed concurrency limit it can move ranges at, when it
@@ -461,7 +461,7 @@ func (a *allocatorState) rebalanceStores(
 						store.StoreID, rangeID))
 				}
 				cands, _ := rstate.constraints.candidatesToMoveLease()
-				var candsPL storeIDPostingList
+				var candsPL storeSet
 				for _, cand := range cands {
 					candsPL.insert(cand.storeID)
 				}
@@ -1347,7 +1347,7 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 func (a *allocatorState) computeCandidatesForRange(
 	ctx context.Context,
 	expr constraintsDisj,
-	storesToExclude storeIDPostingList,
+	storesToExclude storeSet,
 	loadSheddingStore roachpb.StoreID,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := a.cs.meansMemo.getMeans(expr)

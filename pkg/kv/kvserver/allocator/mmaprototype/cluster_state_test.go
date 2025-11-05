@@ -207,8 +207,8 @@ func printPendingChangesTest(changes []*pendingReplicaChange) string {
 	return buf.String()
 }
 
-func testingGetStoreList(t *testing.T, cs *clusterState) storeIDPostingList {
-	var clusterStoreList, nodeStoreList storeIDPostingList
+func testingGetStoreList(t *testing.T, cs *clusterState) storeSet {
+	var clusterStoreList, nodeStoreList storeSet
 	// Ensure that the storeIDs in the cluster store map and the stores listed
 	// under each node are the same.
 	for storeID := range cs.stores {

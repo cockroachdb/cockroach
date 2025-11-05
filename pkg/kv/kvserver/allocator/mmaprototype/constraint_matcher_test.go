@@ -77,15 +77,15 @@ func TestConstraintMatcher(t *testing.T) {
 						Value: interner.toString(c.value),
 					}
 					sepStr := ""
-					if len(pl.storeIDPostingList) > 0 {
+					if len(pl.storeSet) > 0 {
 						sepStr = " "
 					}
 					fmt.Fprintf(b, "%s:%s", rc.String(), sepStr)
-					printPostingList(b, pl.storeIDPostingList)
+					printPostingList(b, pl.storeSet)
 					fmt.Fprintf(b, "\n")
 				}
 				fmt.Fprintf(b, "all-stores: ")
-				printPostingList(b, cm.allStores.storeIDPostingList)
+				printPostingList(b, cm.allStores.storeSet)
 				fmt.Fprintf(b, "\n")
 				err := cm.checkConsistency()
 				require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestConstraintMatcher(t *testing.T) {
 						disj = append(disj, interner.internConstraintsConj(cc))
 					}
 				}
-				var pl storeIDPostingList
+				var pl storeSet
 				if len(disj) <= 1 {
 					if randutil.FastUint32()%2 == 0 {
 						var conj []internedConstraint
