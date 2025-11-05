@@ -1543,8 +1543,9 @@ func getNameEntryDescriptorType(parentID, parentSchemaID descpb.ID) string {
 }
 
 // InitializeSequence is part of the scexec.Catalog interface.
-func (s *TestState) InitializeSequence(id descpb.ID, startVal int64) {
+func (s *TestState) InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error {
 	s.LogSideEffectf("initializing sequence %d with starting value of %d", id, startVal)
+	return nil
 }
 
 // CheckMaxSchemaObjects is part of the scexec.Catalog interface.

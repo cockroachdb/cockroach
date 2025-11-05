@@ -1552,6 +1552,47 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 		true)
 }
 
+// TestTruncateLarge truncates a large number of tables in a single transaction.
+func TestTruncateLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "truncating a large number of tables")
+
+	testutils.RunTrueAndFalse(t, "batch limit set", func(t *testing.T, batchLimitSet bool) {
+		ctx := context.Background()
+		s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		createCommand := strings.Builder{}
+		truncateCommand := strings.Builder{}
+		sqlDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='5m'")
+		if batchLimitSet {
+			sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.batch_flush_threshold_size='2m'")
+		}
+		// Generate the truncate and create table commands.
+		const numTables = 500
+		truncateCommand.WriteString("TRUNCATE TABLE ")
+		for i := range numTables {
+			createCommand.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY, j INT, k INT, INDEX (j), INDEX (k), UNIQUE (j, k));\n", i))
+			truncateCommand.WriteString(fmt.Sprintf("t%d", i))
+			if i != numTables-1 {
+				truncateCommand.WriteString(", ")
+			}
+		}
+		// Execute the create commands first.
+		sqlDB.Exec(t, createCommand.String())
+
+		// The default limit is larger than our reduced raft command size, so if the
+		// limit is not modified, the truncate command will fail.
+		if batchLimitSet {
+			sqlDB.Exec(t, truncateCommand.String())
+		} else {
+			sqlDB.ExpectErr(t, "command is too large", truncateCommand.String())
+		}
+	})
+
+}
+
 func BenchmarkDropLargeDatabaseWithGenerateTestObjects(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
