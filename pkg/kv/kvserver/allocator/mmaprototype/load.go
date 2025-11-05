@@ -492,7 +492,7 @@ func loadSummaryForDimension(
 	meanLoad LoadValue,
 	meanUtil float64,
 ) (summary loadSummary) {
-	loadSummary := loadLow
+	summ := loadLow
 	if dim == WriteBandwidth && capacity == UnknownCapacity {
 		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
 		// value is somewhat arbitrary, but is based on EBS gp3 having a default
@@ -546,13 +546,13 @@ func loadSummaryForDimension(
 		meanFractionNoChange = 0.05
 	)
 	if fractionAbove > meanFractionSlow {
-		loadSummary = overloadSlow
+		summ = overloadSlow
 	} else if fractionAbove < meanFractionLow {
-		loadSummary = loadLow
+		summ = loadLow
 	} else if fractionAbove >= meanFractionNoChange {
-		loadSummary = loadNoChange
+		summ = loadNoChange
 	} else {
-		loadSummary = loadNormal
+		summ = loadNormal
 	}
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
 		// Further tune the summary based on utilization.
@@ -575,9 +575,9 @@ func loadSummaryForDimension(
 		if meanUtil*1.75 < fractionUsed {
 			return min(summaryUpperBound, overloadSlow)
 		}
-		return min(summaryUpperBound, max(loadSummary, loadNoChange))
+		return min(summaryUpperBound, max(summ, loadNoChange))
 	}
-	return min(summaryUpperBound, loadSummary)
+	return min(summaryUpperBound, summ)
 }
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
