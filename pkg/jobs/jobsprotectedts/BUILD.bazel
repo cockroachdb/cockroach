@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "jobsprotectedts",
@@ -26,22 +26,5 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_test(
-    name = "jobsprotectedts_test",
-    size = "medium",
-    srcs = [
-        "jobs_protected_ts_test.go",
-        "main_test.go",
-    ],
-    deps = [
-        "//pkg/security/securityassets",
-        "//pkg/security/securitytest",
-        "//pkg/server",
-        "//pkg/testutils/serverutils",
-        "//pkg/testutils/testcluster",
-        "//pkg/util/randutil",
     ],
 )
