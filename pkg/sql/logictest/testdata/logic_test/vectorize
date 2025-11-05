@@ -1348,3 +1348,26 @@ statement ok
 RESET vectorize
 
 subtest end
+
+# Regression test for #152771. Gracefully plan operators that cannot handle NULL
+# inputs.
+statement ok
+CREATE TABLE t152771 (i INT)
+
+statement ok
+INSERT INTO t152771 VALUES (0)
+
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+PREPARE p(INT, INT, INT, INT) AS UPDATE t152771 SET i=($1-$2)+($3-$4)
+
+statement ok
+EXECUTE p(NULL, 3, 33, NULL)
+
+statement ok
+DEALLOCATE p
+
+statement ok
+RESET plan_cache_mode
