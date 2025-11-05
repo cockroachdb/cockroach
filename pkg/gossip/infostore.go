@@ -272,7 +272,7 @@ func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callba
 				// metrics accordingly.
 				afterQueue := crtime.NowMono()
 				for _, work := range wq {
-					queueDur := work.schedulingTime.Sub(afterQueue)
+					queueDur := afterQueue.Sub(work.schedulingTime)
 					is.metrics.CallbacksPending.Dec(1)
 					if queueDur >= minCallbackDurationToRecord {
 						is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
