@@ -332,24 +332,8 @@ func (n *insertFastPathNode) Close(ctx context.Context) {
 	insertFastPathNodePool.Put(n)
 }
 
-func (n *insertFastPathNode) rowsWritten() int64 {
-	return n.run.rowsAffected()
-}
-
-func (n *insertFastPathNode) indexRowsWritten() int64 {
-	return n.run.ti.indexRowsWritten
-}
-
-func (n *insertFastPathNode) indexBytesWritten() int64 {
-	return n.run.ti.indexBytesWritten
-}
-
 func (n *insertFastPathNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
-}
-
-func (n *insertFastPathNode) kvCPUTime() int64 {
-	return n.run.ti.kvCPUTime + n.run.kvCPUTime
 }
 
 // See planner.autoCommit.

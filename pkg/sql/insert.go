@@ -316,24 +316,8 @@ func (n *insertNode) enableAutoCommit() {
 	n.run.ti.enableAutoCommit()
 }
 
-func (n *insertNode) rowsWritten() int64 {
-	return n.run.rowsAffected()
-}
-
-func (n *insertNode) indexRowsWritten() int64 {
-	return n.run.ti.indexRowsWritten
-}
-
-func (n *insertNode) indexBytesWritten() int64 {
-	return n.run.ti.indexBytesWritten
-}
-
 func (n *insertNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
-}
-
-func (n *insertNode) kvCPUTime() int64 {
-	return n.run.ti.kvCPUTime
 }
 
 // insertProcessor is a LocalProcessor that wraps insertNode execution logic.

@@ -141,34 +141,14 @@ func (n *singleInputPlanNode) SetInput(i int, p planNode) error {
 	return errors.AssertionFailedf("input index %d is out of range", i)
 }
 
-// mutationPlanNode is a specification of planNode for mutations operations
-// (those that insert/update/detele/etc rows).
+// mutationPlanNode is a specification of planNode for mutation operations
+// (those that insert/update/delete/etc rows).
 type mutationPlanNode interface {
 	planNode
-
-	// rowsWritten returns the number of table rows modified by this planNode.
-	// It does not include rows written to secondary indexes. It should only be
-	// called once Next returns false.
-	rowsWritten() int64
-
-	// indexRowsWritten returns the number of primary and secondary index rows
-	// modified by this planNode. It is always >= rowsWritten. It should only be
-	// called once Next returns false.
-	indexRowsWritten() int64
-
-	// indexBytesWritten returns the number of primary and secondary index bytes
-	// modified by this planNode. It should only be called once Next returns
-	// false.
-	indexBytesWritten() int64
 
 	// returnsRowsAffected indicates that the planNode returns the number of
 	// rows affected by the mutation, rather than the rows themselves.
 	returnsRowsAffected() bool
-
-	// kvCPUTime returns the cumulative CPU time (in nanoseconds) that KV reported
-	// in BatchResponse headers during the execution of this mutation. It should
-	// only be called once Next returns false.
-	kvCPUTime() int64
 }
 
 // planNodeReadingOwnWrites can be implemented by planNodes which do

@@ -166,28 +166,9 @@ func (r *deleteRangeRun) executeDeleteRange(ctx context.Context, flowCtx *execin
 var _ planNode = &deleteRangeNode{}
 var _ mutationPlanNode = &deleteRangeNode{}
 
-func (d *deleteRangeNode) rowsWritten() int64 {
-	return d.rowsAffected()
-}
-
-func (d *deleteRangeNode) indexRowsWritten() int64 {
-	// Same as rowsWritten, because deleteRangeNode only applies to primary index
-	// rows (it is not used if there's a secondary index on the table).
-	return d.rowsAffected()
-}
-
-func (d *deleteRangeNode) indexBytesWritten() int64 {
-	// No bytes counted as written for a deletion.
-	return 0
-}
-
 func (d *deleteRangeNode) returnsRowsAffected() bool {
 	// DeleteRange always returns the number of rows deleted.
 	return true
-}
-
-func (d *deleteRangeNode) kvCPUTime() int64 {
-	return d.kvCPUTimeAccum
 }
 
 func (d *deleteRangeNode) startExec(params runParams) error {
