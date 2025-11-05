@@ -174,24 +174,8 @@ func (n *upsertNode) Close(ctx context.Context) {
 	upsertNodePool.Put(n)
 }
 
-func (n *upsertNode) rowsWritten() int64 {
-	return n.run.tw.rowsAffected()
-}
-
-func (n *upsertNode) indexRowsWritten() int64 {
-	return n.run.tw.indexRowsWritten
-}
-
-func (n *upsertNode) indexBytesWritten() int64 {
-	return n.run.tw.indexBytesWritten
-}
-
 func (n *upsertNode) returnsRowsAffected() bool {
 	return !n.run.tw.rowsNeeded
-}
-
-func (n *upsertNode) kvCPUTime() int64 {
-	return n.run.tw.kvCPUTime
 }
 
 func (n *upsertNode) enableAutoCommit() {

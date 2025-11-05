@@ -195,25 +195,8 @@ func (d *deleteNode) Close(ctx context.Context) {
 	deleteNodePool.Put(d)
 }
 
-func (d *deleteNode) rowsWritten() int64 {
-	return d.run.rowsAffected()
-}
-
-func (d *deleteNode) indexRowsWritten() int64 {
-	return d.run.td.indexRowsWritten
-}
-
-func (d *deleteNode) indexBytesWritten() int64 {
-	// No bytes counted as written for a deletion.
-	return 0
-}
-
 func (d *deleteNode) returnsRowsAffected() bool {
 	return !d.run.rowsNeeded
-}
-
-func (d *deleteNode) kvCPUTime() int64 {
-	return d.run.td.kvCPUTime
 }
 
 func (d *deleteNode) enableAutoCommit() {
