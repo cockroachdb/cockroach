@@ -11,9 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -38,7 +40,8 @@ func TestRuleAssertions(t *testing.T) {
 		nameParts := strings.Split(fullName, "rules.")
 		shortName := nameParts[len(nameParts)-1]
 		t.Run(shortName, func(t *testing.T) {
-			_ = scpb.ForEachElementType(func(e scpb.Element) error {
+			cv := clusterversion.ClusterVersion{Version: rulesVersionKey.Version()}
+			_ = rules.ForEachElementInActiveVersion(cv, func(e scpb.Element) error {
 				e = nonNilElement(e)
 				if err := fn(e); err != nil {
 					t.Errorf("%T: %+v", e, err)

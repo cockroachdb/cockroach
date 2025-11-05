@@ -52,10 +52,12 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":release_25_2"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/schemachanger/rel",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/opgen",
+        "//pkg/sql/schemachanger/scplan/internal/rules",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/types",
         "//pkg/testutils/datapathutils",
