@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -319,7 +320,7 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 			Spec:              &spec,
 			TraceKV:           c.rfArgs.traceKV,
 			TraceKVEvery:      &util.EveryN{N: c.rfArgs.traceKVLogFrequency},
-			WorkloadID:        5, // TODO(davidh): Move workloadID constants into a utils package for easy import
+			WorkloadID:        resourceattr.WORKLOAD_ID_CDC,
 		},
 	); err != nil {
 		return nil, nil, err

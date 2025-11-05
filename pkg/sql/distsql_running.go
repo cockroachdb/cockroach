@@ -711,6 +711,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
 const executingParallelAndSerialChecks = "executing %d checks concurrently and %d checks serially"
 
+// TODO(davidh): unclear if this works or is useful. Probably needs rethinking.
 func determineWorkloadID(ctx context.Context, planCtx *PlanningCtx, txn *kv.Txn) uint64 {
 	// First check if this is a user query
 	if planCtx.planner == nil {

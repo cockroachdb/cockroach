@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -178,7 +179,7 @@ func (cb *ColumnBackfiller) init(
 			Spec:                       &spec,
 			TraceKV:                    traceKV,
 			ForceProductionKVBatchSize: cb.evalCtx.TestingKnobs.ForceProductionValues,
-			WorkloadID:                 9, // TODO(davidh): import workloadID constants
+			WorkloadID:                 resourceattr.WORKLOAD_ID_BACKFILL,
 		},
 	)
 }
@@ -1420,7 +1421,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			Spec:                       &spec,
 			TraceKV:                    traceKV,
 			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
-			WorkloadID:                 9, // TODO(davidh): import workloadID constants
+			WorkloadID:                 resourceattr.WORKLOAD_ID_BACKFILL,
 		},
 	); err != nil {
 		return nil, nil, memUsedPerChunk, err

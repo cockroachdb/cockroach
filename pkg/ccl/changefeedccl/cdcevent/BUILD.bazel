@@ -16,6 +16,7 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/obs/resourceattr",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

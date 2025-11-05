@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -664,7 +665,7 @@ func (mgcq *mvccGCQueue) process(
 ) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
-	defer repl.MeasureReqCPUNanos(ctx, grunning.Time(), 11 /* MVCC_GC workloadID //TODO(davidh): REPLACE WITH CONST!!! */)
+	defer repl.MeasureReqCPUNanos(ctx, grunning.Time(), resourceattr.WORKLOAD_ID_MVCC_GC)
 
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, conf := repl.DescAndSpanConfig()

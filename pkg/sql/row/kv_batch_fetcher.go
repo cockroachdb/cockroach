@@ -611,9 +611,6 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	ba.Header.IsReverse = f.reverse
 	ba.Header.WorkloadId = f.workloadID
-	if f.workloadID == 0 {
-		log.Dev.Warningf(ctx, "~~~~~~~ ADDED WORKLOAD ID ZERO %v", errors.GetReportableStackTrace(errors.New("for stacktrace")))
-	}
 	if buildutil.CrdbTestBuild {
 		if f.scanFormat == kvpb.COL_BATCH_RESPONSE && f.indexFetchSpec == nil {
 			return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
