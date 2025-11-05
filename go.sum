@@ -550,8 +550,8 @@ github.com/cockroachdb/cockroach-go/v2 v2.4.1 h1:ACVT/zXsuK6waRPVYtDQpsM8pPA7IA/
 github.com/cockroachdb/cockroach-go/v2 v2.4.1/go.mod h1:9U179XbCx4qFWtNhc7BiWLPfuyMVQ7qdAhfrwLz1vH0=
 github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 h1:i0bnjanlWAvM50wHMT7EFyxlt5HQusznWrkwl+HBIsU=
 github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548/go.mod h1:qtkxNlt5i3rrdirfJE/bQeW/IeLajKexErv7jEIV+Uc=
-github.com/cockroachdb/crlib v0.0.0-20251001180057-2a49e1873587 h1:qjG2TrBrPbGRVYp5obcAi8OSsuFJ8s1AElDImHLV9tY=
-github.com/cockroachdb/crlib v0.0.0-20251001180057-2a49e1873587/go.mod h1:ae57yNis2F1FThSNdPdoXfiPOVi8G1TLreCBQYPOdqo=
+github.com/cockroachdb/crlib v0.0.0-20251024155502-a2e0a212ef05 h1:7DV1UcpuwF78hKMC33w8ube+/wawG/57dT8Wo56+vUo=
+github.com/cockroachdb/crlib v0.0.0-20251024155502-a2e0a212ef05/go.mod h1:ae57yNis2F1FThSNdPdoXfiPOVi8G1TLreCBQYPOdqo=
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
 github.com/cockroachdb/datadriven v1.0.3-0.20251006155849-f84f9e519edd h1:vpWCe7VvdQbQ/9wGtlH3i+Oj+9OggKci3lsASL1ydvg=
