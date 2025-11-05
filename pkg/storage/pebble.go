@@ -727,7 +727,6 @@ func spanPolicyFunc(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _
 		return policy, spanPolicyLockTableStartKey, nil
 	}
 	// Lock key. Disable value separation.
-	policy.DisableValueSeparationBySuffix = true
 	policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
 	return policy, spanPolicyLockTableEndKey, nil
 }
