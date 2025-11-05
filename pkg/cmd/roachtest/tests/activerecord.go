@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -245,7 +246,7 @@ func registerActiveRecord(r registry.Registry) {
 		Name:             "activerecord",
 		Owner:            registry.OwnerSQLFoundations,
 		Timeout:          5 * time.Hour,
-		Cluster:          r.MakeClusterSpec(1),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.AllExceptFIPS)),
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
