@@ -26,7 +26,7 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2, GeneratedAsIdentityType: GENERATED_ALWAYS, Value: }, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
@@ -229,7 +229,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, PUBLIC], PUBLIC] -> ABSENT
-    [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2, GeneratedAsIdentityType: GENERATED_ALWAYS, Value: }, PUBLIC], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], BACKFILL_ONLY] -> ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], PUBLIC] -> ABSENT
@@ -261,7 +261,7 @@ PreCommitPhase stage 2 of 2 with 43 MutationType ops
     [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT] -> PUBLIC
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, ReferencedSequenceIDs: [105], Expr: nextval(105:::REGCLASS)}, PUBLIC], ABSENT] -> PUBLIC
-    [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2, GeneratedAsIdentityType: GENERATED_ALWAYS, Value: }, PUBLIC], ABSENT] -> PUBLIC
     [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
