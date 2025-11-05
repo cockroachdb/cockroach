@@ -100,6 +100,7 @@ func registerKV(r registry.Registry) {
 		if opts.smallBlockCache {
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=0.20")
 		}
+		settings.ClusterSettings["server.consistency_check.interval"] = "0"
 		c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
 		db := c.Conn(ctx, t.L(), 1)
