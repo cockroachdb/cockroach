@@ -207,7 +207,7 @@ func printPendingChangesTest(changes []*pendingReplicaChange) string {
 	return buf.String()
 }
 
-func testingGetStoreList(t *testing.T, cs *clusterState) (member, removed storeIDPostingList) {
+func testingGetStoreList(t *testing.T, cs *clusterState) storeIDPostingList {
 	var clusterStoreList, nodeStoreList storeIDPostingList
 	// Ensure that the storeIDs in the cluster store map and the stores listed
 	// under each node are the same.
@@ -222,15 +222,7 @@ func testingGetStoreList(t *testing.T, cs *clusterState) (member, removed storeI
 	require.True(t, clusterStoreList.isEqual(nodeStoreList),
 		"expected store lists to be equal %v != %v", clusterStoreList, nodeStoreList)
 
-	for storeID, ss := range cs.stores {
-		switch ss.storeMembership {
-		case storeMembershipMember, storeMembershipRemoving:
-			member.insert(storeID)
-		case storeMembershipRemoved:
-			removed.insert(storeID)
-		}
-	}
-	return member, removed
+	return clusterStoreList
 }
 
 func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaChange {
@@ -305,8 +297,8 @@ func TestClusterState(t *testing.T) {
 						ns.NodeID, cs.stores[ns.stores[0]].StoreAttributesAndLocality.locality())
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
-						fmt.Fprintf(&buf, "  store-id=%v membership=%v attrs=%s locality-code=%s\n",
-							ss.StoreID, ss.storeMembership, ss.StoreAttrs, ss.localityTiers.str)
+						fmt.Fprintf(&buf, "  store-id=%v attrs=%s locality-code=%s\n",
+							ss.StoreID, ss.StoreAttrs, ss.localityTiers.str)
 					}
 				}
 				return buf.String()
@@ -336,7 +328,7 @@ func TestClusterState(t *testing.T) {
 
 				case "get-load-info":
 					var buf strings.Builder
-					memberStores, _ := testingGetStoreList(t, cs)
+					memberStores := testingGetStoreList(t, cs)
 					for _, storeID := range memberStores {
 						ss := cs.stores[storeID]
 						ns := cs.nodes[ss.NodeID]
@@ -364,27 +356,6 @@ func TestClusterState(t *testing.T) {
 						cs.setStore(sal)
 					}
 					return printNodeListMeta()
-
-				case "set-store-membership":
-					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
-					var storeMembershipVal storeMembership
-					switch str := dd.ScanArg[string](t, d, "membership"); str {
-					case "member":
-						storeMembershipVal = storeMembershipMember
-					case "removing":
-						storeMembershipVal = storeMembershipRemoving
-					case "removed":
-						storeMembershipVal = storeMembershipRemoved
-					}
-					cs.setStoreMembership(storeID, storeMembershipVal)
-
-					var buf strings.Builder
-					nonRemovedStores, removedStores := testingGetStoreList(t, cs)
-					buf.WriteString("member store-ids: ")
-					printPostingList(&buf, nonRemovedStores)
-					buf.WriteString("\nremoved store-ids: ")
-					printPostingList(&buf, removedStores)
-					return buf.String()
 
 				case "store-load-msg":
 					msg := parseStoreLoadMsg(t, d.Input)

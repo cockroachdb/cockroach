@@ -597,37 +597,9 @@ type pendingReplicaChange struct {
 	enactedAtTime time.Time
 }
 
-// TODO(kvoli): This will eventually be used to represent the state of a node's
-// membership. This corresponds to non-decommissioning, decommissioning and
-// decommissioned. Fill in commentary and use.
-type storeMembership int8
-
-const (
-	storeMembershipMember storeMembership = iota
-	storeMembershipRemoving
-	storeMembershipRemoved
-)
-
-func (s storeMembership) String() string {
-	return redact.StringWithoutMarkers(s)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (s storeMembership) SafeFormat(w redact.SafePrinter, _ rune) {
-	switch s {
-	case storeMembershipMember:
-		w.Print("full")
-	case storeMembershipRemoving:
-		w.Print("removing")
-	case storeMembershipRemoved:
-		w.Print("removed")
-	}
-}
-
 // storeState maintains the complete state about a store as known to the
 // allocator.
 type storeState struct {
-	storeMembership
 	storeLoad
 	StoreAttributesAndLocality
 	adjusted struct {
@@ -1857,14 +1829,6 @@ func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 		cs.constraintMatcher.setStore(sal)
 		cs.stores[sal.StoreID] = ss
 		ns.stores = append(ns.stores, sal.StoreID)
-	}
-}
-
-func (cs *clusterState) setStoreMembership(storeID roachpb.StoreID, state storeMembership) {
-	if ss, ok := cs.stores[storeID]; ok {
-		ss.storeMembership = state
-	} else {
-		panic(fmt.Sprintf("store %d not found in cluster state", storeID))
 	}
 }
 
