@@ -493,10 +493,6 @@ func (a *allocatorState) rebalanceStores(
 						continue
 					}
 					candSls := a.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
-					if sls.fd != fdOK {
-						log.KvDistribution.VInfof(ctx, 2, "skipping store s%d: failure detection status not OK", cand.storeID)
-						continue
-					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
 						StoreID:              cand.storeID,
 						storeLoadSummary:     candSls,
@@ -608,7 +604,7 @@ func (a *allocatorState) rebalanceStores(
 		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 		// the other stores on this node from receiving replicas shed by this
 		// store.
-		excludeStoresOnNode := store.nls > overloadSlow || store.fd != fdOK
+		excludeStoresOnNode := store.nls > overloadSlow
 		storesToExclude = storesToExclude[:0]
 		if excludeStoresOnNode {
 			nodeID := ss.NodeID
@@ -814,15 +810,6 @@ func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 
 // RemoveNodeAndStores implements the Allocator interface.
 func (a *allocatorState) RemoveNodeAndStores(nodeID roachpb.NodeID) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	panic("unimplemented")
-}
-
-// UpdateFailureDetectionSummary implements the Allocator interface.
-func (a *allocatorState) UpdateFailureDetectionSummary(
-	nodeID roachpb.NodeID, fd failureDetectionSummary,
-) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	panic("unimplemented")
@@ -1381,9 +1368,6 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 		ss := a.cs.stores[storeID]
 		csls := a.cs.meansMemo.getStoreLoadSummary(ctx, means, storeID, ss.loadSeqNum)
-		if csls.fd != fdOK {
-			continue
-		}
 		cset.candidates = append(cset.candidates, candidateInfo{
 			StoreID:          storeID,
 			storeLoadSummary: csls,

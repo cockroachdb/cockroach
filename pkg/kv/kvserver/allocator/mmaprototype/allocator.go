@@ -43,10 +43,6 @@ type Allocator interface {
 	// stores.
 	RemoveNodeAndStores(nodeID roachpb.NodeID) error
 
-	// UpdateFailureDetectionSummary tells the allocator about the current
-	// failure detection state for a node. A node starts in the fdOK state.
-	UpdateFailureDetectionSummary(nodeID roachpb.NodeID, fd failureDetectionSummary) error
-
 	// ProcessStoreLoadMsg provides frequent the state of every store and its
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)

@@ -197,7 +197,6 @@ type storeLoadSummary struct {
 	nls                                                    loadSummary
 	dimSummary                                             [NumLoadDimensions]loadSummary
 	highDiskSpaceUtilization                               bool
-	fd                                                     failureDetectionSummary
 	maxFractionPendingIncrease, maxFractionPendingDecrease float64
 
 	loadSeqNum uint64
@@ -208,9 +207,9 @@ func (sls storeLoadSummary) String() string {
 }
 
 func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(store=%v worst=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f,%.2f(%t))",
+	w.Printf("(store=%v worst=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v frac_pending=%.2f,%.2f(%t))",
 		sls.sls, sls.worstDim, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
-		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPendingIncrease,
+		sls.nls, sls.highDiskSpaceUtilization, sls.maxFractionPendingIncrease,
 		sls.maxFractionPendingDecrease,
 		sls.maxFractionPendingIncrease < epsilon && sls.maxFractionPendingDecrease < epsilon)
 }

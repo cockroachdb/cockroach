@@ -301,8 +301,8 @@ func TestClusterState(t *testing.T) {
 				var buf strings.Builder
 				for _, nodeID := range nodeList {
 					ns := cs.nodes[roachpb.NodeID(nodeID)]
-					fmt.Fprintf(&buf, "node-id=%s failure-summary=%s locality-tiers=%s\n",
-						ns.NodeID, ns.fdSummary, cs.stores[ns.stores[0]].StoreAttributesAndLocality.locality())
+					fmt.Fprintf(&buf, "node-id=%s locality-tiers=%s\n",
+						ns.NodeID, cs.stores[ns.stores[0]].StoreAttributesAndLocality.locality())
 					for _, storeID := range ns.stores {
 						ss := cs.stores[storeID]
 						fmt.Fprintf(&buf, "  store-id=%v membership=%v attrs=%s locality-code=%s\n",
@@ -385,19 +385,6 @@ func TestClusterState(t *testing.T) {
 					buf.WriteString("\nremoved store-ids: ")
 					printPostingList(&buf, removedStores)
 					return buf.String()
-
-				case "update-failure-detection":
-					nodeID := dd.ScanArg[roachpb.NodeID](t, d, "node-id")
-					failureDetectionString := dd.ScanArg[string](t, d, "summary")
-					var fd failureDetectionSummary
-					for i := fdOK; i < fdDead+1; i++ {
-						if i.String() == failureDetectionString {
-							fd = i
-							break
-						}
-					}
-					cs.updateFailureDetectionSummary(nodeID, fd)
-					return printNodeListMeta()
 
 				case "store-load-msg":
 					msg := parseStoreLoadMsg(t, d.Input)

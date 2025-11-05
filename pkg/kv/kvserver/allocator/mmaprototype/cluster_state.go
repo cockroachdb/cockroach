@@ -829,47 +829,10 @@ func newStoreState() *storeState {
 	return ss
 }
 
-// failureDetectionSummary is provided by an external entity and never
-// computed inside the allocator.
-type failureDetectionSummary uint8
-
-// All state transitions are permitted by the allocator. For example, fdDead
-// => fdOk is allowed since the allocator can simply stop shedding replicas
-// and then start adding replicas (if underloaded).
-const (
-	fdOK failureDetectionSummary = iota
-	// Don't add replicas or leases.
-	fdSuspect
-	// Move leases away. Don't add replicas or leases.
-	fdDrain
-	// Node is dead, so move leases and replicas away from it.
-	fdDead
-)
-
-func (fds failureDetectionSummary) String() string {
-	return redact.StringWithoutMarkers(fds)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (fds failureDetectionSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	switch fds {
-	case fdOK:
-		w.Print("ok")
-	case fdSuspect:
-		w.Print("suspect")
-	case fdDrain:
-		w.Print("drain")
-	case fdDead:
-		w.Print("dead")
-	}
-}
-
 type nodeState struct {
 	stores []roachpb.StoreID
 	NodeLoad
 	adjustedCPU LoadValue
-
-	fdSummary failureDetectionSummary
 }
 
 func newNodeState(nodeID roachpb.NodeID) *nodeState {
@@ -1905,13 +1868,6 @@ func (cs *clusterState) setStoreMembership(storeID roachpb.StoreID, state storeM
 	}
 }
 
-func (cs *clusterState) updateFailureDetectionSummary(
-	nodeID roachpb.NodeID, fd failureDetectionSummary,
-) {
-	ns := cs.nodes[nodeID]
-	ns.fdSummary = fd
-}
-
 //======================================================================
 // clusterState accessors:
 //
@@ -2193,7 +2149,6 @@ func computeLoadSummary(
 		nls:                        nls,
 		dimSummary:                 dimSummary,
 		highDiskSpaceUtilization:   highDiskSpaceUtil,
-		fd:                         ns.fdSummary,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
 		loadSeqNum:                 ss.loadSeqNum,
