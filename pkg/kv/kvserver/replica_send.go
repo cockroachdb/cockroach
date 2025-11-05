@@ -128,7 +128,7 @@ func (r *Replica) SendWithWriteBytes(
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
 	startCPU := grunning.Time()
-	defer r.MeasureReqCPUNanos(ctx, startCPU)
+	defer r.MeasureReqCPUNanos(ctx, startCPU, ba.WorkloadId)
 
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		defer pprof.SetGoroutineLabels(ctx)

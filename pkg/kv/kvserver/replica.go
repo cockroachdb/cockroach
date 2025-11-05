@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/tenantrate"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1083,6 +1084,8 @@ type Replica struct {
 	// changes, leaseholder changes, and periodically at the interval of
 	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
 	cachedClosedTimestampPolicy atomic.Pointer[ctpb.RangeClosedTimestampPolicy]
+
+	resourceAttr *resourceattr.ResourceAttr
 }
 
 // String returns the string representation of the replica using an
@@ -2760,7 +2763,7 @@ func init() {
 
 // MeasureReqCPUNanos measures the cpu time spent on this replica processing
 // requests.
-func (r *Replica) MeasureReqCPUNanos(ctx context.Context, start time.Duration) {
+func (r *Replica) MeasureReqCPUNanos(ctx context.Context, start time.Duration, workloadID uint64) {
 	r.measureNanosRunning(start, func(dur float64) {
 		r.loadStats.RecordReqCPUNanos(dur)
 		// NB: the caller also has a tenant ID, but we use the replica's here for
@@ -2777,6 +2780,8 @@ func (r *Replica) MeasureReqCPUNanos(ctx context.Context, start time.Duration) {
 			tm.ReqCPUNanos.Inc(dur)
 			r.store.metrics.releaseTenant(ctx, tm)
 		}
+
+		r.resourceAttr.Record(workloadID, dur)
 	})
 }
 

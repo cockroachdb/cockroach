@@ -145,6 +145,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,
 		}),
 		allocatorToken: &plan.AllocatorToken{},
+		resourceAttr:   store.resourceAttr,
 	}
 	r.sideTransportClosedTimestamp.init(store.cfg.ClosedTimestampReceiver, id.RangeID)
 	r.cachedClosedTimestampPolicy.Store(new(ctpb.RangeClosedTimestampPolicy))

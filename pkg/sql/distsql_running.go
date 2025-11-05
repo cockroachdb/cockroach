@@ -722,6 +722,7 @@ const (
 	WORKLOAD_ID_SUBQUERY
 	WORKLOAD_ID_BACKFILL
 	WORKLOAD_ID_SCHEMA_CHANGE
+	WORKLOAD_ID_MVCC_GC
 )
 
 func determineWorkloadID(ctx context.Context, planCtx *PlanningCtx, txn *kv.Txn) uint64 {

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
@@ -424,6 +425,8 @@ type Node struct {
 
 	// licenseEnforcer is used to enforce license policies on the cluster
 	licenseEnforcer *license.Enforcer
+
+	workloadObserver *resourceattr.ResourceAttr
 }
 
 var _ kvpb.InternalServer = &Node{}
@@ -597,11 +600,13 @@ func NewNode(
 		spanStatsCollector:    spanstatscollector.New(cfg.Settings),
 		proxySender:           proxySender,
 		licenseEnforcer:       licenseEnforcer,
+		workloadObserver:      resourceattr.NewResourceAttr(10000, stopper),
 	}
 	n.perConsumerCatchupLimiterMu.limiters = make(map[int64]*perConsumerLimiter)
 	n.diskSlowCoalescerMu.lastDiskSlow = make(map[roachpb.StoreID]time.Time)
 	n.versionUpdateMu.updateCh = make(chan struct{})
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
+	n.storeCfg.ResourceAttr = n.workloadObserver
 	return n
 }
 

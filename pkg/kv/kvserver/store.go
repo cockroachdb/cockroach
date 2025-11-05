@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
+	"github.com/cockroachdb/cockroach/pkg/obs/resourceattr"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftlogger"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -1161,6 +1162,8 @@ type Store struct {
 
 	// diskMonitor provides metrics for the disk associated with this store.
 	diskMonitor *disk.Monitor
+
+	resourceAttr *resourceattr.ResourceAttr
 }
 
 var _ kv.Sender = &Store{}
@@ -1354,6 +1357,8 @@ type StoreConfig struct {
 	// RangeCount is populated by the node and represents the total number of
 	// ranges this node has.
 	RangeCount *atomic.Int64
+
+	ResourceAttr *resourceattr.ResourceAttr
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1504,6 +1509,7 @@ func NewStore(
 		nodeCapacityProvider:              cfg.NodeCapacityProvider,
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
+		resourceAttr:                      cfg.ResourceAttr,
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
 	// Track the maxScore over the last 5 minutes, in one minute windows.
