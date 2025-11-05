@@ -7,6 +7,10 @@ package mmaprototype
 
 import "github.com/cockroachdb/redact"
 
+// A storeLoadSummary is a classification of a store's load relative to the mean
+// load across a set of permissible stores (often, all that satisfy the
+// constraints for a given range). Sources and targets are primarily picked
+// based on the store- and node level load summaries contained in this struct.
 type storeLoadSummary struct {
 	worstDim                                               LoadDimension // for logging only
 	sls                                                    loadSummary
