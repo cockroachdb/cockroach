@@ -331,7 +331,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 		{
 			Name:   tenantMetricName,
-			Source: "1-2",
+			Source: "1-3",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
@@ -359,7 +359,7 @@ func TestServerQueryTenant(t *testing.T) {
 		},
 		{
 			Name:   tenantMetricName,
-			Source: "10-2",
+			Source: "10-3",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
@@ -530,7 +530,7 @@ func TestServerQueryTenant(t *testing.T) {
 	require.Equal(t, expectedSystemResult, systemResponse)
 
 	// App tenant should only report metrics with its tenant ID in the secondary source field
-	tenantID := roachpb.MustMakeTenantID(2)
+	tenantID := roachpb.MustMakeTenantID(3)
 	expectedTenantResponse := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -571,7 +571,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	tenant, _ := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
+	_, err = systemDB.Exec("ALTER TENANT [3] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -638,7 +638,7 @@ func TestServerQueryTenant(t *testing.T) {
 			},
 		},
 	}
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_all_metrics=true;\n")
+	_, err = systemDB.Exec("ALTER TENANT [3] GRANT CAPABILITY can_view_all_metrics=true;\n")
 	if err != nil {
 		t.Fatal(err)
 	}
