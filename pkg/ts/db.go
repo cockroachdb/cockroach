@@ -195,32 +195,32 @@ func (db *DB) PollChildMetricsSource(
 // start begins the goroutine for the child metrics poller.
 func (p *childMetricsPoller) start() (firstDone <-chan struct{}) {
 	ch := make(chan struct{}) // closed on completion of first poll
-	ctx, hdl, err := p.stopper.GetHandle(
-		p.AnnotateCtx(context.Background()), stop.TaskOpts{TaskName: "ts-child-poller"},
+	
+	err := p.stopper.RunAsyncTaskEx(
+		p.AnnotateCtx(context.Background()),
+		stop.TaskOpts{TaskName: "ts-child-poller"},
+		func(ctx context.Context) {
+			var ticker timeutil.Timer
+			ticker.Reset(0) // poll immediately
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					ticker.Reset(p.frequency)
+					p.poll(ctx)
+					if ch != nil {
+						close(ch)
+						ch = nil
+					}
+				case <-p.stopper.ShouldQuiesce():
+					return
+				}
+			}
+		},
 	)
 	if err != nil {
 		close(ch)
-		return ch
 	}
-	go func(ctx context.Context, ch chan struct{}) {
-		defer hdl.Activate(ctx).Release(ctx)
-		var ticker timeutil.Timer
-		ticker.Reset(0) // poll immediately
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				ticker.Reset(p.frequency)
-				p.poll(ctx)
-				if ch != nil {
-					close(ch)
-					ch = nil
-				}
-			case <-p.stopper.ShouldQuiesce():
-				return
-			}
-		}
-	}(ctx, ch)
 	return ch
 }
 
@@ -255,32 +255,32 @@ func (p *childMetricsPoller) poll(ctx context.Context) {
 // time series data from the DataSource and store it.
 func (p *poller) start() (firstDone <-chan struct{}) {
 	ch := make(chan struct{}) // closed on completion of first poll
-	ctx, hdl, err := p.stopper.GetHandle(
-		p.AnnotateCtx(context.Background()), stop.TaskOpts{TaskName: "ts-poller"},
+	
+	err := p.stopper.RunAsyncTaskEx(
+		p.AnnotateCtx(context.Background()),
+		stop.TaskOpts{TaskName: "ts-poller"},
+		func(ctx context.Context) {
+			var ticker timeutil.Timer
+			ticker.Reset(0) // poll immediately
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					ticker.Reset(p.frequency)
+					p.poll(ctx)
+					if ch != nil {
+						close(ch)
+						ch = nil
+					}
+				case <-p.stopper.ShouldQuiesce():
+					return
+				}
+			}
+		},
 	)
 	if err != nil {
 		close(ch)
-		return ch
 	}
-	go func(ctx context.Context, ch chan struct{}) {
-		defer hdl.Activate(ctx).Release(ctx)
-		var ticker timeutil.Timer
-		ticker.Reset(0) // poll immediately
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				ticker.Reset(p.frequency)
-				p.poll(ctx)
-				if ch != nil {
-					close(ch)
-					ch = nil
-				}
-			case <-p.stopper.ShouldQuiesce():
-				return
-			}
-		}
-	}(ctx, ch)
 	return ch
 }
 
