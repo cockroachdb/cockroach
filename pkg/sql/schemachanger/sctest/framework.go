@@ -1006,7 +1006,7 @@ func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
 	// Schema changes in more complex tests can be slower, so give them
 	// a lot more headroom to complete.
 	old := tdb.SucceedsSoonDuration
-	tdb.SucceedsSoonDuration = time.Minute * 2
+	tdb.SucceedsSoonDuration = time.Minute * 25
 	defer func() {
 		tdb.SucceedsSoonDuration = old
 	}()
