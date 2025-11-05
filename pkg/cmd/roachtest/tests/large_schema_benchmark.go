@@ -170,6 +170,12 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// a large number of tables
 						_, err = conn.Exec("SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=500")
 						require.NoError(t, err)
+						// Disable the schema object count limit to allow creating 40,000+
+						// tables. This is a guardrail that prevents unbounded growth of the
+						// descriptor table, but for this benchmark we intentionally want to
+						// test with a large number of tables.
+						_, err = conn.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0")
+						require.NoError(t, err)
 						// Create a user that will be used for authentication for the REST
 						// API calls.
 						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
