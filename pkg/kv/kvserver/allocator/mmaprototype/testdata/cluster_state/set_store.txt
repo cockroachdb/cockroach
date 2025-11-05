@@ -1,0 +1,29 @@
+set-store
+  store-id=1 node-id=1 attrs=orange,black locality-tiers=region=europe
+----
+node-id=1 locality-tiers=region=europe,node=1
+  store-id=1 attrs=orange,black locality-code=1:2:
+
+# Different attributes (though one is present in both).
+set-store
+  store-id=1 node-id=1 attrs=silver,black,tan locality-tiers=region=europe
+----
+node-id=1 locality-tiers=region=europe,node=1
+  store-id=1 attrs=orange,black locality-code=1:2:
+
+# Different locality.
+set-store
+  store-id=1 node-id=1 attrs=silver,black,tan locality-tiers=region=asia
+----
+node-id=1 locality-tiers=region=europe,node=1
+  store-id=1 attrs=orange,black locality-code=1:2:
+
+# Both change. Throw in another store just for good measure.
+set-store
+  store-id=1 node-id=1 attrs=rainbow locality-tiers=planet=earth,island=kiribati
+  store-id=2 node-id=2 attrs=magenta locality-tiers=region=us-east1
+----
+node-id=1 locality-tiers=region=europe,node=1
+  store-id=1 attrs=orange,black locality-code=1:2:
+node-id=2 locality-tiers=region=us-east1,node=2
+  store-id=2 attrs=magenta locality-code=3:4:
