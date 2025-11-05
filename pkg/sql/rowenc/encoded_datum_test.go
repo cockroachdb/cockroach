@@ -150,7 +150,6 @@ func TestEncDatumNull(t *testing.T) {
 			}
 		}
 	}
-
 }
 
 // checkEncDatumCmp encodes the given values using the given encodings,
