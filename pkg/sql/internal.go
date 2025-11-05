@@ -1468,14 +1468,16 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	return ex.commitSQLTransactionInternal(ctx)
 }
 
-// checkIfStmtIsAllowed returns an error if the internal executor is not bound
-// with the outer-txn-related info but is used to run DDL statements within an
-// outer txn.
-// TODO (janexing): this will be deprecate soon since it's not a good idea
-// to have `extraTxnState` to store the info from a outer txn.
+// checkIfStmtIsAllowed returns an error if the internal executor cannot execute
+// the given stmt.
 func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Txn) error {
 	if stmt == nil {
 		return nil
+	}
+	if _, ok := stmt.(*tree.CopyFrom); ok {
+		// COPY FROM has special handling in the connExecutor, so we can't run
+		// it via the internal executor.
+		return errors.New("COPY cannot be run via the internal executor")
 	}
 	if tree.CanModifySchema(stmt) && txn != nil && ie.extraTxnState == nil {
 		return errors.New("DDL statement is disallowed if internal " +
