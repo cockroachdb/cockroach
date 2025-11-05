@@ -298,3 +298,6 @@ subtest end
 # Regression test for crashing with SHOW COMMIT TIMESTAMP.
 statement error this statement is disallowed
 SELECT crdb_internal.execute_internally('SHOW COMMIT TIMESTAMP;', true);
+
+statement error COPY cannot be run via the internal executor
+SELECT crdb_internal.execute_internally('COPY t FROM STDIN');

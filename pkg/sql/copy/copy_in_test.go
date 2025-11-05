@@ -646,49 +646,51 @@ func TestCopyTransaction(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec(`
+	_, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		CREATE TABLE t (
 			i INT PRIMARY KEY
 		);
-	`); err != nil {
-		t.Fatal(err)
-	}
+	`)
+	require.NoError(t, err)
 
 	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	// Note that, at least with lib/pq, this doesn't actually send a Parse msg
-	// (which we wouldn't support, as we don't support Copy-in in extended
-	// protocol mode). lib/pq has magic for recognizing a Copy.
-	stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Run COPY twice with the first one being rolled back via savepoints.
+	for val, doSavepoint := range []bool{true, false} {
+		func() {
+			if doSavepoint {
+				_, err = txn.Exec("SAVEPOINT s")
+				require.NoError(t, err)
+				defer func() {
+					_, err = txn.Exec("ROLLBACK TO SAVEPOINT s")
+					require.NoError(t, err)
+				}()
+			}
+			// Note that, at least with lib/pq, this doesn't actually send a
+			// Parse msg (which we wouldn't support, as we don't support Copy-in
+			// in extended protocol mode). lib/pq has magic for recognizing a
+			// Copy.
+			stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
+			require.NoError(t, err)
 
-	const val = 2
+			_, err = stmt.Exec(val)
+			require.NoError(t, err)
 
-	_, err = stmt.Exec(val)
-	if err != nil {
-		t.Fatal(err)
-	}
+			err = stmt.Close()
+			require.NoError(t, err)
 
-	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
+			var i int
+			err = txn.QueryRow("SELECT i FROM d.t").Scan(&i)
+			require.NoError(t, err)
+			if i != val {
+				t.Fatalf("expected %d, got %d", val, i)
+			}
+		}()
 	}
-
-	var i int
-	if err := txn.QueryRow("SELECT i FROM d.t").Scan(&i); err != nil {
-		t.Fatal(err)
-	} else if i != val {
-		t.Fatalf("expected 1, got %d", i)
-	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn.Commit())
 }
 
 // TestCopyFromFKCheck verifies that foreign keys are checked during COPY.
