@@ -2,6 +2,7 @@ name: Mark stale backport requests
 
 on:
   schedule:
+  # Run at 10am UTC daily, except weekends
   - cron: "0 10 * * 1-4"
   workflow_dispatch:
 
@@ -12,17 +13,17 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-    - uses: actions/stale@v3
+    - uses: actions/stale@v10
       with:
         operations-per-run: 1000
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-        stale-issue-message: 'Blah'
-        stale-pr-message: 'Reminder: it has been 3 weeks please merge or close your backport!'
+        stale-issue-message: 'Ignored'
+        stale-pr-message: 'Reminder: it has been 2 weeks please merge or close your backport!'
         stale-issue-label: 'no-backport-issue-activity'
         stale-pr-label: 'no-backport-pr-activity'
         close-issue-label: 'X-stale'
         close-pr-label: 'X-stale'
-        days-before-pr-stale: 21
+        days-before-pr-stale: 14
         # Disable this for issues, by setting a very high bar
         days-before-issue-stale: 99999
         days-before-close: 99999
