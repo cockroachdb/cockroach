@@ -22,6 +22,7 @@ go_library(
         "dep_drop_policy.go",
         "dep_drop_trigger.go",
         "dep_garbage_collection.go",
+        "dep_generated_column.go",
         "dep_rename_column.go",
         "dep_rename_constraint.go",
         "dep_rename_table.go",
