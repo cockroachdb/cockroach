@@ -410,7 +410,7 @@ func registerKVRangefeed(r registry.Registry) {
 	testConfigs := []kvRangefeedTest{
 		// Adequately provisioned sink
 		{
-			writeMaxRate:              20000,
+			writeMaxRate:              10000,
 			duration:                  30 * time.Minute,
 			sinkProvisioning:          1.2,
 			splits:                    splits,
@@ -420,7 +420,7 @@ func registerKVRangefeed(r registry.Registry) {
 		},
 		// Underprovisioned sink
 		{
-			writeMaxRate:              20000,
+			writeMaxRate:              10000,
 			duration:                  30 * time.Minute,
 			sinkProvisioning:          0.8,
 			splits:                    splits,
