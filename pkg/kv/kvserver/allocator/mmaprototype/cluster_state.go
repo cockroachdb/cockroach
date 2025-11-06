@@ -934,9 +934,9 @@ type rangeState struct {
 	// see a new RangeMsg.Replicas, and have an existing list of pending
 	// changes, we can individually compare each pending change to the state in
 	// RangeMsg.Replicas and decide whether it is (a) already incorporated or
-	// (b) can still apply in the future or (c) is inconsistent. This simplifies
-	// the code. It also allows composition of many simple pendingReplicaChanges
-	// to represent a complex decision.
+	// (b) can still apply in the future or (c) is inconsistent. Even complex
+	// decisions don't need to refer to a replica multiple times, so this is
+	// not a problematic restriction.
 	//
 	// This separability per replica allows for observing intermediate states
 	// representing partial application (case (a) in the previous paragraph),
