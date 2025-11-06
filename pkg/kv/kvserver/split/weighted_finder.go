@@ -91,7 +91,14 @@ func (f *WeightedFinder) Ready(nowTime time.Time) bool {
 // key) lies with regard to the candidate split keys. We use weighted reservoir
 // sampling (a simplified version of A-Chao algorithm) to get the candidate
 // split keys.
-func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
+//
+// Typically, `key` being equal to `sample.key` increments the right counter
+// because the start key of a range is inclusive (i.e. splitting at that key
+// would move the load to the right side of the split key). However, when we
+// record a point access on behalf of the end key of a ranged request, this
+// reverses: the access would be on the left side, so this cases sets
+// `excl=true`.
+func (f *WeightedFinder) record(key roachpb.Key, weight float64, excl bool) {
 	if f == nil {
 		return
 	}
@@ -117,9 +124,10 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 			//                    Candidate split key
 			// Left range split  [         )
 			// Right range split           [         )
-			if comp := key.Compare(f.samples[i].key); comp < 0 {
+			if comp := key.Compare(f.samples[i].key); comp < 0 || (excl && comp == 0) {
 				// Case key < f.samples[i].Key i.e. key is to the left of the candidate
-				// split key (left is exclusive to split key).
+				// split key (left is exclusive to split key). Exception: if this is an
+				// "exclusive" point access, in the equality case it still ends up here.
 				f.samples[i].left += weight
 			} else {
 				// Case key >= f.samples[i].Key i.e. key is to the right of or on the
@@ -153,11 +161,16 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 // a candidate split key will contribute half of its weight to the left counter
 // and half of its weight to the right counter of that candidate split key.
 func (f *WeightedFinder) Record(span roachpb.Span, weight float64) {
+	const (
+		// See comment on `record` for details.
+		incl = false
+		excl = true
+	)
 	if span.EndKey == nil {
-		f.record(span.Key, weight)
+		f.record(span.Key, weight, incl)
 	} else {
-		f.record(span.Key, weight/2)
-		f.record(span.EndKey, weight/2)
+		f.record(span.Key, weight/2, incl)
+		f.record(span.EndKey, weight/2, excl)
 	}
 }
 
