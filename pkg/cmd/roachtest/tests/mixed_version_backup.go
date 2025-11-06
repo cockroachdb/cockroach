@@ -2145,7 +2145,10 @@ func (d *BackupRestoreTestDriver) runBackup(
 			backupErr <- err
 		}
 		return nil
-	}, task.Name(fmt.Sprintf("backup %s", collection.name)))
+	},
+		task.Logger(l),
+		task.Name(fmt.Sprintf("backup %s", collection.name)),
+	)
 
 	var numPauses int
 	for {
