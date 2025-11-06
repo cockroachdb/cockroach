@@ -408,7 +408,7 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			dbNameStr := tree.NewDString(db.GetName())
 			scNameStr := tree.NewDString(sc.GetName())
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
-			privDesc, err := p.getPrivilegeDescriptor(ctx, table)
+			privDesc, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 			if err != nil {
 				return err
 			}
@@ -1610,7 +1610,7 @@ func populateTablePrivileges(
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
 			tableType := table.GetObjectType()
-			desc, err := p.getPrivilegeDescriptor(ctx, table)
+			desc, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 			if err != nil {
 				return err
 			}
@@ -1623,7 +1623,7 @@ func populateTablePrivileges(
 				for _, priv := range u.Privileges {
 					// We use this function to check for the grant option so that the
 					// object owner also gets is_grantable=true.
-					privs, err := p.getPrivilegeDescriptor(ctx, table)
+					privs, err := p.getImmutablePrivilegeDescriptor(ctx, table)
 					if err != nil {
 						return err
 					}

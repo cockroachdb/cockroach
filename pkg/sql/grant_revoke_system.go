@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -48,7 +49,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 		if err := catprivilege.ValidateSyntheticPrivilegeObject(systemPrivilegeObject); err != nil {
 			return err
 		}
-		syntheticPrivDesc, err := params.p.getPrivilegeDescriptor(params.ctx, systemPrivilegeObject)
+		syntheticPrivDesc, err := params.p.getMutablePrivilegeDescriptor(params.ctx, systemPrivilegeObject)
 		if err != nil {
 			return err
 		}
@@ -255,10 +256,11 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 	}
 }
 
-// getPrivilegeDescriptor returns the privilege descriptor for the
+// getImmutablePrivilegeDescriptor returns the privilege descriptor for the
 // object. Note that for non-descriptor backed objects, we query the
-// system.privileges table to synthesize a PrivilegeDescriptor.
-func (p *planner) getPrivilegeDescriptor(
+// system.privileges table to synthesize a PrivilegeDescriptor. The returned
+// privilege descriptor is not safe for modification.
+func (p *planner) getImmutablePrivilegeDescriptor(
 	ctx context.Context, po privilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
 	switch d := po.(type) {
@@ -293,4 +295,27 @@ func (p *planner) getPrivilegeDescriptor(
 		)
 	}
 	return nil, errors.AssertionFailedf("unknown privilege.Object type %T", po)
+}
+
+// getMutablePrivilegeDescriptor returns the privilege descriptor for the
+// object. Note that for non-descriptor backed objects, we query the
+// system.privileges table to synthesize a PrivilegeDescriptor. The returned
+// copy can be safely modified.
+func (p *planner) getMutablePrivilegeDescriptor(
+	ctx context.Context, po privilege.Object,
+) (*catpb.PrivilegeDescriptor, error) {
+	pd, err := p.getImmutablePrivilegeDescriptor(ctx, po)
+	if err != nil {
+		return nil, err
+	}
+	// No copy is needed for non-synthetic descriptors.
+	switch d := po.(type) {
+	case catalog.TableDescriptor:
+		if !d.IsVirtualTable() {
+			return pd, nil
+		}
+	case catalog.Descriptor:
+		return pd, nil
+	}
+	return protoutil.Clone(pd).(*catpb.PrivilegeDescriptor), nil
 }
