@@ -75,7 +75,7 @@ func (m minioManager) install(ctx context.Context) {
 		fmt.Sprintf(`sudo docker run --name minio -d -p 443:9000 -e "MINIO_ROOT_USER=%s" -e "MINIO_ROOT_PASSWORD=%s" --privileged -v %s:/root/.minio us-central1-docker.pkg.dev/cockroach-testeng-infra/roachtest-support/minio server  /data`,
 			m.key, m.secret, minioDir))
 
-	m.run(ctx, `install s3cmd`, `sudo apt install -y s3cmd`)
+	m.run(ctx, `install s3cmd`, `sudo apt update -q && sudo apt install -y s3cmd`)
 	m.run(ctx, `creating bucket`,
 		fmt.Sprintf(s3cmdSsl, m.key, m.secret, "mb s3://"+m.bucket))
 

@@ -485,6 +485,11 @@ func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args F
 		return err
 	}
 
+	// Ubuntu 24.04+ uses cgroups v2, which requires enabling io accounting
+	if err = s.Run(ctx, l, s.c.Nodes, `sudo systemctl set-property cockroach-system.service IOAccounting=yes`); err != nil {
+		return err
+	}
+
 	if diskStallArgs.RestartNodes {
 		if err = s.StartCluster(ctx, l); err != nil {
 			return err

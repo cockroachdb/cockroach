@@ -90,6 +90,17 @@ func registerRustPostgres(r registry.Registry) {
 			t,
 			c,
 			node,
+			"update apt-get",
+			`sudo apt-get -qq update`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx,
+			t,
+			c,
+			node,
 			"install C linker",
 			"sudo apt-get install build-essential -y",
 		); err != nil {
