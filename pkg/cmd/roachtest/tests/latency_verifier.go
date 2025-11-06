@@ -116,7 +116,7 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		return
 	}
 
-	if lv.targetSteadyLatency == 0 || latency < lv.targetSteadyLatency/2 {
+	if lv.targetSteadyLatency == 0 || latency < lv.targetSteadyLatency {
 		lv.latencyBecameSteady = true
 	}
 	if !lv.latencyBecameSteady {
