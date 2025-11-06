@@ -491,5 +491,30 @@ export default function (props: GraphDashboardProps) {
         )}
       </Axis>
     </LineGraph>,
+
+    <LineGraph
+        title="Store Disk Read Bytes/s"
+        sources={storeSources}
+        isKvGraph={true}
+        tenantSource={tenantSource}
+        tooltip={
+          <div>
+            The number of bytes read from the store's disk per second{" "}
+            {tooltipSelection} (as reported by the OS).
+          </div>
+        }
+        showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Bytes} label="bytes">
+        {storeMetrics(
+          {
+            name: "cr.store.storage.disk.read.bytes",
+            nonNegativeRate: true,
+          },
+          nodeIDs,
+          storeIDsByNodeID,
+        )}
+      </Axis>
+    </LineGraph>,
   ];
 }
