@@ -109,8 +109,8 @@ var cacheSize = settings.RegisterIntSetting(
 	"number of hint entries to store in the LRU",
 	metamorphic.ConstantWithTestChoice[int64](
 		"sql.hints.statement_hints_cache_size",
-		1024,                  /* defaultValue */
-		1, 2, 3, 8, 128, 4096, /* otherValues */
+		1024,                     /* defaultValue */
+		0, 1, 2, 3, 8, 128, 4096, /* otherValues */
 	),
 	settings.NonNegativeInt,
 )
