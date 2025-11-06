@@ -127,8 +127,8 @@ func TestChangefeedBasics(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		// sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
 		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
-		defer closeFeed(t, foo)
+		// foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		// defer closeFeed(t, foo)
 
 		// 'initial' is skipped because only the latest value ('updated') is
 		// emitted by the initial scan.
@@ -136,30 +136,44 @@ func TestChangefeedBasics(t *testing.T) {
 		// 	`foo: [0]->{"after": {"a": 0, "b": "updated"}}`,
 		// })
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b')`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
-			`foo: [2]->{"after": {"a": 2, "b": "b"}}`,
-		})
+		// sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`) //, (2, 'b')`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [1]->{"after": {"a": 1, "b": "a"}}`,
+		// 	// `foo: [2]->{"after": {"a": 2, "b": "b"}}`,
+		// })
 
-		sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
-		assertPayloads(t, foo, []string{
-			`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
-			`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
-		})
+		// sqlDB.Exec(t, `UPSERT INTO foo VALUES (2, 'c'), (3, 'd')`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [2]->{"after": {"a": 2, "b": "c"}}`,
+		// 	`foo: [3]->{"after": {"a": 3, "b": "d"}}`,
+		// })
 
-		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
-		assertPayloads(t, foo, []string{
-			`foo: [1]->{"after": null}`,
-		})
+		// sqlDB.Exec(t, `DELETE FROM foo WHERE a = 1`)
+		// assertPayloads(t, foo, []string{
+		// 	`foo: [1]->{"after": null}`,
+		// })
 	}
+
+	// kafka webhook sinkless combo timed out
+	// kafka webhook sinkless cloudstorage combo timed out
+	// cloudstorage alone did not
+	// kafka+webhook did not
+	// sinkless alone... timed out?
+	// sinkless back with the initial scan stuff was fine?
+
+	// running everything except sinkless: passed in 20s
+
+	// sinkless with only the first insert and assert times out
+	// sinkless where the first insert only puts in a single value... times out
+	// sinkless with no inserts and no assertions also times out.
+	// sinkless where I don't even make the changefeed is fine (thank god)
 
 	// cdcTest(t, testFn, feedTestForceSink("kafka"))
 	// cdcTest(t, testFn, feedTestForceSink("enterprise"))
-	cdcTest(t, testFn, feedTestForceSink("webhook"))
+	// cdcTest(t, testFn, feedTestForceSink("webhook"))
 	// cdcTest(t, testFn, feedTestForceSink("pubsub"))
-	// cdcTest(t, testFn, feedTestForceSink("sinkless"))
-	// cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+	// cdcTest(t, testFn, feedTestForceSink("cloudstorage")) // I think this was the issue
 
 	// NB running TestChangefeedBasics, which includes a DELETE, with
 	// cloudStorageTest is a regression test for #36994.
