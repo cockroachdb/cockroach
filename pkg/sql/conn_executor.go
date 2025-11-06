@@ -76,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4937,29 +4936,4 @@ func (ex *connExecutor) WithAnonymizedStatementAndGist(err error) error {
 		err = errors.WithSafeDetails(err, "plan gist: %s", ex.curStmtPlanGist)
 	}
 	return err
-}
-
-var contextPlanGistKey = ctxutil.RegisterFastValueKey()
-
-func withPlanGist(ctx context.Context, gist string) context.Context {
-	if gist == "" {
-		return ctx
-	}
-	return ctxutil.WithFastValue(ctx, contextPlanGistKey, gist)
-}
-
-func planGistFromCtx(ctx context.Context) string {
-	val := ctxutil.FastValue(ctx, contextPlanGistKey)
-	if val != nil {
-		return val.(string)
-	}
-	return ""
-}
-
-func init() {
-	// Register a function to include the plan gist in crash reports.
-	logcrash.RegisterTagFn("gist", func(ctx context.Context) string {
-		return planGistFromCtx(ctx)
-	})
-	tree.PlanGistFromCtx = planGistFromCtx
 }

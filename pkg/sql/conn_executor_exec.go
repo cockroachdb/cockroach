@@ -3278,7 +3278,6 @@ func (ex *connExecutor) makeExecPlan(
 	// Include gist in error reports.
 	ih := &planner.instrumentation
 	ex.curStmtPlanGist = redact.SafeString(ih.planGist.String())
-	ctx = withPlanGist(ctx, ih.planGist.String())
 	if buildutil.CrdbTestBuild && ih.planGist.String() != "" {
 		// Ensure that the gist can be decoded in test builds.
 		//

@@ -5293,10 +5293,6 @@ func (d *DEnum) ResolvedType() *types.T {
 	return d.EnumTyp
 }
 
-// PlanGistFromCtx returns the plan gist if it is stored in the context. It is
-// injected from the sql package to avoid import cycle.
-var PlanGistFromCtx func(context.Context) string
-
 // Compare implements the Datum interface.
 func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
 	if other == DNull {
@@ -5314,16 +5310,10 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 
 	// We should never be comparing two different versions of the same enum.
 	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
-		var gist redact.SafeString
-		if PlanGistFromCtx != nil {
-			// Plan gist, by construction, doesn't contain any PII, so it's a
-			// safe string.
-			gist = redact.SafeString(PlanGistFromCtx(ctx))
-		}
 		return 0, errors.AssertionFailedf(
-			"comparison of two different versions of enum %s oid %d: versions %d and %d, gist %q",
-			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()), d.EnumTyp.TypeMeta.Version,
-			v.EnumTyp.TypeMeta.Version, gist,
+			"comparison of two different versions of enum %s oid %d: versions %d and %d",
+			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()),
+			d.EnumTyp.TypeMeta.Version, v.EnumTyp.TypeMeta.Version,
 		)
 	}
 

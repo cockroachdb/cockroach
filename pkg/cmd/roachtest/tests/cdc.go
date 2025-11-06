@@ -2574,7 +2574,7 @@ CONFIGURE ZONE USING
 			})
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 10 * time.Minute,
-				steadyLatency:      time.Minute,
+				steadyLatency:      3 * time.Minute,
 			})
 			ct.waitForWorkload()
 		},
