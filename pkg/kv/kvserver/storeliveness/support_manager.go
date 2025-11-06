@@ -34,7 +34,8 @@ var Enabled = settings.RegisterBoolSetting(
 // MessageSender is the interface that defines how Store Liveness messages are
 // sent. Transport is the production implementation of MessageSender.
 type MessageSender interface {
-	SendAsync(ctx context.Context, msg slpb.Message) (sent bool)
+	EnqueueMessage(ctx context.Context, msg slpb.Message) (sent bool)
+	SendAllEnqueuedMessages(ctx context.Context)
 }
 
 // SupportManager orchestrates requesting and providing Store Liveness support.
@@ -323,11 +324,14 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	// Send heartbeats to each remote store.
 	successes := 0
 	for _, msg := range heartbeats {
-		if sent := sm.sender.SendAsync(ctx, msg); sent {
+		if sent := sm.sender.EnqueueMessage(ctx, msg); sent {
 			successes++
 		} else {
 			log.KvExec.Warningf(ctx, "failed to send heartbeat to store %+v", msg.To)
 		}
+	}
+	if HeartbeatSmearingEnabled.Get(&sm.settings.SV) {
+		sm.sender.SendAllEnqueuedMessages(ctx)
 	}
 	sm.metrics.HeartbeatSuccesses.Inc(int64(successes))
 	sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats) - successes))
@@ -424,7 +428,10 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 	sm.metrics.SupportForStores.Update(int64(sm.supporterStateHandler.getNumSupportFor()))
 
 	for _, response := range responses {
-		_ = sm.sender.SendAsync(ctx, response)
+		_ = sm.sender.EnqueueMessage(ctx, response)
+	}
+	if HeartbeatSmearingEnabled.Get(&sm.settings.SV) {
+		sm.sender.SendAllEnqueuedMessages(ctx)
 	}
 	log.KvExec.VInfof(ctx, 2, "sent %d heartbeat responses", len(responses))
 }
