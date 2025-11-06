@@ -333,6 +333,7 @@ func DefaultProviderOpts() *ProviderOpts {
 		MinCPUPlatform:       "Intel Ice Lake",
 		Zones:                nil,
 		Image:                "",
+		ImageProject:         DefaultImageFamilyAMD64,
 		SSDCount:             1,
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
@@ -3488,8 +3489,8 @@ func (p *Provider) imageExists(l *logger.Logger, imageName, project string) bool
 	if p.imageCache.images == nil {
 		p.imageCache.images = make(map[string]string)
 	}
-	if _, ok := p.imageCache.images[cacheKey]; ok {
-		return ok
+	if name, ok := p.imageCache.images[cacheKey]; ok {
+		return name != ""
 	}
 
 	// Check if image exists via gcloud
@@ -3503,7 +3504,13 @@ func (p *Provider) imageExists(l *logger.Logger, imageName, project string) bool
 	exists := cmd.Run() == nil
 
 	// Cache the result
-	p.imageCache.images[cacheKey] = imageName
+	if !exists {
+		// If image doesn't exist, cache empty string
+		p.imageCache.images[cacheKey] = ""
+	} else {
+		// Else cache the image name
+		p.imageCache.images[cacheKey] = imageName
+	}
 
 	return exists
 }

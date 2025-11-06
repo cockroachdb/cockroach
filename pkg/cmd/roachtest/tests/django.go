@@ -65,28 +65,13 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3.10 libpq-dev python3.10-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.10-distutils python3-apt libmemcached-dev`,
+			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-venv python3-pip python3-setuptools build-essential python3-distutils-extra python3-apt libmemcached-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.10 as default", `
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
-    		sudo update-alternatives --config python3`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
-			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
-			ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
+			ctx, t, c, node, "create virtualenv", `python3 -m venv --clear venv`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -169,11 +154,16 @@ func registerDjango(r registry.Registry) {
 		}
 
 		// Write the cockroach config into the test suite to use.
+		settings := cockroachDjangoSettings
+		if c.Architecture() == "fips" {
+			t.L().Printf("Setting up FIPS build settings for architecture %s", c.Architecture())
+			settings = cockroachDjangoFIPSSettings
+		}
 		if err := repeatRunE(
 			ctx, t, c, node, "configuring tests to use cockroach",
 			fmt.Sprintf(
 				"echo \"%s\" > /mnt/data1/django/tests/cockroach_settings.py",
-				cockroachDjangoSettings,
+				settings,
 			),
 		); err != nil {
 			t.Fatal(err)
@@ -238,7 +228,6 @@ python3 runtests.py %[1]s --settings cockroach_settings -v 2 > %[1]s.stdout
 var cockroachDjangoSettings = fmt.Sprintf(`
 from django.test.runner import DiscoverRunner
 
-
 DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
@@ -275,3 +264,163 @@ class NonDescribingDiscoverRunner(DiscoverRunner):
 
 USE_TZ = False
 `, install.DefaultUser, install.DefaultPassword)
+
+var cockroachDjangoFIPSSettings = fmt.Sprintf(`
+# --- Allow MD5/SHA1 for *tests* under FIPS (non-security use), but be compatible with builds
+#     where hashlib doesn't accept the 'usedforsecurity' kwarg. ---
+import hashlib, hmac
+
+def _wrap_nonsec(name):
+    orig = getattr(hashlib, name, None)
+    if orig is None:
+        return
+    def wrapper(*args, **kwargs):
+        # Try with 'usedforsecurity=False'; if not supported, retry without it.
+        kw = dict(kwargs)
+        kw.setdefault('usedforsecurity', False)
+        try:
+            return orig(*args, **kw)
+        except TypeError:
+            return orig(*args, **kwargs)
+    wrapper.__name__ = getattr(orig, '__name__', name)
+    setattr(hashlib, name, wrapper)
+
+for _n in ('md5', 'sha1'):
+    _wrap_nonsec(_n)
+
+_orig_new = hashlib.new
+def _new(name, *args, **kwargs):
+    kw = dict(kwargs)
+    if str(name).lower() in ('md5', 'sha1'):
+        kw.setdefault('usedforsecurity', False)
+    try:
+        return _orig_new(name, *args, **kw)
+    except TypeError:
+        return _orig_new(name, *args, **kwargs)
+hashlib.new = _new
+
+# --- Make hashlib.scrypt importable *and* falsey so scrypt tests skip cleanly ---
+class _FalseyScrypt:
+    def __bool__(self): return False
+    def __call__(self, *a, **k):
+        raise NotImplementedError('scrypt is unavailable under FIPS')
+hashlib.scrypt = _FalseyScrypt()
+
+# --- Pure-Python PBKDF2 that never calls digest() directly ---
+import hashlib, hmac
+
+def _resolve_digest_name(digest):
+    # Accept 'sha1'/'sha256' strings, hashlib constructors, or wrapped callables.
+    if digest is None:
+        return 'sha256'
+    if isinstance(digest, str):
+        return digest.lower()
+    # Try to infer from the function name (works even with wrapped funcs)
+    name = getattr(digest, '__name__', '').lower()
+    for cand in ('sha1', 'sha256', 'sha512', 'md5'):
+        if cand in name:
+            return cand
+    # Last resort: introspect without args via hashlib.new on the name attribute if present
+    # but avoid calling digest() directly (that caused the TypeError).
+    return 'sha256'  # safe default for tests if unknown
+
+def _py_pbkdf2(password, salt, iterations, dklen=None, digest=None):
+    alg = _resolve_digest_name(digest)
+
+    if isinstance(password, str):
+        password = password.encode()
+    if isinstance(salt, str):
+        salt = salt.encode()
+
+    # Build a constructor callable for HMAC that returns a fresh hash object.
+    def digest_cons():
+        # Our patched hashlib.new will add usedforsecurity=False for md5/sha1
+        # and gracefully fall back if the kwarg isn't supported.
+        return hashlib.new(alg)
+
+    hlen = digest_cons().digest_size
+    if dklen is None:
+        dklen = hlen
+
+    def PRF(msg):
+        return hmac.new(password, msg, digest_cons).digest()
+
+    out = bytearray()
+    blocks = (dklen + hlen - 1) // hlen
+    for i in range(1, blocks + 1):
+        u = PRF(salt + i.to_bytes(4, 'big'))
+        t = bytearray(u)
+        for _ in range(1, iterations):
+            u = PRF(u)
+            for j in range(hlen):
+                t[j] ^= u[j]
+        out.extend(t)
+    return bytes(out[:dklen])
+
+# Install it
+from django.utils import crypto as _crypto
+_crypto.pbkdf2 = _py_pbkdf2
+
+
+%s
+`, cockroachDjangoSettings)
+
+// var cockroachDjangoSettings = fmt.Sprintf(`
+// import base64, hashlib, secrets
+// from django.test.runner import DiscoverRunner
+// from django.contrib.auth.hashers import PBKDF2PasswordHasher
+// from django.utils.crypto import pbkdf2
+
+// # FIPS 140-3 compliance: use PBKDF2 with SHA256 as the default hasher.
+// class FastPBKDF2(PBKDF2PasswordHasher):
+//     digest = hashlib.sha256
+//     iterations = 6000
+//     def salt(self) -> str:
+//         # 16 random bytes => 32 hex chars (128-bit salt)
+//         return secrets.token_hex(16)
+
+//     def _normalize_pwd_bytes(self, password) -> bytes:
+//         pwd = password.encode() if isinstance(password, str) else password
+//         return hashlib.sha256(pwd).digest() if len(pwd) < 14 else pwd
+
+//     def encode(self, password, salt, iterations=None):
+//         iterations = iterations or self.iterations
+//         dk = pbkdf2(self._normalize_pwd_bytes(password), salt, iterations, digest=self.digest)
+//         return '$'.join((self.algorithm, str(iterations), salt, base64.b64encode(dk).decode('ascii').strip()))
+
+// DATABASES = {
+//     'default': {
+//         'ENGINE': 'django_cockroachdb',
+//         'NAME': 'django_tests',
+//         'USER': '%[1]s',
+//         'PASSWORD': '%[2]s',
+//         'HOST': 'localhost',
+//         'PORT': {pgport:1},
+//     },
+//     'other': {
+//         'ENGINE': 'django_cockroachdb',
+//         'NAME': 'django_tests2',
+//         'USER': '%[1]s',
+//         'PASSWORD': '%[2]s',
+//         'HOST': 'localhost',
+//         'PORT': {pgport:1},
+//     },
+// }
+// SECRET_KEY = 'django_tests_secret_key'
+// PASSWORD_HASHERS = [
+//     '.cockroach_settings.FastPBKDF2',
+// ]
+// TEST_RUNNER = '.cockroach_settings.NonDescribingDiscoverRunner'
+// DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
+// class NonDescribingDiscoverRunner(DiscoverRunner):
+//     def get_test_runner_kwargs(self):
+//         return {
+//             'failfast': self.failfast,
+//             'resultclass': self.get_resultclass(),
+//             'verbosity': self.verbosity,
+//             'descriptions': False,
+//         }
+
+// USE_TZ = False
+// `, install.DefaultUser, install.DefaultPassword)

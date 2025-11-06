@@ -140,6 +140,19 @@ func registerActiveRecord(r registry.Registry) {
 			t.Fatal(err)
 		}
 
+		// Write the cockroach config into the test suite to use.
+		extraArgs := ""
+		if err := repeatRunE(
+			ctx, t, c, node, fmt.Sprintf("setting up FIPS build settings (arch is %s)", c.Architecture()),
+			fmt.Sprintf(
+				"echo \"%s\" > /mnt/data1/activerecord-cockroachdb-adapter/build/fips_boot.rb",
+				activerecordFIPSSettings,
+			),
+		); err != nil {
+			t.Fatal(err)
+		}
+		extraArgs = " -r./build/fips_boot"
+
 		t.Status("installing bundler")
 		if err := repeatRunE(
 			ctx,
@@ -176,7 +189,10 @@ func registerActiveRecord(r registry.Registry) {
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node),
 			fmt.Sprintf(
 				`cd /mnt/data1/activerecord-cockroachdb-adapter/ && `+
-					`sudo RAILS_VERSION=%s RUBYOPT="-W0" TESTOPTS="-v" bundle exec rake test`, supportedRailsVersion),
+					`sudo RAILS_VERSION=%s RUBYOPT="-W0%s" TESTOPTS="-v" bundle exec rake test`,
+				supportedRailsVersion,
+				extraArgs,
+			),
 		)
 
 		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
@@ -254,3 +270,33 @@ func registerActiveRecord(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 	})
 }
+
+// This forces activerecord to use FIPS-compliant settings for its encryption/hashing.
+const activerecordFIPSSettings = `
+# build/fips_boot.rb
+require 'openssl'
+
+# ensure Bundler setup if we were loaded before bundle exec finishes
+begin
+  require 'active_record'
+rescue LoadError
+  begin
+    require 'bundler/setup'
+    retry
+  rescue LoadError
+  end
+end
+
+if defined?(ActiveRecord::Base)
+  ActiveRecord::Base.signed_id_verifier_secret ||= 'crdb-ar-tests-secret'
+end
+
+begin
+  require 'active_record/encryption'
+  ActiveRecord::Encryption.configure do |c|
+    c.hash_digest_class = OpenSSL::Digest::SHA256
+    c.support_sha1_for_non_deterministic_encryption = true
+  end
+rescue LoadError
+end
+`

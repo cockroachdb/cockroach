@@ -171,6 +171,7 @@ fi
 setup_disks true
 
 {{ template "ulimits" . }}
+{{ template "systemd_config" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}
 {{ template "cron_utils" . }}

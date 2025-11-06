@@ -184,6 +184,9 @@ var (
 		"touch_initialized_file": {
 			Runtime: startupScriptTouchInitializedFile,
 		},
+		"systemd_config": {
+			PreBaking: startupScriptSystemdConfig,
+		},
 	}
 )
 
@@ -478,6 +481,13 @@ fi`
 const startupScriptTouchInitializedFile = `
 # Touch the disks initialized file to mark that initialization is complete.
 sudo touch {{ .OSInitializedFile }}
+`
+
+const startupScriptSystemdConfig = `
+# Configure systemd to enable IO accounting required for cgroup v2 io throttling.
+sudo mkdir -p /etc/systemd/system.conf.d
+echo -e "[Manager]\nDefaultIOAccounting=yes\n" | sudo tee /etc/systemd/system.conf.d/10-accounting.conf
+sudo systemctl daemon-reexec
 `
 
 func GenerateStartupScript(w io.Writer, cloudSpecificTemplate string, args any) error {

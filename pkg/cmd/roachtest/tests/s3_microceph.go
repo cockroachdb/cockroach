@@ -136,7 +136,7 @@ func (m cephManager) install(ctx context.Context) {
 		fmt.Sprintf(`sudo radosgw-admin key create --uid=backup --key-type=s3 --access-key=%s --secret-key=%s`,
 			m.key, m.secret))
 
-	m.run(ctx, `install s3cmd`, `sudo apt install -y s3cmd`)
+	m.run(ctx, `install s3cmd`, `sudo apt update -q && sudo apt install -y s3cmd`)
 	s3cmd := s3cmdNoSsl
 	if m.secure != s3ClonePlain {
 		s3cmd = s3cmdSsl

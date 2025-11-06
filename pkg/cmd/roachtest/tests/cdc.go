@@ -3964,7 +3964,7 @@ func (k kafkaManager) configureAuth(ctx context.Context) *testCerts {
 	k.t.Status("constructing java keystores")
 	// Convert PEM cert and key into pkcs12 bundle so that it can be imported into a java keystore.
 	k.c.Run(ctx, option.WithNodes(k.kafkaSinkNodes),
-		fmt.Sprintf("openssl pkcs12 -export -in %s -inkey %s -name kafka -out %s -password pass:%s",
+		fmt.Sprintf("openssl pkcs12 -nomac -export -in %s -inkey %s -name kafka -out %s -password pass:%s",
 			kafkaCertPath,
 			kafkaKeyPath,
 			kafkaBundlePath,

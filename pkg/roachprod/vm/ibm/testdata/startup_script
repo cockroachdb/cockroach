@@ -142,6 +142,14 @@ fi
 
 
 
+# Configure systemd to enable IO accounting required for cgroup v2 io throttling.
+sudo mkdir -p /etc/systemd/system.conf.d
+echo -e "[Manager]\nDefaultIOAccounting=yes\n" | sudo tee /etc/systemd/system.conf.d/10-accounting.conf
+sudo systemctl daemon-reexec
+
+
+
+
 # N.B. Ubuntu 22.04 changed the location of tcpdump to /usr/bin. Since existing tooling, e.g.,
 # jepsen uses /usr/sbin, we create a symlink.
 # See https://ubuntu.pkgs.org/22.04/ubuntu-main-amd64/tcpdump_4.99.1-3build2_amd64.deb.html

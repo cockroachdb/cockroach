@@ -65,6 +65,11 @@ sudo apt-get install -y \
   ntpdate;
 `,
 
+	"chrony": `
+sudo apt-get update;
+sudo apt-get install -y chrony;
+`,
+
 	"sysbench": `
 sudo apt-get update;
 sudo apt-get install -y sysbench;

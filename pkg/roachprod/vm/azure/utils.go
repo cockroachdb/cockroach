@@ -83,6 +83,7 @@ ts_dev_id=$(python3 lsvmbus -vv | grep -w "Time Synchronization" -A 3 | grep "De
 echo $ts_dev_id | sudo tee /sys/bus/vmbus/drivers/hv_utils/unbind
 
 {{ template "ulimits" . }}
+{{ template "systemd_config" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}
 {{ template "cron_utils" . }}

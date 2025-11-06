@@ -357,9 +357,8 @@ sudo systemd-run --unit prometheus --same-dir \
 				l.Stderr, install.WithNodes(promAsInstallNodes).WithShouldRetryFn(install.AlwaysTrue), "install grafana",
 				fmt.Sprintf(`
 export ARCH=$(dpkg --print-architecture)
-sudo apt-get install -qqy apt-transport-https &&
-sudo apt-get install -qqy software-properties-common &&
-sudo apt-get install -y adduser libfontconfig1 &&
+sudo apt-get update -qq &&
+sudo apt-get install -y apt-transport-https software-properties-common adduser libfontconfig1 &&
 echo "Downloading https://dl.grafana.com/enterprise/release/grafana-enterprise_%[1]s_${ARCH}.deb" &&
 curl https://dl.grafana.com/enterprise/release/grafana-enterprise_%[1]s_${ARCH}.deb -sS -o grafana-enterprise_%[1]s_${ARCH}.deb &&
 sudo dpkg -i grafana-enterprise_%[1]s_${ARCH}.deb &&

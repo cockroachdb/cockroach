@@ -159,6 +159,7 @@ function setup_disks() {
 setup_disks
 
 {{ template "ulimits" . }}
+{{ template "systemd_config" . }}
 {{ template "tcpdump" . }}
 {{ template "keepalives" . }}
 {{ template "cron_utils" . }}
