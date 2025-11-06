@@ -205,7 +205,8 @@ func (t *group) GoWithCancel(fn Func, opts ...Option) context.CancelFunc {
 	t.ctxGroup.Go(func() error {
 		l, err := opt.L(opt.Name)
 		if err != nil {
-			return err
+			t.manager.logger.Errorf("WARN: defaulting to root logger after failing to create logger for task %q: %v", opt.Name, err)
+			l = t.manager.logger
 		}
 		err = internalFunc(l)
 		event := Event{
