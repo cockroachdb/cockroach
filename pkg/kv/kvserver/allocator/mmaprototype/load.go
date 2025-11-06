@@ -191,30 +191,6 @@ type meanNodeLoad struct {
 	utilCPU     float64
 }
 
-type storeLoadSummary struct {
-	worstDim                                               LoadDimension // for logging only
-	sls                                                    loadSummary
-	nls                                                    loadSummary
-	dimSummary                                             [NumLoadDimensions]loadSummary
-	highDiskSpaceUtilization                               bool
-	fd                                                     failureDetectionSummary
-	maxFractionPendingIncrease, maxFractionPendingDecrease float64
-
-	loadSeqNum uint64
-}
-
-func (sls storeLoadSummary) String() string {
-	return redact.StringWithoutMarkers(sls)
-}
-
-func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(store=%v worst=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f,%.2f(%t))",
-		sls.sls, sls.worstDim, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
-		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPendingIncrease,
-		sls.maxFractionPendingDecrease,
-		sls.maxFractionPendingIncrease < epsilon && sls.maxFractionPendingDecrease < epsilon)
-}
-
 // The allocator often needs mean load information for a set of stores. This
 // set is implied by a constraintsDisj. We also want to know the set of stores
 // that satisfy that contraintsDisj. meansForStoreSet encapsulates all of this
@@ -229,7 +205,7 @@ func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 type meansForStoreSet struct {
 	constraintsDisj
 	meansLoad
-	stores         storeIDPostingList
+	stores         storeSet
 	storeSummaries map[roachpb.StoreID]storeLoadSummary
 }
 
@@ -492,7 +468,7 @@ func loadSummaryForDimension(
 	meanLoad LoadValue,
 	meanUtil float64,
 ) (summary loadSummary) {
-	loadSummary := loadLow
+	summ := loadLow
 	if dim == WriteBandwidth && capacity == UnknownCapacity {
 		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
 		// value is somewhat arbitrary, but is based on EBS gp3 having a default
@@ -546,13 +522,13 @@ func loadSummaryForDimension(
 		meanFractionNoChange = 0.05
 	)
 	if fractionAbove > meanFractionSlow {
-		loadSummary = overloadSlow
+		summ = overloadSlow
 	} else if fractionAbove < meanFractionLow {
-		loadSummary = loadLow
+		summ = loadLow
 	} else if fractionAbove >= meanFractionNoChange {
-		loadSummary = loadNoChange
+		summ = loadNoChange
 	} else {
-		loadSummary = loadNormal
+		summ = loadNormal
 	}
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
 		// Further tune the summary based on utilization.
@@ -575,9 +551,9 @@ func loadSummaryForDimension(
 		if meanUtil*1.75 < fractionUsed {
 			return min(summaryUpperBound, overloadSlow)
 		}
-		return min(summaryUpperBound, max(loadSummary, loadNoChange))
+		return min(summaryUpperBound, max(summ, loadNoChange))
 	}
-	return min(summaryUpperBound, loadSummary)
+	return min(summaryUpperBound, summ)
 }
 
 func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {

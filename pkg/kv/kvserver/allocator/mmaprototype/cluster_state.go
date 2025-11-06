@@ -597,37 +597,9 @@ type pendingReplicaChange struct {
 	enactedAtTime time.Time
 }
 
-// TODO(kvoli): This will eventually be used to represent the state of a node's
-// membership. This corresponds to non-decommissioning, decommissioning and
-// decommissioned. Fill in commentary and use.
-type storeMembership int8
-
-const (
-	storeMembershipMember storeMembership = iota
-	storeMembershipRemoving
-	storeMembershipRemoved
-)
-
-func (s storeMembership) String() string {
-	return redact.StringWithoutMarkers(s)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (s storeMembership) SafeFormat(w redact.SafePrinter, _ rune) {
-	switch s {
-	case storeMembershipMember:
-		w.Print("full")
-	case storeMembershipRemoving:
-		w.Print("removing")
-	case storeMembershipRemoved:
-		w.Print("removed")
-	}
-}
-
 // storeState maintains the complete state about a store as known to the
 // allocator.
 type storeState struct {
-	storeMembership
 	storeLoad
 	StoreAttributesAndLocality
 	adjusted struct {
@@ -829,47 +801,10 @@ func newStoreState() *storeState {
 	return ss
 }
 
-// failureDetectionSummary is provided by an external entity and never
-// computed inside the allocator.
-type failureDetectionSummary uint8
-
-// All state transitions are permitted by the allocator. For example, fdDead
-// => fdOk is allowed since the allocator can simply stop shedding replicas
-// and then start adding replicas (if underloaded).
-const (
-	fdOK failureDetectionSummary = iota
-	// Don't add replicas or leases.
-	fdSuspect
-	// Move leases away. Don't add replicas or leases.
-	fdDrain
-	// Node is dead, so move leases and replicas away from it.
-	fdDead
-)
-
-func (fds failureDetectionSummary) String() string {
-	return redact.StringWithoutMarkers(fds)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (fds failureDetectionSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	switch fds {
-	case fdOK:
-		w.Print("ok")
-	case fdSuspect:
-		w.Print("suspect")
-	case fdDrain:
-		w.Print("drain")
-	case fdDead:
-		w.Print("dead")
-	}
-}
-
 type nodeState struct {
 	stores []roachpb.StoreID
 	NodeLoad
 	adjustedCPU LoadValue
-
-	fdSummary failureDetectionSummary
 }
 
 func newNodeState(nodeID roachpb.NodeID) *nodeState {
@@ -1897,21 +1832,6 @@ func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 	}
 }
 
-func (cs *clusterState) setStoreMembership(storeID roachpb.StoreID, state storeMembership) {
-	if ss, ok := cs.stores[storeID]; ok {
-		ss.storeMembership = state
-	} else {
-		panic(fmt.Sprintf("store %d not found in cluster state", storeID))
-	}
-}
-
-func (cs *clusterState) updateFailureDetectionSummary(
-	nodeID roachpb.NodeID, fd failureDetectionSummary,
-) {
-	ns := cs.nodes[nodeID]
-	ns.fdSummary = fd
-}
-
 //======================================================================
 // clusterState accessors:
 //
@@ -2193,7 +2113,6 @@ func computeLoadSummary(
 		nls:                        nls,
 		dimSummary:                 dimSummary,
 		highDiskSpaceUtilization:   highDiskSpaceUtil,
-		fd:                         ns.fdSummary,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
 		loadSeqNum:                 ss.loadSeqNum,

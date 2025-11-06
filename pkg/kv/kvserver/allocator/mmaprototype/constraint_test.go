@@ -150,7 +150,7 @@ func TestNormalizedSpanConfig(t *testing.T) {
 		})
 }
 
-func printPostingList(b *strings.Builder, pl storeIDPostingList) {
+func printPostingList(b *strings.Builder, pl storeSet) {
 	for i := range pl {
 		prefix := ""
 		if i > 0 {
@@ -161,7 +161,7 @@ func printPostingList(b *strings.Builder, pl storeIDPostingList) {
 }
 
 func TestStoreIDPostingList(t *testing.T) {
-	pls := map[string]storeIDPostingList{}
+	pls := map[string]storeSet{}
 	forceAllocation := rand.Intn(2) == 1
 
 	datadriven.RunTest(t, "testdata/posting_list",
@@ -178,7 +178,7 @@ func TestStoreIDPostingList(t *testing.T) {
 						storeIDs = append(storeIDs, roachpb.StoreID(storeID))
 					}
 				}
-				pl := makeStoreIDPostingList(storeIDs)
+				pl := makeStoreSet(storeIDs)
 				if forceAllocation {
 					pl = pl[:len(pl):len(pl)]
 				}

@@ -353,8 +353,8 @@ func (a *allocatorState) rebalanceStores(
 
 	var changes []PendingRangeChange
 	var disj [1]constraintsConj
-	var storesToExclude storeIDPostingList
-	var storesToExcludeForRange storeIDPostingList
+	var storesToExclude storeSet
+	var storesToExcludeForRange storeSet
 	scratchNodes := map[roachpb.NodeID]*NodeLoad{}
 	scratchStores := map[roachpb.StoreID]struct{}{}
 	// The caller has a fixed concurrency limit it can move ranges at, when it
@@ -461,7 +461,7 @@ func (a *allocatorState) rebalanceStores(
 						store.StoreID, rangeID))
 				}
 				cands, _ := rstate.constraints.candidatesToMoveLease()
-				var candsPL storeIDPostingList
+				var candsPL storeSet
 				for _, cand := range cands {
 					candsPL.insert(cand.storeID)
 				}
@@ -493,10 +493,6 @@ func (a *allocatorState) rebalanceStores(
 						continue
 					}
 					candSls := a.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
-					if sls.fd != fdOK {
-						log.KvDistribution.VInfof(ctx, 2, "skipping store s%d: failure detection status not OK", cand.storeID)
-						continue
-					}
 					candsSet.candidates = append(candsSet.candidates, candidateInfo{
 						StoreID:              cand.storeID,
 						storeLoadSummary:     candSls,
@@ -608,7 +604,7 @@ func (a *allocatorState) rebalanceStores(
 		// If the node is cpu overloaded, or the store/node is not fdOK, exclude
 		// the other stores on this node from receiving replicas shed by this
 		// store.
-		excludeStoresOnNode := store.nls > overloadSlow || store.fd != fdOK
+		excludeStoresOnNode := store.nls > overloadSlow
 		storesToExclude = storesToExclude[:0]
 		if excludeStoresOnNode {
 			nodeID := ss.NodeID
@@ -810,22 +806,6 @@ func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cs.setStore(store)
-}
-
-// RemoveNodeAndStores implements the Allocator interface.
-func (a *allocatorState) RemoveNodeAndStores(nodeID roachpb.NodeID) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	panic("unimplemented")
-}
-
-// UpdateFailureDetectionSummary implements the Allocator interface.
-func (a *allocatorState) UpdateFailureDetectionSummary(
-	nodeID roachpb.NodeID, fd failureDetectionSummary,
-) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	panic("unimplemented")
 }
 
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
@@ -1222,7 +1202,7 @@ func sortTargetCandidateSetAndPick(
 	// ones that have notMatchedLeasePreferenceIndex.
 	j = 0
 	for _, cand := range cands.candidates {
-		if cand.leasePreferenceIndex == notMatchedLeasePreferencIndex {
+		if cand.leasePreferenceIndex == notMatchedLeasePreferenceIndex {
 			break
 		}
 		j++
@@ -1360,7 +1340,7 @@ func (a *allocatorState) ensureAnalyzedConstraints(rstate *rangeState) bool {
 func (a *allocatorState) computeCandidatesForRange(
 	ctx context.Context,
 	expr constraintsDisj,
-	storesToExclude storeIDPostingList,
+	storesToExclude storeSet,
 	loadSheddingStore roachpb.StoreID,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
 	means := a.cs.meansMemo.getMeans(expr)
@@ -1381,9 +1361,6 @@ func (a *allocatorState) computeCandidatesForRange(
 		}
 		ss := a.cs.stores[storeID]
 		csls := a.cs.meansMemo.getStoreLoadSummary(ctx, means, storeID, ss.loadSeqNum)
-		if csls.fd != fdOK {
-			continue
-		}
 		cset.candidates = append(cset.candidates, candidateInfo{
 			StoreID:          storeID,
 			storeLoadSummary: csls,

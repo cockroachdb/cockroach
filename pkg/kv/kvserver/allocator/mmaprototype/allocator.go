@@ -39,14 +39,6 @@ type Allocator interface {
 	// about the nodes in the cluster is a side effect of this method.
 	SetStore(store StoreAttributesAndLocality)
 
-	// RemoveNodeAndStores tells the allocator to remove the NodeID and all its
-	// stores.
-	RemoveNodeAndStores(nodeID roachpb.NodeID) error
-
-	// UpdateFailureDetectionSummary tells the allocator about the current
-	// failure detection state for a node. A node starts in the fdOK state.
-	UpdateFailureDetectionSummary(nodeID roachpb.NodeID, fd failureDetectionSummary) error
-
 	// ProcessStoreLoadMsg provides frequent the state of every store and its
 	// associated node in the cluster.
 	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
