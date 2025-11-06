@@ -344,7 +344,8 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //   - testingKnobCfg: specifies a key to a hardcoded testingKnob configuration
 //
 //   - disable-tenant : ensures the test is never run in a multitenant environment by
-//     setting testserverargs.DefaultTestTenant to base.TODOTestTenantDisabled.
+//     setting testserverargs.DefaultTestTenant to
+//     base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142798).
 //
 //   - "upgrade-cluster version=<version>"
 //     Upgrade the cluster version of the active cluster to the passed in

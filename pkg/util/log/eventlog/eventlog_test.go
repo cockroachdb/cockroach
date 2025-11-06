@@ -40,8 +40,9 @@ func TestWriter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	testCases := []struct {
 		instanceId int
@@ -59,7 +60,7 @@ func TestWriter(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("writeAsync=%t", tc.writeAsync), func(t *testing.T) {
 			ambientCtx := log.MakeServerAmbientContext(nil, &ServerId{instanceId: tc.instanceId})
-			writer := eventlog.NewWriter(s.InternalDB().(isql.DB), tc.writeAsync, s.Stopper(), ambientCtx, s.ClusterSettings())
+			writer := eventlog.NewWriter(s.InternalDB().(isql.DB), tc.writeAsync, s.AppStopper(), ambientCtx, s.ClusterSettings())
 			// This can be any event type
 			event := logtestutils.TestEvent{Timestamp: timeutil.Now().UnixNano()}
 

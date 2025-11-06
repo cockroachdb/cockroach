@@ -4235,20 +4235,21 @@ func (ex *connExecutor) waitForTxnJobs() error {
 		}
 	}
 	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
-		jobIDs := strings.Builder{}
-		for i, jobID := range ex.extraTxnState.jobs.created {
-			if i > 0 {
-				jobIDs.WriteString(", ")
+		if !ex.sessionData().DisableWaitForJobsNotice {
+			jobIDs := strings.Builder{}
+			for i, jobID := range ex.extraTxnState.jobs.created {
+				if i > 0 {
+					jobIDs.WriteString(", ")
+				}
+				jobIDs.WriteString(jobID.String())
 			}
-			jobIDs.WriteString(jobID.String())
+			if err := ex.planner.SendClientNotice(ex.Ctx(),
+				pgnotice.Newf("waiting for job(s) to complete: %s\nIf the statement is canceled, jobs will continue in the background.", redact.SafeString(jobIDs.String())),
+				true, /* immediateFlush */
+			); err != nil {
+				return err
+			}
 		}
-		if err := ex.planner.SendClientNotice(ex.Ctx(),
-			pgnotice.Newf("waiting for job(s) to complete: %s\nIf the statement is canceled, jobs will continue in the background.", redact.SafeString(jobIDs.String())),
-			true, /* immediateFlush */
-		); err != nil {
-			return err
-		}
-
 		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
 			ex.extraTxnState.jobs.created); err != nil {
 			if errors.Is(err, context.Canceled) && queryTimedout.Load() {

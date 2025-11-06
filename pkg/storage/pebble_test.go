@@ -1888,9 +1888,8 @@ func TestPebbleSpanPolicyFunc(t *testing.T) {
 				return k
 			}(),
 			wantPolicy: pebble.SpanPolicy{
-				PreferFastCompression:          true,
-				DisableValueSeparationBySuffix: true,
-				ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLowReadLatency,
 			},
 			wantEndKey: spanPolicyLockTableEndKey,
 		},

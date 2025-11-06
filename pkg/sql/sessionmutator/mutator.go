@@ -1102,3 +1102,7 @@ func (m *SessionDataMutator) SetOptimizerClampInequalitySelectivity(val bool) {
 func (m *SessionDataMutator) SetOptimizerUseMaxFrequencySelectivity(val bool) {
 	m.Data.OptimizerUseMaxFrequencySelectivity = val
 }
+
+func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
+	m.Data.DisableWaitForJobsNotice = val
+}

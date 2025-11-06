@@ -3067,6 +3067,7 @@ disable_optimizer_rules                                          ·             
 disable_partially_distributed_plans                              off                 NULL      NULL        NULL        string
 disable_plan_gists                                               off                 NULL      NULL        NULL        string
 disable_vec_union_eager_cancellation                             off                 NULL      NULL        NULL        string
+disable_wait_for_jobs_notice                                     off                 NULL      NULL        NULL        string
 disallow_full_table_scans                                        off                 NULL      NULL        NULL        string
 distribute_group_by_row_count_threshold                          1000                NULL      NULL        NULL        string
 distribute_join_row_count_threshold                              1000                NULL      NULL        NULL        string
@@ -3314,6 +3315,7 @@ disable_optimizer_rules                                          ·             
 disable_partially_distributed_plans                              off                 NULL  user     NULL      off                 off
 disable_plan_gists                                               off                 NULL  user     NULL      off                 off
 disable_vec_union_eager_cancellation                             off                 NULL  user     NULL      off                 off
+disable_wait_for_jobs_notice                                     off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                                        off                 NULL  user     NULL      off                 off
 distribute_group_by_row_count_threshold                          1000                NULL  user     NULL      1000                1000
 distribute_join_row_count_threshold                              1000                NULL  user     NULL      1000                1000
@@ -3548,6 +3550,7 @@ disable_optimizer_rules                                          NULL    NULL   
 disable_partially_distributed_plans                              NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                               NULL    NULL     NULL     NULL        NULL
 disable_vec_union_eager_cancellation                             NULL    NULL     NULL     NULL        NULL
+disable_wait_for_jobs_notice                                     NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                                        NULL    NULL     NULL     NULL        NULL
 distribute_group_by_row_count_threshold                          NULL    NULL     NULL     NULL        NULL
 distribute_join_row_count_threshold                              NULL    NULL     NULL     NULL        NULL

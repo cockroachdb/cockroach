@@ -287,7 +287,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
 		//
-		// TODO(#76378): We should review this choice. Why can't we use "Random"
+		// TODO(#156124): We should review this choice. Why can't we use "Random"
 		// here? If there are specific tests that are incompatible, we can
 		// flag them to run only in a separate config.
 		UseSecondaryTenant:          Never,
@@ -356,7 +356,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #100787 for more info.
 		//
-		// TODO(#76378): We should review this choice. Zone configs have
+		// TODO(#156124): We should review this choice. Zone configs have
 		// been supported for secondary tenants since v22.2.
 		// Should this config use "Random" instead?
 		UseSecondaryTenant: Never,
@@ -468,7 +468,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
 		//
-		// TODO(#76378): We've fixed that issue. Review this choice. Can
+		// TODO(#156124): We've fixed that issue. Review this choice. Can
 		// it be "Random" instead? Then we can merge it with the next
 		// config below.
 		UseSecondaryTenant:          Never,
