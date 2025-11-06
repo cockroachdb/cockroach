@@ -25,54 +25,39 @@ import (
 const gceDiskStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a GCE machine for roachprod use.
 
-function setup_disks() {
-	first_setup=$1
+{{ template "head_utils" . }}
+{{ template "apt_packages" . }}
 
-{{ if .BootDiskOnly }}
-	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
-	echo "VM has no disk attached other than the boot disk."
-	return 0
-{{ end }}
+sudo -u {{ .SharedUser }} bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
 
-{{ if not .Zfs }}
-	mount_opts="defaults,nofail"
-	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
-{{ end }}
-
-	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
-
-	mount_prefix="/mnt/data"
-
-	# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
-	# then the disks will be selected for RAID'ing. If there are both Local SSDs and Persistent disks,
-	# RAID'ing in this case can cause performance differences. So, to avoid this, local SSDs are ignored.
+# Provider specific disk logic
+function detect_disks() {
+	# GCE-specific disk detection - returns list of available disks
+	# If both Local SSDs and Persistent disks exist, prioritize persistent disks to avoid
+	# performance differences when RAID'ing mixed disk types.
 	# Scenarios:
 	#   (local SSD = 0, Persistent Disk - 1) - no RAID'ing and Persistent Disk mounted
 	#   (local SSD = 1, Persistent Disk - 0) - no RAID'ing and local SSD mounted
 	#   (local SSD >= 1, Persistent Disk = 1) - no RAID'ing and Persistent Disk mounted
 	#   (local SSD > 1, Persistent Disk = 0) - local SSDs selected for RAID'ing
 	#   (local SSD >= 0, Persistent Disk > 1) - network disks selected for RAID'ing
-	local_or_persistent=()
-	disks=()
-
-{{ if .Zfs }}
-	apt-get update -q
-	apt-get install -yq zfsutils-linux
-{{ end }}
+	local local_or_persistent=()
+	local disks=()
 
 	# N.B. we assume 0th disk is the boot disk.
 	if [ "$(ls /dev/disk/by-id/google-persistent-disk-[1-9]|wc -l)" -gt "0" ]; then
-		local_or_persistent=$(ls /dev/disk/by-id/google-persistent-disk-[1-9])
-		echo "Using only persistent disks: ${local_or_persistent[@]}"
+		local_or_persistent=($(ls /dev/disk/by-id/google-persistent-disk-[1-9]))
+		echo "Using only persistent disks: ${local_or_persistent[@]}" >&2
 	else
-		local_or_persistent=$(ls /dev/disk/by-id/google-local-*)
-		echo "Using only local disks: ${local_or_persistent[@]}"
+		local_or_persistent=($(ls /dev/disk/by-id/google-local-*))
+		echo "Using only local disks: ${local_or_persistent[@]}" >&2
 	fi
 
-	for l in ${local_or_persistent}; do
+	for l in ${local_or_persistent[@]}; do
 		d=$(readlink -f $l)
 		mounted="no"
-{{ if .Zfs }}
+{{ if eq .Filesystem "zfs" }}
 		# Check if the disk is already part of a zpool or mounted; skip if so.
 		if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
 			mounted="yes"
@@ -85,86 +70,20 @@ function setup_disks() {
 {{ end }}
 		if [ "$mounted" == "no" ]; then
 			disks+=("${d}")
-			echo "Disk ${d} not mounted, need to mount..."
+			echo "Disk ${d} not mounted, need to mount..." >&2
 		else
-			echo "Disk ${d} already mounted, skipping..."
+			echo "Disk ${d} already mounted, skipping..." >&2
 		fi
 	done
 
-	if [ "${#disks[@]}" -eq "0" ]; then
-		mountpoint="${mount_prefix}1"
-		echo "No disks mounted, creating ${mountpoint}"
-		mkdir -p ${mountpoint}
-		chmod 777 ${mountpoint}
-	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
-		disknum=1
-		for disk in "${disks[@]}"
-		do
-			mountpoint="${mount_prefix}${disknum}"
-			disknum=$((disknum + 1 ))
-			echo "Mounting ${disk} at ${mountpoint}"
-			mkdir -p ${mountpoint}
-{{ if .Zfs }}
-			zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
-			# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-			mkfs.ext4 -q -F ${disk}
-			mount -o ${mount_opts} ${disk} ${mountpoint}
-			if [ "$first_setup" = "true" ]; then
-				echo "${d} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-			fi
-			tune2fs -m 0 ${disk}
-{{ end }}
-			chmod 777 ${mountpoint}
-		done
-	else
-		mountpoint="${mount_prefix}1"
-		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
-		mkdir -p ${mountpoint}
-{{ if .Zfs }}
-		zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
-		# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-		raiddisk="/dev/md0"
-		mdadm -q --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
-		mkfs.ext4 -q -F ${raiddisk}
-		mount -o ${mount_opts} ${raiddisk} ${mountpoint}
-		if [ "$first_setup" = "true" ]; then
-			echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-		fi
-		tune2fs -m 0 ${raiddisk}
-{{ end }}
-		chmod 777 ${mountpoint}
+	# Return disks array by printing each element (only if non-empty)
+	if [ "${#disks[@]}" -gt 0 ]; then
+		printf '%s\n' "${disks[@]}"
 	fi
-
-	# Print the block device and FS usage output. This is useful for debugging.
-	lsblk
-	df -h
-{{ if .Zfs }}
-	zpool list
-{{ end }}
-
-	mkdir -p /mnt/data1/cores
-	chmod a+w /mnt/data1/cores
-
-	sudo touch {{ .DisksInitializedFile }}
 }
 
-{{ template "head_utils" . }}
-{{ template "apt_packages" . }}
-
-sudo -u {{ .SharedUser }} bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
-sudo -u {{ .SharedUser }} bash -c 'echo "{{ .PublicKey }}" >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys'
-
-if [ -e {{ .OSInitializedFile }} ]; then
-  echo "OS already initialized, only initializing disks."
-  # Initialize disks, but don't write fstab entries again.
-  setup_disks false
-  exit 0
-fi
-
-# Initialize disks and write fstab entries.
-setup_disks true
+# Common disk setup logic that calls the above detect_disks function
+{{ template "setup_disks_utils" . }}
 
 {{ template "ulimits" . }}
 {{ template "tcpdump" . }}
@@ -190,18 +109,18 @@ sudo touch {{ .OSInitializedFile }}
 // a comma-separated list of options for the "mount -o" flag.
 func writeStartupScript(
 	extraMountOpts string,
-	fileSystem string,
+	fileSystem vm.Filesystem,
 	useMultiple bool,
 	enableFIPS bool,
 	enableCron bool,
 	bootDiskOnly bool,
 ) (string, error) {
+
+	// We define a local type in case we need to add more provider-specific params in
+	// the future.
 	type tmplParams struct {
 		vm.StartupArgs
-		ExtraMountOpts   string
-		UseMultipleDisks bool
-		PublicKey        string
-		BootDiskOnly     bool
+		PublicKey string
 	}
 
 	publicKey, err := config.SSHPublicKey()
@@ -213,14 +132,14 @@ func writeStartupScript(
 		StartupArgs: vm.DefaultStartupArgs(
 			vm.WithSharedUser(config.SharedUser),
 			vm.WithEnableCron(enableCron),
-			vm.WithZfs(fileSystem == vm.Zfs),
+			vm.WithFilesystem(fileSystem),
 			vm.WithEnableFIPS(enableFIPS),
 			vm.WithChronyServers([]string{"metadata.google.internal"}),
+			vm.WithExtraMountOpts(extraMountOpts),
+			vm.WithUseMultipleDisks(useMultiple),
+			vm.WithBootDiskOnly(bootDiskOnly),
 		),
-		ExtraMountOpts:   extraMountOpts,
-		UseMultipleDisks: useMultiple,
-		PublicKey:        publicKey,
-		BootDiskOnly:     bootDiskOnly,
+		PublicKey: publicKey,
 	}
 
 	tmpfile, err := os.CreateTemp("", "gce-startup-script")

@@ -29,45 +29,28 @@ import (
 const awsStartupScriptTemplate = `#!/usr/bin/env bash
 # Script for setting up a AWS machine for roachprod use.
 
-function setup_disks() {
-{{ if .BootDiskOnly }}
-	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
-	echo "VM has no disk attached other than the boot disk."
-	return 0
-{{ end }}
+{{ template "head_utils" . }}
+{{ template "apt_packages" . }}
 
-{{ if not .Zfs }}
-	mount_opts="defaults,nofail"
-	{{if .ExtraMountOpts}}mount_opts="${mount_opts},{{.ExtraMountOpts}}"{{end}}
-{{ end }}
-
-	use_multiple_disks='{{if .UseMultipleDisks}}true{{end}}'
-
-	mount_prefix="/mnt/data"
-
-	# if the use_multiple_disks is not set and there are more than 1 disk (excluding the boot disk),
-	# then the disks will be selected for RAID'ing. If there are both EC2 NVMe Instance Storage and
-	# EBS, RAID'ing in this case can cause performance differences. So, to avoid this,
-	# EC2 NVMe Instance Storage are ignored.
+# Provider specific disk logic
+function detect_disks() {
+	# AWS-specific disk detection - returns list of available disks
+	# If both EC2 NVMe Instance Storage and EBS exist, prioritize EBS volumes to avoid
+	# performance differences when RAID'ing mixed disk types.
 	# Scenarios:
 	#   (local SSD = 0, Network Disk - 1)  - no RAID'ing and mount network disk
 	#   (local SSD = 1, Network Disk - 0)  - no RAID'ing and mount local SSD
 	#   (local SSD >= 1, Network Disk = 1) - no RAID'ing and mount network disk
 	#   (local SSD > 1, Network Disk = 0)  - local SSDs selected for RAID'ing
 	#   (local SSD >= 0, Network Disk > 1) - network disks selected for RAID'ing
-	# Keep track of the Local SSDs and EBS volumes for RAID'ing
-	local_disks=()
-	ebs_volumes=()
-
-{{ if .Zfs }}
-	apt-get update -q
-	apt-get install -yq zfsutils-linux
-{{ end }}
+	local local_disks=()
+	local ebs_volumes=()
+	local disks=()
 
 	# On different machine types, the drives are either called nvme... or xvdd.
 	for d in $(ls /dev/nvme?n1 /dev/xvdd); do
 		mounted="no"
-{{ if .Zfs }}
+{{ if eq .Filesystem "zfs" }}
 		# Check if the disk is already part of a zpool or mounted; skip if so.
 		if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
 			mounted="yes"
@@ -84,79 +67,29 @@ function setup_disks() {
 			else
 				local_disks+=("${d}")
 			fi
-			echo "Disk ${d} not mounted, need to mount..."
+			echo "Disk ${d} not mounted, need to mount..." >&2
 		else
-			echo "Disk ${d} already mounted, skipping..."
+			echo "Disk ${d} already mounted, skipping..." >&2
 		fi
 	done
 
 	# use only EBS volumes if available and ignore EC2 NVMe Instance Storage
-	disks=()
 	if [ "${#ebs_volumes[@]}" -gt "0" ]; then
-	echo "Using only EBS disks: ${ebs_volumes[@]}"
+		echo "Using only EBS disks: ${ebs_volumes[@]}" >&2
 		disks=("${ebs_volumes[@]}")
 	else
-		echo "Using only local disks: ${local_disks[@]}"
+		echo "Using only local disks: ${local_disks[@]}" >&2
 		disks=("${local_disks[@]}")
 	fi
 
-	if [ "${#disks[@]}" -eq "0" ]; then
-		mountpoint="${mount_prefix}1"
-		echo "No disks mounted, creating ${mountpoint}"
-		mkdir -p ${mountpoint}
-		chmod 777 ${mountpoint}
-	elif [ "${#disks[@]}" -eq "1" ] || [ -n "$use_multiple_disks" ]; then
-		disknum=1
-		for disk in "${disks[@]}"
-		do
-			mountpoint="${mount_prefix}${disknum}"
-			disknum=$((disknum + 1 ))
-			echo "Mounting ${disk} at ${mountpoint}"
-			mkdir -p ${mountpoint}
-{{ if .Zfs }}
-			zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disk}
-			# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-			mkfs.ext4 -F ${disk}
-			mount -o ${mount_opts} ${disk} ${mountpoint}
-			echo "${disk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-			tune2fs -m 0 ${disk}
-{{ end }}
-			chmod 777 ${mountpoint}
-		done
-	else
-		mountpoint="${mount_prefix}1"
-		echo "${#disks[@]} disks mounted, creating ${mountpoint} using RAID 0"
-		mkdir -p ${mountpoint}
-{{ if .Zfs }}
-		zpool create -f $(basename $mountpoint) -m ${mountpoint} ${disks[@]}
-		# NOTE: we don't need an /etc/fstab entry for ZFS. It will handle this itself.
-{{ else }}
-		raiddisk="/dev/md0"
-		mdadm --create ${raiddisk} --level=0 --raid-devices=${#disks[@]} "${disks[@]}"
-		mkfs.ext4 -F ${raiddisk}
-		mount -o ${mount_opts} ${raiddisk} ${mountpoint}
-		echo "${raiddisk} ${mountpoint} ext4 ${mount_opts} 1 1" | tee -a /etc/fstab
-		tune2fs -m 0 ${raiddisk}
-{{ end }}
-		chmod 777 ${mountpoint}
+	# Return disks array by printing each element (only if non-empty)
+	if [ "${#disks[@]}" -gt 0 ]; then
+		printf '%s\n' "${disks[@]}"
 	fi
-
-	# Print the block device and FS usage output. This is useful for debugging.
-	lsblk
-	df -h
-{{ if .Zfs }}
-	zpool list
-{{ end }}
-
-	sudo touch {{ .DisksInitializedFile }}
 }
 
-{{ template "head_utils" . }}
-{{ template "apt_packages" . }}
-
-# Initialize disks.
-setup_disks
+# Common disk setup logic that calls the above detect_disks function
+{{ template "setup_disks_utils" . }}
 
 {{ template "ulimits" . }}
 {{ template "tcpdump" . }}
@@ -183,30 +116,30 @@ sudo touch {{ .OSInitializedFile }}
 func writeStartupScript(
 	name string,
 	extraMountOpts string,
-	fileSystem string,
+	fileSystem vm.Filesystem,
 	useMultiple bool,
 	enableFips bool,
 	remoteUser string,
 	bootDiskOnly bool,
 ) (string, error) {
+
+	// We define a local type in case we need to add more provider-specific params in
+	// the future.
 	type tmplParams struct {
 		vm.StartupArgs
-		ExtraMountOpts   string
-		UseMultipleDisks bool
-		BootDiskOnly     bool
 	}
 
 	args := tmplParams{
 		StartupArgs: vm.DefaultStartupArgs(
 			vm.WithVMName(name),
 			vm.WithSharedUser(remoteUser),
-			vm.WithZfs(fileSystem == vm.Zfs),
+			vm.WithFilesystem(fileSystem),
+			vm.WithExtraMountOpts(extraMountOpts),
+			vm.WithUseMultipleDisks(useMultiple),
+			vm.WithBootDiskOnly(bootDiskOnly),
 			vm.WithEnableFIPS(enableFips),
 			vm.WithChronyServers([]string{"169.254.169.123"}),
 		),
-		ExtraMountOpts:   extraMountOpts,
-		UseMultipleDisks: useMultiple,
-		BootDiskOnly:     bootDiskOnly,
 	}
 
 	tmpfile, err := os.CreateTemp("", "aws-startup-script")
