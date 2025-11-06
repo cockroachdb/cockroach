@@ -278,6 +278,10 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
+				// Probably this test could work in shared-process mode, but
+				// it's occasionally flaking there and doesn't seem worth
+				// investigating since we're touching the ranges directly.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
@@ -298,7 +302,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	//
 	// TODO(andrei): This is super hacky. What this test really wants to do is to
 	// precisely control the contents of the range cache on node 4.
-	tc.Server(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
+	tc.ApplicationLayer(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Force the DistSQL on this connection.
 	_, err := db3.Exec(`SET CLUSTER SETTING sql.defaults.distsql = always;`)

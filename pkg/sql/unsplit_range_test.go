@@ -290,7 +290,7 @@ func TestUnsplitRanges(t *testing.T) {
 		s := srv.ApplicationLayer()
 
 		// Speed up how long it takes for the zone config changes to propagate.
-		sqltestutils.SetShortRangeFeedIntervals(t, sqlDB)
+		sqltestutils.SetShortRangeFeedIntervals(t, srv)
 
 		// Disable strict GC TTL enforcement because we're going to shove a zero-value
 		// TTL into the system with AddImmediateGCZoneConfig.

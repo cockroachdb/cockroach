@@ -263,6 +263,7 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	params, _ := createTestServerParamsAllowTenants()
+	params.DefaultTestTenant = base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127)
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
@@ -1560,12 +1561,13 @@ func TestTruncateLarge(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "batch limit set", func(t *testing.T, batchLimitSet bool) {
 		ctx := context.Background()
-		s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
-		defer s.Stopper().Stop(ctx)
+		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 		createCommand := strings.Builder{}
 		truncateCommand := strings.Builder{}
-		sqlDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='5m'")
+		systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+		systemDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='5m'")
 		if batchLimitSet {
 			sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.batch_flush_threshold_size='2m'")
 		}

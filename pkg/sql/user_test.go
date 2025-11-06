@@ -35,7 +35,12 @@ func TestUserLoginAfterGC(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// In external-process mode the tenant doesn't have kvpb.GCRequest
+		// capability (and this capability can't be granted at the time of
+		// writing either), so we skip the external mode only.
+		DefaultTestTenant: base.TestSkipForExternalProcessMode(),
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
