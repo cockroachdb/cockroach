@@ -392,40 +392,36 @@ func TestRestoreReplicas(t *testing.T) {
 
 	require.NoError(t, tc.Restart())
 
-	// Find the leaseholder and follower. The restart may cause the Raft
-	// leadership to bounce around a bit, since we don't fully enable Raft
-	// prevote, so we loop for a bit until we find the leaseholder.
+	// The restart may cause the Raft leadership and the lease to bounce around a
+	// bit, so we loop until we find the leaseholder and able to propose the
+	// second increment.
 	incArgs = incrementArgs(key, 5)
-	var followerStore *kvserver.Store
 	testutils.SucceedsSoon(t, func() error {
 		var pErr *kvpb.Error
 		for i := 0; i < tc.NumServers(); i++ {
 			_, pErr = kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), incArgs)
 			if pErr == nil {
-				followerStore = tc.GetFirstStoreFromServer(t, 1-i)
-				break
+				return nil
 			}
 			require.IsType(t, &kvpb.NotLeaseHolderError{}, pErr.GetDetail())
 		}
 		return pErr.GoError()
 	})
 
-	// The follower should now return a NLHE.
-	_, pErr = kv.SendWrapped(ctx, followerStore.TestSender(), incArgs)
-	require.Error(t, pErr.GoError())
-	require.IsType(t, &kvpb.NotLeaseHolderError{}, pErr.GetDetail())
-
-	testutils.SucceedsSoon(t, func() error {
-		getArgs := getArgs(key)
-		if reply, err := kv.SendWrappedWith(ctx, followerStore.TestSender(), kvpb.Header{
-			ReadConsistency: kvpb.INCONSISTENT,
-		}, getArgs); err != nil {
-			return errors.Errorf("failed to read data: %s", err)
-		} else if e, v := int64(28), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
-			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
-		}
-		return nil
-	})
+	// Both servers should eventually observe the new value.
+	for i := 0; i < tc.NumServers(); i++ {
+		testutils.SucceedsSoon(t, func() error {
+			getArgs := getArgs(key)
+			if reply, err := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), kvpb.Header{
+				ReadConsistency: kvpb.INCONSISTENT,
+			}, getArgs); err != nil {
+				return errors.Errorf("failed to read data: %s", err)
+			} else if e, v := int64(28), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
+				return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
+			}
+			return nil
+		})
+	}
 
 	validate := func(s *kvserver.Store) {
 		repl := s.LookupReplica(key)
