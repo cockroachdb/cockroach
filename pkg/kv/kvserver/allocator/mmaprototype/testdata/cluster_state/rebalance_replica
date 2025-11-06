@@ -105,6 +105,7 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
+# Advance just to simulate some passage of time.
 tick seconds=5
 ----
 t=5s
@@ -141,16 +142,18 @@ store-load-msg
 
 # Store load msg from s1 showing updated load.
 store-load-msg
-  store-id=1 node-id=2 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=14s
+  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=14s
 ----
 
-# Neither load is recent enough (computePendingChangesReflectedInLatestLoad
-# timeout) to be considered as accounting for the enacted changes. So s2
-# adjusted load appears very high and s1 adjusted load becomes negative.
+# Both of the load msgs had load-time=14s, while the enacted time was 5s.
+# Neither is recent enough, since lagForChangeReflectedInLoad is 10s (see
+# computePendingChangesReflectedInLatestLoad) to be considered as accounting
+# for the enacted changes. So s2 adjusted load appears very high and s1
+# adjusted load becomes negative.
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:-75, write-bandwidth:-75, byte-size:-75] node-reported-cpu=80 node-adjusted-cpu=-80 seq=6
-store-id=2 node-id=2 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:168, write-bandwidth:168, byte-size:168] node-reported-cpu=5 node-adjusted-cpu=173 seq=3
+store-id=1 node-id=1 reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:-75, write-bandwidth:-75, byte-size:-75] node-reported-cpu=5 node-adjusted-cpu=-75 seq=6
+store-id=2 node-id=2 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:168, write-bandwidth:168, byte-size:168] node-reported-cpu=80 node-adjusted-cpu=168 seq=3
 
 # The enacted changes are still adjusting the load.
 get-pending-changes
@@ -170,15 +173,17 @@ store-load-msg
 
 # Store load msg from s1 showing updated load.
 store-load-msg
-  store-id=1 node-id=2 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=16s
+  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=16s
 ----
 
-# The enacted changes are no longer adjusting the load.
+# Both of the load msgs had load-time=16s, while the enacted time was 5s. So
+# they are recent enough to be considered as accounting for the enacted
+# changes. The enacted changes are no longer adjusting the load.
 get-pending-changes
 ----
 pending(0)
 
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=80 node-adjusted-cpu=-80 seq=7
-store-id=2 node-id=2 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=5 node-adjusted-cpu=165 seq=4
+store-id=1 node-id=1 reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=5 node-adjusted-cpu=5 seq=7
+store-id=2 node-id=2 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=4

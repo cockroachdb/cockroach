@@ -169,7 +169,7 @@ store-load-msg
 
 # The adjusted load on s2 reflects both the reported load and the addition of
 # the replica and lease, since the load-time is not more than 10s after the
-# enactment time of change 1.
+# enactment time of change 1 (see lagForChangeReflectedInLoad).
 get-load-info
 ----
 store-id=1 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=168 seq=2
@@ -177,7 +177,7 @@ store-id=2 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjuste
   top-k-ranges (local-store-id=2) dim=ByteSize: r1
 
 # Store load msg from s2 at time 16s, which is 11s after the enactment of
-# change 1.
+# change 1. So the change is no longer needed for load adjustment.
 store-load-msg
   store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=16s
 ----
@@ -191,7 +191,7 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth
   next=(replica-id=none type=VOTER_FULL)
 
 # The adjusted load on s2 no longer reflects the addition of the replica and
-# lease, since the load-time is more than 10s after the enactment time of
+# lease, since the load-time was more than 10s after the enactment time of
 # change 1.
 get-load-info
 ----
@@ -235,7 +235,8 @@ store-id=1 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjuste
 store-id=2 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
   top-k-ranges (local-store-id=2) dim=CPURate: r1
 
-# Store load msg from s2, showing its new load.
+# Store load msg from s2, showing its new load. The enacted change is still
+# needed because the enactment time is equal to the load-time.
 store-load-msg
   store-id=2 node-id=1 load=[85,85,85] capacity=[100,100,100] secondary-load=1 load-time=310s
 ----
@@ -250,7 +251,9 @@ tick seconds=20
 ----
 t=5m30s
 
-# Store load msg from s1, showing its new load.
+# Store load msg from s1, showing its new load. The enacted change is no
+# longer needed for load adjustment since load-time is 20s after the enactment
+# time (and lagForChangeReflectedInLoad is 10s).
 store-load-msg
   store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=330s
 ----

@@ -408,6 +408,11 @@ func TestClusterState(t *testing.T) {
 					return printNodeListMeta()
 
 				case "store-load-msg":
+					// TODO(sumeer): the load-time is passed as an argument, and is
+					// independent of ts. This is by necessity, since the load-time can
+					// be in the past, indicating gossip delay. However, having it be
+					// some arbitrary value can be confusing for the test reader.
+					// Consider making it relative to ts.
 					msg := parseStoreLoadMsg(t, d.Input)
 					cs.processStoreLoadMsg(context.Background(), &msg)
 					return ""

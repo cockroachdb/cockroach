@@ -838,7 +838,12 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// NB: It is possible that some of the changeIDs have already been enacted
+	// via StoreLeaseholderMsg, and even been garbage collected. So no
+	// assumption can be made about whether these changeIDs will be found in the
+	// allocator's state.
 	if !success {
+		// Gather the changes that are found and need to be undone.
 		replicaChanges := make([]ReplicaChange, 0, len(changeIDs))
 		for _, changeID := range changeIDs {
 			change, ok := a.cs.pendingChanges[changeID]
@@ -854,25 +859,35 @@ func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, s
 				return
 			}
 			replicaChanges = append(replicaChanges, change.ReplicaChange)
-			// Else ignore this change. We don't want to pass this change to
-			// pre-check since it will likely violate an invariant and cause us to
-			// emit a noisy log message.
 		}
 		if len(replicaChanges) == 0 {
 			return
 		}
+		// Check that we can undo these changes. If not, log and return.
 		if err := a.cs.preCheckOnUndoReplicaChanges(replicaChanges); err != nil {
+			// TODO(sumeer): we should be able to panic here, once the interface
+			// contract says that all the proposed changes must be included in
+			// changeIDs. Without that contract, there may be a pair of changes
+			// (remove replica and lease from s1), (add replica and lease to s2),
+			// and the caller can provide the first changeID only, and the undo
+			// would cause two leaseholders. The pre-check would catch that here.
 			log.KvDistribution.Infof(context.Background(), "did not undo change %v: due to %v", changeIDs, err)
 			return
 		}
 	}
 
 	for _, changeID := range changeIDs {
-		// We set !requireFound, since a StoreLeaseholderMsg that happened after
-		// the pending change was created and before this call to
+		// We set !requireFound, since some of these pending changes may no longer
+		// exist in the allocator's state. For example, a StoreLeaseholderMsg that
+		// happened after the pending change was created and before this call to
 		// AdjustPendingChangesDisposition may have already removed the pending
 		// change.
 		if success {
+			// TODO(sumeer): this code is implicitly assuming that all the changes
+			// on the rangeState are being enacted. And that is true of the current
+			// callers. We should explicitly state the assumption in the interface.
+			// Because if only some are being enacted, we ought to set
+			// pendingChangeNoRollback, and we don't bother to.
 			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now(), false)
 		} else {
 			a.cs.undoPendingChange(changeID, false)
