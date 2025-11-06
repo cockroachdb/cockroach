@@ -1189,8 +1189,59 @@ func maybeForceDBLevelChangefeed(
 			t.Logf("opted out of DB level changefeed for %s: %s", create, o.reason)
 		}
 	}
-	// return create, nil
-	return `CREATE CHANGEFEED FOR DATABASE d`, nil
+
+	switch f := f.(type) {
+	// Don't do it for sinkless feeds.
+	// Skip external connection feeds for now. (TODO: revisit this.)
+	case *externalConnectionFeedFactory, *sinklessFeedFactory:
+		t.Logf("did not force DB level changefeed for %s because %T is not supported", create, f)
+		return create, nil
+	}
+
+	// Don't do it if it's a CDC query.
+	createStmt, err := parser.ParseOne(create)
+	if err != nil {
+		return "", err
+	}
+	createAST := createStmt.AST.(*tree.CreateChangefeed)
+	if createAST.Select != nil {
+		t.Logf("did not force DB level changefeed for %s because it is a CDC query", create)
+		return create, nil
+	}
+
+	// Don't do it if it's already a DB level changefeed.
+	if createAST.Level == tree.ChangefeedLevelDatabase {
+		t.Logf("did not force DB level changefeed for %s because it is already a DB level changefeed", create)
+		return create, nil
+	}
+
+	opts := createAST.Options
+	for _, opt := range opts {
+		// Don't do it if there's an initial scan explicitly requested.
+		// TODO: double check that this doesn't exclude the default case where the initial scan is not specified.
+		// Do I need this equalFold that copilot added?
+		key := opt.Key.String()
+		if strings.EqualFold(key, "initial_scan") {
+			if opt.Value.String() != "yes" || opt.Value.String() != "only" {
+				t.Logf("did not force DB level changefeed for %s because it has an initial scan", create)
+				return create, nil
+			}
+		}
+		if strings.EqualFold(key, "initial_scan_only") {
+			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
+			return create, nil
+		}
+	}
+
+	// Keep the options as is but make it a DB level changefeed.
+	createStmt.AST.(*tree.CreateChangefeed).Level = tree.ChangefeedLevelDatabase
+	createStmt.AST.(*tree.CreateChangefeed).TableTargets = nil
+	createStmt.AST.(*tree.CreateChangefeed).DatabaseTarget = tree.ChangefeedDatabaseTarget("d")
+	t.Logf("forcing DB level changefeed for %s", create)
+	create = tree.AsStringWithFlags(createStmt.AST, tree.FmtShowPasswords)
+
+	t.Logf("forced DB level changefeed result: %s", create)
+	return create, nil
 }
 
 func maybeForceEnrichedEnvelope(
