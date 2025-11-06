@@ -2651,6 +2651,39 @@ func TestPartialIndexes(t *testing.T) {
 	dbB.ExpectErr(t, " this schema change is disallowed on table foo because it is referenced by one or more logical replication jobs", "CREATE INDEX idx3 ON b.foo (pi) WHERE pk = 0")
 }
 
+// TODO(msbutler): migrate TestLogicalReplicationCreationChecks to this test
+// which has subtests and no weird cross case dependencies.
+func TestSupportedSchemaChecks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	// source is allowed to have a seq expression but not dest.
+	t.Run("sequences", func(t *testing.T) {
+
+		dbA.Exec(t, "CREATE SEQUENCE my_seqA")
+		dbB.Exec(t, "CREATE SEQUENCE my_seqB")
+		dbA.Exec(t, "CREATE TABLE tab_with_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seqA'))")
+		dbA.Exec(t, "INSERT INTO tab_with_seq (pk) VALUES (1), (2), (3)")
+
+		dbB.Exec(t, "CREATE TABLE tab_with_seq (pk INT PRIMARY KEY, v INT DEFAULT nextval('my_seqB'))")
+		dbB.Exec(t, "CREATE TABLE tab_no_seq (pk INT PRIMARY KEY, v INT)")
+
+		var jobBID jobspb.JobID
+		dbB.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_seq ON $1 INTO TABLE tab_no_seq", dbAURL.String()).Scan(&jobBID)
+		WaitUntilReplicatedTime(t, s.Clock().Now(), dbB, jobBID)
+
+		dbB.ExpectErr(t, "references sequences with IDs", "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_with_seq ON $1 INTO TABLE tab_with_seq", dbAURL.String())
+	})
+}
+
 // TestLogicalReplicationCreationChecks verifies that we check that the table
 // schemas are compatible when creating the replication stream.
 func TestLogicalReplicationCreationChecks(t *testing.T) {

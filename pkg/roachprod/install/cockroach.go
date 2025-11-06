@@ -805,6 +805,7 @@ func (c *SyncedCluster) NodeURL(
 	serviceMode ServiceMode,
 	auth PGAuthMode,
 	database string,
+	disallowUnsafeInternals bool,
 ) string {
 	var u url.URL
 	u.Scheme = "postgres"
@@ -836,7 +837,11 @@ func (c *SyncedCluster) NodeURL(
 		v.Add("sslmode", "disable")
 	}
 
-	v.Add("allow_unsafe_internals", "true")
+	// We usually want to allow unsafe internals for testing environments,
+	// but allow an escape hatch to disallow it, e.g. if we are using psql.
+	if !disallowUnsafeInternals {
+		v.Add("allow_unsafe_internals", "true")
+	}
 	// We only want to pass an explicit `cluster` name if the user provided one.
 	if virtualClusterName != "" {
 		// We can only pass the cluster parameter for shared processes, as SQL server
@@ -894,7 +899,7 @@ func (c *SyncedCluster) ExecOrInteractiveSQL(
 	if err != nil {
 		return err
 	}
-	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database)
+	url := c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database, false /* disallowUnsafeInternals */)
 	binary := cockroachNodeBinary(c, c.Nodes[0])
 	allArgs := []string{binary, "sql", "--url", url}
 	allArgs = append(allArgs, ssh.Escape(args))
@@ -926,7 +931,7 @@ func (c *SyncedCluster) ExecSQL(
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
 			}
 			cmd += SuppressMetamorphicConstantsEnvVar() + " " + cockroachNodeBinary(c, node) + " sql --url " +
-				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database) + " " +
+				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode, authMode, database, false /* disallowUnsafeInternals */) + " " +
 				ssh.Escape(args)
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
 		})
@@ -1562,7 +1567,7 @@ func (c *SyncedCluster) generateClusterSettingCmd(
 	if err != nil {
 		return "", err
 	}
-	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert, "" /* database */)
+	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert, "" /* database */, false /* disallowUnsafeInternals */)
 
 	// We use `mkdir -p` here since the directory may not exist if an in-memory
 	// store is used.
@@ -1584,7 +1589,7 @@ func (c *SyncedCluster) generateInitCmd(ctx context.Context, node Node) (string,
 	if err != nil {
 		return "", err
 	}
-	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert, "" /* database */)
+	url := c.NodeURL("localhost", port, SystemInterfaceName /* virtualClusterName */, ServiceModeShared, AuthRootCert, "" /* database */, false /* disallowUnsafeInternals */)
 	binary := cockroachNodeBinary(c, node)
 	initCmd += fmt.Sprintf(`
 		if ! test -e %[1]s ; then
@@ -1802,7 +1807,7 @@ func (c *SyncedCluster) createFixedBackupSchedule(
 		serviceMode = ServiceModeExternal
 	}
 
-	url := c.NodeURL("localhost", port, startOpts.VirtualClusterName, serviceMode, AuthRootCert, "" /* database */)
+	url := c.NodeURL("localhost", port, startOpts.VirtualClusterName, serviceMode, AuthRootCert, "" /* database */, false /* disallowUnsafeInternals */)
 	fullCmd := fmt.Sprintf(`%s COCKROACH_CONNECT_TIMEOUT=%d %s sql --url %s -e %q`,
 		SuppressMetamorphicConstantsEnvVar(), startSQLTimeout, binary, url, createScheduleCmd)
 	// Instead of using `c.ExecSQL()`, use `c.runCmdOnSingleNode()`, which allows us to

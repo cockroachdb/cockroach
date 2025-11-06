@@ -2721,9 +2721,6 @@ func (c *clusterImpl) InternalPGUrl(
 	return c.pgURLErr(ctx, l, nodes, opts)
 }
 
-// Silence unused warning.
-var _ = (&clusterImpl{}).InternalPGUrl
-
 // ExternalPGUrl returns the external Postgres endpoint for the specified nodes.
 func (c *clusterImpl) ExternalPGUrl(
 	ctx context.Context, l *logger.Logger, nodes option.NodeListOption, opts roachprod.PGURLOptions,

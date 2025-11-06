@@ -1763,7 +1763,7 @@ func (r *testRunner) postTestAssertions(
 				// NB: the invalid description checks should run at the system tenant level.
 				db := c.Conn(ctx, t.L(), validationNode, option.VirtualClusterName(install.SystemInterfaceName))
 				defer db.Close()
-				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
+				if err := roachtestutil.CheckInvalidDescriptors(ctx, t.L(), db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
 				}
 			}()
