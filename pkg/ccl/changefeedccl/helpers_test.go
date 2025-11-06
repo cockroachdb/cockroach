@@ -1233,6 +1233,14 @@ func maybeForceDBLevelChangefeed(
 		}
 	}
 
+	// Skip for families.
+	for _, target := range createAST.TableTargets {
+		if target.FamilyName != "" {
+			t.Logf("did not force DB level changefeed for %s because it has column family %s", create, target.FamilyName)
+			return create, nil
+		}
+	}
+
 	// Keep the options as is but make it a DB level changefeed.
 	createStmt.AST.(*tree.CreateChangefeed).Level = tree.ChangefeedLevelDatabase
 	createStmt.AST.(*tree.CreateChangefeed).TableTargets = nil
