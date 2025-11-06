@@ -1335,7 +1335,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// changes, and these are the changes that are pending. This is hacky
 			// and should be cleaned up.
 			var valid bool
-			var reason string
+			var reason redact.RedactableString
 			if gcRemainingChanges {
 				reason = "GCing remaining changes after partial enactment"
 			} else {
@@ -1346,7 +1346,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				err := cs.preCheckOnApplyReplicaChanges(remainingReplicaChanges)
 				valid = err == nil
 				if err != nil {
-					reason = err.Error()
+					reason = redact.Sprint(err)
 				}
 				// Restore it.
 				rs.pendingChanges = rc
