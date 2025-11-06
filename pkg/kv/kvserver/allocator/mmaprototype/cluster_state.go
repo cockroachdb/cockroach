@@ -600,6 +600,7 @@ type pendingReplicaChange struct {
 // storeState maintains the complete state about a store as known to the
 // allocator.
 type storeState struct {
+	status Status
 	storeLoad
 	StoreAttributesAndLocality
 	adjusted struct {
@@ -1822,6 +1823,11 @@ func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 	if !ok {
 		// This is the first time seeing this store.
 		ss := newStoreState()
+		// At this point, the store's health is unknown. It will need to be marked
+		// as healthy separately. Until we know more, we won't place leases or
+		// replicas on it (nor will we try to shed any that are already reported to
+		// have replicas on it).
+		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
 		ss.localityTiers = cs.localityTierInterner.intern(sal.locality())
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()

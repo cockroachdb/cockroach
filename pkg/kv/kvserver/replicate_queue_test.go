@@ -2279,12 +2279,19 @@ SELECT * FROM (
 			return 0, 0, roachpb.RangeDescriptor{}, err
 		}
 
+		// Find the start key of the range containing our table. Note that TABLE t
+		// might not show up in SHOW RANGES immediately. Return zeroes in this case,
+		// and the caller retries.
+		const q = `
+SELECT start_key FROM crdb_internal.ranges_no_leases
+WHERE range_id IN (SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1);`
 		var key roachpb.Key
-		require.NoError(t,
-			db.QueryRow(`
-SELECT start_key from crdb_internal.ranges_no_leases WHERE range_id IN
-(SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1);
-`).Scan(&key))
+		if err := db.QueryRow(q).Scan(&key); errors.Is(err, gosql.ErrNoRows) {
+			return 0, 0, roachpb.RangeDescriptor{}, nil
+		} else {
+			require.NoError(t, err)
+		}
+
 		desc, err := tc.LookupRange(key)
 		if err != nil {
 			return 0, 0, roachpb.RangeDescriptor{}, err
