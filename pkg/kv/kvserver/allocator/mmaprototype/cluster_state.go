@@ -930,7 +930,25 @@ type rangeState struct {
 	// what is pending also allows for undo in the case of explicit failure,
 	// notified by AdjustPendingChangesDisposition.
 	//
-	// 2. Modeling
+	// 2. Lifecycle
+	// pendingChanges are created in createPendingChanges from three sources:
+	// range rebalances, lease transfers originating from MMA, or external changes
+	// via RegisterExternalChanges (replicate or lease queue). They represent a
+	// transient override of the current view of the source of truth provided by
+	// the leaseholder. There exists a pending change in a range state iff there
+	// is also a corresponding one in clusterState's pendingChanges.
+	//
+	// There are three possible outcomes for a pending change,
+	// after which it is removed from the range state:
+	// 1. Enacted – either applied successfully via
+	// AdjustPendingChangesDisposition(success), or considered subsumed based on
+	// the leaseholder msg, or the leaseholder of the range has changed.
+	// 2. Undone – garbage collected or AdjustPendingChangesDisposition(failed).
+	// 3. Dropped due to inconsistencies – the change is not undone but discarded
+	// entirely if the provided authoritative leaseholder msg is inconsistent with
+	// it.
+	//
+	// 3. Modeling
 	//
 	// The slice of pendingChanges represent one decision. However, this
 	// decision is not always executed atomically by the external system.
@@ -979,7 +997,7 @@ type rangeState struct {
 	// added. This is unavoidable and will be fixed by the first
 	// StoreLeaseholderMsg post-GC.
 	//
-	// 3. Non Atomicity Hazard
+	// 4. Non Atomicity Hazard
 	//
 	// Since a decision is represented with multiple pending changes, and we
 	// allow for individual changes to be considered enacted or failed, we have
