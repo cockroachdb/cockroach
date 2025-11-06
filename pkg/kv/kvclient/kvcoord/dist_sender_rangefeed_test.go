@@ -558,12 +558,12 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 	// Wait for the test frontier to advance.  Once it advances,
 	// we know the rangefeed is started, all ranges are running (even if some of them are blocked).
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		if frontier.Frontier().IsEmpty() {
 			return errors.Newf("waiting for frontier advance: %s", frontier.String())
 		}
 		return nil
-	}, 10*time.Second)
+	})
 
 	// At this point, we know the rangefeed for all ranges are running.
 	require.EqualValues(t, numRanges, metrics.RangefeedRanges.Value(), frontier.String())
