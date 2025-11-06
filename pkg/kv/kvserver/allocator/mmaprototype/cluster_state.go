@@ -1076,12 +1076,12 @@ type clusterState struct {
 	stores map[roachpb.StoreID]*storeState
 	// A range is present in the ranges map if any of the local stores is the
 	// leaseholder for that range according to the StoreLeaseholderMsgs from the
-	// local stores. If a local store is shedding the lease for the range, this
-	// map will continue to contain that range until that change is enacted
-	// according to a StoreLeaseholderMsg. However, rangeState internally
-	// maintains adjusted state, along with the pending changes, so that
-	// adjustment will already be reflected in that adjusted state (i.e., a
-	// local store will not be the leaseholder in the adjusted rangeState).
+	// local stores, or if the local leaseholder is transferring the lease to
+	// a non-local store. In the latter case, there is a pending change reflecting
+	// the lease transfer, and the adjusted range state (which already reflects
+	// that transfer) will show the lease on a non-local store. If/once this
+	// change gets enacted via a StoreLeaseholderMsg, range state is
+	// dropped.
 	//
 	// Of course, if the lease shedding was done as part of moving the replica
 	// from one local store to another local store, then the rangeState will
