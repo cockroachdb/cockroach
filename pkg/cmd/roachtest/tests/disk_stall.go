@@ -436,8 +436,8 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 			spec.WorkloadNode(),
 			spec.ReuseNone(),
 			spec.DisableLocalSSD(),
-			spec.GCEVolumeCount(2),
-			spec.GCEVolumeType("pd-ssd"),
+			spec.VolumeCount(2),
+			spec.VolumeType("pd-ssd"),
 			spec.VolumeSize(100),
 			// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 			spec.Arch(spec.AllExceptFIPS),

@@ -42,7 +42,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		spec.WorkloadNode(),
 		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(800),
-		spec.GCEVolumeType("pd-ssd"),
+		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 	}
 	testTimeout := 19 * time.Hour
