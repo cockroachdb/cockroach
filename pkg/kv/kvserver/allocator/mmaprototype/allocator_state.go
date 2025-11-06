@@ -808,13 +808,6 @@ func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 	a.cs.setStore(store)
 }
 
-// RemoveNodeAndStores implements the Allocator interface.
-func (a *allocatorState) RemoveNodeAndStores(nodeID roachpb.NodeID) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	panic("unimplemented")
-}
-
 // ProcessStoreLeaseholderMsg implements the Allocator interface.
 func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg) {
 	a.mu.Lock()
