@@ -1,3 +1,22 @@
+# Tests rebalancing a replica from a local store to a remote store (stores on
+# different nodes).
+#
+# Scenario: Store s1 on node 1 initially holds the replica and lease for range 1.
+# The test rebalances the replica (and lease) from s1 to s2 on node 2.
+#
+# Steps and expectations:
+# 1. Creates pending changes for the rebalance, verifying load adjustments
+#    immediately reflect the pending state.
+# 2. Simulates enactment: when s1's leaseholder message arrives without the
+#    range (indicating s1 no longer has the lease), both changes are considered
+#    enacted simultaneously. The range state is removed since the lease moved to
+#    a non-local store.
+# 3. Tracks load adjustments: pending changes adjust load until store-reported
+#    load reflects the change (after >10s of enactment). Load messages arriving
+#    too early (<10s after enactment) result in incorrect adjusted loads (negative
+#    for s1, inflated for s2) until later load messages arrive.
+# 4. Verifies changes are removed from load tracking once store-reported load
+#    reflects the change.
 set-store
   store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
   store-id=2 node-id=2 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
@@ -125,9 +144,9 @@ store-load-msg
   store-id=1 node-id=2 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=14s
 ----
 
-# Neither load is recent enough to be considered as accounting for the enacted
-# changes. So s2 adjusted load appears very high and s1 adjusted load becomes
-# negative.
+# Neither load is recent enough (computePendingChangesReflectedInLatestLoad
+# timeout) to be considered as accounting for the enacted changes. So s2
+# adjusted load appears very high and s1 adjusted load becomes negative.
 get-load-info
 ----
 store-id=1 node-id=1 reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:-75, write-bandwidth:-75, byte-size:-75] node-reported-cpu=80 node-adjusted-cpu=-80 seq=6

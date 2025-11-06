@@ -1,3 +1,28 @@
+# Tests rebalancing a replica between two local stores (stores on the same node).
+#
+# Scenario: Two stores (s1, s2) on node 1. Initially, s1 holds the replica and
+# lease for range 1. The test rebalances the replica (and lease) from s1 to s2,
+# then back from s2 to s1.
+#
+# Steps and expectations:
+# 1. Creates pending changes for the rebalance, verifying load adjustments
+#    immediately reflect the pending state.
+# 2. Simulates enactment: when s2's leaseholder message arrives showing it has
+#    the lease, change 1 (add to s2) is marked enacted. Change 2 (remove from
+#    s1) remains pending until s1 is removed from the replica set.
+# 3. Verifies enacted changes cannot be rejected (they're removed from
+#    pendingChanges).
+# 4. Verifies no-rollback changes cannot be rejected once any change in the
+#    set is enacted.
+# 5. Tracks load adjustments: pending changes adjust load until store-reported
+#    load reflects the change (after 10s of enactment). After that, the change
+#    is removed from load tracking but may remain for GC.
+# 6. Tests GC: changes marked no-rollback cannot be GC'd via normal GC (which
+#    requires undo). They're only removed once store-reported load reflects the
+#    change.
+# 7. Rebalances back from s2 to s1 and verifies changes are GC'd after the
+#    normal GC duration.
+#
 # Two stores on the same node.
 set-store
   store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
