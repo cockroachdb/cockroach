@@ -536,6 +536,12 @@ func (prc PendingRangeChange) LeaseTransferFrom() roachpb.StoreID {
 	panic("unreachable")
 }
 
+// TODO(sumeer): we have various methods that take slices of either ChangeIDs
+// or pendingReplicaChanges or ReplicaChange, and have callers that already
+// have or could first construct a slice of pendingReplicaChanges, and avoid
+// various temporary slice construction and repeated map lookups. Clean this
+// up.
+
 // pendingReplicaChange is a proposed change to a single replica. Some
 // external entity (the leaseholder of the range) may choose to enact this
 // change. It may not be enacted if it will cause some invariant (like the
@@ -559,6 +565,10 @@ type pendingReplicaChange struct {
 	// earlier GC. It is used to hasten GC (for the remaining changes) when some
 	// subset of changes corresponding to the same complex change have been
 	// observed to be enacted.
+	//
+	// The GC of these changes happens on a different path than the usual GC,
+	// which can undo the changes -- this GC happens only when processing a
+	// RangeMsg from the leaseholder.
 	revisedGCTime time.Time
 
 	// TODO(kvoli,sumeerbhola): Consider adopting an explicit expiration time,
@@ -902,7 +912,12 @@ type rangeState struct {
 	// change for adding s4 includes both that it has a replica, and it has the
 	// lease, so we will not mark it done, and keep pretending that the whole
 	// change is pending. Since lease transfers are fast, we accept this
-	// imperfect modeling fidelity.
+	// imperfect modeling fidelity. One consequence of this imperfect modeling
+	// is that if in this example there are no further changes observed until
+	// GC, the allocator will undo both changes and go back to the state {s1,
+	// s2, s3} with s3 as the leaseholder. That is, it has forgotten that s4 was
+	// added. This is unavoidable and will be fixed by the first
+	// StoreLeaseholderMsg post-GC.
 	//
 	// 3. Non Atomicity Hazard
 	//
@@ -1627,9 +1642,7 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 			changeIDs = append(changeIDs, pendingChange.ChangeID)
 		}
 		if err := cs.preCheckOnUndoReplicaChanges(replicaChanges); err != nil {
-			log.KvDistribution.Infof(context.Background(),
-				"did not undo changes to range %v: due to %v", rangeID, err)
-			continue
+			panic(err)
 		}
 		for _, changeID := range changeIDs {
 			cs.undoPendingChange(changeID, true)
@@ -1773,6 +1786,13 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 
 // preCheckOnApplyReplicaChanges does some validation of the changes being
 // proposed. It ensures the range is known and has no pending changes already.
+//
+// It only needs to be called for (a) new changes that are being proposed, or
+// (b) when we have reset the rangeState.replicas using a StoreLeaseholderMsg
+// and we have some previously proposed pending changes that have not been
+// enacted yet, and we want to re-validate them before adjusting
+// rangeState.replicas.
+//
 // For a removal, it validates that the replica exists. For non-removal, it
 // blind applies the change without validating whether the current state is
 // ReplicaChange.prev -- this blind application allows this pre-check to
@@ -1783,6 +1803,20 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 //
 // REQUIRES: all the changes are to the same range; there are 1, 2 or 4
 // changes.
+//
+// TODO(sumeer): the 4 changes part is a hack because the asim conformance
+// test produces a change (when running under SMA) which is:
+//
+// r10 type: RemoveReplica target store n3,s3 (replica-id=5 type=NON_VOTER)->(replica-id=none type=VOTER_FULL)
+// r10 type: RemoveReplica target store n2,s2 (replica-id=2 type=VOTER_FULL)->(replica-id=none type=VOTER_FULL)
+// r10 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+// r10 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=NON_VOTER)]
+//
+// This change violates the requirement that there should be a single change
+// per store. Fix how this is modeled and disallow 4 changes.
+//
+// TODO(sumeer): allow arbitrary number of changes, but validate that at most
+// one change per store.
 func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []ReplicaChange) error {
 	// preApplyReplicaChange is called before applying a change to the cluster
 	// state.
@@ -1833,23 +1867,16 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []ReplicaChange) e
 	return replicaSetIsValid(copiedCurr.replicas)
 }
 
-// TODO: this is unnecessary since if we always check against the current
-// state before allowing a chang to be added (including re-addition after a
-// StoreLeaseholderMsg), we should never have invalidity during an undo.
-// Which is why this function now panics except for the trivial cases of no
-// changes or the range not existing in the cluster state.
-//
-// This is also justified by the current callers. If this were to return false
-// in non-trivial cases, what is the caller supposed to do? These changes have
-// been reflected on both the membership and load information. Undoing the
-// latter is trivial since it is just subtraction of numbers. But it can't
-// undo the membership changes. So we presumably have left membership in an
-// inconsistent state.
-
 // preCheckOnUndoReplicaChanges does some validation of the changes being
 // proposed for undo.
 //
-// REQUIRES: changes is non-empty, and all changes are to the same range.
+// REQUIRES: changes is non-empty; all changes are to the same range; the
+// rangeState.pendingChangeNoRollback is false.
+//
+// This method is defensive since if we always check against the current state
+// before allowing a change to be added (including re-addition after a
+// StoreLeaseholderMsg), we should never have invalidity during an undo, if
+// all the changes are being undone.
 func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []ReplicaChange) error {
 	if len(changes) == 0 {
 		panic(errors.AssertionFailedf("no changes to undo"))

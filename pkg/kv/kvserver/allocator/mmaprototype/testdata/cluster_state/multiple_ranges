@@ -100,8 +100,9 @@ range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cp
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=2 replica-id=2 type=VOTER_FULL
 
-# Exercise the path that ensures consistency even though not-populated is
-# true.
+# Change the membership, while MaybeSpanConfIsPopulated=false, to ensure that
+# we notice the change in replicas. One of these ranges has changed the number
+# of replicas, and the other the replica-id of one of the store's replicas.
 store-leaseholder-msg
 store-id=1
   range-id=2 not-populated
@@ -111,6 +112,7 @@ store-id=1
     store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
 ----
 
+# The ranges reflect the latest state from the StoreLeaseholderMsg.
 ranges
 ----
 range-id=2 local-store=1 load=[cpu:20, write-bandwidth:10, byte-size:15] raft-cpu=10
