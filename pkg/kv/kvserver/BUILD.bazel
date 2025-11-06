@@ -616,9 +616,11 @@ go_proto_library(
     proto = ":kvserver_proto",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb", # keep (see #147833)
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/roachpb",
         "//pkg/storage/enginepb",
+        "//pkg/util/uuid", # keep (see #147833)
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
