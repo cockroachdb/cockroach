@@ -1,4 +1,17 @@
-# Two stores on the same node.
+# Tests GC of partially enacted changes when rebalancing between local stores.
+# This is a variation of rebalance_replica_local_stores in which a rebalancing
+# operation is partially enacted but the remainder is ultimately garbage collected.
+#
+# - The range initially initially sits on (n1s1,n3s3), and is then rebalanced to
+#   (n1s2,n3s4), i.e. moved between n1's two stores.
+# - The second half of the pending change (removal of s1) never gets enacted.
+# - That change is pending is no-rollback due to the first half having been enacted.
+#   After 30s (partiallyEnactedGCDuration) has elapsed since the partial
+#   enactment, the removal is GC'd with the next leaseholder message. In
+#   particular, this change does not have to wait for the much longer regular GC
+#   timeout.
+# - A second rebalance is carried out on the same range, while an enacted remnant
+#   of the first operation remains.
 set-store
   store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
   store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
@@ -109,7 +122,9 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=none type=VOTER_FULL)
 
-# Same store leaseholder msg from s2. The pending change for s1 is gc'd.
+# Same store leaseholder msg from s2. The pending change for s1 is gc'd because
+# the more aggressive partiallyEnactedGCDuration (30s) applies. It is immaterial
+# that the message originates from s2 and not s1.
 store-leaseholder-msg
 store-id=2
   range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
