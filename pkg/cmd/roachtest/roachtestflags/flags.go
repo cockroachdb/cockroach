@@ -526,7 +526,7 @@ var (
 	OverrideFilesystem string
 	_                  = registerRunFlag(&OverrideFilesystem, FlagInfo{
 		Name:  "filesystem",
-		Usage: `Override the underlying file system(ext4/zfs)`,
+		Usage: `Override the underlying file system(ext4/zfs/xfs/f2fs/btrfs)`,
 	})
 
 	OverrideNoExt4Barrier bool

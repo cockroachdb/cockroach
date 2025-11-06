@@ -279,11 +279,19 @@ func (vl List) ProviderIDs() []string {
 	return ret
 }
 
+type Filesystem string
+
 const (
 	// Zfs refers to the zfs file system.
-	Zfs = "zfs"
+	Zfs Filesystem = "zfs"
 	// Ext4 refers to the ext4 file system.
-	Ext4 = "ext4"
+	Ext4 Filesystem = "ext4"
+	// Xfs refers to the xfs file system.
+	Xfs Filesystem = "xfs"
+	// F2fs refers to the f2fs file system.
+	F2fs Filesystem = "f2fs"
+	// Btrfs refers to the btrfs file system.
+	Btrfs Filesystem = "btrfs"
 )
 
 // CreateOpts is the set of options when creating VMs.
@@ -319,7 +327,7 @@ func DefaultCreateOpts() CreateOpts {
 	}
 	defaultCreateOpts.SSDOpts.UseLocalSSD = true
 	defaultCreateOpts.SSDOpts.NoExt4Barrier = true
-	defaultCreateOpts.SSDOpts.FileSystem = Ext4
+	defaultCreateOpts.SSDOpts.FileSystem = string(Ext4)
 
 	return defaultCreateOpts
 }
