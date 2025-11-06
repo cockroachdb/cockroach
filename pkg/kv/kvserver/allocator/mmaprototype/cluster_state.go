@@ -870,7 +870,62 @@ type rangeState struct {
 	// what is pending also allows for undo in the case of explicit failure,
 	// notified by AdjustPendingChangesDisposition.
 	//
-	// 2. Modeling
+	// 2. Lifecycle
+	// pendingChanges track proposed modifications to a range's replicas or
+	// leaseholder that are not yet reflected in the leaseholder's authoritative
+	// state. They are created by three sources: range rebalances, lease transfers
+	// originating from MMA, or external changes via RegisterExternalChanges
+	// (replicate or lease queue). There exists a pending change in a range state
+	// iff there is also a corresponding one in clusterState's pendingChanges.
+	//
+	// A pending change is removed from tracking in one of three ways:
+	// 1. Marked as enacted successfully: remove the pending changes, but the
+	// adjusted pending load remains until processStoreLoadMsg decides that the
+	// change has been reflected in the latest store load message according to
+	// lagForChangeReflectedInLoad.
+	//
+	// This happens when:
+	// - The pending change is successfully applied via
+	// AdjustPendingChangesDisposition(success).
+	// - The pending change is considered subsumed based on the leaseholder msg.
+	// - The leaseholder of the range has changed. This is a special case where
+	// the leaseholder of the range has moved to a different store, and the
+	// rangeMag no longer contains the range. We assume that the pending change
+	// has been enacted in this case.
+	//
+	// 2. Undone as failed: corresponding replica and load change is rolled back.
+	// Note that for replica changes that originate from one action, all changes
+	// would be undone together.
+	// NB: pending changes of a range state originate from one decision.
+	// Therefore, when one pending change is enacted successfully, we mark this
+	// range state's pending changes as no rollback (read more about this in 3).
+	// If we are here trying to undo a pending change but the range state has
+	// already been marked as no rollback, we do not undo the remaining pending
+	// changes. Instead, we wait for a StoreLeaseholderMsg to discard the pending
+	// changes and revert the load adjustments after the
+	// partiallyEnactedGCDuration has elapsed since the first enacted change.
+	//
+	// This happens when:
+	// - The pending change failed to apply via
+	// AdjustPendingChangesDisposition(failed)).
+	// - The pending change is garbage collected after this pending change has
+	// been created for pendingChangeGCDuration.
+	//
+	// 3. Dropped due to incompatibility: mma creates these pending changes while
+	// working with an earlier authoritative leaseholder message. These changes
+	// remain valid until a new authoritative message arrives that may reflect a
+	// conflicting state. See preCheckOnApplyReplicaChanges for details on how
+	// compatibility between the pending change and the new range state is
+	// determined. When incompatibility is detected, the pending change is
+	// discarded and the corresponding replica and load adjustments are rolled
+	// back.
+	//
+	// This happens when:
+	// - processStoreLeaseholderMsgInternal tries to apply the pending changes to
+	// the received range state from the new leaseholder msg, but the pending
+	// changes are incompatible with the new range state.
+	//
+	// 3. Modeling
 	//
 	// The slice of pendingChanges represent one decision. However, this
 	// decision is not always executed atomically by the external system.
@@ -919,7 +974,7 @@ type rangeState struct {
 	// added. This is unavoidable and will be fixed by the first
 	// StoreLeaseholderMsg post-GC.
 	//
-	// 3. Non Atomicity Hazard
+	// 4. Non Atomicity Hazard
 	//
 	// Since a decision is represented with multiple pending changes, and we
 	// allow for individual changes to be considered enacted or failed, we have
@@ -1622,6 +1677,12 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		if !ok {
 			panic(errors.AssertionFailedf("range %v not found in cluster state", rangeID))
 		}
+
+		// Unlike normal GC that reverts changes, we want to discard these pending
+		// changes. Do nothing here; processStoreLeaseholderMsgInternal will later
+		// detect and discard these pending changes. Note that
+		// processStoreLeaseholderMsgInternal will not revert the pending load
+		// change.
 		if rs.pendingChangeNoRollback {
 			continue
 		}
