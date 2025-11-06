@@ -247,6 +247,21 @@ type RemoveColumnComputeExpression struct {
 	ColumnID descpb.ColumnID
 }
 
+// MakeAbsentColumnHiddenWriteOnly moves a column into its mutation to not
+// visible.
+type MakeAbsentColumnHiddenWriteOnly struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakeAbsentColumnHiddenWriteOnly moves a column into its mutation to visible.
+type MakePublicColumnHiddenWriteOnly struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
 // MakeWriteOnlyColumnPublic moves a new column from its mutation to public.
 type MakeWriteOnlyColumnPublic struct {
 	immediateMutationOp

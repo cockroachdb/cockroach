@@ -543,7 +543,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	column := &scpb.Column{
 		TableID:                           tbl.GetID(),
 		ColumnID:                          col.GetID(),
-		IsHidden:                          col.IsHidden(),
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
@@ -591,6 +590,19 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			}
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+
+		if col.IsHidden() {
+			if columnType.ElementCreationMetadata.In_26_1OrLater {
+				columnHidden := scpb.ColumnHidden{
+					TableID:  tbl.GetID(),
+					ColumnID: col.GetID(),
+				}
+				w.ev(scpb.Status_PUBLIC, &columnHidden)
+			} else {
+				column.IsHidden = true
+			}
+		}
+
 	}
 	if !col.IsNullable() {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{
@@ -633,6 +645,7 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			ColumnID:   col.GetID(),
 		})
 	})
+
 }
 
 func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {

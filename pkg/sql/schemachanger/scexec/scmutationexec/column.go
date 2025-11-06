@@ -468,3 +468,35 @@ func clearComputedExpr(col *descpb.ColumnDescriptor) {
 		col.ComputeExpr = nil
 	}
 }
+
+func (i *immediateVisitor) MakeAbsentColumnHiddenWriteOnly(ctx context.Context, op scop.MakeAbsentColumnHiddenWriteOnly) error {
+	if err := i.setColumnHidden(ctx, op.TableID, op.ColumnID, true); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *immediateVisitor) MakePublicColumnHiddenWriteOnly(ctx context.Context, op scop.MakePublicColumnHiddenWriteOnly) error {
+	if err := i.setColumnHidden(ctx, op.TableID, op.ColumnID, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *immediateVisitor) setColumnHidden(ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID, hidden bool) error {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+
+	catCol, err := catalog.MustFindColumnByID(tbl, columnID)
+	if err != nil {
+		return err
+	}
+	col := catCol.ColumnDesc()
+
+	col.Hidden = hidden
+	return nil
+}
