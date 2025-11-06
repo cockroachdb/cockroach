@@ -121,9 +121,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -150,9 +148,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -179,9 +175,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -208,9 +202,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -237,9 +229,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -586,9 +576,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -615,9 +603,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -644,9 +630,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 3
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -673,9 +657,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -702,9 +684,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -731,9 +711,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -760,9 +738,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -789,9 +765,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -818,9 +792,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 5
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -847,9 +819,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 6
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1294,9 +1264,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1323,9 +1291,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 1
     isVirtual: false
@@ -1352,9 +1318,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1381,9 +1345,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1410,9 +1372,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1439,9 +1399,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1683,9 +1641,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1712,9 +1668,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1741,9 +1695,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1770,9 +1722,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1799,9 +1749,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1828,9 +1776,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
