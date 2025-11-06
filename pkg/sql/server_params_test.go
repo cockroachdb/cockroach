@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 )
 
@@ -21,7 +20,6 @@ import (
 func createTestServerParamsAllowTenants() (base.TestServerArgs, *tests.CommandFilters) {
 	var cmdFilters tests.CommandFilters
 	params := base.TestServerArgs{}
-	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
