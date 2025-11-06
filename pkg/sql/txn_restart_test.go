@@ -463,7 +463,13 @@ func TestTxnAutoRetry(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, cmdFilters := createTestServerParamsAllowTenants()
+	var cmdFilters tests.CommandFilters
+	params := base.TestServerArgs{}
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+			TestingEvalFilter: cmdFilters.RunFilters,
+		},
+	}
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
@@ -657,7 +663,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
@@ -877,7 +883,13 @@ func TestTxnUserRestart(t *testing.T) {
 			t.Run(fmt.Sprintf("err=%s,stgy=%d", tc.expectedErr, rs), func(t *testing.T) {
 				aborter := NewTxnAborter()
 				defer aborter.Close(t)
-				params, cmdFilters := createTestServerParamsAllowTenants()
+				var cmdFilters tests.CommandFilters
+				params := base.TestServerArgs{}
+				params.Knobs.Store = &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: cmdFilters.RunFilters,
+					},
+				}
 				params.Knobs.SQLExecutor = aborter.executorKnobs()
 				srv, sqlDB, _ := serverutils.StartServer(t, params)
 				defer srv.Stopper().Stop(context.Background())
@@ -963,8 +975,7 @@ func TestCommitWaitState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
@@ -999,7 +1010,7 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1088,7 +1099,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1150,8 +1161,7 @@ func TestUnexpectedStatementInRestartWait(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	tx, err := sqlDB.Begin()
@@ -1201,7 +1211,13 @@ func TestNonRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, cmdFilters := createTestServerParamsAllowTenants()
+	var cmdFilters tests.CommandFilters
+	params := base.TestServerArgs{}
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+			TestingEvalFilter: cmdFilters.RunFilters,
+		},
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -1294,7 +1310,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 		DisableMaxOffsetCheck: true,
 	}
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.Store = storeTestingKnobs
 	params.Knobs.KVClient = clientTestingKnobs
 	params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(156333)
@@ -1346,7 +1362,7 @@ func TestFlushUncommittedDescriptorCacheOnRestart(t *testing.T) {
 		},
 	}
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.Store = testingKnobs
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1556,8 +1572,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	checkState := func(tx *gosql.Tx, ts time.Time) {
@@ -1619,8 +1634,7 @@ func TestTxnAutoRetriesDisabledAfterResultsHaveBeenSentToClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	defer sqlDB.Close()
 
@@ -1708,7 +1722,13 @@ func TestTxnAutoRetryReasonAvailable(t *testing.T) {
 	const numRetries = 3
 	retryCount := 0
 
-	params, cmdFilters := createTestServerParamsAllowTenants()
+	var cmdFilters tests.CommandFilters
+	params := base.TestServerArgs{}
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+			TestingEvalFilter: cmdFilters.RunFilters,
+		},
+	}
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		BeforeRestart: func(ctx context.Context, reason error) {
 			retryCount++
