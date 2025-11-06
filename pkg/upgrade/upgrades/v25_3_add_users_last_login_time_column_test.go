@@ -85,7 +85,7 @@ func TestUsersLastLoginTimeTableMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.V25_3_AddEstimatedLastLoginTime,
+		clusterversion.TODO_Delete_V25_3_AddEstimatedLastLoginTime,
 		nil,   /* done */
 		false, /* expectError */
 	)

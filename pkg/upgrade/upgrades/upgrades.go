@@ -59,11 +59,11 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
+	newFirstUpgrade(clusterversion.TODO_Delete_V25_3_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
 		"add 'payload' column to system.eventlog table and add new index on eventType column",
-		clusterversion.V25_3_AddEventLogColumnAndIndex.Version(),
+		clusterversion.TODO_Delete_V25_3_AddEventLogColumnAndIndex.Version(),
 		upgrade.NoPrecondition,
 		eventLogTableMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
@@ -71,7 +71,7 @@ var upgrades = []upgradebase.Upgrade{
 
 	upgrade.NewTenantUpgrade(
 		"add 'estimated_last_login_time' column to system.users table",
-		clusterversion.V25_3_AddEstimatedLastLoginTime.Version(),
+		clusterversion.TODO_Delete_V25_3_AddEstimatedLastLoginTime.Version(),
 		upgrade.NoPrecondition,
 		usersLastLoginTimeTableMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
@@ -79,7 +79,7 @@ var upgrades = []upgradebase.Upgrade{
 
 	upgrade.NewTenantUpgrade(
 		"add new hot range logger job",
-		clusterversion.V25_3_AddHotRangeLoggerJob.Version(),
+		clusterversion.TODO_Delete_V25_3_AddHotRangeLoggerJob.Version(),
 		upgrade.NoPrecondition,
 		addHotRangeLoggerJob,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),

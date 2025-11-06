@@ -191,13 +191,13 @@ const (
 	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
 	V25_2
 
-	V25_3_Start
+	TODO_Delete_V25_3_Start
 
-	V25_3_AddEventLogColumnAndIndex
+	TODO_Delete_V25_3_AddEventLogColumnAndIndex
 
-	V25_3_AddEstimatedLastLoginTime
+	TODO_Delete_V25_3_AddEstimatedLastLoginTime
 
-	V25_3_AddHotRangeLoggerJob
+	TODO_Delete_V25_3_AddHotRangeLoggerJob
 
 	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
 	V25_3
@@ -280,13 +280,13 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_2: {Major: 25, Minor: 2, Internal: 0},
 
 	// v25.3 versions. Internal versions must be even.
-	V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
+	TODO_Delete_V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
 
-	V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
+	TODO_Delete_V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
 
-	V25_3_AddEstimatedLastLoginTime: {Major: 25, Minor: 2, Internal: 6},
+	TODO_Delete_V25_3_AddEstimatedLastLoginTime: {Major: 25, Minor: 2, Internal: 6},
 
-	V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
+	TODO_Delete_V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
 
 	V25_3: {Major: 25, Minor: 3, Internal: 0},
 
@@ -322,7 +322,7 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V25_2
+const MinSupported Key = V25_3
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).

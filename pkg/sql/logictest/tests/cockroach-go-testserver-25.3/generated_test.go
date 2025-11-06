@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 24
+const configIdx = 22
 
 var logicTestDir string
 
@@ -94,6 +94,20 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_char(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_char")
+}
+
+func TestLogic_mixed_version_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_citext")
+}
+
 func TestLogic_mixed_version_ltree(
 	t *testing.T,
 ) {
@@ -134,4 +148,11 @@ func TestLogic_upgrade(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upgrade")
+}
+
+func TestLogic_vector_index_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index_mixed")
 }
