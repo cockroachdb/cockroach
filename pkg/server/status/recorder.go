@@ -559,19 +559,19 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 		timestampNanos: now.UnixNano(),
 		settings:       mr.settings,
 	}
-	recorder.recordChildx(&data)
+	recorder.recordChangefeedChildMetrics(&data)
 	
 	// Record child metrics from app registry for system tenant
 	recorder.registry = mr.mu.appRegistry
-	recorder.recordChildx(&data)
+	recorder.recordChangefeedChildMetrics(&data)
 	
 	// Record child metrics from log registry
 	recorder.registry = mr.mu.logRegistry
-	recorder.recordChildx(&data)
+	recorder.recordChangefeedChildMetrics(&data)
 	
 	// Record child metrics from system registry
 	recorder.registry = mr.mu.sysRegistry
-	recorder.recordChildx(&data)
+	recorder.recordChangefeedChildMetrics(&data)
 
 	// Record child metrics from app-level registries for secondary tenants
 	for tenantID, r := range mr.mu.tenantRegistries {
@@ -582,7 +582,7 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 			timestampNanos: now.UnixNano(),
 			settings:       mr.settings,
 		}
-		tenantRecorder.recordChildx(&data)
+		tenantRecorder.recordChangefeedChildMetrics(&data)
 	}
 
 	// Record child metrics from store-level registries
@@ -595,7 +595,7 @@ func (mr *MetricsRecorder) GetChildMetricsData() []tspb.TimeSeriesData {
 			timestampNanos: now.UnixNano(),
 			settings:       mr.settings,
 		}
-		storeRecorder.recordChildx(&data)
+		storeRecorder.recordChangefeedChildMetrics(&data)
 
 		// Record child metrics for secondary tenant store metrics
 		for tenantID := range mr.mu.tenantRegistries {
@@ -1016,12 +1016,12 @@ func sanitizeAlphanumeric(s string) string {
 	return result.String()
 }
 
-// recordChildx iterates through metrics in the registry and processes child metrics
+// recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
 // for those that have EnableLowFreqChildCollection set to true in their metadata.
 // Records up to the configured maximum child metrics to prevent unbounded memory usage and performance issues.
 //
 // NB: Only available for Counter and Gauge metrics.
-func (rr registryRecorder) recordChildx(
+func (rr registryRecorder) recordChangefeedChildMetrics(
 	dest *[]tspb.TimeSeriesData,
 ) {
 	maxChildMetrics := 1024 // Default value
@@ -1032,6 +1032,11 @@ func (rr registryRecorder) recordChildx(
 
 	labels := rr.registry.GetLabels()
 	rr.registry.Each(func(name string, v interface{}) {
+		// Filter for changefeed metrics only
+		if !strings.HasPrefix(name, "changefeed.") {
+			return
+		}
+
 		prom, ok := v.(metric.PrometheusExportable)
 		if !ok {
 			return
