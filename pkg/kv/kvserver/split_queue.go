@@ -373,7 +373,8 @@ func (sq *splitQueue) processAttempt(
 			reason,
 			true, /* findFirstSafeSplitKey */
 		); pErr != nil {
-			return false, errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
+			return false, errors.Wrapf(pErr, "unable to split %s at key %q (attempted because: %v)", r, splitByLoadKey,
+				reason)
 		}
 
 		telemetry.Inc(sq.loadBasedCount)
