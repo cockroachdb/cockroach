@@ -263,6 +263,10 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleMetrics(w, r, cfg)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/sqlactivity", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/future/sqlactivity/statements", http.StatusFound)
+	}).Methods("GET")
+
 	futureRouter.HandleFunc("/sqlactivity/statements", func(w http.ResponseWriter, r *http.Request) {
 		handleSqlActivityStatements(w, r, cfg)
 	}).Methods("GET")

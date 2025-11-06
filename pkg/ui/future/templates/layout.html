@@ -1,41 +1,49 @@
-{{define "layout"}}
+{{define "layout-start"}}
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <script src="assets/htmx.min.js"></script>
-    <script defer src="assets/alpine.min.js"></script>
-    <script src="assets/auto-refresh.js"></script>
-    <link rel=stylesheet href="assets/missing.css">
+    <script src="/future/assets/htmx.min.js"></script>
+    <script defer src="/future/assets/alpine.min.js"></script>
+    <script src="/future/assets/auto-refresh.js"></script>
+    <link rel=stylesheet href="/future/assets/missing.css">
+    <script src="/future/assets/table-sort.js"></script>
+    <script src="/future/assets/timepickers.js"></script>
+    <meta charset="utf-8">
   </head>
   <body>
-  <div class="flex-row align-items:center padding crowded border-block-end">
-    <div class="flex-grow:2">
-      <img src="/future/assets/crl.svg" alt="CockroachDB Logo" width="200">
-    </div>
-    {{if .Insecure}}<chip class="warn">Insecure Mode</chip>{{end}}
-  </div>
-  <div class="flex-row align-items:center padding crowded border-block-end">
-    <div class="<h3> flex-grow:2">Cluster id: {{.ClusterID}}</div>
-    <chip class="info">{{.Tag}}</chip>
-  </div>
-  <div class="sidebar-layout">
-    <header>
-      <ul role="list">
-        <li><a href="overview">Overview</a></li>
-        <li><a href="metrics">Metrics</a></li>
-        <li>Databases</li>
-        <li>SQL Activity</li>
-        <li>Insights</li>
-        <li>Top Ranges</li>
-        <li>Jobs</li>
-        <li>Schedules</li>
-        <li>Advanced Debug</li>
-      </ul>
+    <header class="navbar margin-block-end:0">
+      <div class="flex-grow:2">ClusterID: {{.ClusterID}}</div>
+      <div><chip class="info">{{.Tag}}</chip></div>
+      <div>{{if .Insecure}}<chip class="warn">Insecure Mode</chip>{{end}}</div>
     </header>
-    <div class="padding">
-      {{template "page-content" .}}
+    <div class="sidebar-layout" style="height: 100vh;">
+      <header>
+        <strong class="<h1>">DB Console</strong>
+        <nav>
+          <ul role="list">
+            <li><a href="/future/overview">Overview</a></li>
+            <li><a href="/future/metrics">Metrics</a></li>
+            <li>Databases</li>
+            <li><a href="/future/sqlactivity">SQL Activity</a></li>
+              <ul role="list" class="margin">
+                <li>Statements</li>
+                <li>Transactions</li>
+                <li>Sessions</li>
+              </ul>
+            <li>Insights</li>
+            <li>Top Ranges</li>
+            <li>Jobs</li>
+            <li>Schedules</li>
+            <li>Advanced Debug</li>
+          </ul>
+        </nav>
+      </header>
+      <main class="width:100% padding">
+{{end}}
+
+{{define "layout-end"}}
+      </main>
     </div>
-  </div>
   </body>
 </html>
 {{end}}

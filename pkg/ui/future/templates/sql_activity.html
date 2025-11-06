@@ -1,277 +1,238 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <script src="/future/assets/htmx.min.js"></script>
-    <script defer src="/future/assets/alpine.min.js"></script>
-    <script src="/future/assets/auto-refresh.js"></script>
-    <link rel=stylesheet href="/future/assets/missing.css">
-    <script src="/future/assets/table-sort.js"></script>
-    <script src="/future/assets/timepickers.js"></script>
-    <meta charset="utf-8">
-  </head>
-  <body>
-    <style>
-      section.grid {
-        grid-template:
-          "name status"  auto
-          "uuid version" auto /
-          1fr   max-content;
-      }
-    </style>
-    <div class="sidebar-layout" style="height: 100vh;">
-      <header>
-        <nav>
-          <strong class="<h1>">DB Console</strong>
-            <ul role="list">
-              <li><a href="overview">Overview</a></li>
-              <li><a href="metrics">Metrics</a></li>
-              <li>Databases</li>
-              <li>SQL Activity</li>
-                <ul role="list" class="margin">
-                  <li>Statements</li>
-                  <li>Transactions</li>
-                  <li>Sessions</li>
-                </ul>
-              <li>Insights</li>
-              <li>Top Ranges</li>
-              <li>Jobs</li>
-              <li>Schedules</li>
-              <li>Advanced Debug</li>
-            </ul>
-        </nav>
-        <section aria-label="Status">
-          <chip class="ok">logged in</chip>
-          <chip class="info">v123.234</chip>
-        </section>
-      </header>
-        <main class="width:100% padding">
-          <nav class="breadcrumbs" aria-label="Breadcrumbs">
-            <ul>
-              <li class="<h1>">SQL Activity</li>
-              <li class="<h2>"><a href="#" aria-current=page>Statements</a></li>
-            </ul>
-          </nav>
-          <form class="flex-column box" method="GET" action="/future/sqlactivity/statements" x-data>
-            <div class="flex-row">
-              <div>
-                <label for=top>Top:</label>
-                <select id=top name=top>
-                  <option value="25" {{if eq .Data.Params.Top 25}}selected{{end}}>25</option>
-                  <option value="50" {{if eq .Data.Params.Top 50}}selected{{end}}>50</option>
-                  <option value="100" {{if eq .Data.Params.Top 100}}selected{{end}}>100</option>
-                  <option value="500" {{if eq .Data.Params.Top 500}}selected{{end}}>500</option>
-                  <hr />
-                  <optgroup label="Loads more slowly">
-                  <option value="1000" {{if eq .Data.Params.Top 1000}}selected{{end}}>1,000</option>
-                  <option value="5000" {{if eq .Data.Params.Top 5000}}selected{{end}}>5,000</option>
-                  <option value="10000" {{if eq .Data.Params.Top 10000}}selected{{end}}>10,000</option>
-                  </optgroup>
-                </select>
-              </div>
-              <div>
-                <label for=by>By:</label>
-                <select id=by name=by>
-                  <option {{if eq .Data.Params.By "% of All Runtime"}}selected{{end}}>% of All Runtime</option>
-                  <option {{if eq .Data.Params.By "Contention Time"}}selected{{end}}>Contention Time</option>
-                  <option {{if eq .Data.Params.By "Execution Count"}}selected{{end}}>Execution Count</option>
-                  <option {{if eq .Data.Params.By "SQL CPU Time"}}selected{{end}}>SQL CPU Time</option>
-                  <option {{if eq .Data.Params.By "Statement Time"}}selected{{end}}>Statement Time</option>
-                  <hr />
-                  <optgroup label="Load smore slowly">
-                    <option {{if eq .Data.Params.By "Last Execution Time"}}selected{{end}}>Last Execution Time</option>
-                    <option {{if eq .Data.Params.By "Max Latency"}}selected{{end}}>Max Latency</option>
-                    <option {{if eq .Data.Params.By "Max Memory"}}selected{{end}}>Max Memory</option>
-                    <option {{if eq .Data.Params.By "Min Latency"}}selected{{end}}>Min Latency</option>
-                    <option {{if eq .Data.Params.By "Network"}}selected{{end}}>Network</option>
-                    <option {{if eq .Data.Params.By "Retries"}}selected{{end}}>Retries</option>
-                    <option {{if eq .Data.Params.By "Rows Processed"}}selected{{end}}>Rows Processed</option>
-                  </optgroup>
-                </select>
-              </div>
-            </div>
-            <div class="flex-row">
-              <div>
-                <label for=interval>Interval:</label>
-                <select
-                  id=interval
-                  name=interval
-                  x-model="$store.timeRangeSQL.interval"
-                  @change="$store.timeRangeSQL.handleIntervalChange()">
-                  <option value="1h" {{if eq .Data.Params.Interval "1h"}}selected{{end}}>Past Hour</option>
-                  <option value="6h" {{if eq .Data.Params.Interval "6h"}}selected{{end}}>Past 6 Hours</option>
-                  <option value="1d" {{if eq .Data.Params.Interval "1d"}}selected{{end}}>Past Day</option>
-                  <option value="2d" {{if eq .Data.Params.Interval "2d"}}selected{{end}}>Past 2 Days</option>
-                  <option value="3d" {{if eq .Data.Params.Interval "3d"}}selected{{end}}>Past 3 Days</option>
-                  <option value="1w" {{if eq .Data.Params.Interval "1w"}}selected{{end}}>Past Week</option>
-                  <option value="2w" {{if eq .Data.Params.Interval "2w"}}selected{{end}}>Past 2 Weeks</option>
-                  <option value="1m" {{if eq .Data.Params.Interval "1m"}}selected{{end}}>Past Month</option>
-                  <option value="Custom" {{if eq .Data.Params.Interval "Custom"}}selected{{end}}>Custom</option>
-                </select>
-              </div>
-              <div>
-                <label for="start-time">Start:</label>
-                <input
-                  type="datetime-local"
-                  id="start-time"
-                  x-model="$store.timeRangeSQL.startTime"
-                  :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
-              </div>
-              <div>
-                <label for="end-time">End:</label>
-                <input
-                  type="datetime-local"
-                  id="end-time"
-                  x-model="$store.timeRangeSQL.endTime"
-                  :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
-              </div>
-            </div>
-            <input type="hidden" name="start" value="{{.Data.Params.Start}}" x-model="$store.timeRangeSQL.startSeconds" />
-            <input type="hidden" name="end" value="{{.Data.Params.End}}" x-model="$store.timeRangeSQL.endSeconds" />
-            <div>
-            <strong><button type="submit" class="<big>">Apply</button></strong>
-            </div>
-          </form>
-          <h3>Results - Top {{.Data.Params.ResultCount}} Statement Fingerprints by {{.Data.Params.SortByDisplay}}</h3>
-          <p>Showing aggregated stats from {{.Data.Params.StartTime}} to {{.Data.Params.EndTime}} ({{.Data.Params.Timezone}})</p>
+{{template "layout-start" .}}
 
-          <div x-data="tableSort()" style="overflow-x: auto;">
-            <table id="table-data">
-              <thead>
-                <tr>
-                  <th @click="sort('statements', 0)" style="cursor: pointer;">
-                    Statements <span x-text="getSortIndicator('statements')"></span>
-                  </th>
-                  <th @click="sort('execution-count', 1)" style="cursor: pointer;">
-                    Execution Count <span x-text="getSortIndicator('execution-count')"></span>
-                  </th>
-                  <th @click="sort('database', 2)" style="cursor: pointer;">
-                    Database <span x-text="getSortIndicator('database')"></span>
-                  </th>
-                  <th @click="sort('application-name', 3)" style="cursor: pointer;">
-                    Application Name <span x-text="getSortIndicator('application-name')"></span>
-                  </th>
-                  <th @click="sort('statement-time', 4)" style="cursor: pointer;">
-                    Statement Time <span x-text="getSortIndicator('statement-time')"></span>
-                  </th>
-                  <th @click="sort('pct-runtime', 5)" style="cursor: pointer;">
-                    % of All Runtime <span x-text="getSortIndicator('pct-runtime')"></span>
-                  </th>
-                  <th @click="sort('contention-time', 6)" style="cursor: pointer;">
-                    Contention Time <span x-text="getSortIndicator('contention-time')"></span>
-                  </th>
-                  <th @click="sort('sql-cpu-time', 7)" style="cursor: pointer;">
-                    SQL CPU Time <span x-text="getSortIndicator('sql-cpu-time')"></span>
-                  </th>
-                  <th @click="sort('min-latency', 8)" style="cursor: pointer;">
-                    Min Latency <span x-text="getSortIndicator('min-latency')"></span>
-                  </th>
-                  <th @click="sort('max-latency', 9)" style="cursor: pointer;">
-                    Max Latency <span x-text="getSortIndicator('max-latency')"></span>
-                  </th>
-                  <th @click="sort('rows-processed', 10)" style="cursor: pointer;">
-                    Rows Processed <span x-text="getSortIndicator('rows-processed')"></span>
-                  </th>
-                  <th @click="sort('bytes-read', 11)" style="cursor: pointer;">
-                    Bytes Read <span x-text="getSortIndicator('bytes-read')"></span>
-                  </th>
-                  <th @click="sort('max-memory', 12)" style="cursor: pointer;">
-                    Max Memory <span x-text="getSortIndicator('max-memory')"></span>
-                  </th>
-                  <th @click="sort('network', 13)" style="cursor: pointer;">
-                    Network <span x-text="getSortIndicator('network')"></span>
-                  </th>
-                  <th @click="sort('retries', 14)" style="cursor: pointer;">
-                    Retries <span x-text="getSortIndicator('retries')"></span>
-                  </th>
-                  <th @click="sort('last-exec-time', 15)" style="cursor: pointer;">
-                    Last Execution Time <span x-text="getSortIndicator('last-exec-time')"></span>
-                  </th>
-                  <th @click="sort('fingerprint-id', 16)" style="cursor: pointer;">
-                    Statement Fingerprint ID <span x-text="getSortIndicator('fingerprint-id')"></span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {{range .Data.Statements.Statements}}
-                <tr>
-                  <td>
-                    {{.Key.KeyData.Query}}
-                  </td>
-                  <td data-sort="{{.Stats.Count}}">
-                    {{formatNumber .Stats.Count}}
-                  </td>
-                  <td>
-                    {{.Key.KeyData.Database}}
-                  </td>
-                  <td>
-                    {{.Key.KeyData.App}}
-                  </td>
-                  <td data-sort="{{mul .Stats.ServiceLat.Mean 1000000000}}">
-                    {{formatTime (mul .Stats.ServiceLat.Mean 1000000000)}}
-                  </td>
-                  <td data-sort="{{if ne $.Data.TotalWorkload 0.0}}{{div (mul .Stats.ServiceLat.Mean .Stats.Count) $.Data.TotalWorkload}}{{else}}0{{end}}">
-                    {{if ne $.Data.TotalWorkload 0.0}}{{printf "%.2f%%" (mul 100.0 (div (mul .Stats.ServiceLat.Mean .Stats.Count) $.Data.TotalWorkload))}}{{else}}-{{end}}
-                  </td>
-                  <td data-sort="{{.Stats.ExecStats.ContentionTime.Mean}}">
-                    {{formatTime .Stats.ExecStats.ContentionTime.Mean}}
-                  </td>
-                  <td data-sort="{{.Stats.ExecStats.CPUSQLNanos.Mean}}">
-                    {{formatTime .Stats.ExecStats.CPUSQLNanos.Mean}}
-                  </td>
-                  <td data-sort="{{mul .Stats.LatencyInfo.Min 1000000000}}">
-                    {{formatTime (mul .Stats.LatencyInfo.Min 1000000000)}}
-                  </td>
-                  <td data-sort="{{mul .Stats.LatencyInfo.Max 1000000000}}">
-                    {{formatTime (mul .Stats.LatencyInfo.Max 1000000000)}}
-                  </td>
-                  <td data-sort="{{add .Stats.RowsRead.Mean .Stats.RowsWritten.Mean}}">
-                    {{formatNumber .Stats.RowsRead.Mean}} Reads / {{formatNumber .Stats.RowsWritten.Mean}} Writes
-                  </td>
-                  <td data-sort="{{.Stats.BytesRead.Mean}}">
-                    {{formatBytes .Stats.BytesRead.Mean}}
-                  </td>
-                  <td data-sort="{{.Stats.ExecStats.MaxMemUsage.Mean}}">
-                    {{formatBytes .Stats.ExecStats.MaxMemUsage.Mean}}
-                  </td>
-                  <td data-sort="{{.Stats.ExecStats.NetworkBytes.Mean}}">
-                    {{formatBytes .Stats.ExecStats.NetworkBytes.Mean}}
-                  </td>
-                  <td data-sort="{{sub .Stats.Count .Stats.FirstAttemptCount}}">
-                    {{formatNumber (sub .Stats.Count .Stats.FirstAttemptCount)}}
-                  </td>
-                  <td data-sort="{{.Stats.LastExecTimestamp.Unix}}">
-                    {{if .Stats.LastExecTimestamp.IsZero}}-{{else}}{{.Stats.LastExecTimestamp.Format "2006-01-02 15:04:05"}}{{end}}
-                  </td>
-                  <td>
-                    {{.ID}}
-                  </td>
-                </tr>
-                {{end}}
-              </tbody>
-            </table>
+<style>
+  section.grid {
+    grid-template:
+      "name status"  auto
+      "uuid version" auto /
+      1fr   max-content;
+  }
+</style>
+<nav class="breadcrumbs" aria-label="Breadcrumbs">
+  <ul>
+    <li class="<h1>">SQL Activity</li>
+    <li class="<h2>"><a href="#" aria-current=page>Statements</a></li>
+  </ul>
+</nav>
+<form class="flex-column box" method="GET" action="/future/sqlactivity/statements" x-data>
+  <div class="flex-row">
+    <div>
+      <label for=top>Top:</label>
+      <select id=top name=top>
+        <option value="25" {{if eq .Data.Params.Top 25}}selected{{end}}>25</option>
+        <option value="50" {{if eq .Data.Params.Top 50}}selected{{end}}>50</option>
+        <option value="100" {{if eq .Data.Params.Top 100}}selected{{end}}>100</option>
+        <option value="500" {{if eq .Data.Params.Top 500}}selected{{end}}>500</option>
+        <hr />
+        <optgroup label="Loads more slowly">
+        <option value="1000" {{if eq .Data.Params.Top 1000}}selected{{end}}>1,000</option>
+        <option value="5000" {{if eq .Data.Params.Top 5000}}selected{{end}}>5,000</option>
+        <option value="10000" {{if eq .Data.Params.Top 10000}}selected{{end}}>10,000</option>
+        </optgroup>
+      </select>
+    </div>
+    <div>
+      <label for=by>By:</label>
+      <select id=by name=by>
+        <option {{if eq .Data.Params.By "% of All Runtime"}}selected{{end}}>% of All Runtime</option>
+        <option {{if eq .Data.Params.By "Contention Time"}}selected{{end}}>Contention Time</option>
+        <option {{if eq .Data.Params.By "Execution Count"}}selected{{end}}>Execution Count</option>
+        <option {{if eq .Data.Params.By "SQL CPU Time"}}selected{{end}}>SQL CPU Time</option>
+        <option {{if eq .Data.Params.By "Statement Time"}}selected{{end}}>Statement Time</option>
+        <hr />
+        <optgroup label="Load smore slowly">
+          <option {{if eq .Data.Params.By "Last Execution Time"}}selected{{end}}>Last Execution Time</option>
+          <option {{if eq .Data.Params.By "Max Latency"}}selected{{end}}>Max Latency</option>
+          <option {{if eq .Data.Params.By "Max Memory"}}selected{{end}}>Max Memory</option>
+          <option {{if eq .Data.Params.By "Min Latency"}}selected{{end}}>Min Latency</option>
+          <option {{if eq .Data.Params.By "Network"}}selected{{end}}>Network</option>
+          <option {{if eq .Data.Params.By "Retries"}}selected{{end}}>Retries</option>
+          <option {{if eq .Data.Params.By "Rows Processed"}}selected{{end}}>Rows Processed</option>
+        </optgroup>
+      </select>
+    </div>
+  </div>
+  <div class="flex-row">
+    <div>
+      <label for=interval>Interval:</label>
+      <select
+        id=interval
+        name=interval
+        x-model="$store.timeRangeSQL.interval"
+        @change="$store.timeRangeSQL.handleIntervalChange()">
+        <option value="1h" {{if eq .Data.Params.Interval "1h"}}selected{{end}}>Past Hour</option>
+        <option value="6h" {{if eq .Data.Params.Interval "6h"}}selected{{end}}>Past 6 Hours</option>
+        <option value="1d" {{if eq .Data.Params.Interval "1d"}}selected{{end}}>Past Day</option>
+        <option value="2d" {{if eq .Data.Params.Interval "2d"}}selected{{end}}>Past 2 Days</option>
+        <option value="3d" {{if eq .Data.Params.Interval "3d"}}selected{{end}}>Past 3 Days</option>
+        <option value="1w" {{if eq .Data.Params.Interval "1w"}}selected{{end}}>Past Week</option>
+        <option value="2w" {{if eq .Data.Params.Interval "2w"}}selected{{end}}>Past 2 Weeks</option>
+        <option value="1m" {{if eq .Data.Params.Interval "1m"}}selected{{end}}>Past Month</option>
+        <option value="Custom" {{if eq .Data.Params.Interval "Custom"}}selected{{end}}>Custom</option>
+      </select>
+    </div>
+    <div>
+      <label for="start-time">Start:</label>
+      <input
+        type="datetime-local"
+        id="start-time"
+        x-model="$store.timeRangeSQL.startTime"
+        :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
+    </div>
+    <div>
+      <label for="end-time">End:</label>
+      <input
+        type="datetime-local"
+        id="end-time"
+        x-model="$store.timeRangeSQL.endTime"
+        :disabled="$store.timeRangeSQL.interval !== 'Custom'" />
+    </div>
+  </div>
+  <input type="hidden" name="start" value="{{.Data.Params.Start}}" x-model="$store.timeRangeSQL.startSeconds" />
+  <input type="hidden" name="end" value="{{.Data.Params.End}}" x-model="$store.timeRangeSQL.endSeconds" />
+  <div>
+  <strong><button type="submit" class="<big>">Apply</button></strong>
+  </div>
+</form>
+<h3>Results - Top {{.Data.Params.ResultCount}} Statement Fingerprints by {{.Data.Params.SortByDisplay}}</h3>
+<p>Showing aggregated stats from {{.Data.Params.StartTime}} to {{.Data.Params.EndTime}} ({{.Data.Params.Timezone}})</p>
 
-            <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
-              <div>
-                <span x-text="paginationInfo"></span>
-              </div>
-              <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <button
-                  @click="prevPage()"
-                  :disabled="currentPage === 1"
-                  type="button">
-                  ← Previous
-                </button>
-                <span>Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></span>
-                <button
-                  @click="nextPage()"
-                  :disabled="currentPage === totalPages"
-                  type="button">
-                  Next →
-                </button>
-              </div>
-            </div>
-          </div>
-       </main>
-      </div>
-   </body>
-</html>
+<div x-data="tableSort()" style="overflow-x: auto;">
+  <table id="table-data">
+    <thead>
+      <tr>
+        <th @click="sort('statements', 0)" style="cursor: pointer;">
+          Statements <span x-text="getSortIndicator('statements')"></span>
+        </th>
+        <th @click="sort('execution-count', 1)" style="cursor: pointer;">
+          Execution Count <span x-text="getSortIndicator('execution-count')"></span>
+        </th>
+        <th @click="sort('database', 2)" style="cursor: pointer;">
+          Database <span x-text="getSortIndicator('database')"></span>
+        </th>
+        <th @click="sort('application-name', 3)" style="cursor: pointer;">
+          Application Name <span x-text="getSortIndicator('application-name')"></span>
+        </th>
+        <th @click="sort('statement-time', 4)" style="cursor: pointer;">
+          Statement Time <span x-text="getSortIndicator('statement-time')"></span>
+        </th>
+        <th @click="sort('pct-runtime', 5)" style="cursor: pointer;">
+          % of All Runtime <span x-text="getSortIndicator('pct-runtime')"></span>
+        </th>
+        <th @click="sort('contention-time', 6)" style="cursor: pointer;">
+          Contention Time <span x-text="getSortIndicator('contention-time')"></span>
+        </th>
+        <th @click="sort('sql-cpu-time', 7)" style="cursor: pointer;">
+          SQL CPU Time <span x-text="getSortIndicator('sql-cpu-time')"></span>
+        </th>
+        <th @click="sort('min-latency', 8)" style="cursor: pointer;">
+          Min Latency <span x-text="getSortIndicator('min-latency')"></span>
+        </th>
+        <th @click="sort('max-latency', 9)" style="cursor: pointer;">
+          Max Latency <span x-text="getSortIndicator('max-latency')"></span>
+        </th>
+        <th @click="sort('rows-processed', 10)" style="cursor: pointer;">
+          Rows Processed <span x-text="getSortIndicator('rows-processed')"></span>
+        </th>
+        <th @click="sort('bytes-read', 11)" style="cursor: pointer;">
+          Bytes Read <span x-text="getSortIndicator('bytes-read')"></span>
+        </th>
+        <th @click="sort('max-memory', 12)" style="cursor: pointer;">
+          Max Memory <span x-text="getSortIndicator('max-memory')"></span>
+        </th>
+        <th @click="sort('network', 13)" style="cursor: pointer;">
+          Network <span x-text="getSortIndicator('network')"></span>
+        </th>
+        <th @click="sort('retries', 14)" style="cursor: pointer;">
+          Retries <span x-text="getSortIndicator('retries')"></span>
+        </th>
+        <th @click="sort('last-exec-time', 15)" style="cursor: pointer;">
+          Last Execution Time <span x-text="getSortIndicator('last-exec-time')"></span>
+        </th>
+        <th @click="sort('fingerprint-id', 16)" style="cursor: pointer;">
+          Statement Fingerprint ID <span x-text="getSortIndicator('fingerprint-id')"></span>
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Data.Statements.Statements}}
+      <tr>
+        <td>
+          {{.Key.KeyData.Query}}
+        </td>
+        <td data-sort="{{.Stats.Count}}">
+          {{formatNumber .Stats.Count}}
+        </td>
+        <td>
+          {{.Key.KeyData.Database}}
+        </td>
+        <td>
+          {{.Key.KeyData.App}}
+        </td>
+        <td data-sort="{{mul .Stats.ServiceLat.Mean 1000000000}}">
+          {{formatTime (mul .Stats.ServiceLat.Mean 1000000000)}}
+        </td>
+        <td data-sort="{{if ne $.Data.TotalWorkload 0.0}}{{div (mul .Stats.ServiceLat.Mean .Stats.Count) $.Data.TotalWorkload}}{{else}}0{{end}}">
+          {{if ne $.Data.TotalWorkload 0.0}}{{printf "%.2f%%" (mul 100.0 (div (mul .Stats.ServiceLat.Mean .Stats.Count) $.Data.TotalWorkload))}}{{else}}-{{end}}
+        </td>
+        <td data-sort="{{.Stats.ExecStats.ContentionTime.Mean}}">
+          {{formatTime .Stats.ExecStats.ContentionTime.Mean}}
+        </td>
+        <td data-sort="{{.Stats.ExecStats.CPUSQLNanos.Mean}}">
+          {{formatTime .Stats.ExecStats.CPUSQLNanos.Mean}}
+        </td>
+        <td data-sort="{{mul .Stats.LatencyInfo.Min 1000000000}}">
+          {{formatTime (mul .Stats.LatencyInfo.Min 1000000000)}}
+        </td>
+        <td data-sort="{{mul .Stats.LatencyInfo.Max 1000000000}}">
+          {{formatTime (mul .Stats.LatencyInfo.Max 1000000000)}}
+        </td>
+        <td data-sort="{{add .Stats.RowsRead.Mean .Stats.RowsWritten.Mean}}">
+          {{formatNumber .Stats.RowsRead.Mean}} Reads / {{formatNumber .Stats.RowsWritten.Mean}} Writes
+        </td>
+        <td data-sort="{{.Stats.BytesRead.Mean}}">
+          {{formatBytes .Stats.BytesRead.Mean}}
+        </td>
+        <td data-sort="{{.Stats.ExecStats.MaxMemUsage.Mean}}">
+          {{formatBytes .Stats.ExecStats.MaxMemUsage.Mean}}
+        </td>
+        <td data-sort="{{.Stats.ExecStats.NetworkBytes.Mean}}">
+          {{formatBytes .Stats.ExecStats.NetworkBytes.Mean}}
+        </td>
+        <td data-sort="{{sub .Stats.Count .Stats.FirstAttemptCount}}">
+          {{formatNumber (sub .Stats.Count .Stats.FirstAttemptCount)}}
+        </td>
+        <td data-sort="{{.Stats.LastExecTimestamp.Unix}}">
+          {{if .Stats.LastExecTimestamp.IsZero}}-{{else}}{{.Stats.LastExecTimestamp.Format "2006-01-02 15:04:05"}}{{end}}
+        </td>
+        <td>
+          {{.ID}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
+    <div>
+      <span x-text="paginationInfo"></span>
+    </div>
+    <div style="display: flex; gap: 0.5rem; align-items: center;">
+      <button
+        @click="prevPage()"
+        :disabled="currentPage === 1"
+        type="button">
+        ← Previous
+      </button>
+      <span>Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span></span>
+      <button
+        @click="nextPage()"
+        :disabled="currentPage === totalPages"
+        type="button">
+        Next →
+      </button>
+    </div>
+  </div>
+</div>
+
+{{template "layout-end" .}}
