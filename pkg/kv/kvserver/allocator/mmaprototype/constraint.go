@@ -1922,6 +1922,14 @@ func (lti *localityTierInterner) unintern(lt localityTiers) roachpb.Locality {
 	return locality
 }
 
+// localityTiers encodes a locality value hierarchy, represented by codes
+// from an associated stringInterner.
+//
+// Note that CockroachDB operators must use matching *keys*[1] across all nodes
+// in each deployment, so we only need to deal with a slice of locality
+// *values*.
+//
+// [1]: https://www.cockroachlabs.com/docs/stable/cockroach-start#locality
 type localityTiers struct {
 	tiers []stringCode
 	// str is useful as a map key for caching computations.
