@@ -354,13 +354,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT GENERATED ALWAYS AS IDENTITY
 - [[SequenceOwner:{DescID: 104, ColumnID: 2, ReferencedDescID: 107}, PUBLIC], ABSENT]
   {columnId: 2, sequenceId: 107, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, generatedAsIdentityType: 1, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
   {columnId: 2, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, PUBLIC], ABSENT]
   {columnId: 2, expr: 'nextval(107:::REGCLASS)', tableId: 104, usesSequenceIds: [107]}
+- [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 104, type: 1}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
@@ -396,13 +398,15 @@ ALTER TABLE defaultdb.foo ADD COLUMN j SERIAL GENERATED ALWAYS AS IDENTITY
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 104}
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
-  {columnId: 2, generatedAsIdentityType: 1, tableId: 104}
+  {columnId: 2, tableId: 104}
 - [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   {columnId: 2, name: j, tableId: 104}
 - [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2, TypeName: INT8}, PUBLIC], ABSENT]
   {columnId: 2, elementCreationMetadata: {in243OrLater: true, in261OrLater: true}, tableId: 104, type: {family: IntFamily, oid: 20, width: 64}, typeName: INT8}
 - [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: unique_rowid()}, PUBLIC], ABSENT]
   {columnId: 2, expr: unique_rowid(), tableId: 104}
+- [[ColumnGeneratedAsIdentity:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 104, type: 1}
 - [[PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT]
   {constraintId: 2, indexId: 2, isUnique: true, sourceIndexId: 1, tableId: 104, temporaryIndexId: 3}
 - [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]

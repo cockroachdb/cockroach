@@ -25,7 +25,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #106
   ...
      - columnIds:
@@ -131,7 +131,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 15 MutationType ops
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
 upsert descriptor #106
   ...
      createAsOfTime:

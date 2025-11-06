@@ -407,10 +407,6 @@ var (
 		// Use generic query plans since our queries are extremely simple and
 		// won't benefit from custom plans.
 		PlanCacheMode: &forceGenericPlan,
-		// We've observed in the CPU profiles that the default goroutine stack
-		// of the connExecutor goroutine is insufficient for evaluation of the
-		// ingestion queries, so we grow the stack right away to 32KiB.
-		GrowStackSize: true,
 		// We don't get any benefits from generating plan gists for internal
 		// queries, so we disable them.
 		DisablePlanGists:      true,

@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
-	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -223,7 +222,6 @@ func (ie *InternalExecutor) runWithEx(
 	syncCallback func([]*streamingCommandResult),
 	errCallback func(error),
 	attributeToUser bool,
-	growStackSize bool,
 ) error {
 	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
@@ -251,11 +249,6 @@ func (ie *InternalExecutor) runWithEx(
 	go func() {
 		defer hdl.Activate(ctx).Release(ctx)
 		defer cleanup(ctx)
-		// TODO(yuzefovich): benchmark whether we should be growing the
-		// stack size unconditionally.
-		if growStackSize {
-			growstack.Grow()
-		}
 		if err := ex.run(
 			ctx,
 			ie.mon,
@@ -1196,7 +1189,6 @@ func (ie *InternalExecutor) execInternal(
 		txn.SetBufferedWritesEnabled(false)
 	}
 	attributeToUser := sessionDataOverride.AttributeToUser && attributeToUserEnabled.Get(&ie.s.cfg.Settings.SV)
-	growStackSize := sessionDataOverride.GrowStackSize
 	if !rw.async() && (txn != nil && txn.Type() == kv.RootTxn) {
 		// If the "outer" query uses the RootTxn and the sync result channel is
 		// requested, then we must disable both DistSQL and Streamer to ensure
@@ -1308,7 +1300,7 @@ func (ie *InternalExecutor) execInternal(
 	errCallback := func(err error) {
 		_ = rw.addResult(ctx, ieIteratorResult{err: err})
 	}
-	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser, growStackSize)
+	err = ie.runWithEx(ctx, opName, txn, rw, mode, sd, stmtBuf, &wg, syncCallback, errCallback, attributeToUser)
 	if err != nil {
 		return nil, err
 	}
