@@ -13,7 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -178,7 +178,7 @@ type TelemetryLoggingTestingKnobs struct {
 	// when updating rolling query counts.
 	getTimeNow func() time.Time
 	// getQueryLevelMetrics allows tests to override the recorded query level stats.
-	getQueryLevelStats func() execstats.QueryLevelStats
+	getQueryLevelStats func() execstatstypes.QueryLevelStats
 	// getTracingStatus allows tests to override whether the current query has tracing
 	// enabled or not. Queries with tracing enabled are always sampled to telemetry.
 	getTracingStatus func() bool
@@ -186,7 +186,7 @@ type TelemetryLoggingTestingKnobs struct {
 
 func NewTelemetryLoggingTestingKnobs(
 	getTimeNowFunc func() time.Time,
-	getQueryLevelStatsFunc func() execstats.QueryLevelStats,
+	getQueryLevelStatsFunc func() execstatstypes.QueryLevelStats,
 	getTracingStatusFunc func() bool,
 ) *TelemetryLoggingTestingKnobs {
 	return &TelemetryLoggingTestingKnobs{
@@ -358,8 +358,8 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 }
 
 func (t *telemetryLoggingMetrics) getQueryLevelStats(
-	queryLevelStats execstats.QueryLevelStats,
-) execstats.QueryLevelStats {
+	queryLevelStats execstatstypes.QueryLevelStats,
+) execstatstypes.QueryLevelStats {
 	if t.Knobs != nil && t.Knobs.getQueryLevelStats != nil {
 		return t.Knobs.getQueryLevelStats()
 	}

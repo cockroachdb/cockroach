@@ -86,7 +86,7 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 		stats.mu.data.MaxRetries = int64(value.AutoRetryCount)
 	}
 
-	stats.mu.data.SQLType = value.StatementType.String()
+	stats.mu.data.SQLType = value.StatementType
 	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
 	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatencySec)
 	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatencySec)

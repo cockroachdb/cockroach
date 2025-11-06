@@ -246,7 +246,7 @@ func (ex *connExecutor) recordStatementSummary(
 			RowsWritten:          stats.rowsWritten,
 			Nodes:                sqlInstanceIDs,
 			KVNodeIDs:            kvNodeIDs,
-			StatementType:        stmt.AST.StatementType(),
+			StatementType:        stmt.AST.StatementType().String(),
 			PlanGist:             planner.instrumentation.planGist.String(),
 			StatementError:       stmtErr,
 			IndexRecommendations: idxRecommendations,

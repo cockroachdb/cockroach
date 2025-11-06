@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -373,7 +373,7 @@ func (s *stmtStats) sizeUnsafeLocked() int64 {
 	return stmtStatsShallowSize + metaFieldsSize + dataSize
 }
 
-func (s *stmtStats) recordExecStatsLocked(stats execstats.QueryLevelStats) {
+func (s *stmtStats) recordExecStatsLocked(stats execstatstypes.QueryLevelStats) {
 	s.mu.data.ExecStats.Count++
 	count := s.mu.data.ExecStats.Count
 	s.mu.data.ExecStats.NetworkBytes.Record(count, float64(stats.DistSQLNetworkBytesSent))

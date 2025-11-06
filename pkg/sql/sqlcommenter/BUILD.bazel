@@ -5,11 +5,7 @@ go_library(
     srcs = ["sql_commenter.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/settings",
-        "//pkg/sql/parser",
-        "@com_github_cockroachdb_redact//:redact",
-    ],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
 )
 
 go_test(

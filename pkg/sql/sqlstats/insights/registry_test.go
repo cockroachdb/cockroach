@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -356,7 +356,7 @@ func TestRegistry(t *testing.T) {
 			Committed:     true,
 			SessionID:     session.ID,
 			TransactionID: uuid.MakeV4(),
-			ExecStats: execstats.QueryLevelStats{
+			ExecStats: execstatstypes.QueryLevelStats{
 				ContentionTime: contentionDuration,
 			},
 		}

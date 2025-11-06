@@ -15,8 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -84,14 +83,14 @@ type RecordedStmtStats struct {
 	RowsWritten              int64
 	Nodes                    []int64
 	KVNodeIDs                []int32
-	StatementType            tree.StatementType
+	StatementType            string
 	Plan                     *appstatspb.ExplainTreePlanNode
 	PlanGist                 string
 	StatementError           error
 	IndexRecommendations     []string
 	StartTime                time.Time
 	EndTime                  time.Time
-	ExecStats                *execstats.QueryLevelStats
+	ExecStats                *execstatstypes.QueryLevelStats
 	Indexes                  []string
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
@@ -116,7 +115,7 @@ type RecordedTxnStats struct {
 	IdleLatency             time.Duration
 	RowsAffected            int
 	CollectedExecStats      bool
-	ExecStats               execstats.QueryLevelStats
+	ExecStats               execstatstypes.QueryLevelStats
 	RowsRead                int64
 	RowsWritten             int64
 	BytesRead               int64

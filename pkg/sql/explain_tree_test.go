@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -85,7 +85,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 				ctx,
 				explain.Flags{Verbose: true, ShowTypes: true},
 				sessionphase.NewTimes(),
-				&execstats.QueryLevelStats{},
+				&execstatstypes.QueryLevelStats{},
 			)
 			return ob.BuildString()
 		default:
