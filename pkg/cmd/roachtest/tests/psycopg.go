@@ -79,28 +79,13 @@ func registerPsycopg(r registry.Registry) {
 		if err := repeatRunE(
 			ctx, t, c, node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3 libpq-dev python3-dev gcc python3-virtualenv python3-setuptools python-setuptools`,
+			`sudo apt-get -qq install make python3 python3-pip libpq-dev python3-dev gcc python3-venv python3-setuptools`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.10 as default", `
-				sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
-				sudo update-alternatives --config python3`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
-			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := repeatRunE(
-			ctx, t, c, node, "create virtualenv", `virtualenv --clear venv`,
+			ctx, t, c, node, "create virtualenv", `python3 -m venv --clear venv`,
 		); err != nil {
 			t.Fatal(err)
 		}

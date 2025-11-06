@@ -290,7 +290,7 @@ EOF`
 	require.NoError(t, err)
 
 	// run the command to install the relevant packages in non-interactibve mode.
-	installCmd := "sudo DEBIAN_FRONTEND=noninteractive apt install -yyq slapd ldap-utils"
+	installCmd := "sudo apt update -qq && sudo DEBIAN_FRONTEND=noninteractive apt install -yyq slapd ldap-utils"
 	err = c.RunE(ctx, option.WithNodes(nodeListOptions), installCmd)
 	require.NoError(t, err)
 
