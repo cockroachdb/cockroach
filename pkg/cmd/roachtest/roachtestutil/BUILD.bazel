@@ -62,6 +62,12 @@ go_test(
     embed = [":roachtestutil"],
     deps = [
         "//pkg/cmd/roachtest/option",
+        "//pkg/roachprod",
+        "//pkg/roachprod/vm/aws",
+        "//pkg/roachprod/vm/azure",
+        "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/ibm",
+        "//pkg/roachprod/vm/local",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
