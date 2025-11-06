@@ -31,7 +31,6 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
-        "//pkg/sql/execversion",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
