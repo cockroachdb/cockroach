@@ -49,10 +49,14 @@ type weightedSample struct {
 	count       int
 }
 
+func (ws weightedSample) balance() float64 {
+	return math.Abs(ws.left-ws.right) / (ws.left + ws.right)
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (ws weightedSample) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s(l=%.1f r=%.1f c=%d w=%.1f)",
-		ws.key, ws.left, ws.right, ws.count, ws.weight)
+	w.Printf("%s bal=%.2f (l=%.1f r=%.1f c=%d w=%.1f)",
+		ws.key, ws.balance(), ws.left, ws.right, ws.count, ws.weight)
 }
 
 func (ws weightedSample) String() string {
@@ -211,7 +215,7 @@ func (f *WeightedFinder) Key() roachpb.Key {
 		if s.count < splitKeyMinCounter {
 			continue
 		}
-		balanceScore := math.Abs(s.left-s.right) / (s.left + s.right)
+		balanceScore := s.balance()
 		if balanceScore >= splitKeyThreshold {
 			continue
 		}
@@ -234,7 +238,7 @@ func (f *WeightedFinder) noSplitKeyCause() (insufficientCounters, imbalance int)
 	for _, s := range f.samples {
 		if s.count < splitKeyMinCounter {
 			insufficientCounters++
-		} else if balanceScore := math.Abs(s.left-s.right) / (s.left + s.right); balanceScore >= splitKeyThreshold {
+		} else if balanceScore := s.balance(); balanceScore >= splitKeyThreshold {
 			imbalance++
 		}
 	}
