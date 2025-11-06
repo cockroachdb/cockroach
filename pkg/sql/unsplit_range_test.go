@@ -276,7 +276,7 @@ func TestUnsplitRanges(t *testing.T) {
 
 	ctx := context.Background()
 	run := func(t *testing.T, tc testCase) {
-		params, _ := createTestServerParamsAllowTenants()
+		var params base.TestServerArgs
 		params.DefaultTestTenant = base.TestDoesNotWorkWithExternalProcessMode(142388)
 		params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 		params.Knobs.GCJob = &sql.GCJobTestingKnobs{

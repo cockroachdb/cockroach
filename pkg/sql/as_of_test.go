@@ -15,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -30,7 +32,7 @@ func TestAsOfTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error {
 		<-ctx.Done()
 		return nil
@@ -263,7 +265,13 @@ func TestAsOfRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, cmdFilters := createTestServerParamsAllowTenants()
+	var cmdFilters tests.CommandFilters
+	params := base.TestServerArgs{}
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+			TestingEvalFilter: cmdFilters.RunFilters,
+		},
+	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 

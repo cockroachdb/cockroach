@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -225,8 +226,7 @@ func runCommentOnTestsDeclarativeOnly(t *testing.T, testFunc func(db *gosql.DB))
 }
 
 func runOneCommentOnTest(t *testing.T, setupQuery string, testFunc func(db *gosql.DB)) {
-	params, _ := createTestServerParamsAllowTenants()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	_, err := db.Exec(setupQuery)
 	require.NoError(t, err)

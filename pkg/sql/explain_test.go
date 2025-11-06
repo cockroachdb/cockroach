@@ -540,8 +540,7 @@ func TestExplainRedact(t *testing.T) {
 	rng, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
 
-	params, _ := createTestServerParamsAllowTenants()
-	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
 	conn, err := sqlDB.Conn(ctx)

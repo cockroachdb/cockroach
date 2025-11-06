@@ -165,9 +165,7 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	// Disable external processing of mutations.
-	params, _ := createTestServerParamsAllowTenants()
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
 	// The descriptor changes made must have an immediate effect
@@ -227,8 +225,7 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	// Disable external processing of mutations.
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -494,9 +491,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	// Disable external processing of mutations.
-	params, _ := createTestServerParamsAllowTenants()
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(context.Background())
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	// The descriptor changes made must have an immediate effect.
@@ -661,8 +656,7 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	params, _ := createTestServerParamsAllowTenants()
-	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
@@ -876,8 +870,9 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	// Disable external processing of mutations.
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SchemaChangeJobNoOp: func() bool {
@@ -1099,9 +1094,10 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 func TestTableMutationQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	// Disable synchronous and asynchronous schema change processing so that
 	// the mutations get queued up.
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SchemaChangeJobNoOp: func() bool {
@@ -1218,8 +1214,7 @@ func TestAddingFKs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`

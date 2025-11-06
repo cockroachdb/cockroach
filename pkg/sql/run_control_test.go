@@ -415,8 +415,7 @@ func TestCancelWithSubquery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s, conn, _ := serverutils.StartServer(t, params)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	_, err := conn.Exec("CANCEL SESSION (SELECT session_id FROM [SHOW session_id]);")

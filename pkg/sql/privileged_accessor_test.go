@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,8 +26,7 @@ func TestLookupNamespaceID(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

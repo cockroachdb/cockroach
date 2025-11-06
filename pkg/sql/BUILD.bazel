@@ -730,7 +730,6 @@ go_test(
         "schema_changer_test.go",
         "schema_resolver_test.go",
         "sequence_test.go",
-        "server_params_test.go",
         "session_migration_test.go",
         "set_zone_config_test.go",
         "show_cluster_setting_test.go",

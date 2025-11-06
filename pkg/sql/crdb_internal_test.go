@@ -83,9 +83,7 @@ func TestGetAllNamesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
-
-	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, params)
+	s, _ /* sqlDB */, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -169,8 +167,7 @@ func TestGossipAlertsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
-	s := serverutils.StartServerOnly(t, params)
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stop(context.Background())
 	ctx := context.Background()
 
@@ -210,8 +207,7 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	// The descriptor changes made must have an immediate effect
@@ -428,7 +424,7 @@ func TestInvalidObjects(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,

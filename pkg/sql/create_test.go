@@ -244,8 +244,8 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
