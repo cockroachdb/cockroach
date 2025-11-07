@@ -879,10 +879,10 @@ type rangeState struct {
 	// iff there is also a corresponding one in clusterState's pendingChanges.
 	//
 	// A pending change is removed from tracking in one of three ways:
-	// 1. Marked as enacted successfully: remove the pending changes, but the
-	// adjusted pending load remains until processStoreLoadMsg decides that the
-	// change has been reflected in the latest store load message according to
-	// lagForChangeReflectedInLoad.
+	// 1. Marked as enacted successfully: remove the pending changes. The adjusted
+	// load remains until processStoreLoadMsg determines the change is reflected
+	// in the latest store load message, based on whether
+	// lagForChangeReflectedInLoad has elapsed since enactment.
 	//
 	// This happens when:
 	// - The pending change is successfully applied via
@@ -890,7 +890,7 @@ type rangeState struct {
 	// - The pending change is considered subsumed based on the leaseholder msg.
 	// - The leaseholder of the range has changed. This is a special case where
 	// the leaseholder of the range has moved to a different store, and the
-	// rangeMag no longer contains the range. We assume that the pending change
+	// rangeMsg no longer contains the range. We assume that the pending change
 	// has been enacted in this case.
 	//
 	// 2. Undone as failed: corresponding replica and load change is rolled back.
@@ -916,9 +916,8 @@ type rangeState struct {
 	// remain valid until a new authoritative message arrives that may reflect a
 	// conflicting state. See preCheckOnApplyReplicaChanges for details on how
 	// compatibility between the pending change and the new range state is
-	// determined. When incompatibility is detected, the pending change is
-	// discarded and the corresponding replica and load adjustments are rolled
-	// back.
+	// determined. When incompatibility is detected, the pending replica change is
+	// discarded and the corresponding load adjustments are rolled back.
 	//
 	// This happens when:
 	// - processStoreLeaseholderMsgInternal tries to apply the pending changes to
