@@ -4290,9 +4290,26 @@ deprules
     - $new-column-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
     - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
+- name: old constraint name is dropped before conflicting new constraint name is added when at least one is non-index-backed
+  from: old-index-name-Node
+  kind: Precedence
+  to: new-index-name-Node
+  query:
+    - $old-index-name[Type] IN ['*scpb.IndexName', '*scpb.ConstraintWithoutIndexName']
+    - $new-index-name[Type] IN ['*scpb.IndexName', '*scpb.ConstraintWithoutIndexName']
+    - joinOnDescID($old-index-name, $new-index-name, $table-id)
+    - $old-index-name[Name] = $name
+    - $new-index-name[Name] = $name
+    - names-are-for-different-elements(scpb.Element, scpb.Element)($old-index-name, $new-index-name)
+    - $old-index-name-Target[TargetStatus] = ABSENT
+    - $old-index-name-Node[CurrentStatus] = ABSENT
+    - $new-index-name-Target[TargetStatus] = PUBLIC
+    - $new-index-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-index-name, $old-index-name-Target, $old-index-name-Node)
+    - joinTargetNode($new-index-name, $new-index-name-Target, $new-index-name-Node)
 - name: old constraint name is dropped before new constraint name is added
   from: old-constraint-name-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: new-constraint-name-Node
   query:
     - $old-constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
@@ -4324,9 +4341,27 @@ deprules
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-primary-index, $old-primary-index-Target, $old-primary-index-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
-- name: old index name is dropped before new index name is added
+- name: old index name is dropped before conflicting new index name is added
   from: old-index-name-Node
   kind: Precedence
+  to: new-index-name-Node
+  query:
+    - $old-index-name[Type] = '*scpb.IndexName'
+    - $new-index-name[Type] = '*scpb.IndexName'
+    - joinOnDescID($old-index-name, $new-index-name, $table-id)
+    - $old-index-name[Name] = $name
+    - $new-index-name[Name] = $name
+    - $new-index-name[IndexID] = $index-id
+    - no secondary index swap is on going($table-id, $index-id)
+    - $old-index-name-Target[TargetStatus] = ABSENT
+    - $old-index-name-Node[CurrentStatus] = ABSENT
+    - $new-index-name-Target[TargetStatus] = PUBLIC
+    - $new-index-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-index-name, $old-index-name-Target, $old-index-name-Node)
+    - joinTargetNode($new-index-name, $new-index-name-Target, $new-index-name-Node)
+- name: old index name is dropped before new index name is added
+  from: old-index-name-Node
+  kind: SameStagePrecedence
   to: new-index-name-Node
   query:
     - $old-index-name[Type] = '*scpb.IndexName'
@@ -9492,9 +9527,26 @@ deprules
     - $new-column-name-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-column-name, $old-column-name-Target, $old-column-name-Node)
     - joinTargetNode($new-column-name, $new-column-name-Target, $new-column-name-Node)
+- name: old constraint name is dropped before conflicting new constraint name is added when at least one is non-index-backed
+  from: old-index-name-Node
+  kind: Precedence
+  to: new-index-name-Node
+  query:
+    - $old-index-name[Type] IN ['*scpb.IndexName', '*scpb.ConstraintWithoutIndexName']
+    - $new-index-name[Type] IN ['*scpb.IndexName', '*scpb.ConstraintWithoutIndexName']
+    - joinOnDescID($old-index-name, $new-index-name, $table-id)
+    - $old-index-name[Name] = $name
+    - $new-index-name[Name] = $name
+    - names-are-for-different-elements(scpb.Element, scpb.Element)($old-index-name, $new-index-name)
+    - $old-index-name-Target[TargetStatus] = ABSENT
+    - $old-index-name-Node[CurrentStatus] = ABSENT
+    - $new-index-name-Target[TargetStatus] = PUBLIC
+    - $new-index-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-index-name, $old-index-name-Target, $old-index-name-Node)
+    - joinTargetNode($new-index-name, $new-index-name-Target, $new-index-name-Node)
 - name: old constraint name is dropped before new constraint name is added
   from: old-constraint-name-Node
-  kind: Precedence
+  kind: SameStagePrecedence
   to: new-constraint-name-Node
   query:
     - $old-constraint-name[Type] = '*scpb.ConstraintWithoutIndexName'
@@ -9526,9 +9578,27 @@ deprules
     - $new-primary-index-Node[CurrentStatus] = PUBLIC
     - joinTargetNode($old-primary-index, $old-primary-index-Target, $old-primary-index-Node)
     - joinTargetNode($new-primary-index, $new-primary-index-Target, $new-primary-index-Node)
-- name: old index name is dropped before new index name is added
+- name: old index name is dropped before conflicting new index name is added
   from: old-index-name-Node
   kind: Precedence
+  to: new-index-name-Node
+  query:
+    - $old-index-name[Type] = '*scpb.IndexName'
+    - $new-index-name[Type] = '*scpb.IndexName'
+    - joinOnDescID($old-index-name, $new-index-name, $table-id)
+    - $old-index-name[Name] = $name
+    - $new-index-name[Name] = $name
+    - $new-index-name[IndexID] = $index-id
+    - no secondary index swap is on going($table-id, $index-id)
+    - $old-index-name-Target[TargetStatus] = ABSENT
+    - $old-index-name-Node[CurrentStatus] = ABSENT
+    - $new-index-name-Target[TargetStatus] = PUBLIC
+    - $new-index-name-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-index-name, $old-index-name-Target, $old-index-name-Node)
+    - joinTargetNode($new-index-name, $new-index-name-Target, $new-index-name-Node)
+- name: old index name is dropped before new index name is added
+  from: old-index-name-Node
+  kind: SameStagePrecedence
   to: new-index-name-Node
   query:
     - $old-index-name[Type] = '*scpb.IndexName'

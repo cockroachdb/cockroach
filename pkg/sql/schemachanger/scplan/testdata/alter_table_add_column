@@ -3142,6 +3142,10 @@ ALTER TABLE defaultdb.baz ADD g INT UNIQUE DEFAULT 1
   kind: Precedence
   rule: secondary index named before validation (without index swap)
 - from: [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 1}, ABSENT]
+  to:   [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 4}, PUBLIC]
+  kind: Precedence
+  rule: old index name is dropped before conflicting new index name is added
+- from: [IndexName:{DescID: 109, Name: baz_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index

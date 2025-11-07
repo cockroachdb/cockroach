@@ -820,6 +820,10 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
   kind: SameStagePrecedence
   rule: schedule all GC jobs for a descriptor in the same stage
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT]
+  to:   [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC]
+  kind: Precedence
+  rule: old index name is dropped before conflicting new index name is added
+- from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}, ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   kind: Precedence
   rule: dependents removed before index

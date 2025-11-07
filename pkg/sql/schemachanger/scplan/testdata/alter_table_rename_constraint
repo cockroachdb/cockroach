@@ -44,7 +44,7 @@ ALTER TABLE t RENAME CONSTRAINT cc TO cc_renamed;
 ----
 - from: [ConstraintWithoutIndexName:{DescID: 104, Name: cc, ConstraintID: 2}, ABSENT]
   to:   [ConstraintWithoutIndexName:{DescID: 104, Name: cc_renamed, ConstraintID: 2}, PUBLIC]
-  kind: Precedence
+  kind: SameStagePrecedence
   rule: old constraint name is dropped before new constraint name is added
 
 setup
@@ -93,7 +93,7 @@ ALTER TABLE t2 RENAME CONSTRAINT u TO u_renamed;
 ----
 - from: [IndexName:{DescID: 105, Name: u, IndexID: 2}, ABSENT]
   to:   [IndexName:{DescID: 105, Name: u_renamed, IndexID: 2}, PUBLIC]
-  kind: Precedence
+  kind: SameStagePrecedence
   rule: old index name is dropped before new index name is added
 
 setup
@@ -163,10 +163,14 @@ deps
 ALTER TABLE t3 RENAME CONSTRAINT con1 TO con1_old, RENAME CONSTRAINT con2 TO con1;
 ----
 - from: [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT]
-  to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1_old, ConstraintID: 2}, PUBLIC]
+  to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC]
   kind: Precedence
+  rule: old constraint name is dropped before conflicting new constraint name is added when at least one is non-index-backed
+- from: [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 2}, ABSENT]
+  to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1_old, ConstraintID: 2}, PUBLIC]
+  kind: SameStagePrecedence
   rule: old constraint name is dropped before new constraint name is added
 - from: [ConstraintWithoutIndexName:{DescID: 106, Name: con2, ConstraintID: 3}, ABSENT]
   to:   [ConstraintWithoutIndexName:{DescID: 106, Name: con1, ConstraintID: 3}, PUBLIC]
-  kind: Precedence
+  kind: SameStagePrecedence
   rule: old constraint name is dropped before new constraint name is added
