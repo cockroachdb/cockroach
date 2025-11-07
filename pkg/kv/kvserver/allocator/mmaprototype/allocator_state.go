@@ -486,10 +486,10 @@ func (a *allocatorState) rebalanceStores(
 				}
 				var candsSet candidateSet
 				for _, cand := range cands {
-					if a.cs.stores[cand.storeID].adjusted.replicas[rangeID].VoterIsLagging {
+					if disp := a.cs.stores[cand.storeID].adjusted.replicas[rangeID].LeaseDisposition; disp != LeaseDispositionOK {
 						// Don't transfer lease to a store that is lagging.
-						log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: replica is lagging",
-							cand.storeID)
+						log.KvDistribution.Infof(ctx, "skipping store s%d for lease transfer: lease disposition %v",
+							cand.storeID, disp)
 						continue
 					}
 					candSls := a.cs.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)

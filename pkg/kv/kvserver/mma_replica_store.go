@@ -125,10 +125,17 @@ func constructRangeMsgReplicas(
 	// should pass scratch memory to avoid unnecessary allocation.
 	replicas := make([]mmaprototype.StoreIDAndReplicaState, 0, len(desc.InternalReplicas))
 	for _, repl := range desc.InternalReplicas {
+		leaseDisp := mmaprototype.LeaseDispositionOK
+		if repl.IsAnyVoter() && raftutil.ReplicaIsBehind(raftStatus, repl.ReplicaID) {
+			// TODO: a follower for which we have developed a send queue will likely
+			// be behind, but we could also explicitly use the send queue state to
+			// inform the disposition below.
+			leaseDisp = mmaprototype.LeaseDispositionRefusing
+		}
 		replica := mmaprototype.StoreIDAndReplicaState{
 			StoreID: repl.StoreID,
 			ReplicaState: mmaprototype.ReplicaState{
-				VoterIsLagging: repl.IsAnyVoter() && raftutil.ReplicaIsBehind(raftStatus, repl.ReplicaID),
+				LeaseDisposition: leaseDisp,
 				ReplicaIDAndType: mmaprototype.ReplicaIDAndType{
 					ReplicaID: repl.ReplicaID,
 					ReplicaType: mmaprototype.ReplicaType{
