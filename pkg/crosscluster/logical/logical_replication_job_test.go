@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -2940,11 +2939,7 @@ func TestGetWriterType(t *testing.T) {
 	})
 
 	t.Run("immediate-mode", func(t *testing.T) {
-		st := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.V25_3.Version(),
-			clusterversion.PreviousRelease.Version(),
-			true, /* initializeVersion */
-		)
+		st := cluster.MakeTestingClusterSettings()
 		sqlclustersettings.LDRImmediateModeWriter.Override(ctx, &st.SV, string(sqlclustersettings.LDRWriterTypeSQL))
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
 		require.NoError(t, err)
