@@ -274,6 +274,9 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 25.4
 	"storage.columnar_blocks.enabled": {},
+
+	// removed as of 26.1
+	"sql.distsql_planning.use_gossip.enabled": {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults

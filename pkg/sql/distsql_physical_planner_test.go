@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -1748,112 +1747,6 @@ func TestShouldPickGatewayNode(t *testing.T) {
 			shouldPick := mockDsp.shouldPickGateway(mockPlanCtx, tc.instances)
 			require.Equal(t, tc.shouldPick, shouldPick)
 		})
-	}
-}
-
-// Test that a node whose descriptor info is not accessible through gossip is
-// not used. This is to simulate nodes that have been decomisioned and also
-// nodes that have been "replaced" by another node at the same address (which, I
-// guess, is also a type of decomissioning).
-func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// The spans that we're going to plan for.
-	span := roachpb.Span{Key: roachpb.Key("A"), EndKey: roachpb.Key("Z")}
-	gatewayNode := roachpb.NodeID(2)
-	ranges := []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}}
-
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.Background())
-	codec := keys.SystemSQLCodec
-
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
-	var nodeDescs []*roachpb.NodeDescriptor
-	for i := 1; i <= 2; i++ {
-		sqlInstanceID := base.SQLInstanceID(i)
-		desc := &roachpb.NodeDescriptor{
-			NodeID:  roachpb.NodeID(sqlInstanceID),
-			Address: util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
-		}
-		if i == 2 {
-			if err := mockGossip.SetNodeDescriptor(desc); err != nil {
-				t.Fatal(err)
-			}
-		}
-		// All the nodes advertise that they are not draining. This is to
-		// simulate the "node overridden by another node at the same address"
-		// case mentioned in the test comment - for such a node, the descriptor
-		// would be taken out of the gossip data, but other datums it advertised
-		// are left in place.
-		if err := mockGossip.AddInfoProto(
-			gossip.MakeDistSQLDrainingKey(sqlInstanceID),
-			&execinfrapb.DistSQLDrainingInfo{
-				Draining: false,
-			},
-			0, // ttl - no expiration
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		nodeDescs = append(nodeDescs, desc)
-	}
-	tsp := &testSpanResolver{
-		nodes:  nodeDescs,
-		ranges: ranges,
-	}
-
-	st := cluster.MakeTestingClusterSettings()
-	gw := gossip.MakeOptionalGossip(mockGossip)
-	dsp := DistSQLPlanner{
-		st:                   st,
-		gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
-		stopper:              stopper,
-		spanResolver:         tsp,
-		gossip:               gw,
-		nodeHealth: distSQLNodeHealth{
-			gossip: gw,
-			connHealthSystem: func(node roachpb.NodeID, _ rpcbase.ConnectionClass) error {
-				_, _, err := mockGossip.GetNodeIDAddress(node)
-				return err
-			},
-			isAvailable: func(base.SQLInstanceID) bool {
-				return true
-			},
-		},
-		codec: codec,
-	}
-
-	ctx := context.Background()
-	// This test is specific to gossip-based planning.
-	useGossipPlanning.Override(ctx, &st.SV, true)
-	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
-		nil /* planner */, nil /* txn */, FullDistribution,
-	)
-	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	resMap := make(map[base.SQLInstanceID][][2]string)
-	for _, p := range partitions {
-		if _, ok := resMap[p.SQLInstanceID]; ok {
-			t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
-		}
-		var spans [][2]string
-		for _, s := range p.Spans {
-			spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
-		}
-		resMap[p.SQLInstanceID] = spans
-	}
-
-	expectedPartitions :=
-		map[base.SQLInstanceID][][2]string{
-			2: {{"A", "Z"}},
-		}
-	if !reflect.DeepEqual(resMap, expectedPartitions) {
-		t.Errorf("expected partitions:\n  %v\ngot:\n  %v", expectedPartitions, resMap)
 	}
 }
 
