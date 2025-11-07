@@ -15,11 +15,14 @@ import (
 // trackedAllocatorChange represents a change registered with AllocatorSync
 // (e.g. lease transfer or change replicas).
 type trackedAllocatorChange struct {
-	// changeIDs are the change IDs that are registered with mma. Nil if mma is
-	// disabled or the change cannot be registered with mma. If changeIDs is
-	// nil, PostApply does not need to inform mma. Otherwise, PostApply should
-	// inform mma by passing changeIDs to AdjustPendingChangesDisposition.
-	changeIDs []mmaprototype.ChangeID
+	// isMMARegistered is true if the change has been successfully registered
+	// with mma. When true, mmaChange is the registered change, and PostApply
+	// should inform mma by passing mmaChange to
+	// AdjustPendingChangesDisposition. It is false if mma is disabled or the
+	// change could not be registered with mma, in which case PostApply must not
+	// inform mma.
+	isMMARegistered bool
+	mmaChange       mmaprototype.PendingRangeChange
 	// Usage is range load usage.
 	usage allocator.RangeUsageInfo
 	// Exactly one of the following two fields will be set.
