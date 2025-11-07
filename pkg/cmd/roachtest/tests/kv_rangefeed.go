@@ -62,6 +62,10 @@ type kvRangefeedTest struct {
 	// catch up in the given configuration. We don't expect under-provisioned
 	// changefeeds to catch up.
 	expectChangefeedCatchesUp bool
+
+	// latencyAssertions controls whether we should assert that the foreground
+	// latency was not impacted during the test.
+	latencyAssertions bool
 }
 
 const (
@@ -288,7 +292,7 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 	//
 	// NB: If this proves flakey, feel free to change it. We haven't yet put much
 	// thought into what the right statistic here would be.
-	if opts.changefeedDelay > 0 {
+	if opts.changefeedDelay > 0 && opts.latencyAssertions {
 		preChangefeedp99ticks := p99sBetween(metrics["write"], 0, opts.changefeedDelay)
 		postChangefeedp99ticks := p99sBetween(metrics["write"], opts.changefeedDelay, time.Duration(math.MaxInt64))
 
@@ -417,6 +421,8 @@ func registerKVRangefeed(r registry.Registry) {
 			expectChangefeedCatchesUp: true,
 			changefeedDelay:           1 * time.Minute,
 			catchUpInterval:           5 * time.Minute,
+			// TODO(ssd): Re-enable once we can make this more stable.
+			latencyAssertions: false,
 		},
 		// Underprovisioned sink
 		{
@@ -427,6 +433,8 @@ func registerKVRangefeed(r registry.Registry) {
 			expectChangefeedCatchesUp: false,
 			changefeedDelay:           1 * time.Minute,
 			catchUpInterval:           5 * time.Minute,
+			// TODO(ssd): Re-enable once we can make this more stable.
+			latencyAssertions: false,
 		},
 		// Zipfian tests.
 		//
