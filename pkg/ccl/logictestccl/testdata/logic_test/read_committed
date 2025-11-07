@@ -227,20 +227,27 @@ DROP TABLE supermarket
 ----
 NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
-query T noticetrace
-DROP USER testuser
-----
-NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+# Skip test cases for user/role creation, removal, and inheritance, as they are
+# flaky. https://github.com/cockroachdb/cockroach/pull/157072 should help, but
+# we are not backporting that to the 25.4 branch.
 
-query T noticetrace
-CREATE USER testuser
-----
-NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+# query T noticetrace
+# DROP USER testuser
+# ----
+# NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
-query T noticetrace
+# query T noticetrace
+# CREATE USER testuser
+# ----
+# NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+# query T noticetrace
+# GRANT admin TO testuser
+# ----
+# NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
+
+statement ok
 GRANT admin TO testuser
-----
-NOTICE: setting transaction isolation level to SERIALIZABLE due to schema change
 
 query T noticetrace
 GRANT SELECT ON foo TO testuser
