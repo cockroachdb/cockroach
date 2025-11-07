@@ -1,5 +1,10 @@
 {{template "layout-start" .}}
-
+<script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.store('diagnosticsTarget', '')
+    Alpine.store('diagnosticsFingerprint', '')
+  })
+</script>
 <style>
   section.grid {
     grid-template:
@@ -95,6 +100,7 @@
   </div>
 </form>
 <h3>Results - Top {{.Data.Params.ResultCount}} Statement Fingerprints by {{.Data.Params.SortByDisplay}}</h3>
+{{ if ne .Data.Params.ResultCount 0}}
 <p>Showing aggregated stats from {{.Data.Params.StartTime}} to {{.Data.Params.EndTime}} ({{.Data.Params.Timezone}})</p>
 
 <div x-data="tableSort()" style="overflow-x: auto;">
@@ -152,6 +158,9 @@
         <th @click="sort('fingerprint-id', 16)" style="cursor: pointer;">
           Statement Fingerprint ID <span x-text="getSortIndicator('fingerprint-id')"></span>
         </th>
+        <th>
+          Diagnostics
+        </th>
       </tr>
     </thead>
     <tbody>
@@ -208,11 +217,13 @@
         <td>
           {{.ID}}
         </td>
+        <td>
+          <button id="diag-btn-{{.ID}}" popovertarget="diagnostics" @click="$store.diagnosticsTarget = '{{.ID}}'; $store.diagnosticsFingerprint = {{.Key.KeyData.Query | printf "%q"}}">Activate</button>
+        </td>
       </tr>
       {{end}}
     </tbody>
   </table>
-
   <div class="flex-row" style="justify-content: space-between; align-items: center; margin-top: 1rem;">
     <div>
       <span x-text="paginationInfo"></span>
@@ -233,6 +244,96 @@
       </button>
     </div>
   </div>
+  {{end}}
 </div>
-
+<div id="diagnostics" popover class="padding container">
+  <h3>Activate statement diagnostics</h3>
+  <div id="diagnostics-error"></div>
+  <p>
+    Diagnostics will be collected for the next execution that
+    matches this statement fingerprint, or according to the trace and
+    latency thresholds set below. The request is cancelled when a single
+    diagnostics bundle is captured. Learn more
+  </p>
+  <form method="POST" action="/future/diagnostics/new"
+        hx-post="/future/diagnostics/new"
+        :hx-target="'#diag-btn-' + $store.diagnosticsTarget"
+        hx-swap="outerHTML"
+        @htmx:after-swap="document.getElementById('diagnostics').hidePopover()"
+        x-data="{ sampled: 'sampled', plangist: 'all' }"
+        class="flex-column">
+    <div role=radiogroup aria-labelledby=sampled-lbl>
+      <h4 id=sampled-lbl>Collect diagnostics:</h4>
+      <div class="flex-column">
+        <div>
+          <label>
+            <input type=radio name=sampled value="sampled" checked x-model="sampled"> Trace and collect diagnostics
+          </label>
+          <blockquote class="crowded-inside">
+            <label for=samplerate>At a sampled rate of: </label>
+            <div class="flex-row align-items:center">
+               <select id=samplerate name=samplerate :disabled="sampled != 'sampled'">
+                <option value="1%" selected>1% (recommended)</option>
+                <option value="2%" >2%</option>
+                <option value="3%" >3%</option>
+                <option value="4%" >4%</option>
+                <option value="5%" >5%</option>
+                <option value="100%" >100% (not recommended)</option>
+              </select>
+              <div>
+                <small>
+                  We recommend starting at 1% to minimize the impact on performance.
+                </small>
+              </div>
+            </div>
+            <p>
+              When the statement execution latency exceeds:
+            </p>
+            <div class="flex-row">
+              <input type="text" name="latthreshold" value="100" size=5 :disabled="sampled != 'sampled'">
+              <div>
+                <select id=latunit name=latunit :disabled="sampled != 'sampled'">
+                  <option value="milliseconds" selected>milliseconds</option>
+                  <option value="seconds" >seconds</option>
+                </select>
+              </div>
+            </div>
+          </blockquote>
+        </div>
+        <div>
+          <label>
+            <input type=radio name=sampled value="next" x-model="sampled"> Trace and collect diagnostics on the next statement execution
+          </label>
+        </div>
+      </div>
+    </div>
+    <hr />
+    <div role=radiogroup>
+      <label>
+        <input type=radio name=plangist value=all checked x-model="plangist"> For all plan gists
+      </label>
+      <div class="flex-row align-items:center">
+        <label>
+          <input type=radio name=plangist value=selected x-model="plangist"> For the following plan gist:
+        </label>
+        <select id=plangistselect name=plangistselect :disabled="plangist != 'selected'">
+          <option value="AhgDSFHSFHSFASH" selected>AhgDSFHSFHSFASH</option>
+        </select>
+      </div>
+    </div>
+    <hr />
+    <div>
+      <label for=expiresafter><input type=checkbox id=expiresafter name=expiresafter checked> Diagnostics request expires after</label>
+      <label for=expiresaftermin><input type=text id=expiresaftermin name=expiresaftermin value=15 size=3> Minutes</label>
+    </div>
+    <hr />
+    <div>
+      <label for=redact><input type=checkbox id=redact name=redact> Redact</label>
+    </div>
+    <div class="flex-row justify-content:end">
+      <button class="<big>">Submit</button>
+      <input type="hidden" name="fingerprint_id" x-model="$store.diagnosticsFingerprint">
+    </div>
+  </form>
+</div>
 {{template "layout-end" .}}

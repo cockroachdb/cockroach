@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -271,10 +272,105 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 		handleSqlActivityStatements(w, r, cfg)
 	}).Methods("GET")
 
+	futureRouter.HandleFunc("/diagnostics/new", func(w http.ResponseWriter, r *http.Request) {
+		handleCreateDiagnostics(w, r, cfg)
+	}).Methods("POST")
+
 	// Serve static assets
 	futureRouter.PathPrefix("/assets/").HandlerFunc(handleAssets)
 
 	return router.ServeHTTP
+}
+
+func handleCreateDiagnostics(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
+	// Parse form data
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	// Extract form parameters
+	sampled := r.FormValue("sampled")
+	sampleRateStr := r.FormValue("samplerate")
+	latThresholdStr := r.FormValue("latthreshold")
+	latUnit := r.FormValue("latunit")
+	planGist := r.FormValue("plangist")
+	planGistSelect := r.FormValue("plangistselect")
+	expiresAfter := r.FormValue("expiresafter")
+	expiresAfterMinStr := r.FormValue("expiresaftermin")
+	redact := r.FormValue("redact")
+	fingerprintID := r.FormValue("fingerprint_id")
+
+	if fingerprintID == "" {
+		http.Error(w, "Missing fingerprint_id", http.StatusBadRequest)
+		return
+	}
+
+	// Build the request
+	req := &serverpb.CreateStatementDiagnosticsReportRequest{
+		StatementFingerprint: fingerprintID,
+	}
+
+	// Parse sampling probability and latency based on collection mode
+	if sampled == "sampled" {
+		// Parse sampling rate (e.g., "1%" -> 0.01)
+		if sampleRateStr != "" {
+			rateStr := strings.TrimSuffix(sampleRateStr, "%")
+			if rate, err := strconv.ParseFloat(rateStr, 64); err == nil {
+				req.SamplingProbability = rate / 100.0
+			}
+		}
+
+		// Parse minimum execution latency
+		if latThresholdStr != "" {
+			if threshold, err := strconv.ParseFloat(latThresholdStr, 64); err == nil {
+				var duration time.Duration
+				if latUnit == "seconds" {
+					duration = time.Duration(threshold * float64(time.Second))
+				} else { // milliseconds (default)
+					duration = time.Duration(threshold * float64(time.Millisecond))
+				}
+				req.MinExecutionLatency = duration
+			}
+		}
+	}
+	// For "next execution" mode, leave both sampling_probability and min_execution_latency at zero/unset
+
+	// Parse plan gist
+	if planGist == "selected" && planGistSelect != "" {
+		req.PlanGist = planGistSelect
+	}
+
+	// Parse expiration
+	if expiresAfter == "on" && expiresAfterMinStr != "" {
+		if mins, err := strconv.ParseInt(expiresAfterMinStr, 10, 64); err == nil {
+			req.ExpiresAfter = time.Duration(mins) * time.Minute
+		}
+	}
+
+	// Parse redact checkbox
+	req.Redacted = redact == "on"
+
+	// Call the API to create the diagnostics request
+	_, err := cfg.Status.CreateStatementDiagnosticsReport(r.Context(), req)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	if err != nil {
+		log.Dev.Warningf(r.Context(), "Failed to create diagnostics request: %v", err)
+		// Return only error HTML with OOB swap (no button update, so popover stays open)
+		errorHTML := fmt.Sprintf(`<div id="diagnostics-error" hx-swap-oob="true" class="bad box">
+  <strong class="titlebar">Error</strong>
+  <p>%s</p>
+</div>`, err.Error())
+		_, _ = w.Write([]byte(errorHTML))
+		return
+	}
+
+	// Return button update and clear any errors (popover will close via @htmx:after-swap)
+	successHTML := `<button disabled class="pending">Pending...</button>
+<div id="diagnostics-error" hx-swap-oob="true"></div>`
+	_, _ = w.Write([]byte(successHTML))
 }
 
 func handleSqlActivityStatements(w http.ResponseWriter, r *http.Request, cfg IndexHTMLArgs) {
