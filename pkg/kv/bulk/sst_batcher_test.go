@@ -796,7 +796,7 @@ func TestSSTBatcherSplitBetweenColumnFamilies(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
 	db := tc.ServerConn(0)
@@ -809,15 +809,17 @@ func TestSSTBatcherSplitBetweenColumnFamilies(t *testing.T) {
 		CREATE TABLE t (
 			pk INT PRIMARY KEY,
 			a INT,
-			b STRING,
+			b STRING NOT NULL,
 			INDEX idx_a (a),
 			FAMILY f0 (pk, a),
 			FAMILY f1 (b)
 		)
 	`)
 
+	const numRows = 10
+
 	// Insert some rows.
-	for i := 1; i <= 11; i++ {
+	for i := 1; i <= numRows; i++ {
 		tdb.Exec(t, `INSERT INTO t VALUES ($1, $2, $3)`, i, i*10, fmt.Sprintf("b-%d", i))
 	}
 
@@ -829,7 +831,7 @@ func TestSSTBatcherSplitBetweenColumnFamilies(t *testing.T) {
 	indexPrefix := s.Codec().IndexPrefix(uint32(tableID), 1)
 
 	// Create unsafe split keys between family 0 and family 1 for each row.
-	for pk := 1; pk <= 11; pk++ {
+	for pk := 1; pk <= numRows; pk++ {
 		pkKey := encoding.EncodeVarintAscending(append([]byte{}, indexPrefix...), int64(pk))
 		family0Key := keys.MakeFamilyKey(pkKey, 0)
 		unsafeSplitKey := roachpb.Key(family0Key).Next()
@@ -863,28 +865,30 @@ func TestSSTBatcherSplitBetweenColumnFamilies(t *testing.T) {
 	s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache().Clear()
 
 	// Verify the split occurred by checking range boundaries.
-	ranges := tdb.QueryStr(t, `SELECT start_key, end_key, replicas FROM [SHOW RANGES FROM TABLE t]`)
-	t.Logf("Ranges after split:")
-	for i, r := range ranges {
-		t.Logf("  Range %d: [%s, %s), replicas %s", i, r[0], r[1], r[2])
-	}
+	//ranges := tdb.QueryStr(t, `SELECT start_key, end_key, replicas FROM [SHOW RANGES FROM TABLE t]`)
+	//t.Logf("Ranges after split:")
+	//for i, r := range ranges {
+	//	t.Logf("  Range %d: [%s, %s), replicas %s", i, r[0], r[1], r[2])
+	//}
 
-	tdb.Exec(t, `SET streamer_enabled = true`)
+	//tdb.Exec(t, `SET streamer_enabled = true`)
 
 	// Query each value of 'a' individually in a loop
-	for pk := 1; pk <= 11; pk++ {
-		aValue := pk * 10
-		row := tdb.QueryStr(t, `SELECT * FROM t WHERE a = $1`, aValue)
-		expectedRow := [][]string{{fmt.Sprintf("%d", pk), fmt.Sprintf("%d", aValue), fmt.Sprintf("b-%d", pk)}}
-		require.Equal(t, expectedRow, row, "row with pk=%d should have correct values", pk)
+	for pk := 1; pk <= numRows; pk++ {
+		// Scan all rows on the secondary index, and then do the index join into
+		// the primary - the latter part should hit the assertion
+		// (non-deterministically).
+		tdb.QueryStr(t, `SELECT * FROM t@idx_a WHERE a > 0 AND a < 200`)
+		//expectedRow := [][]string{{fmt.Sprintf("%d", pk), fmt.Sprintf("%d", aValue), fmt.Sprintf("b-%d", pk)}}
+		//require.Equal(t, expectedRow, row, "row with pk=%d should have correct values", pk)
 	}
 
 	// Run EXPLAIN ANALYZE for the query with a = 10
-	explainResults := tdb.QueryStr(t, `EXPLAIN ANALYZE SELECT * FROM t WHERE a = 10`)
-	t.Logf("EXPLAIN ANALYZE for SELECT * FROM t WHERE a = 10:")
-	for _, line := range explainResults {
-		t.Logf("  %v", line)
-	}
+	//explainResults := tdb.QueryStr(t, `EXPLAIN ANALYZE SELECT * FROM t WHERE a = 10`)
+	//t.Logf("EXPLAIN ANALYZE for SELECT * FROM t WHERE a = 10:")
+	//for _, line := range explainResults {
+	//	t.Logf("  %v", line)
+	//}
 
 	// Scan over the table key space and verify the row is split.
 	//tableSpan := tableDesc.TableSpan(s.Codec())
