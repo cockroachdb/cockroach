@@ -1065,6 +1065,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantReadOnly:             cfg.SQLConfig.TenantReadOnly,
 		CidrLookup:                 cfg.BaseConfig.CidrLookup,
 		LicenseEnforcer:            cfg.SQLConfig.LicenseEnforcer,
+		QueueManager:               queuefeed.NewManager(cfg.internalDB),
 	}
 
 	if codec.ForSystemTenant() {
