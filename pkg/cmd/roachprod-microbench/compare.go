@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -31,12 +32,14 @@ import (
 )
 
 type compareConfig struct {
-	slackConfig   slackConfig
-	influxConfig  influxConfig
-	experimentDir string
-	baselineDir   string
-	sheetDesc     string
-	threshold     float64
+	slackConfig    slackConfig
+	influxConfig   influxConfig
+	experimentDir  string
+	baselineDir    string
+	versionContext string
+	generateSheet  bool
+	threshold      float64
+	postIssues     bool
 }
 
 type slackConfig struct {
@@ -96,7 +99,7 @@ func newCompare(config compareConfig) (*compare, error) {
 
 	ctx := context.Background()
 	var service *google.Service
-	if config.sheetDesc != "" {
+	if config.generateSheet {
 		service, err = google.New(ctx)
 		if err != nil {
 			return nil, err
@@ -212,8 +215,8 @@ func (c *compare) publishToGoogleSheets(
 	sheets := make(map[string]string)
 	for pkgGroup, comparisonResults := range comparisonResultsMap {
 		sheetName := pkgGroup + "/..."
-		if c.sheetDesc != "" {
-			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.sheetDesc)
+		if c.versionContext != "" {
+			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.versionContext)
 		}
 
 		url, err := c.service.CreateSheet(c.ctx, sheetName, comparisonResults, "baseline", "experiment")
@@ -258,9 +261,7 @@ func (c *compare) postToSlack(
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				if (comparison.Delta < 0 && metric.Better < 0) ||
-					(comparison.Delta > 0 && metric.Better > 0) ||
-					comparison.Delta == 0 {
+				if !isRegression(comparison.Delta, metric.Better) {
 					continue
 				}
 				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
@@ -311,7 +312,7 @@ func (c *compare) postToSlack(
 
 	s := newSlackClient(c.slackConfig.user, c.slackConfig.channel, c.slackConfig.token)
 	return s.Post(
-		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.sheetDesc), false),
+		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.versionContext), false),
 		slack.MsgOptionAttachments(attachments...),
 	)
 }
@@ -344,6 +345,58 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 		reportString := strings.Join(reportStrings, "\n\n")
 		return errors.Errorf("there are benchmark regressions of > %.2f%% in the following packages:\n\n%s",
 			c.threshold, reportString)
+	}
+
+	return nil
+}
+
+func (c *compare) maybePostRegressionIssues(comparisonResultsMap model.ComparisonResultsMap) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, _ := loggerCfg.NewLogger("")
+
+	// Collect errors encountered while creating benchmark issues.
+	createBenchmarkIssueErrors := []error{}
+
+	for pkgName, comparisonResults := range comparisonResultsMap {
+		var regressions []regressionInfo
+
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				if isRegression(comparison.Delta, metric.Better) && math.Abs(comparison.Delta) >= slackPercentageThreshold {
+					regressions = append(regressions, regressionInfo{
+						benchmarkName:  detail.BenchmarkName,
+						metricUnit:     result.Metric.Unit,
+						percentChange:  math.Abs(comparison.Delta),
+						formattedDelta: comparison.FormattedDelta,
+					})
+				}
+			}
+		}
+
+		if len(regressions) > 0 {
+			formatter, req, err := createRegressionPostRequest(pkgName, regressions, c.versionContext)
+			if err != nil {
+				log.Printf("failed to create regression post request for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
+				continue
+			}
+			err = postBenchmarkIssue(c.ctx, l, formatter, req)
+			if err != nil {
+				log.Printf("failed to post regression issue for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
+				continue
+			}
+			log.Printf("Posted regression issue for package: %s with %d regression(s)", pkgName, len(regressions))
+		}
+	}
+
+	if len(createBenchmarkIssueErrors) > 0 {
+		return errors.Join(createBenchmarkIssueErrors...)
 	}
 
 	return nil
@@ -441,4 +494,8 @@ func truncateBenchmarkName(text string, maxLen int) string {
 		}
 	}
 	return text
+}
+
+func isRegression(delta float64, better int) bool {
+	return delta*float64(better) < 0
 }
