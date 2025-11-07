@@ -705,7 +705,7 @@ type storeState struct {
 	localityTiers
 
 	// Time when this store started to be observed as overloaded. Set by
-	// allocatorState.rebalanceStores.
+	// clusterState.rebalanceStores.
 	overloadStartTime time.Time
 	// When overloaded this is equal to time.Time{}.
 	overloadEndTime time.Time

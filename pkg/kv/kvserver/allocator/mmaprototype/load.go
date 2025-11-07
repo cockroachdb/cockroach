@@ -92,7 +92,7 @@ const (
 // are considered here. Lease rebalancing will see if there is scope to move
 // some leases between stores that do not have any pending changes and are not
 // overloaded (and will not get overloaded by the movement). This will happen
-// in a separate pass (i.e., not in allocatorState.rebalanceStores) -- the
+// in a separate pass (i.e., not in clusterState.rebalanceStores) -- the
 // current plan is to continue using the leaseQueue and call from it into MMA.
 //
 // Note that lease rebalancing will only move leases and not replicas. Also,
