@@ -300,8 +300,8 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 		for _, shard := range s.shards {
 			shard.Lock()
 			shard.stopped = true
-			shard.Unlock()
 			shard.cond.Broadcast()
+			shard.Unlock()
 		}
 	})
 
@@ -324,6 +324,7 @@ func (s *raftScheduler) Start(stopper *stop.Stopper) {
 				})
 			if err != nil {
 				s.done.Done()
+				continue
 			}
 			go f(ctx, hdl)
 		}
