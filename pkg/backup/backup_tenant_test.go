@@ -49,7 +49,7 @@ func TestBackupSharedProcessTenantNodeDown(t *testing.T) {
 		},
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	tc, hostDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 0, /* numAccounts */
+	tc, hostDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 2, /* numAccounts */
 		InitManualReplication, params)
 	defer cleanup()
 

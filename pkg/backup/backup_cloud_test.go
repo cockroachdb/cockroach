@@ -295,7 +295,7 @@ func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
 			uri:  fmt.Sprintf("azure-kms:///non-existent-key/000?AUTH=implicit&AZURE_VAULT_NAME=%s", azureVaultName),
 		},
 	} {
-		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, 1, 1, InitManualReplication)
+		tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, 1, 2, InitManualReplication)
 		defer cleanupFn()
 
 		t.Run(tt.name, func(t *testing.T) {
