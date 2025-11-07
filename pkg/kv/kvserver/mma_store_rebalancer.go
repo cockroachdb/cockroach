@@ -154,7 +154,7 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
-		m.as.MarkChangesAsFailed(change.ChangeIDs())
+		m.as.MarkChangeAsFailed(change)
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)

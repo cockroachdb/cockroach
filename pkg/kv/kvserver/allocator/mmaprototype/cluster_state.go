@@ -125,6 +125,8 @@ type ReplicaState struct {
 // ChangeID is a unique ID, in the context of this data-structure and when
 // receiving updates about enactment having happened or having been rejected
 // (by the component responsible for change enactment).
+//
+// TODO(sumeer): make ChangeID private.
 type ChangeID uint64
 
 type ReplicaChangeType int
@@ -151,6 +153,9 @@ func (s ReplicaChangeType) String() string {
 	}
 }
 
+// ReplicaChange describes a change to a replica.
+//
+// TODO(sumeer): make ReplicaChange private.
 type ReplicaChange struct {
 	// The load this change adds to a store. The values will be negative if the
 	// load is being removed.
@@ -158,7 +163,8 @@ type ReplicaChange struct {
 	secondaryLoadDelta SecondaryLoadVector
 
 	// target is the target {store,node} for the change.
-	target  roachpb.ReplicationTarget
+	target roachpb.ReplicationTarget
+	// TODO(sumeer): remove rangeID.
 	rangeID roachpb.RangeID
 
 	// NB: 0 is not a valid ReplicaID, but this component does not care about
@@ -379,9 +385,51 @@ func makeRebalanceReplicaChanges(
 // PendingRangeChange is a proposed set of change(s) to a range. It can consist
 // of multiple pending replica changes, such as adding or removing replicas, or
 // transferring the lease.
+//
+// NB: pendingReplicaChanges is not visible outside the package, so we can be
+// certain that callers outside this package that hold a PendingRangeChange
+// cannot mutate the internals other than clearing the state.
+//
+// Additionally, for a PendingRangeChange returned outside the package, we
+// ensure that the pendingReplicaChanges slice itself is not shared with the
+// rangeState.pendingChanges slice since the rangeState.pendingChanges slice
+// can have entries removed from it (and swapped around as part of removal).
+//
+// Some the state inside each *pendingReplicaChange is mutable at arbitrary
+// points in time by the code inside this package (with the relevant locking,
+// of course). Currently, this state is revisedGCTime, enactedAtTime. Neither
+// of it is read by the public methods on PendingRangeChange.
+//
+// TODO(sumeer): when we expand the set of mutable fields, make a deep copy.
 type PendingRangeChange struct {
 	RangeID               roachpb.RangeID
 	pendingReplicaChanges []*pendingReplicaChange
+}
+
+// MakePendingRangeChange creates a PendingRangeChange for the given rangeID
+// and changes. Certain internal aspects of the change, like the change-ids,
+// start time etc., are not yet initialized, since those use internal state of
+// MMA. Those will be initialized by MMA when this change is later handed to
+// MMA for tracking, in clusterState.addPendingRangeChange. For external
+// callers of MakePendingRangeChange, this happens transitively when
+// Allocator.RegisterExternalChange is called.
+func MakePendingRangeChange(rangeID roachpb.RangeID, changes []ReplicaChange) PendingRangeChange {
+	for _, c := range changes {
+		if c.rangeID != rangeID {
+			panic(errors.AssertionFailedf("all changes must be to the same range %d != %d",
+				c.rangeID, rangeID))
+		}
+	}
+	prcs := make([]*pendingReplicaChange, len(changes))
+	for i, c := range changes {
+		prcs[i] = &pendingReplicaChange{
+			ReplicaChange: c,
+		}
+	}
+	return PendingRangeChange{
+		RangeID:               rangeID,
+		pendingReplicaChanges: prcs,
+	}
 }
 
 func (prc PendingRangeChange) String() string {
@@ -414,16 +462,6 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.Printf("%v", c.ChangeID)
 	}
 	w.Print("]")
-}
-
-// ChangeIDs returns the list of ChangeIDs associated with the pending range
-// change.
-func (prc PendingRangeChange) ChangeIDs() []ChangeID {
-	cids := make([]ChangeID, len(prc.pendingReplicaChanges))
-	for i, c := range prc.pendingReplicaChanges {
-		cids[i] = c.ChangeID
-	}
-	return cids
 }
 
 // IsChangeReplicas returns true if the pending range change is a change
@@ -526,12 +564,6 @@ func (prc PendingRangeChange) LeaseTransferFrom() roachpb.StoreID {
 	}
 	panic("unreachable")
 }
-
-// TODO(sumeer): we have various methods that take slices of either ChangeIDs
-// or pendingReplicaChanges or ReplicaChange, and have callers that already
-// have or could first construct a slice of pendingReplicaChanges, and avoid
-// various temporary slice construction and repeated map lookups. Clean this
-// up.
 
 // pendingReplicaChange is a proposed change to a single replica. Some
 // external entity (the leaseholder of the range) may choose to enact this
@@ -1003,6 +1035,8 @@ type rangeState struct {
 	// Life-cycle matches clusterState.pendingChanges. The consolidated
 	// rangeState.pendingChanges across all ranges in clusterState.ranges will
 	// be identical to clusterState.pendingChanges.
+	//
+	// TODO(sumeer): replace by PendingRangeChange.
 	pendingChanges []*pendingReplicaChange
 	// When set, the pendingChanges can not be rolled back anymore. They have
 	// to be enacted, or discarded wholesale in favor of the latest RangeMsg
@@ -1035,12 +1069,12 @@ type rangeState struct {
 	// that the change we did not know about has been enacted.
 	//
 	// One may wonder how such unknown changes can happen, given that other
-	// components call mmaprototype.Allocator.RegisterExternalChanges. One example is
+	// components call mmaprototype.Allocator.RegisterExternalChange. One example is
 	// when MMA does not currently know about a range. Say the lease gets
 	// transferred to the local store, but MMA has not yet been called with a
 	// StoreLeaseholderMsg, but replicateQueue already knows about this lease,
 	// and decides to initiate a transfer of replicas between two remote stores
-	// (to equalize replica counts). When mmaprototype.Allocator.RegisterExternalChanges
+	// (to equalize replica counts). When mmaprototype.Allocator.RegisterExternalChange
 	// is called, there is no record of this range in MMA (since it wasn't the
 	// leaseholder), and the change is ignored. When the next
 	// StoreLeaseholderMsg is provided to MMA it now knows about the range, and
@@ -1324,7 +1358,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// leaseholder. Note that this is the only code path where a subset of
 		// pending changes for a replica can be considered enacted.
 		var remainingChanges, enactedChanges []*pendingReplicaChange
-		var remainingReplicaChanges []ReplicaChange
 		for _, change := range rs.pendingChanges {
 			ss := cs.stores[change.target.StoreID]
 			adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
@@ -1336,7 +1369,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				enactedChanges = append(enactedChanges, change)
 			} else {
 				remainingChanges = append(remainingChanges, change)
-				remainingReplicaChanges = append(remainingReplicaChanges, change.ReplicaChange)
 			}
 		}
 		gcRemainingChanges := false
@@ -1380,7 +1412,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
 			// is because MMA is acting faster to undo the effects of the changes
 			// made by the replicate and lease queues.
-			cs.pendingChangeEnacted(change.ChangeID, now, true)
+			cs.pendingChangeEnacted(change.ChangeID, now)
 		}
 		// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
 		// of changes, though possibly in different order.
@@ -1404,7 +1436,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				// remainingChanges, but they are not the same slice.
 				rc := rs.pendingChanges
 				rs.pendingChanges = nil
-				err := cs.preCheckOnApplyReplicaChanges(remainingReplicaChanges)
+				err := cs.preCheckOnApplyReplicaChanges(remainingChanges)
 				valid = err == nil
 				if err != nil {
 					reason = redact.Sprint(err)
@@ -1479,12 +1511,15 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
+		//
+		// Gather the changeIDs, since calls to pendingChangeEnacted modify the
+		// rs.pendingChanges slice.
 		changeIDs := make([]ChangeID, len(rs.pendingChanges))
 		for i, change := range rs.pendingChanges {
 			changeIDs[i] = change.ChangeID
 		}
 		for _, changeID := range changeIDs {
-			cs.pendingChangeEnacted(changeID, now, true)
+			cs.pendingChangeEnacted(changeID, now)
 		}
 		// Remove from the storeStates.
 		for _, replica := range rs.replicas {
@@ -1687,29 +1722,25 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		if !startTime.Add(pendingChangeGCDuration).Before(now) {
 			continue
 		}
-		var replicaChanges []ReplicaChange
-		var changeIDs []ChangeID
-		for _, pendingChange := range rs.pendingChanges {
-			replicaChanges = append(replicaChanges, pendingChange.ReplicaChange)
-			changeIDs = append(changeIDs, pendingChange.ChangeID)
-		}
-		if err := cs.preCheckOnUndoReplicaChanges(replicaChanges); err != nil {
+		if err := cs.preCheckOnUndoReplicaChanges(rs.pendingChanges); err != nil {
 			panic(err)
 		}
+		// Gather the changeIDs, since calls to undoPendingChange modify the
+		// rs.pendingChanges slice.
+		var changeIDs []ChangeID
+		for _, pendingChange := range rs.pendingChanges {
+			changeIDs = append(changeIDs, pendingChange.ChangeID)
+		}
 		for _, changeID := range changeIDs {
-			cs.undoPendingChange(changeID, true)
+			cs.undoPendingChange(changeID)
 		}
 	}
 }
 
-func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, requireFound bool) {
+func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
-		if requireFound {
-			panic(fmt.Sprintf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
-		} else {
-			return
-		}
+		panic(fmt.Sprintf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
 	}
 	change.enactedAtTime = enactedAt
 	rs, ok := cs.ranges[change.rangeID]
@@ -1721,18 +1752,13 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, 
 	delete(cs.pendingChanges, change.ChangeID)
 }
 
-// undoPendingChange reverses the change with ID cid, if it exists.
+// undoPendingChange reverses the change with ID cid.
 //
-// REQUIRES: if requireFound, the change exists; the change is not marked as
-// no-rollback.
-func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
+// REQUIRES: the change is not marked as no-rollback.
+func (cs *clusterState) undoPendingChange(cid ChangeID) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
-		if requireFound {
-			panic(errors.AssertionFailedf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
-		} else {
-			return
-		}
+		panic(errors.AssertionFailedf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
 	}
 	rs, ok := cs.ranges[change.rangeID]
 	if !ok {
@@ -1787,21 +1813,22 @@ func printPendingChanges(changes []*pendingReplicaChange) string {
 	return buf.String()
 }
 
-// createPendingChanges takes a set of changes applies the changes as pending.
-// The application updates the adjusted load, tracked pending changes and
-// changeID to reflect the pending application.
+// addPendingRangeChange takes a range change containing a set of replica
+// changes, and applies the changes as pending. The application updates the
+// adjusted load, tracked pending changes and changeIDs to reflect the pending
+// application. It updates the *pendingReplicaChanges inside the change.
 //
-// REQUIRES: all the changes are to the same range, and that the range has no
-// pending changes.
-func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendingReplicaChange {
-	if len(changes) == 0 {
-		return nil
+// REQUIRES: all the replica changes are to the same range, and that the range
+// has no pending changes.
+func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
+	if len(change.pendingReplicaChanges) == 0 {
+		return
 	}
-	rangeID := changes[0].rangeID
-	for i := 1; i < len(changes); i++ {
-		if changes[i].rangeID != rangeID {
+	rangeID := change.RangeID
+	for _, c := range change.pendingReplicaChanges {
+		if c.rangeID != rangeID {
 			panic(errors.AssertionFailedf("all changes must be to the same range %d != %d",
-				changes[i].rangeID, rangeID))
+				c.rangeID, rangeID))
 		}
 	}
 	rs := cs.ranges[rangeID]
@@ -1812,28 +1839,26 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 	// NB: rs != nil is also required, but we also check that in a method called
 	// below.
 
-	var pendingChanges []*pendingReplicaChange
+	pendingChanges := change.pendingReplicaChanges
 	now := cs.ts.Now()
-	for _, change := range changes {
-		cs.applyReplicaChange(change, true)
+	for _, pendingChange := range pendingChanges {
+		cs.applyReplicaChange(pendingChange.ReplicaChange, true)
 		cs.changeSeqGen++
 		cid := cs.changeSeqGen
-		pendingChange := &pendingReplicaChange{
-			ChangeID:      cid,
-			ReplicaChange: change,
-			startTime:     now,
-			enactedAtTime: time.Time{},
-		}
-		storeState := cs.stores[change.target.StoreID]
-		rangeState := cs.ranges[change.rangeID]
+		pendingChange.ChangeID = cid
+		pendingChange.startTime = now
+		pendingChange.enactedAtTime = time.Time{}
+		storeState := cs.stores[pendingChange.target.StoreID]
+		rangeState := cs.ranges[rangeID]
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
 		rangeState.pendingChangeNoRollback = false
-		log.KvDistribution.VInfof(context.Background(), 3, "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
+		log.KvDistribution.VInfof(context.Background(), 3,
+			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
+			cid, rangeID, pendingChange.ReplicaChange)
 		pendingChanges = append(pendingChanges, pendingChange)
 	}
-	return pendingChanges
 }
 
 // preCheckOnApplyReplicaChanges does some validation of the changes being
@@ -1869,7 +1894,9 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 //
 // TODO(sumeer): allow arbitrary number of changes, but validate that at most
 // one change per store.
-func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []ReplicaChange) error {
+//
+// TODO(sumeer): change to take PendingRangeChange as parameter
+func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []*pendingReplicaChange) error {
 	// preApplyReplicaChange is called before applying a change to the cluster
 	// state.
 	if len(changes) != 1 && len(changes) != 2 && len(changes) != 4 {
@@ -1929,7 +1956,9 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []ReplicaChange) e
 // before allowing a change to be added (including re-addition after a
 // StoreLeaseholderMsg), we should never have invalidity during an undo, if
 // all the changes are being undone.
-func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []ReplicaChange) error {
+//
+// TODO(sumeer): change to take PendingRangeChange as parameter
+func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []*pendingReplicaChange) error {
 	if len(changes) == 0 {
 		panic(errors.AssertionFailedf("no changes to undo"))
 	}

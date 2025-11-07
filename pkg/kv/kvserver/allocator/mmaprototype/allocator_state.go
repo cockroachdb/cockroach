@@ -544,16 +544,14 @@ func (cs *clusterState) rebalanceStores(
 					NodeID:  ss.NodeID,
 					StoreID: ss.StoreID,
 				}
-				leaseChanges := MakeLeaseTransferChanges(
+				replicaChanges := MakeLeaseTransferChanges(
 					rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-				if err := cs.preCheckOnApplyReplicaChanges(leaseChanges[:]); err != nil {
-					panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChanges))
+				leaseChange := MakePendingRangeChange(rangeID, replicaChanges[:])
+				if err := cs.preCheckOnApplyReplicaChanges(leaseChange.pendingReplicaChanges); err != nil {
+					panic(errors.Wrapf(err, "pre-check failed for lease transfer %v", leaseChange))
 				}
-				pendingChanges := cs.createPendingChanges(leaseChanges[:]...)
-				changes = append(changes, PendingRangeChange{
-					RangeID:               rangeID,
-					pendingReplicaChanges: pendingChanges[:],
-				})
+				cs.addPendingRangeChange(leaseChange)
+				changes = append(changes, leaseChange)
 				leaseTransferCount++
 				if changes[len(changes)-1].IsChangeReplicas() || !changes[len(changes)-1].IsTransferLease() {
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
@@ -763,15 +761,13 @@ func (cs *clusterState) rebalanceStores(
 			}
 			replicaChanges := makeRebalanceReplicaChanges(
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-			if err = cs.preCheckOnApplyReplicaChanges(replicaChanges[:]); err != nil {
+			rangeChange := MakePendingRangeChange(rangeID, replicaChanges[:])
+			if err = cs.preCheckOnApplyReplicaChanges(rangeChange.pendingReplicaChanges); err != nil {
 				panic(errors.Wrapf(err, "pre-check failed for replica changes: %v for %v",
 					replicaChanges, rangeID))
 			}
-			pendingChanges := cs.createPendingChanges(replicaChanges[:]...)
-			changes = append(changes, PendingRangeChange{
-				RangeID:               rangeID,
-				pendingReplicaChanges: pendingChanges[:],
-			})
+			cs.addPendingRangeChange(rangeChange)
+			changes = append(changes, rangeChange)
 			rangeMoveCount++
 			log.KvDistribution.VInfof(ctx, 2,
 				"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
@@ -807,93 +803,73 @@ func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 	a.cs.setStore(store)
 }
 
-// ProcessStoreLeaseholderMsg implements the Allocator interface.
+// ProcessStoreLoadMsg implements the Allocator interface.
 func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.cs.processStoreLoadMsg(ctx, msg)
 }
 
-// AdjustPendingChangesDisposition implements the Allocator interface.
-func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
+// AdjustPendingChangeDisposition implements the Allocator interface.
+func (a *allocatorState) AdjustPendingChangeDisposition(change PendingRangeChange, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	// NB: It is possible that some of the changeIDs have already been enacted
-	// via StoreLeaseholderMsg, and even been garbage collected. So no
-	// assumption can be made about whether these changeIDs will be found in the
-	// allocator's state.
+	rs, ok := a.cs.ranges[change.RangeID]
+	if !ok {
+		// Range no longer exists. This can happen if the StoreLeaseholderMsg
+		// which included the effect of the change that transferred the lease away
+		// was already processed, causing the range to no longer be tracked by the
+		// allocator.
+		return
+	}
+	if !success && rs.pendingChangeNoRollback {
+		// Not allowed to undo.
+		return
+	}
+	// NB: It is possible that some of the changes have already been enacted via
+	// StoreLeaseholderMsg, and even been garbage collected. So no assumption
+	// can be made about whether these changes will be found in the allocator's
+	// state. We gather the found changes.
+	var changes []*pendingReplicaChange
+	for _, c := range change.pendingReplicaChanges {
+		ch, ok := a.cs.pendingChanges[c.ChangeID]
+		if !ok {
+			continue
+		}
+		changes = append(changes, ch)
+	}
+	if len(changes) == 0 {
+		return
+	}
 	if !success {
-		// Gather the changes that are found and need to be undone.
-		replicaChanges := make([]ReplicaChange, 0, len(changeIDs))
-		for _, changeID := range changeIDs {
-			change, ok := a.cs.pendingChanges[changeID]
-			if !ok {
-				continue
-			}
-			rs, ok := a.cs.ranges[change.rangeID]
-			if !ok {
-				panic(errors.AssertionFailedf("range %v not found in cluster state", change.rangeID))
-			}
-			if rs.pendingChangeNoRollback {
-				// All the changes are to the same range, so return.
-				return
-			}
-			replicaChanges = append(replicaChanges, change.ReplicaChange)
-		}
-		if len(replicaChanges) == 0 {
-			return
-		}
-		// Check that we can undo these changes. If not, log and return.
-		if err := a.cs.preCheckOnUndoReplicaChanges(replicaChanges); err != nil {
-			// TODO(sumeer): we should be able to panic here, once the interface
-			// contract says that all the proposed changes must be included in
-			// changeIDs. Without that contract, there may be a pair of changes
-			// (remove replica and lease from s1), (add replica and lease to s2),
-			// and the caller can provide the first changeID only, and the undo
-			// would cause two leaseholders. The pre-check would catch that here.
-			log.KvDistribution.Infof(context.Background(), "did not undo change %v: due to %v", changeIDs, err)
-			return
+		// Check that we can undo these changes.
+		if err := a.cs.preCheckOnUndoReplicaChanges(changes); err != nil {
+			panic(err)
 		}
 	}
-
-	for _, changeID := range changeIDs {
-		// We set !requireFound, since some of these pending changes may no longer
-		// exist in the allocator's state. For example, a StoreLeaseholderMsg that
-		// happened after the pending change was created and before this call to
-		// AdjustPendingChangesDisposition may have already removed the pending
-		// change.
+	for _, c := range changes {
 		if success {
-			// TODO(sumeer): this code is implicitly assuming that all the changes
-			// on the rangeState are being enacted. And that is true of the current
-			// callers. We should explicitly state the assumption in the interface.
-			// Because if only some are being enacted, we ought to set
-			// pendingChangeNoRollback, and we don't bother to.
-			a.cs.pendingChangeEnacted(changeID, a.cs.ts.Now(), false)
+			a.cs.pendingChangeEnacted(c.ChangeID, a.cs.ts.Now())
 		} else {
-			a.cs.undoPendingChange(changeID, false)
+			a.cs.undoPendingChange(c.ChangeID)
 		}
 	}
 }
 
-// RegisterExternalChanges implements the Allocator interface. All changes should
-// correspond to the same range, panic otherwise.
-func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []ChangeID {
+// RegisterExternalChange implements the Allocator interface.
+func (a *allocatorState) RegisterExternalChange(change PendingRangeChange) (ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if err := a.cs.preCheckOnApplyReplicaChanges(changes); err != nil {
+	if err := a.cs.preCheckOnApplyReplicaChanges(change.pendingReplicaChanges); err != nil {
 		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
 		log.KvDistribution.Infof(context.Background(),
 			"did not register external changes: due to %v", err)
-		return nil
+		return false
 	} else {
 		a.mmaMetrics.ExternaRegisterSuccess.Inc(1)
 	}
-	pendingChanges := a.cs.createPendingChanges(changes...)
-	changeIDs := make([]ChangeID, len(pendingChanges))
-	for i, pendingChange := range pendingChanges {
-		changeIDs[i] = pendingChange.ChangeID
-	}
-	return changeIDs
+	a.cs.addPendingRangeChange(change)
+	return true
 }
 
 // ComputeChanges implements the Allocator interface.
