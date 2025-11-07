@@ -8,12 +8,12 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # Load go bazel tools. This gives us access to the go bazel SDK/toolchains.
 http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "3796a31d6dceca5f71975a83223e27f8aeb10b5e10d7b69e8ed2c5abd26c5234",
-    strip_prefix = "cockroachdb-rules_go-fcadc30",
+    sha256 = "b49129afe88a5de87b392fa2486df99d5db999aa16615bc67edd6f3eafe62193",
+    strip_prefix = "cockroachdb-rules_go-9ed26e2",
     urls = [
-        # cockroachdb/rules_go as of fcadc30972ee05bb1385eb80aa42146a3809bad7
+        # cockroachdb/rules_go as of 9ed26e2be9a53655fddfe1d8dc59729518b5334a
         # (upstream release-0.57 plus a few patches).
-        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.54.0-56-gfcadc30.tar.gz",
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.54.0-57-g9ed26e2.tar.gz",
     ],
 )
 
