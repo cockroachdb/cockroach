@@ -718,7 +718,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 		}
 		totalReqsMemUsage += r.reqsReservedBytes + r.overheadAccountedFor
 
-		if s.mode == OutOfOrder {
+		if s.mode == OutOfOrder && len(r.reqs) > 1 {
 			// Sort all single-range requests to be in the key order.
 			// TODO(yuzefovich): we should be able to sort not head-of-the-line
 			// request in the InOrder mode too; however, there would be
