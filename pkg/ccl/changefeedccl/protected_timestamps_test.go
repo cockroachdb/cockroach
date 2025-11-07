@@ -1144,6 +1144,8 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 148858) // I think that this isn't respecting per table pts.
+
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 

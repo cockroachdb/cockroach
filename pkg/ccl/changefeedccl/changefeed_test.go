@@ -122,7 +122,7 @@ func TestChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858)
+	skip.WithIssue(t, 148858) // initial scan?
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -694,7 +694,7 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858)
+	skip.WithIssue(t, 148858) // ?
 
 	// Verify the aggmetric functional gauges work correctly
 	t.Run("aggregate functional gauge", func(t *testing.T) {
@@ -865,8 +865,7 @@ func TestChangefeedIdleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Should opt out because it initializes multiple feeds.
-	skip.WithIssue(t, 148858)
+	skip.WithIssue(t, 148858) // Should opt out because it initializes multiple feeds.
 
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -2373,7 +2372,6 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 }
 
 func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
-	// skip.WithIssue(t, 148858) // column families. This is families-related, maybe we can opt out for that.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3859,73 +3857,7 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 	cdcTest(t, testFn, withAllowChangefeedErr("expects terminal error"))
 }
 
-// === RUN   TestChangefeedSingleColumnFamily/cloudstorage
-//
-//	helpers_test.go:1464: making server as secondary tenant
-//	helpers_test.go:1543: making cloudstorage feed factory
-//
-// maybeForceDBLevelChangefeed CREATE CHANGEFEED FOR foo FAMILY most []
-//
-//	helpers_test.go:1239: forcing DB level changefeed for CREATE CHANGEFEED FOR foo FAMILY most
-//	helpers_test.go:1242: forced DB level changefeed result: CREATE CHANGEFEED FOR DATABASE d
-//
-// maybeForceDBLevelChangefeed CREATE CHANGEFEED FOR foo FAMILY rest []
-//
-//	helpers_test.go:1239: forcing DB level changefeed for CREATE CHANGEFEED FOR foo FAMILY rest
-//	helpers_test.go:1242: forced DB level changefeed result: CREATE CHANGEFEED FOR DATABASE d
-//	changefeed_test.go:3875:
-//	    	Error Trace:	pkg/ccl/changefeedccl/helpers_test.go:279
-//	    	            				pkg/ccl/changefeedccl/helpers_test.go:498
-//	    	            				pkg/ccl/changefeedccl/changefeed_test.go:3875
-//	    	            				pkg/ccl/changefeedccl/helpers_test.go:1729
-//	    	            				pkg/ccl/changefeedccl/helpers_test.go:1765
-//	    	Error:      	Received unexpected error:
-//	    	            	expected
-//	    	            	(1) attached stack trace
-//	    	            	  -- stack trace:
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloadsBaseErr
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:466
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloadsBase.func1
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:282
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.withTimeout.func1
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:491
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/util/timeutil.RunWithTimeout
-//	    	            	  | 	pkg/util/timeutil/timeout.go:28
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.withTimeout
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:487
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloadsBase
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:280
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloads
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:498
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.TestChangefeedSingleColumnFamily.func1
-//	    	            	  | 	pkg/ccl/changefeedccl/changefeed_test.go:3875
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.cdcTestNamed.func1
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:1729
-//	    	            	  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.cdcTestNamedWithSystem.func1
-//	    	            	  | 	pkg/ccl/changefeedccl/helpers_test.go:1765
-//	    	            	  | testing.tRunner
-//	    	            	  | 	GOROOT/src/testing/testing.go:1934
-//	    	            	  | runtime.goexit
-//	    	            	  | 	src/runtime/asm_arm64.s:1268
-//	    	            	Wraps: (2) expected
-//	    	            	  |   foo.rest: [0]->{"after": {"c": "cat", "d": null}}
-//	    	            	  |   foo.rest: [1]->{"after": {"c": "cent", "d": null}}
-//	    	            	  | got
-//	    	            	  |   foo.most: [0]->{"after": {"a": 0, "b": "dog"}}
-//	    	            	  |   foo.most: [1]->{"after": {"a": 1, "b": "dollar"}}
-//	    	            	Error types: (1) *withstack.withStack (2) *errutil.leafError
-//	    	Test:       	TestChangefeedSingleColumnFamily/cloudstorage
-//
-// === NAME  TestChangefeedSingleColumnFamily
-//
-//	changefeed_test.go:3897: -- test log scope end --
-//
-// test logs left over in: /tmp/cockroach/_tmp/f5cb02fa45891c8256821a187ced6fe9/logTestChangefeedSingleColumnFamily652389414
-// --- FAIL: TestChangefeedSingleColumnFamily (0.89s)
-//
-//	--- FAIL: TestChangefeedSingleColumnFamily/cloudstorage (0.88s)
 func TestChangefeedSingleColumnFamily(t *testing.T) {
-	// skip.WithIssue(t, 148858) // Column Families.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -3978,16 +3910,9 @@ func TestChangefeedSingleColumnFamily(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
-// --- FAIL: TestChangefeedSingleColumnFamilySchemaChanges (1.28s)
-//
-//	--- FAIL: TestChangefeedSingleColumnFamilySchemaChanges/regression_141453=false (0.62s)
-//	    --- FAIL: TestChangefeedSingleColumnFamilySchemaChanges/regression_141453=false/cloudstorage (0.62s)
-//	--- FAIL: TestChangefeedSingleColumnFamilySchemaChanges/regression_141453=true (0.64s)
-//	    --- FAIL: TestChangefeedSingleColumnFamilySchemaChanges/regression_141453=true/pulsar (0.64s)
 func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// skip.WithIssue(t, 148858) // Column families and backfill?
 
 	testutils.SetVModule(t, "kv_feed=2,changefeed_processors=2")
 
