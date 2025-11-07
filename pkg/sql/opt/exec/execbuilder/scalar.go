@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -1176,29 +1177,30 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 		format := tree.FmtHideConstants | tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&b.evalCtx.Settings.SV))
 		for i := range stmts {
-			var statsBuilder *sqlstats.RecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder]
+			var statsBuilder *sqlstats.RecordedStatementStatsBuilder[*sqlstats.LatencyRecorder]
+			latencyRecorder := sqlstats.NewStatementLatencyRecorder()
+			latencyRecorder.RecordPhase(sqlstats.StatementStarted, crtime.NowMono())
+			latencyRecorder.RecordPhase(sqlstats.StatementStartParsing, crtime.NowMono())
 			stmt := stmts[i]
 			props := stmtProps[i]
 			var tag string
-			var fingerprint string
-			var summary string
-			var fpId appstatspb.StmtFingerprintID
-			var stmtType tree.StatementType
 			// Theoretically, stmts and stmtTags should have the same length,
 			// but just to avoid an out-of-bounds panic, we have this check.
 			if i < len(stmtTags) {
 				tag = stmtTags[i]
 			}
 			if i < len(stmtASTs) {
-				fingerprint = tree.FormatStatementHideConstants(stmtASTs[i], format)
-				summary = tree.FormatStatementSummary(stmtASTs[i], format)
-				fpId = appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
-				stmtType = stmtASTs[i].StatementType()
+				fingerprint := tree.FormatStatementHideConstants(stmtASTs[i], format)
+				fpId := appstatspb.ConstructStatementFingerprintID(fingerprint, b.evalCtx.TxnImplicit, dbName)
+				summary := tree.FormatStatementSummary(stmtASTs[i], format)
+				stmtType := stmtASTs[i].StatementType().String()
+				statsBuilder = sqlstats.NewRecordedStatementStatsBuilder[*sqlstats.LatencyRecorder](
+					fpId, dbName, fingerprint, summary, stmtType, appName,
+				).WithLatencyRecorder(latencyRecorder)
 			}
-			statsBuilder = sqlstats.NewRecordedStatementStatsBuilder[sqlstats.StatementLatencyRecorder](
-				fpId, dbName, fingerprint, summary, stmtType.String(), appName,
-			)
 
+			latencyRecorder.RecordPhase(sqlstats.StatementEndParsing, crtime.NowMono())
+			latencyRecorder.RecordPhase(sqlstats.StatementStartPlanning, crtime.NowMono())
 			o.Init(ctx, b.evalCtx, b.catalog)
 			f := o.Factory()
 
@@ -1307,6 +1309,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 				stmtForDistSQLDiagram = stmtStr[i]
 			}
 			incrementRoutineStmtCounter(b.evalCtx.StartedRoutineStatementCounters, dbName, appName, tag)
+			latencyRecorder.RecordPhase(sqlstats.StatementEndPlanning, crtime.NowMono())
 			err = fn(plan, statsBuilder, stmtForDistSQLDiagram, isFinalPlan)
 			if err != nil {
 				return err

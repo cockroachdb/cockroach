@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats/execstatstypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // IteratorOptions provides the ability to the caller to change how it iterates
@@ -155,7 +156,9 @@ type StatementLatencyRecorder interface {
 }
 
 type RecordedStatementStatsBuilder[L StatementLatencyRecorder] struct {
-	stmtStats *RecordedStmtStats
+	stmtStats       *RecordedStmtStats
+	latencyRecorder L
+	recorderSet     bool
 }
 
 func NewRecordedStatementStatsBuilder[L StatementLatencyRecorder](
@@ -176,6 +179,21 @@ func NewRecordedStatementStatsBuilder[L StatementLatencyRecorder](
 			App:           appName,
 		},
 	}
+}
+
+func (b *RecordedStatementStatsBuilder[L]) WithLatencyRecorder(
+	recorder L,
+) *RecordedStatementStatsBuilder[L] {
+	if b == nil {
+		return b
+	}
+	b.recorderSet = true
+	b.latencyRecorder = recorder
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder[L]) GetLatencyRecorder() L {
+	return b.latencyRecorder
 }
 
 func (b *RecordedStatementStatsBuilder[L]) PlanMetadata(
@@ -349,5 +367,75 @@ func (b *RecordedStatementStatsBuilder[L]) SessionID(
 }
 
 func (b *RecordedStatementStatsBuilder[L]) Build() *RecordedStmtStats {
+	// Validate that Session id has been set
+	if b == nil {
+		return nil
+	}
+
+	if b.recorderSet {
+		b.LatencyRecorder(b.latencyRecorder)
+	}
 	return b.stmtStats
+}
+
+type RoutineStatementPhase int
+
+const (
+	StatementStarted RoutineStatementPhase = iota
+	StatementStartParsing
+	StatementEndParsing
+	StatementStartPlanning
+	StatementEndPlanning
+	StatementStartExec
+	StatementEndExec
+	StatementEnd
+	StatementNumPhases
+)
+
+type LatencyRecorder struct {
+	times [StatementNumPhases]crtime.Mono
+}
+
+var _ StatementLatencyRecorder = &LatencyRecorder{}
+
+func NewStatementLatencyRecorder() *LatencyRecorder {
+	return &LatencyRecorder{}
+}
+
+func (r *LatencyRecorder) RecordPhase(phase RoutineStatementPhase, time crtime.Mono) {
+	r.times[phase] = time
+}
+
+func (r *LatencyRecorder) RunLatency() time.Duration {
+	return r.times[StatementEndExec].Sub(r.times[StatementStartExec])
+}
+
+func (r *LatencyRecorder) IdleLatency() time.Duration {
+	return 0
+}
+
+func (r *LatencyRecorder) ServiceLatency() time.Duration {
+	return r.times[StatementEndExec].Sub(r.times[StatementStarted])
+}
+func (r *LatencyRecorder) ParsingLatency() time.Duration {
+	return r.times[StatementEndParsing].Sub(r.times[StatementStartParsing])
+}
+func (r *LatencyRecorder) PlanningLatency() time.Duration {
+	return r.times[StatementEndPlanning].Sub(r.times[StatementStartPlanning])
+}
+
+func (r *LatencyRecorder) ProcessingLatency() time.Duration {
+	return r.ParsingLatency() + r.PlanningLatency() + r.RunLatency()
+}
+
+func (r *LatencyRecorder) ExecOverheadLatency() time.Duration {
+	return r.ServiceLatency() - r.ProcessingLatency()
+}
+
+func (r *LatencyRecorder) StartTime() time.Time {
+	return r.times[StatementStarted].ToUTC()
+}
+
+func (r *LatencyRecorder) EndTime() time.Time {
+	return r.times[StatementEnd].ToUTC()
 }
