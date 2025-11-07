@@ -89,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/rangeprober"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
@@ -216,6 +217,8 @@ type SQLServer struct {
 
 	// serviceMode is the service mode this server was started with.
 	serviceMode mtinfopb.TenantServiceMode
+
+	queueManager *queuefeed.Manager
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -1458,6 +1461,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		internalDBMemMonitor:           internalDBMonitor,
 		upgradeManager:                 upgradeMgr,
 		serviceMode:                    cfg.serviceMode,
+		queueManager:                   queuefeed.NewManager(cfg.internalDB),
 	}, nil
 }
 

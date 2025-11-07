@@ -320,6 +320,8 @@ type Context struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
 	ExecutedRoutineStatementCounters RoutineStatementCounters
+
+	QueueSessionMgr any
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution

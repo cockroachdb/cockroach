@@ -3984,6 +3984,7 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.schemaResolver.authAccessor = p
 	p.reducedAuditConfig = &auditlogging.ReducedAuditConfig{}
 	p.datumAlloc = &tree.DatumAlloc{}
+	p.queueManager = ex.server.queueManager
 }
 
 // maybeAdjustMaxTimestampBound checks

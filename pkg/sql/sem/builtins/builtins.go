@@ -4642,6 +4642,64 @@ value if you rely on the HLC for accuracy.`,
 			}
 		}()...),
 
+	"crdb_internal.create_queue_feed": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+		},
+		ReturnType: tree.FixedReturnType(types.Void),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			qn := args[0].(*tree.DString)
+			return nil, evalCtx.Planner.QueueManager().CreateQueueTables(ctx, string(*qn))
+		},
+	}),
+
+	"crdb_internal.select_from_queue_feed": makeBuiltin(defProps(), tree.Overload{
+		Types: tree.ParamTypes{
+			{Name: "queue_name", Typ: types.String},
+			{Name: "limit", Typ: types.Int},
+		},
+		ReturnType: tree.ArrayOfFirstNonNullReturnType(),
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			var err error
+			// ignore queue_name for now; we only support one queue
+			// ditto limit lol
+			qr := evalCtx.Planner.QueueReader()
+			// if not initialized, initialize it
+			if qr == nil {
+				qn := args[0].(*tree.DString)
+				qr, err = evalCtx.Planner.QueueManager().GetOrInitReader(ctx, string(*qn))
+				if err != nil {
+					return nil, err
+				}
+			}
+			// attach commit hook to txn to confirm receipt
+			txn := evalCtx.Txn
+			// or something... todo on rollback/abort
+			txn.AddCommitTrigger(func(ctx context.Context) {
+				qr.ConfirmReceipt(ctx)
+			})
+
+			ret := tree.NewDArray(types.Json)
+
+			rows, err := qr.GetRows(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, row := range rows {
+				obj := json.NewObjectBuilder(len(row))
+				for i, d := range row {
+					j, err := tree.AsJSON(d, evalCtx.SessionData().DataConversionConfig, evalCtx.GetLocation())
+					if err != nil {
+						return nil, err
+					}
+					obj.Add(fmt.Sprintf("f%d", i+1), j)
+				}
+				ret.Append(tree.NewDJSON(obj.Build()))
+			}
+			return ret, nil
+		},
+	}),
+
 	"crdb_internal.json_to_pb": makeBuiltin(
 		jsonProps(),
 		tree.Overload{
