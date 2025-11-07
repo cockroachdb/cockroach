@@ -1049,7 +1049,7 @@ func (rr registryRecorder) recordChangefeedChildMetrics(
 		// Check if the metric has child collection enabled in its metadata
 		if iterable, ok := v.(metric.Iterable); ok {
 			metadata := iterable.GetMetadata()
-			if !metadata.EnableLowFreqChildCollection {
+			if !metadata.GetEnableLowFreqChildCollection() {
 				return // Skip this metric if child collection is not enabled
 			}
 		} else {

@@ -107,7 +107,7 @@ message Metadata {
   // enable_low_freq_child_collection enables child metrics to be collected
   // in the low-frequency child metrics poller. When true, child metrics with
   // labels will be recorded in the time series database.
-  optional bool enable_low_freq_child_collection = 13 [(gogoproto.nullable) = false];
+  optional bool enable_low_freq_child_collection = 13;
 
   // Next ID: 10 (then 14).
 }
