@@ -33,7 +33,6 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN k
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 4 (p-), IndexID: 5}
       │    └── 24 Mutation operations
       │         ├── SetColumnName {"ColumnID":3,"Name":"k","TableID":104}
-      │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":2,"TableID":104}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
@@ -50,10 +49,11 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN k
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":5,"Kind":2,"Ordinal":1,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
-      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
+      │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 4 in PostCommitNonRevertiblePhase
