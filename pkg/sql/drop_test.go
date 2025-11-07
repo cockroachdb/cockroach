@@ -1555,24 +1555,34 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 
 // TestTruncateLarge truncates a large number of tables in a single transaction.
 func TestTruncateLarge(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	skip.UnderDuress(t, "truncating a large number of tables")
 
+	// NB: we must use t.Cleanup instead of deferring this cleanup in the main
+	// test due to the use of t.Parallel below.
+	// See https://github.com/golang/go/issues/31651.
+	t.Cleanup(leaktest.AfterTest(t))
+	scope := log.Scope(t)
+	t.Cleanup(func() {
+		scope.Close(t)
+	})
+
 	testutils.RunTrueAndFalse(t, "batch limit set", func(t *testing.T, batchLimitSet bool) {
+		t.Parallel() // SAFE FOR TESTING
 		ctx := context.Background()
-		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+			SQLMemoryPoolSize: 1 << 30, /* 1 GiB */
+		})
 		defer srv.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
 		createCommand := strings.Builder{}
 		truncateCommand := strings.Builder{}
 		systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
-		systemDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='5m'")
+		systemDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='4.1MiB'")
 		if batchLimitSet {
-			sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.batch_flush_threshold_size='2m'")
+			sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.batch_flush_threshold_size='1.8MiB'")
 		}
 		// Generate the truncate and create table commands.
-		const numTables = 500
+		const numTables = 340
 		truncateCommand.WriteString("TRUNCATE TABLE ")
 		for i := range numTables {
 			createCommand.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY, j INT, k INT, INDEX (j), INDEX (k), UNIQUE (j, k));\n", i))
