@@ -37,10 +37,10 @@ import (
 
 func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t, "does too much work under race, see: "+
 		"https://github.com/cockroachdb/cockroach/pull/56343#issuecomment-733577377")
-
-	defer log.Scope(t).Close(t)
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
@@ -61,33 +61,30 @@ func TestTrace(t *testing.T) {
 		"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
 		"noop",
 	}
-	nonVectorizedExpSpans := []string{
+	// These are optional if we use a test tenant.
+	tenantOptionalSpans := []string{
+		"/cockroach.roachpb.Internal/RangeLookup",
+		"executeWriteBatch",
+	}
+	commonExpSpans := []string{
 		"session recording",
 		"sql txn",
 		"sql query",
 		"optimizer",
 		"flow",
-		"table reader",
 		"consuming rows",
 		"txn coordinator send",
 		"dist sender send",
 		"/cockroach.roachpb.Internal/Batch",
 		"commit sql txn",
 	}
-	vectorizedExpSpans := []string{
-		"session recording",
-		"sql txn",
-		"sql query",
-		"optimizer",
-		"flow",
+	nonVectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
+		"table reader",
+	}...)
+	vectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
 		"batch flow coordinator",
 		"colbatchscan",
-		"consuming rows",
-		"txn coordinator send",
-		"dist sender send",
-		"/cockroach.roachpb.Internal/Batch",
-		"commit sql txn",
-	}
+	}...)
 
 	getRows := func(t *testing.T, sqlDB *gosql.DB, distsql, vectorize string, useShowTraceFor bool) (*gosql.Rows, string, error) {
 		if _, err := sqlDB.Exec(fmt.Sprintf("SET distsql = %s", distsql)); err != nil {
@@ -210,6 +207,9 @@ func TestTrace(t *testing.T) {
 		optionalSpans := append([]string{}, alwaysOptionalSpans...)
 		if test.distSQL == "on" {
 			optionalSpans = append(optionalSpans, distsqlOptionalSpans...)
+		}
+		if cluster.StartedDefaultTestTenant() {
+			optionalSpans = append(optionalSpans, tenantOptionalSpans...)
 		}
 		expSpans := nonVectorizedExpSpans
 		if test.vectorize == "on" {
