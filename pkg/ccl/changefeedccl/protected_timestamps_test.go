@@ -169,7 +169,6 @@ func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
 //     once it completes
 //   - When a changefeed is cancelled the protection is removed.
 func TestChangefeedProtectedTimestamps(t *testing.T) {
-	skip.WithIssue(t, 148858) // Might be real
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

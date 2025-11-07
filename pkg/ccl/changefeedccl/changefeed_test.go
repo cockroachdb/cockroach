@@ -7992,7 +7992,6 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 }
 
 func TestChangefeedPauseUnpause(t *testing.T) {
-	skip.WithIssue(t, 148858) // Uses initial scan.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -9136,8 +9135,6 @@ INSERT INTO bar VALUES (6, 'f');
 func TestChangefeedCheckpointSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 148858) // Uses initial scan.
 
 	skip.UnderRace(t)
 	skip.UnderShort(t)
