@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
-	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -174,12 +173,6 @@ func (evalCtx *extendedEvalContext) QueueJob(record *jobs.Record) jobspb.JobID {
 // If one needs to be created outside of a Session, use makeInternalPlanner().
 type planner struct {
 	schemaResolver
-
-	// must clean up on connexecutor.close()
-	// shouldnt be a single one in reality
-	queueReader *queuefeed.Reader
-
-	queueManager *queuefeed.Manager
 
 	txn *kv.Txn
 
@@ -329,14 +322,6 @@ type planner struct {
 	// skipUnsafeInternalsCheck is used to skip the check that the
 	// planner is not used for unsafe internal statements.
 	skipUnsafeInternalsCheck bool
-}
-
-func (p *planner) QueueManager() *queuefeed.Manager {
-	return p.queueManager
-}
-
-func (p *planner) QueueReader() *queuefeed.Reader {
-	return p.queueReader
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a

@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "queuefeed",
+    srcs = [
+        "manager.go",
+        "reader.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/queuefeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+    ],
+)

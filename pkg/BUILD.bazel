@@ -2228,6 +2228,7 @@ GO_TARGETS = [
     "//pkg/sql/protoreflect:protoreflect_test",
     "//pkg/sql/querycache:querycache",
     "//pkg/sql/querycache:querycache_test",
+    "//pkg/sql/queuefeed:queuefeed",
     "//pkg/sql/randgen:randgen",
     "//pkg/sql/randgen:randgen_test",
     "//pkg/sql/rangeprober:range_prober",

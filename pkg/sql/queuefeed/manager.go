@@ -14,6 +14,7 @@ type Manager struct {
 	executor isql.DB
 }
 
+
 func NewManager(executor isql.DB) *Manager {
 	// setup rangefeed on partitions table (/poll)
 	// handle handoff from one server to another

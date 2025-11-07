@@ -49,6 +49,7 @@ func NewReader(ctx context.Context, executor isql.DB, mgr *Manager, name string)
 // after each batch, ask mgr if i need to change assignments
 // buffer rows in the background before being asked for them
 // checkpoint frontier if our frontier has advanced and we confirmed receipt
+// gonna need some way to clean stuff up on conn_executor.close()
 
 func (r *Reader) run(ctx context.Context) {
 

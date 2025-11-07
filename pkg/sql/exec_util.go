@@ -81,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -1851,6 +1852,12 @@ type ExecutorConfig struct {
 
 	// LicenseEnforcer is used to enforce the license profiles.
 	LicenseEnforcer *license.Enforcer
+
+	QueueManager *queuefeed.Manager
+}
+
+func (cfg *ExecutorConfig) GetQueueManager() *queuefeed.Manager {
+	return cfg.QueueManager
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

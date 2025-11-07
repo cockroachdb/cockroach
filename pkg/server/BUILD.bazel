@@ -259,6 +259,7 @@ go_library(
         "//pkg/sql/physicalplan",
         "//pkg/sql/privilege",
         "//pkg/sql/querycache",
+        "//pkg/sql/queuefeed",
         "//pkg/sql/rangeprober",
         "//pkg/sql/regions",
         "//pkg/sql/rolemembershipcache",

@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/queuefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -4649,7 +4650,7 @@ value if you rely on the HLC for accuracy.`,
 		ReturnType: tree.FixedReturnType(types.Void),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			qn := args[0].(*tree.DString)
-			return nil, evalCtx.Planner.QueueManager().CreateQueueTables(ctx, string(*qn))
+			return nil, getQueueManager(evalCtx).CreateQueueTables(ctx, string(*qn))
 		},
 	}),
 
@@ -4663,14 +4664,10 @@ value if you rely on the HLC for accuracy.`,
 			var err error
 			// ignore queue_name for now; we only support one queue
 			// ditto limit lol
-			qr := evalCtx.Planner.QueueReader()
-			// if not initialized, initialize it
-			if qr == nil {
-				qn := args[0].(*tree.DString)
-				qr, err = evalCtx.Planner.QueueManager().GetOrInitReader(ctx, string(*qn))
-				if err != nil {
-					return nil, err
-				}
+			qn := args[0].(*tree.DString)
+			qr, err := getQueueManager(evalCtx).GetOrInitReader(ctx, string(*qn))
+			if err != nil {
+				return nil, err
 			}
 			// attach commit hook to txn to confirm receipt
 			txn := evalCtx.Txn
@@ -12904,3 +12901,7 @@ func exprSliceToStrSlice(exprs []tree.Expr) []string {
 }
 
 var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")
+
+func getQueueManager(evalCtx *eval.Context) *queuefeed.Manager {
+	return evalCtx.Planner.ExecutorConfig().(interface{ GetQueueManager() *queuefeed.Manager }).GetQueueManager()
+}
