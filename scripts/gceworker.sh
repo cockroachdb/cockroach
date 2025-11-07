@@ -98,7 +98,7 @@ create)
 		echo "Using dev license key from \$COCKROACH_DEV_LICENSE"
 	else
 		echo -n "Enter your dev license key (if any): "
-		read COCKROACH_DEV_LICENSE
+		read -r COCKROACH_DEV_LICENSE
 	fi
 
 	gsuite_account_for_label="$(
@@ -163,7 +163,7 @@ start)
 		echo "Set GCEWORKER_START_SSH_COMMAND=mosh to use mosh instead"
 	fi
 	echo "****************************************"
-	$0 ${GCEWORKER_START_SSH_COMMAND-ssh}
+	$0 "${GCEWORKER_START_SSH_COMMAND-ssh}"
 	;;
 stop)
 	read -r -p "This will stop the VM. Are you sure? [yes] " response
@@ -221,9 +221,6 @@ ssh)
 mosh)
 	mosh --ssh "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" "$(user_domain_suffix)@${FQNAME}"
 	;;
-gcloud)
-	gcloud "$@"
-	;;
 get)
 	rpath="${1}"
 	# Check whether we have an absolute path like /foo, ~foo, or ~/foo.
@@ -253,56 +250,15 @@ put)
 	gcloud compute scp --recurse "${lpaths[@]}" "${to}"
 	;;
 ip)
-	echo "$(get_ip)"
-	;;
-sync)
-	if ! hash unison 2>/dev/null; then
-		echo 'unison not found (on macOS, run `brew install unison`)' >&2
-		exit 1
-	fi
-	if ! hash unison-fsmonitor 2>/dev/null; then
-		echo 'unison-fsmonitor not installed (on macOS, run `brew install eugenmayer/dockersync/unox`)'
-		exit 1
-	fi
-	if (($# == 0)); then
-		host=. # Sync the Cockroach repo by default.
-		worker=go/src/github.com/cockroachdb/cockroach
-	elif (($# == 2)); then
-		host=$1
-		worker=$2
-	else
-		echo "usage: $0 mount [HOST-PATH WORKER-PATH]" >&2
-		exit 1
-	fi
-	read -p "Warning: sync will overwrite files on the GCE worker with your local copy. Continue? (Y/n) "
-	if [[ "$REPLY" && "$REPLY" != [Yy] ]]; then
-		exit 1
-	fi
-	tmpfile=$(mktemp)
-	trap 'rm -f ${tmpfile}' EXIT
-	unison "$host" "ssh://${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}/$worker" \
-		-sshargs "-F ${tmpfile}" -auto -prefer "$host" -repeat watch \
-		-ignore 'Path .localcluster.certs*' \
-		-ignore 'Path .git' \
-		-ignore 'Path _bazel*' \
-		-ignore 'Path bazel-out*' \
-		-ignore 'Path bin*' \
-		-ignore 'Path build/builder_home' \
-		-ignore 'Path pkg/sql/parser/gen' \
-		-ignore 'Path pkg/ui/node_modules' \
-		-ignore 'Path pkg/ui/.cache-loader' \
-		-ignore 'Path cockroach-data' \
-		-ignore 'Name *.d' \
-		-ignore 'Name *.o' \
-		-ignore 'Name zcgo_flags*.go'
+	get_ip
 	;;
 vscode)
 	start_and_wait "${NAME}"
-	HOST=$(gcloud_compute_ssh --dry-run ${NAME} | awk '{print $NF}')
-	code --wait --remote ssh-remote+$HOST "$@"
+	HOST="$(gcloud_compute_ssh --dry-run "$NAME" | awk '{print $NF}')"
+	code --wait --remote ssh-remote+"$HOST" "$@"
 	;;
 status)
-	gcloud compute instances describe ${NAME} --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
+	gcloud compute instances describe "$NAME" --format="table(name,status,lastStartTimestamp,lastStopTimestamp)"
 	;;
 update-hosts)
 	NEW_IP="$(get_ip)"
