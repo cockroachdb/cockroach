@@ -343,6 +343,7 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/ioctx",
