@@ -501,6 +501,11 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			job := &Job{id: id, registry: r}
 			stateString := *row[1].(*tree.DString)
 			jobTypeString := *row[2].(*tree.DString)
+
+			if err := job.Messages().Record(ctx, txn, "state", string(stateString)); err != nil {
+				return err
+			}
+
 			switch State(stateString) {
 			case StatePaused:
 				if !r.cancelRegisteredJobContext(id) {
