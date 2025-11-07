@@ -1,0 +1,4 @@
+echo
+----
+     0.000ms      0.000ms    === operation:test-operation
+   100.000ms    100.000ms    event:test event message

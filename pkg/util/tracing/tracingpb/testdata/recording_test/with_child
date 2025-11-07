@@ -1,0 +1,7 @@
+echo
+----
+   100.000ms      0.000ms        === operation:child-operation
+   200.000ms    100.000ms        event:child event
+     0.000ms      0.000ms    === operation:parent-operation
+   100.000ms    100.000ms        === operation:child-operation
+   200.000ms    100.000ms        event:child event
