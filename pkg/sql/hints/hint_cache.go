@@ -322,8 +322,9 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 				c.mu.Lock()
 				defer c.mu.Unlock()
 				if refreshTS.Forward(c.mu.hintedHashes[hash]) {
-					// The refresh timestamp was bumped by a rangefeed event. Retry at the
-					// new timestamp.
+					// The refresh timestamp was bumped by a rangefeed event.
+					// Retry at the new timestamp (refreshTS has been updated in
+					// place).
 					return false
 				}
 				if hasHints {

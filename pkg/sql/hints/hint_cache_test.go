@@ -12,12 +12,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -41,8 +42,7 @@ func TestHintCacheBasic(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(db)
 	setTestDefaults(t, srv)
 
-	// Create a hints cache.
-	hc := createHintsCache(t, ctx, ts)
+	hc := ts.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
 	require.Equal(t, 0, hc.TestingHashCount())
 
 	// Insert a hint for a statement. The cache should soon contain the hash.
@@ -96,7 +96,7 @@ func TestHintCacheLRU(t *testing.T) {
 	// Set cache size to 2 for testing eviction.
 	r.Exec(t, "SET CLUSTER SETTING sql.hints.statement_hints_cache_size = 2")
 
-	hc := createHintsCache(t, ctx, ts)
+	hc := ts.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
 	require.Equal(t, 0, hc.TestingHashCount())
 
 	// Create test data: 3 different fingerprints.
@@ -169,14 +169,29 @@ func TestHintCacheInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
-	ts := srv.ApplicationLayer()
-	r := sqlutils.MakeSQLRunner(db)
-	setTestDefaults(t, srv)
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+	stickyVFSRegistry := fs.NewStickyRegistry()
 
-	// Insert multiple hints into the system table BEFORE creating the cache.
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					// Sticky vfs is needed for cluster restart.
+					StickyVFSRegistry: stickyVFSRegistry,
+				},
+			},
+		},
+		// A listener is required for cluster restart.
+		ReusableListenerReg: listenerReg,
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.ApplicationLayer(0)
+	r := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+	setTestDefaults(t, tc.Server(0))
+
+	// Insert multiple hints into the system table.
 	fingerprints := []string{
 		"SELECT a FROM t WHERE b = $1",
 		"SELECT c FROM t WHERE d = $1",
@@ -191,9 +206,12 @@ func TestHintCacheInitialScan(t *testing.T) {
 	// Insert multiple hints for the first fingerprint.
 	insertStatementHint(t, r, fingerprints[0])
 
-	// Now create a hints cache - it should populate from existing hints during
-	// initial scan.
-	hc := createHintsCache(t, ctx, ts)
+	// Restart the cluster to trigger the initial scan for the hints cache.
+	require.NoError(t, tc.Restart())
+	ts = tc.ApplicationLayer(0)
+	r = sqlutils.MakeSQLRunner(ts.SQLConn(t))
+
+	hc := ts.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
 
 	// The cache should have all the hashes once the initial scan completes.
 	testutils.SucceedsSoon(t, func() error {
@@ -246,8 +264,8 @@ func TestHintCacheMultiNode(t *testing.T) {
 	r2 := sqlutils.MakeSQLRunner(tc.ServerConn(2))
 	setTestDefaults(t, tc.Server(0))
 
-	// Create a hints cache on node 0.
-	hc := createHintsCache(t, ctx, ts)
+	// Use the hints cache from node 0.
+	hc := ts.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
 	require.Equal(t, 0, hc.TestingHashCount())
 
 	// Insert hints from node 1.
@@ -307,9 +325,8 @@ func TestHintCacheMultiTenant(t *testing.T) {
 	r1 := sqlutils.MakeSQLRunner(tenantConn1)
 	r2 := sqlutils.MakeSQLRunner(tenantConn2)
 
-	// Create hints caches for both tenants.
-	hc1 := createHintsCache(t, ctx, tenant1)
-	hc2 := createHintsCache(t, ctx, tenant2)
+	hc1 := tenant1.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
+	hc2 := tenant2.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
 	require.Equal(t, 0, hc1.TestingHashCount())
 	require.Equal(t, 0, hc2.TestingHashCount())
 
@@ -390,8 +407,7 @@ func TestHintCacheGeneration(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(db)
 	setTestDefaults(t, srv)
 
-	// Create a hints cache.
-	hc := createHintsCache(t, ctx, ts)
+	hc := ts.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
 
 	// Helper that retrieves the generation and verifies that it doesn't change
 	// over a short period.
@@ -473,21 +489,6 @@ func setTestDefaults(t *testing.T, srv serverutils.TestServerInterface) {
 	r.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'")
 	r.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
 	r.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
-}
-
-func createHintsCache(
-	t *testing.T, ctx context.Context, ts serverutils.ApplicationLayerInterface,
-) *hints.StatementHintsCache {
-	hc := hints.NewStatementHintsCache(
-		ts.Clock(),
-		ts.RangeFeedFactory().(*rangefeed.Factory),
-		ts.AppStopper(),
-		ts.Codec(),
-		ts.InternalDB().(descs.DB),
-		ts.ClusterSettings(),
-	)
-	require.NoError(t, hc.Start(ctx, ts.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	return hc
 }
 
 // waitForUpdateOnFingerprintHash waits for the cache to automatically refresh
