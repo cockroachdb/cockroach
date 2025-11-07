@@ -117,18 +117,9 @@ func (rit ReplicaIDAndType) subsumesChange(prev, next ReplicaIDAndType) bool {
 
 type ReplicaState struct {
 	ReplicaIDAndType
-	// VoterIsLagging can be set for a VOTER_FULL replica that has fallen
-	// behind, i.e., it's matching log is less than the current committed log.
-	// It is a hint to the allocator not to transfer the lease to this replica.
-	VoterIsLagging bool
-	// TODO(kvoli,sumeerbhola): Consider adding in rac2.SendQueue information to
-	// prevent lease transfers to replicas which are not able to take the lease
-	// due to a send queue. Do we even need this, given the VoterIsLagging
-	// should be true whenever there is a send queue? I suppose if we are
-	// force-flushing to a replica, it is possible for VoterIsLagging to be
-	// false and the send queue to be non-empty. But we could incorporate the
-	// send-queue state into VoterIsLagging -- having two bools doesn't seem
-	// beneficial.
+	// LeaseDisposition can be set for a VOTER_FULL replica and communicates the
+	// availability of this replica for lease transfers.
+	LeaseDisposition LeaseDisposition
 }
 
 // ChangeID is a unique ID, in the context of this data-structure and when
@@ -820,7 +811,7 @@ func (s StoreIDAndReplicaState) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s StoreIDAndReplicaState) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("s%v:%v voterIsLagging:%v", s.StoreID, s.ReplicaState.ReplicaIDAndType, s.ReplicaState.VoterIsLagging)
+	w.Printf("s%v:%v lease disposition:%v", s.StoreID, s.ReplicaState.ReplicaIDAndType, s.ReplicaState.LeaseDisposition)
 }
 
 // rangeState is periodically updated based on reporting by the leaseholder.
