@@ -50,7 +50,6 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN m 
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 5}
       │    └── 38 Mutation operations
       │         ├── MakeValidatedColumnNotNullPublic {"ColumnID":3,"TableID":104}
-      │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
       │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
       │         ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4,"TableID":104}
@@ -75,11 +74,12 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN m 
       │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":4,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":5,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":5,"Kind":1,"TableID":104}
-      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
+      │         ├── SetIndexName {"IndexID":1,"Name":"t_pkey","TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":7,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
+      │         ├── MakeValidatedPrimaryIndexPublic {"IndexID":1,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":6,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":6,"Kind":2,"TableID":104}
