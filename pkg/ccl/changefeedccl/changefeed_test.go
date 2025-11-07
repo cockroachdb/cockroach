@@ -1034,7 +1034,6 @@ func TestChangefeedBasicConfluentKafka(t *testing.T) {
 }
 
 func TestChangefeedQuotedTableNameTopicName(t *testing.T) {
-	// skip.WithIssue(t, 148858) // full_table_name
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1064,8 +1063,6 @@ func TestChangefeedQuotedTableNameTopicName(t *testing.T) {
 func TestChangefeedQuotedIdentifiersTopicName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// skip.WithIssue(t, 148858) // full_table_name
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1367,9 +1364,7 @@ func TestChangefeedEnvelope(t *testing.T) {
 	cdcTest(t, testFn, feedTestRestrictSinks("sinkless", "enterprise", "kafka"))
 }
 
-// Fails: full table name is not supported for db-level changefeeds???
 func TestChangefeedFullTableName(t *testing.T) {
-	// skip.WithIssue(t, 148858) // full_table_name
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1384,6 +1379,30 @@ func TestChangefeedFullTableName(t *testing.T) {
 			assertPayloads(t, foo, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
 		})
 	})
+}
+
+func TestDatabaseLevelChangefeedWithFullTableName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		normal := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d WITH full_table_name`)
+		defer closeFeed(t, normal)
+		include := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d INCLUDE TABLES foo WITH full_table_name`)
+		defer closeFeed(t, include)
+		exclude := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d EXCLUDE TABLES bar WITH full_table_name`)
+		defer closeFeed(t, exclude)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+		assertPayloads(t, normal, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+		assertPayloads(t, include, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+		assertPayloads(t, exclude, []string{`d.public.foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 func TestChangefeedMultiTable(t *testing.T) {
