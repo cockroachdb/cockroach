@@ -865,8 +865,6 @@ func TestChangefeedIdleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858) // Should opt out because it initializes multiple feeds.
-
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		changefeedbase.IdleTimeout.Override(
@@ -905,8 +903,11 @@ func TestChangefeedIdleness(t *testing.T) {
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (b INT PRIMARY KEY)`)
-		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo WITH resolved='10ms'") // higher resolved frequency for faster test
-		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'")
+		// TODO(#148858): Add coverage for DB-level changefeed testing.
+		cf1 := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo WITH resolved='10ms'", // higher resolved frequency for faster test
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
+		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'",
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 		defer closeFeed(t, cf1)
 
 		go workload()
@@ -2425,7 +2426,6 @@ func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
 }
 
 func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
-	skip.WithIssue(t, 148858) // Two tables
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -2443,6 +2443,8 @@ func TestChangefeedColumnDropsOnMultipleFamiliesWithTheSameName(t *testing.T) {
 		if _, ok := f.(*webhookFeedFactory); ok {
 			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
 		}
+		// TODO(#148858): Add coverage for DB-level changefeed testing.
+		args = append(args, optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 
 		// Open up the changefeed.
 		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c, TABLE alsohasfams FAMILY id_a`, args...)
@@ -6499,9 +6501,7 @@ func TestChangefeedUpdatePrimaryKey(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
-// fails (kafka)
 func TestChangefeedTruncateOrDrop(t *testing.T) {
-	skip.WithIssue(t, 148858) // Multiple tables.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -6540,9 +6540,12 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE truncate_cascade (b INT PRIMARY KEY REFERENCES truncate (a)) WITH (schema_locked=false)`)
 		sqlDB.Exec(t,
 			`BEGIN; INSERT INTO truncate VALUES (1); INSERT INTO truncate_cascade VALUES (1); COMMIT`)
-		truncate := feed(t, f, `CREATE CHANGEFEED FOR truncate`)
+		// TODO(#148858): Add coverage for DB-level changefeed testing.
+		truncate := feed(t, f, `CREATE CHANGEFEED FOR truncate`,
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 		defer closeFeed(t, truncate)
-		truncateCascade := feed(t, f, `CREATE CHANGEFEED FOR truncate_cascade`)
+		truncateCascade := feed(t, f, `CREATE CHANGEFEED FOR truncate_cascade`,
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 		defer closeFeed(t, truncateCascade)
 		assertPayloads(t, truncate, []string{`truncate: [1]->{"after": {"a": 1}}`})
 		assertPayloads(t, truncateCascade, []string{`truncate_cascade: [1]->{"after": {"b": 1}}`})
@@ -6559,7 +6562,8 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 
 		sqlDB.Exec(t, `CREATE TABLE drop (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO drop VALUES (1)`)
-		drop := feed(t, f, `CREATE CHANGEFEED FOR drop`)
+		drop := feed(t, f, `CREATE CHANGEFEED FOR drop`,
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 		defer closeFeed(t, drop)
 		assertPayloads(t, drop, []string{`drop: [1]->{"after": {"a": 1}}`})
 		sqlDB.Exec(t, `DROP TABLE drop`)
@@ -8190,60 +8194,7 @@ func TestUnspecifiedPrimaryKey(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
-// Fails: this could be something real
-// === RUN   TestChangefeedTelemetry/enterprise
-// helpers_test.go:1467: making server as system tenant
-// helpers_test.go:1543: making enterprise feed factory
-// helpers_test.go:1557: pgURL enterprise root
-// maybeForceDBLevelChangefeed CREATE CHANGEFEED FOR foo []
-// helpers_test.go:1239: forcing DB level changefeed for CREATE CHANGEFEED FOR foo
-// helpers_test.go:1242: forced DB level changefeed result: CREATE CHANGEFEED FOR DATABASE d
-// maybeForceDBLevelChangefeed CREATE CHANGEFEED FOR foo, bar WITH format=json []
-// helpers_test.go:1239: forcing DB level changefeed for CREATE CHANGEFEED FOR foo, bar WITH format=json
-// helpers_test.go:1242: forced DB level changefeed result: CREATE CHANGEFEED FOR DATABASE d WITH OPTIONS (format = 'json')
-// changefeed_test.go:8173:
-//
-//	Error Trace:	pkg/ccl/changefeedccl/helpers_test.go:279
-//								pkg/ccl/changefeedccl/helpers_test.go:498
-//								pkg/ccl/changefeedccl/changefeed_test.go:8173
-//								pkg/ccl/changefeedccl/helpers_test.go:1729
-//								pkg/ccl/changefeedccl/helpers_test.go:1765
-//	Error:      	Received unexpected error:
-//					expected
-//					(1) attached stack trace
-//					  -- stack trace:
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloadsBaseErr
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:466
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloadsBase.func1
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:282
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.withTimeout.func1
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:491
-//					  | github.com/cockroachdb/cockroach/pkg/util/timeutil.RunWithTimeout
-//					  | 	pkg/util/timeutil/timeout.go:28
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.withTimeout
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:487
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloadsBase
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:280
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.assertPayloads
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:498
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.TestChangefeedTelemetry.func1
-//					  | 	pkg/ccl/changefeedccl/changefeed_test.go:8173
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.cdcTestNamed.func1
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:1729
-//					  | github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl.cdcTestNamedWithSystem.func1
-//					  | 	pkg/ccl/changefeedccl/helpers_test.go:1765
-//					  | testing.tRunner
-//					  | 	GOROOT/src/testing/testing.go:1934
-//					  | runtime.goexit
-//					  | 	src/runtime/asm_arm64.s:1268
-//					Wraps: (2) expected
-//					  |   foo: [1]->{"after": {"a": 1}}
-//					  | got
-//					  |   bar: [1]->{"after": {"a": 1}}
-//					Error types: (1) *withstack.withStack (2) *errutil.leafError
-//	Test:       	TestChangefeedTelemetry/enterprise
 func TestChangefeedTelemetry(t *testing.T) {
-	skip.WithIssue(t, 148858) // Creates multiple tables.
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -8258,9 +8209,12 @@ func TestChangefeedTelemetry(t *testing.T) {
 		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 		// Start some feeds (and read from them to make sure they've started.
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		// TODO(#148858): Add coverage for DB-level changefeed testing.
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`,
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 		defer closeFeed(t, foo)
-		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`)
+		fooBar := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH format=json`,
+			optOutOfMetamorphicDBLevelChangefeed{reason: "test initializes multiple tables but doesn't watch all of them"})
 		defer closeFeed(t, fooBar)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1}}`,

@@ -1161,7 +1161,7 @@ func feed(
 		t.Fatal(err)
 	}
 
-	create, err = maybeForceDBLevelChangefeed(t, create, f, args)
+	create, args, err = maybeForceDBLevelChangefeed(t, create, f, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1182,62 +1182,59 @@ func feed(
 
 func maybeForceDBLevelChangefeed(
 	t testing.TB, create string, f cdctest.TestFeedFactory, args []any,
-) (newCreate string, err error) {
-	fmt.Println("maybeForceDBLevelChangefeed", create, args)
-	for _, arg := range args {
+) (newCreate string, newArgs []any, err error) {
+	for i, arg := range args {
 		if o, ok := arg.(optOutOfMetamorphicDBLevelChangefeed); ok {
 			t.Logf("opted out of DB level changefeed for %s: %s", create, o.reason)
+			newArgs = slices.Clone(args)
+			newArgs = slices.Delete(newArgs, i, i+1)
+			return create, newArgs, nil
 		}
 	}
 
 	switch f := f.(type) {
-	// Don't do it for sinkless feeds.
-	// Skip external connection feeds for now. (TODO: revisit this.)
+	// Skip external connection feeds for now. (TODO(#148858): revisit this.)
 	case *externalConnectionFeedFactory, *sinklessFeedFactory:
 		t.Logf("did not force DB level changefeed for %s because %T is not supported", create, f)
-		return create, nil
+		return create, args, nil
 	}
 
-	// Don't do it if it's a CDC query.
 	createStmt, err := parser.ParseOne(create)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	createAST := createStmt.AST.(*tree.CreateChangefeed)
 	if createAST.Select != nil {
 		t.Logf("did not force DB level changefeed for %s because it is a CDC query", create)
-		return create, nil
+		return create, args, nil
 	}
 
-	// Don't do it if it's already a DB level changefeed.
 	if createAST.Level == tree.ChangefeedLevelDatabase {
 		t.Logf("did not force DB level changefeed for %s because it is already a DB level changefeed", create)
-		return create, nil
+		return create, args, nil
 	}
 
 	opts := createAST.Options
 	for _, opt := range opts {
 		// Don't do it if there's an initial scan explicitly requested.
-		// TODO: double check that this doesn't exclude the default case where the initial scan is not specified.
-		// Do I need this equalFold that copilot added?
+		// TODO(#148858): Do I need this equalFold that copilot added?
 		key := opt.Key.String()
 		if strings.EqualFold(key, "initial_scan") {
 			if opt.Value.String() != "yes" || opt.Value.String() != "only" {
 				t.Logf("did not force DB level changefeed for %s because it has an initial scan", create)
-				return create, nil
+				return create, args, nil
 			}
 		}
 		if strings.EqualFold(key, "initial_scan_only") {
 			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
-			return create, nil
+			return create, args, nil
 		}
 	}
 
-	// Skip for families.
 	for _, target := range createAST.TableTargets {
 		if target.FamilyName != "" {
 			t.Logf("did not force DB level changefeed for %s because it has column family %s", create, target.FamilyName)
-			return create, nil
+			return create, args, nil
 		}
 	}
 
@@ -1249,7 +1246,7 @@ func maybeForceDBLevelChangefeed(
 	create = tree.AsStringWithFlags(createStmt.AST, tree.FmtShowPasswords)
 
 	t.Logf("forced DB level changefeed result: %s", create)
-	return create, nil
+	return create, args, nil
 }
 
 func maybeForceEnrichedEnvelope(
