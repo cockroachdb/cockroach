@@ -70,9 +70,6 @@ echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/baze
 chmod +x /tmp/bazelisk
 sudo mv /tmp/bazelisk /usr/bin/bazel
 
-# Install the Unison file-syncer.
-. bootstrap/bootstrap-unison.sh
-
 # Configure environment variables for CockroachDB
 echo 'export PATH="${PATH}:${HOME}/go/src/github.com/cockroachdb/cockroach/bin:/usr/local/go/bin"' >> ~/.bashrc_bootstrap
 echo >> ~/.bashrc
