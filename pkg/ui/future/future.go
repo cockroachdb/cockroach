@@ -39,8 +39,8 @@ type IndexHTMLArgs struct {
 	LicenseType               string
 	SecondsUntilLicenseExpiry int64
 	IsManaged                 bool
-	Admin                     serverpb.AdminServer
-	Status                    serverpb.StatusServer
+	Admin                     serverpb.AdminClient
+	Status                    serverpb.StatusClient
 }
 
 //go:embed assets/*
@@ -243,10 +243,15 @@ func MakeFutureHandler(cfg IndexHTMLArgs) http.HandlerFunc {
 	// Create a new Gorilla Mux router
 	router := mux.NewRouter()
 
+	// Redirect root to /future/overview
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/future/overview", http.StatusFound)
+	}).Methods("GET")
+
 	// Prefix all routes with /future
 	futureRouter := router.PathPrefix("/future").Subrouter()
 
-	// Redirect root to overview
+	// Redirect /future to overview
 	futureRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/future/overview", http.StatusFound)
 	}).Methods("GET")

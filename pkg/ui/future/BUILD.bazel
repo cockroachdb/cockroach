@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "future",
-    srcs = ["future.go"],
+    srcs = [
+        "client.go",
+        "future.go",
+    ],
     embedsrcs = glob([
         "assets/**",
         "templates/**",
@@ -11,9 +14,15 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
+        "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_gorilla_mux//:mux",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//credentials/insecure",
     ],
 )

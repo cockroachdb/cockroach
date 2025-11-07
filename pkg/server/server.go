@@ -2170,6 +2170,8 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
 			DisableKvLevelAdvancedDebug: false,
 		},
+		s.kvNodeDialer,              /* nodeDialer */
+		s.rpcContext.NodeID.Get(),   /* localNodeID */
 	); err != nil {
 		return err
 	}

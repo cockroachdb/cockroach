@@ -248,6 +248,7 @@ func init() {
 	cockroachCmd.AddCommand(
 		startCmd,
 		startSingleNodeCmd,
+		startDBConsoleCmd,
 		initCmd,
 		certCmd,
 

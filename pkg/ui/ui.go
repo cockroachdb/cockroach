@@ -111,8 +111,8 @@ type Config struct {
 	OIDC         OIDCUI
 	Flags        serverpb.FeatureFlags
 	Settings     *cluster.Settings
-	Admin        serverpb.AdminServer
-	Status       serverpb.StatusServer
+	Admin        serverpb.AdminClient
+	Status       serverpb.StatusClient
 }
 
 var uiConfigPath = regexp.MustCompile("^/uiconfig$")
