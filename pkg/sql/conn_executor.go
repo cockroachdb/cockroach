@@ -3210,6 +3210,12 @@ func (ex *connExecutor) execCopyIn(
 	// Disable the buffered writes for COPY since there is no benefit in this
 	// ability here.
 	ex.state.mu.txn.SetBufferedWritesEnabled(false /* enabled */)
+	// Step the txn in case it had just been rolled back to a savepoint (if it
+	// wasn't, this is harmless). This also matches what we do unconditionally
+	// on the main query path.
+	if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
+		return ex.makeErrEvent(err, cmd.ParsedStmt.AST)
+	}
 	txnOpt := copyTxnOpt{
 		txn:           ex.state.mu.txn,
 		txnTimestamp:  ex.state.sqlTimestamp,
