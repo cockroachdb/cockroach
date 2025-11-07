@@ -61,7 +61,6 @@ import (
 // continuously advances the timestamp of its PTS record as its highwater
 // advances.
 func TestChangefeedUpdateProtectedTimestamp(t *testing.T) {
-	skip.WithIssue(t, 148858) // ?
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

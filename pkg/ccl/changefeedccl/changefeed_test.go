@@ -694,8 +694,6 @@ func TestChangefeedProgressMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 148858) // ?
-
 	// Verify the aggmetric functional gauges work correctly
 	t.Run("aggregate functional gauge", func(t *testing.T) {
 		cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
@@ -1527,8 +1525,6 @@ func TestChangefeedCursor(t *testing.T) {
 func TestChangefeedTimestamps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.WithIssue(t, 148858) // I think this is relying on initial scan.
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
@@ -5594,7 +5590,6 @@ func TestChangefeedAvroNotice(t *testing.T) {
 //	--- FAIL: TestChangefeedResolvedNotice/resolved>min_checkpoint_frequency (0.00s)
 //	--- FAIL: TestChangefeedResolvedNotice/resolved_default (0.00s)
 func TestChangefeedResolvedNotice(t *testing.T) {
-	skip.WithIssue(t, 148858) // initial scan?
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -11049,7 +11044,6 @@ func TestChangefeedCanceledTelemetryLogs(t *testing.T) {
 }
 
 func TestChangefeedTestTimesOut(t *testing.T) {
-	skip.WithIssue(t, 148858) // ?
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

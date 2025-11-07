@@ -1229,6 +1229,11 @@ func maybeForceDBLevelChangefeed(
 			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
 			return create, args, nil
 		}
+		// skip resolved because of split column families.
+		if strings.EqualFold(key, "resolved") {
+			t.Logf("did not force DB level changefeed for %s because it set resolved", create)
+			return create, args, nil
+		}
 	}
 
 	for _, target := range createAST.TableTargets {

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -187,7 +186,6 @@ RETURNING cluster_logical_timestamp()`).Scan(&tsStr)
 }
 
 func TestChangefeedProgressSkewMetrics(t *testing.T) {
-	skip.WithIssue(t, 148858) // sets no_initial_scan, so why does it fail?
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
