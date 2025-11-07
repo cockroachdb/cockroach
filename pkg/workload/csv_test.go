@@ -43,7 +43,7 @@ func TestHandleCSV(t *testing.T) {
 
 	// assertions depend on this seed
 	bank.RandomSeed.Set(1)
-	meta := bank.FromRows(0).Meta()
+	meta := bank.FromRows(2).Meta()
 	for _, test := range tests {
 		t.Run(test.params, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -232,7 +232,11 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		backuptestutils.WithSkipInvalidDescriptorCheck(),
 	}
 	if cfg.iodir == "" {
-		opts = append(opts, backuptestutils.WithBank(cfg.splits))
+		rows := cfg.splits
+		if rows < 2 {
+			rows = 2
+		}
+		opts = append(opts, backuptestutils.WithBank(rows))
 	}
 
 	var tc serverutils.TestClusterInterface

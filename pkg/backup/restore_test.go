@@ -237,7 +237,7 @@ func TestRestoreJobMessages(t *testing.T) {
 	var params base.TestClusterArgs
 	params.ServerArgs.Knobs.BackupRestore = testKnobs
 
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
 		t, singleNode, backuptestutils.WithParams(params), backuptestutils.WithBank(numAccounts),
 	)

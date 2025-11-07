@@ -350,7 +350,7 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
 		t,
 		singleNode,
@@ -468,7 +468,7 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 		DefaultTestTenant: base.TestControlsTenantsExplicitly},
 	}
-	const numAccounts = 1
+	const numAccounts = 2
 
 	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, params,
@@ -558,7 +558,7 @@ func TestOnlineRestoreErrors(t *testing.T) {
 
 	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	params := base.TestClusterArgs{
 		// Online restore is not supported in a secondary tenant yet.
@@ -640,7 +640,7 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 		},
 	}
 
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
 	)
@@ -699,7 +699,7 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 			},
 		},
 	}
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
 	)

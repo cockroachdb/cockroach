@@ -920,7 +920,7 @@ func TestToggleCompactionForRestore(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	tc, db, _, cleanup := backupRestoreTestSetup(
-		t, singleNode, 1 /* numAccounts */, InitManualReplication,
+		t, singleNode, 2 /* numAccounts */, InitManualReplication,
 	)
 	defer cleanup()
 

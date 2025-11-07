@@ -37,7 +37,7 @@ func TestAlterBackupStatement(t *testing.T) {
 	key2 := getAWSEncryptionOption(t, "NEW_AWS_KMS_REGION", "NEW_AWS_KEY_ID")
 
 	const userfile = "'userfile:///a'"
-	const numAccounts = 1
+	const numAccounts = 2
 
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
@@ -77,7 +77,7 @@ func TestAlterBackupRestore(t *testing.T) {
 	newURI := getAWSEncryptionOption(t, "NEW_AWS_KMS_REGION", "NEW_AWS_KEY_ID")
 
 	const userfile = "'userfile:///a'"
-	const numAccounts = 1
+	const numAccounts = 2
 
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
@@ -178,7 +178,7 @@ func TestAlterBackupIncremental(t *testing.T) {
 	newURI := getAWSEncryptionOption(t, "NEW_AWS_KMS_REGION", "NEW_AWS_KEY_ID")
 
 	const userfile = "'userfile:///a'"
-	const numAccounts = 1
+	const numAccounts = 2
 
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
