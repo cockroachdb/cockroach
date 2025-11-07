@@ -1,0 +1,310 @@
+# Tests rebalancing a replica between two local stores (stores on the same node).
+#
+# Scenario: Two stores (s1, s2) on node 1. Initially, s1 holds the replica and
+# lease for range 1. The test rebalances the replica (and lease) from s1 to s2,
+# then back from s2 to s1.
+#
+# Steps and expectations:
+# 1. Creates pending changes for the rebalance, verifying load adjustments
+#    immediately reflect the pending state.
+# 2. Simulates enactment: when s2's leaseholder message arrives showing it has
+#    the lease, change 1 (add to s2) is marked enacted. Change 2 (remove from
+#    s1) remains pending until s1 is removed from the replica set.
+# 3. Verifies enacted changes cannot be rejected (they're removed from
+#    pendingChanges).
+# 4. Verifies no-rollback changes cannot be rejected once any change in the
+#    set is enacted.
+# 5. Tracks load adjustments: pending changes adjust load until store-reported
+#    load reflects the change (after 10s of enactment). After that, the change
+#    is removed from load tracking but may remain for GC.
+# 6. Tests GC: changes marked no-rollback cannot be GC'd via normal GC (which
+#    requires undo). They're only removed once store-reported load reflects the
+#    change.
+# 7. Rebalances back from s2 to s1 and verifies changes are GC'd after the
+#    normal GC duration.
+#
+# Two stores on the same node.
+set-store
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=4:5:3:
+
+store-load-msg
+  store-id=1 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=0 load-time=0s
+----
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=80 seq=0
+
+# Store s1 has the single replica and lease for r1.
+store-leaseholder-msg 
+store-id=1
+  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+----
+
+ranges
+----
+range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+
+# The top-k uses CPURate, with r1 as the only range.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=80 seq=0
+
+# Transfer the replica from s1 to s2. The lease will also be transferred.
+make-pending-changes range-id=1
+  rebalance-replica: remove-store-id=1 add-store-id=2
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Range r1 reflects the pending change as if it has already been applied. Note
+# that the local-store representing the "range owner" is still s1.
+ranges
+----
+range-id=1 local-store=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+  store-id=2 replica-id=unknown type=VOTER_FULL leaseholder=true
+
+# The adjusted load is post transfer.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=80 node-adjusted-cpu=88 seq=2
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:88, write-bandwidth:88, byte-size:88] node-reported-cpu=80 node-adjusted-cpu=88 seq=1
+
+tick seconds=5
+----
+t=5s
+
+# Store leaseholder msg from s1, showing that s2 has a replica, but not the
+# lease.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=2 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+----
+
+# Neither change is considered enacted.
+get-pending-changes
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Store leaseholder msg from s2, showing that s2 is now the leaseholder.
+store-leaseholder-msg
+store-id=2
+  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=2 type=VOTER_FULL
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+# The local-store representing the "range owner" is now s2.
+ranges
+----
+range-id=1 local-store=2 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
+  store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+
+# The addition of replica and lease on s2 is considered enacted. The removal
+# of replica and lease from s1 is not yet enacted.
+get-pending-changes
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+tick seconds=5
+----
+t=10s
+
+# Change 1 will not be found, so can't be rejected.
+reject-pending-changes change-ids=(1) expect-panic
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Change 2 is found, but is no-rollback, so can't be rejected.
+reject-pending-changes change-ids=(2) expect-panic
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Store load msg from s2, showing its new load.
+store-load-msg
+  store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=15s
+----
+
+# The adjusted load on s2 reflects both the reported load and the addition of
+# the replica and lease, since the load-time is not more than 10s after the
+# enactment time of change 1 (see lagForChangeReflectedInLoad).
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=168 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:168, write-bandwidth:168, byte-size:168] node-reported-cpu=160 node-adjusted-cpu=168 seq=3
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+
+# Store load msg from s2 at time 16s, which is 11s after the enactment of
+# change 1. So the change is no longer needed for load adjustment.
+store-load-msg
+  store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=16s
+----
+
+# We are no longer tracking change 1 for the sake of load.
+get-pending-changes
+----
+pending(1)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# The adjusted load on s2 no longer reflects the addition of the replica and
+# lease, since the load-time was more than 10s after the enactment time of
+# change 1.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+
+# Advance time enough for change 2 to be eligible for GC.
+tick seconds=300
+----
+t=5m10s
+
+# Even after the GC time has elapsed change 2 cannot be undone since it is
+# no-rollback.
+gc-pending-changes
+----
+pending(1)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Store leaseholder msg from s2, showing that s1 is no longer a replica.
+store-leaseholder-msg
+store-id=2
+  range-id=1 load=[80,80,80] raft-cpu=20 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+# Now change 2 is considered enacted.
+get-pending-changes
+----
+pending(1)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=0s enacted=5m10s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Change 2 is still serving the purpose of adjusting the load on s1.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=160 node-adjusted-cpu=80 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=160 node-adjusted-cpu=80 seq=4
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
+
+# Store load msg from s2, showing its new load. The enacted change is still
+# needed because the enactment time is equal to the load-time.
+store-load-msg
+  store-id=2 node-id=1 load=[85,85,85] capacity=[100,100,100] secondary-load=1 load-time=310s
+----
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=165 node-adjusted-cpu=85 seq=2
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:85, write-bandwidth:85, byte-size:85] node-reported-cpu=165 node-adjusted-cpu=85 seq=5
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
+
+tick seconds=20
+----
+t=5m30s
+
+# Store load msg from s1, showing its new load. The enacted change is no
+# longer needed for load adjustment since load-time is 20s after the enactment
+# time (and lagForChangeReflectedInLoad is 10s).
+store-load-msg
+  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=330s
+----
+
+# No longer tracking change 2 for the sake of load.
+get-pending-changes
+----
+pending(0)
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=90 seq=3
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:85, write-bandwidth:85, byte-size:85] node-reported-cpu=90 node-adjusted-cpu=90 seq=5
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
+
+# Transfer the replica from s2 back to s1. The lease will also be transferred.
+make-pending-changes range-id=1
+  rebalance-replica: remove-store-id=2 add-store-id=1
+----
+pending(2)
+change-id=3 store-id=1 node-id=1 range-id=1 load-delta=[cpu:88, write-bandwidth:88, byte-size:88] start=5m30s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=4 store-id=2 node-id=1 range-id=1 load-delta=[cpu:-80, write-bandwidth:-80, byte-size:-80] start=5m30s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Adjusted load shows the change.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:93, write-bandwidth:93, byte-size:93] node-reported-cpu=90 node-adjusted-cpu=98 seq=4
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=98 seq=6
+  top-k-ranges (local-store-id=2) dim=CPURate: r1
+
+# Enough time elapses to GC the changes.
+tick seconds=310
+----
+t=10m40s
+
+gc-pending-changes
+----
+pending(0)
+
+# No more pending changes.
+get-pending-changes
+----
+pending(0)
+
+# Adjusted load no longer reflects the changes.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:5, write-bandwidth:5, byte-size:5] adjusted=[cpu:5, write-bandwidth:5, byte-size:5] node-reported-cpu=90 node-adjusted-cpu=90 seq=5
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:85, write-bandwidth:85, byte-size:85] adjusted=[cpu:85, write-bandwidth:85, byte-size:85] node-reported-cpu=90 node-adjusted-cpu=90 seq=7
+  top-k-ranges (local-store-id=2) dim=CPURate: r1

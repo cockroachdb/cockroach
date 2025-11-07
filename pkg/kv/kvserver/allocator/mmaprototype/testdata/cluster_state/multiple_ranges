@@ -90,3 +90,33 @@ store-id=1 node-id=1 status=ok accepting all reported=[cpu:100, write-bandwidth:
   top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
 store-id=2 node-id=2 status=ok accepting all reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r2 r3
+
+ranges
+----
+range-id=2 local-store=1 load=[cpu:20, write-bandwidth:10, byte-size:15] raft-cpu=10
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  store-id=2 replica-id=2 type=VOTER_FULL
+range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cpu=25
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  store-id=2 replica-id=2 type=VOTER_FULL
+
+# Change the membership, while MaybeSpanConfIsPopulated=false, to ensure that
+# we notice the change in replicas. One of these ranges has changed the number
+# of replicas, and the other the replica-id of one of the store's replicas.
+store-leaseholder-msg
+store-id=1
+  range-id=2 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  range-id=3 not-populated
+    store-id=2 replica-id=5 type=VOTER_FULL
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+----
+
+# The ranges reflect the latest state from the StoreLeaseholderMsg.
+ranges
+----
+range-id=2 local-store=1 load=[cpu:20, write-bandwidth:10, byte-size:15] raft-cpu=10
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+range-id=3 local-store=1 load=[cpu:30, write-bandwidth:10, byte-size:10] raft-cpu=25
+  store-id=2 replica-id=5 type=VOTER_FULL
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true

@@ -1,0 +1,265 @@
+# Tests GC of partially enacted changes when rebalancing between local stores.
+# This is a variation of rebalance_replica_local_stores in which a rebalancing
+# operation is partially enacted but the remainder is ultimately garbage collected.
+#
+# - The range initially initially sits on (n1s1,n3s3), and is then rebalanced to
+#   (n1s2,n3s4), i.e. moved between n1's two stores.
+# - The second half of the pending change (removal of s1) never gets enacted.
+# - That change is pending is no-rollback due to the first half having been enacted.
+#   After 30s (partiallyEnactedGCDuration) has elapsed since the partial
+#   enactment, the removal is GC'd with the next leaseholder message. In
+#   particular, this change does not have to wait for the much longer regular GC
+#   timeout.
+# - A second rebalance is carried out on the same range, while an enacted remnant
+#   of the first operation remains.
+set-store
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=2 node-id=1 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=4:5:3:
+
+# Two other stores.
+set-store
+  store-id=3 node-id=3 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=4 node-id=4 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 attrs=purple locality-code=1:2:3:
+  store-id=2 attrs=yellow locality-code=4:5:3:
+node-id=3 locality-tiers=region=us-west-1,zone=us-west-1a,node=3
+  store-id=3 attrs=purple locality-code=1:2:6:
+node-id=4 locality-tiers=region=us-east-1,zone=us-east-1a,node=4
+  store-id=4 attrs=yellow locality-code=4:5:7:
+
+# Store s1 is the leaseholder for range r1.
+store-leaseholder-msg 
+store-id=1
+  range-id=1 load=[2,2,2] raft-cpu=1 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=3 replica-id=3 type=VOTER_FULL
+----
+
+ranges
+----
+range-id=1 local-store=1 load=[cpu:2, write-bandwidth:2, byte-size:2] raft-cpu=1
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+  store-id=3 replica-id=3 type=VOTER_FULL
+
+# Transfer the replica from s1 to s2. The lease will also be transferred.
+make-pending-changes range-id=1
+  rebalance-replica: remove-store-id=1 add-store-id=2
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Range r1 reflects the pending change as if it has already been applied. Note
+# that the local-store representing the "range owner" is still s1.
+ranges
+----
+range-id=1 local-store=1 load=[cpu:2, write-bandwidth:2, byte-size:2] raft-cpu=1
+  store-id=2 replica-id=unknown type=VOTER_FULL leaseholder=true
+  store-id=3 replica-id=3 type=VOTER_FULL
+
+# The adjusted load is post transfer.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:-2, write-bandwidth:-2, byte-size:-2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+
+tick seconds=5
+----
+t=5s
+
+# Store leaseholder msg from s2, showing that s2 has the replica and lease,
+# and s1 still has a replica.
+store-leaseholder-msg
+store-id=2
+  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+# One change is considered enacted.
+get-pending-changes
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+ranges
+----
+range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
+  store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+  store-id=3 replica-id=3 type=VOTER_FULL
+
+tick seconds=35
+----
+t=40s
+
+get-pending-changes
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-2, write-bandwidth:-2, byte-size:-2] start=0s
+  prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Same store leaseholder msg from s2. The pending change for s1 is gc'd because
+# the more aggressive partiallyEnactedGCDuration (30s) applies. It is immaterial
+# that the message originates from s2 and not s1.
+store-leaseholder-msg
+store-id=2
+  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+ranges
+----
+range-id=1 local-store=2 load=[cpu:3, write-bandwidth:3, byte-size:3] raft-cpu=2
+  store-id=1 replica-id=1 type=VOTER_FULL
+  store-id=3 replica-id=3 type=VOTER_FULL
+  store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+
+get-pending-changes
+----
+pending(1)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
+  top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
+  top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=0
+
+# Make another pending change to transfer from s3 to s4.
+make-pending-changes range-id=1
+  rebalance-replica: remove-store-id=3 add-store-id=4
+----
+pending(3)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:-3, byte-size:-3] start=40s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+tick seconds=5
+----
+t=45s
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
+  top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:-2, write-bandwidth:-3, byte-size:-3] node-reported-cpu=0 node-adjusted-cpu=-2 seq=1
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
+  top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:3, byte-size:3] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+
+# Store leaseholder msg from s2, showing that s4 has the replica, and s3
+# replica has not been removed.
+store-leaseholder-msg
+store-id=2
+  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    store-id=4 replica-id=4 type=VOTER_FULL
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+get-pending-changes
+----
+pending(3)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s enacted=45s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:-3, byte-size:-3] start=40s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+tick seconds=35
+----
+t=1m20s
+
+get-pending-changes
+----
+pending(3)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s enacted=45s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+change-id=4 store-id=3 node-id=3 range-id=1 load-delta=[cpu:-2, write-bandwidth:-3, byte-size:-3] start=40s
+  prev=(replica-id=3 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+# Same store leaseholder msg from s2. The pending change for s3 is gc'd.
+store-leaseholder-msg
+store-id=2
+  range-id=1 load=[3,3,3] raft-cpu=2 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=3 replica-id=3 type=VOTER_FULL
+    store-id=4 replica-id=4 type=VOTER_FULL
+    store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+get-pending-changes
+----
+pending(2)
+change-id=1 store-id=2 node-id=1 range-id=1 load-delta=[cpu:2, write-bandwidth:2, byte-size:2] start=0s enacted=5s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=4 node-id=4 range-id=1 load-delta=[cpu:2, write-bandwidth:3, byte-size:3] start=40s enacted=45s
+  prev=(replica-id=none type=VOTER_FULL)
+  next=(replica-id=unknown type=VOTER_FULL)
+
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=2 seq=2
+  top-k-ranges (local-store-id=1) dim=CPURate: r1
+  top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
+store-id=2 node-id=1 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:2, byte-size:2] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:0, write-bandwidth:0, byte-size:0] node-reported-cpu=0 node-adjusted-cpu=0 seq=2
+  top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
+  top-k-ranges (local-store-id=2) dim=WriteBandwidth: r1
+store-id=4 node-id=4 status=ok accepting all reported=[cpu:0, write-bandwidth:0, byte-size:0] adjusted=[cpu:2, write-bandwidth:3, byte-size:3] node-reported-cpu=0 node-adjusted-cpu=2 seq=1
+  top-k-ranges (local-store-id=2) dim=ByteSize: r1

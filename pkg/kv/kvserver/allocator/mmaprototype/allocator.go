@@ -59,6 +59,8 @@ type Allocator interface {
 	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
+	//
+	// REQUIRES: len(changes) > 0 and all changes are to the same range.
 	AdjustPendingChangesDisposition(changes []ChangeID, success bool)
 
 	// RegisterExternalChanges informs this allocator about yet to complete
