@@ -901,10 +901,6 @@ func (ex *connExecutor) execStmtInOpenState(
 				typeHints[i] = resolved
 			}
 		}
-		var statementHintsCache *hints.StatementHintsCache
-		if ex.executorType != executorTypeInternal {
-			statementHintsCache = ex.server.cfg.StatementHintsCache
-		}
 		prepStmt := makeStatement(
 			ctx,
 			statements.Statement[tree.Statement]{
@@ -1882,10 +1878,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 				}
 				typeHints[i] = resolved
 			}
-		}
-		var statementHintsCache *hints.StatementHintsCache
-		if ex.executorType != executorTypeInternal {
-			statementHintsCache = ex.server.cfg.StatementHintsCache
 		}
 		prepStmt := makeStatement(
 			ctx,
