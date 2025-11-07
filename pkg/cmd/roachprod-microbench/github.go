@@ -43,8 +43,50 @@ func createBenchmarkPostRequest(
 	return formatter, req
 }
 
-// postBenchmarkIssue posts a benchmark issue to github.
-func postBenchmarkIssue(
+// regressionInfo holds information about a single benchmark regression.
+type regressionInfo struct {
+	benchmarkName  string
+	metricUnit     string
+	percentChange  float64
+	formattedDelta string
+}
+
+// createRegressionPostRequest creates a post request for benchmark performance regressions.
+func createRegressionPostRequest(
+	pkgName string, regressions []regressionInfo, sheetLink, description string,
+) (issues.IssueFormatter, issues.PostRequest) {
+	// Build the regression summary message
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Performance regressions detected in package %s\n\n", pkgName))
+	sb.WriteString(fmt.Sprintf("Comparison: %s\n\n", description))
+	sb.WriteString(fmt.Sprintf("Found %d benchmark(s) with regressions ≥20%%:\n\n", len(regressions)))
+
+	for i, reg := range regressions {
+		if i >= 10 { // Limit to 10 regressions in the summary
+			sb.WriteString(fmt.Sprintf("... and %d more regression(s)\n", len(regressions)-i))
+			break
+		}
+		sb.WriteString(fmt.Sprintf("• %s (%s): %s (%.1f%%)\n",
+			reg.benchmarkName, reg.metricUnit, reg.formattedDelta, reg.percentChange))
+	}
+
+	sb.WriteString(fmt.Sprintf("\nDetailed comparison: %s\n", sheetLink))
+
+	// Create a failure object for the package with all regressions
+	title := fmt.Sprintf("%s: performance regression", pkgName)
+	f := githubpost.MicrobenchmarkFailure(
+		pkgName,
+		title,
+		sb.String(),
+	)
+
+	formatter, req := githubpost.DefaultFormatter(context.Background(), f)
+	req.Labels = append(req.Labels, "O-microbench", "C-performance")
+	return formatter, req
+}
+
+// postIssuesToGitHub posts a benchmark issue to github.
+func postIssuesToGitHub(
 	ctx context.Context, l *logger.Logger, formatter issues.IssueFormatter, req issues.PostRequest,
 ) error {
 	opts := issues.DefaultOptionsFromEnv()

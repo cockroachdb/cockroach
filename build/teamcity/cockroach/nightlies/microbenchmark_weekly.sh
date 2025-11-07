@@ -207,6 +207,7 @@ if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
     --sheet-desc="$sheet_description" \
     ${influx_token:+--influx-token="$influx_token"} \
     ${influx_host:+--influx-host="$influx_host"} \
+    ${TRIGGERED_BUILD:+--post-issues} \
     2>&1 | tee "$output_dir/sheets.txt"
 else
   echo "No microbenchmarks were run. Skipping comparison."
