@@ -450,6 +450,7 @@ func (ec *evalContext) maybeVisitSubqueries() (nextSubQuery int, done bool, erro
 func (ec *evalContext) visitSubquery(query int) (done bool, _ error) {
 	sub := ec.q.notJoins[query]
 	sec := sub.query.getEvalContext()
+
 	defer sub.query.putEvalContext(sec)
 	defer func() { // reset the slots populated to run the subquery
 		sub.inputSlotMappings.ForEach(func(_, subSlot int) {
