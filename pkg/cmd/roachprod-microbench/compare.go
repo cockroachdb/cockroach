@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -37,6 +38,7 @@ type compareConfig struct {
 	baselineDir   string
 	sheetDesc     string
 	threshold     float64
+	postIssues    bool
 }
 
 type slackConfig struct {
@@ -344,6 +346,52 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 		reportString := strings.Join(reportStrings, "\n\n")
 		return errors.Errorf("there are benchmark regressions of > %.2f%% in the following packages:\n\n%s",
 			c.threshold, reportString)
+	}
+
+	return nil
+}
+
+func (c *compare) postRegressionIssues(
+	links map[string]string, comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, err := loggerCfg.NewLogger("")
+	if err != nil {
+		return errors.Wrap(err, "failed to create logger for posting issues")
+	}
+
+	for pkgName, comparisonResults := range comparisonResultsMap {
+		var regressions []regressionInfo
+
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				// Check if this is a regression
+				isRegression := (comparison.Delta < 0 && metric.Better > 0) ||
+					(comparison.Delta > 0 && metric.Better < 0)
+
+				if isRegression && math.Abs(comparison.Delta) >= slackPercentageThreshold {
+					regressions = append(regressions, regressionInfo{
+						benchmarkName:  detail.BenchmarkName,
+						metricUnit:     result.Metric.Unit,
+						percentChange:  math.Abs(comparison.Delta),
+						formattedDelta: comparison.FormattedDelta,
+					})
+				}
+			}
+		}
+
+		if len(regressions) > 0 {
+			sheetLink := links[pkgName]
+			formatter, req := createRegressionPostRequest(pkgName, regressions, sheetLink, c.sheetDesc)
+			err := postIssuesToGitHub(c.ctx, l, formatter, req)
+			if err != nil {
+				return errors.Wrapf(err, "failed to post regression issue for package %s", pkgName)
+			}
+			log.Printf("Posted regression issue for package: %s with %d regression(s)", pkgName, len(regressions))
+		}
 	}
 
 	return nil
