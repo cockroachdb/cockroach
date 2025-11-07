@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -511,6 +512,13 @@ func TestClusterState(t *testing.T) {
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "get-pending-changes":
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
+
+				case "rebalance-stores":
+					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
+					rng := rand.New(rand.NewSource(0))
+					dsm := newDiversityScoringMemo()
+					cs.rebalanceStores(context.Background(), storeID, rng, dsm)
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
