@@ -12165,6 +12165,364 @@ memo (optimized, ~38KB, required=[presentation: a:1] [ordering: +2])
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)
 
+# Regression test for #157073: explore splitting a disjunction on the same
+# column if there are multiple partial indexes with predicates on that column
+# that could be used.
+
+exec-ddl
+CREATE TABLE t157073 (
+  a INT NOT NULL PRIMARY KEY,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  INDEX (c) WHERE b < 0,
+  INDEX (c, b) WHERE b >= 9990
+)
+----
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(8)
+      │    └── scan t157073@t157073_c_b_idx,partial
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── constraint: /13/12/11: [/5 - /5]
+      │         ├── key: (11)
+      │         └── fd: ()-->(13), (11)-->(12)
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (a > 10 OR b < 0 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── select
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    ├── scan t157073
+      │    │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    │    ├── constraint: /6: [/11 - ]
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── c:8 = 5 [outer=(8), constraints=(/8: [/5 - /5]; tight), fd=()-->(8)]
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── scan t157073@t157073_c_b_idx,partial
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── constraint: /18/17/16: [/5 - /5]
+      │         │    │    ├── key: (16)
+      │         │    │    └── fd: ()-->(18), (16)-->(17)
+      │         │    └── index-join t157073
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── key: (21)
+      │         │         ├── fd: ()-->(23), (21)-->(22)
+      │         │         └── scan t157073@t157073_c_idx,partial
+      │         │              ├── columns: a:21!null c:23!null
+      │         │              ├── constraint: /23/21: [/5 - /5]
+      │         │              ├── key: (21)
+      │         │              └── fd: ()-->(23)
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR a > 10 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(8)
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── scan t157073@t157073_c_b_idx,partial
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── constraint: /18/17/16: [/5 - /5]
+      │         │    │    ├── key: (16)
+      │         │    │    └── fd: ()-->(18), (16)-->(17)
+      │         │    └── select
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── key: (21)
+      │         │         ├── fd: ()-->(23), (21)-->(22)
+      │         │         ├── scan t157073
+      │         │         │    ├── columns: a:21!null b:22!null c:23!null
+      │         │         │    ├── constraint: /21: [/11 - ]
+      │         │         │    ├── key: (21)
+      │         │         │    └── fd: (21)-->(22,23)
+      │         │         └── filters
+      │         │              └── c:23 = 5 [outer=(23), constraints=(/23: [/5 - /5]; tight), fd=()-->(23)]
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR b >= 9990 OR a > 10)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(8)
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── select
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── key: (16)
+      │         │    │    ├── fd: ()-->(18), (16)-->(17)
+      │         │    │    ├── scan t157073
+      │         │    │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    │    ├── constraint: /16: [/11 - ]
+      │         │    │    │    ├── key: (16)
+      │         │    │    │    └── fd: (16)-->(17,18)
+      │         │    │    └── filters
+      │         │    │         └── c:18 = 5 [outer=(18), constraints=(/18: [/5 - /5]; tight), fd=()-->(18)]
+      │         │    └── scan t157073@t157073_c_b_idx,partial
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── constraint: /23/22/21: [/5 - /5]
+      │         │         ├── key: (21)
+      │         │         └── fd: ()-->(23), (21)-->(22)
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+# In this case, we split the disjunction but then we do not choose the
+# split-disjunction plan because the split scans cannot be constrained.
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 9990 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── select
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan t157073
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── partial index predicates
+      │    │    ├── t157073_c_idx: filters
+      │    │    │    └── b:2 < 0 [outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
+      │    │    └── t157073_c_b_idx: filters
+      │    │         └── b:2 >= 9990 [outer=(2), constraints=(/2: [/9990 - ]; tight)]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           ├── c:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+           └── (b:2 < 9990) OR (b:2 >= 9990) [outer=(2), constraints=(/2: (/NULL - /9989] [/9990 - ]; tight)]
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND ((b >= 9990 AND b < 10000) OR b > 11000 OR a > 10)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── scan t157073@t157073_c_b_idx,partial
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── constraint: /8/7/6: [/5 - /5/9999]
+      │    │    ├── key: (6)
+      │    │    └── fd: ()-->(8), (6)-->(7)
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── select
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── key: (16)
+      │         │    │    ├── fd: ()-->(18), (16)-->(17)
+      │         │    │    ├── scan t157073
+      │         │    │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    │    ├── constraint: /16: [/11 - ]
+      │         │    │    │    ├── key: (16)
+      │         │    │    │    └── fd: (16)-->(17,18)
+      │         │    │    └── filters
+      │         │    │         └── c:18 = 5 [outer=(18), constraints=(/18: [/5 - /5]; tight), fd=()-->(18)]
+      │         │    └── scan t157073@t157073_c_b_idx,partial
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── constraint: /23/22/21: [/5/11001 - /5]
+      │         │         ├── key: (21)
+      │         │         └── fd: ()-->(23), (21)-->(22)
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+# Check that we still get a multi-span constrained scan for IN sets.
+opt
+SELECT c, a FROM t157073 WHERE c = 5 AND b IN (9990, 9991, 9992, 9993, 9994, 9996, 9998)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── scan t157073@t157073_c_b_idx,partial
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── constraint: /3/2/1
+      │    ├── [/5/9990 - /5/9994]
+      │    ├── [/5/9996 - /5/9996]
+      │    └── [/5/9998 - /5/9998]
+      ├── key: (1)
+      └── fd: ()-->(3), (1)-->(2)
+
+# Ideally we would split the -1 from the rest of the IN set, but we do not currently.
+opt
+SELECT c, a FROM t157073 WHERE c = 5 AND b IN (-1, 9990, 9991, 9992, 9993, 9994, 9996, 9998)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── select
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan t157073
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── partial index predicates
+      │    │    ├── t157073_c_idx: filters
+      │    │    │    └── b:2 < 0 [outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
+      │    │    └── t157073_c_b_idx: filters
+      │    │         └── b:2 >= 9990 [outer=(2), constraints=(/2: [/9990 - ]; tight)]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           ├── c:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+           └── b:2 IN (-1, 9990, 9991, 9992, 9993, 9994, 9996, 9998) [outer=(2), constraints=(/2: [/-1 - /-1] [/9990 - /9990] [/9991 - /9991] [/9992 - /9992] [/9993 - /9993] [/9994 - /9994] [/9996 - /9996] [/9998 - /9998]; tight)]
+
 # --------------------------------------------------
 # SplitDisjunctionAddKey
 # --------------------------------------------------
